@@ -525,14 +525,37 @@ CREATE TABLE IF NOT EXISTS dispute_events (
 
 CREATE TABLE IF NOT EXISTS trading_clients (
   id TEXT PRIMARY KEY,
+  entity_id TEXT REFERENCES entities(id),
   name TEXT NOT NULL,
   client_type TEXT NOT NULL CHECK (client_type IN ('GENERATOR','DISCOM','TRADER','C&I','OTHER')),
   noc_valid_till TEXT,
   ppa_ref TEXT,
   pre_payment_balance REAL NOT NULL DEFAULT 0,
   margin_available REAL NOT NULL DEFAULT 0,
+  exposure_limit REAL NOT NULL DEFAULT 0,
+  risk_rating TEXT NOT NULL DEFAULT 'MEDIUM' CHECK (risk_rating IN ('LOW','MEDIUM','HIGH')),
   status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','INACTIVE','SUSPENDED')),
+  suspension_reason TEXT,
   documents TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS trading_client_signatories (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL REFERENCES trading_clients(id),
+  name TEXT NOT NULL,
+  designation TEXT,
+  contact_info TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS trading_client_exchanges (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL REFERENCES trading_clients(id),
+  exchange TEXT NOT NULL CHECK (exchange IN ('IEX','PXIL','HPX')),
+  registration_id TEXT NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

@@ -18,6 +18,7 @@ import Reconciliation from './pages/reia/Reconciliation.jsx';
 
 import TradingDashboard from './pages/trading/TradingDashboard.jsx';
 import TradingClients from './pages/trading/TradingClients.jsx';
+import TradingClientProfile from './pages/trading/TradingClientProfile.jsx';
 import Bids from './pages/trading/Bids.jsx';
 import Bilateral from './pages/trading/Bilateral.jsx';
 import TradingInvoices from './pages/trading/TradingInvoices.jsx';
@@ -94,6 +95,7 @@ export default function App() {
 
         <Route path="trading" element={<ProtectedRoute roles={TRADING_ROLES}><TradingDashboard /></ProtectedRoute>} />
         <Route path="trading/clients" element={<ProtectedRoute roles={TRADING_ROLES}><TradingClients /></ProtectedRoute>} />
+        <Route path="trading/clients/:id" element={<ProtectedRoute roles={TRADING_ROLES}><TradingClientProfile /></ProtectedRoute>} />
         <Route path="trading/bids" element={<ProtectedRoute roles={TRADING_ROLES}><Bids /></ProtectedRoute>} />
         <Route path="trading/bilateral" element={<ProtectedRoute roles={TRADING_ROLES}><Bilateral /></ProtectedRoute>} />
         <Route path="trading/invoices" element={<ProtectedRoute roles={TRADING_ROLES}><TradingInvoices /></ProtectedRoute>} />

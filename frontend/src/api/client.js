@@ -128,7 +128,12 @@ export const api = {
     list: (params) => g('/trading-clients', params),
     get: (id) => g(`/trading-clients/${id}`),
     create: (body) => p('/trading-clients', body),
-    update: (id, body) => put(`/trading-clients/${id}`, body),
+    update: (id, body) => client.put(`/trading-clients/${id}`, body).then(r => r.data),
+    suspend: (id, reason) => p(`/trading-clients/${id}/suspend`, { reason }),
+    addSignatory: (id, body) => p(`/trading-clients/${id}/signatories`, body),
+    removeSignatory: (id, sigId) => client.delete(`/trading-clients/${id}/signatories/${sigId}`).then(r => r.data),
+    addExchange: (id, body) => p(`/trading-clients/${id}/exchanges`, body),
+    removeExchange: (id, excId) => client.delete(`/trading-clients/${id}/exchanges/${excId}`).then(r => r.data),
   },
   bids: {
     list: (params) => g('/bids', params),
@@ -157,7 +162,12 @@ export const api = {
   },
   dashboard: {
     reia: () => g('/dashboard/reia'),
-    trading: () => g('/dashboard/trading'),
+    trading: {
+      realtime: () => g('/dashboard/trading/realtime'),
+      daily: () => g('/dashboard/trading/daily'),
+      periodic: () => g('/dashboard/trading/periodic'),
+      health: () => g('/dashboard/trading/health'),
+    },
     consolidated: () => g('/dashboard/consolidated'),
   },
   sellerDashboard: () => g('/seller-dashboard'),

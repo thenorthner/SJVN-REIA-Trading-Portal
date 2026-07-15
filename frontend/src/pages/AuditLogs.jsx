@@ -2,6 +2,30 @@ import React, { useEffect, useState } from 'react';
 import api from '../api/client.js';
 import { PageHeader, Card, Table, Badge } from '../components/ui.jsx';
 
+const PayloadViewer = ({ data }) => {
+  if (!data) return null;
+  const entries = Object.entries(data);
+  if (entries.length === 0) return <span style={{ color: '#888' }}>Empty</span>;
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '16px' }}>
+      {entries.map(([k, v]) => {
+        let displayValue = String(v);
+        if (v === null || v === undefined) displayValue = '-';
+        else if (typeof v === 'boolean') displayValue = v ? 'Yes' : 'No';
+        else if (typeof v === 'object') displayValue = JSON.stringify(v);
+
+        return (
+          <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <span style={{ fontSize: 12, color: '#64748b', textTransform: 'capitalize', fontWeight: 600 }}>{k.replace(/_/g, ' ')}</span>
+            <span style={{ fontSize: 14, color: '#0f172a', wordBreak: 'break-word', background: '#fff', padding: '6px 10px', borderRadius: 4, border: '1px solid #e2e8f0' }}>{displayValue}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 export default function AuditLogs() {
   const [rows, setRows] = useState([]);
   const [module, setModule] = useState('');
@@ -164,9 +188,9 @@ export default function AuditLogs() {
               {expanded.details && (
                 <div style={{ marginBottom: 20 }}>
                   <h4 style={{ borderBottom: '1px solid #eee', paddingBottom: 8, marginBottom: 12 }}>Payload / Details</h4>
-                  <pre style={{ margin: 0, padding: 12, background: '#1e293b', color: '#e2e8f0', borderRadius: 6, fontSize: 12, overflowX: 'auto' }}>
-                    {JSON.stringify(JSON.parse(expanded.details), null, 2)}
-                  </pre>
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: 16 }}>
+                    <PayloadViewer data={JSON.parse(expanded.details)} />
+                  </div>
                 </div>
               )}
 

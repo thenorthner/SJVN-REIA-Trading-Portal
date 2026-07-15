@@ -774,15 +774,32 @@ console.log('Payment security instruments seeded:', db.prepare('SELECT COUNT(*) 
 
 // ---------------- Trading Clients ----------------
 const insertClient = db.prepare(`
-  INSERT INTO trading_clients (id, name, client_type, noc_valid_till, ppa_ref, pre_payment_balance, margin_available, status)
-  VALUES (@id, @name, @client_type, @noc_valid_till, @ppa_ref, @pre_payment_balance, @margin_available, @status)
+  INSERT INTO trading_clients (id, entity_id, name, client_type, noc_valid_till, ppa_ref, pre_payment_balance, margin_available, exposure_limit, risk_rating, status)
+  VALUES (@id, @entity_id, @name, @client_type, @noc_valid_till, @ppa_ref, @pre_payment_balance, @margin_available, @exposure_limit, @risk_rating, @status)
 `);
+const insertSignatory = db.prepare(`
+  INSERT INTO trading_client_signatories (id, client_id, name, designation, contact_info)
+  VALUES (@id, @client_id, @name, @designation, @contact_info)
+`);
+const insertExchange = db.prepare(`
+  INSERT INTO trading_client_exchanges (id, client_id, exchange, registration_id)
+  VALUES (@id, @client_id, @exchange, @registration_id)
+`);
+
 const tradingClients = [
-  { id: newId('TCL'), name: 'ABC Trading Client', client_type: 'C&I', noc_valid_till: '2026-03-31', ppa_ref: 'NA', pre_payment_balance: 5000000, margin_available: 2000000, status: 'ACTIVE' },
-  { id: newId('TCL'), name: 'Green Power Generators', client_type: 'GENERATOR', noc_valid_till: '2026-06-30', ppa_ref: 'PPA-GPG-001', pre_payment_balance: 8000000, margin_available: 3500000, status: 'ACTIVE' },
-  { id: newId('TCL'), name: 'Metro DISCOM Trading Desk', client_type: 'DISCOM', noc_valid_till: '2025-12-31', ppa_ref: 'NA', pre_payment_balance: 3000000, margin_available: 1200000, status: 'ACTIVE' },
+  { id: newId('TCL'), entity_id: sellers[0].id, name: 'ABC Trading Client', client_type: 'C&I', noc_valid_till: '2026-03-31', ppa_ref: 'NA', pre_payment_balance: 5000000, margin_available: 2000000, exposure_limit: 10000000, risk_rating: 'LOW', status: 'ACTIVE' },
+  { id: newId('TCL'), entity_id: sellers[1].id, name: 'Green Power Generators', client_type: 'GENERATOR', noc_valid_till: '2026-06-30', ppa_ref: 'PPA-GPG-001', pre_payment_balance: 8000000, margin_available: 3500000, exposure_limit: 15000000, risk_rating: 'MEDIUM', status: 'ACTIVE' },
+  { id: newId('TCL'), entity_id: buyers[0].id, name: 'Metro DISCOM Trading Desk', client_type: 'DISCOM', noc_valid_till: '2025-12-31', ppa_ref: 'NA', pre_payment_balance: 3000000, margin_available: 1200000, exposure_limit: 5000000, risk_rating: 'HIGH', status: 'ACTIVE' },
 ];
-for (const c of tradingClients) insertClient.run(c);
+
+for (const c of tradingClients) {
+  insertClient.run(c);
+  // Add a signatory
+  insertSignatory.run({ id: newId('SIG'), client_id: c.id, name: `Mr. ${c.name.split(' ')[0]} Head`, designation: 'Head of Trading', contact_info: `head@${c.name.replace(/\s/g,'').toLowerCase()}.com` });
+  // Add exchange memberships
+  insertExchange.run({ id: newId('TCX'), client_id: c.id, exchange: 'IEX', registration_id: `IEX-${Math.floor(1000+Math.random()*9000)}` });
+  if (Math.random() > 0.5) insertExchange.run({ id: newId('TCX'), client_id: c.id, exchange: 'PXIL', registration_id: `PXIL-${Math.floor(1000+Math.random()*9000)}` });
+}
 
 // ---------------- Bids ----------------
 const insertBid = db.prepare(`

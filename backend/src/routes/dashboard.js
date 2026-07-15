@@ -65,39 +65,100 @@ router.get('/reia', (req, res) => {
   });
 });
 
-// Power Trading dashboards
-router.get('/trading', (req, res) => {
-  const totalBids = db.prepare(`SELECT COUNT(*) c FROM bids`).get().c;
-  const clearedBids = db.prepare(`SELECT COUNT(*) c FROM bids WHERE status IN ('CLEARED','PARTIALLY_CLEARED')`).get().c;
-  const totalQuantumBid = db.prepare(`SELECT COALESCE(SUM(quantum_mw),0) s FROM bids`).get().s;
-  const totalQuantumCleared = db.prepare(`SELECT COALESCE(SUM(cleared_quantum_mw),0) s FROM bids`).get().s;
-  const activeClients = db.prepare(`SELECT COUNT(*) c FROM trading_clients WHERE status = 'ACTIVE'`).get().c;
-  const activeBilateral = db.prepare(`SELECT COUNT(*) c FROM bilateral_transactions WHERE status = 'ACTIVE'`).get().c;
-  const pendingOpenAccess = db.prepare(`SELECT COUNT(*) c FROM bilateral_transactions WHERE open_access_status = 'PENDING'`).get().c;
+// Mock integration health for Trading Dashboard
+router.get('/trading/health', (req, res) => {
+  // Simulating API integration health
+  res.json({
+    status: 'ONLINE',
+    last_sync: new Date().toISOString(),
+    exchanges: {
+      IEX: { status: 'ONLINE', delay_ms: 120 },
+      PXIL: { status: 'ONLINE', delay_ms: 150 },
+      HPX: { status: 'DELAYED', delay_ms: 8500 }
+    }
+  });
+});
 
-  const tradingMarginTotal = db.prepare(`SELECT COALESCE(SUM(trading_margin),0) s FROM trading_invoices`).get().s;
-  const totalTradingRevenue = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM trading_invoices`).get().s;
-  const totalTradingReceived = db.prepare(`SELECT COALESCE(SUM(amount),0) s FROM trading_payments`).get().s;
+// 1. Real-Time / Intraday View
+router.get('/trading/realtime', (req, res) => {
+  // Open positions (bids submitted but not cleared/rejected)
+  const openBids = db.prepare(`SELECT COUNT(*) c, COALESCE(SUM(quantum_mw),0) q FROM bids WHERE status IN ('SUBMITTED', 'DRAFT')`).get();
+  
+  // Active Limits vs Utilized (simulating utilized from open bids)
+  const clientLimits = db.prepare(`
+    SELECT tc.name, tc.exposure_limit, COALESCE(SUM(b.quantum_mw * b.price_per_unit), 0) as utilized
+    FROM trading_clients tc
+    LEFT JOIN bids b ON b.client_id = tc.id AND b.status IN ('SUBMITTED', 'CLEARED')
+    WHERE tc.status = 'ACTIVE'
+    GROUP BY tc.id
+  `).all();
 
-  const byExchange = db.prepare(`
-    SELECT exchange, COUNT(*) bids, COALESCE(SUM(quantum_mw),0) quantum, COALESCE(SUM(cleared_quantum_mw),0) cleared
-    FROM bids GROUP BY exchange
-  `).all();
-  const byProduct = db.prepare(`
-    SELECT product, COUNT(*) bids, COALESCE(SUM(quantum_mw),0) quantum, COALESCE(SUM(cleared_quantum_mw),0) cleared
-    FROM bids GROUP BY product
-  `).all();
-  const byClient = db.prepare(`
-    SELECT tc.name as client_name, COUNT(b.id) bids, COALESCE(SUM(b.cleared_quantum_mw),0) cleared
-    FROM trading_clients tc LEFT JOIN bids b ON b.client_id = tc.id GROUP BY tc.id
+  // Exchange wise open positions
+  const exchangeExposure = db.prepare(`
+    SELECT exchange, COUNT(*) as bid_count, COALESCE(SUM(quantum_mw),0) as total_mw
+    FROM bids WHERE status IN ('SUBMITTED', 'PARTIALLY_CLEARED')
+    GROUP BY exchange
   `).all();
 
   res.json({
-    kpis: {
-      totalBids, clearedBids, totalQuantumBid, totalQuantumCleared, activeClients,
-      activeBilateral, pendingOpenAccess, tradingMarginTotal, totalTradingRevenue, totalTradingReceived,
-    },
-    byExchange, byProduct, byClient,
+    open_positions: { count: openBids.c, quantum_mw: openBids.q },
+    client_limits: clientLimits,
+    exchange_exposure: exchangeExposure,
+    live_rates: { IEX: 4.25, PXIL: 4.10, HPX: 4.30 } // Mock live rates
+  });
+});
+
+// 2. Daily / Settlement View
+router.get('/trading/daily', (req, res) => {
+  // Today's summary
+  const totalBids = db.prepare(`SELECT COUNT(*) c FROM bids WHERE date(created_at) = date('now')`).get().c;
+  const clearedBids = db.prepare(`SELECT COUNT(*) c FROM bids WHERE status IN ('CLEARED','PARTIALLY_CLEARED') AND date(created_at) = date('now')`).get().c;
+  
+  const quantumBid = db.prepare(`SELECT COALESCE(SUM(quantum_mw),0) s FROM bids WHERE date(created_at) = date('now')`).get().s;
+  const quantumCleared = db.prepare(`SELECT COALESCE(SUM(cleared_quantum_mw),0) s FROM bids WHERE date(created_at) = date('now')`).get().s;
+  
+  const clearRatio = totalBids > 0 ? (clearedBids / totalBids) * 100 : 0;
+
+  // Realized vs Unrealized P&L
+  const realizedPl = db.prepare(`SELECT COALESCE(SUM(trading_margin),0) s FROM trading_invoices WHERE status = 'PAID' AND date(created_at) = date('now')`).get().s;
+  const unrealizedPl = db.prepare(`SELECT COALESCE(SUM(quantum_mw * 0.05),0) s FROM bids WHERE status = 'CLEARED' AND date(created_at) = date('now')`).get().s; // Assuming 0.05 margin
+
+  // Rejection reasons (Mocked based on NO_BID/REJECTED)
+  const rejectedBids = db.prepare(`SELECT status, COUNT(*) c FROM bids WHERE status IN ('REJECTED', 'NO_BID') AND date(created_at) = date('now') GROUP BY status`).all();
+
+  res.json({
+    daily_summary: { totalBids, clearedBids, quantumBid, quantumCleared, clearRatio },
+    pnl: { realized: realizedPl, unrealized: unrealizedPl },
+    rejected_analysis: rejectedBids
+  });
+});
+
+// 3. Periodic / Trend View
+router.get('/trading/periodic', (req, res) => {
+  // Monthly volume trend
+  const volumeTrend = db.prepare(`
+    SELECT strftime('%Y-%m', bid_date) as month, COALESCE(SUM(quantum_mw),0) as bid_mw, COALESCE(SUM(cleared_quantum_mw),0) as cleared_mw
+    FROM bids GROUP BY month ORDER BY month DESC LIMIT 6
+  `).all();
+
+  // Client-wise profitability (trading margin)
+  const clientProfitability = db.prepare(`
+    SELECT tc.name as client_name, COALESCE(SUM(ti.trading_margin),0) as total_margin
+    FROM trading_clients tc
+    LEFT JOIN trading_invoices ti ON ti.client_id = tc.id
+    GROUP BY tc.id ORDER BY total_margin DESC LIMIT 5
+  `).all();
+
+  // Product wise
+  const byProduct = db.prepare(`
+    SELECT product, COALESCE(SUM(cleared_quantum_mw),0) as cleared_mw
+    FROM bids WHERE status IN ('CLEARED', 'PARTIALLY_CLEARED') GROUP BY product
+  `).all();
+
+  res.json({
+    volume_trend: volumeTrend.reverse(),
+    client_profitability: clientProfitability,
+    product_mix: byProduct
   });
 });
 
