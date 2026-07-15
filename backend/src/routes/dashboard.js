@@ -48,7 +48,10 @@ router.get('/reia', (req, res) => {
   `).all();
 
   const expiringSecurities = db.prepare(`
-    SELECT COUNT(*) c FROM payment_security WHERE status = 'ACTIVE' AND julianday(validity_end) - julianday('now') <= 60
+    SELECT COUNT(*) c FROM payment_security
+    WHERE status IN ('ACTIVE','PARTIALLY_UTILIZED','RENEWED')
+      AND validity_end IS NOT NULL
+      AND julianday(validity_end) - julianday('now') BETWEEN 0 AND 60
   `).get().c;
 
   res.json({

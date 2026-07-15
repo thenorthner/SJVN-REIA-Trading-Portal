@@ -48,6 +48,9 @@ const TONE_MAP = {
   // Reconciliation
   AUTO_MATCHED: 'green', NEEDS_REVIEW: 'amber', PENDING_SIGN_OFF: 'blue',
   AGREED: 'green', REOPENED: 'amber', IN_PROGRESS: 'blue',
+  // Payment security
+  PARTIALLY_UTILIZED: 'amber', RENEWED: 'blue', RELEASE_PENDING: 'amber', RELEASED: 'green',
+  ELIGIBLE: 'amber', NOTICE_ISSUED: 'blue', CLAIMED: 'amber', FUNDS_RECEIVED: 'green',
 };
 
 export function Badge({ status }) {

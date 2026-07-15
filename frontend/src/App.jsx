@@ -30,6 +30,7 @@ import SellerInvoices from './pages/seller/SellerInvoices.jsx';
 import SellerPayments from './pages/seller/SellerPayments.jsx';
 import SellerDisputes from './pages/seller/SellerDisputes.jsx';
 import SellerReconciliation from './pages/seller/SellerReconciliation.jsx';
+import SellerPaymentSecurity from './pages/seller/SellerPaymentSecurity.jsx';
 
 import BuyerDashboard from './pages/buyer/BuyerDashboard.jsx';
 import BuyerContracts from './pages/buyer/BuyerContracts.jsx';
@@ -38,6 +39,7 @@ import BuyerInvoices from './pages/buyer/BuyerInvoices.jsx';
 import BuyerPayments from './pages/buyer/BuyerPayments.jsx';
 import BuyerDisputes from './pages/buyer/BuyerDisputes.jsx';
 import BuyerReconciliation from './pages/buyer/BuyerReconciliation.jsx';
+import BuyerPaymentSecurity from './pages/buyer/BuyerPaymentSecurity.jsx';
 
 import AuditLogs from './pages/AuditLogs.jsx';
 
@@ -78,6 +80,7 @@ export default function App() {
         <Route path="seller/payments" element={<ProtectedRoute roles={SELLER_ROLES}><SellerPayments /></ProtectedRoute>} />
         <Route path="seller/disputes" element={<ProtectedRoute roles={SELLER_ROLES}><SellerDisputes /></ProtectedRoute>} />
         <Route path="seller/reconciliation" element={<ProtectedRoute roles={SELLER_ROLES}><SellerReconciliation /></ProtectedRoute>} />
+        <Route path="seller/payment-security" element={<ProtectedRoute roles={SELLER_ROLES}><SellerPaymentSecurity /></ProtectedRoute>} />
 
         {/* Buyer Portal */}
         <Route path="buyer" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerDashboard /></ProtectedRoute>} />
@@ -87,6 +90,7 @@ export default function App() {
         <Route path="buyer/payments" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerPayments /></ProtectedRoute>} />
         <Route path="buyer/disputes" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerDisputes /></ProtectedRoute>} />
         <Route path="buyer/reconciliation" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerReconciliation /></ProtectedRoute>} />
+        <Route path="buyer/payment-security" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerPaymentSecurity /></ProtectedRoute>} />
 
         <Route path="trading" element={<ProtectedRoute roles={TRADING_ROLES}><TradingDashboard /></ProtectedRoute>} />
         <Route path="trading/clients" element={<ProtectedRoute roles={TRADING_ROLES}><TradingClients /></ProtectedRoute>} />

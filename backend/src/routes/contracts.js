@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit } from '../util.js';
+import { syncRequirementsFromContract, createInstrumentsFromRequirements } from '../paymentSecurityEngine.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -70,6 +71,8 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     pbg_expiry: b.pbg_expiry ?? null,
   });
   logAudit({ user: req.user, action: 'CREATE', module: 'REIA', entityType: 'contract', entityId: id, details: b });
+  syncRequirementsFromContract(id);
+  createInstrumentsFromRequirements(id, req.user);
   res.status(201).json(db.prepare('SELECT * FROM contracts WHERE id = ?').get(id));
 });
 
@@ -96,6 +99,8 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
   });
   db.prepare(`UPDATE contracts SET status = 'AMENDED', updated_at = datetime('now') WHERE id = ?`).run(original.id);
   logAudit({ user: req.user, action: 'AMEND', module: 'REIA', entityType: 'contract', entityId: original.id, details: { newVersionId } });
+  syncRequirementsFromContract(newVersionId);
+  createInstrumentsFromRequirements(newVersionId, req.user);
   res.status(201).json(db.prepare('SELECT * FROM contracts WHERE id = ?').get(newVersionId));
 });
 

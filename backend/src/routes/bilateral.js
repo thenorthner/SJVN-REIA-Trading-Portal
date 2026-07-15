@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit } from '../util.js';
+import { checkPortfolioAdequacy } from '../paymentSecurityEngine.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -61,6 +62,12 @@ router.post('/:id/schedule', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, re
   const { schedule_status } = req.body; // SUBMITTED | APPROVED | REVISED | CANCELLED
   const row = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
+  if (['SUBMITTED', 'APPROVED'].includes(schedule_status)) {
+    const sec = checkPortfolioAdequacy();
+    if (!sec.adequate) {
+      return res.status(400).json({ error: sec.error, security: sec });
+    }
+  }
   db.prepare(`UPDATE bilateral_transactions SET schedule_status = ? WHERE id = ?`).run(schedule_status, row.id);
   logAudit({ user: req.user, action: `SCHEDULE_${schedule_status}`, module: 'TRADING', entityType: 'bilateral', entityId: row.id });
   res.json(withClient(db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(row.id)));

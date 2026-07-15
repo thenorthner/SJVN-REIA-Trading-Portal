@@ -11,7 +11,7 @@ import contractsRoutes from './routes/contracts.js';
 import energyDataRoutes from './routes/energyData.js';
 import invoicesRoutes from './routes/invoices.js';
 import disputesRoutes, { runSlaEscalations } from './routes/disputes.js';
-import paymentSecurityRoutes from './routes/paymentSecurity.js';
+import paymentSecurityRoutes, { runAlertCascade } from './routes/paymentSecurity.js';
 import reconciliationRoutes, { runScheduledReconciliations } from './routes/reconciliation.js';
 import tradingClientsRoutes from './routes/tradingClients.js';
 import bidsRoutes from './routes/bids.js';
@@ -88,6 +88,15 @@ app.listen(PORT, () => {
       if (result.created > 0) console.log(`[RECON] Scheduled ${result.created} run(s) for ${result.period}`);
     } catch (err) {
       console.error('[RECON] schedule failed', err.message);
+    }
+  }, 60 * 60 * 1000);
+  // Payment security alert cascade every hour
+  setInterval(() => {
+    try {
+      const result = runAlertCascade();
+      if (result.sent > 0) console.log(`[SECURITY] Sent ${result.sent} alert(s)`);
+    } catch (err) {
+      console.error('[SECURITY] alert cascade failed', err.message);
     }
   }, 60 * 60 * 1000);
 });

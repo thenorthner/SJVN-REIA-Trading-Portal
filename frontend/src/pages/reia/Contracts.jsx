@@ -23,6 +23,8 @@ export default function Contracts() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
   const [amendForm, setAmendForm] = useState(null);
+  const [requirements, setRequirements] = useState([]);
+  const [syncMsg, setSyncMsg] = useState('');
 
   function load() {
     setLoading(true);
@@ -40,7 +42,20 @@ export default function Contracts() {
 
   function openDetail(row) {
     api.contracts.get(row.id).then(setSelected);
+    api.paymentSecurity.requirements(row.id).then(setRequirements).catch(() => setRequirements([]));
     setAmendForm(null);
+    setSyncMsg('');
+  }
+
+  async function syncSecurity() {
+    if (!selected) return;
+    try {
+      const res = await api.paymentSecurity.fromContract(selected.id);
+      setRequirements(res.requirements || []);
+      setSyncMsg(`Synced — ${res.created?.length || 0} new instrument(s)`);
+    } catch (err) {
+      setSyncMsg(err.response?.data?.error || 'Sync failed');
+    }
   }
 
   async function handleCreate(e) {
@@ -207,6 +222,29 @@ export default function Contracts() {
               <div className="detail-item"><span className="detail-label">PBG</span><span className="detail-value">{fmtCurrency(selected.pbg_amount)} {selected.pbg_type ? `(${selected.pbg_type})` : ''}</span></div>
               <div className="detail-item"><span className="detail-label">Version</span><span className="detail-value">v{selected.version}</span></div>
             </div>
+
+            <div className="section-title" style={{ marginTop: 18 }}>Payment security requirements</div>
+            {requirements.length === 0 ? (
+              <p style={{ fontSize: 13, opacity: 0.7 }}>No requirements yet (run sync to inherit from EMD/PBG/PSA LC rules).</p>
+            ) : (
+              <ul style={{ fontSize: 13, margin: '0 0 8px', paddingLeft: 18 }}>
+                {requirements.map((r) => (
+                  <li key={r.id}>
+                    {r.mechanism_type}{r.bg_subtype ? `/${r.bg_subtype}` : ''}
+                    {' — '}min {fmtCurrency(r.min_amount)}
+                    {r.months_cover > 0 ? `, ${r.months_cover} mo cover` : ''}
+                    {`, waterfall #${r.waterfall_priority}`}
+                    {r.is_revolving ? ' (revolving)' : ''}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {CAN_WRITE.includes(user?.role) && (
+              <div style={{ marginBottom: 8 }}>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={syncSecurity}>Sync security instruments</button>
+                {syncMsg && <span style={{ marginLeft: 10, fontSize: 12 }}>{syncMsg}</span>}
+              </div>
+            )}
 
             {selected.versions?.length > 1 && (
               <>

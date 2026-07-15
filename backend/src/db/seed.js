@@ -1,6 +1,15 @@
 import bcrypt from 'bcryptjs';
 import db from './index.js';
 import { newId } from '../util.js';
+import {
+  syncRequirementsFromContract,
+  createInstrumentsFromRequirements,
+  trailingMonthlyBilledAvg,
+  genInstrumentNo,
+  genInvocationNo,
+  recordSecurityEvent,
+} from '../paymentSecurityEngine.js';
+import { WATERFALL_DEFAULTS } from '../paymentSecurityConstants.js';
 
 const already = db.prepare('SELECT COUNT(*) c FROM users').get().c;
 if (already > 0) {
@@ -453,27 +462,295 @@ for (const inv of invoices.filter((i) => i.status === 'PAID')) {
   });
 }
 
-// ---------------- Payment Security ----------------
+// ---------------- Payment Security (full module) ----------------
 const insertPS = db.prepare(`
-  INSERT INTO payment_security (id, contract_id, mechanism_type, amount, issuing_bank, beneficiary,
-    validity_start, validity_end, utilized_amount, status)
-  VALUES (@id, @contract_id, @mechanism_type, @amount, @issuing_bank, @beneficiary,
-    @validity_start, @validity_end, @utilized_amount, @status)
+  INSERT INTO payment_security (
+    id, instrument_no, contract_id, entity_id, mechanism_type, bg_subtype, is_revolving,
+    limit_amount, utilized_amount, available_amount, required_amount, waterfall_priority,
+    issuing_bank, beneficiary, bank_confirmation_ref, verified_at, verified_by,
+    validity_start, validity_end, renewal_status, invocation_status, status, remarks
+  ) VALUES (
+    @id, @instrument_no, @contract_id, @entity_id, @mechanism_type, @bg_subtype, @is_revolving,
+    @limit_amount, @utilized_amount, @available_amount, @required_amount, @waterfall_priority,
+    @issuing_bank, @beneficiary, @bank_confirmation_ref, @verified_at, @verified_by,
+    @validity_start, @validity_end, @renewal_status, @invocation_status, @status, @remarks
+  )
 `);
-for (const c of contracts.filter((c) => c.contract_type === 'PSA')) {
+
+const seedUser = { id: userIds['reia@sjvn.in'], name: 'Rahul (REIA Ops)' };
+const psas = contracts.filter((c) => c.contract_type === 'PSA');
+const ppas = contracts.filter((c) => c.contract_type === 'PPA');
+
+for (const c of contracts) {
+  syncRequirementsFromContract(c.id);
+}
+
+// PPA: EMD + PBG instruments (from requirements)
+for (const c of ppas) {
+  createInstrumentsFromRequirements(c.id, seedUser);
+  const instruments = db.prepare(`SELECT * FROM payment_security WHERE contract_id = ?`).all(c.id);
+  for (const ps of instruments) {
+    db.prepare(`
+      UPDATE payment_security SET issuing_bank = ?, bank_confirmation_ref = ?, verified_at = ?, verified_by = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(
+      ps.bg_subtype === 'EMD' ? 'HDFC Bank' : 'ICICI Bank',
+      `BKCONF/${ps.bg_subtype || 'BG'}/${Math.floor(1000 + Math.random() * 9000)}`,
+      daysAgoIso(20),
+      'Rahul (REIA Ops)',
+      ps.id
+    );
+  }
+}
+
+// PSA instruments — three demo profiles
+const psaHealthy = psas[0];
+const psaShortfall = psas[1];
+const psaNearExpiry = psas[2];
+
+function insertInstrument(row) {
+  const limit = row.limit_amount;
+  const utilized = row.utilized_amount || 0;
   insertPS.run({
-    id: newId('PSC'),
-    contract_id: c.id,
-    mechanism_type: 'LC',
-    amount: Math.round(c.capacity_mw * 24 * 30 * 0.25 * c.tariff_per_unit * 1.1),
-    issuing_bank: 'State Bank of India',
-    beneficiary: 'SJVN Limited',
-    validity_start: '2025-01-01',
-    validity_end: '2025-12-31',
-    utilized_amount: 0,
-    status: 'ACTIVE',
+    renewal_status: 'NONE',
+    invocation_status: 'NONE',
+    bank_confirmation_ref: null,
+    verified_at: null,
+    verified_by: null,
+    bg_subtype: null,
+    is_revolving: 0,
+    ...row,
+    available_amount: Math.max(0, limit - utilized),
+  });
+  recordSecurityEvent({
+    instrumentId: row.id,
+    contractId: row.contract_id,
+    user: seedUser,
+    eventType: 'CREATE',
+    details: { seeded: true },
   });
 }
+
+if (psaHealthy) {
+  const avg = trailingMonthlyBilledAvg(psaHealthy.id) || Math.round(psaHealthy.capacity_mw * 24 * 30 * 0.25 * psaHealthy.tariff_per_unit);
+  const corpusAmt = Math.round(avg * 0.15);
+  const lcLimit = Math.round(avg * 2.5);
+  const corpusId = newId('PSC');
+  const lcId = newId('PSC');
+  insertInstrument({
+    id: corpusId,
+    instrument_no: genInstrumentNo('CORPUS'),
+    contract_id: psaHealthy.id,
+    entity_id: psaHealthy.buyer_id,
+    mechanism_type: 'CORPUS_FUND',
+    is_revolving: 0,
+    limit_amount: corpusAmt,
+    utilized_amount: 0,
+    required_amount: corpusAmt,
+    waterfall_priority: WATERFALL_DEFAULTS.CORPUS_FUND,
+    issuing_bank: 'SJVN Payment Security Fund',
+    beneficiary: 'SJVN Limited',
+    bank_confirmation_ref: 'CORPUS/SEED/001',
+    verified_at: daysAgoIso(60),
+    verified_by: 'Rahul (REIA Ops)',
+    validity_start: '2025-01-01',
+    validity_end: '2027-12-31',
+    status: 'ACTIVE',
+    remarks: 'Corpus + LC waterfall demo (healthy coverage)',
+  });
+  insertInstrument({
+    id: lcId,
+    instrument_no: genInstrumentNo('LC'),
+    contract_id: psaHealthy.id,
+    entity_id: psaHealthy.buyer_id,
+    mechanism_type: 'LC',
+    is_revolving: 1,
+    limit_amount: lcLimit,
+    utilized_amount: Math.round(lcLimit * 0.12),
+    required_amount: avg,
+    waterfall_priority: WATERFALL_DEFAULTS.LC,
+    issuing_bank: 'State Bank of India',
+    beneficiary: 'SJVN Limited',
+    bank_confirmation_ref: 'SBI/LC/CONF/7741',
+    verified_at: daysAgoIso(45),
+    verified_by: 'Rahul (REIA Ops)',
+    validity_start: '2025-04-01',
+    validity_end: '2027-03-31',
+    status: 'PARTIALLY_UTILIZED',
+    remarks: 'Revolving LC — healthy cover',
+  });
+  db.prepare(`UPDATE payment_security SET available_amount = limit_amount - utilized_amount WHERE id IN (?, ?)`).run(corpusId, lcId);
+}
+
+if (psaShortfall) {
+  const avg = trailingMonthlyBilledAvg(psaShortfall.id) || Math.round(psaShortfall.capacity_mw * 24 * 30 * 0.25 * psaShortfall.tariff_per_unit);
+  const lcLimit = Math.round(avg * 0.4);
+  const id = newId('PSC');
+  insertInstrument({
+    id,
+    instrument_no: genInstrumentNo('LC'),
+    contract_id: psaShortfall.id,
+    entity_id: psaShortfall.buyer_id,
+    mechanism_type: 'LC',
+    is_revolving: 1,
+    limit_amount: lcLimit,
+    utilized_amount: Math.round(lcLimit * 0.85),
+    required_amount: avg,
+    waterfall_priority: WATERFALL_DEFAULTS.LC,
+    issuing_bank: 'Punjab National Bank',
+    beneficiary: 'SJVN Limited',
+    bank_confirmation_ref: 'PNB/LC/CONF/2201',
+    verified_at: daysAgoIso(30),
+    verified_by: 'Rahul (REIA Ops)',
+    validity_start: '2025-06-01',
+    validity_end: '2026-12-31',
+    status: 'PARTIALLY_UTILIZED',
+    remarks: 'Shortfall demo — coverage < 1.0',
+  });
+  db.prepare(`UPDATE payment_security SET available_amount = limit_amount - utilized_amount WHERE id = ?`).run(id);
+  const ovId = newId('SOV');
+  db.prepare(`
+    INSERT INTO security_adequacy_overrides (id, contract_id, reason, approved_by, valid_until)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(ovId, psaShortfall.id, 'Temporary trading allowance pending LC replenishment (seed)', 'Divyankur (Management)', daysFromIso(30).slice(0, 10));
+  recordSecurityEvent({
+    contractId: psaShortfall.id,
+    user: seedUser,
+    eventType: 'ADEQUACY_OVERRIDE',
+    details: { override_id: ovId },
+  });
+}
+
+if (psaNearExpiry) {
+  const avg = trailingMonthlyBilledAvg(psaNearExpiry.id) || Math.round(psaNearExpiry.capacity_mw * 24 * 30 * 0.25 * psaNearExpiry.tariff_per_unit);
+  const lcLimit = Math.round(avg * 2.2);
+  const id = newId('PSC');
+  insertInstrument({
+    id,
+    instrument_no: genInstrumentNo('LC'),
+    contract_id: psaNearExpiry.id,
+    entity_id: psaNearExpiry.buyer_id,
+    mechanism_type: 'LC',
+    is_revolving: 1,
+    limit_amount: lcLimit,
+    utilized_amount: 0,
+    required_amount: avg,
+    waterfall_priority: WATERFALL_DEFAULTS.LC,
+    issuing_bank: 'Bank of Baroda',
+    beneficiary: 'SJVN Limited',
+    bank_confirmation_ref: 'BOB/LC/CONF/9910',
+    verified_at: daysAgoIso(90),
+    verified_by: 'Rahul (REIA Ops)',
+    validity_start: '2025-07-01',
+    validity_end: daysFromIso(15).slice(0, 10),
+    status: 'ACTIVE',
+    remarks: 'Near-expiry — 15-day cascade demo',
+  });
+  db.prepare(`UPDATE payment_security SET available_amount = limit_amount - utilized_amount WHERE id = ?`).run(id);
+  for (const days of [60, 30, 15]) {
+    db.prepare(`
+      INSERT INTO security_alerts (id, payment_security_id, contract_id, alert_type, days_before, sent_to, message, created_at)
+      VALUES (?, ?, ?, 'EXPIRY', ?, 'BUYER,REIA_USER', ?, ?)
+    `).run(
+      newId('SAL'),
+      id,
+      psaNearExpiry.id,
+      days,
+      `Payment security ${id} expires in ${days} days`,
+      daysAgoIso(60 - days)
+    );
+  }
+}
+
+// Invocations: one in-progress (NOTICE), one completed (FUNDS_RECEIVED)
+if (psaHealthy) {
+  const overdueInv = invoices.find((i) => i.contract_id === psaHealthy.id && i.status === 'UNDER_APPROVAL');
+  const invAmt = Math.round((overdueInv?.total_amount || 50000) * 0.25);
+  const instruments = db.prepare(`
+    SELECT * FROM payment_security WHERE contract_id = ? ORDER BY waterfall_priority ASC
+  `).all(psaHealthy.id);
+  const first = instruments[0];
+  if (first) {
+    const invId = newId('SIV');
+    db.prepare(`
+      INSERT INTO security_invocations (
+        id, invocation_no, contract_id, payment_security_id, amount, invoice_ids, status,
+        demand_letter_json, waterfall_used, notes, created_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'NOTICE_ISSUED', ?, ?, ?, ?, ?, ?)
+    `).run(
+      invId,
+      genInvocationNo(),
+      psaHealthy.id,
+      first.id,
+      invAmt,
+      JSON.stringify(overdueInv ? [overdueInv.id] : []),
+      JSON.stringify({
+        to: 'Buyer DISCOM',
+        subject: `Demand under payment security — ${psaHealthy.contract_no}`,
+        amount: invAmt,
+        invoice_ids: overdueInv ? [overdueInv.id] : [],
+        waterfall: instruments.map((i) => i.instrument_no),
+      }),
+      JSON.stringify([{ id: first.id, amount: invAmt }]),
+      'Partial waterfall draw — notice issued (seed)',
+      'Rahul (REIA Ops)',
+      daysAgoIso(5),
+      daysAgoIso(5)
+    );
+    db.prepare(`UPDATE payment_security SET utilized_amount = utilized_amount + ?, available_amount = available_amount - ?, invocation_status = 'NOTICE_ISSUED', status = 'PARTIALLY_UTILIZED' WHERE id = ?`)
+      .run(invAmt, invAmt, first.id);
+  }
+}
+
+if (psaNearExpiry) {
+  const invId = newId('SIV');
+  const ps = db.prepare(`SELECT * FROM payment_security WHERE contract_id = ? AND mechanism_type = 'LC'`).get(psaNearExpiry.id);
+  const amt = 250000;
+  db.prepare(`
+    INSERT INTO security_invocations (
+      id, invocation_no, contract_id, payment_security_id, amount, invoice_ids, status,
+      demand_letter_json, waterfall_used, notes, created_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, '[]', 'FUNDS_RECEIVED', ?, ?, ?, ?, ?, ?)
+  `).run(
+    invId,
+    genInvocationNo(),
+    psaNearExpiry.id,
+    ps?.id || null,
+    amt,
+    JSON.stringify({ subject: 'Completed invocation (seed)', amount: amt }),
+    JSON.stringify(ps ? [{ id: ps.id, amount: amt }] : []),
+    'Historical invocation — funds received',
+    'Rahul (REIA Ops)',
+    daysAgoIso(120),
+    daysAgoIso(100)
+  );
+}
+
+// Release pending on a PPA EMD (phase expansion — no open dues expected on unused EMD framing)
+const releasePpa = ppas.find((c) => c.contract_no.includes('001-A')) || ppas[1];
+if (releasePpa) {
+  const emd = db.prepare(`
+    SELECT * FROM payment_security WHERE contract_id = ? AND bg_subtype = 'EMD' LIMIT 1
+  `).get(releasePpa.id);
+  if (emd) {
+    const relId = newId('SRL');
+    db.prepare(`
+      INSERT INTO security_releases (
+        id, payment_security_id, contract_id, status, checklist_no_dues, checklist_no_disputes, reason, requested_by
+      ) VALUES (?, ?, ?, 'PENDING', 1, 1, ?, ?)
+    `).run(relId, emd.id, releasePpa.id, 'Contract expansion EMD release after COD (seed)', 'Sunrise Solar Pvt Ltd');
+    db.prepare(`UPDATE payment_security SET status = 'RELEASE_PENDING' WHERE id = ?`).run(emd.id);
+    recordSecurityEvent({
+      instrumentId: emd.id,
+      contractId: releasePpa.id,
+      user: seedUser,
+      eventType: 'RELEASE_REQUESTED',
+      details: { release_id: relId },
+    });
+  }
+}
+
+console.log('Payment security instruments seeded:', db.prepare('SELECT COUNT(*) c FROM payment_security').get().c);
 
 // ---------------- Reconciliation (seeded after trading data — see end of file) ----------------
 
@@ -590,7 +867,6 @@ for (let d = 1; d <= 15; d++) {
 
 // ---------------- Reconciliation (engine-driven samples) ----------------
 const { persistRun } = await import('../routes/reconciliation.js');
-const seedUser = { id: userIds['reia@sjvn.in'], name: 'Rahul (REIA Ops)' };
 
 // Matched May runs for first few contracts
 for (const c of contracts.slice(0, 3)) {

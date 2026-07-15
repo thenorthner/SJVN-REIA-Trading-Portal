@@ -167,19 +167,115 @@ CREATE TABLE IF NOT EXISTS invoice_mapping (
   PRIMARY KEY (buyer_invoice_id, seller_invoice_id)
 );
 
--- Payment Security & Payment Tracking
+-- Payment Security (live risk-control: revolving LC, BG, corpus, waterfall)
 CREATE TABLE IF NOT EXISTS payment_security (
   id TEXT PRIMARY KEY,
+  instrument_no TEXT UNIQUE NOT NULL,
   contract_id TEXT NOT NULL REFERENCES contracts(id),
-  mechanism_type TEXT NOT NULL CHECK (mechanism_type IN ('LC','BANK_GUARANTEE','CORPUS_FUND','OTHER')),
-  amount REAL NOT NULL,
+  entity_id TEXT,
+  mechanism_type TEXT NOT NULL CHECK (mechanism_type IN (
+    'LC','BANK_GUARANTEE','CORPUS_FUND','PAYMENT_SECURITY_FUND','OTHER'
+  )),
+  bg_subtype TEXT CHECK (bg_subtype IS NULL OR bg_subtype IN ('EMD','PBG','OTHER_BG')),
+  is_revolving INTEGER NOT NULL DEFAULT 0,
+  limit_amount REAL NOT NULL,
+  utilized_amount REAL NOT NULL DEFAULT 0,
+  available_amount REAL NOT NULL DEFAULT 0,
+  required_amount REAL NOT NULL DEFAULT 0,
+  waterfall_priority INTEGER NOT NULL DEFAULT 100,
   issuing_bank TEXT,
   beneficiary TEXT,
+  bank_confirmation_ref TEXT,
+  verified_at TEXT,
+  verified_by TEXT,
   validity_start TEXT,
   validity_end TEXT,
-  utilized_amount REAL NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','EXPIRED','INVOKED','RENEWED','CLOSED')),
+  renewal_status TEXT DEFAULT 'NONE',
+  invocation_status TEXT DEFAULT 'NONE',
+  claim_deadline TEXT,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN (
+    'DRAFT','ACTIVE','PARTIALLY_UTILIZED','INVOKED','EXPIRED','RENEWED',
+    'RELEASE_PENDING','RELEASED','CLOSED'
+  )),
   remarks TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS security_requirements (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  mechanism_type TEXT NOT NULL,
+  bg_subtype TEXT,
+  min_amount REAL NOT NULL DEFAULT 0,
+  months_cover REAL NOT NULL DEFAULT 1,
+  validity_rule TEXT,
+  waterfall_priority INTEGER NOT NULL DEFAULT 100,
+  is_revolving INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS security_events (
+  id TEXT PRIMARY KEY,
+  payment_security_id TEXT REFERENCES payment_security(id),
+  contract_id TEXT,
+  actor_id TEXT,
+  actor_name TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  details TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS security_invocations (
+  id TEXT PRIMARY KEY,
+  invocation_no TEXT UNIQUE NOT NULL,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  payment_security_id TEXT REFERENCES payment_security(id),
+  amount REAL NOT NULL,
+  invoice_ids TEXT,
+  status TEXT NOT NULL DEFAULT 'ELIGIBLE' CHECK (status IN (
+    'ELIGIBLE','NOTICE_ISSUED','CLAIMED','FUNDS_RECEIVED','REJECTED'
+  )),
+  demand_letter_json TEXT,
+  waterfall_used TEXT,
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS security_alerts (
+  id TEXT PRIMARY KEY,
+  payment_security_id TEXT,
+  contract_id TEXT,
+  alert_type TEXT NOT NULL,
+  days_before INTEGER,
+  sent_to TEXT,
+  message TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS security_releases (
+  id TEXT PRIMARY KEY,
+  payment_security_id TEXT NOT NULL REFERENCES payment_security(id),
+  contract_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED','RELEASED')),
+  checklist_no_dues INTEGER NOT NULL DEFAULT 0,
+  checklist_no_disputes INTEGER NOT NULL DEFAULT 0,
+  reason TEXT,
+  requested_by TEXT,
+  acted_by TEXT,
+  acted_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS security_adequacy_overrides (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  reason TEXT NOT NULL,
+  approved_by TEXT NOT NULL,
+  valid_until TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

@@ -48,4 +48,25 @@ function migrateReconciliationSchema() {
 migrateDisputesSchema();
 migrateReconciliationSchema();
 
+/** Recreate payment security when upgrading from thin MVP schema. */
+function migratePaymentSecuritySchema() {
+  const exists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='payment_security'`).get();
+  if (!exists) return;
+  const cols = db.prepare('PRAGMA table_info(payment_security)').all().map((c) => c.name);
+  if (cols.includes('instrument_no')) return;
+
+  db.exec(`
+    DROP TABLE IF EXISTS security_adequacy_overrides;
+    DROP TABLE IF EXISTS security_releases;
+    DROP TABLE IF EXISTS security_alerts;
+    DROP TABLE IF EXISTS security_invocations;
+    DROP TABLE IF EXISTS security_events;
+    DROP TABLE IF EXISTS security_requirements;
+    DROP TABLE IF EXISTS payment_security;
+  `);
+  db.exec(schema);
+}
+
+migratePaymentSecuritySchema();
+
 export default db;

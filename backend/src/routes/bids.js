@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification } from '../util.js';
+import { checkPortfolioAdequacy } from '../paymentSecurityEngine.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -40,6 +41,8 @@ function validateBid(client, body) {
   if (body.quantum_mw <= 0) errors.push('Quantum must be greater than zero.');
   if (!body.time_block) errors.push('Time-block is required for exchange bidding.');
   if (!['IEX', 'PXIL', 'HPX'].includes(body.exchange)) errors.push('Unsupported exchange.');
+  const sec = checkPortfolioAdequacy();
+  if (!sec.adequate) errors.push(sec.error);
   return errors;
 }
 
