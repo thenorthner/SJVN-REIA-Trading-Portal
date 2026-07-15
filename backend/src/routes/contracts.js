@@ -7,11 +7,26 @@ import { syncRequirementsFromContract, createInstrumentsFromRequirements } from 
 const router = Router();
 router.use(requireAuth);
 
-function withParties(contract) {
+function fetchContractRelations(contract) {
   if (!contract) return contract;
   const seller = contract.seller_id ? db.prepare('SELECT id, name FROM entities WHERE id = ?').get(contract.seller_id) : null;
   const buyer = contract.buyer_id ? db.prepare('SELECT id, name FROM entities WHERE id = ?').get(contract.buyer_id) : null;
-  return { ...contract, seller_name: seller?.name ?? null, buyer_name: buyer?.name ?? null };
+  contract.seller_name = seller?.name ?? null;
+  contract.buyer_name = buyer?.name ?? null;
+
+  contract.projects = db.prepare(`
+    SELECT p.project_entity_id, e.name, p.allocated_capacity_mw 
+    FROM contract_projects p
+    JOIN entities e ON e.id = p.project_entity_id
+    WHERE p.contract_id = ?
+  `).all(contract.id);
+
+  if (contract.tariff_structure_json) {
+    try {
+      contract.tariff_structure = JSON.parse(contract.tariff_structure_json);
+    } catch(e) {}
+  }
+  return contract;
 }
 
 // B. Contract Management - search / filter / list
@@ -33,7 +48,7 @@ router.get('/', (req, res) => {
   if (project_type) { sql += ' AND project_type = ?'; params.push(project_type); }
   if (q) { sql += ' AND contract_no LIKE ?'; params.push(`%${q}%`); }
   sql += ' ORDER BY created_at DESC';
-  const rows = db.prepare(sql).all(...params).map(withParties);
+  const rows = db.prepare(sql).all(...params).map(fetchContractRelations);
   res.json(rows);
 });
 
@@ -41,39 +56,74 @@ router.get('/:id', (req, res) => {
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
   const versions = db.prepare('SELECT id, contract_no, version, status, created_at FROM contracts WHERE id = ? OR parent_contract_id = ? ORDER BY version').all(req.params.id, req.params.id);
-  res.json({ ...withParties(contract), versions });
+  const amendments = db.prepare('SELECT * FROM contract_amendments WHERE contract_id = ? ORDER BY version DESC').all(req.params.id);
+  res.json({ ...fetchContractRelations(contract), versions, amendments });
 });
 
 router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const id = newId('CON');
   const b = req.body;
-  db.prepare(`
-    INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw,
-      tariff_per_unit, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type, pbg_expiry, status)
-    VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw,
-      @tariff_per_unit, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type, @pbg_expiry, 'ACTIVE')
-  `).run({
-    id,
-    contract_no: b.contract_no,
-    contract_type: b.contract_type,
-    seller_id: b.seller_id ?? null,
-    buyer_id: b.buyer_id ?? null,
-    project_type: b.project_type,
-    capacity_mw: b.capacity_mw,
-    tariff_per_unit: b.tariff_per_unit,
-    tenure_start: b.tenure_start,
-    tenure_end: b.tenure_end,
-    billing_cycle: b.billing_cycle || 'MONTHLY',
-    payment_terms: b.payment_terms ?? null,
-    emd_amount: b.emd_amount ?? null,
-    pbg_amount: b.pbg_amount ?? null,
-    pbg_type: b.pbg_type ?? null,
-    pbg_expiry: b.pbg_expiry ?? null,
-  });
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
+        tariff_type, tariff_per_unit, tariff_structure_json, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type, pbg_expiry, status)
+      VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
+        @tariff_type, @tariff_per_unit, @tariff_structure_json, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type, @pbg_expiry, @status)
+    `).run({
+      id,
+      contract_no: b.contract_no,
+      contract_type: b.contract_type,
+      seller_id: b.seller_id ?? null,
+      buyer_id: b.buyer_id ?? null,
+      project_type: b.project_type,
+      capacity_mw: b.capacity_mw,
+      commissioned_capacity_mw: b.commissioned_capacity_mw ?? 0,
+      cod_date: b.cod_date ?? null,
+      tariff_type: b.tariff_type || 'FLAT',
+      tariff_per_unit: b.tariff_per_unit,
+      tariff_structure_json: b.tariff_structure ? JSON.stringify(b.tariff_structure) : null,
+      tenure_start: b.tenure_start,
+      tenure_end: b.tenure_end,
+      billing_cycle: b.billing_cycle || 'MONTHLY',
+      payment_terms: b.payment_terms ?? null,
+      emd_amount: b.emd_amount ?? null,
+      pbg_amount: b.pbg_amount ?? null,
+      pbg_type: b.pbg_type ?? null,
+      pbg_expiry: b.pbg_expiry ?? null,
+      status: b.status || 'DRAFT'
+    });
+
+    if (b.projects && Array.isArray(b.projects)) {
+      const insertProj = db.prepare('INSERT INTO contract_projects (contract_id, project_entity_id, allocated_capacity_mw) VALUES (?, ?, ?)');
+      for (const p of b.projects) {
+        insertProj.run(id, p.project_entity_id, p.allocated_capacity_mw);
+      }
+    }
+  })();
+
   logAudit({ user: req.user, action: 'CREATE', module: 'REIA', entityType: 'contract', entityId: id, details: b });
-  syncRequirementsFromContract(id);
-  createInstrumentsFromRequirements(id, req.user);
-  res.status(201).json(db.prepare('SELECT * FROM contracts WHERE id = ?').get(id));
+  if (b.status === 'ACTIVE') {
+    syncRequirementsFromContract(id);
+    createInstrumentsFromRequirements(id, req.user);
+  }
+  res.status(201).json(fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(id)));
+});
+
+router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
+  if (!contract) return res.status(404).json({ error: 'Contract not found' });
+  const { status, remarks, termination_reason, termination_date } = req.body;
+  
+  db.prepare(`UPDATE contracts SET status = ?, remarks = ?, termination_reason = ?, termination_date = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(status, remarks ?? contract.remarks, termination_reason ?? null, termination_date ?? null, contract.id);
+    
+  if (status === 'ACTIVE') {
+    syncRequirementsFromContract(contract.id);
+    createInstrumentsFromRequirements(contract.id, req.user);
+  }
+
+  logAudit({ user: req.user, action: `STATUS_${status}`, module: 'REIA', entityType: 'contract', entityId: contract.id, details: { remarks, termination_reason } });
+  res.json(fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract.id)));
 });
 
 // Amendment -> creates a new version, marks old as AMENDED
@@ -83,46 +133,71 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
 
   const newVersionId = newId('CON');
   const updated = { ...original, ...req.body };
-  db.prepare(`
-    INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw,
-      tariff_per_unit, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type,
-      pbg_expiry, version, parent_contract_id, status, remarks)
-    VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw,
-      @tariff_per_unit, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type,
-      @pbg_expiry, @version, @parent_contract_id, 'ACTIVE', @remarks)
-  `).run({
-    ...updated,
-    id: newVersionId,
-    version: original.version + 1,
-    parent_contract_id: original.parent_contract_id || original.id,
-    remarks: req.body.amendment_reason ?? null,
-  });
-  db.prepare(`UPDATE contracts SET status = 'AMENDED', updated_at = datetime('now') WHERE id = ?`).run(original.id);
-  logAudit({ user: req.user, action: 'AMEND', module: 'REIA', entityType: 'contract', entityId: original.id, details: { newVersionId } });
+  
+  const changedFields = {};
+  for (const k of Object.keys(req.body)) {
+    if (String(req.body[k]) !== String(original[k])) changedFields[k] = { old: original[k], new: req.body[k] };
+  }
+
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
+        tariff_type, tariff_per_unit, tariff_structure_json, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type,
+        pbg_expiry, version, parent_contract_id, status, remarks)
+      VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
+        @tariff_type, @tariff_per_unit, @tariff_structure_json, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type,
+        @pbg_expiry, @version, @parent_contract_id, 'ACTIVE', @remarks)
+    `).run({
+      ...updated,
+      id: newVersionId,
+      tariff_structure_json: updated.tariff_structure ? JSON.stringify(updated.tariff_structure) : original.tariff_structure_json,
+      version: original.version + 1,
+      parent_contract_id: original.parent_contract_id || original.id,
+      remarks: req.body.amendment_reason ?? null,
+    });
+    
+    // Copy projects
+    const projects = db.prepare('SELECT * FROM contract_projects WHERE contract_id = ?').all(original.id);
+    const insertProj = db.prepare('INSERT INTO contract_projects (contract_id, project_entity_id, allocated_capacity_mw) VALUES (?, ?, ?)');
+    for (const p of projects) insertProj.run(newVersionId, p.project_entity_id, p.allocated_capacity_mw);
+
+    db.prepare(`UPDATE contracts SET status = 'AMENDED', updated_at = datetime('now') WHERE id = ?`).run(original.id);
+    db.prepare(`INSERT INTO contract_amendments (id, contract_id, version, changed_fields_json, approved_by) VALUES (?, ?, ?, ?, ?)`).run(newId('CMA'), original.id, original.version, JSON.stringify(changedFields), req.user.name);
+  })();
+
+  logAudit({ user: req.user, action: 'AMEND', module: 'REIA', entityType: 'contract', entityId: original.id, details: { newVersionId, changedFields } });
   syncRequirementsFromContract(newVersionId);
   createInstrumentsFromRequirements(newVersionId, req.user);
-  res.status(201).json(db.prepare('SELECT * FROM contracts WHERE id = ?').get(newVersionId));
+  res.status(201).json(fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(newVersionId)));
 });
 
 router.post('/bulk-upload', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const rows = req.body.rows || [];
-  const inserted = [];
+  const results = { successful: 0, failed: 0, errors: [] };
+  
   const insert = db.prepare(`
-    INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw,
-      tariff_per_unit, tenure_start, tenure_end, billing_cycle, emd_amount, pbg_amount, status)
-    VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw,
-      @tariff_per_unit, @tenure_start, @tenure_end, @billing_cycle, @emd_amount, @pbg_amount, 'ACTIVE')
+    INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
+      tariff_type, tariff_per_unit, tenure_start, tenure_end, billing_cycle, emd_amount, pbg_amount, status)
+    VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
+      'FLAT', @tariff_per_unit, @tenure_start, @tenure_end, @billing_cycle, @emd_amount, @pbg_amount, 'ACTIVE')
   `);
-  const tx = db.transaction((items) => {
-    for (const r of items) {
-      const id = newId('CON');
-      insert.run({ id, billing_cycle: 'MONTHLY', emd_amount: null, pbg_amount: null, ...r });
-      inserted.push(id);
+  
+  db.transaction(() => {
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      try {
+        if (!r.contract_no || !r.capacity_mw || !r.tariff_per_unit) throw new Error('Missing required fields (contract_no, capacity_mw, tariff_per_unit)');
+        insert.run({ id: newId('CON'), billing_cycle: 'MONTHLY', emd_amount: null, pbg_amount: null, commissioned_capacity_mw: r.capacity_mw, cod_date: null, ...r });
+        results.successful++;
+      } catch (err) {
+        results.failed++;
+        results.errors.push({ row: i+1, contract_no: r.contract_no, error: err.message });
+      }
     }
-  });
-  tx(rows);
-  logAudit({ user: req.user, action: 'BULK_UPLOAD', module: 'REIA', entityType: 'contract', details: { count: inserted.length } });
-  res.status(201).json({ inserted: inserted.length });
+  })();
+  
+  logAudit({ user: req.user, action: 'BULK_UPLOAD', module: 'REIA', entityType: 'contract', details: results });
+  res.status(201).json(results);
 });
 
 export default router;

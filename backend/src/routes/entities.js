@@ -6,77 +6,140 @@ import { newId, logAudit, pushNotification } from '../util.js';
 const router = Router();
 router.use(requireAuth);
 
+function fetchEntityRelations(entity) {
+  if (!entity) return entity;
+  entity.contacts = db.prepare('SELECT * FROM entity_contacts WHERE entity_id = ?').all(entity.id);
+  entity.documents = db.prepare('SELECT * FROM entity_documents WHERE entity_id = ?').all(entity.id);
+  if (entity.parent_entity_id) {
+    const parent = db.prepare('SELECT name FROM entities WHERE id = ?').get(entity.parent_entity_id);
+    entity.parent_name = parent?.name;
+  }
+  return entity;
+}
+
 // A. Stakeholder Onboarding and Registration + C. Profile Management
 router.get('/', (req, res) => {
-  const { entity_type, status } = req.query;
+  const { entity_type, status, parent_entity_id } = req.query;
   let sql = 'SELECT * FROM entities WHERE 1=1';
   const params = [];
   if (entity_type) { sql += ' AND entity_type = ?'; params.push(entity_type); }
   if (status) { sql += ' AND status = ?'; params.push(status); }
+  if (parent_entity_id !== undefined) {
+    if (parent_entity_id === 'null') sql += ' AND parent_entity_id IS NULL';
+    else { sql += ' AND parent_entity_id = ?'; params.push(parent_entity_id); }
+  }
   sql += ' ORDER BY created_at DESC';
-  res.json(db.prepare(sql).all(...params));
+  const rows = db.prepare(sql).all(...params).map(fetchEntityRelations);
+  res.json(rows);
 });
 
 router.get('/:id', (req, res) => {
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
   const history = db.prepare('SELECT * FROM entity_audit WHERE entity_id = ? ORDER BY created_at DESC').all(req.params.id);
-  res.json({ ...entity, history });
+  res.json({ ...fetchEntityRelations(entity), history });
 });
 
 router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req, res) => {
   const id = newId('ENT');
   const body = req.body;
-  db.prepare(`
-    INSERT INTO entities (id, entity_type, category, name, capacity_mw, technology, contracted_capacity_mw,
-      psa_tariff, supply_criteria, organization_details, regulatory_approvals, bank_details, contact_details, documents, status)
-    VALUES (@id, @entity_type, @category, @name, @capacity_mw, @technology, @contracted_capacity_mw,
-      @psa_tariff, @supply_criteria, @organization_details, @regulatory_approvals, @bank_details, @contact_details, @documents, 'PENDING')
-  `).run({
-    id,
-    entity_type: body.entity_type,
-    category: body.category,
-    name: body.name,
-    capacity_mw: body.capacity_mw ?? null,
-    technology: body.technology ?? null,
-    contracted_capacity_mw: body.contracted_capacity_mw ?? null,
-    psa_tariff: body.psa_tariff ?? null,
-    supply_criteria: body.supply_criteria ?? null,
-    organization_details: body.organization_details ?? null,
-    regulatory_approvals: body.regulatory_approvals ?? null,
-    bank_details: body.bank_details ?? null,
-    contact_details: body.contact_details ?? null,
-    documents: body.documents ? JSON.stringify(body.documents) : null,
-  });
-  logAudit({ user: req.user, action: 'CREATE', module: 'REIA', entityType: 'entity', entityId: id, details: body });
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO entities (id, parent_entity_id, entity_type, category, name, pan_no, gst_no, cin, credit_rating,
+        is_blacklisted, capacity_mw, technology, contracted_capacity_mw, psa_tariff, supply_criteria,
+        organization_details, regulatory_approvals, bank_details, is_penny_drop_verified, status)
+      VALUES (@id, @parent_entity_id, @entity_type, @category, @name, @pan_no, @gst_no, @cin, @credit_rating,
+        0, @capacity_mw, @technology, @contracted_capacity_mw, @psa_tariff, @supply_criteria,
+        @organization_details, @regulatory_approvals, @bank_details, 0, 'PENDING')
+    `).run({
+      id,
+      parent_entity_id: body.parent_entity_id ?? null,
+      entity_type: body.entity_type,
+      category: body.category,
+      name: body.name,
+      pan_no: body.pan_no ?? null,
+      gst_no: body.gst_no ?? null,
+      cin: body.cin ?? null,
+      credit_rating: body.credit_rating ?? null,
+      capacity_mw: body.capacity_mw ?? null,
+      technology: body.technology ?? null,
+      contracted_capacity_mw: body.contracted_capacity_mw ?? null,
+      psa_tariff: body.psa_tariff ?? null,
+      supply_criteria: body.supply_criteria ?? null,
+      organization_details: body.organization_details ?? null,
+      regulatory_approvals: body.regulatory_approvals ?? null,
+      bank_details: body.bank_details ?? null,
+    });
+
+    if (body.contacts && Array.isArray(body.contacts)) {
+      const insertContact = db.prepare('INSERT INTO entity_contacts (id, entity_id, contact_type, name, email, phone, is_primary) VALUES (?, ?, ?, ?, ?, ?, ?)');
+      for (const c of body.contacts) {
+        insertContact.run(newId('CNT'), id, c.contact_type, c.name, c.email, c.phone, c.is_primary ? 1 : 0);
+      }
+    }
+
+    if (body.documents && Array.isArray(body.documents)) {
+      const insertDoc = db.prepare('INSERT INTO entity_documents (id, entity_id, doc_type, url, validity_end, alert_sent) VALUES (?, ?, ?, ?, ?, 0)');
+      for (const d of body.documents) {
+        insertDoc.run(newId('DOC'), id, d.doc_type, d.url, d.validity_end || null);
+      }
+    }
+  })();
+
+  logAudit({ user: req.user, action: 'CREATE', module: 'REIA', entityType: 'entity', entityId: id, details: { name: body.name } });
   pushNotification({ role: 'SJVN_ADMIN', type: 'ONBOARDING', message: `New ${body.entity_type} onboarding request: ${body.name}` });
-  res.status(201).json(db.prepare('SELECT * FROM entities WHERE id = ?').get(id));
+  res.status(201).json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(id)));
 });
 
 router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req, res) => {
   const existing = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Entity not found' });
 
-  const fields = ['category', 'name', 'capacity_mw', 'technology', 'contracted_capacity_mw', 'psa_tariff',
-    'supply_criteria', 'organization_details', 'regulatory_approvals', 'bank_details', 'contact_details'];
+  const fields = ['category', 'name', 'pan_no', 'gst_no', 'cin', 'credit_rating', 'capacity_mw', 'technology', 'contracted_capacity_mw', 'psa_tariff',
+    'supply_criteria', 'organization_details', 'regulatory_approvals', 'bank_details'];
+  
   const updates = {};
+  let isHighRisk = false;
+
   for (const f of fields) {
     if (req.body[f] !== undefined && String(req.body[f]) !== String(existing[f])) {
+      if (['bank_details', 'pan_no', 'gst_no', 'capacity_mw', 'psa_tariff'].includes(f)) {
+        isHighRisk = true;
+      }
       db.prepare(`INSERT INTO entity_audit (id, entity_id, field_changed, old_value, new_value, changed_by) VALUES (?, ?, ?, ?, ?, ?)`)
         .run(newId('EAU'), existing.id, f, String(existing[f] ?? ''), String(req.body[f] ?? ''), req.user.name);
       updates[f] = req.body[f];
     }
   }
+
   const merged = { ...existing, ...updates };
+  // If high risk change (like bank), we strip penny drop verification and might pend approval
+  if (isHighRisk && updates.bank_details) {
+    merged.is_penny_drop_verified = 0;
+  }
+
   db.prepare(`
-    UPDATE entities SET category=@category, name=@name, capacity_mw=@capacity_mw, technology=@technology,
-      contracted_capacity_mw=@contracted_capacity_mw, psa_tariff=@psa_tariff, supply_criteria=@supply_criteria,
+    UPDATE entities SET category=@category, name=@name, pan_no=@pan_no, gst_no=@gst_no, cin=@cin, credit_rating=@credit_rating,
+      capacity_mw=@capacity_mw, technology=@technology, contracted_capacity_mw=@contracted_capacity_mw, psa_tariff=@psa_tariff, supply_criteria=@supply_criteria,
       organization_details=@organization_details, regulatory_approvals=@regulatory_approvals,
-      bank_details=@bank_details, contact_details=@contact_details, updated_at=datetime('now')
+      bank_details=@bank_details, is_penny_drop_verified=@is_penny_drop_verified, updated_at=datetime('now')
     WHERE id=@id
   `).run(merged);
-  logAudit({ user: req.user, action: 'UPDATE', module: 'REIA', entityType: 'entity', entityId: existing.id, details: updates });
-  res.json(db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id));
+
+  logAudit({ user: req.user, action: 'UPDATE', module: 'REIA', entityType: 'entity', entityId: existing.id, details: { highRisk: isHighRisk } });
+  if (isHighRisk) {
+    pushNotification({ role: 'SJVN_ADMIN', type: 'RISK_UPDATE', message: `High-risk profile update by ${existing.name}. Penny-drop reset.` });
+  }
+
+  res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id)));
+});
+
+router.post('/:id/penny-drop', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  db.prepare(`UPDATE entities SET is_penny_drop_verified = 1 WHERE id = ?`).run(entity.id);
+  logAudit({ user: req.user, action: 'PENNY_DROP_VERIFIED', module: 'REIA', entityType: 'entity', entityId: entity.id });
+  res.json({ success: true, message: 'Bank account verified via penny drop' });
 });
 
 router.post('/:id/approve', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
@@ -85,7 +148,7 @@ router.post('/:id/approve', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
   db.prepare(`UPDATE entities SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(decision, req.params.id);
   logAudit({ user: req.user, action: `ENTITY_${decision}`, module: 'REIA', entityType: 'entity', entityId: entity.id, details: { remarks } });
-  res.json(db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id));
+  res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id)));
 });
 
 export default router;

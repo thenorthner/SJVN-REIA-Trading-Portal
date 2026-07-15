@@ -49,9 +49,15 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- Stakeholder Onboarding & Registration (Sellers / Buyers)
 CREATE TABLE IF NOT EXISTS entities (
   id TEXT PRIMARY KEY,
+  parent_entity_id TEXT REFERENCES entities(id), -- Hierarchy: Parent/Group vs SPV/Project
   entity_type TEXT NOT NULL CHECK (entity_type IN ('SELLER','BUYER')),
   category TEXT NOT NULL, -- RE Generator / DISCOM / C&I / Other
   name TEXT NOT NULL,
+  pan_no TEXT,
+  gst_no TEXT,
+  cin TEXT,
+  credit_rating TEXT,
+  is_blacklisted INTEGER NOT NULL DEFAULT 0,
   capacity_mw REAL,
   technology TEXT, -- Solar / Wind / Hybrid / FDRE / Peak Power / PSP / Storage
   contracted_capacity_mw REAL,
@@ -60,11 +66,30 @@ CREATE TABLE IF NOT EXISTS entities (
   organization_details TEXT,
   regulatory_approvals TEXT,
   bank_details TEXT,
-  contact_details TEXT,
-  documents TEXT, -- JSON array of {name, url}
+  is_penny_drop_verified INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS entity_contacts (
+  id TEXT PRIMARY KEY,
+  entity_id TEXT NOT NULL REFERENCES entities(id),
+  contact_type TEXT NOT NULL CHECK (contact_type IN ('COMMERCIAL','TECHNICAL','DISPUTE','EMERGENCY')),
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT,
+  is_primary INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS entity_documents (
+  id TEXT PRIMARY KEY,
+  entity_id TEXT NOT NULL REFERENCES entities(id),
+  doc_type TEXT NOT NULL,
+  url TEXT NOT NULL,
+  validity_end TEXT,
+  alert_sent INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS entity_audit (
@@ -86,7 +111,11 @@ CREATE TABLE IF NOT EXISTS contracts (
   buyer_id TEXT REFERENCES entities(id),
   project_type TEXT NOT NULL, -- Solar/Wind/Hybrid/FDRE/PeakPower/PSP/Storage
   capacity_mw REAL NOT NULL,
+  commissioned_capacity_mw REAL NOT NULL DEFAULT 0,
+  cod_date TEXT,
+  tariff_type TEXT NOT NULL DEFAULT 'FLAT' CHECK (tariff_type IN ('FLAT','ESCALATING','TWO_PART','SLAB')),
   tariff_per_unit REAL NOT NULL,
+  tariff_structure_json TEXT,
   tenure_start TEXT NOT NULL,
   tenure_end TEXT NOT NULL,
   billing_cycle TEXT NOT NULL DEFAULT 'MONTHLY' CHECK (billing_cycle IN ('DAILY','WEEKLY','MONTHLY','CUSTOM')),
@@ -97,10 +126,31 @@ CREATE TABLE IF NOT EXISTS contracts (
   pbg_expiry TEXT,
   version INTEGER NOT NULL DEFAULT 1,
   parent_contract_id TEXT,
-  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('DRAFT','ACTIVE','AMENDED','EXPIRED','TERMINATED')),
+  termination_reason TEXT,
+  termination_date TEXT,
+  status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN (
+    'DRAFT','UNDER_NEGOTIATION','SIGNED','PENDING_REGULATORY_APPROVAL',
+    'ACTIVE','NEARING_EXPIRY','EXPIRED','RENEWED','TERMINATED','CLOSED'
+  )),
   remarks TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS contract_projects (
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  project_entity_id TEXT NOT NULL REFERENCES entities(id),
+  allocated_capacity_mw REAL NOT NULL,
+  PRIMARY KEY (contract_id, project_entity_id)
+);
+
+CREATE TABLE IF NOT EXISTS contract_amendments (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  version INTEGER NOT NULL,
+  changed_fields_json TEXT NOT NULL,
+  approved_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Energy Data Accounting & Validation

@@ -13,6 +13,7 @@ import invoicesRoutes from './routes/invoices.js';
 import disputesRoutes, { runSlaEscalations } from './routes/disputes.js';
 import paymentSecurityRoutes, { runAlertCascade } from './routes/paymentSecurity.js';
 import reconciliationRoutes, { runScheduledReconciliations } from './routes/reconciliation.js';
+import { runStakeholderAlerts } from './stakeholderEngine.js';
 import tradingClientsRoutes from './routes/tradingClients.js';
 import bidsRoutes from './routes/bids.js';
 import bilateralRoutes from './routes/bilateral.js';
@@ -97,6 +98,14 @@ app.listen(PORT, () => {
       if (result.sent > 0) console.log(`[SECURITY] Sent ${result.sent} alert(s)`);
     } catch (err) {
       console.error('[SECURITY] alert cascade failed', err.message);
+    }
+  }, 60 * 60 * 1000);
+  // Stakeholder and contract alerts cascade every hour
+  setInterval(() => {
+    try {
+      runStakeholderAlerts();
+    } catch (err) {
+      console.error('[STAKEHOLDER] alert cascade failed', err.message);
     }
   }, 60 * 60 * 1000);
 });

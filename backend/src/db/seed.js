@@ -44,51 +44,68 @@ for (const u of users) {
 
 // ---------------- Entities (Sellers / Buyers) ----------------
 const insertEntity = db.prepare(`
-  INSERT INTO entities (id, entity_type, category, name, capacity_mw, technology, contracted_capacity_mw,
-    psa_tariff, supply_criteria, organization_details, regulatory_approvals, bank_details, contact_details, status)
-  VALUES (@id, @entity_type, @category, @name, @capacity_mw, @technology, @contracted_capacity_mw,
-    @psa_tariff, @supply_criteria, @organization_details, @regulatory_approvals, @bank_details, @contact_details, @status)
+  INSERT INTO entities (id, parent_entity_id, entity_type, category, name, pan_no, gst_no, cin, credit_rating, is_blacklisted, capacity_mw, technology, contracted_capacity_mw,
+    psa_tariff, supply_criteria, organization_details, regulatory_approvals, bank_details, is_penny_drop_verified, status)
+  VALUES (@id, @parent_entity_id, @entity_type, @category, @name, @pan_no, @gst_no, @cin, @credit_rating, @is_blacklisted, @capacity_mw, @technology, @contracted_capacity_mw,
+    @psa_tariff, @supply_criteria, @organization_details, @regulatory_approvals, @bank_details, @is_penny_drop_verified, @status)
 `);
 
-const sellers = [
-  { id: newId('SEL'), entity_type: 'SELLER', category: 'RE Generator', name: 'Sunrise Solar Pvt Ltd', capacity_mw: 150, technology: 'Solar', contracted_capacity_mw: 150, psa_tariff: null, supply_criteria: null, organization_details: 'CIN U40106DL2015PTC123456', regulatory_approvals: 'CEA, MNRE registered', bank_details: 'HDFC Bank - A/C 001122334455', contact_details: 'ops@sunrise-solar.in', status: 'APPROVED' },
-  { id: newId('SEL'), entity_type: 'SELLER', category: 'RE Generator', name: 'Windforce Energy Ltd', capacity_mw: 100, technology: 'Wind', contracted_capacity_mw: 100, psa_tariff: null, supply_criteria: null, organization_details: 'CIN U40200RJ2016PLC654321', regulatory_approvals: 'CEA registered', bank_details: 'SBI - A/C 220033445566', contact_details: 'ops@windforce.in', status: 'APPROVED' },
-  { id: newId('SEL'), entity_type: 'SELLER', category: 'RE Generator', name: 'Hybrid Power Generation Co', capacity_mw: 200, technology: 'Hybrid', contracted_capacity_mw: 200, psa_tariff: null, supply_criteria: null, organization_details: 'CIN U40109GJ2018PLC998877', regulatory_approvals: 'CEA, MNRE registered', bank_details: 'ICICI Bank - A/C 330044556677', contact_details: 'ops@hybridpower.in', status: 'APPROVED' },
-  { id: newId('SEL'), entity_type: 'SELLER', category: 'RE Generator', name: 'FDRE Renewables Ltd', capacity_mw: 300, technology: 'FDRE', contracted_capacity_mw: 300, psa_tariff: null, supply_criteria: null, organization_details: 'CIN U40300MH2019PLC112233', regulatory_approvals: 'Pending CEA approval', bank_details: 'Axis Bank - A/C 440055667788', contact_details: 'ops@fdre-renewables.in', status: 'PENDING' },
-];
+const insertContact = db.prepare(`
+  INSERT INTO entity_contacts (id, entity_id, contact_type, name, email, phone, is_primary)
+  VALUES (@id, @entity_id, @contact_type, @name, @email, @phone, @is_primary)
+`);
+
+const insertDoc = db.prepare(`
+  INSERT INTO entity_documents (id, entity_id, doc_type, url, validity_end, alert_sent)
+  VALUES (@id, @entity_id, @doc_type, @url, @validity_end, @alert_sent)
+`);
+
+const parentAdani = { id: newId('SEL'), parent_entity_id: null, entity_type: 'SELLER', category: 'RE Generator', name: 'Adani Green Energy Ltd (Group)', pan_no: 'ABCDE1234F', gst_no: '27ABCDE1234F1Z5', cin: 'L40106GJ2015PLC082007', credit_rating: 'AAA', is_blacklisted: 0, capacity_mw: null, technology: null, contracted_capacity_mw: null, psa_tariff: null, supply_criteria: null, organization_details: 'Parent Group', regulatory_approvals: null, bank_details: null, is_penny_drop_verified: 0, status: 'APPROVED' };
+const sellerAdani1 = { id: newId('SEL'), parent_entity_id: parentAdani.id, entity_type: 'SELLER', category: 'RE Generator', name: 'Adani Solar Rajasthan SPV', pan_no: 'ABCDE1234F', gst_no: '08ABCDE1234F1Z5', cin: 'U40106RJ2016PTC012345', credit_rating: 'AA', is_blacklisted: 0, capacity_mw: 150, technology: 'Solar', contracted_capacity_mw: 150, psa_tariff: null, supply_criteria: null, organization_details: 'SPV for Rajasthan Solar Project', regulatory_approvals: 'CEA, MNRE registered', bank_details: 'HDFC Bank - A/C 001122334455', is_penny_drop_verified: 1, status: 'APPROVED' };
+const sellerWindforce = { id: newId('SEL'), parent_entity_id: null, entity_type: 'SELLER', category: 'RE Generator', name: 'Windforce Energy Ltd', pan_no: 'WINDD5678G', gst_no: '08WINDD5678G1Z5', cin: 'U40200RJ2016PLC654321', credit_rating: 'A+', is_blacklisted: 0, capacity_mw: 100, technology: 'Wind', contracted_capacity_mw: 100, psa_tariff: null, supply_criteria: null, organization_details: 'Independent Wind Generator', regulatory_approvals: 'CEA registered', bank_details: 'SBI - A/C 220033445566', is_penny_drop_verified: 1, status: 'APPROVED' };
+const sellerHybrid = { id: newId('SEL'), parent_entity_id: null, entity_type: 'SELLER', category: 'RE Generator', name: 'Hybrid Power Generation Co', pan_no: 'HYBCC9012H', gst_no: '24HYBCC9012H1Z5', cin: 'U40109GJ2018PLC998877', credit_rating: 'A', is_blacklisted: 0, capacity_mw: 200, technology: 'Hybrid', contracted_capacity_mw: 200, psa_tariff: null, supply_criteria: null, organization_details: 'Hybrid SPV', regulatory_approvals: 'CEA, MNRE registered', bank_details: 'ICICI Bank - A/C 330044556677', is_penny_drop_verified: 1, status: 'APPROVED' };
 
 const buyers = [
-  { id: newId('BUY'), entity_type: 'BUYER', category: 'DISCOM', name: 'Punjab State Power Corp', capacity_mw: null, technology: null, contracted_capacity_mw: 120, psa_tariff: 3.45, supply_criteria: 'Round the clock RE supply', organization_details: 'State DISCOM', regulatory_approvals: 'PSERC approved', bank_details: 'PNB - A/C 550066778899', contact_details: 'billing@pspcl.gov.in', status: 'APPROVED' },
-  { id: newId('BUY'), entity_type: 'BUYER', category: 'DISCOM', name: 'Uttar Pradesh Power Corp', capacity_mw: null, technology: null, contracted_capacity_mw: 200, psa_tariff: 3.60, supply_criteria: 'Peak power supply', organization_details: 'State DISCOM', regulatory_approvals: 'UPERC approved', bank_details: 'BOB - A/C 660077889900', contact_details: 'billing@uppcl.gov.in', status: 'APPROVED' },
-  { id: newId('BUY'), entity_type: 'BUYER', category: 'DISCOM', name: 'Bihar State Power Holding', capacity_mw: null, technology: null, contracted_capacity_mw: 180, psa_tariff: 3.30, supply_criteria: 'FDRE supply', organization_details: 'State DISCOM', regulatory_approvals: 'BERC approved', bank_details: 'Canara Bank - A/C 770088990011', contact_details: 'billing@bihar-power.gov.in', status: 'APPROVED' },
+  { id: newId('BUY'), parent_entity_id: null, entity_type: 'BUYER', category: 'DISCOM', name: 'Punjab State Power Corp', pan_no: 'PSPBB3456I', gst_no: '03PSPBB3456I1Z5', cin: 'U40109PB2010SGC033813', credit_rating: 'A', is_blacklisted: 0, capacity_mw: null, technology: null, contracted_capacity_mw: 120, psa_tariff: 3.45, supply_criteria: 'Round the clock RE supply', organization_details: 'State DISCOM', regulatory_approvals: 'PSERC approved', bank_details: 'PNB - A/C 550066778899', is_penny_drop_verified: 1, status: 'APPROVED' },
+  { id: newId('BUY'), parent_entity_id: null, entity_type: 'BUYER', category: 'DISCOM', name: 'Uttar Pradesh Power Corp', pan_no: 'UPPCC7890J', gst_no: '09UPPCC7890J1Z5', cin: 'U40101UP1999SGC024928', credit_rating: 'B+', is_blacklisted: 0, capacity_mw: null, technology: null, contracted_capacity_mw: 200, psa_tariff: 3.60, supply_criteria: 'Peak power supply', organization_details: 'State DISCOM', regulatory_approvals: 'UPERC approved', bank_details: 'BOB - A/C 660077889900', is_penny_drop_verified: 1, status: 'APPROVED' }
 ];
 
-for (const e of [...sellers, ...buyers]) insertEntity.run(e);
+const sellers = [parentAdani, sellerAdani1, sellerWindforce, sellerHybrid];
+for (const e of [...sellers, ...buyers]) {
+  insertEntity.run(e);
+  insertContact.run({ id: newId('CNT'), entity_id: e.id, contact_type: 'COMMERCIAL', name: 'Commercial Lead', email: 'billing@' + e.name.replace(/\\s+/g, '').toLowerCase() + '.in', phone: '9876543210', is_primary: 1 });
+  insertDoc.run({ id: newId('DOC'), entity_id: e.id, doc_type: 'Registration Certificate', url: 'https://sjvn.in/docs/reg.pdf', validity_end: '2030-12-31', alert_sent: 0 });
+}
 
 // Link external users to their entities for data isolation
-db.prepare('UPDATE users SET linked_entity_id = ? WHERE email = ?').run(sellers[0].id, 'seller@sunrise-solar.in');
+db.prepare('UPDATE users SET linked_entity_id = ? WHERE email = ?').run(sellers[1].id, 'seller@sunrise-solar.in');
 db.prepare('UPDATE users SET linked_entity_id = ? WHERE email = ?').run(buyers[0].id, 'buyer@discom.gov.in');
 
 // ---------------- Contracts ----------------
 const insertContract = db.prepare(`
-  INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw,
-    tariff_per_unit, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type, pbg_expiry, status)
-  VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw,
-    @tariff_per_unit, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type, @pbg_expiry, @status)
+  INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
+    tariff_type, tariff_per_unit, tariff_structure_json, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type, pbg_expiry, termination_reason, termination_date, status)
+  VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
+    @tariff_type, @tariff_per_unit, @tariff_structure_json, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type, @pbg_expiry, @termination_reason, @termination_date, @status)
+`);
+
+const insertContractProject = db.prepare(`
+  INSERT INTO contract_projects (contract_id, project_entity_id, allocated_capacity_mw)
+  VALUES (@contract_id, @project_entity_id, @allocated_capacity_mw)
 `);
 
 const contracts = [
-  { id: newId('CON'), contract_no: 'PPA/SJVN/2024/001', contract_type: 'PPA', seller_id: sellers[0].id, buyer_id: null, project_type: 'Solar', capacity_mw: 150, tariff_per_unit: 2.55, tenure_start: '2024-04-01', tenure_end: '2049-03-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 30 days', emd_amount: 15000000, pbg_amount: 22500000, pbg_type: 'BG', pbg_expiry: '2026-03-31', status: 'ACTIVE' },
-  { id: newId('CON'), contract_no: 'PPA/SJVN/2024/001-A', contract_type: 'PPA', seller_id: sellers[0].id, buyer_id: null, project_type: 'Solar (Expansion)', capacity_mw: 50, tariff_per_unit: 2.45, tenure_start: '2024-08-01', tenure_end: '2049-07-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 30 days', emd_amount: 5000000, pbg_amount: 7500000, pbg_type: 'BG', pbg_expiry: '2026-07-31', status: 'ACTIVE' },
-  { id: newId('CON'), contract_no: 'PPA/SJVN/2024/001-B', contract_type: 'PPA', seller_id: sellers[0].id, buyer_id: null, project_type: 'Solar (Phase III)', capacity_mw: 100, tariff_per_unit: 2.60, tenure_start: '2024-11-01', tenure_end: '2049-10-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 30 days', emd_amount: 10000000, pbg_amount: 15000000, pbg_type: 'BG', pbg_expiry: '2026-10-31', status: 'ACTIVE' },
-  { id: newId('CON'), contract_no: 'PPA/SJVN/2024/002', contract_type: 'PPA', seller_id: sellers[1].id, buyer_id: null, project_type: 'Wind', capacity_mw: 100, tariff_per_unit: 2.85, tenure_start: '2024-06-01', tenure_end: '2049-05-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 30 days', emd_amount: 10000000, pbg_amount: 15000000, pbg_type: 'BG', pbg_expiry: '2026-05-31', status: 'ACTIVE' },
-  { id: newId('CON'), contract_no: 'PPA/SJVN/2025/003', contract_type: 'PPA', seller_id: sellers[2].id, buyer_id: null, project_type: 'Hybrid', capacity_mw: 200, tariff_per_unit: 3.10, tenure_start: '2025-01-01', tenure_end: '2050-12-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 45 days', emd_amount: 20000000, pbg_amount: 30000000, pbg_type: 'ISB', pbg_expiry: '2027-01-01', status: 'ACTIVE' },
-  { id: newId('CON'), contract_no: 'PSA/SJVN/2024/101', contract_type: 'PSA', seller_id: null, buyer_id: buyers[0].id, project_type: 'Solar', capacity_mw: 120, tariff_per_unit: 3.45, tenure_start: '2024-04-01', tenure_end: '2049-03-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 45 days', emd_amount: null, pbg_amount: null, pbg_type: null, pbg_expiry: null, status: 'ACTIVE' },
-  { id: newId('CON'), contract_no: 'PSA/SJVN/2024/102', contract_type: 'PSA', seller_id: null, buyer_id: buyers[1].id, project_type: 'Wind', capacity_mw: 100, tariff_per_unit: 3.60, tenure_start: '2024-06-01', tenure_end: '2049-05-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 45 days', emd_amount: null, pbg_amount: null, pbg_type: null, pbg_expiry: null, status: 'ACTIVE' },
-  { id: newId('CON'), contract_no: 'PSA/SJVN/2025/103', contract_type: 'PSA', seller_id: null, buyer_id: buyers[2].id, project_type: 'Hybrid', capacity_mw: 180, tariff_per_unit: 3.30, tenure_start: '2025-01-01', tenure_end: '2050-12-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 45 days', emd_amount: null, pbg_amount: null, pbg_type: null, pbg_expiry: null, status: 'ACTIVE' },
+  { id: newId('CON'), contract_no: 'PPA/SJVN/2024/001', contract_type: 'PPA', seller_id: sellers[0].id, buyer_id: null, project_type: 'Solar', capacity_mw: 150, commissioned_capacity_mw: 150, cod_date: '2024-03-15', tariff_type: 'FLAT', tariff_per_unit: 2.55, tariff_structure_json: null, tenure_start: '2024-04-01', tenure_end: '2049-03-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 30 days', emd_amount: 15000000, pbg_amount: 22500000, pbg_type: 'BG', pbg_expiry: '2026-03-31', termination_reason: null, termination_date: null, status: 'ACTIVE' },
+  { id: newId('CON'), contract_no: 'PPA/SJVN/2024/002', contract_type: 'PPA', seller_id: sellers[2].id, buyer_id: null, project_type: 'Wind', capacity_mw: 100, commissioned_capacity_mw: 40, cod_date: '2024-05-15', tariff_type: 'TWO_PART', tariff_per_unit: 2.85, tariff_structure_json: JSON.stringify({ fixedCapacityCharge: 1.20, variableEnergyCharge: 1.65 }), tenure_start: '2024-06-01', tenure_end: '2049-05-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 30 days', emd_amount: 10000000, pbg_amount: 15000000, pbg_type: 'BG', pbg_expiry: '2026-05-31', termination_reason: null, termination_date: null, status: 'ACTIVE' },
+  { id: newId('CON'), contract_no: 'PSA/SJVN/2024/101', contract_type: 'PSA', seller_id: null, buyer_id: buyers[0].id, project_type: 'Solar', capacity_mw: 120, commissioned_capacity_mw: 120, cod_date: '2024-03-15', tariff_type: 'FLAT', tariff_per_unit: 3.45, tariff_structure_json: null, tenure_start: '2024-04-01', tenure_end: '2049-03-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 45 days', emd_amount: null, pbg_amount: null, pbg_type: null, pbg_expiry: null, termination_reason: null, termination_date: null, status: 'ACTIVE' },
 ];
 
-for (const c of contracts) insertContract.run(c);
+for (const c of contracts) {
+  insertContract.run(c);
+  if (c.contract_type === 'PPA') {
+    insertContractProject.run({ contract_id: c.id, project_entity_id: c.seller_id === sellers[0].id ? sellers[1].id : c.seller_id, allocated_capacity_mw: c.capacity_mw });
+  }
+}
 
 // ---------------- Energy Data ----------------
 const insertEnergy = db.prepare(`
