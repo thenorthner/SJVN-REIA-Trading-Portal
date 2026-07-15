@@ -226,7 +226,7 @@ export default function Contracts() {
       </Modal>
 
       {selected && !amendForm && !statusForm && (
-        <Modal open={true} onClose={() => setSelected(null)} title={\`Contract: \${selected.contract_no}\`} width={800}>
+        <Modal open={true} onClose={() => setSelected(null)} title={`Contract: ${selected.contract_no}`} width={800}>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 20 }}>
             <div style={{ flex: 1, minWidth: 300 }}>
               <h4 style={{ margin: '0 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Contract Info</h4>
@@ -262,7 +262,7 @@ export default function Contracts() {
                   <tr><td>Tariff / Unit</td><td>₹{selected.tariff_per_unit}</td></tr>
                   {selected.tariff_structure_json && <tr><td>Structure JSON</td><td><pre style={{fontSize: 10}}>{selected.tariff_structure_json}</pre></td></tr>}
                   <tr><td>Tenure</td><td>{selected.tenure_start} to {selected.tenure_end}</td></tr>
-                  <tr><td>PBG / EMD</td><td>{fmtCurrency(selected.pbg_amount)} {selected.pbg_type && \`(\${selected.pbg_type})\`}</td></tr>
+                  <tr><td>PBG / EMD</td><td>{fmtCurrency(selected.pbg_amount)} {selected.pbg_type && `(${selected.pbg_type})`}</td></tr>
                   <tr><td>Remarks</td><td>{selected.remarks || '-'}</td></tr>
                 </tbody>
               </table>
