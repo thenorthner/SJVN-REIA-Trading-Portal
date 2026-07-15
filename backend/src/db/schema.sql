@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN (
     'SJVN_ADMIN','REIA_USER','TRADING_USER','FINANCE_USER',
-    'MANAGEMENT','SELLER','BUYER','TRADING_CLIENT'
+    'MANAGEMENT','SELLER','BUYER','TRADING_CLIENT','COMPLIANCE_AUDITOR'
   )),
   linked_entity_id TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
@@ -22,13 +22,22 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id TEXT PRIMARY KEY,
+  trace_id TEXT,
+  session_id TEXT,
+  ip_address TEXT,
   user_id TEXT,
   user_name TEXT,
+  user_role TEXT,
   action TEXT NOT NULL,
   module TEXT NOT NULL,
   entity_type TEXT,
   entity_id TEXT,
+  before_value TEXT,
+  after_value TEXT,
+  reason TEXT,
   details TEXT,
+  prev_hash TEXT,
+  curr_hash TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

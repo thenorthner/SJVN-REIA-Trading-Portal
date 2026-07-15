@@ -284,7 +284,7 @@ router.post('/', requireRole(...REIA_WRITE), (req, res) => {
   );
 
   recordSecurityEvent({ instrumentId: id, contractId: b.contract_id, user: req.user, eventType: 'CREATE', details: b });
-  logAudit({ user: req.user, action: 'CREATE', module: 'REIA', entityType: 'payment_security', entityId: id, details: b });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CREATE', module: 'REIA', entityType: 'payment_security', entityId: id, details: b });
   res.status(201).json(enrich(db.prepare('SELECT * FROM payment_security WHERE id = ?').get(id)));
 });
 
@@ -307,7 +307,7 @@ router.post('/overrides', requireRole(...REIA_WRITE, 'MANAGEMENT', 'SJVN_ADMIN')
     VALUES (?, ?, ?, ?, ?)
   `).run(id, contract_id, reason, req.user.name, valid_until || null);
   recordSecurityEvent({ contractId: contract_id, user: req.user, eventType: 'ADEQUACY_OVERRIDE', details: { reason, valid_until } });
-  logAudit({ user: req.user, action: 'SECURITY_OVERRIDE', module: 'REIA', entityType: 'contract', entityId: contract_id, details: req.body });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SECURITY_OVERRIDE', module: 'REIA', entityType: 'contract', entityId: contract_id, details: req.body });
   pushNotification({ role: 'MANAGEMENT', type: 'SECURITY_OVERRIDE', message: `Adequacy override on ${contract_id}: ${reason}` });
   res.status(201).json(db.prepare('SELECT * FROM security_adequacy_overrides WHERE id = ?').get(id));
 });
@@ -319,7 +319,7 @@ router.post('/invocations', requireRole(...REIA_WRITE), (req, res) => {
   const amt = amount != null ? Number(amount) : elig.amount;
   if (!(amt > 0)) return res.status(400).json({ error: 'No eligible overdue amount to invoke' });
   const inv = invokeWaterfall(contract_id, amt, invoice_ids || elig.overdue_invoices, req.user);
-  logAudit({ user: req.user, action: 'INVOKE_WATERFALL', module: 'REIA', entityType: 'security_invocation', entityId: inv.id, details: { amount: amt } });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'INVOKE_WATERFALL', module: 'REIA', entityType: 'security_invocation', entityId: inv.id, details: { amount: amt } });
   res.status(201).json(inv);
 });
 
@@ -441,7 +441,7 @@ router.post('/:id/renew', requireRole(...REIA_WRITE), (req, res) => {
   `).run(validity_end, newLimit, newLimit, existing.id);
   const fresh = syncInstrumentAvailable(existing.id);
   recordSecurityEvent({ instrumentId: existing.id, contractId: existing.contract_id, user: req.user, eventType: 'RENEW', details: { validity_end, limit_amount: newLimit } });
-  logAudit({ user: req.user, action: 'RENEW', module: 'REIA', entityType: 'payment_security', entityId: existing.id });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'RENEW', module: 'REIA', entityType: 'payment_security', entityId: existing.id });
   res.json(enrich(fresh));
 });
 
@@ -453,7 +453,7 @@ router.post('/:id/invoke', requireRole(...REIA_WRITE), (req, res) => {
   const elig = evaluateInvocationEligibility(existing.contract_id);
   const amt = amount != null ? Number(amount) : elig.amount || refreshAvailable(existing);
   const inv = invokeWaterfall(existing.contract_id, amt, elig.overdue_invoices, req.user);
-  logAudit({ user: req.user, action: 'INVOKE', module: 'REIA', entityType: 'payment_security', entityId: existing.id, details: { amount: amt } });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'INVOKE', module: 'REIA', entityType: 'payment_security', entityId: existing.id, details: { amount: amt } });
   res.json({ instrument: enrich(db.prepare('SELECT * FROM payment_security WHERE id = ?').get(existing.id)), invocation: inv });
 });
 

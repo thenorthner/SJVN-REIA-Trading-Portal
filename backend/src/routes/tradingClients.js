@@ -39,7 +39,7 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     margin_available: b.margin_available || 0,
     documents: b.documents ? JSON.stringify(b.documents) : null,
   });
-  logAudit({ user: req.user, action: 'CREATE', module: 'TRADING', entityType: 'trading_client', entityId: id, details: b });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CREATE', module: 'TRADING', entityType: 'trading_client', entityId: id, details: b });
   res.status(201).json(db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(id));
 });
 
@@ -52,7 +52,7 @@ router.put('/:id', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
       ppa_ref=@ppa_ref, pre_payment_balance=@pre_payment_balance, margin_available=@margin_available, status=@status
     WHERE id=@id
   `).run(merged);
-  logAudit({ user: req.user, action: 'UPDATE', module: 'TRADING', entityType: 'trading_client', entityId: existing.id, details: req.body });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'UPDATE', module: 'TRADING', entityType: 'trading_client', entityId: existing.id, details: req.body });
   res.json(db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(req.params.id));
 });
 

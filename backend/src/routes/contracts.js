@@ -101,7 +101,7 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     }
   })();
 
-  logAudit({ user: req.user, action: 'CREATE', module: 'REIA', entityType: 'contract', entityId: id, details: b });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CREATE', module: 'REIA', entityType: 'contract', entityId: id, details: b });
   if (b.status === 'ACTIVE') {
     syncRequirementsFromContract(id);
     createInstrumentsFromRequirements(id, req.user);
@@ -122,7 +122,7 @@ router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     createInstrumentsFromRequirements(contract.id, req.user);
   }
 
-  logAudit({ user: req.user, action: `STATUS_${status}`, module: 'REIA', entityType: 'contract', entityId: contract.id, details: { remarks, termination_reason } });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: `STATUS_${status}`, module: 'REIA', entityType: 'contract', entityId: contract.id, details: { remarks, termination_reason } });
   res.json(fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract.id)));
 });
 
@@ -165,7 +165,7 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
     db.prepare(`INSERT INTO contract_amendments (id, contract_id, version, changed_fields_json, approved_by) VALUES (?, ?, ?, ?, ?)`).run(newId('CMA'), original.id, original.version, JSON.stringify(changedFields), req.user.name);
   })();
 
-  logAudit({ user: req.user, action: 'AMEND', module: 'REIA', entityType: 'contract', entityId: original.id, details: { newVersionId, changedFields } });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'AMEND', module: 'REIA', entityType: 'contract', entityId: original.id, details: { newVersionId, changedFields } });
   syncRequirementsFromContract(newVersionId);
   createInstrumentsFromRequirements(newVersionId, req.user);
   res.status(201).json(fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(newVersionId)));
@@ -196,7 +196,7 @@ router.post('/bulk-upload', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =
     }
   })();
   
-  logAudit({ user: req.user, action: 'BULK_UPLOAD', module: 'REIA', entityType: 'contract', details: results });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'BULK_UPLOAD', module: 'REIA', entityType: 'contract', details: results });
   res.status(201).json(results);
 });
 

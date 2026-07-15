@@ -45,7 +45,7 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     start_date: b.start_date,
     end_date: b.end_date,
   });
-  logAudit({ user: req.user, action: 'CREATE', module: 'TRADING', entityType: 'bilateral', entityId: id, details: b });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CREATE', module: 'TRADING', entityType: 'bilateral', entityId: id, details: b });
   res.status(201).json(withClient(db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(id)));
 });
 
@@ -54,7 +54,7 @@ router.post('/:id/open-access', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req,
   const row = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
   db.prepare(`UPDATE bilateral_transactions SET open_access_status = ? WHERE id = ?`).run(decision, row.id);
-  logAudit({ user: req.user, action: `OPEN_ACCESS_${decision}`, module: 'TRADING', entityType: 'bilateral', entityId: row.id });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: `OPEN_ACCESS_${decision}`, module: 'TRADING', entityType: 'bilateral', entityId: row.id });
   res.json(withClient(db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(row.id)));
 });
 
@@ -69,7 +69,7 @@ router.post('/:id/schedule', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, re
     }
   }
   db.prepare(`UPDATE bilateral_transactions SET schedule_status = ? WHERE id = ?`).run(schedule_status, row.id);
-  logAudit({ user: req.user, action: `SCHEDULE_${schedule_status}`, module: 'TRADING', entityType: 'bilateral', entityId: row.id });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: `SCHEDULE_${schedule_status}`, module: 'TRADING', entityType: 'bilateral', entityId: row.id });
   res.json(withClient(db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(row.id)));
 });
 

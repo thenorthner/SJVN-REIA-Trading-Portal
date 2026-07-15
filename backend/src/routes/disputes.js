@@ -456,7 +456,7 @@ router.post('/', requireRole('SELLER', 'BUYER', ...REIA_WRITE), (req, res) => {
   recordEvent(id, req.user, 'RAISED', null, 'RAISED', { reason_code, charge_line, amount });
   recordEvent(id, { name: 'system' }, 'ACKNOWLEDGED', 'RAISED', 'ACKNOWLEDGED', { auto: true });
 
-  logAudit({
+  logAudit({ req: typeof req !== "undefined" ? req : null,
     user: req.user,
     action: 'DISPUTE_RAISED',
     module: 'REIA',
@@ -562,7 +562,7 @@ router.post('/:id/transition', (req, res) => {
   }
 
   recordEvent(dispute.id, req.user, 'STATUS_CHANGE', from, toStatus, note ? { note } : null);
-  logAudit({ user: req.user, action: `DISPUTE_${toStatus}`, module: 'REIA', entityType: 'dispute', entityId: dispute.id });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: `DISPUTE_${toStatus}`, module: 'REIA', entityType: 'dispute', entityId: dispute.id });
 
   res.json(enrichDispute(db.prepare('SELECT * FROM disputes WHERE id = ?').get(dispute.id)));
 });
@@ -675,7 +675,7 @@ router.post('/:id/resolve', requireRole(...REIA_WRITE), (req, res) => {
     outcome, accepted, credit, before_total: beforeTotal, after_total: credit > 0 ? afterTotal : beforeTotal, lps_on_resolution: lpsRes,
   });
 
-  logAudit({
+  logAudit({ req: typeof req !== "undefined" ? req : null,
     user: req.user,
     action: 'DISPUTE_RESOLVED',
     module: 'REIA',
@@ -798,7 +798,7 @@ router.post('/:id/assign', requireRole(...REIA_WRITE), (req, res) => {
     });
   }
 
-  logAudit({ user: req.user, action: 'DISPUTE_ASSIGNED', module: 'REIA', entityType: 'dispute', entityId: dispute.id, details: { assigned_to } });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'DISPUTE_ASSIGNED', module: 'REIA', entityType: 'dispute', entityId: dispute.id, details: { assigned_to } });
   res.json(enrichDispute(db.prepare('SELECT * FROM disputes WHERE id = ?').get(dispute.id)));
 });
 

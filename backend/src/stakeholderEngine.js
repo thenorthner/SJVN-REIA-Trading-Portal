@@ -13,7 +13,7 @@ export function runStakeholderAlerts() {
     const diffDays = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
     
     if (diffDays <= 60 && diffDays > 0) {
-      pushNotification('REIA_USER', 'DOCUMENT_EXPIRING', \`Document \${doc.doc_type} for Entity \${doc.entity_id} expires in \${diffDays} days.\`);
+      pushNotification('REIA_USER', 'DOCUMENT_EXPIRING', `Document ${doc.doc_type} for Entity ${doc.entity_id} expires in ${diffDays} days.`);
       db.prepare('UPDATE entity_documents SET alert_sent = 1 WHERE id = ?').run(doc.id);
     }
   }
@@ -26,13 +26,13 @@ export function runStakeholderAlerts() {
     
     if (diffDays <= 90 && c.status === 'ACTIVE') {
       db.prepare("UPDATE contracts SET status = 'NEARING_EXPIRY' WHERE id = ?").run(c.id);
-      pushNotification('REIA_USER', 'CONTRACT_EXPIRING', \`Contract \${c.contract_no} expires in \${diffDays} days. Initiate renewal workflow.\`);
+      pushNotification('REIA_USER', 'CONTRACT_EXPIRING', `Contract ${c.contract_no} expires in ${diffDays} days. Initiate renewal workflow.`);
       logAudit({ user: { id: 'SYSTEM', name: 'SYSTEM' }, action: 'STATUS_UPDATE', module: 'CONTRACTS', entityType: 'contract', entityId: c.id, details: { newStatus: 'NEARING_EXPIRY' } });
     }
     
     if (diffDays <= 0 && c.status === 'NEARING_EXPIRY') {
       db.prepare("UPDATE contracts SET status = 'EXPIRED' WHERE id = ?").run(c.id);
-      pushNotification('REIA_USER', 'CONTRACT_EXPIRED', \`Contract \${c.contract_no} has expired. Billing engine will block future invoices.\`);
+      pushNotification('REIA_USER', 'CONTRACT_EXPIRED', `Contract ${c.contract_no} has expired. Billing engine will block future invoices.`);
       logAudit({ user: { id: 'SYSTEM', name: 'SYSTEM' }, action: 'STATUS_UPDATE', module: 'CONTRACTS', entityType: 'contract', entityId: c.id, details: { newStatus: 'EXPIRED' } });
     }
   }
@@ -43,7 +43,7 @@ export function runStakeholderAlerts() {
     const created = new Date(e.created_at);
     const diffDays = Math.ceil((today - created) / (1000 * 60 * 60 * 24));
     if (diffDays > 14) {
-      pushNotification('MANAGEMENT', 'SLA_BREACH', \`Entity \${e.name} onboarding pending for \${diffDays} days.\`);
+      pushNotification('MANAGEMENT', 'SLA_BREACH', `Entity ${e.name} onboarding pending for ${diffDays} days.`);
     }
   }
 }

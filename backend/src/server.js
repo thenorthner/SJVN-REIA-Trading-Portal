@@ -25,6 +25,8 @@ import buyerDashboardRoutes from './routes/buyerDashboard.js';
 import notificationsRoutes from './routes/notifications.js';
 import auditLogsRoutes from './routes/auditLogs.js';
 
+import { assignTraceId } from './middleware/auth.js';
+
 dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,6 +35,7 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use(assignTraceId);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'sjvn-energy-platform-backend' }));
 

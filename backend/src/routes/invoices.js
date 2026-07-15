@@ -115,7 +115,7 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     }
   }
 
-  logAudit({ user: req.user, action: 'GENERATE', module: 'REIA', entityType: 'invoice', entityId: id, details: invoice });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'GENERATE', module: 'REIA', entityType: 'invoice', entityId: id, details: invoice });
   res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(id));
 });
 
@@ -163,7 +163,7 @@ router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     created_by: req.user.name,
   });
   db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)').run(newId('APR'), id, 'PENDING');
-  logAudit({ user: req.user, action: 'SUBMIT', module: 'REIA', entityType: 'invoice', entityId: id, details: b });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SUBMIT', module: 'REIA', entityType: 'invoice', entityId: id, details: b });
   pushNotification({ role: 'REIA_USER', type: 'INVOICE_SUBMITTED', message: `Seller invoice ${b.invoice_no || id} submitted for review` });
   res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(id));
 });
@@ -181,7 +181,7 @@ router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, '
     // Reset existing approvals back to PENDING for resubmission
     db.prepare(`UPDATE invoice_approvals SET status = 'PENDING', comments = NULL, acted_at = NULL, approver_name = NULL WHERE invoice_id = ?`).run(inv.id);
   }
-  logAudit({ user: req.user, action: 'SUBMIT_FOR_APPROVAL', module: 'REIA', entityType: 'invoice', entityId: inv.id });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SUBMIT_FOR_APPROVAL', module: 'REIA', entityType: 'invoice', entityId: inv.id });
   res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
 });
 
@@ -201,7 +201,7 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
       pushNotification({ role: 'BUYER', type: 'INVOICE_APPROVED', message: `Invoice ${req.params.id} approved and ready for dispatch` });
     }
   }
-  logAudit({ user: req.user, action: `APPROVAL_${decision}`, module: 'REIA', entityType: 'invoice', entityId: req.params.id, details: { level: req.params.level, comments } });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: `APPROVAL_${decision}`, module: 'REIA', entityType: 'invoice', entityId: req.params.id, details: { level: req.params.level, comments } });
   res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id));
 });
 
@@ -211,7 +211,7 @@ router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status !== 'APPROVED') return res.status(400).json({ error: 'Invoice must be APPROVED before it can be sent' });
   db.prepare(`UPDATE invoices SET status = 'SENT', updated_at = datetime('now') WHERE id = ?`).run(inv.id);
-  logAudit({ user: req.user, action: 'SEND', module: 'REIA', entityType: 'invoice', entityId: inv.id });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SEND', module: 'REIA', entityType: 'invoice', entityId: inv.id });
   pushNotification({ role: 'BUYER', type: 'INVOICE_SENT', message: `Invoice ${inv.invoice_no} has been sent for payment` });
   res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
 });
@@ -262,7 +262,7 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req,
   db.prepare(`UPDATE invoices SET status = ?, rebate = ?, lps = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(newStatus, newRebate, newLps, inv.id);
 
-  logAudit({ user: req.user, action: 'PAYMENT_RECORDED', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: req.body });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'PAYMENT_RECORDED', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: req.body });
   res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
 });
 

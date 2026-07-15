@@ -86,7 +86,7 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req
     }
   })();
 
-  logAudit({ user: req.user, action: 'CREATE', module: 'REIA', entityType: 'entity', entityId: id, details: { name: body.name } });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CREATE', module: 'REIA', entityType: 'entity', entityId: id, details: { name: body.name } });
   pushNotification({ role: 'SJVN_ADMIN', type: 'ONBOARDING', message: `New ${body.entity_type} onboarding request: ${body.name}` });
   res.status(201).json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(id)));
 });
@@ -126,7 +126,7 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
     WHERE id=@id
   `).run(merged);
 
-  logAudit({ user: req.user, action: 'UPDATE', module: 'REIA', entityType: 'entity', entityId: existing.id, details: { highRisk: isHighRisk } });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'UPDATE', module: 'REIA', entityType: 'entity', entityId: existing.id, details: { highRisk: isHighRisk } });
   if (isHighRisk) {
     pushNotification({ role: 'SJVN_ADMIN', type: 'RISK_UPDATE', message: `High-risk profile update by ${existing.name}. Penny-drop reset.` });
   }
@@ -138,7 +138,7 @@ router.post('/:id/penny-drop', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
   db.prepare(`UPDATE entities SET is_penny_drop_verified = 1 WHERE id = ?`).run(entity.id);
-  logAudit({ user: req.user, action: 'PENNY_DROP_VERIFIED', module: 'REIA', entityType: 'entity', entityId: entity.id });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'PENNY_DROP_VERIFIED', module: 'REIA', entityType: 'entity', entityId: entity.id });
   res.json({ success: true, message: 'Bank account verified via penny drop' });
 });
 
@@ -147,7 +147,7 @@ router.post('/:id/approve', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
   db.prepare(`UPDATE entities SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(decision, req.params.id);
-  logAudit({ user: req.user, action: `ENTITY_${decision}`, module: 'REIA', entityType: 'entity', entityId: entity.id, details: { remarks } });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: `ENTITY_${decision}`, module: 'REIA', entityType: 'entity', entityId: entity.id, details: { remarks } });
   res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id)));
 });
 

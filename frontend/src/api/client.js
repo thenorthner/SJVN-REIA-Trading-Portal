@@ -169,6 +169,10 @@ export const api = {
   },
   auditLogs: {
     list: (params) => g('/audit-logs', params),
+    get: (id) => g(`/audit-logs/${id}`),
+    verifyIntegrity: () => p('/audit-logs/verify-integrity'),
+    violationsSod: () => g('/audit-logs/violations/sod'),
+    logExport: (body) => p('/audit-logs/log-export', body),
   },
 };
 

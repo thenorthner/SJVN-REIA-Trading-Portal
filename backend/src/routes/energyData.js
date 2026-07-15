@@ -43,7 +43,7 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     cuf_percent: b.cuf_percent ?? null,
     availability_percent: b.availability_percent ?? null,
   });
-  logAudit({ user: req.user, action: 'CREATE', module: 'REIA', entityType: 'energy_data', entityId: id, details: b });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CREATE', module: 'REIA', entityType: 'energy_data', entityId: id, details: b });
   res.status(201).json(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(id));
 });
 
@@ -57,7 +57,7 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
   const flagged = deviationPct > 30;
   db.prepare(`UPDATE energy_data SET status = ?, deviation_notes = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(flagged ? 'DISPUTED' : 'VALIDATED', `Deviation ${deviationPct.toFixed(1)}% vs expected ${expected.toFixed(0)} MWh`, row.id);
-  logAudit({ user: req.user, action: 'VALIDATE', module: 'REIA', entityType: 'energy_data', entityId: row.id, details: { deviationPct } });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'VALIDATE', module: 'REIA', entityType: 'energy_data', entityId: row.id, details: { deviationPct } });
   res.json(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id));
 });
 
@@ -67,7 +67,7 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   if (!row) return res.status(404).json({ error: 'Energy data not found' });
   if (row.status === 'LOCKED') return res.status(400).json({ error: 'Already locked' });
   db.prepare(`UPDATE energy_data SET status = 'LOCKED', data_type = 'FINAL', updated_at = datetime('now') WHERE id = ?`).run(row.id);
-  logAudit({ user: req.user, action: 'LOCK', module: 'REIA', entityType: 'energy_data', entityId: row.id });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'LOCK', module: 'REIA', entityType: 'energy_data', entityId: row.id });
 
   // If a provisional recon existed for this period, auto-trigger FINAL re-recon
   try {

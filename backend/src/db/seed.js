@@ -30,6 +30,7 @@ const users = [
   { name: 'Shreya (Trading Ops)', email: 'trading@sjvn.in', role: 'TRADING_USER' },
   { name: 'Vikas (Finance)', email: 'finance@sjvn.in', role: 'FINANCE_USER' },
   { name: 'Divyankur (Management)', email: 'management@sjvn.in', role: 'MANAGEMENT' },
+  { name: 'Ravi (Compliance)', email: 'auditor@sjvn.in', role: 'COMPLIANCE_AUDITOR' },
   { name: 'Sunrise Solar Pvt Ltd', email: 'seller@sunrise-solar.in', role: 'SELLER' },
   { name: 'State DISCOM Buyer', email: 'buyer@discom.gov.in', role: 'BUYER' },
   { name: 'ABC Trading Client', email: 'client@abctrading.in', role: 'TRADING_CLIENT' },

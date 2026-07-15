@@ -32,6 +32,13 @@ export function requireRole(...roles) {
   };
 }
 
+import { v4 as uuidv4 } from 'uuid';
+
+export function assignTraceId(req, res, next) {
+  req.traceId = req.headers['x-trace-id'] || `TRC-${uuidv4().slice(0, 8)}`;
+  next();
+}
+
 export const ROLE_GROUPS = {
   REIA_ALL: ['SJVN_ADMIN', 'REIA_USER', 'FINANCE_USER', 'MANAGEMENT'],
   REIA_WRITE: ['SJVN_ADMIN', 'REIA_USER'],
@@ -40,5 +47,6 @@ export const ROLE_GROUPS = {
   TRADING_WRITE: ['SJVN_ADMIN', 'TRADING_USER'],
   SELLER_ACCESS: ['SELLER', 'SJVN_ADMIN'],
   BUYER_ACCESS: ['BUYER', 'SJVN_ADMIN'],
-  ANY_AUTH: ['SJVN_ADMIN', 'REIA_USER', 'TRADING_USER', 'FINANCE_USER', 'MANAGEMENT', 'SELLER', 'BUYER', 'TRADING_CLIENT'],
+  ANY_AUTH: ['SJVN_ADMIN', 'REIA_USER', 'TRADING_USER', 'FINANCE_USER', 'MANAGEMENT', 'SELLER', 'BUYER', 'TRADING_CLIENT', 'COMPLIANCE_AUDITOR'],
+  AUDITOR: ['SJVN_ADMIN', 'COMPLIANCE_AUDITOR'],
 };

@@ -60,7 +60,7 @@ router.post('/generate', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) =
     gst_amount: gst,
     total_amount: subtotal + gst,
   });
-  logAudit({ user: req.user, action: 'GENERATE', module: 'TRADING', entityType: 'trading_invoice', entityId: id, details: req.body });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'GENERATE', module: 'TRADING', entityType: 'trading_invoice', entityId: id, details: req.body });
   res.status(201).json(withClient(db.prepare('SELECT * FROM trading_invoices WHERE id = ?').get(id)));
 });
 
@@ -68,7 +68,7 @@ router.post('/:id/send', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) =
   const inv = db.prepare('SELECT * FROM trading_invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Not found' });
   db.prepare(`UPDATE trading_invoices SET status = 'SENT' WHERE id = ?`).run(inv.id);
-  logAudit({ user: req.user, action: 'SEND', module: 'TRADING', entityType: 'trading_invoice', entityId: inv.id });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SEND', module: 'TRADING', entityType: 'trading_invoice', entityId: inv.id });
   res.json(withClient(db.prepare('SELECT * FROM trading_invoices WHERE id = ?').get(inv.id)));
 });
 
@@ -82,7 +82,7 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, ...ROLE_GROUPS.
   const totalPaid = db.prepare('SELECT COALESCE(SUM(amount),0) s FROM trading_payments WHERE trading_invoice_id = ?').get(inv.id).s;
   const newStatus = totalPaid >= inv.total_amount ? 'PAID' : 'PARTIALLY_PAID';
   db.prepare(`UPDATE trading_invoices SET status = ? WHERE id = ?`).run(newStatus, inv.id);
-  logAudit({ user: req.user, action: 'PAYMENT_RECORDED', module: 'TRADING', entityType: 'trading_invoice', entityId: inv.id, details: req.body });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'PAYMENT_RECORDED', module: 'TRADING', entityType: 'trading_invoice', entityId: inv.id, details: req.body });
   res.status(201).json(withClient(db.prepare('SELECT * FROM trading_invoices WHERE id = ?').get(inv.id)));
 });
 

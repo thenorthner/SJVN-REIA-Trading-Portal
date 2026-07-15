@@ -153,7 +153,7 @@ function persistRun({
   saveStatement(recon, built.items, user);
   recordEvent(id, user, 'RUN', { trigger: triggerType, auto_match_pct: built.metrics.auto_match_pct, exceptions: built.metrics.items_exception });
 
-  logAudit({
+  logAudit({ req: typeof req !== "undefined" ? req : null,
     user,
     action: 'RECONCILIATION_RUN',
     module: 'REIA',
@@ -521,7 +521,7 @@ router.post('/:id/override', requireRole(...REIA_WRITE), (req, res) => {
   `).run(status, exceptions, matched, Number(((matched / items.length) * 100).toFixed(2)), unrecon, recon.id);
 
   recordEvent(recon.id, req.user, 'OVERRIDE', { item_id, reason });
-  logAudit({ user: req.user, action: 'RECON_OVERRIDE', module: 'REIA', entityType: 'reconciliation', entityId: recon.id, details: { item_id, reason } });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'RECON_OVERRIDE', module: 'REIA', entityType: 'reconciliation', entityId: recon.id, details: { item_id, reason } });
 
   const fresh = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(recon.id);
   saveStatement(fresh, items, req.user);

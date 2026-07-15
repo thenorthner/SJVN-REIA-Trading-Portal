@@ -16,7 +16,7 @@ router.post('/login', (req, res) => {
   }
 
   const token = signToken(user);
-  logAudit({ user, action: 'LOGIN', module: 'AUTH', entityType: 'user', entityId: user.id });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user, action: 'LOGIN', module: 'AUTH', entityType: 'user', entityId: user.id });
   res.json({
     token,
     user: { id: user.id, name: user.name, email: user.email, role: user.role },

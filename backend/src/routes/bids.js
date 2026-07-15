@@ -85,7 +85,7 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE, 'TRADING_CLIENT'), (r
     status: isNoBid ? 'NO_BID' : 'SUBMITTED',
     created_by: req.user.name,
   });
-  logAudit({ user: req.user, action: isNoBid ? 'NO_BID' : 'SUBMIT', module: 'TRADING', entityType: 'bid', entityId: id, details: b });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: isNoBid ? 'NO_BID' : 'SUBMIT', module: 'TRADING', entityType: 'bid', entityId: id, details: b });
   res.status(201).json(withClient(db.prepare('SELECT * FROM bids WHERE id = ?').get(id)));
 });
 
@@ -99,7 +99,7 @@ router.put('/:id', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     UPDATE bids SET quantum_mw=@quantum_mw, price_per_unit=@price_per_unit, time_block=@time_block,
       premium_discount=@premium_discount WHERE id=@id
   `).run(merged);
-  logAudit({ user: req.user, action: 'EDIT', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: req.body });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'EDIT', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: req.body });
   res.json(withClient(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
 });
 
@@ -108,7 +108,7 @@ router.post('/:id/cancel', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res)
   if (!bid) return res.status(404).json({ error: 'Bid not found' });
   if (['CLEARED', 'PARTIALLY_CLEARED'].includes(bid.status)) return res.status(400).json({ error: 'Cleared bids cannot be cancelled' });
   db.prepare(`UPDATE bids SET status = 'CANCELLED' WHERE id = ?`).run(bid.id);
-  logAudit({ user: req.user, action: 'CANCEL', module: 'TRADING', entityType: 'bid', entityId: bid.id });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CANCEL', module: 'TRADING', entityType: 'bid', entityId: bid.id });
   res.json(withClient(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
 });
 
@@ -117,7 +117,7 @@ router.delete('/:id', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   if (!bid) return res.status(404).json({ error: 'Bid not found' });
   if (bid.status !== 'DRAFT') return res.status(400).json({ error: 'Only draft bids can be deleted' });
   db.prepare('DELETE FROM bids WHERE id = ?').run(bid.id);
-  logAudit({ user: req.user, action: 'DELETE', module: 'TRADING', entityType: 'bid', entityId: bid.id });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'DELETE', module: 'TRADING', entityType: 'bid', entityId: bid.id });
   res.status(204).send();
 });
 
@@ -129,7 +129,7 @@ router.post('/:id/clear', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) 
   const status = cleared_quantum_mw >= bid.quantum_mw ? 'CLEARED' : (cleared_quantum_mw > 0 ? 'PARTIALLY_CLEARED' : 'REJECTED');
   db.prepare(`UPDATE bids SET cleared_quantum_mw = ?, cleared_price = ?, status = ? WHERE id = ?`)
     .run(cleared_quantum_mw, cleared_price, status, bid.id);
-  logAudit({ user: req.user, action: 'CLEAR_OBLIGATION', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: req.body });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CLEAR_OBLIGATION', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: req.body });
   pushNotification({ role: 'TRADING_USER', type: 'BID_CLEARED', message: `Bid ${bid.id} on ${bid.exchange} ${status}` });
   res.json(withClient(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
 });
@@ -151,7 +151,7 @@ router.post('/bulk-upload', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res
     }
   });
   tx(rows);
-  logAudit({ user: req.user, action: 'BULK_UPLOAD', module: 'TRADING', entityType: 'bid', details: { count: inserted } });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'BULK_UPLOAD', module: 'TRADING', entityType: 'bid', details: { count: inserted } });
   res.status(201).json({ inserted });
 });
 
