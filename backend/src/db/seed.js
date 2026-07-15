@@ -70,6 +70,8 @@ const insertContract = db.prepare(`
 
 const contracts = [
   { id: newId('CON'), contract_no: 'PPA/SJVN/2024/001', contract_type: 'PPA', seller_id: sellers[0].id, buyer_id: null, project_type: 'Solar', capacity_mw: 150, tariff_per_unit: 2.55, tenure_start: '2024-04-01', tenure_end: '2049-03-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 30 days', emd_amount: 15000000, pbg_amount: 22500000, pbg_type: 'BG', pbg_expiry: '2026-03-31', status: 'ACTIVE' },
+  { id: newId('CON'), contract_no: 'PPA/SJVN/2024/001-A', contract_type: 'PPA', seller_id: sellers[0].id, buyer_id: null, project_type: 'Solar (Expansion)', capacity_mw: 50, tariff_per_unit: 2.45, tenure_start: '2024-08-01', tenure_end: '2049-07-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 30 days', emd_amount: 5000000, pbg_amount: 7500000, pbg_type: 'BG', pbg_expiry: '2026-07-31', status: 'ACTIVE' },
+  { id: newId('CON'), contract_no: 'PPA/SJVN/2024/001-B', contract_type: 'PPA', seller_id: sellers[0].id, buyer_id: null, project_type: 'Solar (Phase III)', capacity_mw: 100, tariff_per_unit: 2.60, tenure_start: '2024-11-01', tenure_end: '2049-10-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 30 days', emd_amount: 10000000, pbg_amount: 15000000, pbg_type: 'BG', pbg_expiry: '2026-10-31', status: 'ACTIVE' },
   { id: newId('CON'), contract_no: 'PPA/SJVN/2024/002', contract_type: 'PPA', seller_id: sellers[1].id, buyer_id: null, project_type: 'Wind', capacity_mw: 100, tariff_per_unit: 2.85, tenure_start: '2024-06-01', tenure_end: '2049-05-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 30 days', emd_amount: 10000000, pbg_amount: 15000000, pbg_type: 'BG', pbg_expiry: '2026-05-31', status: 'ACTIVE' },
   { id: newId('CON'), contract_no: 'PPA/SJVN/2025/003', contract_type: 'PPA', seller_id: sellers[2].id, buyer_id: null, project_type: 'Hybrid', capacity_mw: 200, tariff_per_unit: 3.10, tenure_start: '2025-01-01', tenure_end: '2050-12-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 45 days', emd_amount: 20000000, pbg_amount: 30000000, pbg_type: 'ISB', pbg_expiry: '2027-01-01', status: 'ACTIVE' },
   { id: newId('CON'), contract_no: 'PSA/SJVN/2024/101', contract_type: 'PSA', seller_id: null, buyer_id: buyers[0].id, project_type: 'Solar', capacity_mw: 120, tariff_per_unit: 3.45, tenure_start: '2024-04-01', tenure_end: '2049-03-31', billing_cycle: 'MONTHLY', payment_terms: 'Net 45 days', emd_amount: null, pbg_amount: null, pbg_type: null, pbg_expiry: null, status: 'ACTIVE' },
@@ -150,22 +152,288 @@ for (const c of contracts) {
   }
 }
 
-// A disputed invoice for demo
+// A disputed invoice for demo + rich dispute samples
 const disputedInvoice = invoices[0];
-db.prepare(`UPDATE invoices SET status = 'DISPUTED', disputed_amount = ? WHERE id = ?`)
-  .run(Math.round(disputedInvoice.total_amount * 0.1), disputedInvoice.id);
+const buyerInvoice = invoices.find((i) => i.direction === 'SJVN_TO_BUYER') || invoices[6] || invoices[1];
+const sellerInvoice2 = invoices.find((i, idx) => i.direction === 'SELLER_TO_SJVN' && idx > 0) || invoices[1];
+
+function daysAgoIso(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString().slice(0, 19).replace('T', ' ');
+}
+function daysFromIso(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 19).replace('T', ' ');
+}
 
 const insertDispute = db.prepare(`
-  INSERT INTO disputes (id, invoice_id, raised_by, issue_description, disputed_amount, status)
-  VALUES (@id, @invoice_id, @raised_by, @issue_description, @disputed_amount, @status)
+  INSERT INTO disputes (
+    id, dispute_no, invoice_id, raised_by_role, raised_by_user_id, reason_code, charge_line,
+    issue_description, disputed_amount, status, assigned_to, acknowledged_at, acknowledged_by,
+    resolution_outcome, resolution_notes, accepted_amount, credit_amount, lps_on_resolution,
+    before_total, after_total, sla_ack_due, sla_resolve_due, sla_breached_at, escalated_at,
+    created_at, updated_at, resolved_at, resolved_by
+  ) VALUES (
+    @id, @dispute_no, @invoice_id, @raised_by_role, @raised_by_user_id, @reason_code, @charge_line,
+    @issue_description, @disputed_amount, @status, @assigned_to, @acknowledged_at, @acknowledged_by,
+    @resolution_outcome, @resolution_notes, @accepted_amount, @credit_amount, @lps_on_resolution,
+    @before_total, @after_total, @sla_ack_due, @sla_resolve_due, @sla_breached_at, @escalated_at,
+    @created_at, @updated_at, @resolved_at, @resolved_by
+  )
 `);
+
+const insertComment = db.prepare(`
+  INSERT INTO dispute_comments (id, dispute_id, user_id, user_name, role, body, is_internal, created_at)
+  VALUES (@id, @dispute_id, @user_id, @user_name, @role, @body, @is_internal, @created_at)
+`);
+
+const insertEvent = db.prepare(`
+  INSERT INTO dispute_events (id, dispute_id, actor_id, actor_name, event_type, from_status, to_status, details, created_at)
+  VALUES (@id, @dispute_id, @actor_id, @actor_name, @event_type, @from_status, @to_status, @details, @created_at)
+`);
+
+const reiaUserId = userIds['reia@sjvn.in'];
+const buyerUserId = userIds['buyer@discom.gov.in'];
+const sellerUserId = userIds['seller@sunrise-solar.in'];
+
+const amt1 = Math.round(disputedInvoice.energy_charges * 0.08);
+const amt2 = Math.round((buyerInvoice?.trading_margin || buyerInvoice?.energy_charges || 50000) * 0.3) || 50000;
+const amt3 = Math.round((sellerInvoice2?.energy_charges || 100000) * 0.05);
+const amt4 = Math.round((buyerInvoice?.energy_charges || 80000) * 0.12);
+const amt5 = Math.round((disputedInvoice.energy_charges || 100000) * 0.03);
+
+const d1 = newId('DIS');
+const d2 = newId('DIS');
+const d3 = newId('DIS');
+const d4 = newId('DIS');
+const d5 = newId('DIS');
+const d6 = newId('DIS');
+
 insertDispute.run({
-  id: newId('DIS'),
+  id: d1,
+  dispute_no: 'DSP/2026/1001',
   invoice_id: disputedInvoice.id,
-  raised_by: 'BUYER',
-  issue_description: 'Energy quantum billed does not match SLDC data for the period.',
-  disputed_amount: Math.round(disputedInvoice.total_amount * 0.1),
+  raised_by_role: 'SELLER',
+  raised_by_user_id: sellerUserId,
+  reason_code: 'ENERGY_DATA_MISMATCH',
+  charge_line: 'energy_charges',
+  issue_description: 'Billed energy does not match SLDC metered units for the period.',
+  disputed_amount: amt1,
   status: 'UNDER_REVIEW',
+  assigned_to: reiaUserId,
+  acknowledged_at: daysAgoIso(9),
+  acknowledged_by: 'system',
+  resolution_outcome: null,
+  resolution_notes: null,
+  accepted_amount: 0,
+  credit_amount: 0,
+  lps_on_resolution: 0,
+  before_total: null,
+  after_total: null,
+  sla_ack_due: daysAgoIso(8),
+  sla_resolve_due: daysFromIso(5),
+  sla_breached_at: null,
+  escalated_at: null,
+  created_at: daysAgoIso(10),
+  updated_at: daysAgoIso(2),
+  resolved_at: null,
+  resolved_by: null,
+});
+
+insertDispute.run({
+  id: d2,
+  dispute_no: 'DSP/2026/1002',
+  invoice_id: buyerInvoice.id,
+  raised_by_role: 'BUYER',
+  raised_by_user_id: buyerUserId,
+  reason_code: 'TARIFF_RATE_ERROR',
+  charge_line: 'energy_charges',
+  issue_description: 'PSA tariff applied incorrectly vs contracted rate.',
+  disputed_amount: amt2,
+  status: 'INFO_REQUESTED',
+  assigned_to: reiaUserId,
+  acknowledged_at: daysAgoIso(4),
+  acknowledged_by: 'system',
+  resolution_outcome: null,
+  resolution_notes: null,
+  accepted_amount: 0,
+  credit_amount: 0,
+  lps_on_resolution: 0,
+  before_total: null,
+  after_total: null,
+  sla_ack_due: daysAgoIso(3),
+  sla_resolve_due: daysFromIso(10),
+  sla_breached_at: null,
+  escalated_at: null,
+  created_at: daysAgoIso(5),
+  updated_at: daysAgoIso(1),
+  resolved_at: null,
+  resolved_by: null,
+});
+
+insertDispute.run({
+  id: d3,
+  dispute_no: 'DSP/2026/1003',
+  invoice_id: sellerInvoice2.id,
+  raised_by_role: 'SELLER',
+  raised_by_user_id: sellerUserId,
+  reason_code: 'REBATE_ERROR',
+  charge_line: 'rebate',
+  issue_description: 'Prompt payment rebate not applied despite early settlement.',
+  disputed_amount: Math.max(amt3, 25000),
+  status: 'ESCALATED',
+  assigned_to: reiaUserId,
+  acknowledged_at: daysAgoIso(20),
+  acknowledged_by: 'system',
+  resolution_outcome: null,
+  resolution_notes: null,
+  accepted_amount: 0,
+  credit_amount: 0,
+  lps_on_resolution: 0,
+  before_total: null,
+  after_total: null,
+  sla_ack_due: daysAgoIso(18),
+  sla_resolve_due: daysAgoIso(5),
+  sla_breached_at: daysAgoIso(5),
+  escalated_at: daysAgoIso(5),
+  created_at: daysAgoIso(20),
+  updated_at: daysAgoIso(5),
+  resolved_at: null,
+  resolved_by: null,
+});
+
+insertDispute.run({
+  id: d4,
+  dispute_no: 'DSP/2026/1004',
+  invoice_id: buyerInvoice.id,
+  raised_by_role: 'BUYER',
+  raised_by_user_id: buyerUserId,
+  reason_code: 'TAX_GST_ERROR',
+  charge_line: 'taxes',
+  issue_description: 'GST computed on wrong taxable base.',
+  disputed_amount: Math.max(amt4, 15000),
+  status: 'RESOLVED_ACCEPTED',
+  assigned_to: reiaUserId,
+  acknowledged_at: daysAgoIso(28),
+  acknowledged_by: 'system',
+  resolution_outcome: 'PARTIAL_CREDIT',
+  resolution_notes: 'Partial credit accepted for GST miscalculation on transmission component.',
+  accepted_amount: Math.round(Math.max(amt4, 15000) * 0.6),
+  credit_amount: Math.round(Math.max(amt4, 15000) * 0.6),
+  lps_on_resolution: 0,
+  before_total: buyerInvoice.total_amount,
+  after_total: buyerInvoice.total_amount - Math.round(Math.max(amt4, 15000) * 0.6),
+  sla_ack_due: daysAgoIso(26),
+  sla_resolve_due: daysAgoIso(14),
+  sla_breached_at: null,
+  escalated_at: null,
+  created_at: daysAgoIso(30),
+  updated_at: daysAgoIso(12),
+  resolved_at: daysAgoIso(12),
+  resolved_by: 'Rahul (REIA Ops)',
+});
+
+insertDispute.run({
+  id: d5,
+  dispute_no: 'DSP/2026/1005',
+  invoice_id: disputedInvoice.id,
+  raised_by_role: 'SELLER',
+  raised_by_user_id: sellerUserId,
+  reason_code: 'TRANSMISSION_WHEELING',
+  charge_line: 'transmission_charges',
+  issue_description: 'Wheeling charges billed though OA was not applicable.',
+  disputed_amount: amt5,
+  status: 'ACKNOWLEDGED',
+  assigned_to: null,
+  acknowledged_at: daysAgoIso(1),
+  acknowledged_by: 'system',
+  resolution_outcome: null,
+  resolution_notes: null,
+  accepted_amount: 0,
+  credit_amount: 0,
+  lps_on_resolution: 0,
+  before_total: null,
+  after_total: null,
+  sla_ack_due: daysFromIso(1),
+  sla_resolve_due: daysFromIso(14),
+  sla_breached_at: null,
+  escalated_at: null,
+  created_at: daysAgoIso(1),
+  updated_at: daysAgoIso(1),
+  resolved_at: null,
+  resolved_by: null,
+});
+
+insertDispute.run({
+  id: d6,
+  dispute_no: 'DSP/2026/1006',
+  invoice_id: sellerInvoice2.id,
+  raised_by_role: 'SELLER',
+  raised_by_user_id: sellerUserId,
+  reason_code: 'DUPLICATE_BILLING',
+  charge_line: 'energy_charges',
+  issue_description: 'Same period billed twice under two invoice numbers.',
+  disputed_amount: Math.round((sellerInvoice2.energy_charges || 50000) * 0.1),
+  status: 'RESOLVED_REJECTED',
+  assigned_to: reiaUserId,
+  acknowledged_at: daysAgoIso(45),
+  acknowledged_by: 'system',
+  resolution_outcome: 'REJECTED',
+  resolution_notes: 'Second invoice was amendment; original stands. Supporting docs reviewed.',
+  accepted_amount: 0,
+  credit_amount: 0,
+  lps_on_resolution: 0,
+  before_total: sellerInvoice2.total_amount,
+  after_total: sellerInvoice2.total_amount,
+  sla_ack_due: daysAgoIso(43),
+  sla_resolve_due: daysAgoIso(30),
+  sla_breached_at: null,
+  escalated_at: null,
+  created_at: daysAgoIso(45),
+  updated_at: daysAgoIso(25),
+  resolved_at: daysAgoIso(25),
+  resolved_by: 'Rahul (REIA Ops)',
+});
+
+// Open disputed amounts on invoices
+const openOnInv1 = amt1 + amt5;
+db.prepare(`UPDATE invoices SET status = 'DISPUTED', disputed_amount = ? WHERE id = ?`).run(openOnInv1, disputedInvoice.id);
+db.prepare(`UPDATE invoices SET status = 'DISPUTED', disputed_amount = ? WHERE id = ?`).run(amt2, buyerInvoice.id);
+db.prepare(`UPDATE invoices SET status = 'DISPUTED', disputed_amount = ? WHERE id = ?`)
+  .run(Math.max(amt3, 25000), sellerInvoice2.id);
+
+insertComment.run({
+  id: newId('DCM'), dispute_id: d2, user_id: reiaUserId, user_name: 'Rahul (REIA Ops)', role: 'REIA_USER',
+  body: 'Please share the PSA rate schedule page referenced in your claim.', is_internal: 0, created_at: daysAgoIso(1),
+});
+insertComment.run({
+  id: newId('DCM'), dispute_id: d2, user_id: reiaUserId, user_name: 'Rahul (REIA Ops)', role: 'REIA_USER',
+  body: 'Internal: tariff table looks correct — waiting on buyer docs before rejecting.', is_internal: 1, created_at: daysAgoIso(1),
+});
+insertComment.run({
+  id: newId('DCM'), dispute_id: d1, user_id: sellerUserId, user_name: 'Sunrise Solar Pvt Ltd', role: 'SELLER',
+  body: 'Attached SLDC screenshot in evidence folder for Apr 2025.', is_internal: 0, created_at: daysAgoIso(3),
+});
+
+for (const [did, events] of [
+  [d1, [['RAISED', null, 'RAISED'], ['ACKNOWLEDGED', 'RAISED', 'ACKNOWLEDGED'], ['STATUS_CHANGE', 'ACKNOWLEDGED', 'UNDER_REVIEW']]],
+  [d2, [['RAISED', null, 'RAISED'], ['ACKNOWLEDGED', 'RAISED', 'ACKNOWLEDGED'], ['STATUS_CHANGE', 'UNDER_REVIEW', 'INFO_REQUESTED']]],
+  [d3, [['RAISED', null, 'RAISED'], ['ACKNOWLEDGED', 'RAISED', 'ACKNOWLEDGED'], ['SLA_BREACH', 'UNDER_REVIEW', 'ESCALATED']]],
+]) {
+  for (const [etype, from, to] of events) {
+    insertEvent.run({
+      id: newId('DEV'), dispute_id: did, actor_id: reiaUserId, actor_name: 'system',
+      event_type: etype, from_status: from, to_status: to, details: null, created_at: daysAgoIso(5),
+    });
+  }
+}
+
+insertEvent.run({
+  id: newId('DEV'), dispute_id: d4, actor_id: reiaUserId, actor_name: 'Rahul (REIA Ops)',
+  event_type: 'RESOLVED', from_status: 'UNDER_REVIEW', to_status: 'RESOLVED_ACCEPTED',
+  details: JSON.stringify({ outcome: 'PARTIAL_CREDIT' }), created_at: daysAgoIso(12),
 });
 
 // ---------------- Payments ----------------
@@ -207,35 +475,7 @@ for (const c of contracts.filter((c) => c.contract_type === 'PSA')) {
   });
 }
 
-// ---------------- Reconciliation ----------------
-const insertRecon = db.prepare(`
-  INSERT INTO reconciliations (id, contract_id, period_type, period, energy_match, payment_match, performance_match, discrepancy_notes, status)
-  VALUES (@id, @contract_id, @period_type, @period, @energy_match, @payment_match, @performance_match, @discrepancy_notes, @status)
-`);
-for (const c of contracts) {
-  insertRecon.run({
-    id: newId('REC'),
-    contract_id: c.id,
-    period_type: 'MONTHLY',
-    period: '2025-05',
-    energy_match: 1,
-    payment_match: 1,
-    performance_match: 1,
-    discrepancy_notes: null,
-    status: 'RESOLVED',
-  });
-}
-insertRecon.run({
-  id: newId('REC'),
-  contract_id: contracts[0].id,
-  period_type: 'MONTHLY',
-  period: '2025-06',
-  energy_match: 0,
-  payment_match: 1,
-  performance_match: 1,
-  discrepancy_notes: 'Energy mismatch of 45 MWh vs SLDC data - under review',
-  status: 'OPEN',
-});
+// ---------------- Reconciliation (seeded after trading data — see end of file) ----------------
 
 // ---------------- Trading Clients ----------------
 const insertClient = db.prepare(`
@@ -316,8 +556,9 @@ for (const client of tradingClients) {
   const margin = Math.round(qty * 0.05);
   const base = Math.round(qty * rate) + margin;
   const gst = Math.round(base * 0.18);
+  const tinId = newId('TIN');
   insertTInvoice.run({
-    id: newId('TIN'),
+    id: tinId,
     invoice_no: `TRD/2025/${tInvCounter++}`,
     client_id: client.id,
     invoice_kind: 'COMBINED',
@@ -330,6 +571,10 @@ for (const client of tradingClients) {
     total_amount: base + gst,
     status: 'PAID',
   });
+  db.prepare(`
+    INSERT INTO trading_payments (id, trading_invoice_id, amount, payment_date, mode, reference)
+    VALUES (?, ?, ?, '2025-06-28', 'NEFT', ?)
+  `).run(newId('TPY'), tinId, base + gst, `TREF-${Math.floor(Math.random() * 900000)}`);
 }
 
 // ---------------- Market Rates (for analytics/forecast demo) ----------------
@@ -343,6 +588,97 @@ for (let d = 1; d <= 15; d++) {
   insertRate.run({ id: newId('MKT'), product: 'DAM', rate_date: date, mcp_rate: Number(mcp.toFixed(2)), forecast_rate: Number((mcp + (Math.random() - 0.5)).toFixed(2)) });
 }
 
+// ---------------- Reconciliation (engine-driven samples) ----------------
+const { persistRun } = await import('../routes/reconciliation.js');
+const seedUser = { id: userIds['reia@sjvn.in'], name: 'Rahul (REIA Ops)' };
+
+// Matched May runs for first few contracts
+for (const c of contracts.slice(0, 3)) {
+  const r = persistRun({
+    scope: 'REIA_CONTRACT', contractId: c.id, periodType: 'MONTHLY', period: '2025-05',
+    triggerType: 'SCHEDULED', user: seedUser,
+  });
+  // Dual ack → CLOSED
+  db.prepare(`
+    UPDATE reconciliations SET status = 'CLOSED', sjvn_ack_at = datetime('now'), sjvn_ack_by = 'Rahul (REIA Ops)',
+      counterparty_ack_at = datetime('now'), counterparty_ack_by = 'Stakeholder', closed_at = datetime('now')
+    WHERE id = ?
+  `).run(r.id);
+}
+
+// April matched (for carry baseline)
+persistRun({
+  scope: 'REIA_CONTRACT', contractId: contracts[0].id, periodType: 'MONTHLY', period: '2025-04',
+  triggerType: 'MANUAL', user: seedUser,
+});
+
+// Needs review: SAP mirror mismatch on June
+const needsReview = persistRun({
+  scope: 'REIA_CONTRACT', contractId: contracts[0].id, periodType: 'MONTHLY', period: '2025-06',
+  triggerType: 'MANUAL', user: seedUser,
+  sapOverride: { sap_amount: 1, sap_factor: 0.85 },
+});
+
+// Provisional-based run for another contract period
+const prov = persistRun({
+  scope: 'REIA_CONTRACT', contractId: contracts[1].id, periodType: 'MONTHLY', period: '2025-06',
+  triggerType: 'MANUAL', user: seedUser, forceDataBasis: 'PROVISIONAL',
+});
+db.prepare(`UPDATE reconciliations SET data_basis = 'PROVISIONAL', status = 'PENDING_SIGN_OFF' WHERE id = ?`).run(prov.id);
+
+// Pending sign-off clean run
+const signoff = persistRun({
+  scope: 'REIA_CONTRACT', contractId: contracts[5]?.id || contracts[2].id, periodType: 'MONTHLY', period: '2025-05',
+  triggerType: 'MANUAL', user: seedUser,
+});
+db.prepare(`
+  UPDATE reconciliations SET status = 'PENDING_SIGN_OFF', sjvn_ack_at = datetime('now'), sjvn_ack_by = 'Rahul (REIA Ops)'
+  WHERE id = ?
+`).run(signoff.id);
+
+// Trading reconciliation
+persistRun({
+  scope: 'TRADING_CLIENT', tradingClientId: tradingClients[0].id, periodType: 'MONTHLY', period: '2025-06',
+  triggerType: 'MANUAL', user: seedUser,
+});
+
+// Pattern: force historical exceptions on ENERGY for pattern flag demo
+for (let i = 0; i < 3; i++) {
+  const month = `2025-0${1 + i}`;
+  const fakeId = newId('RCN');
+  db.prepare(`
+    INSERT INTO reconciliations (
+      id, recon_no, scope, contract_id, period_type, period, data_basis, status, trigger_type,
+      items_total, items_auto_matched, items_exception, auto_match_pct, unreconciled_amount,
+      energy_match, payment_match, performance_match, created_by, created_at
+    ) VALUES (?, ?, 'REIA_CONTRACT', ?, 'MONTHLY', ?, 'FINAL', 'CLOSED', 'MANUAL',
+      1, 0, 1, 0, 1000, 0, 1, 1, 'seed', ?)
+  `).run(fakeId, `RCN/2025/P${100 + i}`, contracts[0].id, month, `2025-0${1 + i}-28 10:00:00`);
+  db.prepare(`
+    INSERT INTO recon_items (id, reconciliation_id, item_type, label, metered_value, billed_value, variance, unit, match_status, pattern_flag)
+    VALUES (?, ?, 'ENERGY_THREE_WAY', 'Energy mismatch', 100, 145, -45, 'MWh', 'EXCEPTION', 0)
+  `).run(newId('RCI'), fakeId);
+}
+
+// Re-run June so pattern_flag may trip on ENERGY if still exception from sap and carry
+persistRun({
+  scope: 'REIA_CONTRACT', contractId: contracts[0].id, periodType: 'MONTHLY', period: '2025-06',
+  triggerType: 'MANUAL', user: seedUser,
+  sapOverride: { sap_factor: 0.9 },
+});
+
+// Reopen request on a closed May recon
+const closedMay = db.prepare(`
+  SELECT id FROM reconciliations WHERE contract_id = ? AND period = '2025-05' AND status = 'CLOSED' LIMIT 1
+`).get(contracts[0].id);
+if (closedMay) {
+  db.prepare(`
+    INSERT INTO recon_reopen_requests (id, reconciliation_id, requested_by, requested_by_name, reason, status)
+    VALUES (?, ?, ?, 'Sunrise Solar Pvt Ltd', 'SLDC revised metered data for May 2025', 'PENDING')
+  `).run(newId('RRQ'), closedMay.id, userIds['seller@sunrise-solar.in']);
+}
+
 console.log('Database seeded successfully.');
 console.log('Demo login (all roles use password: password123):');
 users.forEach((u) => console.log(`  ${u.role.padEnd(14)} -> ${u.email}`));
+console.log(`Reconciliation samples: ${db.prepare('SELECT COUNT(*) c FROM reconciliations').get().c} runs, needs-review=${needsReview.recon_no}`);

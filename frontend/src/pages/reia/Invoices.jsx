@@ -168,6 +168,7 @@ export default function Invoices() {
               <div className="detail-item"><span className="detail-label">Contract</span><span className="detail-value">{selected.contract_no}</span></div>
               <div className="detail-item"><span className="detail-label">Direction</span><span className="detail-value">{selected.direction === 'SJVN_TO_BUYER' ? 'SJVN → Buyer' : 'Seller → SJVN'}</span></div>
               <div className="detail-item"><span className="detail-label">Billing Period</span><span className="detail-value">{selected.billing_period}</span></div>
+              <div className="detail-item"><span className="detail-label">Due Date</span><span className="detail-value">{selected.due_date || 'Not set'}</span></div>
               <div className="detail-item"><span className="detail-label">Energy</span><span className="detail-value">{fmtNumber(selected.energy_mwh)} MWh</span></div>
               <div className="detail-item"><span className="detail-label">Tariff</span><span className="detail-value">₹{selected.tariff_per_unit}/unit</span></div>
               <div className="detail-item"><span className="detail-label">Energy Charges</span><span className="detail-value">{fmtCurrency(selected.energy_charges)}</span></div>
@@ -179,32 +180,48 @@ export default function Invoices() {
               
               <div className="detail-item">
                 <span className="detail-label">
-                  Disputed Amount
-                  <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>Amount currently under dispute</div>
+                  Disputed | Payable Now
+                  <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>
+                    Disputed: {fmtCurrency(selected.disputed_amount || 0)} | Payable Now: {fmtCurrency(selected.payable_now ?? (
+                      selected.direction === 'SELLER_TO_SJVN'
+                        ? selected.total_amount - selected.rebate + selected.lps - selected.disputed_amount
+                        : selected.total_amount + selected.lps - selected.disputed_amount
+                    ))}
+                  </div>
                 </span>
                 <span className="detail-value" style={{color: 'var(--error)'}}>-{fmtCurrency(selected.disputed_amount)}</span>
               </div>
-              <div className="detail-item">
-                <span className="detail-label">
-                  Early Pay Rebate
-                  <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>Formula: 2% of Energy Charges if paid on/before Due Date</div>
-                </span>
-                <span className="detail-value" style={{color: 'var(--success)'}}>-{fmtCurrency(selected.rebate)}</span>
-              </div>
+              {selected.direction === 'SELLER_TO_SJVN' && (
+                <div className="detail-item">
+                  <span className="detail-label">
+                    Early Pay Rebate
+                    <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>Formula: 2% of Energy Charges if SJVN pays Seller early</div>
+                  </span>
+                  <span className="detail-value" style={{color: 'var(--success)'}}>-{fmtCurrency(selected.rebate)}</span>
+                </div>
+              )}
               <div className="detail-item">
                 <span className="detail-label">
                   Late Pay Surcharge (LPS)
-                  <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>Formula: 15% p.a. on Total Amount for delayed days</div>
+                  <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>15% p.a. on undisputed amount only while dispute is open</div>
                 </span>
                 <span className="detail-value" style={{color: 'var(--error)'}}>+{fmtCurrency(selected.lps)}</span>
               </div>
               
               <div className="detail-item">
                 <span className="detail-label">
-                  Effective Payable
-                  <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>(Total Base - Rebate + LPS - Disputed)</div>
+                  Payable Now
+                  <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>
+                    Undisputed balance due by due date
+                  </div>
                 </span>
-                <span className="detail-value" style={{ fontSize: 16, fontWeight: 'bold' }}>{fmtCurrency(selected.total_amount - selected.rebate + selected.lps - selected.disputed_amount)}</span>
+                <span className="detail-value" style={{ fontSize: 16, fontWeight: 'bold' }}>
+                  {fmtCurrency(selected.payable_now ?? (
+                    selected.direction === 'SELLER_TO_SJVN'
+                      ? selected.total_amount - selected.rebate + selected.lps - selected.disputed_amount
+                      : selected.total_amount + selected.lps - selected.disputed_amount
+                  ))}
+                </span>
               </div>
             </div>
 
@@ -237,7 +254,8 @@ export default function Invoices() {
                 <div className="timeline">
                   {selected.disputes.map((d) => (
                     <div className="timeline-item" key={d.id}>
-                      <Badge status={d.status} /> {d.issue_description} — {fmtCurrency(d.disputed_amount)}
+                      <Badge status={d.status} /> {d.dispute_no || ''} {d.reason_code || ''} — {fmtCurrency(d.disputed_amount)}
+                      {d.issue_description && <div className="t-meta">{d.issue_description}</div>}
                     </div>
                   ))}
                 </div>

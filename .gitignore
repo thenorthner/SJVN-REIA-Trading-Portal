@@ -5,5 +5,7 @@ backend/src/db/platform.db
 backend/src/db/platform.db-journal
 backend/src/db/platform.db-wal
 backend/src/db/platform.db-shm
+backend/uploads/disputes/**
+!backend/uploads/disputes/.gitkeep
 dist/
 build/

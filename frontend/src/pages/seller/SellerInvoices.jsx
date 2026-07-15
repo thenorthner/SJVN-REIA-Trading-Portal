@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { REASON_CODES, CHARGE_LINES } from '../../disputesMeta.js';
 
 const STATUS_STEPS = ['DRAFT', 'SUBMITTED', 'UNDER_APPROVAL', 'APPROVED', 'PAID'];
 const STATUS_LABELS = {
@@ -68,7 +69,9 @@ export default function SellerInvoices() {
 
   // Dispute form
   const [showDispute, setShowDispute] = useState(false);
-  const [disputeForm, setDisputeForm] = useState({ issue_description: '', disputed_amount: '' });
+  const [disputeForm, setDisputeForm] = useState({
+    reason_code: '', charge_line: 'energy_charges', issue_description: '', disputed_amount: '',
+  });
 
   function load() {
     setLoading(true);
@@ -107,7 +110,7 @@ export default function SellerInvoices() {
   function openDetail(row) {
     api.invoices.get(row.id).then(setSelected);
     setShowDispute(false);
-    setDisputeForm({ issue_description: '', disputed_amount: '' });
+    setDisputeForm({ reason_code: '', charge_line: 'energy_charges', issue_description: '', disputed_amount: '' });
   }
 
   async function handleCreate(e, asDraft = false) {
@@ -152,17 +155,19 @@ export default function SellerInvoices() {
     try {
       await api.disputes.create({
         invoice_id: selected.id,
-        raised_by: 'SELLER',
+        raised_by_role: 'SELLER',
+        reason_code: disputeForm.reason_code,
+        charge_line: disputeForm.charge_line,
         issue_description: disputeForm.issue_description,
         disputed_amount: Number(disputeForm.disputed_amount),
       });
       setShowDispute(false);
-      setDisputeForm({ issue_description: '', disputed_amount: '' });
+      setDisputeForm({ reason_code: '', charge_line: 'energy_charges', issue_description: '', disputed_amount: '' });
       const fresh = await api.invoices.get(selected.id);
       setSelected(fresh);
       load();
     } catch (err) {
-      // ignore
+      alert(err.response?.data?.error || 'Failed to raise dispute');
     }
   }
 
@@ -321,14 +326,16 @@ export default function SellerInvoices() {
               <div className="detail-item"><span className="detail-label">Taxes</span><span className="detail-value">{fmtCurrency(selected.taxes)}</span></div>
               <div className="detail-item"><span className="detail-label">Other Adjustments</span><span className="detail-value">{fmtCurrency(selected.other_adjustments)}</span></div>
               {selected.disputed_amount > 0 && (
-                <div className="detail-item"><span className="detail-label" style={{ color: 'var(--danger)' }}>Disputed Amount</span><span className="detail-value" style={{ color: 'var(--danger)' }}>-{fmtCurrency(selected.disputed_amount)}</span></div>
+                <div className="detail-item"><span className="detail-label" style={{ color: 'var(--danger)' }}>Disputed</span><span className="detail-value" style={{ color: 'var(--danger)' }}>{fmtCurrency(selected.disputed_amount)}</span></div>
               )}
               <div className="detail-item">
                 <span className="detail-label" style={{ fontWeight: 600 }}>
-                  Effective Payable
-                  <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>(Total Base - Rebate + LPS - Disputed)</div>
+                  Payable Now
+                  <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>
+                    Disputed: {fmtCurrency(selected.disputed_amount || 0)} | Payable Now: {fmtCurrency(selected.payable_now ?? (selected.total_amount - selected.rebate + selected.lps - selected.disputed_amount))}
+                  </div>
                 </span>
-                <span className="detail-value" style={{ fontSize: 18, fontWeight: 700 }}>{fmtCurrency(selected.total_amount - selected.rebate + selected.lps - selected.disputed_amount)}</span>
+                <span className="detail-value" style={{ fontSize: 18, fontWeight: 700 }}>{fmtCurrency(selected.payable_now ?? (selected.total_amount - selected.rebate + selected.lps - selected.disputed_amount))}</span>
               </div>
               <div className="detail-item"><span className="detail-label">Due Date</span><span className="detail-value">{selected.due_date || 'Not set'}</span></div>
             </div>
@@ -396,11 +403,22 @@ export default function SellerInvoices() {
               <div style={{ marginTop: 16, padding: 16, background: 'var(--bg-main)', borderRadius: 8, border: '1px solid var(--danger)' }}>
                 <div className="section-title">Raise Dispute</div>
                 <form onSubmit={handleRaiseDispute}>
+                  <Field label="Charge line">
+                    <select required value={disputeForm.charge_line} onChange={(e) => setDisputeForm({ ...disputeForm, charge_line: e.target.value })}>
+                      {CHARGE_LINES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Reason code">
+                    <select required value={disputeForm.reason_code} onChange={(e) => setDisputeForm({ ...disputeForm, reason_code: e.target.value })}>
+                      <option value="">Select...</option>
+                      {REASON_CODES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                  </Field>
                   <Field label="Issue Description">
-                    <textarea required rows={3} placeholder="Describe the issue (e.g., energy data mismatch, penalty disagreement)" value={disputeForm.issue_description} onChange={(e) => setDisputeForm({ ...disputeForm, issue_description: e.target.value })} />
+                    <textarea required={disputeForm.reason_code === 'OTHER'} rows={3} value={disputeForm.issue_description} onChange={(e) => setDisputeForm({ ...disputeForm, issue_description: e.target.value })} />
                   </Field>
                   <Field label="Disputed Amount (₹)">
-                    <input required type="number" placeholder="Amount you are disputing" value={disputeForm.disputed_amount} onChange={(e) => setDisputeForm({ ...disputeForm, disputed_amount: e.target.value })} />
+                    <input required type="number" value={disputeForm.disputed_amount} onChange={(e) => setDisputeForm({ ...disputeForm, disputed_amount: e.target.value })} />
                   </Field>
                   <div className="form-actions">
                     <button type="button" className="btn btn-ghost" onClick={() => setShowDispute(false)}>Cancel</button>

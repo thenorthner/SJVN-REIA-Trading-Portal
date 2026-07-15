@@ -195,33 +195,173 @@ CREATE TABLE IF NOT EXISTS payments (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Reconciliation
+-- Reconciliation (three-way trust + joint sign-off)
 CREATE TABLE IF NOT EXISTS reconciliations (
   id TEXT PRIMARY KEY,
-  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  recon_no TEXT UNIQUE NOT NULL,
+  scope TEXT NOT NULL DEFAULT 'REIA_CONTRACT' CHECK (scope IN ('REIA_CONTRACT','TRADING_CLIENT')),
+  contract_id TEXT REFERENCES contracts(id),
+  trading_client_id TEXT,
   period_type TEXT NOT NULL CHECK (period_type IN ('MONTHLY','QUARTERLY','ANNUAL')),
   period TEXT NOT NULL,
+  data_basis TEXT NOT NULL DEFAULT 'FINAL' CHECK (data_basis IN ('PROVISIONAL','FINAL')),
+  status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN (
+    'DRAFT','IN_PROGRESS','AUTO_MATCHED','NEEDS_REVIEW','PENDING_SIGN_OFF',
+    'AGREED','DISPUTED','CLOSED','REOPENED'
+  )),
+  trigger_type TEXT NOT NULL DEFAULT 'MANUAL' CHECK (trigger_type IN ('MANUAL','SCHEDULED','FINAL_DATA','REOPEN')),
+  tolerance_qty_pct REAL NOT NULL DEFAULT 0.5,
+  tolerance_amount REAL NOT NULL DEFAULT 100,
   energy_match INTEGER NOT NULL DEFAULT 0,
   payment_match INTEGER NOT NULL DEFAULT 0,
   performance_match INTEGER NOT NULL DEFAULT 0,
+  items_total INTEGER NOT NULL DEFAULT 0,
+  items_auto_matched INTEGER NOT NULL DEFAULT 0,
+  items_exception INTEGER NOT NULL DEFAULT 0,
+  auto_match_pct REAL NOT NULL DEFAULT 0,
+  unreconciled_amount REAL NOT NULL DEFAULT 0,
   discrepancy_notes TEXT,
-  status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','ASSISTED_REVIEW','RESOLVED')),
+  statement_json TEXT,
+  version INTEGER NOT NULL DEFAULT 1,
+  counterparty_role TEXT,
+  sjvn_ack_at TEXT,
+  sjvn_ack_by TEXT,
+  counterparty_ack_at TEXT,
+  counterparty_ack_by TEXT,
+  carried_from_id TEXT,
+  reopened_from_id TEXT,
+  reopen_reason TEXT,
+  closed_at TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS recon_items (
+  id TEXT PRIMARY KEY,
+  reconciliation_id TEXT NOT NULL REFERENCES reconciliations(id),
+  item_type TEXT NOT NULL CHECK (item_type IN (
+    'ENERGY_THREE_WAY','FINANCIAL_THREE_WAY','TAX','PERFORMANCE','PENALTY',
+    'INTERNAL_SAP','TRADING_BID_CLEAR_BILL','CARRY_FORWARD','DISPUTE_REF'
+  )),
+  label TEXT,
+  metered_value REAL,
+  billed_value REAL,
+  paid_value REAL,
+  sap_reference_amount REAL,
+  variance REAL NOT NULL DEFAULT 0,
+  variance_pct REAL,
+  unit TEXT,
+  match_status TEXT NOT NULL CHECK (match_status IN (
+    'EXACT','AUTO_MATCHED','EXCEPTION','CARRIED','OVERRIDDEN'
+  )),
+  pattern_flag INTEGER NOT NULL DEFAULT 0,
+  dispute_id TEXT,
+  invoice_id TEXT,
+  override_reason TEXT,
+  notes TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Dispute Management
+CREATE TABLE IF NOT EXISTS recon_events (
+  id TEXT PRIMARY KEY,
+  reconciliation_id TEXT NOT NULL REFERENCES reconciliations(id),
+  actor_id TEXT,
+  actor_name TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  details TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS recon_statements (
+  id TEXT PRIMARY KEY,
+  reconciliation_id TEXT NOT NULL REFERENCES reconciliations(id),
+  version INTEGER NOT NULL,
+  statement_json TEXT NOT NULL,
+  generated_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS recon_reopen_requests (
+  id TEXT PRIMARY KEY,
+  reconciliation_id TEXT NOT NULL REFERENCES reconciliations(id),
+  requested_by TEXT,
+  requested_by_name TEXT,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED')),
+  acted_by TEXT,
+  acted_at TEXT,
+  new_reconciliation_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Dispute Management (financial control + SLA workflow)
 CREATE TABLE IF NOT EXISTS disputes (
   id TEXT PRIMARY KEY,
+  dispute_no TEXT UNIQUE NOT NULL,
   invoice_id TEXT NOT NULL REFERENCES invoices(id),
-  raised_by TEXT NOT NULL, -- BUYER / SELLER
+  raised_by_role TEXT NOT NULL CHECK (raised_by_role IN ('BUYER','SELLER')),
+  raised_by_user_id TEXT,
+  reason_code TEXT NOT NULL CHECK (reason_code IN (
+    'ENERGY_DATA_MISMATCH','TARIFF_RATE_ERROR','REBATE_ERROR','LPS_PENALTY_ERROR',
+    'TRANSMISSION_WHEELING','CUF_PERFORMANCE','TAX_GST_ERROR','CONTRACT_INTERPRETATION',
+    'DUPLICATE_BILLING','OTHER'
+  )),
+  charge_line TEXT NOT NULL CHECK (charge_line IN (
+    'energy_charges','transmission_charges','trading_margin','rebate','lps',
+    'penalty','taxes','other_adjustments'
+  )),
   issue_description TEXT NOT NULL,
   disputed_amount REAL NOT NULL,
   supporting_docs TEXT,
-  status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('SUBMITTED','UNDER_REVIEW','RESOLVED','CLOSED')),
+  status TEXT NOT NULL DEFAULT 'RAISED' CHECK (status IN (
+    'RAISED','ACKNOWLEDGED','UNDER_REVIEW','INFO_REQUESTED',
+    'RESOLVED_ACCEPTED','RESOLVED_REJECTED','ESCALATED','CLOSED'
+  )),
+  assigned_to TEXT,
+  acknowledged_at TEXT,
+  acknowledged_by TEXT,
+  resolved_at TEXT,
+  resolved_by TEXT,
+  resolution_outcome TEXT CHECK (resolution_outcome IS NULL OR resolution_outcome IN (
+    'FULL_CREDIT','PARTIAL_CREDIT','REJECTED'
+  )),
   resolution_notes TEXT,
+  accepted_amount REAL NOT NULL DEFAULT 0,
+  credit_amount REAL NOT NULL DEFAULT 0,
   lps_on_resolution REAL NOT NULL DEFAULT 0,
+  before_total REAL,
+  after_total REAL,
+  supplementary_invoice_id TEXT,
+  sla_ack_due TEXT,
+  sla_resolve_due TEXT,
+  sla_breached_at TEXT,
+  escalated_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  resolved_at TEXT
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS dispute_comments (
+  id TEXT PRIMARY KEY,
+  dispute_id TEXT NOT NULL REFERENCES disputes(id),
+  user_id TEXT,
+  user_name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  body TEXT NOT NULL,
+  is_internal INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS dispute_events (
+  id TEXT PRIMARY KEY,
+  dispute_id TEXT NOT NULL REFERENCES disputes(id),
+  actor_id TEXT,
+  actor_name TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  from_status TEXT,
+  to_status TEXT,
+  details TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- ---------------------------------------------------------------

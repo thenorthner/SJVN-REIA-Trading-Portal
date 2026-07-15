@@ -64,9 +64,22 @@ export const api = {
   },
   disputes: {
     list: (params) => g('/disputes', params),
+    get: (id) => g(`/disputes/${id}`),
+    meta: () => g('/disputes/meta'),
+    stats: () => g('/disputes/stats'),
     create: (body) => p('/disputes', body),
+    transition: (id, status, note) => p(`/disputes/${id}/transition`, { status, note }),
     setStatus: (id, status) => p(`/disputes/${id}/status`, { status }),
     resolve: (id, body) => p(`/disputes/${id}/resolve`, body),
+    comment: (id, body, is_internal = false) => p(`/disputes/${id}/comments`, { body, is_internal }),
+    assign: (id, assigned_to) => p(`/disputes/${id}/assign`, { assigned_to }),
+    uploadEvidence: (id, file, note) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      if (note) fd.append('note', note);
+      return client.post(`/disputes/${id}/evidence`, fd).then((r) => r.data);
+    },
+    slaCheck: () => p('/disputes/sla/check'),
   },
   paymentSecurity: {
     list: (params) => g('/payment-security', params),
@@ -77,7 +90,20 @@ export const api = {
   },
   reconciliation: {
     list: (params) => g('/reconciliation', params),
+    get: (id) => g(`/reconciliation/${id}`),
+    stats: () => g('/reconciliation/stats'),
+    meta: () => g('/reconciliation/meta'),
     run: (body) => p('/reconciliation/run', body),
+    runScheduled: () => p('/reconciliation/run-scheduled'),
+    override: (id, item_id, reason) => p(`/reconciliation/${id}/override`, { item_id, reason }),
+    raiseDispute: (id, body) => p(`/reconciliation/${id}/raise-dispute`, body),
+    requestSignoff: (id) => p(`/reconciliation/${id}/request-signoff`),
+    acknowledge: (id, decision, note) => p(`/reconciliation/${id}/acknowledge`, { decision, note }),
+    reopenRequest: (id, reason) => p(`/reconciliation/${id}/reopen-request`, { reason }),
+    reopenRequests: () => g('/reconciliation/reopen-requests'),
+    actReopen: (id, decision) => p(`/reconciliation/reopen-requests/${id}/act`, { decision }),
+    statement: (id, version) => g(`/reconciliation/${id}/statement`, version ? { version } : undefined),
+    regenerateStatement: (id) => p(`/reconciliation/${id}/regenerate-statement`),
     resolve: (id, notes) => p(`/reconciliation/${id}/resolve`, { notes }),
   },
   tradingClients: {

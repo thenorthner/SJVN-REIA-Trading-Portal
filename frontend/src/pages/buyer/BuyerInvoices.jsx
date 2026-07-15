@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { REASON_CODES, CHARGE_LINES } from '../../disputesMeta.js';
 
 const PAY_FORM = { amount: '', payment_date: '', mode: 'NEFT', reference: '' };
+const DISPUTE_FORM = { reason_code: '', charge_line: 'energy_charges', issue_description: '', disputed_amount: '' };
 
 function StatusStepper({ status }) {
   const steps = ['SENT', 'PARTIALLY_PAID', 'PAID'];
@@ -38,6 +40,8 @@ export default function BuyerInvoices() {
   const [selected, setSelected] = useState(null);
   const [payForm, setPayForm] = useState(PAY_FORM);
   const [error, setError] = useState('');
+  const [showDispute, setShowDispute] = useState(false);
+  const [disputeForm, setDisputeForm] = useState(DISPUTE_FORM);
 
   function load() {
     setLoading(true);
@@ -57,6 +61,30 @@ export default function BuyerInvoices() {
     api.invoices.get(row.id).then(setSelected);
     setPayForm(PAY_FORM);
     setError('');
+    setShowDispute(false);
+    setDisputeForm(DISPUTE_FORM);
+  }
+
+  async function handleRaiseDispute(e) {
+    e.preventDefault();
+    setError('');
+    try {
+      await api.disputes.create({
+        invoice_id: selected.id,
+        raised_by_role: 'BUYER',
+        reason_code: disputeForm.reason_code,
+        charge_line: disputeForm.charge_line,
+        issue_description: disputeForm.issue_description,
+        disputed_amount: Number(disputeForm.disputed_amount),
+      });
+      setShowDispute(false);
+      setDisputeForm(DISPUTE_FORM);
+      const fresh = await api.invoices.get(selected.id);
+      setSelected(fresh);
+      load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to raise dispute');
+    }
   }
 
   async function handlePayment(e) {
@@ -114,7 +142,7 @@ export default function BuyerInvoices() {
               <div className="detail-item"><span className="detail-label">PSA</span><span className="detail-value">{selected.contract?.contract_no}</span></div>
               <div className="detail-item"><span className="detail-label">Billing Period</span><span className="detail-value">{selected.billing_period}</span></div>
               <div className="detail-item"><span className="detail-label">Allocated Energy</span><span className="detail-value">{fmtNumber(selected.energy_mwh)} MWh</span></div>
-              <div className="detail-item"><span className="detail-label">Tariff</span><span className="detail-value">₹{selected.contract?.tariff_per_unit}/unit</span></div>
+              <div className="detail-item"><span className="detail-label">Tariff</span><span className="detail-value">₹{selected.tariff_per_unit}/unit</span></div>
             </div>
 
             <div className="section-title" style={{ marginTop: 24 }}>Payable Breakup</div>
@@ -122,26 +150,18 @@ export default function BuyerInvoices() {
               <tbody>
                 <tr>
                   <td>Energy Charges ({fmtNumber(selected.energy_mwh * 1000)} units)</td>
-                  <td className="text-right mono">{fmtCurrency(selected.energy_mwh * 1000 * selected.contract?.tariff_per_unit)}</td>
+                  <td className="text-right mono">{fmtCurrency(selected.energy_charges)}</td>
                 </tr>
                 {/* Assuming SJVN adds a 7 paise/unit trading margin for buyers */}
                 <tr>
                   <td>Trading Margin (SJVN)</td>
-                  <td className="text-right mono">{fmtCurrency(selected.energy_mwh * 1000 * 0.07)}</td>
+                  <td className="text-right mono">{fmtCurrency(selected.trading_margin)}</td>
                 </tr>
                 <tr style={{ background: 'var(--bg)', fontWeight: 700 }}>
                   <td>Gross Amount Payable</td>
                   <td className="text-right mono">{fmtCurrency(selected.total_amount)}</td>
                 </tr>
-                {selected.rebate > 0 && (
-                  <tr>
-                    <td>
-                      <div>Early Pay Rebate</div>
-                      <div style={{fontSize: 11, color: 'var(--text-light)'}}>Formula: 2% of Energy Charges if paid early</div>
-                    </td>
-                    <td className="text-right mono" style={{ color: 'var(--success)' }}>-{fmtCurrency(selected.rebate)}</td>
-                  </tr>
-                )}
+
                 {selected.lps > 0 && (
                   <tr>
                     <td>
@@ -155,21 +175,69 @@ export default function BuyerInvoices() {
                   <tr>
                     <td>
                       <div>Disputed Amount</div>
-                      <div style={{fontSize: 11, color: 'var(--text-light)'}}>Amount currently under dispute</div>
+                      <div style={{fontSize: 11, color: 'var(--text-light)'}}>Held from payable — LPS does not apply on this portion while open</div>
                     </td>
                     <td className="text-right mono" style={{ color: 'var(--error)' }}>-{fmtCurrency(selected.disputed_amount)}</td>
                   </tr>
                 )}
                 <tr style={{ background: 'var(--bg-main)', fontWeight: 800, borderTop: '2px solid var(--border)' }}>
                   <td style={{ paddingTop: 12, paddingBottom: 12 }}>
-                    Effective Amount Payable
-                    <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>(Gross - Rebate + LPS - Disputed)</div>
+                    Payable Now
+                    <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>
+                      Disputed: {fmtCurrency(selected.disputed_amount || 0)} | Payable Now: {fmtCurrency(selected.payable_now ?? (selected.total_amount + (selected.lps || 0) - (selected.disputed_amount || 0)))}
+                    </div>
                   </td>
-                  <td className="text-right mono" style={{ paddingTop: 12, paddingBottom: 12, fontSize: 16 }}>{fmtCurrency(selected.total_amount - selected.rebate + selected.lps - selected.disputed_amount)}</td>
+                  <td className="text-right mono" style={{ paddingTop: 12, paddingBottom: 12, fontSize: 16 }}>{fmtCurrency(selected.payable_now ?? (selected.total_amount + selected.lps - selected.disputed_amount))}</td>
                 </tr>
               </tbody>
             </table>
-            <div className="inline-note">Note: A rebate may apply if payment is made within 5 days of invoice receipt.</div>
+            <div className="inline-note">Note: LPS of 15% p.a. applies only on the undisputed payable if delayed beyond due date.</div>
+
+            {selected.disputes?.length > 0 && (
+              <>
+                <div className="section-title" style={{ marginTop: 18 }}>Disputes</div>
+                <div className="timeline">
+                  {selected.disputes.map((d) => (
+                    <div className="timeline-item" key={d.id}>
+                      <Badge status={d.status} /> {d.dispute_no || d.id} — {fmtCurrency(d.disputed_amount)} ({d.reason_code})
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {!['DRAFT', 'CANCELLED', 'PAID'].includes(selected.status) && (
+              <div className="form-actions" style={{ marginTop: 16 }}>
+                <button type="button" className="btn btn-danger" onClick={() => setShowDispute(true)}>Raise Dispute</button>
+              </div>
+            )}
+            {showDispute && (
+              <div style={{ marginTop: 12, padding: 16, background: 'var(--bg-main)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <form onSubmit={handleRaiseDispute}>
+                  <Field label="Charge line">
+                    <select required value={disputeForm.charge_line} onChange={(e) => setDisputeForm({ ...disputeForm, charge_line: e.target.value })}>
+                      {CHARGE_LINES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Reason code">
+                    <select required value={disputeForm.reason_code} onChange={(e) => setDisputeForm({ ...disputeForm, reason_code: e.target.value })}>
+                      <option value="">Select...</option>
+                      {REASON_CODES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Disputed amount (₹)">
+                    <input required type="number" value={disputeForm.disputed_amount} onChange={(e) => setDisputeForm({ ...disputeForm, disputed_amount: e.target.value })} />
+                  </Field>
+                  <Field label="Description">
+                    <textarea required={disputeForm.reason_code === 'OTHER'} value={disputeForm.issue_description} onChange={(e) => setDisputeForm({ ...disputeForm, issue_description: e.target.value })} />
+                  </Field>
+                  <div className="form-actions">
+                    <button type="button" className="btn btn-ghost" onClick={() => setShowDispute(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-danger">Submit Dispute</button>
+                  </div>
+                </form>
+              </div>
+            )}
 
             {selected.status !== 'PAID' && (
               <>

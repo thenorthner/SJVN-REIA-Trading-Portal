@@ -42,6 +42,12 @@ const TONE_MAP = {
   PARTIALLY_PAID: 'amber', PARTIALLY_CLEARED: 'amber', OPEN: 'amber', REJECTED: 'red', DISPUTED: 'red',
   EXPIRED: 'red', CANCELLED: 'gray', TERMINATED: 'gray', AMENDED: 'blue', INVOKED: 'red', OVERDUE: 'red',
   CLOSED: 'gray', NO_BID: 'gray', LOCKED: 'green', VALIDATED: 'blue',
+  // Dispute lifecycle
+  RAISED: 'blue', ACKNOWLEDGED: 'blue', INFO_REQUESTED: 'amber', ESCALATED: 'red',
+  RESOLVED_ACCEPTED: 'green', RESOLVED_REJECTED: 'red',
+  // Reconciliation
+  AUTO_MATCHED: 'green', NEEDS_REVIEW: 'amber', PENDING_SIGN_OFF: 'blue',
+  AGREED: 'green', REOPENED: 'amber', IN_PROGRESS: 'blue',
 };
 
 export function Badge({ status }) {

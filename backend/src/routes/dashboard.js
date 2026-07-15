@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
+import { OPEN_STATUSES } from '../disputesConstants.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -12,8 +13,8 @@ router.get('/reia', (req, res) => {
   const energySupplied = db.prepare(`SELECT COALESCE(SUM(energy_mwh),0) s FROM energy_data`).get().s;
   const billedEnergy = db.prepare(`SELECT COALESCE(SUM(energy_mwh),0) s FROM invoices`).get().s;
   const pendingApprovals = db.prepare(`SELECT COUNT(*) c FROM invoices WHERE status = 'UNDER_APPROVAL'`).get().c;
-  const pendingDisputes = db.prepare(`SELECT COUNT(*) c FROM disputes WHERE status IN ('SUBMITTED','UNDER_REVIEW')`).get().c;
-  const reconciliationExceptions = db.prepare(`SELECT COUNT(*) c FROM reconciliations WHERE status = 'OPEN'`).get().c;
+  const pendingDisputes = db.prepare(`SELECT COUNT(*) c FROM disputes WHERE status IN (${OPEN_STATUSES.map(() => '?').join(',')})`).get(...OPEN_STATUSES).c;
+  const reconciliationExceptions = db.prepare(`SELECT COUNT(*) c FROM reconciliations WHERE status IN ('NEEDS_REVIEW','DISPUTED','REOPENED')`).get().c;
 
   const totalInvoices = db.prepare(`SELECT COUNT(*) c, COALESCE(SUM(total_amount),0) s FROM invoices`).get();
   const receivables = db.prepare(`
@@ -107,8 +108,8 @@ router.get('/consolidated', (req, res) => {
   `).get().s;
   const reiaContractedCapacity = db.prepare(`SELECT COALESCE(SUM(capacity_mw),0) s FROM contracts WHERE status = 'ACTIVE'`).get().s;
   const reiaBilledValue = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices`).get().s;
-  const reiaOpenDisputes = db.prepare(`SELECT COUNT(*) c FROM disputes WHERE status IN ('SUBMITTED','UNDER_REVIEW')`).get().c;
-  const reiaReconExceptions = db.prepare(`SELECT COUNT(*) c FROM reconciliations WHERE status = 'OPEN'`).get().c;
+  const reiaOpenDisputes = db.prepare(`SELECT COUNT(*) c FROM disputes WHERE status IN (${OPEN_STATUSES.map(() => '?').join(',')})`).get(...OPEN_STATUSES).c;
+  const reiaReconExceptions = db.prepare(`SELECT COUNT(*) c FROM reconciliations WHERE status IN ('NEEDS_REVIEW','DISPUTED','REOPENED')`).get().c;
 
   const tradingRevenue = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM trading_invoices`).get().s;
   const tradingMargin = db.prepare(`SELECT COALESCE(SUM(trading_margin),0) s FROM trading_invoices`).get().s;

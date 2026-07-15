@@ -53,6 +53,7 @@ const NAV_SELLER = [
       { to: '/seller/invoices', label: '🧾 My Invoices' },
       { to: '/seller/payments', label: '💰 Payments & Ledger' },
       { to: '/seller/disputes', label: '⚠️ My Disputes' },
+      { to: '/seller/reconciliation', label: '🔄 Reconciliation' },
     ],
   },
 ];
@@ -68,6 +69,7 @@ const NAV_BUYER = [
       { to: '/buyer/invoices', label: '🧾 Payable Invoices' },
       { to: '/buyer/payments', label: '💰 Payment Ledger' },
       { to: '/buyer/disputes', label: '⚠️ My Disputes' },
+      { to: '/buyer/reconciliation', label: '🔄 Reconciliation' },
     ],
   },
 ];

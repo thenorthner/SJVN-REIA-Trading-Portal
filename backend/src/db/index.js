@@ -13,4 +13,39 @@ db.pragma('foreign_keys = ON');
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
 db.exec(schema);
 
+/** Recreate disputes tables when upgrading from the old 4-status MVP schema. */
+function migrateDisputesSchema() {
+  const exists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='disputes'`).get();
+  if (!exists) return;
+  const cols = db.prepare('PRAGMA table_info(disputes)').all().map((c) => c.name);
+  if (cols.includes('dispute_no')) return;
+
+  db.exec(`
+    DROP TABLE IF EXISTS dispute_comments;
+    DROP TABLE IF EXISTS dispute_events;
+    DROP TABLE IF EXISTS disputes;
+  `);
+  db.exec(schema);
+}
+
+/** Recreate reconciliations when upgrading from thin MVP schema. */
+function migrateReconciliationSchema() {
+  const exists = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='reconciliations'`).get();
+  if (!exists) return;
+  const cols = db.prepare('PRAGMA table_info(reconciliations)').all().map((c) => c.name);
+  if (cols.includes('recon_no')) return;
+
+  db.exec(`
+    DROP TABLE IF EXISTS recon_reopen_requests;
+    DROP TABLE IF EXISTS recon_statements;
+    DROP TABLE IF EXISTS recon_events;
+    DROP TABLE IF EXISTS recon_items;
+    DROP TABLE IF EXISTS reconciliations;
+  `);
+  db.exec(schema);
+}
+
+migrateDisputesSchema();
+migrateReconciliationSchema();
+
 export default db;

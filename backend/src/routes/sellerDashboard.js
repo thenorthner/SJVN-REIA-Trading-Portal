@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { OPEN_STATUSES } from '../disputesConstants.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -36,7 +37,7 @@ router.get('/', requireRole('SELLER', 'SJVN_ADMIN'), (req, res) => {
   
   const lastPayment = db.prepare(`SELECT p.amount, p.payment_date, p.reference, p.mode FROM payments p JOIN invoices i ON p.invoice_id = i.id WHERE i.contract_id IN (${ph}) AND i.direction = 'SELLER_TO_SJVN' ORDER BY p.payment_date DESC LIMIT 1`).get(...contractIds) || null;
   
-  const disputes = db.prepare(`SELECT COUNT(*) as count FROM disputes d JOIN invoices i ON d.invoice_id = i.id WHERE i.contract_id IN (${ph}) AND d.status IN ('SUBMITTED','UNDER_REVIEW')`).get(...contractIds);
+  const disputes = db.prepare(`SELECT COUNT(*) as count FROM disputes d JOIN invoices i ON d.invoice_id = i.id WHERE i.contract_id IN (${ph}) AND d.status IN (${OPEN_STATUSES.map(() => '?').join(',')})`).get(...contractIds, ...OPEN_STATUSES);
   
   res.json({
     active_contracts: contractStats.count,

@@ -2,15 +2,17 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 import authRoutes from './routes/auth.js';
 import entitiesRoutes from './routes/entities.js';
 import contractsRoutes from './routes/contracts.js';
 import energyDataRoutes from './routes/energyData.js';
 import invoicesRoutes from './routes/invoices.js';
-import disputesRoutes from './routes/disputes.js';
+import disputesRoutes, { runSlaEscalations } from './routes/disputes.js';
 import paymentSecurityRoutes from './routes/paymentSecurity.js';
-import reconciliationRoutes from './routes/reconciliation.js';
+import reconciliationRoutes, { runScheduledReconciliations } from './routes/reconciliation.js';
 import tradingClientsRoutes from './routes/tradingClients.js';
 import bidsRoutes from './routes/bids.js';
 import bilateralRoutes from './routes/bilateral.js';
@@ -24,10 +26,12 @@ import auditLogsRoutes from './routes/auditLogs.js';
 
 dotenv.config();
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'sjvn-energy-platform-backend' }));
 
@@ -68,4 +72,22 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`SJVN Energy Platform API listening on http://localhost:${PORT}`);
+  // SLA escalation sweep every 15 minutes
+  setInterval(() => {
+    try {
+      const result = runSlaEscalations();
+      if (result.escalated > 0) console.log(`[SLA] Escalated ${result.escalated} dispute(s)`);
+    } catch (err) {
+      console.error('[SLA] check failed', err.message);
+    }
+  }, 15 * 60 * 1000);
+  // Period-end reconciliation sweep every hour (creates missing prior-month runs)
+  setInterval(() => {
+    try {
+      const result = runScheduledReconciliations();
+      if (result.created > 0) console.log(`[RECON] Scheduled ${result.created} run(s) for ${result.period}`);
+    } catch (err) {
+      console.error('[RECON] schedule failed', err.message);
+    }
+  }, 60 * 60 * 1000);
 });

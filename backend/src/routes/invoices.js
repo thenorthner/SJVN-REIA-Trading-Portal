@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, genInvoiceNo } from '../util.js';
+import { payableNow, lpsBaseAmount } from '../disputesConstants.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -9,7 +10,7 @@ router.use(requireAuth);
 function withContract(inv) {
   if (!inv) return inv;
   const contract = db.prepare('SELECT contract_no, contract_type, project_type FROM contracts WHERE id = ?').get(inv.contract_id);
-  return { ...inv, contract_no: contract?.contract_no, project_type: contract?.project_type };
+  return { ...inv, contract_no: contract?.contract_no, project_type: contract?.project_type, ...payableNow(inv) };
 }
 
 // E/F. Billing & Invoicing + Seller Invoice Management - list
@@ -168,7 +169,7 @@ router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) =>
 });
 
 // G. Invoice Approval Workflow
-router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER'), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   db.prepare(`UPDATE invoices SET status = 'UNDER_APPROVAL', updated_at = datetime('now') WHERE id = ?`).run(inv.id);
@@ -176,6 +177,9 @@ router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE), 
   if (existingLevels === 0) {
     db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)').run(newId('APR'), inv.id, 'PENDING');
     db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 2, ?)').run(newId('APR'), inv.id, 'PENDING');
+  } else {
+    // Reset existing approvals back to PENDING for resubmission
+    db.prepare(`UPDATE invoice_approvals SET status = 'PENDING', comments = NULL, acted_at = NULL, approver_name = NULL WHERE invoice_id = ?`).run(inv.id);
   }
   logAudit({ user: req.user, action: 'SUBMIT_FOR_APPROVAL', module: 'REIA', entityType: 'invoice', entityId: inv.id });
   res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
@@ -231,24 +235,27 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req,
     const diffTime = payDate - dueDate;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
-    // Rebate: 2% on energy charges if paid on or before due date
-    if (diffDays <= 0 && inv.rebate === 0) {
+    // Rebate: 2% on energy charges if SJVN pays Seller (PPA) early
+    // NOTE: Rebate ONLY applies on PPA invoices (Seller -> SJVN).
+    // Discoms (Buyers) do NOT get any early payment rebate on PSA invoices.
+    if (inv.direction === 'SELLER_TO_SJVN' && diffDays <= 0 && inv.rebate === 0) {
       newRebate = Math.round(inv.energy_charges * 0.02);
     }
     
-    // LPS: 15% p.a. on total amount for days delayed (if paid late)
+    // LPS: 15% p.a. on UNDISPUTED amount only for days delayed
+    // Disputed portion is excluded from LPS while dispute is open
     if (diffDays > 0) {
-      // 15% per annum -> 15 / 365 = 0.041% per day
       const dailyLpsRate = 0.15 / 365;
-      const calculatedLps = Math.round(inv.total_amount * dailyLpsRate * diffDays);
-      newLps += calculatedLps; // Add to existing LPS in case of multiple late partial payments
+      const base = lpsBaseAmount({ ...inv, disputed_amount: inv.disputed_amount });
+      const calculatedLps = Math.round(base * dailyLpsRate * diffDays);
+      newLps += calculatedLps;
     }
   }
 
   const totalPaid = db.prepare('SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)),0) s FROM payments WHERE invoice_id = ?').get(inv.id).s;
   
-  // Effective payable = original total - rebate + lps - disputed
-  const effectivePayable = inv.total_amount - newRebate + newLps - inv.disputed_amount;
+  // Effective payable = original total - rebate + lps - disputed (undisputed always due)
+  const effectivePayable = payableNow({ ...inv, rebate: newRebate, lps: newLps }).payable_now;
   
   const newStatus = totalPaid >= effectivePayable ? 'PAID' : 'PARTIALLY_PAID';
   

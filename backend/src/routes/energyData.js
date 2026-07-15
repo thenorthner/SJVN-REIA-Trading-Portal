@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { newId, logAudit } from '../util.js';
+import { newId, logAudit, pushNotification } from '../util.js';
+import { runFinalDataRecon } from './reconciliation.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -67,6 +68,26 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   if (row.status === 'LOCKED') return res.status(400).json({ error: 'Already locked' });
   db.prepare(`UPDATE energy_data SET status = 'LOCKED', data_type = 'FINAL', updated_at = datetime('now') WHERE id = ?`).run(row.id);
   logAudit({ user: req.user, action: 'LOCK', module: 'REIA', entityType: 'energy_data', entityId: row.id });
+
+  // If a provisional recon existed for this period, auto-trigger FINAL re-recon
+  try {
+    const hadProv = db.prepare(`
+      SELECT id FROM reconciliations
+      WHERE contract_id = ? AND period = ? AND data_basis = 'PROVISIONAL'
+      LIMIT 1
+    `).get(row.contract_id, row.period_month);
+    if (hadProv) {
+      runFinalDataRecon(row.contract_id, row.period_month, req.user);
+      pushNotification({
+        role: 'REIA_USER',
+        type: 'RECONCILIATION',
+        message: `Final-data reconciliation triggered for ${row.period_month} after energy lock`,
+      });
+    }
+  } catch (err) {
+    console.error('Final recon trigger failed', err.message);
+  }
+
   res.json(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id));
 });
 
