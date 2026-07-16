@@ -8,7 +8,8 @@ export const DOCUMENT_TAXONOMY = {
     { value: 'BANK_ACCOUNT_PROOF', label: 'Bank Account Proof (Cancelled Cheque)', category: 'VERIFY', reason: 'Penny-drop verification ke saath, fraud-prevention' },
     { value: 'BOARD_RESOLUTION', label: 'Board Resolution / Power of Attorney', category: 'VERIFY', reason: 'Confirm karna ki signing-authority genuine hai' },
     { value: 'COD_CERTIFICATE', label: 'COD Certificate', category: 'VERIFY', reason: 'Billing sirf commissioned capacity se start honi chahiye' },
-    { value: 'REGULATORY_RENEWAL', label: 'Regulatory Approval Renewals', category: 'VERIFY', reason: 'Expiry ke baad dobara verify zaroori' }
+    { value: 'REGULATORY_RENEWAL', label: 'Regulatory Approval Renewals', category: 'VERIFY', reason: 'Expiry ke baad dobara verify zaroori' },
+    { value: 'INVOICE_TEMPLATE', label: 'Invoice Letterhead Template (Word/Image)', category: 'RECORD', reason: 'Custom invoicing ke liye reference template' }
   ],
   CONTRACTS: [
     { value: 'PPA_PSA_SIGNED', label: 'Signed PPA/PSA (Scanned Copy)', category: 'VERIFY', reason: 'Legal contract ka proof, baad mein reference ke liye' },
