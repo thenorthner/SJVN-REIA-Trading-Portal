@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, StatementViewer } from '../../components/ui.jsx';
+import { DocumentManager } from '../../components/DocumentManager.jsx';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
 const CAN_APPROVE_REOPEN = ['SJVN_ADMIN', 'FINANCE_USER', 'REIA_USER'];
@@ -13,10 +14,10 @@ const RUN_FORM = {
 
 function StatPill({ label, value, sub }) {
   return (
-    <div style={{ padding: '12px 14px', background: 'var(--surface-2, #f6f7f9)', borderRadius: 8, minWidth: 110 }}>
-      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, opacity: 0.7 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{value}</div>
-      {sub != null && <div style={{ fontSize: 12, opacity: 0.65 }}>{sub}</div>}
+    <div style={{ padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, minWidth: 120 }}>
+      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: 'var(--text)' }}>{value}</div>
+      {sub != null && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -324,9 +325,7 @@ export default function Reconciliation() {
             )}
 
             <div className="section-title" style={{ marginTop: 16 }}>Reconciliation statement</div>
-            <pre style={{ maxHeight: 180, overflow: 'auto', background: 'var(--bg-main, #f8fafc)', padding: 12, borderRadius: 8, fontSize: 11 }}>
-              {JSON.stringify(detail.statement, null, 2)}
-            </pre>
+            <StatementViewer statement={detail.statement} />
             <div className="form-actions" style={{ flexWrap: 'wrap' }}>
               {CAN_WRITE.includes(user?.role) && detail.items_exception === 0 && detail.status === 'NEEDS_REVIEW' && (
                 <button type="button" className="btn btn-secondary" onClick={handleSignoffRequest}>Request Sign-off</button>
@@ -346,6 +345,13 @@ export default function Reconciliation() {
                   <button type="button" className="btn btn-secondary" onClick={handleReopenRequest}>Request Reopen</button>
                 </>
               )}
+            </div>
+
+            <div style={{ marginTop: 24, marginBottom: 24 }}>
+              <DocumentManager 
+                moduleName="RECONCILIATION"
+                title="Reconciliation Evidence & Approvals" 
+              />
             </div>
 
             <div className="section-title" style={{ marginTop: 14 }}>Audit trail</div>

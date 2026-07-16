@@ -803,101 +803,193 @@ for (const c of tradingClients) {
 
 // ---------------- Bids ----------------
 const insertBid = db.prepare(`
-  INSERT INTO bids (id, client_id, exchange, product, bid_date, delivery_date, time_block, quantum_mw,
-    price_per_unit, carry_forward_from, premium_discount, cleared_quantum_mw, cleared_price, status)
-  VALUES (@id, @client_id, @exchange, @product, @bid_date, @delivery_date, @time_block, @quantum_mw,
-    @price_per_unit, @carry_forward_from, @premium_discount, @cleared_quantum_mw, @cleared_price, @status)
+  INSERT INTO bids (id, client_id, exchange, product, bid_date, delivery_date, gate_closure_time, exchange_receipt_ref, approval_status, status)
+  VALUES (@id, @client_id, @exchange, @product, @bid_date, @delivery_date, @gate_closure_time, @exchange_receipt_ref, @approval_status, @status)
 `);
+const insertBidBlock = db.prepare(`
+  INSERT INTO bid_blocks (id, bid_id, time_block, quantum_mw, price_per_unit, cleared_quantum_mw, cleared_price, status)
+  VALUES (@id, @bid_id, @time_block, @quantum_mw, @price_per_unit, @cleared_quantum_mw, @cleared_price, @status)
+`);
+
 const exchanges = ['IEX', 'PXIL', 'HPX'];
 const products = ['DAM', 'RTM', 'GDAM', 'TAM'];
 let bidDay = 1;
+
 for (const client of tradingClients) {
   for (let i = 0; i < 4; i++) {
-    const quantum = 10 + Math.round(Math.random() * 40);
-    const price = 3 + Math.random() * 5;
-    const cleared = Math.random() > 0.2;
+    const bidId = newId('BID');
+    const isCleared = Math.random() > 0.3;
     insertBid.run({
-      id: newId('BID'),
+      id: bidId,
       client_id: client.id,
       exchange: exchanges[i % exchanges.length],
       product: products[i % products.length],
       bid_date: `2025-07-${String(bidDay).padStart(2, '0')}`,
       delivery_date: `2025-07-${String(bidDay + 1).padStart(2, '0')}`,
-      time_block: `Block-${(i % 96) + 1}`,
-      quantum_mw: quantum,
-      price_per_unit: Number(price.toFixed(2)),
-      carry_forward_from: i === 2 ? 'GDAM->DAM' : null,
-      premium_discount: 0,
-      cleared_quantum_mw: cleared ? quantum : Math.round(quantum * 0.6),
-      cleared_price: cleared ? Number(price.toFixed(2)) : Number((price - 0.3).toFixed(2)),
-      status: cleared ? 'CLEARED' : 'PARTIALLY_CLEARED',
+      gate_closure_time: `2025-07-${String(bidDay).padStart(2, '0')}T12:00:00Z`,
+      exchange_receipt_ref: isCleared ? `EXC-RCPT-${Math.floor(Math.random()*10000)}` : null,
+      approval_status: 'APPROVED',
+      status: isCleared ? 'CLEARED' : 'PARTIALLY_CLEARED',
     });
+    
+    // Add multiple blocks per bid
+    for (let b = 1; b <= 4; b++) {
+      const quantum = 10 + Math.round(Math.random() * 40);
+      const price = 3 + Math.random() * 5;
+      insertBidBlock.run({
+        id: newId('BLK'),
+        bid_id: bidId,
+        time_block: `Block-${b}`,
+        quantum_mw: quantum,
+        price_per_unit: Number(price.toFixed(2)),
+        cleared_quantum_mw: isCleared ? quantum : Math.round(quantum * 0.6),
+        cleared_price: isCleared ? Number(price.toFixed(2)) : Number((price - 0.3).toFixed(2)),
+        status: isCleared ? 'CLEARED' : 'PARTIALLY_CLEARED'
+      });
+    }
     bidDay = (bidDay % 27) + 1;
   }
 }
 
 // ---------------- Bilateral Transactions ----------------
 const insertBilateral = db.prepare(`
-  INSERT INTO bilateral_transactions (id, client_id, counterparty, loi_contract_ref, quantum_mw, tariff_per_unit,
-    open_access_status, schedule_status, wheeling_charges, transmission_charges, losses_percent, start_date, end_date, status)
-  VALUES (@id, @client_id, @counterparty, @loi_contract_ref, @quantum_mw, @tariff_per_unit,
-    @open_access_status, @schedule_status, @wheeling_charges, @transmission_charges, @losses_percent, @start_date, @end_date, @status)
+  INSERT INTO bilateral_transactions (id, client_id, counterparty, loi_contract_ref, oa_type, quantum_mw, tariff_per_unit,
+    open_access_status, wheeling_charges, transmission_charges, loss_injection_state, loss_inter_state, loss_drawee_state, start_date, end_date, status)
+  VALUES (@id, @client_id, @counterparty, @loi_contract_ref, @oa_type, @quantum_mw, @tariff_per_unit,
+    @open_access_status, @wheeling_charges, @transmission_charges, @loss_injection_state, @loss_inter_state, @loss_drawee_state, @start_date, @end_date, @status)
 `);
+
+const insertBilateralSchedule = db.prepare(`
+  INSERT INTO bilateral_schedules (id, transaction_id, schedule_date, time_block, approved_mw, actual_mw, deviation_mw, dsm_penalty_amount, status)
+  VALUES (@id, @transaction_id, @schedule_date, @time_block, @approved_mw, @actual_mw, @deviation_mw, @dsm_penalty_amount, @status)
+`);
+
+const insertBilateralApproval = db.prepare(`
+  INSERT INTO bilateral_approvals (id, schedule_id, node_type, status, acted_by, timestamp)
+  VALUES (@id, @schedule_id, @node_type, @status, @acted_by, @timestamp)
+`);
+
+const bilTxId = newId('BIL');
 insertBilateral.run({
-  id: newId('BIL'), client_id: tradingClients[1].id, counterparty: 'Industrial Buyer Co', loi_contract_ref: 'LOI-2025-045',
-  quantum_mw: 25, tariff_per_unit: 4.2, open_access_status: 'APPROVED', schedule_status: 'APPROVED',
-  wheeling_charges: 0.15, transmission_charges: 0.10, losses_percent: 3.2, start_date: '2025-07-01', end_date: '2025-09-30', status: 'ACTIVE',
+  id: bilTxId, client_id: tradingClients[1].id, counterparty: 'Industrial Buyer Co', loi_contract_ref: 'LOI-2025-045',
+  oa_type: 'MTOA', quantum_mw: 25, tariff_per_unit: 4.2, open_access_status: 'APPROVED',
+  wheeling_charges: 0.15, transmission_charges: 0.10, loss_injection_state: 1.2, loss_inter_state: 0.5, loss_drawee_state: 1.5,
+  start_date: '2025-07-01', end_date: '2025-09-30', status: 'ACTIVE',
 });
+
+// Seed a schedule for this bilateral transaction
+const schedId = newId('SCH');
+const approvedMw = 25;
+const actualMw = 23;
+insertBilateralSchedule.run({
+  id: schedId, transaction_id: bilTxId, schedule_date: '2025-07-15', time_block: 'Block-1',
+  approved_mw: approvedMw, actual_mw: actualMw, deviation_mw: actualMw - approvedMw, dsm_penalty_amount: 1500, status: 'APPROVED'
+});
+
+// Approvals across nodes
+const nodes = ['INJECTION_SLDC', 'RLDC', 'NLDC', 'DRAWEE_SLDC'];
+for (const node of nodes) {
+  insertBilateralApproval.run({
+    id: newId('BAP'), schedule_id: schedId, node_type: node, status: 'APPROVED', acted_by: 'System', timestamp: new Date().toISOString()
+  });
+}
 insertBilateral.run({
   id: newId('BIL'), client_id: tradingClients[2].id, counterparty: 'Textile Cluster Ltd', loi_contract_ref: 'LOI-2025-050',
-  quantum_mw: 12, tariff_per_unit: 4.5, open_access_status: 'PENDING', schedule_status: 'DRAFT',
-  wheeling_charges: 0.18, transmission_charges: 0.12, losses_percent: 3.5, start_date: '2025-08-01', end_date: '2025-10-31', status: 'ACTIVE',
+  oa_type: 'STOA', quantum_mw: 12, tariff_per_unit: 4.5, open_access_status: 'PENDING',
+  wheeling_charges: 0.12, transmission_charges: 0.08, loss_injection_state: 1.0, loss_inter_state: 0.5, loss_drawee_state: 1.2,
+  start_date: '2025-08-01', end_date: '2025-08-31', status: 'ACTIVE',
 });
 
-// ---------------- Trading Invoices ----------------
+// ---------------- Trading Invoices & Billing ----------------
 const insertTInvoice = db.prepare(`
-  INSERT INTO trading_invoices (id, invoice_no, client_id, invoice_kind, billing_period, quantum_mwh,
-    rate_per_unit, trading_margin, gst_applicable, gst_amount, total_amount, status)
-  VALUES (@id, @invoice_no, @client_id, @invoice_kind, @billing_period, @quantum_mwh,
-    @rate_per_unit, @trading_margin, @gst_applicable, @gst_amount, @total_amount, @status)
+  INSERT INTO trading_invoices (id, invoice_no, client_id, trade_date, settlement_date, invoice_kind, trade_type, billing_period, quantum_mwh,
+    exchange_fee, clearing_charges, regulatory_levy, sjvn_margin, transmission_charges, dsm_charges, tds_amount, gst_applicable, gst_amount, total_amount, status)
+  VALUES (@id, @invoice_no, @client_id, @trade_date, @settlement_date, @invoice_kind, @trade_type, @billing_period, @quantum_mwh,
+    @exchange_fee, @clearing_charges, @regulatory_levy, @sjvn_margin, @transmission_charges, @dsm_charges, @tds_amount, @gst_applicable, @gst_amount, @total_amount, @status)
 `);
+const insertLedger = db.prepare(`
+  INSERT INTO client_ledgers (id, client_id, transaction_type, reference_id, credit, debit, running_balance, description, timestamp)
+  VALUES (@id, @client_id, @transaction_type, @reference_id, @credit, @debit, @running_balance, @description, @timestamp)
+`);
+
 let tInvCounter = 5000;
 for (const client of tradingClients) {
+  let runningBalance = 0;
+  
+  // Exchange Bill
   const qty = 500 + Math.round(Math.random() * 1000);
   const rate = 4 + Math.random();
-  const margin = Math.round(qty * 0.05);
-  const base = Math.round(qty * rate) + margin;
-  const gst = Math.round(base * 0.18);
+  const baseValue = qty * rate;
+  
+  const exchangeFee = qty * 0.02;
+  const clearingCharges = qty * 0.01;
+  const margin = qty * 0.05;
+  const tds = margin * 0.10; // 10% TDS on margin
+  
+  const total = baseValue + exchangeFee + clearingCharges + margin - tds;
+  const gst = total * 0.18;
+  const finalTotal = total + gst;
+  
   const tinId = newId('TIN');
+  const tradeDate = '2025-06-10';
+  const settleDate = '2025-06-12'; // T+2
+  
   insertTInvoice.run({
-    id: tinId,
-    invoice_no: `TRD/2025/${tInvCounter++}`,
-    client_id: client.id,
-    invoice_kind: 'COMBINED',
-    billing_period: '2025-06',
-    quantum_mwh: qty,
-    rate_per_unit: Number(rate.toFixed(2)),
-    trading_margin: margin,
-    gst_applicable: 1,
-    gst_amount: gst,
-    total_amount: base + gst,
-    status: 'PAID',
+    id: tinId, invoice_no: `TRD/2025/${tInvCounter++}`, client_id: client.id, trade_date: tradeDate, settlement_date: settleDate,
+    invoice_kind: 'EXCHANGE', trade_type: 'CLIENT_ACCOUNT', billing_period: '2025-06', quantum_mwh: qty,
+    exchange_fee: exchangeFee, clearing_charges: clearingCharges, regulatory_levy: 0, sjvn_margin: margin,
+    transmission_charges: 0, dsm_charges: 0, tds_amount: tds, gst_applicable: 1, gst_amount: gst, total_amount: finalTotal, status: 'PAID',
   });
-  db.prepare(`
-    INSERT INTO trading_payments (id, trading_invoice_id, amount, payment_date, mode, reference)
-    VALUES (?, ?, ?, '2025-06-28', 'NEFT', ?)
-  `).run(newId('TPY'), tinId, base + gst, `TREF-${Math.floor(Math.random() * 900000)}`);
+  
+  runningBalance += finalTotal;
+  insertLedger.run({
+    id: newId('CLG'), client_id: client.id, transaction_type: 'INVOICE', reference_id: tinId,
+    credit: 0, debit: finalTotal, running_balance: runningBalance, description: `Exchange Invoice TRD/2025/${tInvCounter-1}`, timestamp: `${tradeDate} 10:00:00`
+  });
+
+  // Payment
+  db.prepare(`INSERT INTO trading_payments (id, client_id, trading_invoice_id, amount, payment_date, mode, reference) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(newId('TPY'), client.id, tinId, finalTotal, settleDate, 'NEFT', `TREF-${Math.floor(Math.random() * 900000)}`);
+  runningBalance -= finalTotal;
+  insertLedger.run({
+    id: newId('CLG'), client_id: client.id, transaction_type: 'PAYMENT', reference_id: tinId,
+    credit: finalTotal, debit: 0, running_balance: runningBalance, description: `Payment Received`, timestamp: `${settleDate} 14:00:00`
+  });
+
+  // SOA
+  db.prepare(`INSERT INTO settlement_statements (id, client_id, period_start, period_end, opening_balance, closing_balance, status) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(newId('SOA'), client.id, '2025-06-01', '2025-06-30', 0, runningBalance, 'GENERATED');
 }
 
-// ---------------- Market Rates (for analytics/forecast demo) ----------------
+// ---------------- Market Rates & Analytics ----------------
 const insertRate = db.prepare(`
-  INSERT INTO market_rates (id, product, rate_date, mcp_rate, forecast_rate)
-  VALUES (@id, @product, @rate_date, @mcp_rate, @forecast_rate)
+  INSERT INTO market_rates (id, exchange, product, rate_date, mcp_rate, volume_mw, forecast_rate, data_source)
+  VALUES (@id, @exchange, @product, @rate_date, @mcp_rate, @volume_mw, @forecast_rate, @data_source)
 `);
-for (let d = 1; d <= 15; d++) {
+for (let d = 1; d <= 30; d++) {
   const date = `2025-07-${String(d).padStart(2, '0')}`;
-  const mcp = 3 + Math.sin(d / 2) * 1.2 + Math.random() * 0.5;
-  insertRate.run({ id: newId('MKT'), product: 'DAM', rate_date: date, mcp_rate: Number(mcp.toFixed(2)), forecast_rate: Number((mcp + (Math.random() - 0.5)).toFixed(2)) });
+  
+  // Simulate Heatwave mid-month
+  let baseMcp = 3.5;
+  if (d > 10 && d < 15) baseMcp += 2.5; // Price spike
+  
+  ['IEX', 'PXIL', 'HPX'].forEach(exch => {
+    const jitter = (Math.random() - 0.5) * 0.4;
+    const mcp = baseMcp + jitter;
+    insertRate.run({ 
+      id: newId('MKT'), exchange: exch, product: 'DAM', rate_date: date, 
+      mcp_rate: Number(mcp.toFixed(2)), volume_mw: Math.round(5000 + Math.random() * 2000), 
+      forecast_rate: Number((mcp + (Math.random() - 0.5)).toFixed(2)), data_source: 'API' 
+    });
+  });
+}
+
+const insertMarketEvent = db.prepare(`INSERT INTO market_events (id, event_date, event_type, description, impact_level) VALUES (?, ?, ?, ?, ?)`);
+insertMarketEvent.run(newId('EVT'), '2025-07-11', 'HEATWAVE', 'Severe heatwave across Northern grid causing demand surge.', 'HIGH');
+insertMarketEvent.run(newId('EVT'), '2025-07-20', 'PLANT_OUTAGE', 'Unexpected outage at 4000MW Thermal plant.', 'MEDIUM');
+
+const insertFactor = db.prepare(`INSERT INTO market_factors (id, factor_date, weather_index, renewable_forecast_mw, coal_price_index) VALUES (?, ?, ?, ?, ?)`);
+for (let d = 1; d <= 30; d++) {
+  const date = `2025-07-${String(d).padStart(2, '0')}`;
+  insertFactor.run(newId('FCT'), date, d > 10 && d < 15 ? 45.5 : 35.0, 15000 + Math.random() * 5000, 120 + Math.random() * 5);
 }
 
 // ---------------- Reconciliation (engine-driven samples) ----------------

@@ -1,158 +1,145 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification } from '../util.js';
-import { checkPortfolioAdequacy } from '../paymentSecurityEngine.js';
+import { newId } from '../util.js';
+import { secureLogAudit } from '../auditEngine.js';
 
 const router = Router();
 router.use(requireAuth);
 
-function withClient(bid) {
+const withDetails = (bid) => {
   if (!bid) return bid;
-  const client = db.prepare('SELECT name FROM trading_clients WHERE id = ?').get(bid.client_id);
-  return { ...bid, client_name: client?.name };
-}
+  const client = db.prepare('SELECT name, exposure_limit FROM trading_clients WHERE id = ?').get(bid.client_id);
+  bid.client_name = client?.name;
+  bid.exposure_limit = client?.exposure_limit;
+  bid.blocks = db.prepare('SELECT * FROM bid_blocks WHERE bid_id = ? ORDER BY time_block ASC').all(bid.id);
+  bid.events = db.prepare('SELECT * FROM bid_events WHERE bid_id = ? ORDER BY created_at DESC').all(bid.id);
+  return bid;
+};
 
+// List all bids
 router.get('/', (req, res) => {
-  const { client_id, exchange, product, status } = req.query;
+  const { client_id, exchange, status, date } = req.query;
   let sql = 'SELECT * FROM bids WHERE 1=1';
   const params = [];
   if (client_id) { sql += ' AND client_id = ?'; params.push(client_id); }
   if (exchange) { sql += ' AND exchange = ?'; params.push(exchange); }
-  if (product) { sql += ' AND product = ?'; params.push(product); }
   if (status) { sql += ' AND status = ?'; params.push(status); }
+  if (date) { sql += ' AND bid_date = ?'; params.push(date); }
   sql += ' ORDER BY created_at DESC';
-  res.json(db.prepare(sql).all(...params).map(withClient));
+  
+  res.json(db.prepare(sql).all(...params).map(withDetails));
 });
 
-// Configurable bid validation: pre-payment balance, margin, NOC/PPA validity, quantum, time-block
-function validateBid(client, body) {
-  const errors = [];
-  const estimatedValue = body.quantum_mw * body.price_per_unit * 4; // rough block-hours estimate
-  if (client.pre_payment_balance < estimatedValue * 0.1) {
-    errors.push('Insufficient pre-payment balance for this bid quantum.');
-  }
-  if (client.margin_available < estimatedValue * 0.05) {
-    errors.push('Insufficient margin available for this bid.');
-  }
-  if (client.noc_valid_till && new Date(client.noc_valid_till) < new Date(body.delivery_date)) {
-    errors.push('NOC/PPA is not valid for the requested delivery date.');
-  }
-  if (body.quantum_mw <= 0) errors.push('Quantum must be greater than zero.');
-  if (!body.time_block) errors.push('Time-block is required for exchange bidding.');
-  if (!['IEX', 'PXIL', 'HPX'].includes(body.exchange)) errors.push('Unsupported exchange.');
-  const sec = checkPortfolioAdequacy();
-  if (!sec.adequate) errors.push(sec.error);
-  return errors;
-}
-
-router.post('/validate', (req, res) => {
-  const client = db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(req.body.client_id);
-  if (!client) return res.status(404).json({ error: 'Client not found' });
-  const errors = validateBid(client, req.body);
-  res.json({ valid: errors.length === 0, errors });
+// Get single bid
+router.get('/:id', (req, res) => {
+  const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(req.params.id);
+  if (!bid) return res.status(404).json({ error: 'Bid not found' });
+  res.json(withDetails(bid));
 });
 
-router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE, 'TRADING_CLIENT'), (req, res) => {
+// Check Gate Closure
+const checkGateClosure = (gate_closure_time) => {
+  if (!gate_closure_time) return false;
+  return new Date() > new Date(gate_closure_time);
+};
+
+// Create a new Master Bid (Portfolio/Block Bid)
+router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   const b = req.body;
   const client = db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(b.client_id);
   if (!client) return res.status(404).json({ error: 'Client not found' });
+  if (client.status === 'SUSPENDED') return res.status(403).json({ error: 'Client is suspended. Bidding not allowed.' });
 
-  const isNoBid = !!b.no_bid;
-  const errors = isNoBid ? [] : validateBid(client, b);
-  if (errors.length && !b.force) {
-    return res.status(400).json({ error: 'Bid validation failed', details: errors });
+  // Calculate Exposure
+  const totalExposure = b.blocks.reduce((acc, blk) => acc + (blk.quantum_mw * blk.price_per_unit), 0);
+  
+  // Check against Limits
+  const currentUtilized = db.prepare(`
+    SELECT COALESCE(SUM(blk.quantum_mw * blk.price_per_unit), 0) as u
+    FROM bids b JOIN bid_blocks blk ON b.id = blk.bid_id
+    WHERE b.client_id = ? AND b.status IN ('SUBMITTED', 'CLEARED')
+  `).get(client.id).u;
+
+  if ((currentUtilized + totalExposure) > client.exposure_limit) {
+    return res.status(400).json({ 
+      error: 'Exposure limit breached.', 
+      limit: client.exposure_limit, 
+      utilized: currentUtilized, 
+      requested: totalExposure 
+    });
   }
 
-  const id = newId('BID');
+  const bidId = newId('BID');
+  
   db.prepare(`
-    INSERT INTO bids (id, client_id, exchange, product, bid_date, delivery_date, time_block, quantum_mw,
-      price_per_unit, carry_forward_from, premium_discount, cleared_quantum_mw, cleared_price, status, created_by)
-    VALUES (@id, @client_id, @exchange, @product, @bid_date, @delivery_date, @time_block, @quantum_mw,
-      @price_per_unit, @carry_forward_from, @premium_discount, 0, NULL, @status, @created_by)
-  `).run({
-    id,
-    client_id: b.client_id,
-    exchange: b.exchange,
-    product: b.product,
-    bid_date: b.bid_date,
-    delivery_date: b.delivery_date,
-    time_block: b.time_block ?? null,
-    quantum_mw: b.quantum_mw,
-    price_per_unit: b.price_per_unit,
-    carry_forward_from: b.carry_forward_from ?? null,
-    premium_discount: b.premium_discount || 0,
-    status: isNoBid ? 'NO_BID' : 'SUBMITTED',
-    created_by: req.user.name,
-  });
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: isNoBid ? 'NO_BID' : 'SUBMIT', module: 'TRADING', entityType: 'bid', entityId: id, details: b });
-  res.status(201).json(withClient(db.prepare('SELECT * FROM bids WHERE id = ?').get(id)));
+    INSERT INTO bids (id, client_id, exchange, product, bid_date, delivery_date, gate_closure_time, is_no_bid, approval_status, status, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'PENDING', 'DRAFT', ?)
+  `).run(bidId, b.client_id, b.exchange, b.product, b.bid_date, b.delivery_date, b.gate_closure_time, req.user.id);
+
+  const insertBlock = db.prepare(`INSERT INTO bid_blocks (id, bid_id, time_block, quantum_mw, price_per_unit) VALUES (?, ?, ?, ?, ?)`);
+  
+  for (const blk of b.blocks) {
+    insertBlock.run(newId('BLK'), bidId, blk.time_block, blk.quantum_mw, blk.price_per_unit);
+  }
+
+  db.prepare(`INSERT INTO bid_events (id, bid_id, actor_id, event_type, details) VALUES (?, ?, ?, ?, ?)`).run(
+    newId('BEV'), bidId, req.user.id, 'CREATED', JSON.stringify({ totalExposure })
+  );
+
+  secureLogAudit(req, { action: 'CREATE_BID', module: 'TRADING', entityType: 'bid', entityId: bidId, details: { totalExposure }});
+  
+  res.status(201).json(withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bidId)));
 });
 
-// Edit before exchange cut-off
-router.put('/:id', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+// Submit Bid to Exchange (Simulated)
+router.post('/:id/submit', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(req.params.id);
   if (!bid) return res.status(404).json({ error: 'Bid not found' });
-  if (!['DRAFT', 'SUBMITTED'].includes(bid.status)) return res.status(400).json({ error: 'Bid can no longer be edited' });
-  const merged = { ...bid, ...req.body };
+  if (bid.approval_status !== 'APPROVED') return res.status(400).json({ error: 'Bid must be approved before submission' });
+  if (checkGateClosure(bid.gate_closure_time)) return res.status(400).json({ error: 'Gate closure time passed. Cannot submit.' });
+
+  const receiptRef = `EXC-RCPT-${Date.now()}`;
+
+  db.prepare(`UPDATE bids SET status = 'SUBMITTED', exchange_receipt_ref = ? WHERE id = ?`).run(receiptRef, bid.id);
+  db.prepare(`INSERT INTO bid_events (id, bid_id, actor_id, event_type, details) VALUES (?, ?, ?, ?, ?)`).run(
+    newId('BEV'), bid.id, req.user.id, 'SUBMITTED', JSON.stringify({ receiptRef })
+  );
+
+  secureLogAudit(req, { action: 'SUBMIT_BID', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: { receiptRef }});
+  
+  res.json(withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
+});
+
+// Approve/Reject Bid
+router.post('/:id/approve', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+  const { status, reason } = req.body;
+  const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(req.params.id);
+  
+  db.prepare(`UPDATE bids SET approval_status = ?, status = ? WHERE id = ?`).run(
+    status, status === 'REJECTED' ? 'REJECTED' : bid.status, bid.id
+  );
+  
+  db.prepare(`INSERT INTO bid_events (id, bid_id, actor_id, event_type, details) VALUES (?, ?, ?, ?, ?)`).run(
+    newId('BEV'), bid.id, req.user.id, status, JSON.stringify({ reason })
+  );
+
+  secureLogAudit(req, { action: 'APPROVE_BID', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: { status, reason }});
+  res.json(withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
+});
+
+// Explicit No-Bid Logging
+router.post('/no-bid', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+  const b = req.body;
+  const bidId = newId('BID');
+  
   db.prepare(`
-    UPDATE bids SET quantum_mw=@quantum_mw, price_per_unit=@price_per_unit, time_block=@time_block,
-      premium_discount=@premium_discount WHERE id=@id
-  `).run(merged);
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'EDIT', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: req.body });
-  res.json(withClient(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
-});
+    INSERT INTO bids (id, client_id, exchange, product, bid_date, delivery_date, is_no_bid, no_bid_reason, approval_status, status, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?, 'APPROVED', 'NO_BID', ?)
+  `).run(bidId, b.client_id, b.exchange, b.product, b.bid_date, b.delivery_date, b.reason, req.user.id);
 
-router.post('/:id/cancel', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
-  const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(req.params.id);
-  if (!bid) return res.status(404).json({ error: 'Bid not found' });
-  if (['CLEARED', 'PARTIALLY_CLEARED'].includes(bid.status)) return res.status(400).json({ error: 'Cleared bids cannot be cancelled' });
-  db.prepare(`UPDATE bids SET status = 'CANCELLED' WHERE id = ?`).run(bid.id);
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CANCEL', module: 'TRADING', entityType: 'bid', entityId: bid.id });
-  res.json(withClient(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
-});
-
-router.delete('/:id', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
-  const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(req.params.id);
-  if (!bid) return res.status(404).json({ error: 'Bid not found' });
-  if (bid.status !== 'DRAFT') return res.status(400).json({ error: 'Only draft bids can be deleted' });
-  db.prepare('DELETE FROM bids WHERE id = ?').run(bid.id);
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'DELETE', module: 'TRADING', entityType: 'bid', entityId: bid.id });
-  res.status(204).send();
-});
-
-// Simulate exchange clearing (demo of obligation import)
-router.post('/:id/clear', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
-  const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(req.params.id);
-  if (!bid) return res.status(404).json({ error: 'Bid not found' });
-  const { cleared_quantum_mw, cleared_price } = req.body;
-  const status = cleared_quantum_mw >= bid.quantum_mw ? 'CLEARED' : (cleared_quantum_mw > 0 ? 'PARTIALLY_CLEARED' : 'REJECTED');
-  db.prepare(`UPDATE bids SET cleared_quantum_mw = ?, cleared_price = ?, status = ? WHERE id = ?`)
-    .run(cleared_quantum_mw, cleared_price, status, bid.id);
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CLEAR_OBLIGATION', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: req.body });
-  pushNotification({ role: 'TRADING_USER', type: 'BID_CLEARED', message: `Bid ${bid.id} on ${bid.exchange} ${status}` });
-  res.json(withClient(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
-});
-
-// Bulk upload of bids (Excel/CSV simulation - accepts array of rows)
-router.post('/bulk-upload', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
-  const rows = req.body.rows || [];
-  let inserted = 0;
-  const insert = db.prepare(`
-    INSERT INTO bids (id, client_id, exchange, product, bid_date, delivery_date, time_block, quantum_mw,
-      price_per_unit, status, created_by)
-    VALUES (@id, @client_id, @exchange, @product, @bid_date, @delivery_date, @time_block, @quantum_mw,
-      @price_per_unit, 'SUBMITTED', @created_by)
-  `);
-  const tx = db.transaction((items) => {
-    for (const r of items) {
-      insert.run({ id: newId('BID'), time_block: r.time_block ?? null, created_by: req.user.name, ...r });
-      inserted += 1;
-    }
-  });
-  tx(rows);
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'BULK_UPLOAD', module: 'TRADING', entityType: 'bid', details: { count: inserted } });
-  res.status(201).json({ inserted });
+  secureLogAudit(req, { action: 'LOG_NO_BID', module: 'TRADING', entityType: 'bid', entityId: bidId, details: b });
+  res.json({ success: true, id: bidId });
 });
 
 export default router;

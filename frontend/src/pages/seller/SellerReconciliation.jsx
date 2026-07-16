@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
-import { PageHeader, Card, Table, Badge, Modal, fmtCurrency } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, fmtCurrency, StatementViewer } from '../../components/ui.jsx';
 
 export default function SellerReconciliation() {
   const [rows, setRows] = useState([]);
@@ -61,9 +61,7 @@ export default function SellerReconciliation() {
                 </li>
               ))}
             </ul>
-            <pre style={{ maxHeight: 160, overflow: 'auto', fontSize: 11, background: 'var(--bg-main)', padding: 10, borderRadius: 8 }}>
-              {JSON.stringify(detail.statement, null, 2)}
-            </pre>
+            <StatementViewer statement={detail.statement} />
             {['PENDING_SIGN_OFF', 'AUTO_MATCHED'].includes(detail.status) && (
               <>
                 <textarea rows={2} placeholder="Optional note" value={note} onChange={(e) => setNote(e.target.value)} style={{ width: '100%' }} />

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency } from '../../components/ui.jsx';
+import { DocumentManager } from '../../components/DocumentManager.jsx';
 import {
   REASON_CODES, CHARGE_LINES, DISPUTE_STATUSES, OPEN_STATUSES,
   reasonLabel, chargeLabel, invoiceChargeBreakdown,
@@ -18,10 +19,10 @@ const RESOLVE_FORM = { outcome: 'PARTIAL_CREDIT', accepted_amount: '', resolutio
 
 function StatPill({ label, value, sub }) {
   return (
-    <div style={{ padding: '12px 14px', background: 'var(--surface-2, #f6f7f9)', borderRadius: 8, minWidth: 120 }}>
-      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, opacity: 0.7 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>{value}</div>
-      {sub != null && <div style={{ fontSize: 12, opacity: 0.65, marginTop: 2 }}>{sub}</div>}
+    <div style={{ padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, minWidth: 120 }}>
+      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: 'var(--text)' }}>{value}</div>
+      {sub != null && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -373,14 +374,12 @@ export default function Disputes() {
               </div>
             )}
 
-            <div className="section-title" style={{ marginTop: 18 }}>Evidence</div>
-            <ul style={{ paddingLeft: 18, margin: '6px 0' }}>
-              {(detail.supporting_docs || []).map((d) => (
-                <li key={d.filename}>{d.original_name || d.filename} <span style={{ opacity: 0.6 }}>({d.uploaded_by})</span></li>
-              ))}
-              {!(detail.supporting_docs || []).length && <li style={{ opacity: 0.6 }}>No documents uploaded</li>}
-            </ul>
-            <input type="file" onChange={handleEvidence} />
+            <div style={{ marginTop: 24, marginBottom: 24 }}>
+              <DocumentManager 
+                moduleName="DISPUTES"
+                title="Dispute Evidence & Resolution Notes" 
+              />
+            </div>
 
             <div className="section-title" style={{ marginTop: 18 }}>Communication thread</div>
             <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid var(--border, #e5e7eb)', borderRadius: 8, padding: 10, marginBottom: 10 }}>

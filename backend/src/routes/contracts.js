@@ -66,9 +66,9 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   db.transaction(() => {
     db.prepare(`
       INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
-        tariff_type, tariff_per_unit, tariff_structure_json, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type, pbg_expiry, status)
+        tariff_type, tariff_per_unit, tariff_structure_json, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type, pbg_expiry, rebate_rule, lps_rule, payment_security_type, status)
       VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
-        @tariff_type, @tariff_per_unit, @tariff_structure_json, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type, @pbg_expiry, @status)
+        @tariff_type, @tariff_per_unit, @tariff_structure_json, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type, @pbg_expiry, @rebate_rule, @lps_rule, @payment_security_type, @status)
     `).run({
       id,
       contract_no: b.contract_no,
@@ -90,6 +90,9 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
       pbg_amount: b.pbg_amount ?? null,
       pbg_type: b.pbg_type ?? null,
       pbg_expiry: b.pbg_expiry ?? null,
+      rebate_rule: b.rebate_rule ?? null,
+      lps_rule: b.lps_rule ?? null,
+      payment_security_type: b.payment_security_type ?? null,
       status: b.status || 'DRAFT'
     });
 
@@ -143,10 +146,10 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
     db.prepare(`
       INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
         tariff_type, tariff_per_unit, tariff_structure_json, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type,
-        pbg_expiry, version, parent_contract_id, status, remarks)
+        pbg_expiry, rebate_rule, lps_rule, payment_security_type, version, parent_contract_id, status, remarks)
       VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
         @tariff_type, @tariff_per_unit, @tariff_structure_json, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type,
-        @pbg_expiry, @version, @parent_contract_id, 'ACTIVE', @remarks)
+        @pbg_expiry, @rebate_rule, @lps_rule, @payment_security_type, @version, @parent_contract_id, 'ACTIVE', @remarks)
     `).run({
       ...updated,
       id: newVersionId,
@@ -169,6 +172,34 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
   syncRequirementsFromContract(newVersionId);
   createInstrumentsFromRequirements(newVersionId, req.user);
   res.status(201).json(fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(newVersionId)));
+});
+
+// PPA to PSA Allocations
+router.get('/:id/allocations', (req, res) => {
+  const allocations = db.prepare(`
+    SELECT a.*, c.contract_no as psa_no, e.name as buyer_name
+    FROM contract_allocations a
+    JOIN contracts c ON a.psa_id = c.id
+    JOIN entities e ON c.buyer_id = e.id
+    WHERE a.ppa_id = ?
+    ORDER BY a.created_at DESC
+  `).all(req.params.id);
+  res.json(allocations);
+});
+
+router.post('/:id/allocations', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const ppa = db.prepare('SELECT * FROM contracts WHERE id = ? AND contract_type = "PPA"').get(req.params.id);
+  if (!ppa) return res.status(404).json({ error: 'PPA not found' });
+  
+  const { psa_id, allocation_percent, effective_from, effective_to } = req.body;
+  
+  db.prepare(`
+    INSERT INTO contract_allocations (id, ppa_id, psa_id, allocation_percent, effective_from, effective_to)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(newId('CAL'), ppa.id, psa_id, allocation_percent, effective_from, effective_to ?? null);
+  
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CREATE_ALLOCATION', module: 'REIA', entityType: 'contract', entityId: ppa.id, details: { psa_id, allocation_percent } });
+  res.status(201).json({ success: true });
 });
 
 router.post('/bulk-upload', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {

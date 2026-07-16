@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, DemandLetterViewer } from '../../components/ui.jsx';
+import { DocumentManager } from '../../components/DocumentManager.jsx';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER', 'FINANCE_USER'];
 const EMPTY_FORM = {
@@ -432,13 +433,15 @@ export default function PaymentSecurity() {
             )}
 
             {detail.invocations?.[0]?.demand_letter_json && (
-              <>
-                <div className="section-title" style={{ marginTop: 16 }}>Demand letter (latest)</div>
-                <pre style={{ fontSize: 12, background: '#f6f7f9', padding: 10, borderRadius: 6, overflow: 'auto' }}>
-                  {JSON.stringify(JSON.parse(detail.invocations[0].demand_letter_json || '{}'), null, 2)}
-                </pre>
-              </>
+              <DemandLetterViewer letterStr={detail.invocations[0].demand_letter_json} />
             )}
+
+            <DocumentManager 
+              moduleName="PAYMENT_SECURITY"
+              entityId={detail.entity_id} 
+              contractId={detail.contract_id} 
+              title="Payment Security Documents" 
+            />
 
             {detail.events?.length > 0 && (
               <>

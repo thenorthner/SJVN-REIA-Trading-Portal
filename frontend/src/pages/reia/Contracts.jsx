@@ -23,10 +23,12 @@ export default function Contracts() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
+  const [allocations, setAllocations] = useState([]);
   const [amendForm, setAmendForm] = useState(null);
   const [requirements, setRequirements] = useState([]);
   const [syncMsg, setSyncMsg] = useState('');
   const [statusForm, setStatusForm] = useState(null);
+  const [allocationForm, setAllocationForm] = useState(null);
 
   function load() {
     setLoading(true);
@@ -46,6 +48,11 @@ export default function Contracts() {
   function openDetail(row) {
     api.contracts.get(row.id).then(setSelected);
     api.paymentSecurity.requirements(row.id).then(setRequirements).catch(() => setRequirements([]));
+    if (row.contract_type === 'PPA') {
+      api.client.get(`/reia/contracts/${row.id}/allocations`).then(r => setAllocations(r.data)).catch(() => setAllocations([]));
+    } else {
+      setAllocations([]);
+    }
     setAmendForm(null);
     setStatusForm(null);
     setSyncMsg('');
@@ -97,6 +104,17 @@ export default function Contracts() {
     setSelected(updated);
     setStatusForm(null);
     load();
+  }
+
+  async function handleAddAllocation(e) {
+    e.preventDefault();
+    try {
+      await api.client.post(`/reia/contracts/${selected.id}/allocations`, allocationForm);
+      setAllocationForm(null);
+      api.client.get(`/reia/contracts/${selected.id}/allocations`).then(r => setAllocations(r.data));
+    } catch(err) {
+      alert(err.response?.data?.error || 'Failed to map allocation');
+    }
   }
 
   const columns = [
@@ -217,6 +235,23 @@ export default function Contracts() {
               <Field label="Security Type"><input placeholder="BG / LC / ISB" value={form.pbg_type} onChange={(e) => setForm({ ...form, pbg_type: e.target.value })} /></Field>
             </div>
           </div>
+          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+            <h4 style={{ margin: '0 0 12px 0' }}>4. Billing & Regulatory Rules (CERC)</h4>
+            <div className="form-grid">
+              <Field label="Rebate Rule"><input required placeholder="e.g. 2% if paid in 5 days" value={form.rebate_rule} onChange={(e) => setForm({ ...form, rebate_rule: e.target.value })} /></Field>
+              <Field label="LPS Rule"><input required placeholder="e.g. 1.25% per month" value={form.lps_rule} onChange={(e) => setForm({ ...form, lps_rule: e.target.value })} /></Field>
+              <Field label="Payment Security Mechanism"><input required placeholder="Letter of Credit / Corpus Fund" value={form.payment_security_type} onChange={(e) => setForm({ ...form, payment_security_type: e.target.value })} /></Field>
+            </div>
+          </div>
+
+          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+            <h4 style={{ margin: '0 0 12px 0' }}>5. Supporting Document</h4>
+            <div className="form-grid">
+              <Field label="Contract Document (PDF/Word)">
+                <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setUploadFile(e.target.files[0])} />
+              </Field>
+            </div>
+          </div>
 
           <div className="form-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
@@ -263,6 +298,9 @@ export default function Contracts() {
                   {selected.tariff_structure_json && <tr><td>Structure JSON</td><td><pre style={{fontSize: 10}}>{selected.tariff_structure_json}</pre></td></tr>}
                   <tr><td>Tenure</td><td>{selected.tenure_start} to {selected.tenure_end}</td></tr>
                   <tr><td>PBG / EMD</td><td>{fmtCurrency(selected.pbg_amount)} {selected.pbg_type && `(${selected.pbg_type})`}</td></tr>
+                  <tr><td>Rebate Rule</td><td>{selected.rebate_rule || '-'}</td></tr>
+                  <tr><td>LPS Rule</td><td>{selected.lps_rule || '-'}</td></tr>
+                  <tr><td>Payment Security</td><td>{selected.payment_security_type || '-'}</td></tr>
                   <tr><td>Remarks</td><td>{selected.remarks || '-'}</td></tr>
                 </tbody>
               </table>
@@ -273,6 +311,51 @@ export default function Contracts() {
           {selected.projects?.length > 0 ? (
             <Table columns={[{key:'name', header:'Project SPV'}, {key:'capacity', header:'Allocated (MW)', render: r=>r.allocated_capacity_mw}]} rows={selected.projects} />
           ) : <div style={{ fontSize: 13, color: '#666' }}>No projects mapped.</div>}
+
+          {selected.contract_type === 'PPA' && (
+            <>
+              <h4 style={{ margin: '20px 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>PSA Allocations (Energy Split)</h4>
+              {allocations.length > 0 ? (
+                <Table 
+                  columns={[
+                    {key:'psa_no', header:'PSA Number'}, 
+                    {key:'buyer_name', header:'DISCOM (Buyer)'}, 
+                    {key:'allocation_percent', header:'Allocation %', render: r => `${r.allocation_percent}%`},
+                    {key:'effective', header:'Effective Dates', render: r => `${r.effective_from} to ${r.effective_to || 'Active'}`}
+                  ]} 
+                  rows={allocations} 
+                />
+              ) : <div style={{ fontSize: 13, color: '#666' }}>No PSAs mapped to this PPA yet.</div>}
+
+              {allocationForm ? (
+                <form onSubmit={handleAddAllocation} style={{ marginTop: 16, padding: 16, border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                  <h5 style={{ margin: '0 0 12px 0' }}>Map new PSA to this PPA</h5>
+                  <div className="form-grid">
+                    <Field label="Select PSA">
+                      <select required value={allocationForm.psa_id} onChange={e => setAllocationForm({...allocationForm, psa_id: e.target.value})}>
+                        <option value="">Select PSA...</option>
+                        {rows.filter(r => r.contract_type === 'PSA').map(psa => (
+                          <option key={psa.id} value={psa.id}>{psa.contract_no} - {psa.buyer_name}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Allocation %"><input required type="number" step="0.01" min="0.01" max="100" value={allocationForm.allocation_percent} onChange={e => setAllocationForm({...allocationForm, allocation_percent: e.target.value})} /></Field>
+                    <Field label="Effective From"><input required type="date" value={allocationForm.effective_from} onChange={e => setAllocationForm({...allocationForm, effective_from: e.target.value})} /></Field>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <button type="submit" className="btn btn-primary btn-sm">Save Map</button>
+                    <button type="button" className="btn btn-outline btn-sm" onClick={() => setAllocationForm(null)}>Cancel</button>
+                  </div>
+                </form>
+              ) : (
+                <div style={{ marginTop: 12 }}>
+                  <button className="btn btn-outline btn-sm" onClick={() => setAllocationForm({ psa_id: '', allocation_percent: '', effective_from: new Date().toISOString().split('T')[0] })}>
+                    + Map PSA to PPA
+                  </button>
+                </div>
+              )}
+            </>
+          )}
 
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>

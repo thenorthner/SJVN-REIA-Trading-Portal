@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Space, Tag, Typography, Progress, Badge } from 'antd';
 import { Link } from 'react-router-dom';
 import api from '../../api/client';
-
-const { Title, Text } = Typography;
+import { PageHeader, Table, Badge, Card } from '../../components/ui.jsx';
 
 export default function TradingClients() {
   const [clients, setClients] = useState([]);
@@ -16,7 +14,7 @@ export default function TradingClients() {
   const fetchClients = () => {
     setLoading(true);
     api.tradingClients.list().then(res => {
-      setClients(res.data);
+      setClients(res);
       setLoading(false);
     }).catch(console.error);
   };
@@ -25,55 +23,43 @@ export default function TradingClients() {
     switch (rating) {
       case 'LOW': return 'success';
       case 'MEDIUM': return 'warning';
-      case 'HIGH': return 'error';
-      default: return 'default';
+      case 'HIGH': return 'danger';
+      default: return 'neutral';
     }
   };
 
   const columns = [
-    { title: 'Client Name', dataIndex: 'name', render: (val, r) => <Link to={`/trading/clients/${r.id}`}>{val}</Link> },
-    { title: 'Type', dataIndex: 'client_type', render: val => <Tag>{val}</Tag> },
-    { title: 'Risk Rating', dataIndex: 'risk_rating', render: val => <Badge status={getRiskColor(val)} text={val} /> },
+    { key: 'name', label: 'Client Name', render: r => <Link to={`/trading/clients/${r.id}`} style={{color: '#0052cc', fontWeight: 'bold'}}>{r.name}</Link> },
+    { key: 'client_type', label: 'Type', render: r => <Badge>{r.client_type}</Badge> },
+    { key: 'risk_rating', label: 'Risk Rating', render: r => <Badge type={getRiskColor(r.risk_rating)}>{r.risk_rating}</Badge> },
+    { key: 'exposure_limit', label: 'Exposure Limit (₹)', render: r => r.exposure_limit.toLocaleString('en-IN') },
     { 
-      title: 'Exposure Limit (₹)', 
-      dataIndex: 'exposure_limit', 
-      render: val => val.toLocaleString('en-IN') 
-    },
-    { 
-      title: 'NOC Validity', 
-      dataIndex: 'noc_valid_till', 
-      render: val => {
-        if (!val) return 'N/A';
-        const isExpiring = new Date(val) < new Date(Date.now() + 30*24*60*60*1000);
-        return <Text type={isExpiring ? 'danger' : 'success'}>{val} {isExpiring && '(Expiring Soon)'}</Text>;
+      key: 'noc_valid_till', 
+      label: 'NOC Validity', 
+      render: r => {
+        if (!r.noc_valid_till) return 'N/A';
+        const isExpiring = new Date(r.noc_valid_till) < new Date(Date.now() + 30*24*60*60*1000);
+        return <span style={{ color: isExpiring ? '#cf1322' : '#389e0d' }}>{r.noc_valid_till} {isExpiring && '(Expiring Soon)'}</span>;
       }
     },
-    { title: 'Status', dataIndex: 'status', render: val => <Tag color={val === 'ACTIVE' ? 'green' : 'red'}>{val}</Tag> },
+    { key: 'status', label: 'Status', render: r => <Badge type={r.status === 'ACTIVE' ? 'success' : 'danger'}>{r.status}</Badge> },
     { 
-      title: 'Actions', 
-      key: 'actions',
-      render: (_, r) => (
-        <Space>
-          <Link to={`/trading/clients/${r.id}`}>
-            <Button size="small" type="primary">View Profile</Button>
-          </Link>
-        </Space>
+      key: 'actions', 
+      label: 'Actions',
+      render: r => (
+        <Link to={`/trading/clients/${r.id}`}>
+          <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 12 }}>View Profile</button>
+        </Link>
       )
     }
   ];
 
   return (
     <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={3}>Trading Clients & Counterparties</Title>
-        <Button type="primary">Onboard New Client</Button>
-      </div>
-      <Table 
-        dataSource={clients} 
-        columns={columns} 
-        rowKey="id" 
-        loading={loading}
-      />
+      <PageHeader title="Trading Clients & Counterparties" />
+      <Card>
+        {loading ? <p>Loading clients...</p> : <Table columns={columns} data={clients} />}
+      </Card>
     </div>
   );
 }

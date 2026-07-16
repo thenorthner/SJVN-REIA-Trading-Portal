@@ -47,10 +47,10 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req
     db.prepare(`
       INSERT INTO entities (id, parent_entity_id, entity_type, category, name, pan_no, gst_no, cin, credit_rating,
         is_blacklisted, capacity_mw, technology, contracted_capacity_mw, psa_tariff, supply_criteria,
-        organization_details, regulatory_approvals, bank_details, is_penny_drop_verified, status)
+        organization_details, regulatory_approvals, bank_details, is_penny_drop_verified, invoice_template_json, status)
       VALUES (@id, @parent_entity_id, @entity_type, @category, @name, @pan_no, @gst_no, @cin, @credit_rating,
         0, @capacity_mw, @technology, @contracted_capacity_mw, @psa_tariff, @supply_criteria,
-        @organization_details, @regulatory_approvals, @bank_details, 0, 'PENDING')
+        @organization_details, @regulatory_approvals, @bank_details, 0, @invoice_template_json, 'PENDING')
     `).run({
       id,
       parent_entity_id: body.parent_entity_id ?? null,
@@ -69,6 +69,7 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req
       organization_details: body.organization_details ?? null,
       regulatory_approvals: body.regulatory_approvals ?? null,
       bank_details: body.bank_details ?? null,
+      invoice_template_json: body.invoice_template_json ?? null,
     });
 
     if (body.contacts && Array.isArray(body.contacts)) {
@@ -96,7 +97,7 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
   if (!existing) return res.status(404).json({ error: 'Entity not found' });
 
   const fields = ['category', 'name', 'pan_no', 'gst_no', 'cin', 'credit_rating', 'capacity_mw', 'technology', 'contracted_capacity_mw', 'psa_tariff',
-    'supply_criteria', 'organization_details', 'regulatory_approvals', 'bank_details'];
+    'supply_criteria', 'organization_details', 'regulatory_approvals', 'bank_details', 'invoice_template_json'];
   
   const updates = {};
   let isHighRisk = false;
@@ -122,7 +123,8 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
     UPDATE entities SET category=@category, name=@name, pan_no=@pan_no, gst_no=@gst_no, cin=@cin, credit_rating=@credit_rating,
       capacity_mw=@capacity_mw, technology=@technology, contracted_capacity_mw=@contracted_capacity_mw, psa_tariff=@psa_tariff, supply_criteria=@supply_criteria,
       organization_details=@organization_details, regulatory_approvals=@regulatory_approvals,
-      bank_details=@bank_details, is_penny_drop_verified=@is_penny_drop_verified, updated_at=datetime('now')
+      bank_details=@bank_details, is_penny_drop_verified=@is_penny_drop_verified, 
+      invoice_template_json=@invoice_template_json, updated_at=datetime('now')
     WHERE id=@id
   `).run(merged);
 

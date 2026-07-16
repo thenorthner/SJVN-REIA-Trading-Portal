@@ -164,23 +164,49 @@ router.get('/trading/periodic', (req, res) => {
 
 // 3C. Consolidated Executive Dashboard
 router.get('/consolidated', (req, res) => {
-  const reiaReceivables = db.prepare(`
-    SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE direction = 'SJVN_TO_BUYER' AND status NOT IN ('PAID','CANCELLED')
-  `).get().s;
-  const reiaPayables = db.prepare(`
-    SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE direction = 'SELLER_TO_SJVN' AND status NOT IN ('PAID','CANCELLED')
-  `).get().s;
+  // 1. Single Source of Truth Aggregations
+  const reiaReceivables = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE direction = 'SJVN_TO_BUYER' AND status NOT IN ('PAID','CANCELLED')`).get().s;
+  const reiaPayables = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE direction = 'SELLER_TO_SJVN' AND status NOT IN ('PAID','CANCELLED')`).get().s;
+  const reiaOverdue = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE direction = 'SJVN_TO_BUYER' AND status NOT IN ('PAID','CANCELLED') AND due_date < date('now')`).get().s;
+  
   const reiaContractedCapacity = db.prepare(`SELECT COALESCE(SUM(capacity_mw),0) s FROM contracts WHERE status = 'ACTIVE'`).get().s;
   const reiaBilledValue = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices`).get().s;
-  const reiaOpenDisputes = db.prepare(`SELECT COUNT(*) c FROM disputes WHERE status IN (${OPEN_STATUSES.map(() => '?').join(',')})`).get(...OPEN_STATUSES).c;
+  const reiaDisputedAmount = db.prepare(`SELECT COALESCE(SUM(disputed_amount),0) s FROM disputes WHERE status NOT IN ('CLOSED', 'RESOLVED_ACCEPTED', 'RESOLVED_REJECTED')`).get().s;
+  const reiaOpenDisputes = db.prepare(`SELECT COUNT(*) c FROM disputes WHERE status NOT IN ('CLOSED', 'RESOLVED_ACCEPTED', 'RESOLVED_REJECTED')`).get().c;
   const reiaReconExceptions = db.prepare(`SELECT COUNT(*) c FROM reconciliations WHERE status IN ('NEEDS_REVIEW','DISPUTED','REOPENED')`).get().c;
 
   const tradingRevenue = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM trading_invoices`).get().s;
-  const tradingMargin = db.prepare(`SELECT COALESCE(SUM(trading_margin),0) s FROM trading_invoices`).get().s;
-  const tradingOutstanding = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM trading_invoices WHERE status != 'PAID'`).get().s;
-  const tradingClearedQuantum = db.prepare(`SELECT COALESCE(SUM(cleared_quantum_mw),0) s FROM bids`).get().s;
+  const tradingMargin = db.prepare(`SELECT COALESCE(SUM(sjvn_margin),0) s FROM trading_invoices`).get().s; // FIXED: sjvn_margin
+  const tradingOutstanding = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM trading_invoices WHERE status NOT IN ('PAID','SETTLED_VIA_NETTING')`).get().s;
+  const tradingClearedQuantum = db.prepare(`SELECT COALESCE(SUM(cleared_quantum_mw),0) s FROM bid_blocks`).get().s;
 
-  const overallProfitability = tradingMargin; // trading margin acts as SJVN's profitability proxy in this demo
+  const activeSecurityAmount = db.prepare(`SELECT COALESCE(SUM(limit_amount),0) s FROM payment_security WHERE status IN ('ACTIVE', 'PARTIALLY_UTILIZED', 'RENEWED')`).get().s;
+
+  // 2. Data Completeness Indicator
+  const totalEnergyRecords = db.prepare(`SELECT COUNT(*) c FROM energy_data`).get().c;
+  const lockedEnergyRecords = db.prepare(`SELECT COUNT(*) c FROM energy_data WHERE status = 'LOCKED'`).get().c;
+  const dataCompleteness = totalEnergyRecords > 0 ? Math.round((lockedEnergyRecords / totalEnergyRecords) * 100) : 100;
+
+  // 3. Trend View (MoM)
+  // Simplified approximation: compare current month with previous month based on created_at
+  const currMonthInvoices = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')`).get().s;
+  const prevMonthInvoices = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now', '-1 month')`).get().s;
+  const revenueTrend = prevMonthInvoices > 0 ? ((currMonthInvoices - prevMonthInvoices) / prevMonthInvoices) * 100 : 0;
+
+  // 4. Cross-Module Risk Rollup
+  const totalUnresolvedExposure = reiaDisputedAmount + tradingOutstanding + reiaOverdue;
+  const coverageRatio = totalUnresolvedExposure > 0 ? (activeSecurityAmount / totalUnresolvedExposure) * 100 : 100;
+
+  const overallProfitability = tradingMargin; // Trading margin acts as profitability proxy
+  const totalPortfolioValue = reiaBilledValue + tradingRevenue;
+
+  // 5. Executive Summary Generation
+  let summary = `Portfolio capacity stands at ${reiaContractedCapacity} MW towards the 20 GW goal. `;
+  if (revenueTrend > 0) summary += `Billing is up ${revenueTrend.toFixed(1)}% MoM. `;
+  else if (revenueTrend < 0) summary += `Billing is down ${Math.abs(revenueTrend).toFixed(1)}% MoM. `;
+  
+  if (totalUnresolvedExposure > 500000) summary += `Attention required: High unresolved exposure of ₹${(totalUnresolvedExposure/1e7).toFixed(2)} Cr across modules. `;
+  else summary += `Financial exposure is well contained within limits.`;
 
   res.json({
     portfolio: {
@@ -188,6 +214,8 @@ router.get('/consolidated', (req, res) => {
       reiaBilledValue,
       reiaReceivables,
       reiaPayables,
+      reiaOverdue,
+      reiaDisputedAmount,
       reiaOpenDisputes,
       reiaReconExceptions,
       tradingRevenue,
@@ -195,7 +223,13 @@ router.get('/consolidated', (req, res) => {
       tradingOutstanding,
       tradingClearedQuantum,
       overallProfitability,
-      totalPortfolioValue: reiaBilledValue + tradingRevenue,
+      totalPortfolioValue,
+      totalUnresolvedExposure,
+      coverageRatio,
+      dataCompleteness,
+      revenueTrend,
+      executiveSummary: summary,
+      targetCapacity: 20000 // 20 GW target
     },
   });
 });

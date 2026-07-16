@@ -3,6 +3,15 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification } from '../util.js';
 import { runFinalDataRecon } from './reconciliation.js';
+import multer from 'multer';
+import { exec } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const upload = multer({ dest: 'temp/' });
 
 const router = Router();
 router.use(requireAuth);
@@ -25,6 +34,36 @@ router.get('/', (req, res) => {
   if (status) { sql += ' AND ed.status = ?'; params.push(status); }
   sql += ' ORDER BY ed.period_month DESC';
   res.json(db.prepare(sql).all(...params));
+});
+
+router.post('/parse-rea', requireRole(...ROLE_GROUPS.REIA_WRITE), upload.single('file'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No PDF file uploaded' });
+  }
+
+  const pdfPath = req.file.path;
+  const scriptPath = path.join(__dirname, '../scripts/parse_rea.py');
+
+  exec(`python3 "${scriptPath}" "${pdfPath}"`, (error, stdout, stderr) => {
+    // cleanup temp file
+    fs.unlink(pdfPath, () => {});
+
+    if (error) {
+      console.error('REA parsing error:', stderr || error);
+      return res.status(500).json({ error: 'Failed to parse REA PDF' });
+    }
+
+    try {
+      const result = JSON.parse(stdout);
+      if (!result.success) {
+        return res.status(400).json({ error: result.error || 'Failed to parse REA PDF' });
+      }
+      res.json(result.data);
+    } catch (parseErr) {
+      console.error('Invalid JSON from script:', stdout);
+      res.status(500).json({ error: 'Invalid output from parser script' });
+    }
+  });
 });
 
 router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
@@ -52,11 +91,20 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
   const row = db.prepare('SELECT * FROM energy_data WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Energy data not found' });
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(row.contract_id);
-  const expected = contract.capacity_mw * 24 * 30 * 0.22; // rough expected generation at 22% CUF
+  
+  let baseCuf = 0.22;
+  if (contract.project_type === 'Wind') baseCuf = 0.30;
+  if (contract.project_type === 'Hydro') baseCuf = 0.65;
+  
+  const expected = contract.capacity_mw * 24 * 30 * baseCuf;
   const deviationPct = Math.abs(row.energy_mwh - expected) / expected * 100;
-  const flagged = deviationPct > 30;
+  
+  // Hydro has extreme seasonality (monsoon vs winter)
+  const tolerance = contract.project_type === 'Hydro' ? 80 : 30;
+  const flagged = deviationPct > tolerance;
+  
   db.prepare(`UPDATE energy_data SET status = ?, deviation_notes = ?, updated_at = datetime('now') WHERE id = ?`)
-    .run(flagged ? 'DISPUTED' : 'VALIDATED', `Deviation ${deviationPct.toFixed(1)}% vs expected ${expected.toFixed(0)} MWh`, row.id);
+    .run(flagged ? 'DISPUTED' : 'VALIDATED', `Deviation ${deviationPct.toFixed(1)}% vs expected ${expected.toFixed(0)} MWh (${(baseCuf * 100).toFixed(0)}% CUF) - Tolerance: ${tolerance}%`, row.id);
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'VALIDATE', module: 'REIA', entityType: 'energy_data', entityId: row.id, details: { deviationPct } });
   res.json(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id));
 });
@@ -89,6 +137,73 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   }
 
   res.json(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id));
+});
+
+// ──────────────────────────────────────────────
+// REA Automation Endpoints
+// ──────────────────────────────────────────────
+import { reaScraper } from '../services/reaScraper.js';
+import { RPC_SOURCES } from '../config/rpcSources.js';
+
+// GET /rea-status — Dashboard status per RPC
+router.get('/rea-status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  try {
+    const status = reaScraper.getStatus();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /rea-log — Full fetch audit log
+router.get('/rea-log', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  try {
+    const log = reaScraper.getFetchLog({
+      rpc_source: req.query.rpc_source,
+      status: req.query.status,
+    });
+    res.json(log);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /rea-trigger — Manually trigger scrape
+router.post('/rea-trigger', requireRole('SJVN_ADMIN', 'REIA_USER'), async (req, res) => {
+  const { rpc, period_month, data_type } = req.body;
+  
+  if (!rpc || !period_month) {
+    return res.status(400).json({ error: 'rpc and period_month are required' });
+  }
+  
+  if (!RPC_SOURCES[rpc]) {
+    return res.status(400).json({ error: `Unknown RPC source: ${rpc}. Valid: ${Object.keys(RPC_SOURCES).join(', ')}` });
+  }
+
+  try {
+    const result = await reaScraper.triggerManual(rpc, period_month, data_type || 'PROVISIONAL');
+    logAudit({ req, user: req.user, action: 'REA_TRIGGER', module: 'REIA', entityType: 'rea_fetch_log', entityId: result.logId, details: { rpc, period_month } });
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /rea-scan — Trigger full scan for all RPCs (or one specific RPC)
+router.post('/rea-scan', requireRole('SJVN_ADMIN'), async (req, res) => {
+  const { rpc } = req.body;
+  
+  try {
+    let results;
+    if (rpc) {
+      results = [await reaScraper.runFullCycle(rpc)];
+    } else {
+      results = await reaScraper.runAllSources();
+    }
+    res.json({ success: true, results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

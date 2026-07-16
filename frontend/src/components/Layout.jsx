@@ -31,8 +31,8 @@ const NAV_INTERNAL = [
       { to: '/trading/clients', label: 'Clients & Counterparties' },
       { to: '/trading/bids', label: 'Exchange Bid Management' },
       { to: '/trading/bilateral', label: 'Bilateral Transactions' },
-      { to: '/trading/invoices', label: 'Trading Billing & Settlement' },
-      { to: '/trading/market-rates', label: 'Market Rates & Analytics' },
+      { to: '/trading/billing-settlement', label: 'Trading Billing & Settlement' },
+      { to: '/trading/market-analytics', label: 'Market Rates & Analytics' },
     ],
   },
   {

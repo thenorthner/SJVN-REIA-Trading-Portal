@@ -21,8 +21,8 @@ import TradingClients from './pages/trading/TradingClients.jsx';
 import TradingClientProfile from './pages/trading/TradingClientProfile.jsx';
 import Bids from './pages/trading/Bids.jsx';
 import Bilateral from './pages/trading/Bilateral.jsx';
-import TradingInvoices from './pages/trading/TradingInvoices.jsx';
-import MarketRates from './pages/trading/MarketRates.jsx';
+import BillingSettlement from './pages/trading/BillingSettlement.jsx';
+import MarketAnalytics from './pages/trading/MarketAnalytics.jsx';
 
 import SellerDashboard from './pages/seller/SellerDashboard.jsx';
 import SellerContracts from './pages/seller/SellerContracts.jsx';
@@ -98,8 +98,8 @@ export default function App() {
         <Route path="trading/clients/:id" element={<ProtectedRoute roles={TRADING_ROLES}><TradingClientProfile /></ProtectedRoute>} />
         <Route path="trading/bids" element={<ProtectedRoute roles={TRADING_ROLES}><Bids /></ProtectedRoute>} />
         <Route path="trading/bilateral" element={<ProtectedRoute roles={TRADING_ROLES}><Bilateral /></ProtectedRoute>} />
-        <Route path="trading/invoices" element={<ProtectedRoute roles={TRADING_ROLES}><TradingInvoices /></ProtectedRoute>} />
-        <Route path="trading/market-rates" element={<ProtectedRoute roles={TRADING_ROLES}><MarketRates /></ProtectedRoute>} />
+        <Route path="trading/billing-settlement" element={<ProtectedRoute roles={TRADING_ROLES}><BillingSettlement /></ProtectedRoute>} />
+        <Route path="trading/market-analytics" element={<ProtectedRoute roles={TRADING_ROLES}><MarketAnalytics /></ProtectedRoute>} />
 
         <Route path="audit-logs" element={<AuditLogs />} />
 

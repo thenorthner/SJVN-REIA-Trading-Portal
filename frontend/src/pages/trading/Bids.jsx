@@ -1,225 +1,212 @@
 import React, { useEffect, useState } from 'react';
-import api from '../../api/client.js';
+import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
-
-const CAN_WRITE = ['SJVN_ADMIN', 'TRADING_USER', 'TRADING_CLIENT'];
-const CAN_CLEAR = ['SJVN_ADMIN', 'TRADING_USER'];
+import { DocumentManager } from '../../components/DocumentManager.jsx';
 
 const EMPTY_FORM = {
-  client_id: '', exchange: 'IEX', product: 'DAM', bid_date: '', delivery_date: '', time_block: '',
-  quantum_mw: '', price_per_unit: '', carry_forward_from: '', premium_discount: '', no_bid: false,
+  client_id: '', exchange: 'IEX', product: 'DAM', bid_date: '', delivery_date: '', gate_closure_time: '',
 };
-const CLEAR_FORM = { cleared_quantum_mw: '', cleared_price: '' };
+
+const EMPTY_BLOCK = { time_block: 'Block-1', quantum_mw: '', price_per_unit: '' };
 
 export default function Bids() {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [clients, setClients] = useState([]);
-  const [filters, setFilters] = useState({ client_id: '', exchange: '', product: '', status: '' });
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [validation, setValidation] = useState(null);
+  const [blocks, setBlocks] = useState([{ ...EMPTY_BLOCK }]);
   const [error, setError] = useState('');
-  const [clearRow, setClearRow] = useState(null);
-  const [clearForm, setClearForm] = useState(CLEAR_FORM);
+  const [selectedBid, setSelectedBid] = useState(null);
 
   function load() {
     setLoading(true);
-    const params = {};
-    Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
-    api.bids.list(params).then(setRows).finally(() => setLoading(false));
+    api.bids.list().then(setRows).finally(() => setLoading(false));
   }
 
-  useEffect(load, [filters.client_id, filters.exchange, filters.product, filters.status]);
+  useEffect(load, []);
   useEffect(() => { api.tradingClients.list({ status: 'ACTIVE' }).then(setClients).catch(() => {}); }, []);
 
   function openCreate() {
     setForm(EMPTY_FORM);
-    setValidation(null);
+    setBlocks([{ ...EMPTY_BLOCK }]);
     setError('');
     setShowCreate(true);
   }
 
-  async function handleValidate() {
-    if (!form.client_id) return;
-    const res = await api.bids.validate({ ...form, quantum_mw: Number(form.quantum_mw) || 0, price_per_unit: Number(form.price_per_unit) || 0 });
-    setValidation(res);
-  }
-
-  async function handleCreate(e, force = false) {
+  async function handleCreate(e) {
     e.preventDefault();
     setError('');
     try {
-      await api.bids.create({
+      const payload = {
         ...form,
-        quantum_mw: Number(form.quantum_mw),
-        price_per_unit: Number(form.price_per_unit),
-        premium_discount: form.premium_discount ? Number(form.premium_discount) : 0,
-        carry_forward_from: form.carry_forward_from || null,
-        force,
-      });
+        blocks: blocks.map(b => ({
+          time_block: b.time_block,
+          quantum_mw: Number(b.quantum_mw),
+          price_per_unit: Number(b.price_per_unit)
+        }))
+      };
+      await api.bids.create(payload);
       setShowCreate(false);
       load();
     } catch (err) {
-      if (err.response?.data?.details) {
-        setError(err.response.data.details.join(' '));
-      } else {
-        setError(err.response?.data?.error || 'Failed to submit bid.');
-      }
+      setError(err.response?.data?.error || 'Failed to create bid');
     }
   }
 
-  async function handleCancel(row) {
-    await api.bids.cancel(row.id);
-    load();
+  async function handleApprove(id, status) {
+    try {
+      await api.bids.approve(id, status, 'Reviewed by Maker/Checker');
+      setSelectedBid(null);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Action failed');
+    }
   }
 
-  async function handleDelete(row) {
-    await api.bids.remove(row.id);
-    load();
-  }
-
-  async function handleClear(e) {
-    e.preventDefault();
-    await api.bids.clear(clearRow.id, { cleared_quantum_mw: Number(clearForm.cleared_quantum_mw), cleared_price: Number(clearForm.cleared_price) });
-    setClearRow(null);
-    load();
+  async function handleSubmitToExchange(id) {
+    try {
+      await api.bids.submit(id);
+      setSelectedBid(null);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to submit to exchange. Check Gate Closure.');
+    }
   }
 
   const columns = [
-    { key: 'client_name', header: 'Client' },
-    { key: 'exchange', header: 'Exchange' },
-    { key: 'product', header: 'Product' },
-    { key: 'bid_date', header: 'Bid Date' },
-    { key: 'delivery_date', header: 'Delivery Date' },
-    { key: 'time_block', header: 'Block', render: (r) => r.time_block || '-' },
-    { key: 'quantum_mw', header: 'Quantum (MW)', render: (r) => fmtNumber(r.quantum_mw) },
-    { key: 'price_per_unit', header: 'Price (₹/unit)', render: (r) => r.price_per_unit },
-    { key: 'cleared_quantum_mw', header: 'Cleared (MW)', render: (r) => fmtNumber(r.cleared_quantum_mw) },
-    { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
-    ...(CAN_WRITE.includes(user?.role) ? [{
-      key: 'actions', header: 'Actions', render: (r) => (
-        <div className="cell-actions">
-          {['DRAFT', 'SUBMITTED'].includes(r.status) && <button className="btn btn-danger btn-sm" onClick={(e) => { e.stopPropagation(); handleCancel(r); }}>Cancel</button>}
-          {r.status === 'DRAFT' && <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); handleDelete(r); }}>Delete</button>}
-          {CAN_CLEAR.includes(user?.role) && ['SUBMITTED'].includes(r.status) && (
-            <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); setClearRow(r); setClearForm({ cleared_quantum_mw: r.quantum_mw, cleared_price: r.price_per_unit }); }}>Clear</button>
-          )}
-        </div>
-      ),
-    }] : []),
+    { key: 'id', label: 'Bid Ref' },
+    { key: 'client_name', label: 'Client' },
+    { key: 'exchange', label: 'Exchange/Product', render: r => `${r.exchange} - ${r.product}` },
+    { key: 'delivery_date', label: 'Delivery Date' },
+    { key: 'approval_status', label: 'Approval', render: r => <Badge type={r.approval_status === 'APPROVED' ? 'success' : r.approval_status === 'REJECTED' ? 'danger' : 'warning'}>{r.approval_status}</Badge> },
+    { key: 'status', label: 'Exchange Status', render: r => <Badge type={r.status === 'CLEARED' ? 'success' : r.status === 'DRAFT' ? 'neutral' : 'primary'}>{r.status}</Badge> },
+    { key: 'actions', label: 'Actions', render: r => <button className="btn btn-outline" onClick={() => setSelectedBid(r)}>View</button> }
   ];
 
   return (
-    <div>
-      <PageHeader
-        title="Exchange Bid Management"
-        subtitle="Submit and track power exchange bids across IEX, PXIL and HPX"
-        actions={CAN_WRITE.includes(user?.role) && <button className="btn btn-primary" onClick={openCreate}>+ Submit Bid</button>}
-      />
-
-      <div className="filters-bar">
-        <select value={filters.client_id} onChange={(e) => setFilters({ ...filters, client_id: e.target.value })}>
-          <option value="">All clients</option>
-          {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <select value={filters.exchange} onChange={(e) => setFilters({ ...filters, exchange: e.target.value })}>
-          <option value="">All exchanges</option>
-          {['IEX', 'PXIL', 'HPX'].map((e) => <option key={e} value={e}>{e}</option>)}
-        </select>
-        <select value={filters.product} onChange={(e) => setFilters({ ...filters, product: e.target.value })}>
-          <option value="">All products</option>
-          {['DAM', 'HPDAM', 'TAM', 'GDAM', 'RTM', 'GTAM', 'REC', 'ESCERT', 'RPO'].map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-          <option value="">All statuses</option>
-          {['DRAFT', 'SUBMITTED', 'CLEARED', 'PARTIALLY_CLEARED', 'REJECTED', 'CANCELLED', 'NO_BID'].map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-      </div>
-
+    <div style={{ padding: 20 }}>
+      <PageHeader title="Exchange Bid Management" onAdd={openCreate} addLabel="New Portfolio Bid" />
       <Card>
-        <Table columns={columns} rows={loading ? [] : rows} emptyMessage={loading ? 'Loading...' : 'No bids found.'} />
+        <Table columns={columns} data={rows} loading={loading} />
       </Card>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Submit Exchange Bid" width={640}>
-        {error && <div className="form-error">{error}</div>}
-        {validation && (
-          <div className={validation.valid ? 'form-error' : 'form-error'} style={validation.valid ? { background: 'var(--green-bg)', color: 'var(--green)' } : {}}>
-            {validation.valid ? 'Validation passed — ready to submit.' : validation.errors.join(' ')}
-          </div>
-        )}
-        <form onSubmit={(e) => handleCreate(e, false)}>
-          <div className="form-grid">
-            <Field label="Client">
-              <select required value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}>
-                <option value="">Select client...</option>
-                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </Field>
-            <Field label="Exchange">
-              <select value={form.exchange} onChange={(e) => setForm({ ...form, exchange: e.target.value })}>
-                {['IEX', 'PXIL', 'HPX'].map((e) => <option key={e} value={e}>{e}</option>)}
-              </select>
-            </Field>
-            <Field label="Product">
-              <select value={form.product} onChange={(e) => setForm({ ...form, product: e.target.value })}>
-                {['DAM', 'HPDAM', 'TAM', 'GDAM', 'RTM', 'GTAM', 'REC', 'ESCERT', 'RPO'].map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </Field>
-            <Field label="Time Block">
-              <input required placeholder="Block-1" value={form.time_block} onChange={(e) => setForm({ ...form, time_block: e.target.value })} />
-            </Field>
-            <Field label="Bid Date">
-              <input required type="date" value={form.bid_date} onChange={(e) => setForm({ ...form, bid_date: e.target.value })} />
-            </Field>
-            <Field label="Delivery Date">
-              <input required type="date" value={form.delivery_date} onChange={(e) => setForm({ ...form, delivery_date: e.target.value })} />
-            </Field>
-            <Field label="Quantum (MW)">
-              <input required type="number" step="0.01" value={form.quantum_mw} onChange={(e) => setForm({ ...form, quantum_mw: e.target.value })} />
-            </Field>
-            <Field label="Price (₹/unit)">
-              <input required type="number" step="0.01" value={form.price_per_unit} onChange={(e) => setForm({ ...form, price_per_unit: e.target.value })} />
-            </Field>
-            <Field label="Premium/Discount">
-              <input type="number" step="0.01" value={form.premium_discount} onChange={(e) => setForm({ ...form, premium_discount: e.target.value })} />
-            </Field>
-            <Field label="Carry-forward From">
-              <input placeholder="e.g. GDAM->DAM" value={form.carry_forward_from} onChange={(e) => setForm({ ...form, carry_forward_from: e.target.value })} />
-            </Field>
-          </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 14 }}>
-            <input type="checkbox" checked={form.no_bid} onChange={(e) => setForm({ ...form, no_bid: e.target.checked })} />
-            Record as No-Bid for this slot
-          </label>
-          <div className="form-actions">
-            <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
-            <button type="button" className="btn btn-secondary" onClick={handleValidate}>Validate</button>
-            <button type="submit" className="btn btn-primary">Submit Bid</button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal open={!!clearRow} onClose={() => setClearRow(null)} title="Record Exchange Clearing" width={420}>
-        {clearRow && (
-          <form onSubmit={handleClear}>
-            <div className="form-grid">
-              <Field label="Cleared Quantum (MW)">
-                <input required type="number" step="0.01" max={clearRow.quantum_mw} value={clearForm.cleared_quantum_mw} onChange={(e) => setClearForm({ ...clearForm, cleared_quantum_mw: e.target.value })} />
+      {showCreate && (
+        <Modal open={true} onClose={() => setShowCreate(false)} title="Create Block Bid Portfolio" width={800}>
+          <form onSubmit={handleCreate}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15, marginBottom: 20 }}>
+              <Field label="Client" required>
+                <select className="input" value={form.client_id} onChange={e => setForm({...form, client_id: e.target.value})} required>
+                  <option value="">Select Client</option>
+                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
               </Field>
-              <Field label="Cleared Price (₹/unit)">
-                <input required type="number" step="0.01" value={clearForm.cleared_price} onChange={(e) => setClearForm({ ...clearForm, cleared_price: e.target.value })} />
+              <Field label="Exchange" required>
+                <select className="input" value={form.exchange} onChange={e => setForm({...form, exchange: e.target.value})}>
+                  <option value="IEX">IEX</option>
+                  <option value="PXIL">PXIL</option>
+                  <option value="HPX">HPX</option>
+                </select>
+              </Field>
+              <Field label="Product" required>
+                <select className="input" value={form.product} onChange={e => setForm({...form, product: e.target.value})}>
+                  <option value="DAM">DAM (Day Ahead)</option>
+                  <option value="RTM">RTM (Real Time)</option>
+                  <option value="GDAM">GDAM (Green DAM)</option>
+                </select>
+              </Field>
+              <Field label="Bid Date" required>
+                <input type="date" className="input" value={form.bid_date} onChange={e => setForm({...form, bid_date: e.target.value})} required />
+              </Field>
+              <Field label="Delivery Date" required>
+                <input type="date" className="input" value={form.delivery_date} onChange={e => setForm({...form, delivery_date: e.target.value})} required />
+              </Field>
+              <Field label="Gate Closure Time (UTC)" required>
+                <input type="datetime-local" className="input" value={form.gate_closure_time} onChange={e => setForm({...form, gate_closure_time: e.target.value})} required />
               </Field>
             </div>
-            <div className="form-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setClearRow(null)}>Cancel</button>
-              <button type="submit" className="btn btn-primary">Save Clearing</button>
+
+            <h4 style={{ marginBottom: 10 }}>Bid Blocks</h4>
+            {blocks.map((b, idx) => (
+              <div key={idx} style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'flex-end' }}>
+                <Field label="Time Block">
+                  <input type="text" className="input" value={b.time_block} onChange={e => { const nb = [...blocks]; nb[idx].time_block = e.target.value; setBlocks(nb); }} required />
+                </Field>
+                <Field label="Quantum (MW)">
+                  <input type="number" step="0.1" className="input" value={b.quantum_mw} onChange={e => { const nb = [...blocks]; nb[idx].quantum_mw = e.target.value; setBlocks(nb); }} required />
+                </Field>
+                <Field label="Price (₹/unit)">
+                  <input type="number" step="0.01" className="input" value={b.price_per_unit} onChange={e => { const nb = [...blocks]; nb[idx].price_per_unit = e.target.value; setBlocks(nb); }} required />
+                </Field>
+                {blocks.length > 1 && (
+                  <button type="button" className="btn btn-danger" style={{ marginBottom: 4 }} onClick={() => setBlocks(blocks.filter((_, i) => i !== idx))}>X</button>
+                )}
+              </div>
+            ))}
+            <button type="button" className="btn btn-outline" style={{ marginBottom: 20 }} onClick={() => setBlocks([...blocks, { ...EMPTY_BLOCK }])}>+ Add Block</button>
+
+            {error && <div style={{ color: 'red', marginBottom: 15 }}>{error}</div>}
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button type="button" className="btn btn-outline" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button type="submit" className="btn btn-primary">Create Draft Portfolio</button>
             </div>
           </form>
-        )}
-      </Modal>
+        </Modal>
+      )}
+
+      {selectedBid && (
+        <Modal open={true} onClose={() => setSelectedBid(null)} title={`Bid Details: ${selectedBid.id}`} width={900}>
+          <div style={{ display: 'flex', gap: 20, marginBottom: 20 }}>
+            <div style={{ flex: 1 }}>
+              <p><strong>Client:</strong> {selectedBid.client_name}</p>
+              <p><strong>Exchange:</strong> {selectedBid.exchange} / {selectedBid.product}</p>
+              <p><strong>Delivery Date:</strong> {selectedBid.delivery_date}</p>
+              <p><strong>Total Exposure:</strong> ₹{fmtNumber(selectedBid.blocks.reduce((a, b) => a + (b.quantum_mw * b.price_per_unit), 0))}</p>
+            </div>
+            <div style={{ flex: 1 }}>
+              <p><strong>Gate Closure:</strong> {new Date(selectedBid.gate_closure_time).toLocaleString()}</p>
+              <p><strong>Approval Status:</strong> <Badge>{selectedBid.approval_status}</Badge></p>
+              <p><strong>Exchange Status:</strong> <Badge>{selectedBid.status}</Badge></p>
+              <p><strong>Receipt Ref:</strong> {selectedBid.exchange_receipt_ref || 'N/A'}</p>
+            </div>
+          </div>
+
+          <h4 style={{ marginBottom: 10 }}>Blocks</h4>
+          <Table 
+            columns={[
+              { key: 'time_block', label: 'Time Block' },
+              { key: 'quantum_mw', label: 'Req Quantum (MW)' },
+              { key: 'price_per_unit', label: 'Req Price (₹)' },
+              { key: 'cleared_quantum_mw', label: 'Cleared Quantum' },
+              { key: 'cleared_price', label: 'Cleared Price' },
+              { key: 'status', label: 'Status' }
+            ]} 
+            data={selectedBid.blocks || []} 
+          />
+
+          <div style={{ marginTop: 24 }}>
+            <DocumentManager 
+              moduleName="EXCHANGE_BIDS"
+              title="Bid Documents & Exchange Receipts" 
+            />
+          </div>
+
+          <div style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            {selectedBid.approval_status === 'PENDING' && (
+              <>
+                <button className="btn btn-danger" onClick={() => handleApprove(selectedBid.id, 'REJECTED')}>Reject</button>
+                <button className="btn btn-success" onClick={() => handleApprove(selectedBid.id, 'APPROVED')}>Approve</button>
+              </>
+            )}
+            {selectedBid.approval_status === 'APPROVED' && selectedBid.status === 'DRAFT' && (
+              <button className="btn btn-primary" onClick={() => handleSubmitToExchange(selectedBid.id)}>Submit to Exchange</button>
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

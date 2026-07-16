@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS entities (
   regulatory_approvals TEXT,
   bank_details TEXT,
   is_penny_drop_verified INTEGER NOT NULL DEFAULT 0,
+  invoice_template_json TEXT,
   status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -133,6 +134,9 @@ CREATE TABLE IF NOT EXISTS contracts (
   pbg_amount REAL,
   pbg_type TEXT, -- BG / ISB / POI
   pbg_expiry TEXT,
+  rebate_rule TEXT,
+  lps_rule TEXT,
+  payment_security_type TEXT,
   version INTEGER NOT NULL DEFAULT 1,
   parent_contract_id TEXT,
   termination_reason TEXT,
@@ -630,5 +634,15 @@ CREATE TABLE IF NOT EXISTS market_rates (
   rate_date TEXT NOT NULL,
   mcp_rate REAL NOT NULL, -- market clearing price
   forecast_rate REAL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS contract_allocations (
+  id TEXT PRIMARY KEY,
+  ppa_id TEXT NOT NULL REFERENCES contracts(id),
+  psa_id TEXT NOT NULL REFERENCES contracts(id),
+  allocation_percent REAL NOT NULL,
+  effective_from TEXT NOT NULL,
+  effective_to TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

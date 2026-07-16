@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { DocumentManager } from '../../components/DocumentManager.jsx';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
 const CAN_APPROVE = ['SJVN_ADMIN', 'REIA_USER', 'FINANCE_USER'];
@@ -275,6 +276,14 @@ export default function Invoices() {
                 </div>
               </>
             )}
+
+            <div style={{ marginTop: 24, marginBottom: 24 }}>
+              <DocumentManager 
+                moduleName="REIA_BILLING"
+                contractId={selected.contract_id} 
+                title="Invoice Documents & Calculations" 
+              />
+            </div>
 
             <div className="form-actions" style={{ flexWrap: 'wrap' }}>
               {CAN_WRITE.includes(user?.role) && ['DRAFT', 'SUBMITTED'].includes(selected.status) && (

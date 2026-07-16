@@ -51,23 +51,35 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
 
+  // If this is a PSA, it might not have its own energy data directly. We must find its parent PPA via allocations.
+  let ppa_id = contract_id;
+  let alloc_percent = 100;
+  if (contract.contract_type === 'PSA') {
+    const alloc = db.prepare('SELECT ppa_id, allocation_percent FROM contract_allocations WHERE psa_id = ?').get(contract_id);
+    if (alloc) {
+      ppa_id = alloc.ppa_id;
+      alloc_percent = alloc.allocation_percent;
+    }
+  }
+
   const energy = db.prepare(`
     SELECT * FROM energy_data WHERE contract_id = ? AND period_month = ?
     ORDER BY (data_type = 'FINAL') DESC LIMIT 1
-  `).get(contract_id, period_month);
+  `).get(ppa_id, period_month);
   
-  if (!energy) return res.status(400).json({ error: 'No energy data found for this contract/period. Upload energy data first.' });
+  if (!energy) return res.status(400).json({ error: 'No energy data found for this contract (or parent PPA)/period. Upload energy data first.' });
 
   if (invoice_type === 'FINAL' && energy.status !== 'LOCKED') {
     return res.status(400).json({ error: 'Cannot generate FINAL invoice because energy data is not LOCKED.' });
   }
 
-  // Calculate base energy charges
-  let energyCharges = Math.round(energy.energy_mwh * contract.tariff_per_unit);
+  // Calculate base energy charges (split for PSAs)
+  const allocated_energy_mwh = (energy.energy_mwh * alloc_percent) / 100;
+  let energyCharges = Math.round(allocated_energy_mwh * contract.tariff_per_unit);
   
   // If seller_invoice_ids are provided, we should ensure the combined sum aligns, but for now we take the energy data directly
   // Trading Margin is 7 paise per unit (0.07 * 1000 = 70 per MWh) for SJVN's commission on PSAs
-  const tradingMargin = contract.contract_type === 'PSA' ? Math.round(energy.energy_mwh * 70) : 0;
+  const tradingMargin = contract.contract_type === 'PSA' ? Math.round(allocated_energy_mwh * 70) : 0;
   
   // Penalty for CUF shortfall can be added if availability/CUF < required
   const penalty = 0; // Configurable penalty
@@ -82,7 +94,7 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     invoice_type: invoice_type || (energy.data_type === 'FINAL' ? 'FINAL' : 'PROVISIONAL'),
     direction: contract.contract_type === 'PPA' ? 'SELLER_TO_SJVN' : 'SJVN_TO_BUYER',
     billing_period: period_month,
-    energy_mwh: energy.energy_mwh,
+    energy_mwh: allocated_energy_mwh,
     tariff_per_unit: contract.tariff_per_unit,
     energy_charges: energyCharges,
     transmission_charges: 0,
