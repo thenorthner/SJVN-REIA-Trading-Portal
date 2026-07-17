@@ -82,6 +82,11 @@ CREATE TABLE IF NOT EXISTS entities (
   bank_details TEXT,
   is_penny_drop_verified INTEGER NOT NULL DEFAULT 0,
   invoice_template_json TEXT,
+  logo_url TEXT,
+  corporate_email TEXT,
+  corporate_phone TEXT,
+  corporate_website TEXT,
+  tan_no TEXT,
   status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))

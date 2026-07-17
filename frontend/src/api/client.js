@@ -38,6 +38,11 @@ export const api = {
     get: (id) => g(`/entities/${id}`),
     create: (body) => p('/entities', body),
     update: (id, body) => put(`/entities/${id}`, body),
+    uploadLogo: (id, file) => {
+      const formData = new FormData();
+      formData.append('logo', file);
+      return client.post(`/entities/${id}/logo`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
+    },
     approve: (id, decision, remarks) => p(`/entities/${id}/approve`, { decision, remarks }),
   },
   users: {

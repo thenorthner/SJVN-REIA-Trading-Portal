@@ -13,6 +13,7 @@ const EMPTY_FORM = {
   capacity_mw: '', technology: '', contracted_capacity_mw: '',
   psa_tariff: '', supply_criteria: '', organization_details: '', regulatory_approvals: '', 
   address: '', bank_name: '', account_no: '', ifsc_code: '', branch_address: '',
+  corporate_email: '', corporate_phone: '', corporate_website: '', tan_no: '',
   contacts: [{ contact_type: 'COMMERCIAL', name: '', email: '', phone: '', is_primary: true }],
   documents: [{ doc_type: 'Registration', url: '', validity_end: '' }]
 };
@@ -94,6 +95,18 @@ export default function Entities() {
     }
   }
 
+  async function handleLogoUpload(e) {
+    if (!e.target.files[0]) return;
+    try {
+      await api.entities.uploadLogo(selected.id, e.target.files[0]);
+      alert('Logo uploaded successfully.');
+      api.entities.get(selected.id).then(setSelected);
+      load();
+    } catch (err) {
+      alert('Failed to upload logo');
+    }
+  }
+
   const columns = [
     { key: 'name', header: 'Name', render: (r) => (
       <div>
@@ -167,13 +180,17 @@ export default function Entities() {
           </div>
 
           <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
-            <h4 style={{ margin: '0 0 12px 0' }}>2. KYC & Compliance</h4>
+            <h4 style={{ margin: '0 0 12px 0' }}>2. Corporate & KYC</h4>
             <div className="form-grid">
               <Field label="PAN No"><input value={form.pan_no} onChange={e => setForm({...form, pan_no: e.target.value})} /></Field>
               <Field label="GST No"><input value={form.gst_no} onChange={e => setForm({...form, gst_no: e.target.value})} /></Field>
+              <Field label="TAN No"><input value={form.tan_no} onChange={e => setForm({...form, tan_no: e.target.value})} /></Field>
               <Field label="CIN"><input value={form.cin} onChange={e => setForm({...form, cin: e.target.value})} /></Field>
-              <Field label="Credit Rating"><input value={form.credit_rating} onChange={e => setForm({...form, credit_rating: e.target.value})} /></Field>
+              <Field label="Corporate Email"><input type="email" value={form.corporate_email} onChange={e => setForm({...form, corporate_email: e.target.value})} /></Field>
+              <Field label="Corporate Phone"><input value={form.corporate_phone} onChange={e => setForm({...form, corporate_phone: e.target.value})} /></Field>
+              <Field label="Corporate Website"><input value={form.corporate_website} onChange={e => setForm({...form, corporate_website: e.target.value})} /></Field>
               <Field label="Address"><input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></Field>
+              <Field label="Credit Rating"><input value={form.credit_rating} onChange={e => setForm({...form, credit_rating: e.target.value})} /></Field>
             </div>
           </div>
 
@@ -205,16 +222,33 @@ export default function Entities() {
         <Modal open={true} onClose={() => setSelected(null)} title={`Stakeholder: ${selected.name}`} width={800}>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 20 }}>
             <div style={{ flex: 1, minWidth: 300 }}>
-              <h4 style={{ margin: '0 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Identity & KYC</h4>
+              <h4 style={{ margin: '0 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Identity & Corporate Info</h4>
+              {selected.logo_url && (
+                <div style={{ marginBottom: 16 }}>
+                  <img src={`http://localhost:4000${selected.logo_url}`} alt="Logo" style={{ maxHeight: 80, objectFit: 'contain' }} />
+                </div>
+              )}
+              {CAN_WRITE.includes(user?.role) && (
+                <div style={{ marginBottom: 16 }}>
+                  <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer' }}>
+                    Upload Invoice Logo
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleLogoUpload} />
+                  </label>
+                </div>
+              )}
               <table className="detail-table">
                 <tbody>
                   <tr><td>Type</td><td><Badge status={selected.entity_type} /></td></tr>
                   <tr><td>Hierarchy</td><td>{selected.parent_name ? `SPV of ${selected.parent_name}` : 'Parent Entity'}</td></tr>
                   <tr><td>Category</td><td>{selected.category}</td></tr>
                   <tr><td>PAN</td><td>{selected.pan_no || '-'}</td></tr>
+                  <tr><td>TAN</td><td>{selected.tan_no || '-'}</td></tr>
                   <tr><td>GST</td><td>{selected.gst_no || '-'}</td></tr>
                   <tr><td>CIN</td><td>{selected.cin || '-'}</td></tr>
                   <tr><td>Address</td><td>{selected.address || '-'}</td></tr>
+                  <tr><td>Email</td><td>{selected.corporate_email || '-'}</td></tr>
+                  <tr><td>Phone</td><td>{selected.corporate_phone || '-'}</td></tr>
+                  <tr><td>Website</td><td>{selected.corporate_website || '-'}</td></tr>
                   <tr><td>Credit Rating</td><td>{selected.credit_rating || '-'}</td></tr>
                   <tr><td>Blacklist Status</td><td>{selected.is_blacklisted ? <Badge status="REJECTED" label="BLACKLISTED" /> : <Badge status="ACTIVE" label="Clear" />}</td></tr>
                 </tbody>

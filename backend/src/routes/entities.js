@@ -2,6 +2,10 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification } from '../util.js';
+import multer from 'multer';
+import path from 'path';
+
+const upload = multer({ dest: 'uploads/' });
 
 const router = Router();
 router.use(requireAuth);
@@ -47,10 +51,12 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req
     db.prepare(`
       INSERT INTO entities (id, parent_entity_id, entity_type, category, name, pan_no, gst_no, cin, credit_rating,
         is_blacklisted, capacity_mw, technology, contracted_capacity_mw, psa_tariff, supply_criteria,
-        organization_details, regulatory_approvals, bank_details, is_penny_drop_verified, invoice_template_json, status)
+        organization_details, regulatory_approvals, bank_details, is_penny_drop_verified, invoice_template_json, status,
+        logo_url, corporate_email, corporate_phone, corporate_website, tan_no)
       VALUES (@id, @parent_entity_id, @entity_type, @category, @name, @pan_no, @gst_no, @cin, @credit_rating,
         0, @capacity_mw, @technology, @contracted_capacity_mw, @psa_tariff, @supply_criteria,
-        @organization_details, @regulatory_approvals, @bank_details, 0, @invoice_template_json, 'PENDING')
+        @organization_details, @regulatory_approvals, @bank_details, 0, @invoice_template_json, 'PENDING',
+        @logo_url, @corporate_email, @corporate_phone, @corporate_website, @tan_no)
     `).run({
       id,
       parent_entity_id: body.parent_entity_id ?? null,
@@ -70,6 +76,11 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req
       regulatory_approvals: body.regulatory_approvals ?? null,
       bank_details: body.bank_details ?? null,
       invoice_template_json: body.invoice_template_json ?? null,
+      logo_url: body.logo_url ?? null,
+      corporate_email: body.corporate_email ?? null,
+      corporate_phone: body.corporate_phone ?? null,
+      corporate_website: body.corporate_website ?? null,
+      tan_no: body.tan_no ?? null,
     });
 
     if (body.contacts && Array.isArray(body.contacts)) {
@@ -97,7 +108,8 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
   if (!existing) return res.status(404).json({ error: 'Entity not found' });
 
   const fields = ['category', 'name', 'pan_no', 'gst_no', 'cin', 'credit_rating', 'capacity_mw', 'technology', 'contracted_capacity_mw', 'psa_tariff',
-    'supply_criteria', 'organization_details', 'regulatory_approvals', 'bank_details', 'invoice_template_json'];
+    'supply_criteria', 'organization_details', 'regulatory_approvals', 'bank_details', 'invoice_template_json',
+    'logo_url', 'corporate_email', 'corporate_phone', 'corporate_website', 'tan_no'];
   
   const updates = {};
   let isHighRisk = false;
@@ -124,7 +136,9 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
       capacity_mw=@capacity_mw, technology=@technology, contracted_capacity_mw=@contracted_capacity_mw, psa_tariff=@psa_tariff, supply_criteria=@supply_criteria,
       organization_details=@organization_details, regulatory_approvals=@regulatory_approvals,
       bank_details=@bank_details, is_penny_drop_verified=@is_penny_drop_verified, 
-      invoice_template_json=@invoice_template_json, updated_at=datetime('now')
+      invoice_template_json=@invoice_template_json,
+      logo_url=@logo_url, corporate_email=@corporate_email, corporate_phone=@corporate_phone, corporate_website=@corporate_website, tan_no=@tan_no,
+      updated_at=datetime('now')
     WHERE id=@id
   `).run(merged);
 
@@ -152,5 +166,17 @@ router.post('/:id/approve', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: `ENTITY_${decision}`, module: 'REIA', entityType: 'entity', entityId: entity.id, details: { remarks } });
   res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id)));
 });
+
+router.post('/:id/logo', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), upload.single('logo'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No logo file provided' });
+  const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  
+  const logoUrl = `/uploads/${req.file.filename}`;
+  db.prepare('UPDATE entities SET logo_url = ?, updated_at = datetime("now") WHERE id = ?').run(logoUrl, entity.id);
+  
+  res.json({ success: true, logo_url: logoUrl });
+});
+
 
 export default router;

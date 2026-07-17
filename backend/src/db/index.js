@@ -140,4 +140,23 @@ try {
   }
 }
 
+function migrateEntityCorporateDetails() {
+  const columns = db.pragma('table_info(entities)').map(c => c.name);
+  if (!columns.includes('logo_url')) {
+    db.exec(`
+      ALTER TABLE entities ADD COLUMN logo_url TEXT;
+      ALTER TABLE entities ADD COLUMN corporate_email TEXT;
+      ALTER TABLE entities ADD COLUMN corporate_phone TEXT;
+      ALTER TABLE entities ADD COLUMN corporate_website TEXT;
+      ALTER TABLE entities ADD COLUMN tan_no TEXT;
+    `);
+  }
+}
+
+try {
+  migrateEntityCorporateDetails();
+} catch (e) {
+  console.error('Failed to migrate entity corporate details:', e);
+}
+
 export default db;

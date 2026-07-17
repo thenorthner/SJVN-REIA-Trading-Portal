@@ -29,9 +29,24 @@ export function generateInvoicePdf(invoice, contract, seller, buyer, res) {
   doc.pipe(res);
 
   // --- HEADER ---
-  doc.fontSize(16).font('Helvetica-Bold').text('SJVN GREEN ENERGY LIMITED', { align: 'center' });
-  doc.fontSize(10).font('Helvetica').text('(A wholly owned subsidiary of SJVN Ltd., A joint venture of Govt. of India & Govt. of H.P.)', { align: 'center' });
-  doc.text('Regd. & Corporate Office: Corporate Headquarters, Shakti Sadan, Shanan, Shimla-171006 (H.P.)', { align: 'center' });
+  const headerTopY = doc.y;
+  
+  if (seller?.logo_url) {
+    try {
+      // logo_url is likely something like /uploads/filename
+      const logoPath = process.cwd() + seller.logo_url;
+      doc.image(logoPath, MARGIN, headerTopY, { width: 80, fit: [80, 80] });
+    } catch (e) {
+      console.error('Failed to load logo:', e);
+    }
+  }
+
+  doc.fontSize(12).font('Helvetica-Bold').text(seller?.name?.toUpperCase() || 'ENERGY GENERATOR', MARGIN + 100, headerTopY, { align: 'right' });
+  doc.fontSize(9).font('Helvetica').text(`CIN: ${seller?.cin || '-'}`, { align: 'right' });
+  doc.text(seller?.address || '-', { align: 'right' });
+  doc.text(`Email: ${seller?.corporate_email || '-'}    Phone: ${seller?.corporate_phone || '-'}    Website: ${seller?.corporate_website || '-'}`, { align: 'right' });
+  
+  doc.moveDown(2);
   doc.moveDown(1);
   doc.fontSize(12).font('Helvetica-Bold').text('MONTHLY ENERGY BILL', { align: 'center', underline: true });
   doc.moveDown(1);
@@ -74,9 +89,10 @@ export function generateInvoicePdf(invoice, contract, seller, buyer, res) {
   doc.font('Helvetica-Bold').text('Supplier Details:', MARGIN + 260, gstY + 5);
   doc.font('Helvetica').text(`GST No: ${seller?.gst_no || '-'}`, MARGIN + 260, gstY + 20);
   doc.text(`PAN No: ${seller?.pan_no || '-'}`, MARGIN + 260, gstY + 35);
-  doc.text(`CIN No: ${seller?.cin || '-'}`, MARGIN + 260, gstY + 50);
+  doc.text(`TAN No: ${seller?.tan_no || '-'}`, MARGIN + 260, gstY + 50);
+  doc.text(`CIN No: ${seller?.cin || '-'}`, MARGIN + 260, gstY + 65);
   
-  doc.y = gstY + 70;
+  doc.y = gstY + 85;
   
   // Reference Line
   doc.font('Helvetica').text(`Ref: Power Purchase Agreement (PPA) dated ${new Date(contract.created_at).toLocaleDateString()} for ${contract.contracted_capacity_mw} MW ${contract.technology} power.`);
