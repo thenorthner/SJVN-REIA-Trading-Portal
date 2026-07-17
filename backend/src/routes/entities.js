@@ -173,7 +173,7 @@ router.post('/:id/logo', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
   
   const logoUrl = `/uploads/${req.file.filename}`;
-  db.prepare('UPDATE entities SET logo_url = ?, updated_at = datetime("now") WHERE id = ?').run(logoUrl, entity.id);
+  db.prepare('UPDATE entities SET logo_url = ?, updated_at = datetime('now') WHERE id = ?').run(logoUrl, entity.id);
   
   res.json({ success: true, logo_url: logoUrl });
 });
