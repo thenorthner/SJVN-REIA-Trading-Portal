@@ -48,6 +48,7 @@ const NAV_SELLER = [
     roles: null,
     links: [
       { to: '/seller', label: '🏠 My Dashboard', end: true },
+      { to: '/seller/team', label: '👥 My Team' },
       { to: '/seller/contracts', label: '📄 My Contracts (PPAs)' },
       { to: '/seller/energy-data', label: '⚡ Energy Data' },
       { to: '/seller/invoices', label: '🧾 My Invoices' },
@@ -65,6 +66,7 @@ const NAV_BUYER = [
     roles: null,
     links: [
       { to: '/buyer', label: '🏠 My Dashboard', end: true },
+      { to: '/buyer/team', label: '👥 My Team' },
       { to: '/buyer/contracts', label: '📄 My PSAs' },
       { to: '/buyer/energy-data', label: '⚡ Energy Allocation' },
       { to: '/buyer/invoices', label: '🧾 Payable Invoices' },

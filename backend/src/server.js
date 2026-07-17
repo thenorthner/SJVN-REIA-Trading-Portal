@@ -27,17 +27,18 @@ import buyerDashboardRoutes from './routes/buyerDashboard.js';
 import notificationsRoutes from './routes/notifications.js';
 import auditLogsRoutes from './routes/auditLogs.js';
 import documentsRoutes from './routes/documents.js';
+import usersRoutes from './routes/users.js';
 
-import { assignTraceId } from './middleware/auth.js';
+import { assignTraceId, requireAuth } from './middleware/auth.js';
 
 dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.use(assignTraceId);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'sjvn-energy-platform-backend' }));
@@ -46,13 +47,14 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'sjvn-ene
 app.use('/api/auth', authRoutes);
 
 // 3A. REIA Billing, Contract and Settlement Management System
-app.use('/api/entities', entitiesRoutes);
-app.use('/api/contracts', contractsRoutes);
-app.use('/api/energy-data', energyDataRoutes);
-app.use('/api/invoices', invoicesRoutes);
-app.use('/api/disputes', disputesRoutes);
+app.use('/api/entities', requireAuth, entitiesRoutes);
+app.use('/api/contracts', requireAuth, contractsRoutes);
+app.use('/api/energy-data', requireAuth, energyDataRoutes);
+app.use('/api/invoices', requireAuth, invoicesRoutes);
+app.use('/api/disputes', requireAuth, disputesRoutes);
 app.use('/api/payment-security', paymentSecurityRoutes);
 app.use('/api/reconciliation', reconciliationRoutes);
+app.use('/api/users', usersRoutes);
 
 // 3B. Power Trading Management System
 app.use('/api/trading-clients', tradingClientsRoutes);

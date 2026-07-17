@@ -40,6 +40,11 @@ export const api = {
     update: (id, body) => put(`/entities/${id}`, body),
     approve: (id, decision, remarks) => p(`/entities/${id}/approve`, { decision, remarks }),
   },
+  users: {
+    list: () => g('/users'),
+    create: (body) => p('/users', body),
+    updateStatus: (id, is_active) => put(`/users/${id}/status`, { is_active })
+  },
   documents: {
     list: (params) => g('/documents', params),
     upload: (formData) => client.post('/documents/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
