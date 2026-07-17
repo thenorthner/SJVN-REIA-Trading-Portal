@@ -73,6 +73,7 @@ export const api = {
   invoices: {
     list: (params) => g('/invoices', params),
     get: (id) => g(`/invoices/${id}`),
+    downloadPdf: (id) => client.get(`/invoices/${id}/pdf`, { responseType: 'blob' }).then(res => res.data),
     generate: (body) => p('/invoices/generate', body),
     submit: (body) => p('/invoices', body),
     submitL2: (id) => p(`/invoices/${id}/submit-l2`),

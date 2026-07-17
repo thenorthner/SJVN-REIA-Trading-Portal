@@ -84,6 +84,22 @@ export default function Invoices() {
     refreshSelected(selected.id);
   }
 
+  async function handleDownloadPdf() {
+    try {
+      const blob = await api.invoices.downloadPdf(selected.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Invoice_${selected.invoice_no}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Failed to download PDF');
+    }
+  }
+
   async function handlePayment(e) {
     e.preventDefault();
     await api.invoices.recordPayment(selected.id, { ...payForm, amount: Number(payForm.amount), deduction: payForm.deduction ? Number(payForm.deduction) : 0 });
@@ -175,9 +191,9 @@ export default function Invoices() {
         {selected && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-              <a href={`http://localhost:4000/api/invoices/${selected.id}/pdf`} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline">
+              <button onClick={handleDownloadPdf} className="btn btn-sm btn-outline">
                 Download PDF Bill
-              </a>
+              </button>
             </div>
             <div className="detail-grid mb-0">
               <div className="detail-item"><span className="detail-label">Status</span><span className="detail-value"><Badge status={selected.status} /></span></div>
