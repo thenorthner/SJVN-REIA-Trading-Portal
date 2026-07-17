@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL CHECK (role IN (
     'IT_SUPER_ADMIN','REIA_ADMIN','TRADING_ADMIN','FINANCE_USER',
     'MANAGEMENT','SELLER_L1','SELLER_L2','SELLER_L3','BUYER_L1','BUYER_L2','BUYER_L3','TRADING_CLIENT','COMPLIANCE_AUDITOR',
-    'SJVN_ADMIN', 'SELLER', 'BUYER' -- Legacy roles preserved for existing data
+    'SJVN_ADMIN', 'SELLER', 'BUYER', 'REIA_USER', 'TRADING_USER' -- Legacy roles preserved for existing data
   )),
   linked_entity_id TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,

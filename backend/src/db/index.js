@@ -135,6 +135,8 @@ try {
 } catch (e) {
   if (e.message.includes('old_users')) {
     db.exec('ROLLBACK; PRAGMA foreign_keys=on;').catch(() => {});
+  } else {
+    db.exec('ROLLBACK; PRAGMA foreign_keys=on;');
   }
 }
 

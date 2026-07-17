@@ -38,15 +38,6 @@ router.get('/', (req, res) => {
 
 import { generateInvoicePdf } from '../scripts/invoicePdf.js';
 
-router.get('/:id', (req, res) => {
-  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
-  const approvals = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? ORDER BY level').all(req.params.id);
-  const payments = db.prepare('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date').all(req.params.id);
-  const disputes = db.prepare('SELECT * FROM disputes WHERE invoice_id = ? ORDER BY created_at DESC').all(req.params.id);
-  res.json({ ...withContract(inv), approvals, payments, disputes });
-});
-
 router.get('/:id/pdf', (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
@@ -58,7 +49,23 @@ router.get('/:id/pdf', (req, res) => {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename=Invoice_${inv.invoice_no}.pdf`);
   
-  generateInvoicePdf(inv, contract, seller, buyer, res);
+  try {
+    generateInvoicePdf(inv, contract, seller, buyer, res);
+  } catch (err) {
+    console.error('PDF Generation Error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to generate PDF', details: err.message });
+    }
+  }
+});
+
+router.get('/:id', (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  const approvals = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? ORDER BY level').all(req.params.id);
+  const payments = db.prepare('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date').all(req.params.id);
+  const disputes = db.prepare('SELECT * FROM disputes WHERE invoice_id = ? ORDER BY created_at DESC').all(req.params.id);
+  res.json({ ...withContract(inv), approvals, payments, disputes });
 });
 
 // Automated invoice generation based on contract + locked energy data
