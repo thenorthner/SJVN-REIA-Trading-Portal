@@ -222,20 +222,6 @@ export default function Entities() {
         <Modal open={true} onClose={() => setSelected(null)} title={`Stakeholder: ${selected.name}`} width={800}>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 20 }}>
             <div style={{ flex: 1, minWidth: 300 }}>
-              <h4 style={{ margin: '0 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Identity & Corporate Info</h4>
-              {selected.logo_url && (
-                <div style={{ marginBottom: 16 }}>
-                  <img src={`http://localhost:4000${selected.logo_url}`} alt="Logo" style={{ maxHeight: 80, objectFit: 'contain' }} />
-                </div>
-              )}
-              {CAN_WRITE.includes(user?.role) && (
-                <div style={{ marginBottom: 16 }}>
-                  <label className="btn btn-sm btn-outline" style={{ cursor: 'pointer' }}>
-                    Upload Invoice Logo
-                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleLogoUpload} />
-                  </label>
-                </div>
-              )}
               <table className="detail-table">
                 <tbody>
                   <tr><td>Type</td><td><Badge status={selected.entity_type} /></td></tr>
@@ -285,10 +271,23 @@ export default function Entities() {
 
           {selected.entity_type === 'SELLER' && CAN_WRITE.includes(user?.role) && (
             <div style={{ marginTop: 24, padding: 16, background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 8 }}>
-              <h4 style={{ margin: '0 0 8px 0', color: '#334155' }}>Invoice Letterhead / Template</h4>
-              <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
-                Please upload the Seller's invoice letterhead template (Word Document or Image) in the <strong>Documents</strong> section below. Ensure you select <strong>"Invoice Letterhead Template (Word/Image)"</strong> as the document type.
-              </p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 8px 0', color: '#334155' }}>Invoice Letterhead / Template</h4>
+                  <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
+                    Please upload the Seller's invoice logo below. This logo will be displayed on the top left of the generated PDF.
+                  </p>
+                </div>
+                <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
+                  Upload Logo
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleLogoUpload} />
+                </label>
+              </div>
+              {selected.logo_url && (
+                <div style={{ marginTop: 16 }}>
+                  <img src={`http://localhost:4000${selected.logo_url}`} alt="Logo" style={{ maxHeight: 60, objectFit: 'contain' }} />
+                </div>
+              )}
             </div>
           )}
           
