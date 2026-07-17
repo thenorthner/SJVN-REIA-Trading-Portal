@@ -63,6 +63,16 @@ export default function Invoices() {
     await refreshSelected((await api.invoices.submitForApproval(selected.id)).id);
   }
 
+  async function handleSubmitL2() {
+    await api.invoices.submitL2(selected.id);
+    refreshSelected(selected.id);
+  }
+
+  async function handleApproveL2() {
+    await api.invoices.approveL2(selected.id, 'Approved by L2');
+    refreshSelected(selected.id);
+  }
+
   async function handleAct(level, decision) {
     await api.invoices.act(selected.id, level, decision, approveComments[level] || '');
     setApproveComments({ ...approveComments, [level]: '' });
@@ -164,6 +174,11 @@ export default function Invoices() {
       <Modal open={!!selected} onClose={() => setSelected(null)} title={selected?.invoice_no} width={720}>
         {selected && (
           <div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+              <a href={`http://localhost:4000/api/invoices/${selected.id}/pdf`} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline">
+                Download PDF Bill
+              </a>
+            </div>
             <div className="detail-grid mb-0">
               <div className="detail-item"><span className="detail-label">Status</span><span className="detail-value"><Badge status={selected.status} /></span></div>
               <div className="detail-item"><span className="detail-label">Contract</span><span className="detail-value">{selected.contract_no}</span></div>
@@ -327,8 +342,14 @@ export default function Invoices() {
             </div>
 
             <div className="form-actions" style={{ flexWrap: 'wrap' }}>
+              {['SELLER_L1', 'BUYER_L1'].includes(user?.role) && selected.status === 'DRAFT' && (
+                <button className="btn btn-secondary" onClick={handleSubmitL2}>Submit to L2 (Checker)</button>
+              )}
+              {['SELLER_L2', 'SELLER_L3', 'BUYER_L2', 'BUYER_L3'].includes(user?.role) && selected.status === 'PENDING_L2' && (
+                <button className="btn btn-primary" onClick={handleApproveL2}>Approve & Submit to SJVN</button>
+              )}
               {CAN_WRITE.includes(user?.role) && ['DRAFT', 'SUBMITTED'].includes(selected.status) && (
-                <button className="btn btn-secondary" onClick={handleSubmitForApproval}>Submit for Approval</button>
+                <button className="btn btn-secondary" onClick={handleSubmitForApproval}>Submit for SJVN Approval</button>
               )}
               {CAN_WRITE.includes(user?.role) && selected.status === 'APPROVED' && selected.direction === 'SJVN_TO_BUYER' && (
                 <button className="btn btn-primary" onClick={handleSend}>Send to Buyer</button>

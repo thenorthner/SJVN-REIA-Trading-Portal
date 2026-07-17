@@ -91,7 +91,51 @@ function migrateBillingSchema() {
     `);
   }
 }
-
 migrateBillingSchema();
+
+function migrateRBACSchema() {
+  const cols = db.prepare('PRAGMA table_info(entities)').all().map(c => c.name);
+  if (!cols.includes('address')) {
+    db.exec(`
+      ALTER TABLE entities ADD COLUMN address TEXT;
+      ALTER TABLE entities ADD COLUMN bank_name TEXT;
+      ALTER TABLE entities ADD COLUMN account_no TEXT;
+      ALTER TABLE entities ADD COLUMN ifsc_code TEXT;
+      ALTER TABLE entities ADD COLUMN branch_address TEXT;
+    `);
+  }
+  
+  db.exec(`
+    PRAGMA foreign_keys=off;
+    BEGIN TRANSACTION;
+    
+    ALTER TABLE users RENAME TO old_users;
+    ALTER TABLE invoices RENAME TO old_invoices;
+  `);
+  
+  db.exec(schema);
+  
+  db.exec(`
+    INSERT INTO users (id, name, email, password_hash, role, linked_entity_id, is_active, created_at)
+    SELECT id, name, email, password_hash, role, linked_entity_id, is_active, created_at FROM old_users;
+    
+    INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh, tariff_per_unit, energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees, transmission_charges, total_amount, invoice_breakdown_json, lps, penalty, trading_margin, taxes, other_adjustments, disputed_amount, due_date, status, version, parent_invoice_id, created_by, created_at, updated_at)
+    SELECT id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh, tariff_per_unit, energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees, transmission_charges, total_amount, invoice_breakdown_json, lps, penalty, trading_margin, taxes, other_adjustments, disputed_amount, due_date, status, version, parent_invoice_id, created_by, created_at, updated_at FROM old_invoices;
+    
+    DROP TABLE old_users;
+    DROP TABLE old_invoices;
+    
+    COMMIT;
+    PRAGMA foreign_keys=on;
+  `);
+}
+
+try {
+  migrateRBACSchema();
+} catch (e) {
+  if (e.message.includes('old_users')) {
+    db.exec('ROLLBACK; PRAGMA foreign_keys=on;').catch(() => {});
+  }
+}
 
 export default db;

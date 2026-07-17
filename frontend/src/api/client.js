@@ -28,6 +28,7 @@ const put = (url, body) => client.put(url, body).then((r) => r.data);
 const del = (url) => client.delete(url).then((r) => r.data);
 
 export const api = {
+  client,
   auth: {
     login: (email, password) => p('/auth/login', { email, password }),
     me: () => g('/auth/me'),
@@ -69,6 +70,8 @@ export const api = {
     get: (id) => g(`/invoices/${id}`),
     generate: (body) => p('/invoices/generate', body),
     submit: (body) => p('/invoices', body),
+    submitL2: (id) => p(`/invoices/${id}/submit-l2`),
+    approveL2: (id, comments) => p(`/invoices/${id}/approve-l2`, { comments }),
     submitForApproval: (id) => p(`/invoices/${id}/submit-for-approval`),
     act: (id, level, decision, comments) => p(`/invoices/${id}/approvals/${level}/act`, { decision, comments }),
     send: (id) => p(`/invoices/${id}/send`),

@@ -18,23 +18,25 @@ router.get('/', (req, res) => {
   const { status, contract_id, direction, billing_period } = req.query;
   let sql, params = [];
   
-  if (req.user.role === 'SELLER') {
+  if (req.user.role.startsWith('SELLER')) {
     sql = 'SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.seller_id = ?';
     params.push(req.user.linked_entity_id);
-  } else if (req.user.role === 'BUYER') {
+  } else if (req.user.role.startsWith('BUYER')) {
     sql = 'SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.buyer_id = ?';
     params.push(req.user.linked_entity_id);
   } else {
-    sql = 'SELECT * FROM invoices WHERE 1=1';
+    sql = 'SELECT i.* FROM invoices i WHERE 1=1';
   }
   
-  if (status) { sql += ' AND status = ?'; params.push(status); }
-  if (contract_id) { sql += ' AND contract_id = ?'; params.push(contract_id); }
-  if (direction) { sql += ' AND direction = ?'; params.push(direction); }
-  if (billing_period) { sql += ' AND billing_period = ?'; params.push(billing_period); }
-  sql += ' ORDER BY created_at DESC';
+  if (status) { sql += ' AND i.status = ?'; params.push(status); }
+  if (contract_id) { sql += ' AND i.contract_id = ?'; params.push(contract_id); }
+  if (direction) { sql += ' AND i.direction = ?'; params.push(direction); }
+  if (billing_period) { sql += ' AND i.billing_period = ?'; params.push(billing_period); }
+  sql += ' ORDER BY i.created_at DESC';
   res.json(db.prepare(sql).all(...params).map(withContract));
 });
+
+import { generateInvoicePdf } from '../scripts/invoicePdf.js';
 
 router.get('/:id', (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
@@ -43,6 +45,20 @@ router.get('/:id', (req, res) => {
   const payments = db.prepare('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date').all(req.params.id);
   const disputes = db.prepare('SELECT * FROM disputes WHERE invoice_id = ? ORDER BY created_at DESC').all(req.params.id);
   res.json({ ...withContract(inv), approvals, payments, disputes });
+});
+
+router.get('/:id/pdf', (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(inv.contract_id);
+  const seller = db.prepare('SELECT * FROM entities WHERE id = ?').get(contract.seller_id);
+  const buyer = db.prepare('SELECT * FROM entities WHERE id = ?').get(contract.buyer_id);
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename=Invoice_${inv.invoice_no}.pdf`);
+  
+  generateInvoicePdf(inv, contract, seller, buyer, res);
 });
 
 // Automated invoice generation based on contract + locked energy data
@@ -279,6 +295,29 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
   }
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: `APPROVAL_${decision}`, module: 'REIA', entityType: 'invoice', entityId: req.params.id, details: { level: req.params.level, comments } });
   res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id));
+});
+
+// Submit invoice to L2 (Maker)
+router.post('/:id/submit-l2', requireRole('SELLER_L1', 'BUYER_L1', ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const inv = db.prepare('SELECT status FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (inv.status !== 'DRAFT') return res.status(400).json({ error: 'Only DRAFT invoices can be submitted to L2' });
+
+  db.prepare("UPDATE invoices SET status = 'PENDING_L2', updated_at = datetime('now') WHERE id = ?").run(req.params.id);
+  logAudit(req.traceId, 'SUBMIT_L2', 'INVOICES', req.params.id, 'DRAFT', 'PENDING_L2', req.user);
+  res.json({ success: true });
+});
+
+// Approve invoice from L2 to SJVN (Checker)
+router.post('/:id/approve-l2', requireRole('SELLER_L2', 'SELLER_L3', 'BUYER_L2', 'BUYER_L3', ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const { comments } = req.body;
+  const inv = db.prepare('SELECT status FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (inv.status !== 'PENDING_L2') return res.status(400).json({ error: 'Only PENDING_L2 invoices can be approved by L2' });
+
+  db.prepare("UPDATE invoices SET status = 'SUBMITTED', updated_at = datetime('now') WHERE id = ?").run(req.params.id);
+  logAudit(req.traceId, 'APPROVE_L2', 'INVOICES', req.params.id, 'PENDING_L2', 'SUBMITTED', req.user);
+  res.json({ success: true });
 });
 
 // Distribution - mark invoice as sent to buyer

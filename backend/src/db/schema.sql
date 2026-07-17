@@ -12,8 +12,9 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN (
-    'SJVN_ADMIN','REIA_USER','TRADING_USER','FINANCE_USER',
-    'MANAGEMENT','SELLER','BUYER','TRADING_CLIENT','COMPLIANCE_AUDITOR'
+    'IT_SUPER_ADMIN','REIA_ADMIN','TRADING_ADMIN','FINANCE_USER',
+    'MANAGEMENT','SELLER_L1','SELLER_L2','SELLER_L3','BUYER_L1','BUYER_L2','BUYER_L3','TRADING_CLIENT','COMPLIANCE_AUDITOR',
+    'SJVN_ADMIN', 'SELLER', 'BUYER' -- Legacy roles preserved for existing data
   )),
   linked_entity_id TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
@@ -71,9 +72,13 @@ CREATE TABLE IF NOT EXISTS entities (
   technology TEXT, -- Solar / Wind / Hybrid / FDRE / Peak Power / PSP / Storage
   contracted_capacity_mw REAL,
   psa_tariff REAL,
-  supply_criteria TEXT,
+  address TEXT,
   organization_details TEXT,
   regulatory_approvals TEXT,
+  bank_name TEXT,
+  account_no TEXT,
+  ifsc_code TEXT,
+  branch_address TEXT,
   bank_details TEXT,
   is_penny_drop_verified INTEGER NOT NULL DEFAULT 0,
   invoice_template_json TEXT,
@@ -212,7 +217,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   disputed_amount REAL NOT NULL DEFAULT 0,
   due_date TEXT,
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN (
-    'DRAFT','SUBMITTED','UNDER_APPROVAL','APPROVED','REJECTED',
+    'DRAFT','PENDING_L2','SUBMITTED','UNDER_APPROVAL','APPROVED','REJECTED',
     'SENT','DISPUTED','PARTIALLY_PAID','PAID','CANCELLED'
   )),
   version INTEGER NOT NULL DEFAULT 1,

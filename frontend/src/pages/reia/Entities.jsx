@@ -11,7 +11,8 @@ const EMPTY_FORM = {
   parent_entity_id: '', entity_type: 'SELLER', category: '', name: '', 
   pan_no: '', gst_no: '', cin: '', credit_rating: '',
   capacity_mw: '', technology: '', contracted_capacity_mw: '',
-  psa_tariff: '', supply_criteria: '', organization_details: '', regulatory_approvals: '', bank_details: '',
+  psa_tariff: '', supply_criteria: '', organization_details: '', regulatory_approvals: '', 
+  address: '', bank_name: '', account_no: '', ifsc_code: '', branch_address: '',
   contacts: [{ contact_type: 'COMMERCIAL', name: '', email: '', phone: '', is_primary: true }],
   documents: [{ doc_type: 'Registration', url: '', validity_end: '' }]
 };
@@ -172,6 +173,7 @@ export default function Entities() {
               <Field label="GST No"><input value={form.gst_no} onChange={e => setForm({...form, gst_no: e.target.value})} /></Field>
               <Field label="CIN"><input value={form.cin} onChange={e => setForm({...form, cin: e.target.value})} /></Field>
               <Field label="Credit Rating"><input value={form.credit_rating} onChange={e => setForm({...form, credit_rating: e.target.value})} /></Field>
+              <Field label="Address"><input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></Field>
             </div>
           </div>
 
@@ -180,7 +182,10 @@ export default function Entities() {
             <div className="form-grid">
               <Field label="Technology"><input placeholder="Solar / Wind" value={form.technology} onChange={(e) => setForm({ ...form, technology: e.target.value })} /></Field>
               <Field label="Capacity (MW)"><input type="number" step="0.01" value={form.capacity_mw} onChange={(e) => setForm({ ...form, capacity_mw: e.target.value })} /></Field>
-              <Field label="Bank Details (A/C, IFSC)"><input required value={form.bank_details} onChange={(e) => setForm({ ...form, bank_details: e.target.value })} /></Field>
+              <Field label="Bank Name"><input required value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })} /></Field>
+              <Field label="Account No"><input required value={form.account_no} onChange={(e) => setForm({ ...form, account_no: e.target.value })} /></Field>
+              <Field label="IFSC Code"><input required value={form.ifsc_code} onChange={(e) => setForm({ ...form, ifsc_code: e.target.value })} /></Field>
+              <Field label="Branch Address"><input required value={form.branch_address} onChange={(e) => setForm({ ...form, branch_address: e.target.value })} /></Field>
               <Field label="Regulatory Approvals"><input value={form.regulatory_approvals} onChange={(e) => setForm({ ...form, regulatory_approvals: e.target.value })} /></Field>
             </div>
           </div>
@@ -209,6 +214,7 @@ export default function Entities() {
                   <tr><td>PAN</td><td>{selected.pan_no || '-'}</td></tr>
                   <tr><td>GST</td><td>{selected.gst_no || '-'}</td></tr>
                   <tr><td>CIN</td><td>{selected.cin || '-'}</td></tr>
+                  <tr><td>Address</td><td>{selected.address || '-'}</td></tr>
                   <tr><td>Credit Rating</td><td>{selected.credit_rating || '-'}</td></tr>
                   <tr><td>Blacklist Status</td><td>{selected.is_blacklisted ? <Badge status="REJECTED" label="BLACKLISTED" /> : <Badge status="ACTIVE" label="Clear" />}</td></tr>
                 </tbody>
@@ -221,11 +227,12 @@ export default function Entities() {
                   <tr>
                     <td>Bank Details</td>
                     <td>
-                      {selected.bank_details}
+                      <div>{selected.account_no || '-'}, {selected.bank_name || '-'}</div>
+                      <div style={{fontSize: 11, color: '#666'}}>IFSC: {selected.ifsc_code || '-'} | Branch: {selected.branch_address || '-'}</div>
                       <div style={{ marginTop: 6 }}>
-                        {selected.is_penny_drop_verified 
-                          ? <Badge status="ACTIVE" label="Penny Drop Verified" /> 
-                          : CAN_APPROVE.includes(user?.role) && <button className="btn btn-outline" style={{padding: '2px 8px', fontSize: 11}} onClick={handlePennyDrop}>Verify Penny Drop (₹1)</button>}
+                        <button className="btn btn-sm btn-outline" onClick={handlePennyDrop} disabled={selected.is_penny_drop_verified}>
+                          {selected.is_penny_drop_verified ? 'Verified ✓' : 'Verify Penny Drop (₹1)'}
+                        </button>
                       </div>
                     </td>
                   </tr>
