@@ -170,13 +170,54 @@ export default function Invoices() {
               <div className="detail-item"><span className="detail-label">Direction</span><span className="detail-value">{selected.direction === 'SJVN_TO_BUYER' ? 'SJVN → Buyer' : 'Seller → SJVN'}</span></div>
               <div className="detail-item"><span className="detail-label">Billing Period</span><span className="detail-value">{selected.billing_period}</span></div>
               <div className="detail-item"><span className="detail-label">Due Date</span><span className="detail-value">{selected.due_date || 'Not set'}</span></div>
-              <div className="detail-item"><span className="detail-label">Energy</span><span className="detail-value">{fmtNumber(selected.energy_mwh)} MWh</span></div>
               <div className="detail-item"><span className="detail-label">Tariff</span><span className="detail-value">₹{selected.tariff_per_unit}/unit</span></div>
-              <div className="detail-item"><span className="detail-label">Energy Charges</span><span className="detail-value">{fmtCurrency(selected.energy_charges)}</span></div>
-              <div className="detail-item"><span className="detail-label">Transmission</span><span className="detail-value">{fmtCurrency(selected.transmission_charges)}</span></div>
-              <div className="detail-item"><span className="detail-label">Trading Margin</span><span className="detail-value">{fmtCurrency(selected.trading_margin)}</span></div>
-              <div className="detail-item"><span className="detail-label">Penalty (CUF)</span><span className="detail-value" style={{color: 'var(--error)'}}>-{fmtCurrency(selected.penalty)}</span></div>
-              <div className="detail-item"><span className="detail-label">Taxes</span><span className="detail-value">{fmtCurrency(selected.taxes)}</span></div>
+            </div>
+
+            {/* ── CERC-style Breakdown Table ── */}
+            {selected.invoice_breakdown_json ? (() => {
+              let items = [];
+              try { items = JSON.parse(selected.invoice_breakdown_json); } catch(e) {}
+              return items.length > 0 && (
+                <div style={{ marginTop: 20, marginBottom: 20 }}>
+                  <h4 style={{ margin: '0 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Invoice Breakdown (CERC Format)</h4>
+                  <table className="detail-table" style={{ width: '100%' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc' }}>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, color: '#64748b' }}>Code</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, color: '#64748b' }}>Description</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12, color: '#64748b' }}>Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((item, i) => (
+                        <tr key={i} style={item.code === 'TOTAL' ? { fontWeight: 700, background: '#eef2ff', borderTop: '2px solid #4f46e5' } : {}}>
+                          <td style={{ padding: '6px 12px', fontFamily: 'monospace', fontSize: 12, color: '#4f46e5' }}>{item.code}</td>
+                          <td style={{ padding: '6px 12px', fontSize: 13 }}>{item.label}</td>
+                          <td style={{ padding: '6px 12px', textAlign: 'right', fontSize: 13, fontFamily: 'monospace' }}>
+                            {['E1','E2','E3','E4','E5'].includes(item.code) 
+                              ? `${fmtNumber(item.value)} MWh` 
+                              : fmtCurrency(item.value)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })() : (
+              /* Fallback: simple summary for older invoices without breakdown */
+              <div className="detail-grid mb-0" style={{ marginTop: 16 }}>
+                <div className="detail-item"><span className="detail-label">Energy</span><span className="detail-value">{fmtNumber(selected.energy_mwh)} MWh</span></div>
+                <div className="detail-item"><span className="detail-label">Energy Charges</span><span className="detail-value">{fmtCurrency(selected.energy_charges)}</span></div>
+                {selected.capacity_charges > 0 && <div className="detail-item"><span className="detail-label">Capacity Charges</span><span className="detail-value">{fmtCurrency(selected.capacity_charges)}</span></div>}
+                <div className="detail-item"><span className="detail-label">Transmission</span><span className="detail-value">{fmtCurrency(selected.transmission_charges)}</span></div>
+                <div className="detail-item"><span className="detail-label">Trading Margin</span><span className="detail-value">{fmtCurrency(selected.trading_margin)}</span></div>
+                <div className="detail-item"><span className="detail-label">Penalty (CUF)</span><span className="detail-value" style={{color: 'var(--error)'}}>-{fmtCurrency(selected.penalty)}</span></div>
+                <div className="detail-item"><span className="detail-label">Taxes</span><span className="detail-value">{fmtCurrency(selected.taxes)}</span></div>
+              </div>
+            )}
+
+            <div className="detail-grid mb-0">
               <div className="detail-item"><span className="detail-label" style={{fontWeight: 600}}>Total Base Amount</span><span className="detail-value" style={{fontWeight: 600}}>{fmtCurrency(selected.total_amount)}</span></div>
               
               <div className="detail-item">

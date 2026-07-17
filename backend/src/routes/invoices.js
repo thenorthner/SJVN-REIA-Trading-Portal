@@ -46,12 +46,15 @@ router.get('/:id', (req, res) => {
 });
 
 // Automated invoice generation based on contract + locked energy data
+// Supports two billing modes:
+//   1. CERC Hydro (Capacity + Energy + Incentive - Free Power + NRLDC)
+//   2. Simple RE (Energy * Tariff) for Solar/Wind/Hybrid
 router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const { contract_id, period_month, invoice_type, seller_invoice_ids } = req.body;
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
 
-  // If this is a PSA, it might not have its own energy data directly. We must find its parent PPA via allocations.
+  // If PSA, resolve parent PPA via allocations
   let ppa_id = contract_id;
   let alloc_percent = 100;
   if (contract.contract_type === 'PSA') {
@@ -73,18 +76,73 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     return res.status(400).json({ error: 'Cannot generate FINAL invoice because energy data is not LOCKED.' });
   }
 
-  // Calculate base energy charges (split for PSAs)
+  // ──── Billing Calculation Engine ────
   const allocated_energy_mwh = (energy.energy_mwh * alloc_percent) / 100;
-  let energyCharges = Math.round(allocated_energy_mwh * contract.tariff_per_unit);
-  
-  // If seller_invoice_ids are provided, we should ensure the combined sum aligns, but for now we take the energy data directly
-  // Trading Margin is 7 paise per unit (0.07 * 1000 = 70 per MWh) for SJVN's commission on PSAs
-  const tradingMargin = contract.contract_type === 'PSA' ? Math.round(allocated_energy_mwh * 70) : 0;
-  
-  // Penalty for CUF shortfall can be added if availability/CUF < required
-  const penalty = 0; // Configurable penalty
+  const breakdown = [];
+  let capacityCharges = 0;
+  let incentiveCharges = 0;
+  let freePowerDeduction = 0;
+  let nrldcFees = 0;
+  let energyCharges = 0;
 
-  const total = energyCharges + tradingMargin - penalty;
+  const isHydro = ['Hydro', 'PSP'].includes(contract.project_type);
+
+  if (isHydro && contract.capacity_charges_total) {
+    // ──── CERC Hydro Billing (NJHPS-style) ────
+    const normAux = contract.normative_aux || 0; // % e.g. 1.2
+    const freePowerPct = contract.free_energy_home_state || 0; // % e.g. 12
+    const monthlyCapacity = contract.capacity_charges_total; // AFC/12 in ₹
+
+    // C1: Monthly Capacity Charge (from AFC divided across 12 months)
+    capacityCharges = Math.round(monthlyCapacity);
+    breakdown.push({ code: 'C1', label: 'Monthly Capacity Charge (AFC/12)', value: capacityCharges });
+
+    // E1: Gross Energy Generation (MWh)
+    const grossEnergy = allocated_energy_mwh;
+    breakdown.push({ code: 'E1', label: 'Gross Energy Generated (MWh)', value: grossEnergy });
+
+    // E2: Normative Auxiliary Consumption
+    const auxEnergy = Math.round(grossEnergy * normAux / 100 * 100) / 100;
+    breakdown.push({ code: 'E2', label: `Auxiliary Consumption (${normAux}%)`, value: auxEnergy });
+
+    // E3: Net Energy (ex-bus)
+    const netEnergy = Math.round((grossEnergy - auxEnergy) * 100) / 100;
+    breakdown.push({ code: 'E3', label: 'Net Energy (Ex-Bus) (MWh)', value: netEnergy });
+
+    // E4: Free Power to Home State
+    const freeEnergy = Math.round(netEnergy * freePowerPct / 100 * 100) / 100;
+    breakdown.push({ code: 'E4', label: `Free Power Home State (${freePowerPct}%)`, value: freeEnergy });
+
+    // E5: Saleable Energy
+    const saleableEnergy = Math.round((netEnergy - freeEnergy) * 100) / 100;
+    breakdown.push({ code: 'E5', label: 'Saleable Energy (MWh)', value: saleableEnergy });
+
+    // EE1: Energy Charges = Saleable Energy * Tariff
+    energyCharges = Math.round(saleableEnergy * contract.tariff_per_unit);
+    breakdown.push({ code: 'EE1', label: `Energy Charges (${saleableEnergy} MWh × ₹${contract.tariff_per_unit})`, value: energyCharges });
+
+    // Free Power deduction in ₹ terms
+    freePowerDeduction = Math.round(freeEnergy * contract.tariff_per_unit);
+    breakdown.push({ code: 'FP', label: 'Free Power Deduction (₹)', value: freePowerDeduction });
+
+    // NRLDC fees (typically a fixed monthly charge, can be configurable)
+    nrldcFees = Math.round(contract.capacity_mw * 100); // ~₹100/MW placeholder
+    breakdown.push({ code: 'NR', label: 'NRLDC/SLDC Fees', value: nrldcFees });
+
+  } else {
+    // ──── Simple RE Billing (Solar/Wind/Hybrid) ────
+    energyCharges = Math.round(allocated_energy_mwh * contract.tariff_per_unit);
+    breakdown.push({ code: 'E1', label: 'Total Energy (MWh)', value: allocated_energy_mwh });
+    breakdown.push({ code: 'EE1', label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${contract.tariff_per_unit})`, value: energyCharges });
+  }
+
+  // Trading Margin: 7 paise/unit = ₹70/MWh for PSAs
+  const tradingMargin = contract.contract_type === 'PSA' ? Math.round(allocated_energy_mwh * 70) : 0;
+  if (tradingMargin) breakdown.push({ code: 'TM', label: 'Trading Margin (₹0.07/unit)', value: tradingMargin });
+
+  const penalty = 0;
+  const total = capacityCharges + energyCharges + incentiveCharges + tradingMargin + nrldcFees - freePowerDeduction - penalty;
+  breakdown.push({ code: 'TOTAL', label: 'Net Payable Amount', value: total });
 
   const id = newId('INV');
   const invoice = {
@@ -97,14 +155,18 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     energy_mwh: allocated_energy_mwh,
     tariff_per_unit: contract.tariff_per_unit,
     energy_charges: energyCharges,
+    capacity_charges: capacityCharges,
+    incentive_charges: incentiveCharges,
+    free_power_deduction: freePowerDeduction,
+    nrldc_fees: nrldcFees,
     transmission_charges: 0,
-    rebate: 0,
     lps: 0,
     penalty,
     trading_margin: tradingMargin,
     taxes: 0,
     other_adjustments: 0,
     total_amount: total,
+    invoice_breakdown_json: JSON.stringify(breakdown),
     disputed_amount: 0,
     due_date: null,
     status: 'DRAFT',
@@ -112,11 +174,13 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   
   db.prepare(`
     INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh,
-      tariff_per_unit, energy_charges, transmission_charges, rebate, lps, penalty, trading_margin, taxes,
-      other_adjustments, total_amount, disputed_amount, due_date, status, created_by)
+      tariff_per_unit, energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees,
+      transmission_charges, lps, penalty, trading_margin, taxes,
+      other_adjustments, total_amount, invoice_breakdown_json, disputed_amount, due_date, status, created_by)
     VALUES (@id, @invoice_no, @contract_id, @invoice_type, @direction, @billing_period, @energy_mwh,
-      @tariff_per_unit, @energy_charges, @transmission_charges, @rebate, @lps, @penalty, @trading_margin, @taxes,
-      @other_adjustments, @total_amount, @disputed_amount, @due_date, @status, @created_by)
+      @tariff_per_unit, @energy_charges, @capacity_charges, @incentive_charges, @free_power_deduction, @nrldc_fees,
+      @transmission_charges, @lps, @penalty, @trading_margin, @taxes,
+      @other_adjustments, @total_amount, @invoice_breakdown_json, @disputed_amount, @due_date, @status, @created_by)
   `).run({ ...invoice, created_by: req.user.name });
 
   // Map to seller invoices (Many-to-Many)

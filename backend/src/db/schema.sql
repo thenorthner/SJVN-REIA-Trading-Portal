@@ -137,6 +137,10 @@ CREATE TABLE IF NOT EXISTS contracts (
   rebate_rule TEXT,
   lps_rule TEXT,
   payment_security_type TEXT,
+  -- Hydro/CERC Specific Parameters
+  normative_aux REAL, -- e.g. 1.2
+  free_energy_home_state REAL, -- e.g. 12.0
+  capacity_charges_total REAL, -- e.g. AFC/12
   version INTEGER NOT NULL DEFAULT 1,
   parent_contract_id TEXT,
   termination_reason TEXT,
@@ -193,14 +197,18 @@ CREATE TABLE IF NOT EXISTS invoices (
   energy_mwh REAL NOT NULL,
   tariff_per_unit REAL NOT NULL,
   energy_charges REAL NOT NULL,
+  capacity_charges REAL DEFAULT 0,
+  incentive_charges REAL DEFAULT 0,
+  free_power_deduction REAL DEFAULT 0,
+  nrldc_fees REAL DEFAULT 0,
   transmission_charges REAL NOT NULL DEFAULT 0,
-  rebate REAL NOT NULL DEFAULT 0,
+  total_amount REAL NOT NULL,
+  invoice_breakdown_json TEXT, -- detailed line-by-line math
   lps REAL NOT NULL DEFAULT 0,
   penalty REAL NOT NULL DEFAULT 0,
   trading_margin REAL NOT NULL DEFAULT 0,
   taxes REAL NOT NULL DEFAULT 0,
   other_adjustments REAL NOT NULL DEFAULT 0,
-  total_amount REAL NOT NULL,
   disputed_amount REAL NOT NULL DEFAULT 0,
   due_date TEXT,
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN (

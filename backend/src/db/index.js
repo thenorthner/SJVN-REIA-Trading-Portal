@@ -69,4 +69,29 @@ function migratePaymentSecuritySchema() {
 
 migratePaymentSecuritySchema();
 
+/** Add CERC billing columns to invoices and contracts if upgrading from simple billing schema. */
+function migrateBillingSchema() {
+  const invCols = db.prepare('PRAGMA table_info(invoices)').all().map(c => c.name);
+  if (!invCols.includes('capacity_charges')) {
+    db.exec(`
+      ALTER TABLE invoices ADD COLUMN capacity_charges REAL DEFAULT 0;
+      ALTER TABLE invoices ADD COLUMN incentive_charges REAL DEFAULT 0;
+      ALTER TABLE invoices ADD COLUMN free_power_deduction REAL DEFAULT 0;
+      ALTER TABLE invoices ADD COLUMN nrldc_fees REAL DEFAULT 0;
+      ALTER TABLE invoices ADD COLUMN invoice_breakdown_json TEXT;
+    `);
+  }
+
+  const conCols = db.prepare('PRAGMA table_info(contracts)').all().map(c => c.name);
+  if (!conCols.includes('normative_aux')) {
+    db.exec(`
+      ALTER TABLE contracts ADD COLUMN normative_aux REAL;
+      ALTER TABLE contracts ADD COLUMN free_energy_home_state REAL;
+      ALTER TABLE contracts ADD COLUMN capacity_charges_total REAL;
+    `);
+  }
+}
+
+migrateBillingSchema();
+
 export default db;

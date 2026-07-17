@@ -244,6 +244,17 @@ export default function Contracts() {
             </div>
           </div>
 
+          {['Hydro', 'PSP'].includes(form.project_type) && (
+          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+            <h4 style={{ margin: '0 0 12px 0', color: '#0369a1' }}>4b. Hydro-Specific Parameters (CERC)</h4>
+            <div className="form-grid">
+              <Field label="Normative Auxiliary Consumption (%)"><input type="number" step="0.01" placeholder="e.g. 1.2" value={form.normative_aux || ''} onChange={(e) => setForm({ ...form, normative_aux: e.target.value })} /></Field>
+              <Field label="Free Energy to Home State (%)"><input type="number" step="0.01" placeholder="e.g. 12" value={form.free_energy_home_state || ''} onChange={(e) => setForm({ ...form, free_energy_home_state: e.target.value })} /></Field>
+              <Field label="Monthly Capacity Charge (₹ AFC/12)"><input type="number" step="1" placeholder="e.g. 85000000" value={form.capacity_charges_total || ''} onChange={(e) => setForm({ ...form, capacity_charges_total: e.target.value })} /></Field>
+            </div>
+          </div>
+          )}
+
           <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 12px 0' }}>5. Supporting Document</h4>
             <div className="form-grid">
