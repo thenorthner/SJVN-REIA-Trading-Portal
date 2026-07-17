@@ -4,8 +4,8 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 
-const CAN_APPROVE = ['SJVN_ADMIN', 'REIA_USER'];
-const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER', 'SELLER', 'BUYER'];
+const CAN_APPROVE = ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN'];
+const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER', 'SELLER', 'BUYER', 'IT_SUPER_ADMIN'];
 
 const EMPTY_FORM = {
   parent_entity_id: '', entity_type: 'SELLER', category: '', name: '', 
