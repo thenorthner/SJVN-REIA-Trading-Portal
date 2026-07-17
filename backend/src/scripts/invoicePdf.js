@@ -31,20 +31,23 @@ export function generateInvoicePdf(invoice, contract, seller, buyer, res) {
   // --- HEADER ---
   const headerTopY = doc.y;
   
+  let textX = MARGIN;
+
   if (seller?.logo_url) {
     try {
-      // logo_url is likely something like /uploads/filename
       const logoPath = process.cwd() + seller.logo_url;
       doc.image(logoPath, MARGIN, headerTopY, { width: 80, fit: [80, 80] });
+      textX = MARGIN + 100;
     } catch (e) {
       console.error('Failed to load logo:', e);
     }
   }
 
-  doc.fontSize(12).font('Helvetica-Bold').text(seller?.name?.toUpperCase() || 'ENERGY GENERATOR', MARGIN + 100, headerTopY, { align: 'right' });
-  doc.fontSize(9).font('Helvetica').text(`CIN: ${seller?.cin || '-'}`, { align: 'right' });
-  doc.text(seller?.address || '-', { align: 'right' });
-  doc.text(`Email: ${seller?.corporate_email || '-'}    Phone: ${seller?.corporate_phone || '-'}    Website: ${seller?.corporate_website || '-'}`, { align: 'right' });
+  doc.fontSize(18).font('Helvetica-Bold').text(seller?.name?.toUpperCase() || 'ENERGY GENERATOR', textX, headerTopY, { align: 'left' });
+  doc.fontSize(10).font('Helvetica').text(`CIN: ${seller?.cin || '-'}`, { align: 'left' });
+  doc.text(seller?.address || '-', { align: 'left' });
+  doc.moveDown(0.2);
+  doc.fontSize(10).text(`Email: ${seller?.corporate_email || '-'}    |    Phone: ${seller?.corporate_phone || '-'}    |    Website: ${seller?.corporate_website || '-'}`, { align: 'left' });
   
   doc.moveDown(2);
   doc.moveDown(1);
