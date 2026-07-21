@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../api/client';
 import { PageHeader, Card, Table, Badge, Modal } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
+import { fmtDate } from '../../datetime.js';
 
 export default function TradingClientProfile() {
   const { id } = useParams();
@@ -81,7 +82,7 @@ export default function TradingClientProfile() {
             { key: 'designation', label: 'Designation' },
             { key: 'contact_info', label: 'Contact' },
             { key: 'is_active', label: 'Status', render: r => <Badge type={r.is_active ? 'success' : 'danger'}>{r.is_active ? 'Active' : 'Inactive'}</Badge> },
-            { key: 'created_at', label: 'Added On', render: r => new Date(r.created_at).toLocaleDateString() }
+            { key: 'created_at', label: 'Added On', render: r => fmtDate(r.created_at) }
           ]}
         />
       </Card>
@@ -93,7 +94,7 @@ export default function TradingClientProfile() {
             { key: 'exchange', label: 'Exchange', render: r => <Badge type="primary">{r.exchange}</Badge> },
             { key: 'registration_id', label: 'Registration ID' },
             { key: 'is_active', label: 'Status', render: r => <Badge type={r.is_active ? 'success' : 'danger'}>{r.is_active ? 'Active' : 'Inactive'}</Badge> },
-            { key: 'created_at', label: 'Added On', render: r => new Date(r.created_at).toLocaleDateString() }
+            { key: 'created_at', label: 'Added On', render: r => fmtDate(r.created_at) }
           ]}
         />
       </Card>

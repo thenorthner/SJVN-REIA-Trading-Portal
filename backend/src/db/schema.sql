@@ -52,6 +52,46 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS documents (
+  id TEXT PRIMARY KEY,
+  entity_id TEXT REFERENCES entities(id),
+  contract_id TEXT REFERENCES contracts(id),
+  document_type TEXT NOT NULL,
+  category TEXT NOT NULL CHECK (category IN ('VERIFY', 'RECORD')),
+  title TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'ARCHIVED')),
+  created_by TEXT REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS document_versions (
+  id TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL REFERENCES documents(id),
+  version_number INTEGER NOT NULL,
+  file_path TEXT NOT NULL,
+  file_name TEXT NOT NULL,
+  file_size_bytes INTEGER NOT NULL,
+  mime_type TEXT NOT NULL,
+  verification_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (verification_status IN ('PENDING', 'VERIFIED', 'REJECTED', 'NOT_REQUIRED')),
+  verification_notes TEXT,
+  verified_by TEXT REFERENCES users(id),
+  verified_at TEXT,
+  expiry_date TEXT,
+  created_by TEXT REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(document_id, version_number)
+);
+
+CREATE TABLE IF NOT EXISTS price_alerts (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  product TEXT NOT NULL,
+  condition TEXT NOT NULL CHECK (condition IN ('ABOVE','BELOW')),
+  threshold_price REAL NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- ---------------------------------------------------------------
 -- 3A. REIA Billing, Contract and Settlement Management
 -- ---------------------------------------------------------------
@@ -72,6 +112,7 @@ CREATE TABLE IF NOT EXISTS entities (
   technology TEXT, -- Solar / Wind / Hybrid / FDRE / Peak Power / PSP / Storage
   contracted_capacity_mw REAL,
   psa_tariff REAL,
+  supply_criteria TEXT, -- Buyer: Criteria for Supply of Power (RTC / Peak / etc.)
   address TEXT,
   organization_details TEXT,
   regulatory_approvals TEXT,
@@ -83,6 +124,9 @@ CREATE TABLE IF NOT EXISTS entities (
   is_penny_drop_verified INTEGER NOT NULL DEFAULT 0,
   invoice_template_json TEXT,
   logo_url TEXT,
+  signature_url TEXT,
+  signatory_name TEXT,
+  signatory_designation TEXT,
   corporate_email TEXT,
   corporate_phone TEXT,
   corporate_website TEXT,
@@ -147,6 +191,7 @@ CREATE TABLE IF NOT EXISTS contracts (
   rebate_rule TEXT,
   lps_rule TEXT,
   payment_security_type TEXT,
+  trading_margin_per_mwh REAL, -- PSA-specific SJVN trading margin override (₹/MWh); NULL = use global default
   -- Hydro/CERC Specific Parameters
   normative_aux REAL, -- e.g. 1.2
   free_energy_home_state REAL, -- e.g. 12.0
@@ -192,6 +237,8 @@ CREATE TABLE IF NOT EXISTS energy_data (
   availability_percent REAL,
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','VALIDATED','LOCKED','DISPUTED')),
   deviation_notes TEXT,
+  billing_family_ref TEXT, -- BFR/{contract}/{YYYY-MM}/{S2S|S2B} — provisional↔final trail key
+  supersedes_energy_id TEXT, -- FINAL row points at provisional energy for same period
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -215,6 +262,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   total_amount REAL NOT NULL,
   invoice_breakdown_json TEXT, -- detailed line-by-line math
   lps REAL NOT NULL DEFAULT 0,
+  rebate REAL NOT NULL DEFAULT 0,
   penalty REAL NOT NULL DEFAULT 0,
   trading_margin REAL NOT NULL DEFAULT 0,
   taxes REAL NOT NULL DEFAULT 0,
@@ -226,7 +274,9 @@ CREATE TABLE IF NOT EXISTS invoices (
     'SENT','DISPUTED','PARTIALLY_PAID','PAID','CANCELLED'
   )),
   version INTEGER NOT NULL DEFAULT 1,
-  parent_invoice_id TEXT,
+  parent_invoice_id TEXT, -- provisional→final true-up, or dispute supplementary credit
+  billing_family_ref TEXT, -- same BFR as energy for this contract/period/direction
+  energy_data_id TEXT, -- energy_data row used to compute this invoice
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -663,4 +713,59 @@ CREATE TABLE IF NOT EXISTS contract_allocations (
   effective_from TEXT NOT NULL,
   effective_to TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Configurable Master Data (SRS)
+CREATE TABLE IF NOT EXISTS bank_master (
+  id TEXT PRIMARY KEY,
+  bank_name TEXT NOT NULL,
+  ifsc_prefix TEXT,
+  branch_name TEXT,
+  city TEXT,
+  swift_code TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS system_parameters (
+  id TEXT PRIMARY KEY,
+  category TEXT NOT NULL CHECK (category IN ('REGULATORY','BILLING','GENERAL')),
+  param_key TEXT NOT NULL UNIQUE,
+  param_value TEXT NOT NULL,
+  data_type TEXT NOT NULL DEFAULT 'NUMBER' CHECK (data_type IN ('NUMBER','TEXT','PERCENT','JSON')),
+  unit TEXT,
+  description TEXT,
+  effective_from TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  updated_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS document_type_master (
+  id TEXT PRIMARY KEY,
+  module_name TEXT NOT NULL,
+  code TEXT NOT NULL,
+  label TEXT NOT NULL,
+  category TEXT NOT NULL CHECK (category IN ('VERIFY','RECORD')),
+  reason TEXT,
+  is_mandatory INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(module_name, code)
+);
+
+CREATE TABLE IF NOT EXISTS lookup_master (
+  id TEXT PRIMARY KEY,
+  category TEXT NOT NULL,
+  code TEXT NOT NULL,
+  label TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(category, code)
 );

@@ -3,6 +3,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, StatementViewer } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
+import { fmtDateTime } from '../../datetime.js';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
 const CAN_APPROVE_REOPEN = ['SJVN_ADMIN', 'FINANCE_USER', 'REIA_USER'];
@@ -37,6 +38,20 @@ export default function Reconciliation() {
   const [filters, setFilters] = useState({ status: '', period_type: '', scope: '', aging: '' });
   const [loading, setLoading] = useState(true);
   const [showRun, setShowRun] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  async function downloadReconPdf() {
+    setPdfLoading(true);
+    try {
+      const params = {};
+      if (filters.status) params.status = filters.status;
+      await api.reports.reconSummaryPdf(params);
+    } catch (err) {
+      alert(err.message || 'Failed to download reconciliation PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  }
   const [runForm, setRunForm] = useState(RUN_FORM);
   const [error, setError] = useState('');
   const [detail, setDetail] = useState(null);
@@ -150,9 +165,16 @@ export default function Reconciliation() {
       <PageHeader
         title="Reconciliation"
         subtitle="Three-way trust: Metered ↔ Billed ↔ Paid — with joint sign-off and dispute linkage"
-        actions={CAN_WRITE.includes(user?.role) && (
-          <button className="btn btn-primary" onClick={() => setShowRun(true)}>+ Run Reconciliation</button>
-        )}
+        actions={
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-primary" disabled={pdfLoading} onClick={downloadReconPdf}>
+              {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
+            </button>
+            {CAN_WRITE.includes(user?.role) && (
+              <button className="btn btn-secondary" onClick={() => setShowRun(true)}>+ Run Reconciliation</button>
+            )}
+          </div>
+        }
       />
 
       {stats && (
@@ -357,7 +379,7 @@ export default function Reconciliation() {
             <div className="section-title" style={{ marginTop: 14 }}>Audit trail</div>
             <ul style={{ paddingLeft: 18, fontSize: 13 }}>
               {(detail.events || []).map((ev) => (
-                <li key={ev.id}>{ev.created_at?.slice(0, 16)} — {ev.event_type} by {ev.actor_name}</li>
+                <li key={ev.id}>{fmtDateTime(ev.created_at)} — {ev.event_type} by {ev.actor_name}</li>
               ))}
             </ul>
           </div>

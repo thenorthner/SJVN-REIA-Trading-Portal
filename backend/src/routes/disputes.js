@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import db from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, genInvoiceNo } from '../util.js';
 import {
   REASON_CODES,
@@ -85,8 +85,9 @@ function canAccessDispute(user, dispute) {
     JOIN contracts c ON c.id = i.contract_id WHERE i.id = ?
   `).get(dispute.invoice_id);
   if (!inv) return false;
-  if (user.role === 'SELLER') return inv.seller_id === user.linked_entity_id;
-  if (user.role === 'BUYER') return inv.buyer_id === user.linked_entity_id;
+  const side = counterpartySide(user);
+  if (side === 'SELLER') return inv.seller_id === user.linked_entity_id;
+  if (side === 'BUYER') return inv.buyer_id === user.linked_entity_id;
   return false;
 }
 
@@ -103,10 +104,11 @@ function scopedListSql(user) {
     WHERE 1=1
   `;
   const params = [];
-  if (user.role === 'SELLER') {
+  const side = counterpartySide(user);
+  if (side === 'SELLER') {
     sql += ' AND c.seller_id = ?';
     params.push(user.linked_entity_id);
-  } else if (user.role === 'BUYER') {
+  } else if (side === 'BUYER') {
     sql += ' AND c.buyer_id = ?';
     params.push(user.linked_entity_id);
   }
@@ -406,15 +408,16 @@ router.post('/', requireRole('SELLER', 'BUYER', ...REIA_WRITE), (req, res) => {
   `).get(invoice_id);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-  const role = raised_by_role || raised_by || (req.user.role === 'SELLER' || req.user.role === 'BUYER' ? req.user.role : null);
+  const userSide = counterpartySide(req.user);
+  const role = raised_by_role || raised_by || userSide;
   if (!role || !['BUYER', 'SELLER'].includes(role)) {
     return res.status(400).json({ error: 'raised_by_role must be BUYER or SELLER' });
   }
 
-  if (req.user.role === 'SELLER' && invoice.seller_id !== req.user.linked_entity_id) {
+  if (userSide === 'SELLER' && invoice.seller_id !== req.user.linked_entity_id) {
     return res.status(403).json({ error: 'Cannot dispute another seller\'s invoice' });
   }
-  if (req.user.role === 'BUYER' && invoice.buyer_id !== req.user.linked_entity_id) {
+  if (userSide === 'BUYER' && invoice.buyer_id !== req.user.linked_entity_id) {
     return res.status(403).json({ error: 'Cannot dispute another buyer\'s invoice' });
   }
 
@@ -499,9 +502,7 @@ router.post('/:id/transition', (req, res) => {
   }
   if (toStatus === 'UNDER_REVIEW' && dispute.status === 'INFO_REQUESTED') {
     // Submitter reply path — buyer/seller or REIA
-    const isSubmitter =
-      (req.user.role === 'BUYER' || req.user.role === 'SELLER') &&
-      req.user.role === dispute.raised_by_role;
+    const isSubmitter = counterpartySide(req.user) === dispute.raised_by_role;
     if (!isSubmitter && !isReia(req.user)) {
       return res.status(403).json({ error: 'Only submitter or SJVN can return from Info Requested' });
     }

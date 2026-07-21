@@ -9,7 +9,7 @@ const EMPTY_FORM = {
   contract_no: '', contract_type: 'PPA', seller_id: '', buyer_id: '', project_type: 'Solar', capacity_mw: '',
   tariff_type: 'FLAT', tariff_per_unit: '', tariff_structure: {}, 
   tenure_start: '', tenure_end: '', billing_cycle: 'MONTHLY', payment_terms: '',
-  emd_amount: '', pbg_amount: '', pbg_type: '', pbg_expiry: '', projects: []
+  emd_amount: '', pbg_amount: '', pbg_type: '', pbg_expiry: '', trading_margin_per_mwh: '', projects: []
 };
 
 export default function Contracts() {
@@ -28,6 +28,23 @@ export default function Contracts() {
   const [requirements, setRequirements] = useState([]);
   const [syncMsg, setSyncMsg] = useState('');
   const [statusForm, setStatusForm] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  async function downloadContractPdf() {
+    setPdfLoading(true);
+    try {
+      const params = {};
+      if (filters.contract_type) params.contract_type = filters.contract_type;
+      if (filters.status) params.status = filters.status;
+      if (filters.project_type) params.project_type = filters.project_type;
+      if (filters.q) params.q = filters.q;
+      await api.reports.contractSummaryPdf(params);
+    } catch (err) {
+      alert(err.message || 'Failed to download contract PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  }
   const [allocationForm, setAllocationForm] = useState(null);
 
   function load() {
@@ -49,7 +66,7 @@ export default function Contracts() {
     api.contracts.get(row.id).then(setSelected);
     api.paymentSecurity.requirements(row.id).then(setRequirements).catch(() => setRequirements([]));
     if (row.contract_type === 'PPA') {
-      api.client.get(`/reia/contracts/${row.id}/allocations`).then(r => setAllocations(r.data)).catch(() => setAllocations([]));
+      api.client.get(`/contracts/${row.id}/allocations`).then(r => setAllocations(r.data)).catch(() => setAllocations([]));
     } else {
       setAllocations([]);
     }
@@ -92,7 +109,7 @@ export default function Contracts() {
 
   async function handleAmend(e) {
     e.preventDefault();
-    const updated = await api.client.post(`/reia/contracts/${selected.id}/amend`, amendForm).then(r=>r.data);
+    const updated = await api.client.post(`/contracts/${selected.id}/amend`, amendForm).then(r=>r.data);
     setSelected(updated);
     setAmendForm(null);
     load();
@@ -100,7 +117,7 @@ export default function Contracts() {
   
   async function handleStatusChange(e) {
     e.preventDefault();
-    const updated = await api.client.post(`/reia/contracts/${selected.id}/status`, statusForm).then(r=>r.data);
+    const updated = await api.client.post(`/contracts/${selected.id}/status`, statusForm).then(r=>r.data);
     setSelected(updated);
     setStatusForm(null);
     load();
@@ -109,9 +126,9 @@ export default function Contracts() {
   async function handleAddAllocation(e) {
     e.preventDefault();
     try {
-      await api.client.post(`/reia/contracts/${selected.id}/allocations`, allocationForm);
+      await api.client.post(`/contracts/${selected.id}/allocations`, allocationForm);
       setAllocationForm(null);
-      api.client.get(`/reia/contracts/${selected.id}/allocations`).then(r => setAllocations(r.data));
+      api.client.get(`/contracts/${selected.id}/allocations`).then(r => setAllocations(r.data));
     } catch(err) {
       alert(err.response?.data?.error || 'Failed to map allocation');
     }
@@ -141,7 +158,16 @@ export default function Contracts() {
       <PageHeader
         title="Contract Management (PPA / PSA)"
         subtitle="Create, amend and track Contract Lifecycle, COD and Complex Tariffs"
-        actions={CAN_WRITE.includes(user?.role) && <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New Contract</button>}
+        actions={
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-primary" disabled={pdfLoading} onClick={downloadContractPdf}>
+              {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
+            </button>
+            {CAN_WRITE.includes(user?.role) && (
+              <button className="btn btn-secondary" onClick={() => setShowCreate(true)}>+ New Contract</button>
+            )}
+          </div>
+        }
       />
 
       <div className="filters-bar">
@@ -216,6 +242,17 @@ export default function Contracts() {
                 </select>
               </Field>
               <Field label="Base Tariff (₹/unit)"><input required type="number" step="0.01" value={form.tariff_per_unit} onChange={(e) => setForm({ ...form, tariff_per_unit: e.target.value })} /></Field>
+              {form.contract_type === 'PSA' && (
+                <Field label="Trading Margin (₹/MWh) — optional">
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Blank = global default (₹70/MWh)"
+                    value={form.trading_margin_per_mwh}
+                    onChange={(e) => setForm({ ...form, trading_margin_per_mwh: e.target.value })}
+                  />
+                </Field>
+              )}
               <Field label="Billing Cycle">
                 <select value={form.billing_cycle} onChange={(e) => setForm({ ...form, billing_cycle: e.target.value })}>
                   <option value="MONTHLY">Monthly</option>
@@ -306,6 +343,11 @@ export default function Contracts() {
                 <tbody>
                   <tr><td>Tariff Type</td><td>{selected.tariff_type}</td></tr>
                   <tr><td>Tariff / Unit</td><td>₹{selected.tariff_per_unit}</td></tr>
+                  {selected.contract_type === 'PSA' && (
+                    <tr><td>Trading Margin</td><td>{selected.trading_margin_per_mwh != null
+                      ? `₹${selected.trading_margin_per_mwh}/MWh (contract-specific)`
+                      : 'Global default (₹70/MWh)'}</td></tr>
+                  )}
                   {selected.tariff_structure_json && <tr><td>Structure JSON</td><td><pre style={{fontSize: 10}}>{selected.tariff_structure_json}</pre></td></tr>}
                   <tr><td>Tenure</td><td>{selected.tenure_start} to {selected.tenure_end}</td></tr>
                   <tr><td>PBG / EMD</td><td>{fmtCurrency(selected.pbg_amount)} {selected.pbg_type && `(${selected.pbg_type})`}</td></tr>

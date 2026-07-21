@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
+import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
+import { fmtDateTime } from '../../datetime.js';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
 
@@ -31,6 +33,27 @@ export default function EnergyData() {
   const [triggering, setTriggering] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [reaMsg, setReaMsg] = useState('');
+  const [trailEnergyId, setTrailEnergyId] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  async function downloadEnergyPdf() {
+    setPdfLoading(true);
+    setError('');
+    try {
+      const params = {};
+      if (filters.period_month) {
+        params.from = filters.period_month;
+        params.to = filters.period_month;
+      }
+      if (filters.contract_id) params.contract_id = filters.contract_id;
+      await api.reports.energySummaryPdf(params);
+    } catch (err) {
+      console.error(err);
+      alert(err.message || err.response?.data?.error || 'Failed to download energy PDF report');
+    } finally {
+      setPdfLoading(false);
+    }
+  }
 
   function load() {
     setLoading(true);
@@ -135,6 +158,9 @@ export default function EnergyData() {
   const columns = [
     { key: 'contract_no', header: 'Contract' },
     { key: 'period_month', header: 'Period' },
+    { key: 'billing_family_ref', header: 'BFR', render: (r) => (
+      <BfrChip bfr={r.billing_family_ref} onClick={() => setTrailEnergyId(r.id)} />
+    )},
     { key: 'data_type', header: 'Type', render: (r) => <Badge status={r.data_type} /> },
     { key: 'source', header: 'Source' },
     { key: 'energy_mwh', header: 'Energy (MWh)', render: (r) => fmtNumber(r.energy_mwh) },
@@ -147,22 +173,39 @@ export default function EnergyData() {
         <div className="cell-actions">
           {r.status === 'DRAFT' && <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); handleValidate(r); }}>Validate</button>}
           {r.status === 'VALIDATED' && <button className="btn btn-success btn-sm" onClick={(e) => { e.stopPropagation(); handleLock(r); }}>Lock</button>}
+          <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); setTrailEnergyId(r.id); }}>Trail</button>
         </div>
       ),
-    }] : []),
+    }] : [{
+      key: 'actions', header: 'Actions', render: (r) => (
+        <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); setTrailEnergyId(r.id); }}>Trail</button>
+      ),
+    }]),
   ];
 
   return (
     <div>
       <PageHeader
-        title="Energy Data Accounting &amp; Validation"
+        title="Energy Data Accounting & Validation"
         subtitle="Record metered generation, validate against contracted parameters and lock for billing"
-        actions={CAN_WRITE.includes(user?.role) && (
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-secondary" onClick={() => setShowUploadREA(true)}>Upload REA PDF</button>
-            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Record Energy Data</button>
+        actions={
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={pdfLoading}
+              onClick={downloadEnergyPdf}
+            >
+              {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
+            </button>
+            {CAN_WRITE.includes(user?.role) && (
+              <>
+                <button className="btn btn-secondary" onClick={() => setShowUploadREA(true)}>Upload REA PDF</button>
+                <button className="btn btn-secondary" onClick={() => setShowCreate(true)}>+ Record Energy Data</button>
+              </>
+            )}
           </div>
-        )}
+        }
       />
 
       <div className="filters-bar">
@@ -224,7 +267,7 @@ export default function EnergyData() {
                       </div>
                       {rpc.latest_fetch && (
                         <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 6 }}>
-                          Last: {rpc.latest_fetch.period_month} — {new Date(rpc.latest_fetch.fetched_at).toLocaleString()}
+                          Last: {rpc.latest_fetch.period_month} — {fmtDateTime(rpc.latest_fetch.fetched_at)}
                         </div>
                       )}
                     </div>
@@ -283,7 +326,7 @@ export default function EnergyData() {
                           <td><Badge status={log.data_type} /></td>
                           <td><Badge status={log.status === 'PROCESSED' ? 'ACTIVE' : log.status === 'FAILED' ? 'REJECTED' : log.status} label={log.status} /></td>
                           <td>{log.records_created}</td>
-                          <td>{new Date(log.fetched_at).toLocaleString()}</td>
+                          <td>{fmtDateTime(log.fetched_at)}</td>
                           <td style={{ fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{log.error_message || '-'}</td>
                         </tr>
                       ))}
@@ -389,6 +432,10 @@ export default function EnergyData() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal open={!!trailEnergyId} onClose={() => setTrailEnergyId(null)} title="Settlement Trail" width={720}>
+        {trailEnergyId && <SettlementTrailPanel energyId={trailEnergyId} />}
       </Modal>
     </div>
   );

@@ -43,6 +43,11 @@ export const api = {
       formData.append('logo', file);
       return client.post(`/entities/${id}/logo`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
     },
+    uploadSignature: (id, file) => {
+      const formData = new FormData();
+      formData.append('signature', file);
+      return client.post(`/entities/${id}/signature`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
+    },
     approve: (id, decision, remarks) => p(`/entities/${id}/approve`, { decision, remarks }),
   },
   users: {
@@ -55,7 +60,16 @@ export const api = {
     upload: (formData) => client.post('/documents/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
     verify: (versionId) => p(`/documents/${versionId}/verify`),
     reject: (versionId, reason) => p(`/documents/${versionId}/reject`, { reason }),
-    downloadUrl: (versionId) => `/api/documents/${versionId}/download`
+    downloadUrl: (versionId) => `/api/documents/${versionId}/download`,
+    download: (versionId) => client.get(`/documents/${versionId}/download`, { responseType: 'blob' }).then((r) => ({
+      blob: r.data,
+      fileName: (() => {
+        const cd = r.headers['content-disposition'] || '';
+        const m = cd.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+        return decodeURIComponent(m?.[1] || m?.[2] || 'document');
+      })(),
+      contentType: r.headers['content-type'] || r.data.type,
+    })),
   },
   contracts: {
     list: (params) => g('/contracts', params),
@@ -87,6 +101,167 @@ export const api = {
     act: (id, level, decision, comments) => p(`/invoices/${id}/approvals/${level}/act`, { decision, comments }),
     send: (id) => p(`/invoices/${id}/send`),
     recordPayment: (id, body) => p(`/invoices/${id}/payments`, body),
+  },
+  billingTrail: {
+    get: (params) => g('/billing-trail', params),
+  },
+  masters: {
+    summary: () => g('/masters/summary'),
+    banks: (params) => g('/masters/banks', params),
+    createBank: (body) => p('/masters/banks', body),
+    updateBank: (id, body) => put(`/masters/banks/${id}`, body),
+    deleteBank: (id) => del(`/masters/banks/${id}`),
+    parameters: (params) => g('/masters/parameters', params),
+    createParameter: (body) => p('/masters/parameters', body),
+    updateParameter: (key, body) => put(`/masters/parameters/${encodeURIComponent(key)}`, body),
+    documentTypes: (params) => g('/masters/document-types', params),
+    createDocumentType: (body) => p('/masters/document-types', body),
+    updateDocumentType: (id, body) => put(`/masters/document-types/${id}`, body),
+    lookups: (params) => g('/masters/lookups', params),
+    createLookup: (body) => p('/masters/lookups', body),
+    updateLookup: (id, body) => put(`/masters/lookups/${id}`, body),
+    projects: () => g('/masters/projects'),
+    resolvedBilling: () => g('/masters/resolved-billing'),
+  },
+  reports: {
+    billingSummary: (params) => g('/reports/billing-summary', params),
+    billingSummaryPdf: async (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.from) qs.set('from', params.from);
+      if (params.to) qs.set('to', params.to);
+      const q = qs.toString();
+      const res = await client.get(`/reports/billing-summary/pdf${q ? `?${q}` : ''}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const from = params.from || 'all';
+      const to = params.to || 'all';
+      a.href = url;
+      a.download = `SJVN_Billing_Report_${from}_to_${to}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
+    energySummary: (params) => g('/reports/energy-summary', params),
+    energySummaryPdf: async (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.from) qs.set('from', params.from);
+      if (params.to) qs.set('to', params.to);
+      if (params.contract_id) qs.set('contract_id', params.contract_id);
+      const q = qs.toString();
+      const res = await client.get(`/reports/energy-summary/pdf${q ? `?${q}` : ''}`, {
+        responseType: 'blob',
+      });
+      // Guard against JSON error payloads returned as blob
+      if (res.data?.type && res.data.type.includes('json')) {
+        const text = await res.data.text();
+        let msg = 'Failed to generate energy PDF';
+        try { msg = JSON.parse(text).error || msg; } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const from = params.from || 'all';
+      const to = params.to || 'all';
+      a.href = url;
+      a.download = `SJVN_Energy_Report_${from}_to_${to}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
+    disputeSummaryPdf: async (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.from) qs.set('from', params.from);
+      if (params.to) qs.set('to', params.to);
+      if (params.status) qs.set('status', params.status);
+      const q = qs.toString();
+      const res = await client.get(`/reports/dispute-summary/pdf${q ? `?${q}` : ''}`, { responseType: 'blob' });
+      if (res.data?.type && res.data.type.includes('json')) {
+        const text = await res.data.text();
+        let msg = 'Failed to generate dispute PDF';
+        try { msg = JSON.parse(text).error || msg; } catch { /* */ }
+        throw new Error(msg);
+      }
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `SJVN_Dispute_Report_${params.from || 'all'}_to_${params.to || 'all'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
+    reconSummaryPdf: async (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.from) qs.set('from', params.from);
+      if (params.to) qs.set('to', params.to);
+      if (params.status) qs.set('status', params.status);
+      const q = qs.toString();
+      const res = await client.get(`/reports/recon-summary/pdf${q ? `?${q}` : ''}`, { responseType: 'blob' });
+      if (res.data?.type && res.data.type.includes('json')) {
+        const text = await res.data.text();
+        let msg = 'Failed to generate reconciliation PDF';
+        try { msg = JSON.parse(text).error || msg; } catch { /* */ }
+        throw new Error(msg);
+      }
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `SJVN_Reconciliation_Report_${params.from || 'all'}_to_${params.to || 'all'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
+    contractSummaryPdf: async (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.contract_type) qs.set('contract_type', params.contract_type);
+      if (params.status) qs.set('status', params.status);
+      if (params.project_type) qs.set('project_type', params.project_type);
+      if (params.q) qs.set('q', params.q);
+      const q = qs.toString();
+      const res = await client.get(`/reports/contract-summary/pdf${q ? `?${q}` : ''}`, { responseType: 'blob' });
+      if (res.data?.type && res.data.type.includes('json')) {
+        const text = await res.data.text();
+        let msg = 'Failed to generate contract PDF';
+        try { msg = JSON.parse(text).error || msg; } catch { /* */ }
+        throw new Error(msg);
+      }
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'SJVN_Contract_Portfolio_Report.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
+    reiaDashboardPdf: async () => {
+      const res = await client.get('/reports/reia-dashboard/pdf', { responseType: 'blob' });
+      if (res.data?.type && res.data.type.includes('json')) {
+        const text = await res.data.text();
+        let msg = 'Failed to generate REIA dashboard PDF';
+        try { msg = JSON.parse(text).error || msg; } catch { /* */ }
+        throw new Error(msg);
+      }
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'SJVN_REIA_Dashboard_Snapshot.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
   },
   disputes: {
     list: (params) => g('/disputes', params),

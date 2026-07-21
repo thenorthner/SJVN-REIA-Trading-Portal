@@ -9,3 +9,26 @@ backend/uploads/disputes/**
 !backend/uploads/disputes/.gitkeep
 dist/
 build/
+
+# Logs
+*.log
+
+# Local databases / sqlite
+*.db
+*.sqlite
+*.sqlite3
+
+# Runtime uploads & generated/scraped files (keep folder, ignore contents)
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/rea_downloads/
+backend/temp/
+backend/test*.pdf
+
+# Local reference/data files dropped into the project root
+/*.pdf
+/*.PDF
+/*.docx
+
+# Agent / editor local settings (keep launch.json shared, ignore machine-local)
+.claude/settings.local.json

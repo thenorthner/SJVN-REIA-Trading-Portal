@@ -1,13 +1,18 @@
 import React from 'react';
 
-export function PageHeader({ title, subtitle, actions }) {
+export function PageHeader({ title, subtitle, actions, onAdd, addLabel }) {
   return (
     <div className="page-header">
       <div>
         <h1>{title}</h1>
         {subtitle && <p className="page-subtitle">{subtitle}</p>}
       </div>
-      {actions && <div className="page-actions">{actions}</div>}
+      {(actions || onAdd) && (
+        <div className="page-actions">
+          {actions}
+          {onAdd && <button className="btn btn-primary" onClick={onAdd}>+ {addLabel || 'Add'}</button>}
+        </div>
+      )}
     </div>
   );
 }
@@ -22,9 +27,9 @@ export function StatCard({ label, value, hint, tone = 'default' }) {
   );
 }
 
-export function Card({ title, actions, children, className = '' }) {
+export function Card({ title, actions, children, className = '', style }) {
   return (
-    <div className={`card ${className}`}>
+    <div className={`card ${className}`} style={style}>
       {(title || actions) && (
         <div className="card-header">
           {title && <h3>{title}</h3>}
@@ -53,25 +58,37 @@ const TONE_MAP = {
   ELIGIBLE: 'amber', NOTICE_ISSUED: 'blue', CLAIMED: 'amber', FUNDS_RECEIVED: 'green',
 };
 
-export function Badge({ status }) {
-  const tone = TONE_MAP[status] || 'gray';
-  return <span className={`badge badge-${tone}`}>{String(status).replaceAll('_', ' ')}</span>;
+// Trading module pages pass `type` (a semantic tone name) instead of a
+// `status` enum value. Map those onto the same tone palette used by TONE_MAP.
+const TYPE_TONE_MAP = { success: 'green', danger: 'red', warning: 'amber', primary: 'blue', neutral: 'gray' };
+
+// `status` (REIA-style, e.g. status="ACTIVE") and `type` + children
+// (Trading-style, e.g. type="success">Custom label</Badge>) are both
+// supported here so this one component works for every module.
+export function Badge({ status, type, label, children }) {
+  const tone = TONE_MAP[status] || TYPE_TONE_MAP[type] || 'gray';
+  const content = children ?? label ?? (status != null ? String(status).replaceAll('_', ' ') : (type ?? ''));
+  return <span className={`badge badge-${tone}`}>{content}</span>;
 }
 
-export function Table({ columns, rows, onRowClick, emptyMessage = 'No records found.' }) {
+// `rows` (REIA-style) and `data` (Trading-style) are both supported so this
+// one component works for every module without each caller needing to match
+// an exact prop name.
+export function Table({ columns, rows, data, onRowClick, loading, emptyMessage = 'No records found.' }) {
+  const list = rows ?? data ?? [];
   return (
     <div className="table-wrap">
       <table className="data-table">
         <thead>
           <tr>
-            {columns.map((c) => <th key={c.key}>{c.header}</th>)}
+            {columns.map((c) => <th key={c.key}>{c.header ?? c.label}</th>)}
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 && (
-            <tr><td colSpan={columns.length} className="empty-cell">{emptyMessage}</td></tr>
+          {list.length === 0 && (
+            <tr><td colSpan={columns.length} className="empty-cell">{loading ? 'Loading...' : emptyMessage}</td></tr>
           )}
-          {rows.map((row, i) => (
+          {list.map((row, i) => (
             <tr key={row.id ?? i} onClick={() => onRowClick?.(row)} className={onRowClick ? 'clickable' : ''}>
               {columns.map((c) => <td key={c.key}>{c.render ? c.render(row) : row[c.key]}</td>)}
             </tr>
@@ -97,10 +114,10 @@ export function Modal({ open, onClose, title, children, width = 560 }) {
   );
 }
 
-export function Field({ label, children }) {
+export function Field({ label, children, required }) {
   return (
     <label className="field">
-      <span className="field-label">{label}</span>
+      <span className="field-label">{label}{required && <span style={{ color: '#dc2626' }}> *</span>}</span>
       {children}
     </label>
   );

@@ -1,16 +1,34 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification, genInvoiceNo } from '../util.js';
-import { payableNow, lpsBaseAmount } from '../disputesConstants.js';
+import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract } from '../util.js';
+import { payableNow, lpsBaseAmount, accruedLps, tieredRebatePct, daysBetween } from '../disputesConstants.js';
+import { getParamNumber, getParam } from '../mastersService.js';
 
 const router = Router();
 router.use(requireAuth);
 
+function paidTotalFor(invoiceId) {
+  return db.prepare('SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)),0) s FROM payments WHERE invoice_id = ?').get(invoiceId).s;
+}
+
 function withContract(inv) {
   if (!inv) return inv;
   const contract = db.prepare('SELECT contract_no, contract_type, project_type FROM contracts WHERE id = ?').get(inv.contract_id);
-  return { ...inv, contract_no: contract?.contract_no, project_type: contract?.project_type, ...payableNow(inv) };
+  const paid = paidTotalFor(inv.id);
+  const settled = ['PAID', 'CANCELLED', 'DRAFT'].includes(inv.status);
+  const accrued = settled
+    ? { days_overdue: 0, lps: 0, base: 0 }
+    : accruedLps(inv, { annualPct: getParamNumber('lps_annual_pct', 15), asOf: new Date(), paid });
+  return {
+    ...inv,
+    contract_no: contract?.contract_no,
+    project_type: contract?.project_type,
+    ...payableNow(inv),
+    paid_total: paid,
+    accrued_lps: accrued.lps,
+    days_overdue: accrued.days_overdue,
+  };
 }
 
 // E/F. Billing & Invoicing + Seller Invoice Management - list
@@ -38,19 +56,19 @@ router.get('/', (req, res) => {
 
 import { generateInvoicePdf } from '../scripts/invoicePdf.js';
 
-router.get('/:id/pdf', (req, res) => {
+router.get('/:id/pdf', async (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
-  
+
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(inv.contract_id);
   const seller = db.prepare('SELECT * FROM entities WHERE id = ?').get(contract.seller_id);
   const buyer = db.prepare('SELECT * FROM entities WHERE id = ?').get(contract.buyer_id);
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename=Invoice_${inv.invoice_no}.pdf`);
-  
+
   try {
-    generateInvoicePdf(inv, contract, seller, buyer, res);
+    await generateInvoicePdf(inv, contract, seller, buyer, res);
   } catch (err) {
     console.error('PDF Generation Error:', err);
     if (!res.headersSent) {
@@ -90,23 +108,41 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
 
   const energy = db.prepare(`
     SELECT * FROM energy_data WHERE contract_id = ? AND period_month = ?
-    ORDER BY (data_type = 'FINAL') DESC LIMIT 1
-  `).get(ppa_id, period_month);
+    ORDER BY
+      CASE WHEN ? = 'FINAL' THEN (data_type = 'FINAL') ELSE (data_type = 'PROVISIONAL') END DESC,
+      (data_type = 'FINAL') DESC,
+      created_at DESC
+    LIMIT 1
+  `).get(ppa_id, period_month, invoice_type || 'PROVISIONAL');
   
   if (!energy) return res.status(400).json({ error: 'No energy data found for this contract (or parent PPA)/period. Upload energy data first.' });
 
-  if (invoice_type === 'FINAL' && energy.status !== 'LOCKED') {
+  const resolvedType = invoice_type || (energy.data_type === 'FINAL' ? 'FINAL' : 'PROVISIONAL');
+
+  if (resolvedType === 'FINAL' && energy.status !== 'LOCKED') {
     return res.status(400).json({ error: 'Cannot generate FINAL invoice because energy data is not LOCKED.' });
+  }
+  if (resolvedType === 'FINAL' && energy.data_type !== 'FINAL') {
+    return res.status(400).json({ error: 'Cannot generate FINAL invoice: no FINAL energy row for this period (provisional must remain separate).' });
   }
 
   // ──── Billing Calculation Engine ────
+  // tariff_per_unit is ₹/kWh (per "unit"); energy is in MWh → convert MWh→kWh (×1000).
+  const UNITS_PER_MWH = 1000;
   const allocated_energy_mwh = (energy.energy_mwh * alloc_percent) / 100;
+  const allocated_units_kwh = allocated_energy_mwh * UNITS_PER_MWH;
   const breakdown = [];
   let capacityCharges = 0;
   let incentiveCharges = 0;
   let freePowerDeduction = 0;
   let nrldcFees = 0;
   let energyCharges = 0;
+
+  // PSA bills draw energy from the parent PPA — surface that linkage explicitly.
+  if (contract.contract_type === 'PSA' && alloc_percent !== 100) {
+    breakdown.push({ code: 'SRC', label: `Source PPA Energy (${period_month})`, value: energy.energy_mwh });
+    breakdown.push({ code: 'ALLOC', label: `Allocation to this PSA (${alloc_percent}%)`, value: allocated_energy_mwh });
+  }
 
   const isHydro = ['Hydro', 'PSP'].includes(contract.project_type);
 
@@ -140,31 +176,74 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     const saleableEnergy = Math.round((netEnergy - freeEnergy) * 100) / 100;
     breakdown.push({ code: 'E5', label: 'Saleable Energy (MWh)', value: saleableEnergy });
 
-    // EE1: Energy Charges = Saleable Energy * Tariff
-    energyCharges = Math.round(saleableEnergy * contract.tariff_per_unit);
-    breakdown.push({ code: 'EE1', label: `Energy Charges (${saleableEnergy} MWh × ₹${contract.tariff_per_unit})`, value: energyCharges });
+    // EE1: Energy Charges = Saleable Energy (kWh) * Tariff (₹/kWh)
+    energyCharges = Math.round(saleableEnergy * UNITS_PER_MWH * contract.tariff_per_unit);
+    breakdown.push({ code: 'EE1', label: `Energy Charges (${saleableEnergy} MWh × ₹${contract.tariff_per_unit}/unit)`, value: energyCharges });
 
-    // Free Power deduction in ₹ terms
-    freePowerDeduction = Math.round(freeEnergy * contract.tariff_per_unit);
+    // Free Power deduction in ₹ terms (kWh × tariff)
+    freePowerDeduction = Math.round(freeEnergy * UNITS_PER_MWH * contract.tariff_per_unit);
     breakdown.push({ code: 'FP', label: 'Free Power Deduction (₹)', value: freePowerDeduction });
 
-    // NRLDC fees (typically a fixed monthly charge, can be configurable)
-    nrldcFees = Math.round(contract.capacity_mw * 100); // ~₹100/MW placeholder
+    // NRLDC fees from billing master
+    const nrldcPerMw = getParamNumber('nrldc_fee_per_mw', 100);
+    nrldcFees = Math.round(contract.capacity_mw * nrldcPerMw);
     breakdown.push({ code: 'NR', label: 'NRLDC/SLDC Fees', value: nrldcFees });
 
   } else {
     // ──── Simple RE Billing (Solar/Wind/Hybrid) ────
-    energyCharges = Math.round(allocated_energy_mwh * contract.tariff_per_unit);
+    // Charges = energy (kWh) × tariff (₹/kWh)
+    energyCharges = Math.round(allocated_units_kwh * contract.tariff_per_unit);
     breakdown.push({ code: 'E1', label: 'Total Energy (MWh)', value: allocated_energy_mwh });
-    breakdown.push({ code: 'EE1', label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${contract.tariff_per_unit})`, value: energyCharges });
+    breakdown.push({ code: 'EE1', label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${contract.tariff_per_unit}/unit)`, value: energyCharges });
   }
 
-  // Trading Margin: 7 paise/unit = ₹70/MWh for PSAs
-  const tradingMargin = contract.contract_type === 'PSA' ? Math.round(allocated_energy_mwh * 70) : 0;
-  if (tradingMargin) breakdown.push({ code: 'TM', label: 'Trading Margin (₹0.07/unit)', value: tradingMargin });
+  // Trading Margin: per-contract override (contracts.trading_margin_per_mwh) else global billing master default (₹70/MWh).
+  const marginPerMwh = (contract.trading_margin_per_mwh != null && contract.trading_margin_per_mwh !== '')
+    ? Number(contract.trading_margin_per_mwh)
+    : getParamNumber('trading_margin_per_mwh', 70);
+  const tradingMargin = contract.contract_type === 'PSA' ? Math.round(allocated_energy_mwh * marginPerMwh) : 0;
+  if (tradingMargin) {
+    const isOverride = contract.trading_margin_per_mwh != null && contract.trading_margin_per_mwh !== '';
+    breakdown.push({ code: 'TM', label: `Trading Margin (₹${marginPerMwh}/MWh${isOverride ? ', contract-specific' : ''})`, value: tradingMargin });
+  }
 
   const penalty = 0;
-  const total = capacityCharges + energyCharges + incentiveCharges + tradingMargin + nrldcFees - freePowerDeduction - penalty;
+  const grossTotal = capacityCharges + energyCharges + incentiveCharges + tradingMargin + nrldcFees - freePowerDeduction - penalty;
+  breakdown.push({ code: 'GROSS', label: 'Gross Amount (before provisional true-up)', value: grossTotal });
+
+  const direction = directionForContract(contract);
+  const billingFamilyRef = buildBillingFamilyRef(contract.contract_no, period_month, direction);
+
+  let otherAdjustments = 0;
+  let parentInvoiceId = null;
+  let alreadyPaid = 0;
+
+  if (resolvedType === 'FINAL') {
+    const provInvoices = db.prepare(`
+      SELECT * FROM invoices
+      WHERE contract_id = ? AND billing_period = ? AND direction = ?
+        AND invoice_type = 'PROVISIONAL' AND status != 'CANCELLED'
+      ORDER BY created_at ASC
+    `).all(contract_id, period_month, direction);
+
+    if (provInvoices.length) {
+      parentInvoiceId = provInvoices[0].id;
+      const ids = provInvoices.map((i) => i.id);
+      const placeholders = ids.map(() => '?').join(',');
+      alreadyPaid = db.prepare(`
+        SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)), 0) AS paid
+        FROM payments WHERE invoice_id IN (${placeholders})
+      `).get(...ids).paid || 0;
+      otherAdjustments = -Math.round(alreadyPaid);
+      breakdown.push({
+        code: 'ADJ',
+        label: `Less: already paid on provisional (${provInvoices.map((i) => i.invoice_no).join(', ')})`,
+        value: otherAdjustments,
+      });
+    }
+  }
+
+  const total = grossTotal + otherAdjustments;
   breakdown.push({ code: 'TOTAL', label: 'Net Payable Amount', value: total });
 
   const id = newId('INV');
@@ -172,8 +251,8 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     id,
     invoice_no: genInvoiceNo(contract.contract_type === 'PPA' ? 'INV-PPA' : 'INV-PSA'),
     contract_id,
-    invoice_type: invoice_type || (energy.data_type === 'FINAL' ? 'FINAL' : 'PROVISIONAL'),
-    direction: contract.contract_type === 'PPA' ? 'SELLER_TO_SJVN' : 'SJVN_TO_BUYER',
+    invoice_type: resolvedType,
+    direction,
     billing_period: period_month,
     energy_mwh: allocated_energy_mwh,
     tariff_per_unit: contract.tariff_per_unit,
@@ -187,23 +266,28 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     penalty,
     trading_margin: tradingMargin,
     taxes: 0,
-    other_adjustments: 0,
+    other_adjustments: otherAdjustments,
     total_amount: total,
     invoice_breakdown_json: JSON.stringify(breakdown),
     disputed_amount: 0,
     due_date: null,
     status: 'DRAFT',
+    parent_invoice_id: parentInvoiceId,
+    billing_family_ref: billingFamilyRef,
+    energy_data_id: energy.id,
   };
   
   db.prepare(`
     INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh,
       tariff_per_unit, energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees,
       transmission_charges, lps, penalty, trading_margin, taxes,
-      other_adjustments, total_amount, invoice_breakdown_json, disputed_amount, due_date, status, created_by)
+      other_adjustments, total_amount, invoice_breakdown_json, disputed_amount, due_date, status,
+      parent_invoice_id, billing_family_ref, energy_data_id, created_by)
     VALUES (@id, @invoice_no, @contract_id, @invoice_type, @direction, @billing_period, @energy_mwh,
       @tariff_per_unit, @energy_charges, @capacity_charges, @incentive_charges, @free_power_deduction, @nrldc_fees,
       @transmission_charges, @lps, @penalty, @trading_margin, @taxes,
-      @other_adjustments, @total_amount, @invoice_breakdown_json, @disputed_amount, @due_date, @status, @created_by)
+      @other_adjustments, @total_amount, @invoice_breakdown_json, @disputed_amount, @due_date, @status,
+      @parent_invoice_id, @billing_family_ref, @energy_data_id, @created_by)
   `).run({ ...invoice, created_by: req.user.name });
 
   // Map to seller invoices (Many-to-Many)
@@ -214,7 +298,15 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     }
   }
 
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'GENERATE', module: 'REIA', entityType: 'invoice', entityId: id, details: invoice });
+  logAudit({
+    req: typeof req !== "undefined" ? req : null,
+    user: req.user,
+    action: 'GENERATE',
+    module: 'REIA',
+    entityType: 'invoice',
+    entityId: id,
+    details: { ...invoice, already_paid: alreadyPaid },
+  });
   res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(id));
 });
 
@@ -225,31 +317,35 @@ router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) =>
   const total = (b.energy_charges || 0) + (b.transmission_charges || 0) + (b.trading_margin || 0) + (b.taxes || 0) - (b.rebate || 0) + (b.lps || 0) + (b.penalty || 0) + (b.other_adjustments || 0);
   
   // Calculate due date (Net 30 days default)
-  const contract = db.prepare('SELECT payment_terms FROM contracts WHERE id = ?').get(b.contract_id);
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(b.contract_id);
   const termsStr = contract ? contract.payment_terms : '';
   const match = (termsStr || '').match(/\d+/);
   const days = match ? parseInt(match[0], 10) : 30;
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + days);
   const dueDateStr = dueDate.toISOString().split('T')[0];
+  const direction = 'SELLER_TO_SJVN';
+  const billingFamilyRef = contract
+    ? buildBillingFamilyRef(contract.contract_no, b.billing_period, direction)
+    : null;
 
   db.prepare(`
     INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh,
       tariff_per_unit, energy_charges, transmission_charges, rebate, lps, penalty, trading_margin, taxes,
-      other_adjustments, total_amount, due_date, status, created_by)
+      other_adjustments, total_amount, due_date, status, billing_family_ref, energy_data_id, parent_invoice_id, created_by)
     VALUES (@id, @invoice_no, @contract_id, @invoice_type, @direction, @billing_period, @energy_mwh,
       @tariff_per_unit, @energy_charges, @transmission_charges, @rebate, @lps, @penalty, @trading_margin, @taxes,
-      @other_adjustments, @total_amount, @due_date, 'SUBMITTED', @created_by)
+      @other_adjustments, @total_amount, @due_date, 'SUBMITTED', @billing_family_ref, @energy_data_id, @parent_invoice_id, @created_by)
   `).run({
     id,
     invoice_no: b.invoice_no || genInvoiceNo('SELLER-INV'),
     contract_id: b.contract_id,
     invoice_type: b.invoice_type || 'FINAL',
-    direction: 'SELLER_TO_SJVN',
+    direction,
     billing_period: b.billing_period,
     energy_mwh: b.energy_mwh,
-    tariff_per_unit: b.tariff_per_unit,
-    energy_charges: b.energy_charges,
+    tariff_per_unit: b.tariff_per_unit || 0,
+    energy_charges: b.energy_charges || 0,
     transmission_charges: b.transmission_charges || 0,
     rebate: b.rebate || 0,
     lps: b.lps || 0,
@@ -258,7 +354,10 @@ router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     taxes: b.taxes || 0,
     other_adjustments: b.other_adjustments || 0,
     total_amount: total,
-    due_date: b.due_date || dueDateStr,
+    due_date: dueDateStr,
+    billing_family_ref: billingFamilyRef,
+    energy_data_id: b.energy_data_id || null,
+    parent_invoice_id: b.parent_invoice_id || null,
     created_by: req.user.name,
   });
   db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)').run(newId('APR'), id, 'PENDING');
@@ -271,6 +370,12 @@ router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) =>
 router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER'), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  const allowed = ['DRAFT', 'SUBMITTED', 'REJECTED'];
+  if (!allowed.includes(inv.status)) {
+    return res.status(400).json({
+      error: `Cannot submit invoice in status ${inv.status}. Allowed: ${allowed.join(', ')}`,
+    });
+  }
   db.prepare(`UPDATE invoices SET status = 'UNDER_APPROVAL', updated_at = datetime('now') WHERE id = ?`).run(inv.id);
   const existingLevels = db.prepare('SELECT COUNT(*) c FROM invoice_approvals WHERE invoice_id = ?').get(inv.id).c;
   if (existingLevels === 0) {
@@ -350,28 +455,30 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req,
   // Advanced Logic: Rebate and LPS
   let newRebate = inv.rebate;
   let newLps = inv.lps;
-  
+  const payDate = payment_date ? new Date(payment_date) : new Date();
+
+  // ── Tiered early-payment rebate (PPA / SELLER_TO_SJVN only, computed once) ──
+  // Buyers (DISCOMs) do NOT get early-payment rebate on PSA invoices.
+  if (inv.direction === 'SELLER_TO_SJVN' && (inv.rebate || 0) === 0) {
+    const daysFromBill = Math.max(0, daysBetween(new Date(inv.created_at), payDate));
+    let pct = tieredRebatePct(daysFromBill, getParam('early_payment_rebate_tiers', null));
+    if (pct === null) {
+      // No tiers configured → fall back to flat % if paid on/before due date
+      pct = (inv.due_date && payDate <= new Date(inv.due_date)) ? getParamNumber('early_payment_rebate_pct', 2) : 0;
+    }
+    if (pct > 0) {
+      const base = Math.max(0, inv.total_amount || 0); // full billed amount, not just energy
+      newRebate = Math.round(base * pct / 100);
+    }
+  }
+
+  // ── LPS accrued on OUTSTANDING undisputed amount as of payment date ──
   if (inv.due_date) {
-    const payDate = new Date(payment_date);
-    const dueDate = new Date(inv.due_date);
-    const diffTime = payDate - dueDate;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    // Rebate: 2% on energy charges if SJVN pays Seller (PPA) early
-    // NOTE: Rebate ONLY applies on PPA invoices (Seller -> SJVN).
-    // Discoms (Buyers) do NOT get any early payment rebate on PSA invoices.
-    if (inv.direction === 'SELLER_TO_SJVN' && diffDays <= 0 && inv.rebate === 0) {
-      newRebate = Math.round(inv.energy_charges * 0.02);
-    }
-    
-    // LPS: 15% p.a. on UNDISPUTED amount only for days delayed
-    // Disputed portion is excluded from LPS while dispute is open
-    if (diffDays > 0) {
-      const dailyLpsRate = 0.15 / 365;
-      const base = lpsBaseAmount({ ...inv, disputed_amount: inv.disputed_amount });
-      const calculatedLps = Math.round(base * dailyLpsRate * diffDays);
-      newLps += calculatedLps;
-    }
+    const paidBefore = db.prepare(
+      'SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)),0) s FROM payments WHERE invoice_id = ? AND id != ?'
+    ).get(inv.id, id).s;
+    const accrued = accruedLps(inv, { annualPct: getParamNumber('lps_annual_pct', 15), asOf: payDate, paid: paidBefore });
+    if (accrued.lps > 0) newLps = accrued.lps;
   }
 
   const totalPaid = db.prepare('SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)),0) s FROM payments WHERE invoice_id = ?').get(inv.id).s;

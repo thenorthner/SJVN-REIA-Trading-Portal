@@ -1,10 +1,15 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 import { OPEN_STATUSES } from '../disputesConstants.js';
 
 const router = Router();
 router.use(requireAuth);
+
+// Cross-module executive aggregates (every counterparty's financials rolled
+// up together). Hiding the nav link is not enough — the endpoint itself must
+// reject seller/buyer users, including their L1/L2/L3 sub-users.
+const EXECUTIVE_ROLES = ['SJVN_ADMIN', 'MANAGEMENT', 'FINANCE_USER', 'IT_SUPER_ADMIN'];
 
 // M. REIA dashboards
 router.get('/reia', (req, res) => {
@@ -163,7 +168,7 @@ router.get('/trading/periodic', (req, res) => {
 });
 
 // 3C. Consolidated Executive Dashboard
-router.get('/consolidated', (req, res) => {
+router.get('/consolidated', requireRole(...EXECUTIVE_ROLES), (req, res) => {
   // 1. Single Source of Truth Aggregations
   const reiaReceivables = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE direction = 'SJVN_TO_BUYER' AND status NOT IN ('PAID','CANCELLED')`).get().s;
   const reiaPayables = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE direction = 'SELLER_TO_SJVN' AND status NOT IN ('PAID','CANCELLED')`).get().s;
@@ -176,9 +181,9 @@ router.get('/consolidated', (req, res) => {
   const reiaReconExceptions = db.prepare(`SELECT COUNT(*) c FROM reconciliations WHERE status IN ('NEEDS_REVIEW','DISPUTED','REOPENED')`).get().c;
 
   const tradingRevenue = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM trading_invoices`).get().s;
-  const tradingMargin = db.prepare(`SELECT COALESCE(SUM(sjvn_margin),0) s FROM trading_invoices`).get().s; // FIXED: sjvn_margin
+  const tradingMargin = db.prepare(`SELECT COALESCE(SUM(trading_margin),0) s FROM trading_invoices`).get().s;
   const tradingOutstanding = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM trading_invoices WHERE status NOT IN ('PAID','SETTLED_VIA_NETTING')`).get().s;
-  const tradingClearedQuantum = db.prepare(`SELECT COALESCE(SUM(cleared_quantum_mw),0) s FROM bid_blocks`).get().s;
+  const tradingClearedQuantum = db.prepare(`SELECT COALESCE(SUM(cleared_quantum_mw),0) s FROM bids`).get().s;
 
   const activeSecurityAmount = db.prepare(`SELECT COALESCE(SUM(limit_amount),0) s FROM payment_security WHERE status IN ('ACTIVE', 'PARTIALLY_UTILIZED', 'RENEWED')`).get().s;
 

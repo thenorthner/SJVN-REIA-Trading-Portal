@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
+import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
 const CAN_APPROVE = ['SJVN_ADMIN', 'REIA_USER', 'FINANCE_USER'];
@@ -13,6 +15,7 @@ const PAY_FORM = { amount: '', payment_date: '', mode: 'NEFT', reference: '', de
 
 export default function Invoices() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [filters, setFilters] = useState({ status: '', direction: '', billing_period: '' });
@@ -23,6 +26,19 @@ export default function Invoices() {
   const [selected, setSelected] = useState(null);
   const [payForm, setPayForm] = useState(PAY_FORM);
   const [approveComments, setApproveComments] = useState({}); // changed to object
+  const [trailBfr, setTrailBfr] = useState(null);
+  const [contractDetail, setContractDetail] = useState(null);
+  const [contractLoading, setContractLoading] = useState(false);
+
+  function openContract(contractId) {
+    if (!contractId) return;
+    setContractLoading(true);
+    setContractDetail({ id: contractId }); // open modal immediately with a loading state
+    api.contracts.get(contractId)
+      .then(setContractDetail)
+      .catch(() => alert('Failed to load contract details'))
+      .finally(() => setContractLoading(false));
+  }
 
   function load() {
     setLoading(true);
@@ -60,7 +76,11 @@ export default function Invoices() {
   }
 
   async function handleSubmitForApproval() {
-    await refreshSelected((await api.invoices.submitForApproval(selected.id)).id);
+    try {
+      await refreshSelected((await api.invoices.submitForApproval(selected.id)).id);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to submit invoice for approval.');
+    }
   }
 
   async function handleSubmitL2() {
@@ -96,7 +116,8 @@ export default function Invoices() {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert('Failed to download PDF');
+      console.error(err);
+      alert('Failed to download PDF: ' + (err.message || err));
     }
   }
 
@@ -109,12 +130,38 @@ export default function Invoices() {
 
   const columns = [
     { key: 'invoice_no', header: 'Invoice No.' },
-    { key: 'contract_no', header: 'Contract' },
+    { key: 'billing_family_ref', header: 'BFR', render: (r) => (
+      <BfrChip bfr={r.billing_family_ref} onClick={(ref) => setTrailBfr(ref)} />
+    )},
+    { key: 'contract_no', header: 'Contract', render: (r) => (
+      r.contract_id ? (
+        <button
+          type="button"
+          className="btn-link"
+          onClick={(e) => { e.stopPropagation(); openContract(r.contract_id); }}
+          title="View contract details"
+        >
+          {r.contract_no}
+        </button>
+      ) : (r.contract_no || '-')
+    )},
     { key: 'direction', header: 'Direction', render: (r) => r.direction === 'SJVN_TO_BUYER' ? 'SJVN → Buyer' : 'Seller → SJVN' },
     { key: 'billing_period', header: 'Period' },
     { key: 'energy_mwh', header: 'Energy (MWh)', render: (r) => fmtNumber(r.energy_mwh) },
     { key: 'total_amount', header: 'Amount', render: (r) => fmtCurrency(r.total_amount) },
-    { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
+    { key: 'status', header: 'Status', render: (r) => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+        <Badge status={r.status} />
+        {r.days_overdue > 0 && (
+          <span
+            title={`Overdue ${r.days_overdue} day(s) · accruing LPS`}
+            style={{ fontSize: 11, fontWeight: 600, color: '#b91c1c', background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap' }}
+          >
+            Overdue {r.days_overdue}d · LPS {fmtCurrency(r.accrued_lps)}
+          </span>
+        )}
+      </div>
+    )},
     { key: 'due_date', header: 'Due Date', render: (r) => r.due_date || '-' },
   ];
 
@@ -123,7 +170,14 @@ export default function Invoices() {
       <PageHeader
         title="Billing &amp; Invoicing"
         subtitle="Generate provisional/final invoices, route through approvals and track payments"
-        actions={CAN_WRITE.includes(user?.role) && <button className="btn btn-primary" onClick={() => setShowGenerate(true)}>+ Generate Invoice</button>}
+        actions={
+          <>
+            <button className="btn btn-secondary" onClick={() => navigate('/reia/reports')}>Billing Report</button>
+            {CAN_WRITE.includes(user?.role) && (
+              <button className="btn btn-primary" onClick={() => setShowGenerate(true)}>+ Generate Invoice</button>
+            )}
+          </>
+        }
       />
 
       <div className="filters-bar">
@@ -197,12 +251,38 @@ export default function Invoices() {
             </div>
             <div className="detail-grid mb-0">
               <div className="detail-item"><span className="detail-label">Status</span><span className="detail-value"><Badge status={selected.status} /></span></div>
-              <div className="detail-item"><span className="detail-label">Contract</span><span className="detail-value">{selected.contract_no}</span></div>
+              <div className="detail-item"><span className="detail-label">Contract</span><span className="detail-value">
+                {selected.contract_id ? (
+                  <button type="button" className="btn-link" onClick={() => openContract(selected.contract_id)} title="View contract details">
+                    {selected.contract_no} &rsaquo;
+                  </button>
+                ) : (selected.contract_no || '-')}
+              </span></div>
               <div className="detail-item"><span className="detail-label">Direction</span><span className="detail-value">{selected.direction === 'SJVN_TO_BUYER' ? 'SJVN → Buyer' : 'Seller → SJVN'}</span></div>
               <div className="detail-item"><span className="detail-label">Billing Period</span><span className="detail-value">{selected.billing_period}</span></div>
               <div className="detail-item"><span className="detail-label">Due Date</span><span className="detail-value">{selected.due_date || 'Not set'}</span></div>
+              {selected.days_overdue > 0 && (
+                <div className="detail-item">
+                  <span className="detail-label">Overdue / Accrued LPS</span>
+                  <span className="detail-value" style={{ color: 'var(--error)', fontWeight: 600 }}>
+                    {selected.days_overdue} day(s) · {fmtCurrency(selected.accrued_lps)}
+                    <span style={{ fontWeight: 400, color: '#64748b', fontSize: 12 }}> (accruing until paid)</span>
+                  </span>
+                </div>
+              )}
               <div className="detail-item"><span className="detail-label">Tariff</span><span className="detail-value">₹{selected.tariff_per_unit}/unit</span></div>
+              <div className="detail-item">
+                <span className="detail-label">Billing Family Ref</span>
+                <span className="detail-value">
+                  <BfrChip bfr={selected.billing_family_ref} onClick={() => setTrailBfr(selected.billing_family_ref)} />
+                </span>
+              </div>
+              {selected.parent_invoice_id && (
+                <div className="detail-item"><span className="detail-label">Parent Invoice</span><span className="detail-value" style={{ fontFamily: 'monospace', fontSize: 12 }}>{selected.parent_invoice_id}</span></div>
+              )}
             </div>
+
+            <SettlementTrailPanel invoiceId={selected.id} />
 
             {/* ── CERC-style Breakdown Table ── */}
             {selected.invoice_breakdown_json ? (() => {
@@ -364,7 +444,7 @@ export default function Invoices() {
               {['SELLER_L2', 'SELLER_L3', 'BUYER_L2', 'BUYER_L3'].includes(user?.role) && selected.status === 'PENDING_L2' && (
                 <button className="btn btn-primary" onClick={handleApproveL2}>Approve & Submit to SJVN</button>
               )}
-              {CAN_WRITE.includes(user?.role) && ['DRAFT', 'SUBMITTED'].includes(selected.status) && (
+              {CAN_WRITE.includes(user?.role) && ['DRAFT', 'SUBMITTED', 'REJECTED'].includes(selected.status) && (
                 <button className="btn btn-secondary" onClick={handleSubmitForApproval}>Submit for SJVN Approval</button>
               )}
               {CAN_WRITE.includes(user?.role) && selected.status === 'APPROVED' && selected.direction === 'SJVN_TO_BUYER' && (
@@ -406,6 +486,81 @@ export default function Invoices() {
             )}
           </div>
         )}
+      </Modal>
+
+      <Modal open={!!trailBfr} onClose={() => setTrailBfr(null)} title="Settlement Trail" width={720}>
+        {trailBfr && <SettlementTrailPanel bfr={trailBfr} />}
+      </Modal>
+
+      <Modal open={!!contractDetail} onClose={() => setContractDetail(null)} title={contractDetail?.contract_no ? `Contract: ${contractDetail.contract_no}` : 'Contract Details'} width={720}>
+        {contractLoading && !contractDetail?.contract_no ? (
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-light)' }}>Loading contract details...</div>
+        ) : contractDetail && contractDetail.contract_no ? (
+          <div>
+            <div className="section-title">Contract Overview</div>
+            <div className="detail-grid mb-0">
+              <div className="detail-item"><span className="detail-label">Contract No</span><span className="detail-value">{contractDetail.contract_no}</span></div>
+              <div className="detail-item"><span className="detail-label">Type</span><span className="detail-value"><Badge status={contractDetail.contract_type} /></span></div>
+              <div className="detail-item"><span className="detail-label">Status</span><span className="detail-value"><Badge status={contractDetail.status} /></span></div>
+              <div className="detail-item"><span className="detail-label">Counterparty</span><span className="detail-value">{contractDetail.seller_name || contractDetail.buyer_name || '-'}</span></div>
+              <div className="detail-item"><span className="detail-label">Project Type</span><span className="detail-value">{contractDetail.project_type || '-'}</span></div>
+              <div className="detail-item"><span className="detail-label">Total Capacity</span><span className="detail-value">{fmtNumber(contractDetail.capacity_mw)} MW</span></div>
+              <div className="detail-item">
+                <span className="detail-label">Commissioned (COD)</span>
+                <span className="detail-value">
+                  {contractDetail.commissioned_capacity_mw > 0
+                    ? <span style={{ color: 'var(--success)', fontWeight: 600 }}>{fmtNumber(contractDetail.commissioned_capacity_mw)} MW{contractDetail.cod_date ? ` (COD: ${contractDetail.cod_date})` : ''}</span>
+                    : 'Not yet commissioned'}
+                </span>
+              </div>
+              {contractDetail.billing_cycle && (
+                <div className="detail-item"><span className="detail-label">Billing Cycle</span><span className="detail-value">{contractDetail.billing_cycle}</span></div>
+              )}
+            </div>
+
+            <div className="section-title" style={{ marginTop: 18 }}>Commercial Terms</div>
+            <div className="detail-grid mb-0">
+              <div className="detail-item"><span className="detail-label">Tariff Type</span><span className="detail-value">{contractDetail.tariff_type || '-'}</span></div>
+              <div className="detail-item"><span className="detail-label">Tariff / Unit</span><span className="detail-value">₹{contractDetail.tariff_per_unit}</span></div>
+              <div className="detail-item"><span className="detail-label">Tenure</span><span className="detail-value">{contractDetail.tenure_start || '?'} to {contractDetail.tenure_end || '?'}</span></div>
+              <div className="detail-item"><span className="detail-label">PBG / EMD</span><span className="detail-value">{fmtCurrency(contractDetail.pbg_amount)}{contractDetail.pbg_type ? ` (${contractDetail.pbg_type})` : ''}</span></div>
+              <div className="detail-item"><span className="detail-label">Rebate Rule</span><span className="detail-value">{contractDetail.rebate_rule || '-'}</span></div>
+              <div className="detail-item"><span className="detail-label">LPS Rule</span><span className="detail-value">{contractDetail.lps_rule || '-'}</span></div>
+              {contractDetail.payment_terms && (
+                <div className="detail-item"><span className="detail-label">Payment Terms</span><span className="detail-value">{contractDetail.payment_terms}</span></div>
+              )}
+            </div>
+
+            {contractDetail.status === 'TERMINATED' && (
+              <div className="detail-grid mb-0" style={{ marginTop: 12 }}>
+                <div className="detail-item"><span className="detail-label">Termination Date</span><span className="detail-value">{contractDetail.termination_date || '-'}</span></div>
+                <div className="detail-item"><span className="detail-label">Termination Reason</span><span className="detail-value">{contractDetail.termination_reason || '-'}</span></div>
+              </div>
+            )}
+
+            {contractDetail.amendments?.length > 0 && (
+              <>
+                <div className="section-title" style={{ marginTop: 18 }}>Amendments</div>
+                <div className="timeline">
+                  {contractDetail.amendments.map((a) => (
+                    <div className="timeline-item" key={a.id}>
+                      v{a.version}: {a.change_summary || a.reason || 'Amendment'}
+                      {a.created_at && <div className="t-meta">{a.created_at}</div>}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div style={{ marginTop: 20, marginBottom: 8 }}>
+              <DocumentManager
+                moduleName="CONTRACTS"
+                contractId={contractDetail.id}
+                title="Contract Documents (PPA / PSA, Amendments)"
+              />
+            </div>
+          </div>
+        ) : null}
       </Modal>
     </div>
   );

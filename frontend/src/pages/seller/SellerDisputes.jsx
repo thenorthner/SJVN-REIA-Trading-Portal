@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency } from '../../components/ui.jsx';
 import { REASON_CODES, CHARGE_LINES, reasonLabel, chargeLabel, invoiceChargeBreakdown } from '../../disputesMeta.js';
+import { fmtDate, fmtDateTime } from '../../datetime.js';
 
 const EMPTY = {
   invoice_id: '', reason_code: '', charge_line: 'energy_charges',
@@ -87,7 +88,7 @@ export default function SellerDisputes() {
     { key: 'charge_line', header: 'Line', render: (r) => chargeLabel(r.charge_line) },
     { key: 'disputed_amount', header: 'Amount', render: (r) => fmtCurrency(r.disputed_amount) },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
-    { key: 'created_at', header: 'Raised', render: (r) => r.created_at?.slice(0, 10) },
+    { key: 'created_at', header: 'Raised', render: (r) => fmtDate(r.created_at) },
   ];
 
   return (
@@ -176,7 +177,7 @@ export default function SellerDisputes() {
             <div className="section-title" style={{ marginTop: 14 }}>Thread</div>
             {(detail.comments || []).map((c) => (
               <div key={c.id} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 12, opacity: 0.65 }}>{c.user_name} · {c.created_at?.slice(0, 16)}</div>
+                <div style={{ fontSize: 12, opacity: 0.65 }}>{c.user_name} · {fmtDateTime(c.created_at)}</div>
                 <div>{c.body}</div>
               </div>
             ))}

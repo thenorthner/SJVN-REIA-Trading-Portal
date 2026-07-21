@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency } from '../../components/ui.jsx';
 import { REASON_CODES, CHARGE_LINES, reasonLabel, chargeLabel, invoiceChargeBreakdown } from '../../disputesMeta.js';
+import { fmtDateTime } from '../../datetime.js';
 
 const EMPTY = {
   invoice_id: '', reason_code: '', charge_line: 'energy_charges',
@@ -203,7 +204,7 @@ export default function BuyerDisputes() {
             <div style={{ maxHeight: 180, overflow: 'auto', marginBottom: 8 }}>
               {(detail.comments || []).map((c) => (
                 <div key={c.id} style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 12, opacity: 0.65 }}>{c.user_name} · {c.created_at?.slice(0, 16)}</div>
+                  <div style={{ fontSize: 12, opacity: 0.65 }}>{c.user_name} · {fmtDateTime(c.created_at)}</div>
                   <div>{c.body}</div>
                 </div>
               ))}

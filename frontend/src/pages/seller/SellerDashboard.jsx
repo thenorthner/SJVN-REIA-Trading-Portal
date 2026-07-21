@@ -69,16 +69,16 @@ export default function SellerDashboard() {
         <div className="section-title" style={{ marginBottom: 12 }}>Quick Actions</div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <button className="btn btn-primary" onClick={() => navigate('/seller/invoices')}>
-            📝 Create New Invoice
+            Create New Invoice
           </button>
           <button className="btn btn-secondary" onClick={() => navigate('/seller/contracts')}>
-            📄 View My Contracts
+            View My Contracts
           </button>
           <button className="btn btn-secondary" onClick={() => navigate('/seller/energy-data')}>
-            ⚡ Check Energy Data
+            Check Energy Data
           </button>
           <button className="btn btn-secondary" onClick={() => navigate('/seller/payments')}>
-            💰 Payment Ledger
+            Payment Ledger
           </button>
         </div>
       </Card>

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification } from '../util.js';
 import {
   computeCoverage,
@@ -43,8 +43,9 @@ function canAccessInstrument(user, ps) {
   if (isReia(user)) return true;
   const c = db.prepare('SELECT seller_id, buyer_id FROM contracts WHERE id = ?').get(ps.contract_id);
   if (!c) return false;
-  if (user.role === 'SELLER') return c.seller_id === user.linked_entity_id;
-  if (user.role === 'BUYER') return c.buyer_id === user.linked_entity_id;
+  const side = counterpartySide(user);
+  if (side === 'SELLER') return c.seller_id === user.linked_entity_id;
+  if (side === 'BUYER') return c.buyer_id === user.linked_entity_id;
   return false;
 }
 
@@ -132,10 +133,11 @@ router.get('/expiring', (req, res) => {
       AND julianday(ps.validity_end) - julianday('now') <= ?
   `;
   const params = [days];
-  if (req.user.role === 'SELLER') {
+  const expSide = counterpartySide(req.user);
+  if (expSide === 'SELLER') {
     sql += ' AND c.seller_id = ?';
     params.push(req.user.linked_entity_id);
-  } else if (req.user.role === 'BUYER') {
+  } else if (expSide === 'BUYER') {
     sql += ' AND c.buyer_id = ?';
     params.push(req.user.linked_entity_id);
   }
@@ -171,10 +173,11 @@ router.get('/requirements/:contractId', (req, res) => {
   const c = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.contractId);
   if (!c) return res.status(404).json({ error: 'Contract not found' });
   if (!isReia(req.user)) {
-    if (req.user.role === 'SELLER' && c.seller_id !== req.user.linked_entity_id) {
+    const reqSide = counterpartySide(req.user);
+    if (reqSide === 'SELLER' && c.seller_id !== req.user.linked_entity_id) {
       return res.status(403).json({ error: 'Not authorized' });
     }
-    if (req.user.role === 'BUYER' && c.buyer_id !== req.user.linked_entity_id) {
+    if (reqSide === 'BUYER' && c.buyer_id !== req.user.linked_entity_id) {
       return res.status(403).json({ error: 'Not authorized' });
     }
   }
@@ -198,10 +201,11 @@ router.get('/', (req, res) => {
     FROM payment_security ps JOIN contracts c ON c.id = ps.contract_id WHERE 1=1
   `;
   const params = [];
-  if (req.user.role === 'SELLER') {
+  const listSide = counterpartySide(req.user);
+  if (listSide === 'SELLER') {
     sql += ' AND c.seller_id = ?';
     params.push(req.user.linked_entity_id);
-  } else if (req.user.role === 'BUYER') {
+  } else if (listSide === 'BUYER') {
     sql += ' AND c.buyer_id = ?';
     params.push(req.user.linked_entity_id);
   }

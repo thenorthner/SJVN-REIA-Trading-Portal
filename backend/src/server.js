@@ -12,6 +12,7 @@ import entitiesRoutes from './routes/entities.js';
 import contractsRoutes from './routes/contracts.js';
 import energyDataRoutes from './routes/energyData.js';
 import invoicesRoutes from './routes/invoices.js';
+import billingTrailRoutes from './routes/billingTrail.js';
 import disputesRoutes, { runSlaEscalations } from './routes/disputes.js';
 import paymentSecurityRoutes, { runAlertCascade } from './routes/paymentSecurity.js';
 import reconciliationRoutes, { runScheduledReconciliations } from './routes/reconciliation.js';
@@ -28,10 +29,16 @@ import notificationsRoutes from './routes/notifications.js';
 import auditLogsRoutes from './routes/auditLogs.js';
 import documentsRoutes from './routes/documents.js';
 import usersRoutes from './routes/users.js';
+import mastersRoutes from './routes/masters.js';
+import reportsRoutes from './routes/reports.js';
+import verifyRoutes from './routes/verify.js';
+import { ensureMasterDefaults } from './mastersService.js';
 
 import { assignTraceId, requireAuth } from './middleware/auth.js';
 
 dotenv.config();
+
+ensureMasterDefaults();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -43,6 +50,9 @@ app.use(assignTraceId);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'sjvn-energy-platform-backend' }));
 
+// Public invoice-authenticity page reached by scanning the bill's QR code (no login).
+app.use('/verify', verifyRoutes);
+
 // Auth
 app.use('/api/auth', authRoutes);
 
@@ -51,6 +61,7 @@ app.use('/api/entities', requireAuth, entitiesRoutes);
 app.use('/api/contracts', requireAuth, contractsRoutes);
 app.use('/api/energy-data', requireAuth, energyDataRoutes);
 app.use('/api/invoices', requireAuth, invoicesRoutes);
+app.use('/api/billing-trail', requireAuth, billingTrailRoutes);
 app.use('/api/disputes', requireAuth, disputesRoutes);
 app.use('/api/payment-security', paymentSecurityRoutes);
 app.use('/api/reconciliation', reconciliationRoutes);
@@ -65,6 +76,8 @@ app.use('/api/market-analytics', marketAnalyticsRoutes);
 
 // Cross-cutting Services
 app.use('/api/documents', documentsRoutes);
+app.use('/api/masters', requireAuth, mastersRoutes);
+app.use('/api/reports', requireAuth, reportsRoutes);
 
 // 3C. Management Dashboard & Consolidated MIS + platform services
 app.use('/api/dashboard', dashboardRoutes);

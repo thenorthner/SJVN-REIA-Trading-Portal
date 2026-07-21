@@ -68,16 +68,16 @@ export default function BuyerDashboard() {
         <div className="section-title" style={{ marginBottom: 12 }}>Quick Actions</div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <button className="btn btn-primary" onClick={() => navigate('/buyer/invoices')}>
-            🧾 Pay Pending Invoices
+            Pay Pending Invoices
           </button>
           <button className="btn btn-secondary" onClick={() => navigate('/buyer/contracts')}>
-            📄 View My PSAs
+            View My PSAs
           </button>
           <button className="btn btn-secondary" onClick={() => navigate('/buyer/energy-data')}>
-            ⚡ View Energy Allocation
+            View Energy Allocation
           </button>
           <button className="btn btn-secondary" onClick={() => navigate('/buyer/payments')}>
-            💰 Payment Ledger
+            Payment Ledger
           </button>
         </div>
       </Card>

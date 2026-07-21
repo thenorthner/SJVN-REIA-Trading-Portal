@@ -234,7 +234,7 @@ export default function SellerInvoices() {
                 </div>
               ) : (
                 <div style={{ color: 'var(--danger)', fontSize: 13 }}>
-                  ⚠️ No locked energy data found for this contract and period. Energy data must be validated and locked by SJVN before you can generate an invoice.
+                  No locked energy data found for this contract and period. Energy data must be validated and locked by SJVN before you can generate an invoice.
                 </div>
               )}
             </div>

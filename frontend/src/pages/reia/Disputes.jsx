@@ -3,6 +3,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
+import { fmtDateTime } from '../../datetime.js';
 import {
   REASON_CODES, CHARGE_LINES, DISPUTE_STATUSES, OPEN_STATUSES,
   reasonLabel, chargeLabel, invoiceChargeBreakdown,
@@ -37,6 +38,20 @@ export default function Disputes() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState('');
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  async function downloadDisputePdf() {
+    setPdfLoading(true);
+    try {
+      const params = {};
+      if (filters.status) params.status = filters.status;
+      await api.reports.disputeSummaryPdf(params);
+    } catch (err) {
+      alert(err.message || 'Failed to download dispute PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  }
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [resolveForm, setResolveForm] = useState(RESOLVE_FORM);
@@ -163,9 +178,16 @@ export default function Disputes() {
       <PageHeader
         title="Dispute Management"
         subtitle="Financial control — partial disputes, SLA, settlement & root-cause patterns"
-        actions={CAN_RAISE.includes(user?.role) && (
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Raise Dispute</button>
-        )}
+        actions={
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-primary" disabled={pdfLoading} onClick={downloadDisputePdf}>
+              {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
+            </button>
+            {CAN_RAISE.includes(user?.role) && (
+              <button className="btn btn-secondary" onClick={() => setShowCreate(true)}>+ Raise Dispute</button>
+            )}
+          </div>
+        }
       />
 
       {stats && (
@@ -386,7 +408,7 @@ export default function Disputes() {
               {(detail.comments || []).map((c) => (
                 <div key={c.id} style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    {c.user_name} ({c.role}) · {c.created_at?.slice(0, 16)}
+                    {c.user_name} ({c.role}) · {fmtDateTime(c.created_at)}
                     {c.is_internal ? ' · INTERNAL' : ''}
                   </div>
                   <div>{c.body}</div>
@@ -411,7 +433,7 @@ export default function Disputes() {
             <ul style={{ paddingLeft: 18, fontSize: 13 }}>
               {(detail.events || []).map((ev) => (
                 <li key={ev.id}>
-                  {ev.created_at?.slice(0, 16)} — {ev.event_type}
+                  {fmtDateTime(ev.created_at)} — {ev.event_type}
                   {ev.from_status ? ` (${ev.from_status} → ${ev.to_status})` : ''} by {ev.actor_name}
                 </li>
               ))}

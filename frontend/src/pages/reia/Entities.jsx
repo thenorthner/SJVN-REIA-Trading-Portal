@@ -3,6 +3,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
+import { fmtDate } from '../../datetime.js';
 
 const CAN_APPROVE = ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN'];
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER', 'SELLER', 'BUYER', 'IT_SUPER_ADMIN'];
@@ -14,6 +15,7 @@ const EMPTY_FORM = {
   psa_tariff: '', supply_criteria: '', organization_details: '', regulatory_approvals: '', 
   address: '', bank_name: '', account_no: '', ifsc_code: '', branch_address: '',
   corporate_email: '', corporate_phone: '', corporate_website: '', tan_no: '',
+  signatory_name: '', signatory_designation: '',
   contacts: [{ contact_type: 'COMMERCIAL', name: '', email: '', phone: '', is_primary: true }],
   documents: [{ doc_type: 'Registration', url: '', validity_end: '' }]
 };
@@ -76,7 +78,7 @@ export default function Entities() {
   
   async function handlePennyDrop() {
     try {
-      await api.client.post(`/reia/entities/${selected.id}/penny-drop`);
+      await api.client.post(`/entities/${selected.id}/penny-drop`);
       api.entities.get(selected.id).then(setSelected);
       load();
     } catch(err) {
@@ -86,7 +88,7 @@ export default function Entities() {
 
   async function handleInvoiceTemplateSave(templateStr) {
     try {
-      await api.client.put(`/reia/entities/${selected.id}`, { invoice_template_json: templateStr });
+      await api.client.put(`/entities/${selected.id}`, { invoice_template_json: templateStr });
       alert('Invoice configuration saved.');
       api.entities.get(selected.id).then(setSelected);
       load();
@@ -107,6 +109,18 @@ export default function Entities() {
     }
   }
 
+  async function handleSignatureUpload(e) {
+    if (!e.target.files[0]) return;
+    try {
+      await api.entities.uploadSignature(selected.id, e.target.files[0]);
+      alert('Signature uploaded successfully.');
+      api.entities.get(selected.id).then(setSelected);
+      load();
+    } catch (err) {
+      alert('Failed to upload signature');
+    }
+  }
+
   const columns = [
     { key: 'name', header: 'Name', render: (r) => (
       <div>
@@ -123,7 +137,7 @@ export default function Entities() {
     )},
     { key: 'capacity', header: 'Capacity (MW)', render: (r) => fmtNumber(r.contracted_capacity_mw ?? r.capacity_mw) },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
-    { key: 'created_at', header: 'Onboarded', render: (r) => r.created_at?.slice(0, 10) },
+    { key: 'created_at', header: 'Onboarded', render: (r) => fmtDate(r.created_at) },
   ];
 
   return (
@@ -191,14 +205,33 @@ export default function Entities() {
               <Field label="Corporate Website"><input value={form.corporate_website} onChange={e => setForm({...form, corporate_website: e.target.value})} /></Field>
               <Field label="Address"><input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></Field>
               <Field label="Credit Rating"><input value={form.credit_rating} onChange={e => setForm({...form, credit_rating: e.target.value})} /></Field>
+              <Field label="Authorised Signatory Name"><input placeholder="Name shown on invoice signature" value={form.signatory_name} onChange={e => setForm({...form, signatory_name: e.target.value})} /></Field>
+              <Field label="Signatory Designation"><input placeholder="e.g. Authorised Signatory / DGM (Finance)" value={form.signatory_designation} onChange={e => setForm({...form, signatory_designation: e.target.value})} /></Field>
             </div>
           </div>
 
           <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 12px 0' }}>3. Technical & Banking</h4>
             <div className="form-grid">
-              <Field label="Technology"><input placeholder="Solar / Wind" value={form.technology} onChange={(e) => setForm({ ...form, technology: e.target.value })} /></Field>
-              <Field label="Capacity (MW)"><input type="number" step="0.01" value={form.capacity_mw} onChange={(e) => setForm({ ...form, capacity_mw: e.target.value })} /></Field>
+              {form.entity_type === 'SELLER' && (
+                <>
+                  <Field label="Technology"><input placeholder="Solar / Wind" value={form.technology} onChange={(e) => setForm({ ...form, technology: e.target.value })} /></Field>
+                  <Field label="Capacity (MW)"><input type="number" step="0.01" value={form.capacity_mw} onChange={(e) => setForm({ ...form, capacity_mw: e.target.value })} /></Field>
+                </>
+              )}
+              {form.entity_type === 'BUYER' && (
+                <>
+                  <Field label="Contracted Capacity (MW)"><input type="number" step="0.01" value={form.contracted_capacity_mw} onChange={(e) => setForm({ ...form, contracted_capacity_mw: e.target.value })} /></Field>
+                  <Field label="PSA Tariff (₹/kWh)"><input type="number" step="0.01" value={form.psa_tariff} onChange={(e) => setForm({ ...form, psa_tariff: e.target.value })} /></Field>
+                  <Field label="Criteria for Supply of Power">
+                    <input
+                      placeholder="e.g. Round the clock / Peak / Off-peak"
+                      value={form.supply_criteria}
+                      onChange={(e) => setForm({ ...form, supply_criteria: e.target.value })}
+                    />
+                  </Field>
+                </>
+              )}
               <Field label="Bank Name"><input required value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })} /></Field>
               <Field label="Account No"><input required value={form.account_no} onChange={(e) => setForm({ ...form, account_no: e.target.value })} /></Field>
               <Field label="IFSC Code"><input required value={form.ifsc_code} onChange={(e) => setForm({ ...form, ifsc_code: e.target.value })} /></Field>
@@ -256,8 +289,19 @@ export default function Entities() {
                       </div>
                     </td>
                   </tr>
-                  <tr><td>Technology</td><td>{selected.technology || '-'}</td></tr>
-                  <tr><td>Capacity</td><td>{fmtNumber(selected.capacity_mw)} MW</td></tr>
+                  {selected.entity_type === 'SELLER' && (
+                    <>
+                      <tr><td>Technology</td><td>{selected.technology || '-'}</td></tr>
+                      <tr><td>Capacity</td><td>{fmtNumber(selected.capacity_mw)} MW</td></tr>
+                    </>
+                  )}
+                  {selected.entity_type === 'BUYER' && (
+                    <>
+                      <tr><td>Contracted Capacity</td><td>{fmtNumber(selected.contracted_capacity_mw)} MW</td></tr>
+                      <tr><td>PSA Tariff</td><td>{selected.psa_tariff != null ? `₹${selected.psa_tariff}/kWh` : '-'}</td></tr>
+                      <tr><td>Criteria for Supply of Power</td><td>{selected.supply_criteria || '-'}</td></tr>
+                    </>
+                  )}
                   <tr><td>Status</td><td><Badge status={selected.status} /></td></tr>
                 </tbody>
               </table>
@@ -288,6 +332,59 @@ export default function Entities() {
                   <img src={`http://localhost:4000${selected.logo_url}`} alt="Logo" style={{ maxHeight: 60, objectFit: 'contain' }} />
                 </div>
               )}
+
+              <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <h4 style={{ margin: '0 0 8px 0', color: '#334155' }}>Digital Signature</h4>
+                    <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
+                      Upload the authorised signatory's signature image. It appears in the "For &amp; on behalf of" box on the invoice, with the signatory name and date as a digital-signature stamp.
+                    </p>
+                  </div>
+                  <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
+                    Upload Signature
+                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleSignatureUpload} />
+                  </label>
+                </div>
+                {selected.signature_url && (
+                  <div style={{ marginTop: 16 }}>
+                    <img src={`http://localhost:4000${selected.signature_url}`} alt="Signature" style={{ maxHeight: 50, objectFit: 'contain', background: '#fff', padding: 4, border: '1px solid #e2e8f0', borderRadius: 4 }} />
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'flex-end' }}>
+                  <Field label="Signatory Name">
+                    <input
+                      value={selected.signatory_name || ''}
+                      onChange={e => setSelected({ ...selected, signatory_name: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Designation">
+                    <input
+                      value={selected.signatory_designation || ''}
+                      onChange={e => setSelected({ ...selected, signatory_designation: e.target.value })}
+                    />
+                  </Field>
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await api.entities.update(selected.id, {
+                          signatory_name: selected.signatory_name || '',
+                          signatory_designation: selected.signatory_designation || '',
+                        });
+                        alert('Signatory details saved.');
+                        api.entities.get(selected.id).then(setSelected);
+                        load();
+                      } catch (err) {
+                        alert('Failed to save signatory details');
+                      }
+                    }}
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
             </div>
           )}
           

@@ -16,7 +16,8 @@
  */
 
 import { db } from '../db/index.js';
-import { newId, logAudit, pushNotification } from '../util.js';
+import { newId, logAudit, pushNotification, buildBillingFamilyRef, directionForContract } from '../util.js';
+import { getParamNumber } from '../mastersService.js';
 import { RPC_SOURCES, mmyyToYYYYMM, yyyymmToMMYY } from '../config/rpcSources.js';
 import { exec } from 'child_process';
 import path from 'path';
@@ -226,25 +227,37 @@ function processAndSave(logId, parsedData, rpcKey, period, dataType) {
       continue;
     }
 
-    // Create energy_data record
+    // Create energy_data record (separate FINAL row; never overwrite provisional)
     const edId = newId('ENG');
+    const bfr = buildBillingFamilyRef(contract.contract_no, period, directionForContract(contract));
+    let supersedesId = null;
+    if (dataType === 'FINAL') {
+      const prov = db.prepare(`
+        SELECT id FROM energy_data
+        WHERE contract_id = ? AND period_month = ? AND data_type = 'PROVISIONAL'
+        ORDER BY created_at ASC LIMIT 1
+      `).get(contract.id, period);
+      if (prov) supersedesId = prov.id;
+    }
     db.prepare(`
-      INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, cuf_percent, availability_percent, status)
-      VALUES (?, ?, ?, ?, 'REA', ?, NULL, ?, 'DRAFT')
-    `).run(edId, contract.id, period, dataType, station.energy_mwh, station.availability_percent);
+      INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, cuf_percent, availability_percent, status, billing_family_ref, supersedes_energy_id)
+      VALUES (?, ?, ?, ?, 'REA', ?, NULL, ?, 'DRAFT', ?, ?)
+    `).run(edId, contract.id, period, dataType, station.energy_mwh, station.availability_percent, bfr, supersedesId);
 
     logAudit({ req: null, user: { id: 'SYSTEM', name: 'REA Scraper' }, action: 'CREATE', module: 'REIA', entityType: 'energy_data', entityId: edId, details: { source: 'REA_SCRAPER', rpc: rpcKey, station: station.station_name } });
 
     // Auto-validate
     try {
-      let baseCuf = 0.22;
-      if (contract.project_type === 'Wind') baseCuf = 0.30;
-      if (contract.project_type === 'Hydro') baseCuf = 0.65;
+      let baseCuf = getParamNumber('solar_base_cuf_pct', 22) / 100;
+      if (contract.project_type === 'Wind') baseCuf = getParamNumber('wind_base_cuf_pct', 30) / 100;
+      if (contract.project_type === 'Hydro') baseCuf = getParamNumber('hydro_base_cuf_pct', 65) / 100;
 
       const expected = contract.capacity_mw * 24 * 30 * baseCuf;
       const deviationPct = Math.abs(station.energy_mwh - expected) / expected * 100;
       
-      const tolerance = contract.project_type === 'Hydro' ? 80 : 30;
+      const tolerance = contract.project_type === 'Hydro'
+        ? getParamNumber('hydro_validate_tolerance_pct', 80)
+        : getParamNumber('energy_validate_tolerance_pct', 30);
       const flagged = deviationPct > tolerance;
       
       db.prepare(`UPDATE energy_data SET status = ?, deviation_notes = ?, updated_at = datetime('now') WHERE id = ?`)

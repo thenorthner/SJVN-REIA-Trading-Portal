@@ -99,6 +99,20 @@ router.post('/upload', requireAuth, upload.single('file'), (req, res) => {
     return res.status(403).json({ error: 'Cannot upload document for another entity' });
   }
 
+  // Segregation of duties: internal users (SJVN Admin / REIA / Finance) are the
+  // reviewers/verifiers. They must NOT also upload VERIFY-category documents —
+  // those must come from the stakeholder (Seller/Buyer) themselves so the same
+  // person never uploads and self-verifies. Internal users may still upload
+  // RECORD-category documents (internal notes, calculations, etc.).
+  const effectiveCategory = category
+    || (document_id ? db.prepare('SELECT category FROM documents WHERE id = ?').get(document_id)?.category : null);
+  if (isInternal && effectiveCategory === 'VERIFY') {
+    fs.unlinkSync(req.file.path);
+    return res.status(403).json({
+      error: 'VERIFY-category documents must be uploaded by the stakeholder (Seller/Buyer). Internal users can only review and verify them.',
+    });
+  }
+
   try {
     db.transaction(() => {
       let docId = document_id;
@@ -177,12 +191,62 @@ router.post('/:versionId/reject', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
+/**
+ * Detect a file's real type by reading its magic bytes.
+ *
+ * The filename and the stored mime_type are both unreliable — users upload
+ * files with the wrong extension (a PNG saved as "invoice.pdf"), and legacy
+ * rows have missing/incorrect mime types. The file's own signature is the
+ * only trustworthy source, so it takes priority over both.
+ *
+ * Returns a mime type string, or null if the signature isn't recognised.
+ */
+function sniffFileType(filePath) {
+  let fd;
+  try {
+    fd = fs.openSync(filePath, 'r');
+    const buf = Buffer.alloc(16);
+    const bytesRead = fs.readSync(fd, buf, 0, 16, 0);
+    if (bytesRead < 4) return null;
+
+    if (buf.slice(0, 4).toString('latin1') === '%PDF') return 'application/pdf';
+    if (buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+    if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+    if (buf.slice(0, 4).toString('latin1') === 'GIF8') return 'image/gif';
+    if (buf[0] === 0x42 && buf[1] === 0x4d) return 'image/bmp';
+    if (buf.slice(0, 4).toString('latin1') === 'RIFF' && buf.slice(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+    return null;
+  } catch (_) {
+    return null;
+  } finally {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch (_) { /* ignore */ }
+    }
+  }
+}
+
+// Fallback extension -> mime map, used only if sniffing is inconclusive and
+// the mime_type captured at upload time is missing from the DB record.
+const EXT_MIME_FALLBACK = {
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.csv': 'text/csv',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.xls': 'application/vnd.ms-excel',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+};
+
 // GET /:versionId/download
 router.get('/:versionId/download', requireAuth, (req, res) => {
   const { versionId } = req.params;
 
   const doc = db.prepare(`
-    SELECT v.file_path, v.file_name, d.entity_id 
+    SELECT v.file_path, v.file_name, v.mime_type, d.entity_id
     FROM document_versions v
     JOIN documents d ON v.document_id = d.id
     WHERE v.id = ?
@@ -196,7 +260,27 @@ router.get('/:versionId/download', requireAuth, (req, res) => {
     }
   }
 
-  res.download(doc.file_path, doc.file_name);
+  if (!fs.existsSync(doc.file_path)) {
+    return res.status(404).json({ error: 'File is missing from storage' });
+  }
+
+  // Determine Content-Type from the file's actual bytes first. Neither the
+  // extension (what res.download()/express.static() use) nor the stored
+  // mime_type can be trusted: files get uploaded with the wrong extension,
+  // and some upload paths don't preserve extensions on disk at all. Serving
+  // a PNG as application/pdf makes the browser open its PDF viewer, which
+  // then fails with "Failed to load PDF document".
+  const ext = path.extname(doc.file_name || '').toLowerCase();
+  const contentType =
+    sniffFileType(doc.file_path) ||
+    doc.mime_type ||
+    EXT_MIME_FALLBACK[ext] ||
+    'application/octet-stream';
+  const safeName = (doc.file_name || 'document').replace(/["\r\n]/g, '');
+
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
+  fs.createReadStream(doc.file_path).pipe(res);
 });
 
 export default router;

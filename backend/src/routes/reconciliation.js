@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification } from '../util.js';
 import {
   buildContractReconItems,
@@ -77,8 +77,9 @@ function canAccessRecon(user, recon) {
   if (!recon.contract_id) return false;
   const c = db.prepare('SELECT seller_id, buyer_id FROM contracts WHERE id = ?').get(recon.contract_id);
   if (!c) return false;
-  if (user.role === 'SELLER') return c.seller_id === user.linked_entity_id;
-  if (user.role === 'BUYER') return c.buyer_id === user.linked_entity_id;
+  const side = counterpartySide(user);
+  if (side === 'SELLER') return c.seller_id === user.linked_entity_id;
+  if (side === 'BUYER') return c.buyer_id === user.linked_entity_id;
   return false;
 }
 
@@ -329,10 +330,11 @@ router.get('/', (req, res) => {
   `;
   const params = [];
 
-  if (req.user.role === 'SELLER') {
+  const side = counterpartySide(req.user);
+  if (side === 'SELLER') {
     sql += ' AND c.seller_id = ?';
     params.push(req.user.linked_entity_id);
-  } else if (req.user.role === 'BUYER') {
+  } else if (side === 'BUYER') {
     sql += ' AND c.buyer_id = ?';
     params.push(req.user.linked_entity_id);
   }

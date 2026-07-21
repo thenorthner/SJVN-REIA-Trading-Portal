@@ -1,12 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import client from '../../api/client';
-import { Modal, Field, Badge } from '../../components/ui';
+import { PageHeader, Card, Table, Modal, Field, Badge } from '../../components/ui';
+import { fmtDate } from '../../datetime.js';
+
+const ROLE_LABELS = {
+  SELLER: 'Company Admin',
+  BUYER: 'Company Admin',
+  SELLER_L1: 'Level 1 (Maker)',
+  SELLER_L2: 'Level 2 (Checker)',
+  SELLER_L3: 'Level 3 (Approver)',
+  BUYER_L1: 'Level 1 (Maker)',
+  BUYER_L2: 'Level 2 (Checker)',
+  BUYER_L3: 'Level 3 (Approver)',
+};
 
 export default function Team() {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
   const [form, setForm] = useState({ name: '', email: '', password: '', role: '' });
 
   const isSuperAdmin = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN'].includes(user.role);
@@ -18,19 +33,27 @@ export default function Team() {
   }, []);
 
   const loadUsers = async () => {
-    const data = await client.users.list();
-    setUsers(data);
+    setLoading(true);
+    try {
+      setUsers(await client.users.list());
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleAdd = async (e) => {
     e.preventDefault();
+    setError('');
+    setSubmitting(true);
     try {
       await client.users.create(form);
       setShowAdd(false);
       setForm({ name: '', email: '', password: '', role: '' });
       loadUsers();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to create user');
+      setError(err.response?.data?.error || 'Failed to create user');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -39,97 +62,128 @@ export default function Team() {
       await client.users.updateStatus(u.id, u.is_active ? 0 : 1);
       loadUsers();
     } catch (err) {
-      alert('Failed to update status');
+      alert(err.response?.data?.error || 'Failed to update status');
     }
   };
 
+  const roleOptions = user.role.startsWith('SELLER')
+    ? [
+        { value: 'SELLER_L1', label: 'Level 1 (Maker) — prepares invoices' },
+        { value: 'SELLER_L2', label: 'Level 2 (Checker) — approves and submits to SJVN' },
+      ]
+    : user.role.startsWith('BUYER')
+      ? [
+          { value: 'BUYER_L1', label: 'Level 1 (Maker) — prepares submissions' },
+          { value: 'BUYER_L2', label: 'Level 2 (Checker) — approves and submits to SJVN' },
+        ]
+      : [
+          { value: 'SELLER_L1', label: 'Seller Level 1 (Maker)' },
+          { value: 'SELLER_L2', label: 'Seller Level 2 (Checker)' },
+          { value: 'BUYER_L1', label: 'Buyer Level 1 (Maker)' },
+          { value: 'BUYER_L2', label: 'Buyer Level 2 (Checker)' },
+        ];
+
+  const columns = [
+    {
+      key: 'name',
+      header: 'Name',
+      render: (u) => (
+        <div>
+          <div style={{ fontWeight: 600 }}>{u.name}</div>
+          {u.id === user.id && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>You</div>}
+        </div>
+      ),
+    },
+    { key: 'email', header: 'Email' },
+    {
+      key: 'role',
+      header: 'Role',
+      render: (u) => (
+        <div>
+          <Badge status={u.role} />
+          {ROLE_LABELS[u.role] && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{ROLE_LABELS[u.role]}</div>
+          )}
+        </div>
+      ),
+    },
+    { key: 'status', header: 'Status', render: (u) => <Badge status={u.is_active ? 'ACTIVE' : 'CANCELLED'} label={u.is_active ? 'Active' : 'Inactive'} /> },
+    { key: 'created_at', header: 'Joined', render: (u) => fmtDate(u.created_at) },
+    ...(canAdd
+      ? [
+          {
+            key: 'actions',
+            header: 'Actions',
+            render: (u) => (
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => toggleStatus(u)}
+                disabled={u.id === user.id}
+                title={u.id === user.id ? 'You cannot deactivate your own account' : undefined}
+              >
+                {u.is_active ? 'Deactivate' : 'Activate'}
+              </button>
+            ),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div>
-      <div className="flex-between align-center mb-24">
-        <h1>Team Management</h1>
-        {canAdd && (
-          <button className="btn btn-primary" onClick={() => setShowAdd(true)}>
+      <PageHeader
+        title="Team Management"
+        subtitle="Manage the users in your organisation and their maker-checker access levels"
+        actions={canAdd && (
+          <button className="btn btn-primary" onClick={() => { setError(''); setShowAdd(true); }}>
             + Add Team Member
           </button>
         )}
-      </div>
+      />
 
-      <div className="card table-container">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Status</th>
-              <th>Joined Date</th>
-              {canAdd && <th className="text-right">Actions</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {users.length === 0 ? (
-              <tr><td colSpan="6" className="text-center text-light py-24">No team members found</td></tr>
-            ) : users.map(u => (
-              <tr key={u.id}>
-                <td>{u.name}</td>
-                <td>{u.email}</td>
-                <td><Badge status={u.role} /></td>
-                <td><Badge status={u.is_active ? 'ACTIVE' : 'INACTIVE'} /></td>
-                <td>{new Date(u.created_at).toLocaleDateString()}</td>
-                {canAdd && (
-                  <td className="text-right">
-                    <button 
-                      className="btn btn-sm btn-outline" 
-                      onClick={() => toggleStatus(u)}
-                      disabled={u.id === user.id}
-                    >
-                      {u.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Card>
+        <Table
+          columns={columns}
+          rows={loading ? [] : users}
+          emptyMessage={loading ? 'Loading team...' : 'No team members found.'}
+        />
+      </Card>
 
-      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Team Member" width={400}>
+      <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Add Team Member" width={460}>
+        {error && <div className="form-error">{error}</div>}
         <form onSubmit={handleAdd}>
           <Field label="Full Name">
-            <input required type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+            <input required type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </Field>
           <Field label="Email Address">
-            <input required type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
+            <input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </Field>
           <Field label="Password">
-            <input required type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
+            <input
+              required
+              type="password"
+              minLength={6}
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+            <p className="inline-note" style={{ marginTop: 4 }}>Minimum 6 characters. The user can change it after first login.</p>
           </Field>
-          <Field label="Role">
-            <select required value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
-              <option value="">Select Role</option>
-              {user.role.startsWith('SELLER') ? (
-                <>
-                  <option value="SELLER_L1">Level 1 (Maker)</option>
-                  <option value="SELLER_L2">Level 2 (Checker)</option>
-                </>
-              ) : user.role.startsWith('BUYER') ? (
-                <>
-                  <option value="BUYER_L1">Level 1 (Maker)</option>
-                  <option value="BUYER_L2">Level 2 (Checker)</option>
-                </>
-              ) : (
-                <>
-                  <option value="SELLER_L1">Seller Level 1</option>
-                  <option value="SELLER_L2">Seller Level 2</option>
-                  <option value="BUYER_L1">Buyer Level 1</option>
-                  <option value="BUYER_L2">Buyer Level 2</option>
-                </>
-              )}
+          <Field label="Access Level">
+            <select required value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+              <option value="">Select access level...</option>
+              {roleOptions.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}</option>
+              ))}
             </select>
+            <p className="inline-note" style={{ marginTop: 4 }}>
+              Makers prepare and submit documents; Checkers review and forward them to SJVN.
+            </p>
           </Field>
           <div className="form-actions mt-24">
-            <button type="button" className="btn btn-ghost" onClick={() => setShowAdd(false)}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Create User</button>
+            <button type="button" className="btn btn-ghost" onClick={() => setShowAdd(false)} disabled={submitting}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={submitting}>
+              {submitting ? 'Creating...' : 'Create User'}
+            </button>
           </div>
         </form>
       </Modal>

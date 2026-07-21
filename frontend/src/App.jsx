@@ -2,7 +2,8 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
-import { ROLE_GROUPS } from './roles.js';
+import { ROLE_GROUPS, isSellerRole, isBuyerRole } from './roles.js';
+import { useAuth } from './context/AuthContext.jsx';
 
 import Login from './pages/Login.jsx';
 import ConsolidatedDashboard from './pages/ConsolidatedDashboard.jsx';
@@ -16,6 +17,7 @@ import Team from './pages/shared/Team.jsx';
 import Disputes from './pages/reia/Disputes.jsx';
 import PaymentSecurity from './pages/reia/PaymentSecurity.jsx';
 import Reconciliation from './pages/reia/Reconciliation.jsx';
+import Reports from './pages/reia/Reports.jsx';
 
 import TradingDashboard from './pages/trading/TradingDashboard.jsx';
 import TradingClients from './pages/trading/TradingClients.jsx';
@@ -44,11 +46,39 @@ import BuyerReconciliation from './pages/buyer/BuyerReconciliation.jsx';
 import BuyerPaymentSecurity from './pages/buyer/BuyerPaymentSecurity.jsx';
 
 import AuditLogs from './pages/AuditLogs.jsx';
+import MastersHub from './pages/masters/MastersHub.jsx';
 
-const REIA_ROLES = [...ROLE_GROUPS.REIA_ALL, 'SELLER', 'BUYER'];
+// Internal SJVN REIA desk only — counterparties use their own portals below,
+// which scope every query to their own entity.
+const REIA_ROLES = [...ROLE_GROUPS.REIA_ALL];
 const TRADING_ROLES = [...ROLE_GROUPS.TRADING_ALL, 'TRADING_CLIENT'];
-const SELLER_ROLES = ['SELLER', 'SJVN_ADMIN'];
-const BUYER_ROLES = ['BUYER', 'SJVN_ADMIN'];
+const SELLER_ROLES = [...ROLE_GROUPS.SELLER_ALL, 'SJVN_ADMIN'];
+const BUYER_ROLES = [...ROLE_GROUPS.BUYER_ALL, 'SJVN_ADMIN'];
+const AUDIT_ROLES = [...ROLE_GROUPS.AUDITOR];
+const MASTERS_ROLES = [...ROLE_GROUPS.MASTERS_READ];
+
+/**
+ * Landing route. The Consolidated Dashboard rolls up financials across every
+ * seller, buyer and trading client, so only SJVN top management sees it.
+ * Everyone else is sent to the dashboard they actually own — showing them an
+ * "access restricted" wall on their own landing page would be a dead end.
+ */
+function HomeRoute() {
+  const { user } = useAuth();
+  const role = user?.role;
+
+  if (isSellerRole(role)) return <Navigate to="/seller" replace />;
+  if (isBuyerRole(role)) return <Navigate to="/buyer" replace />;
+  if (role === 'TRADING_CLIENT' || role === 'TRADING_USER') return <Navigate to="/trading" replace />;
+  if (role === 'REIA_USER') return <Navigate to="/reia" replace />;
+  if (role === 'COMPLIANCE_AUDITOR') return <Navigate to="/audit-logs" replace />;
+
+  return (
+    <ProtectedRoute roles={ROLE_GROUPS.EXECUTIVE}>
+      <ConsolidatedDashboard />
+    </ProtectedRoute>
+  );
+}
 
 export default function App() {
   return (
@@ -63,7 +93,7 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<ConsolidatedDashboard />} />
+        <Route index element={<HomeRoute />} />
 
         <Route path="reia" element={<ProtectedRoute roles={REIA_ROLES}><ReiaDashboard /></ProtectedRoute>} />
         <Route path="reia/entities" element={<ProtectedRoute roles={REIA_ROLES}><Entities /></ProtectedRoute>} />
@@ -73,6 +103,7 @@ export default function App() {
         <Route path="reia/disputes" element={<ProtectedRoute roles={REIA_ROLES}><Disputes /></ProtectedRoute>} />
         <Route path="reia/payment-security" element={<ProtectedRoute roles={REIA_ROLES}><PaymentSecurity /></ProtectedRoute>} />
         <Route path="reia/reconciliation" element={<ProtectedRoute roles={REIA_ROLES}><Reconciliation /></ProtectedRoute>} />
+        <Route path="reia/reports" element={<ProtectedRoute roles={REIA_ROLES}><Reports /></ProtectedRoute>} />
 
         {/* Seller Portal */}
         <Route path="seller" element={<ProtectedRoute roles={SELLER_ROLES}><SellerDashboard /></ProtectedRoute>} />
@@ -104,7 +135,8 @@ export default function App() {
         <Route path="trading/billing-settlement" element={<ProtectedRoute roles={TRADING_ROLES}><BillingSettlement /></ProtectedRoute>} />
         <Route path="trading/market-analytics" element={<ProtectedRoute roles={TRADING_ROLES}><MarketAnalytics /></ProtectedRoute>} />
 
-        <Route path="audit-logs" element={<AuditLogs />} />
+        <Route path="masters" element={<ProtectedRoute roles={MASTERS_ROLES}><MastersHub /></ProtectedRoute>} />
+        <Route path="audit-logs" element={<ProtectedRoute roles={AUDIT_ROLES}><AuditLogs /></ProtectedRoute>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

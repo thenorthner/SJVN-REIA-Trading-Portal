@@ -39,6 +39,27 @@ export function assignTraceId(req, res, next) {
   next();
 }
 
+export const SELLER_ROLES = ['SELLER', 'SELLER_L1', 'SELLER_L2', 'SELLER_L3'];
+export const BUYER_ROLES = ['BUYER', 'BUYER_L1', 'BUYER_L2', 'BUYER_L3'];
+
+/**
+ * Normalise a counterparty user to the side they belong to.
+ *
+ * Company sub-users created from Team Management get roles like SELLER_L1 /
+ * BUYER_L2. Row-level scoping must treat those exactly like the parent
+ * SELLER / BUYER role — an `=== 'SELLER'` check silently fails for them, and
+ * because these filters are "add a WHERE clause if counterparty", failing the
+ * check means NO filter is applied and the user sees every company's data.
+ *
+ * Returns 'SELLER', 'BUYER', or null for internal SJVN users.
+ */
+export function counterpartySide(user) {
+  if (!user) return null;
+  if (SELLER_ROLES.includes(user.role)) return 'SELLER';
+  if (BUYER_ROLES.includes(user.role)) return 'BUYER';
+  return null;
+}
+
 export const ROLE_GROUPS = {
   REIA_ALL: ['SJVN_ADMIN', 'REIA_ADMIN', 'IT_SUPER_ADMIN', 'REIA_USER', 'FINANCE_USER', 'MANAGEMENT'],
   REIA_WRITE: ['SJVN_ADMIN', 'REIA_ADMIN', 'IT_SUPER_ADMIN', 'REIA_USER'],

@@ -94,8 +94,12 @@ function migrateBillingSchema() {
 migrateBillingSchema();
 
 function migrateRBACSchema() {
-  const cols = db.prepare('PRAGMA table_info(entities)').all().map(c => c.name);
-  if (!cols.includes('address')) {
+  const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  // Already on RBAC users schema — never re-run destructive rename migration
+  if (userCols.includes('is_active')) return;
+
+  const entityCols = db.prepare('PRAGMA table_info(entities)').all().map((c) => c.name);
+  if (!entityCols.includes('address')) {
     db.exec(`
       ALTER TABLE entities ADD COLUMN address TEXT;
       ALTER TABLE entities ADD COLUMN bank_name TEXT;
@@ -104,40 +108,259 @@ function migrateRBACSchema() {
       ALTER TABLE entities ADD COLUMN branch_address TEXT;
     `);
   }
-  
-  db.exec(`
-    PRAGMA foreign_keys=off;
-    BEGIN TRANSACTION;
-    
-    ALTER TABLE users RENAME TO old_users;
-    ALTER TABLE invoices RENAME TO old_invoices;
-  `);
-  
-  db.exec(schema);
-  
-  db.exec(`
-    INSERT INTO users (id, name, email, password_hash, role, linked_entity_id, is_active, created_at)
-    SELECT id, name, email, password_hash, role, linked_entity_id, is_active, created_at FROM old_users;
-    
-    INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh, tariff_per_unit, energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees, transmission_charges, total_amount, invoice_breakdown_json, lps, penalty, trading_margin, taxes, other_adjustments, disputed_amount, due_date, status, version, parent_invoice_id, created_by, created_at, updated_at)
-    SELECT id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh, tariff_per_unit, energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees, transmission_charges, total_amount, invoice_breakdown_json, lps, penalty, trading_margin, taxes, other_adjustments, disputed_amount, due_date, status, version, parent_invoice_id, created_by, created_at, updated_at FROM old_invoices;
-    
-    DROP TABLE old_users;
-    DROP TABLE old_invoices;
-    
-    COMMIT;
-    PRAGMA foreign_keys=on;
-  `);
+
+  db.exec('PRAGMA foreign_keys=OFF');
+  try {
+    db.exec(`
+      ALTER TABLE users RENAME TO old_users;
+      ALTER TABLE invoices RENAME TO old_invoices;
+    `);
+    db.exec(schema);
+    db.exec(`
+      INSERT INTO users (id, name, email, password_hash, role, linked_entity_id, is_active, created_at)
+      SELECT id, name, email, password_hash, role, linked_entity_id, COALESCE(is_active, 1), created_at FROM old_users;
+
+      INSERT INTO invoices (
+        id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh, tariff_per_unit,
+        energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees, transmission_charges,
+        total_amount, invoice_breakdown_json, lps, penalty, trading_margin, taxes, other_adjustments,
+        disputed_amount, due_date, status, version, parent_invoice_id, created_by, created_at, updated_at
+      )
+      SELECT
+        id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh, tariff_per_unit,
+        energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees, transmission_charges,
+        total_amount, invoice_breakdown_json, lps, penalty, trading_margin, taxes, other_adjustments,
+        disputed_amount, due_date, status, version, parent_invoice_id, created_by, created_at, updated_at
+      FROM old_invoices;
+
+      DROP TABLE old_users;
+      DROP TABLE old_invoices;
+    `);
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
+/** Repair tables whose FK still points at temporary old_users from a failed RBAC migration. */
+function migrateFixStaleUserForeignKeys() {
+  function sqlFor(table) {
+    return db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name=?`).get(table)?.sql || '';
+  }
+  const needsDocs = sqlFor('documents').includes('old_users');
+  const needsVersions = sqlFor('document_versions').includes('old_users');
+  const needsAlerts = sqlFor('price_alerts').includes('old_users');
+  if (!needsDocs && !needsVersions && !needsAlerts) return;
+
+  db.exec('PRAGMA foreign_keys=OFF');
+  try {
+    if (needsDocs || needsVersions) {
+      const docRows = needsDocs ? db.prepare('SELECT * FROM documents').all() : [];
+      const verRows = needsVersions ? db.prepare('SELECT * FROM document_versions').all() : [];
+
+      db.exec('DROP TABLE IF EXISTS document_versions');
+      db.exec('DROP TABLE IF EXISTS documents');
+
+      db.exec(`
+        CREATE TABLE documents (
+          id TEXT PRIMARY KEY,
+          entity_id TEXT REFERENCES entities(id),
+          contract_id TEXT REFERENCES contracts(id),
+          document_type TEXT NOT NULL,
+          category TEXT NOT NULL CHECK (category IN ('VERIFY', 'RECORD')),
+          title TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'ARCHIVED')),
+          created_by TEXT REFERENCES users(id),
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `);
+      const insDoc = db.prepare(`
+        INSERT INTO documents (id, entity_id, contract_id, document_type, category, title, status, created_by, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const r of docRows) {
+        insDoc.run(
+          r.id, r.entity_id, r.contract_id, r.document_type, r.category, r.title,
+          r.status || 'ACTIVE', r.created_by, r.created_at
+        );
+      }
+
+      db.exec(`
+        CREATE TABLE document_versions (
+          id TEXT PRIMARY KEY,
+          document_id TEXT NOT NULL REFERENCES documents(id),
+          version_number INTEGER NOT NULL,
+          file_path TEXT NOT NULL,
+          file_name TEXT NOT NULL,
+          file_size_bytes INTEGER NOT NULL,
+          mime_type TEXT NOT NULL,
+          verification_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (verification_status IN ('PENDING', 'VERIFIED', 'REJECTED', 'NOT_REQUIRED')),
+          verification_notes TEXT,
+          verified_by TEXT REFERENCES users(id),
+          verified_at TEXT,
+          expiry_date TEXT,
+          created_by TEXT REFERENCES users(id),
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE(document_id, version_number)
+        )
+      `);
+      const insVer = db.prepare(`
+        INSERT INTO document_versions (
+          id, document_id, version_number, file_path, file_name, file_size_bytes, mime_type,
+          verification_status, verification_notes, verified_by, verified_at, expiry_date, created_by, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const r of verRows) {
+        insVer.run(
+          r.id, r.document_id, r.version_number, r.file_path, r.file_name, r.file_size_bytes, r.mime_type,
+          r.verification_status, r.verification_notes, r.verified_by, r.verified_at, r.expiry_date, r.created_by, r.created_at
+        );
+      }
+    }
+
+    if (needsAlerts) {
+      const rows = db.prepare('SELECT * FROM price_alerts').all();
+      db.exec('DROP TABLE IF EXISTS price_alerts');
+      db.exec(`
+        CREATE TABLE price_alerts (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id),
+          product TEXT NOT NULL,
+          condition TEXT NOT NULL CHECK (condition IN ('ABOVE','BELOW')),
+          threshold_price REAL NOT NULL,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `);
+      const ins = db.prepare(`
+        INSERT INTO price_alerts (id, user_id, product, condition, threshold_price, is_active, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const r of rows) ins.run(r.id, r.user_id, r.product, r.condition, r.threshold_price, r.is_active, r.created_at);
+    }
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
 }
 
 try {
   migrateRBACSchema();
 } catch (e) {
-  if (e.message.includes('old_users')) {
-    db.exec('ROLLBACK; PRAGMA foreign_keys=on;').catch(() => {});
-  } else {
-    db.exec('ROLLBACK; PRAGMA foreign_keys=on;');
+  console.error('RBAC migration failed:', e.message);
+  try { db.exec('PRAGMA foreign_keys=ON'); } catch (_) { /* ignore */ }
+}
+
+try {
+  migrateFixStaleUserForeignKeys();
+} catch (e) {
+  console.error('User FK repair failed:', e.message);
+}
+
+/** Repair invoice child tables still pointing at dropped old_invoices. */
+function migrateFixStaleInvoiceForeignKeys() {
+  function sqlFor(table) {
+    return db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name=?`).get(table)?.sql || '';
   }
+  function recreate(table, createDdl) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    const rows = db.prepare(`SELECT * FROM ${table}`).all();
+    db.exec(`DROP TABLE IF EXISTS ${table}`);
+    db.exec(createDdl);
+    if (!rows.length) return;
+    const placeholders = cols.map(() => '?').join(',');
+    const ins = db.prepare(`INSERT INTO ${table} (${cols.join(',')}) VALUES (${placeholders})`);
+    for (const r of rows) ins.run(...cols.map((c) => r[c]));
+  }
+
+  const needsApprovals = sqlFor('invoice_approvals').includes('old_invoices');
+  const needsMapping = sqlFor('invoice_mapping').includes('old_invoices');
+  const needsPayments = sqlFor('payments').includes('old_invoices');
+  const needsDisputes = sqlFor('disputes').includes('old_invoices');
+  if (!needsApprovals && !needsMapping && !needsPayments && !needsDisputes) return;
+
+  db.exec('PRAGMA foreign_keys=OFF');
+  try {
+    if (needsApprovals) {
+      recreate('invoice_approvals', `
+        CREATE TABLE invoice_approvals (
+          id TEXT PRIMARY KEY,
+          invoice_id TEXT NOT NULL REFERENCES invoices(id),
+          level INTEGER NOT NULL,
+          approver_name TEXT,
+          status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED')),
+          comments TEXT,
+          acted_at TEXT
+        )
+      `);
+    }
+    if (needsMapping) {
+      recreate('invoice_mapping', `
+        CREATE TABLE invoice_mapping (
+          buyer_invoice_id TEXT NOT NULL REFERENCES invoices(id),
+          seller_invoice_id TEXT NOT NULL REFERENCES invoices(id),
+          PRIMARY KEY (buyer_invoice_id, seller_invoice_id)
+        )
+      `);
+    }
+    if (needsPayments) {
+      recreate('payments', `
+        CREATE TABLE payments (
+          id TEXT PRIMARY KEY,
+          invoice_id TEXT NOT NULL REFERENCES invoices(id),
+          amount REAL NOT NULL,
+          payment_date TEXT NOT NULL,
+          mode TEXT,
+          reference TEXT,
+          deduction REAL NOT NULL DEFAULT 0,
+          remarks TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `);
+    }
+    if (needsDisputes) {
+      recreate('disputes', `
+        CREATE TABLE disputes (
+          id TEXT PRIMARY KEY,
+          dispute_no TEXT UNIQUE NOT NULL,
+          invoice_id TEXT NOT NULL REFERENCES invoices(id),
+          raised_by_role TEXT NOT NULL CHECK (raised_by_role IN ('BUYER','SELLER')),
+          raised_by_user_id TEXT,
+          reason_code TEXT NOT NULL,
+          charge_line TEXT NOT NULL,
+          issue_description TEXT NOT NULL,
+          disputed_amount REAL NOT NULL,
+          supporting_docs TEXT,
+          status TEXT NOT NULL DEFAULT 'RAISED',
+          assigned_to TEXT,
+          acknowledged_at TEXT,
+          acknowledged_by TEXT,
+          resolved_at TEXT,
+          resolved_by TEXT,
+          resolution_outcome TEXT,
+          resolution_notes TEXT,
+          accepted_amount REAL NOT NULL DEFAULT 0,
+          credit_amount REAL NOT NULL DEFAULT 0,
+          lps_on_resolution REAL NOT NULL DEFAULT 0,
+          before_total REAL,
+          after_total REAL,
+          supplementary_invoice_id TEXT,
+          sla_ack_due TEXT,
+          sla_resolve_due TEXT,
+          sla_breached_at TEXT,
+          escalated_at TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+      `);
+    }
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
+try {
+  migrateFixStaleInvoiceForeignKeys();
+} catch (e) {
+  console.error('Invoice FK repair failed:', e.message);
 }
 
 function migrateEntityCorporateDetails() {
@@ -151,12 +374,124 @@ function migrateEntityCorporateDetails() {
       ALTER TABLE entities ADD COLUMN tan_no TEXT;
     `);
   }
+  // Authorized signatory / digital signature columns (added later)
+  const refreshed = db.pragma('table_info(entities)').map(c => c.name);
+  if (!refreshed.includes('signature_url')) {
+    db.exec(`ALTER TABLE entities ADD COLUMN signature_url TEXT`);
+  }
+  if (!refreshed.includes('signatory_name')) {
+    db.exec(`ALTER TABLE entities ADD COLUMN signatory_name TEXT`);
+  }
+  if (!refreshed.includes('signatory_designation')) {
+    db.exec(`ALTER TABLE entities ADD COLUMN signatory_designation TEXT`);
+  }
 }
 
 try {
   migrateEntityCorporateDetails();
 } catch (e) {
   console.error('Failed to migrate entity corporate details:', e);
+}
+
+/** Provisional↔Final Billing Family Reference columns + backfill. */
+function migrateBillingTrailSchema() {
+  const engCols = db.prepare('PRAGMA table_info(energy_data)').all().map((c) => c.name);
+  if (!engCols.includes('billing_family_ref')) {
+    db.exec(`ALTER TABLE energy_data ADD COLUMN billing_family_ref TEXT`);
+  }
+  if (!engCols.includes('supersedes_energy_id')) {
+    db.exec(`ALTER TABLE energy_data ADD COLUMN supersedes_energy_id TEXT`);
+  }
+
+  const invCols = db.prepare('PRAGMA table_info(invoices)').all().map((c) => c.name);
+  if (!invCols.includes('billing_family_ref')) {
+    db.exec(`ALTER TABLE invoices ADD COLUMN billing_family_ref TEXT`);
+  }
+  if (!invCols.includes('energy_data_id')) {
+    db.exec(`ALTER TABLE invoices ADD COLUMN energy_data_id TEXT`);
+  }
+
+  // Backfill BFR on energy rows missing it (PPA energy → S2S)
+  const energyMissing = db.prepare(`
+    SELECT ed.id, ed.period_month, c.contract_no
+    FROM energy_data ed
+    JOIN contracts c ON c.id = ed.contract_id
+    WHERE ed.billing_family_ref IS NULL OR ed.billing_family_ref = ''
+  `).all();
+  const updEng = db.prepare(`UPDATE energy_data SET billing_family_ref = ? WHERE id = ?`);
+  for (const row of energyMissing) {
+    const safe = String(row.contract_no || 'UNKNOWN').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').toUpperCase() || 'UNKNOWN';
+    updEng.run(`BFR/${safe}/${row.period_month}/S2S`, row.id);
+  }
+
+  // Link FINAL energy → provisional (same contract+period) when supersedes missing
+  const finals = db.prepare(`
+    SELECT id, contract_id, period_month FROM energy_data
+    WHERE data_type = 'FINAL' AND (supersedes_energy_id IS NULL OR supersedes_energy_id = '')
+  `).all();
+  const findProv = db.prepare(`
+    SELECT id FROM energy_data
+    WHERE contract_id = ? AND period_month = ? AND data_type = 'PROVISIONAL'
+    ORDER BY created_at ASC LIMIT 1
+  `);
+  const updSup = db.prepare(`UPDATE energy_data SET supersedes_energy_id = ? WHERE id = ?`);
+  for (const f of finals) {
+    const prov = findProv.get(f.contract_id, f.period_month);
+    if (prov) updSup.run(prov.id, f.id);
+  }
+
+  // Backfill invoice BFR
+  const invMissing = db.prepare(`
+    SELECT i.id, i.billing_period, i.direction, c.contract_no
+    FROM invoices i
+    JOIN contracts c ON c.id = i.contract_id
+    WHERE i.billing_family_ref IS NULL OR i.billing_family_ref = ''
+  `).all();
+  const updInv = db.prepare(`UPDATE invoices SET billing_family_ref = ? WHERE id = ?`);
+  for (const row of invMissing) {
+    const safe = String(row.contract_no || 'UNKNOWN').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').toUpperCase() || 'UNKNOWN';
+    const dir = row.direction === 'SJVN_TO_BUYER' ? 'S2B' : 'S2S';
+    updInv.run(`BFR/${safe}/${row.billing_period}/${dir}`, row.id);
+  }
+}
+
+try {
+  migrateBillingTrailSchema();
+} catch (e) {
+  console.error('Billing trail migration failed:', e.message);
+}
+
+/** Ensure master-data tables exist on upgraded DBs (CREATE IF NOT EXISTS via schema already ran). */
+function migrateMasterDataSchema() {
+  // schema.sql already creates tables; this is a no-op safety check + soft migration for older DBs
+  const needed = ['bank_master', 'system_parameters', 'document_type_master', 'lookup_master'];
+  const existing = new Set(db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name));
+  if (needed.every((t) => existing.has(t))) return;
+  // Re-exec relevant DDL from schema if any missing (schema already ran CREATE IF NOT EXISTS above)
+}
+
+try {
+  migrateMasterDataSchema();
+} catch (e) {
+  console.error('Master data migration failed:', e.message);
+}
+
+/** Per-contract trading margin override column (₹/MWh) + invoices.rebate column. */
+function migrateContractMarginSchema() {
+  const cols = db.prepare('PRAGMA table_info(contracts)').all().map((c) => c.name);
+  if (!cols.includes('trading_margin_per_mwh')) {
+    db.exec(`ALTER TABLE contracts ADD COLUMN trading_margin_per_mwh REAL`);
+  }
+  const invCols = db.prepare('PRAGMA table_info(invoices)').all().map((c) => c.name);
+  if (!invCols.includes('rebate')) {
+    db.exec(`ALTER TABLE invoices ADD COLUMN rebate REAL NOT NULL DEFAULT 0`);
+  }
+}
+
+try {
+  migrateContractMarginSchema();
+} catch (e) {
+  console.error('Contract margin migration failed:', e.message);
 }
 
 export default db;

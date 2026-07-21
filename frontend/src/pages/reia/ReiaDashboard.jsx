@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import api from '../../api/client.js';
 import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
@@ -6,18 +7,44 @@ import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber } from '../../compon
 const COLORS = ['#0b5fff', '#12875a', '#b3760a', '#c22b3a', '#1f5cd6', '#7a5bd6'];
 
 export default function ReiaDashboard() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
     api.dashboard.reia().then(setData).catch(() => {});
   }, []);
+
+  async function downloadDashboardPdf() {
+    setPdfLoading(true);
+    try {
+      await api.reports.reiaDashboardPdf();
+    } catch (err) {
+      alert(err.message || 'Failed to download REIA dashboard PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  }
 
   if (!data) return <div className="page-loading">Loading REIA dashboard...</div>;
   const { kpis, byStatus, byProjectType, monthlyBilling } = data;
 
   return (
     <div>
-      <PageHeader title="REIA Billing &amp; Settlement Dashboard" subtitle="Contracts, energy accounting, billing and receivables overview" />
+      <PageHeader
+        title="REIA Billing & Settlement Dashboard"
+        subtitle="Contracts, energy accounting, billing and receivables overview"
+        actions={
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-primary" disabled={pdfLoading} onClick={downloadDashboardPdf}>
+              {pdfLoading ? 'Preparing PDF…' : 'Download PDF Snapshot'}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => navigate('/reia/reports')}>
+              Billing Reports
+            </button>
+          </div>
+        }
+      />
 
       <div className="kpi-grid">
         <StatCard label="Active Contracts" value={kpis.activeContracts} tone="blue" />

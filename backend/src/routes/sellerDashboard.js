@@ -9,9 +9,15 @@ router.use(requireAuth);
 router.get('/', requireRole('SELLER', 'SJVN_ADMIN'), (req, res) => {
   const entityId = req.user.linked_entity_id;
   if (!entityId) return res.status(400).json({ error: 'No linked entity found for this user' });
-  
-  const contractIds = db.prepare("SELECT id FROM contracts WHERE seller_id = ? AND status = 'ACTIVE'").all(entityId).map(r => r.id);
-  
+
+  // Contracts owned by this seller OR allocated to this project SPV
+  const contractIds = db.prepare(`
+    SELECT DISTINCT c.id FROM contracts c
+    LEFT JOIN contract_projects cp ON cp.contract_id = c.id
+    WHERE c.status = 'ACTIVE'
+      AND (c.seller_id = ? OR cp.project_entity_id = ?)
+  `).all(entityId, entityId).map((r) => r.id);
+
   if (contractIds.length === 0) {
     return res.json({
       active_contracts: 0, total_capacity_mw: 0,
@@ -20,10 +26,13 @@ router.get('/', requireRole('SELLER', 'SJVN_ADMIN'), (req, res) => {
       open_disputes: 0, last_payment: null,
     });
   }
-  
+
   const ph = contractIds.map(() => '?').join(',');
-  
-  const contractStats = db.prepare(`SELECT COUNT(*) as count, COALESCE(SUM(capacity_mw), 0) as capacity FROM contracts WHERE seller_id = ? AND status = 'ACTIVE'`).get(entityId);
+
+  const contractStats = db.prepare(`
+    SELECT COUNT(*) as count, COALESCE(SUM(capacity_mw), 0) as capacity
+    FROM contracts WHERE id IN (${ph})
+  `).get(...contractIds);
   
   const invStats = db.prepare(`SELECT 
     COUNT(*) as total,

@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification } from '../util.js';
+import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
+import { newId, logAudit, pushNotification, buildBillingFamilyRef, directionForContract } from '../util.js';
+import { getParamNumber } from '../mastersService.js';
 import { runFinalDataRecon } from './reconciliation.js';
 import multer from 'multer';
 import { exec } from 'child_process';
@@ -16,15 +17,32 @@ const upload = multer({ dest: 'temp/' });
 const router = Router();
 router.use(requireAuth);
 
+function resolveEnergyBfr(contractId, periodMonth, dataType) {
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId);
+  if (!contract) return null;
+  const bfr = buildBillingFamilyRef(contract.contract_no, periodMonth, directionForContract(contract));
+  let supersedes = null;
+  if (dataType === 'FINAL') {
+    const prov = db.prepare(`
+      SELECT id FROM energy_data
+      WHERE contract_id = ? AND period_month = ? AND data_type = 'PROVISIONAL'
+      ORDER BY created_at ASC LIMIT 1
+    `).get(contractId, periodMonth);
+    if (prov) supersedes = prov.id;
+  }
+  return { bfr, supersedes, contract };
+}
+
 router.get('/', (req, res) => {
   const { contract_id, period_month, status } = req.query;
   let sql = `SELECT ed.*, c.contract_no FROM energy_data ed JOIN contracts c ON c.id = ed.contract_id WHERE 1=1`;
   const params = [];
   
-  if (req.user.role === 'SELLER') {
+  const side = counterpartySide(req.user);
+  if (side === 'SELLER') {
     sql += ' AND c.seller_id = ?';
     params.push(req.user.linked_entity_id);
-  } else if (req.user.role === 'BUYER') {
+  } else if (side === 'BUYER') {
     sql += ' AND c.buyer_id = ?';
     params.push(req.user.linked_entity_id);
   }
@@ -68,19 +86,25 @@ router.post('/parse-rea', requireRole(...ROLE_GROUPS.REIA_WRITE), upload.single(
 
 router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const b = req.body;
+  const dataType = b.data_type || 'PROVISIONAL';
+  const resolved = resolveEnergyBfr(b.contract_id, b.period_month, dataType);
+  if (!resolved) return res.status(400).json({ error: 'Contract not found' });
+
   const id = newId('ENG');
   db.prepare(`
-    INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, cuf_percent, availability_percent, status)
-    VALUES (@id, @contract_id, @period_month, @data_type, @source, @energy_mwh, @cuf_percent, @availability_percent, 'DRAFT')
+    INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, cuf_percent, availability_percent, status, billing_family_ref, supersedes_energy_id)
+    VALUES (@id, @contract_id, @period_month, @data_type, @source, @energy_mwh, @cuf_percent, @availability_percent, 'DRAFT', @billing_family_ref, @supersedes_energy_id)
   `).run({
     id,
     contract_id: b.contract_id,
     period_month: b.period_month,
-    data_type: b.data_type || 'PROVISIONAL',
+    data_type: dataType,
     source: b.source || 'MANUAL',
     energy_mwh: b.energy_mwh,
     cuf_percent: b.cuf_percent ?? null,
     availability_percent: b.availability_percent ?? null,
+    billing_family_ref: resolved.bfr,
+    supersedes_energy_id: resolved.supersedes,
   });
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CREATE', module: 'REIA', entityType: 'energy_data', entityId: id, details: b });
   res.status(201).json(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(id));
@@ -92,15 +116,16 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
   if (!row) return res.status(404).json({ error: 'Energy data not found' });
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(row.contract_id);
   
-  let baseCuf = 0.22;
-  if (contract.project_type === 'Wind') baseCuf = 0.30;
-  if (contract.project_type === 'Hydro') baseCuf = 0.65;
+  let baseCuf = getParamNumber('solar_base_cuf_pct', 22) / 100;
+  if (contract.project_type === 'Wind') baseCuf = getParamNumber('wind_base_cuf_pct', 30) / 100;
+  if (contract.project_type === 'Hydro') baseCuf = getParamNumber('hydro_base_cuf_pct', 65) / 100;
   
   const expected = contract.capacity_mw * 24 * 30 * baseCuf;
   const deviationPct = Math.abs(row.energy_mwh - expected) / expected * 100;
   
-  // Hydro has extreme seasonality (monsoon vs winter)
-  const tolerance = contract.project_type === 'Hydro' ? 80 : 30;
+  const tolerance = contract.project_type === 'Hydro'
+    ? getParamNumber('hydro_validate_tolerance_pct', 80)
+    : getParamNumber('energy_validate_tolerance_pct', 30);
   const flagged = deviationPct > tolerance;
   
   db.prepare(`UPDATE energy_data SET status = ?, deviation_notes = ?, updated_at = datetime('now') WHERE id = ?`)
@@ -109,31 +134,48 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
   res.json(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id));
 });
 
-// Freeze / lock post-finalization
+// Freeze / lock — keeps data_type intact (provisional history must survive for BFR trail)
 router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const row = db.prepare('SELECT * FROM energy_data WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Energy data not found' });
   if (row.status === 'LOCKED') return res.status(400).json({ error: 'Already locked' });
-  db.prepare(`UPDATE energy_data SET status = 'LOCKED', data_type = 'FINAL', updated_at = datetime('now') WHERE id = ?`).run(row.id);
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'LOCK', module: 'REIA', entityType: 'energy_data', entityId: row.id });
 
-  // If a provisional recon existed for this period, auto-trigger FINAL re-recon
-  try {
-    const hadProv = db.prepare(`
-      SELECT id FROM reconciliations
-      WHERE contract_id = ? AND period = ? AND data_basis = 'PROVISIONAL'
-      LIMIT 1
-    `).get(row.contract_id, row.period_month);
-    if (hadProv) {
-      runFinalDataRecon(row.contract_id, row.period_month, req.user);
-      pushNotification({
-        role: 'REIA_USER',
-        type: 'RECONCILIATION',
-        message: `Final-data reconciliation triggered for ${row.period_month} after energy lock`,
-      });
+  // Ensure BFR / supersedes links exist
+  if (!row.billing_family_ref || (row.data_type === 'FINAL' && !row.supersedes_energy_id)) {
+    const resolved = resolveEnergyBfr(row.contract_id, row.period_month, row.data_type);
+    if (resolved) {
+      db.prepare(`
+        UPDATE energy_data
+        SET billing_family_ref = COALESCE(NULLIF(billing_family_ref, ''), ?),
+            supersedes_energy_id = COALESCE(supersedes_energy_id, ?),
+            updated_at = datetime('now')
+        WHERE id = ?
+      `).run(resolved.bfr, resolved.supersedes, row.id);
     }
-  } catch (err) {
-    console.error('Final recon trigger failed', err.message);
+  }
+
+  db.prepare(`UPDATE energy_data SET status = 'LOCKED', updated_at = datetime('now') WHERE id = ?`).run(row.id);
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'LOCK', module: 'REIA', entityType: 'energy_data', entityId: row.id, details: { data_type: row.data_type } });
+
+  // FINAL lock → re-run reconciliation from provisional basis if one exists
+  if (row.data_type === 'FINAL') {
+    try {
+      const hadProv = db.prepare(`
+        SELECT id FROM reconciliations
+        WHERE contract_id = ? AND period = ? AND data_basis = 'PROVISIONAL'
+        LIMIT 1
+      `).get(row.contract_id, row.period_month);
+      if (hadProv) {
+        runFinalDataRecon(row.contract_id, row.period_month, req.user);
+        pushNotification({
+          role: 'REIA_USER',
+          type: 'RECONCILIATION',
+          message: `Final-data reconciliation triggered for ${row.period_month} after energy lock`,
+        });
+      }
+    } catch (err) {
+      console.error('Final recon trigger failed', err.message);
+    }
   }
 
   res.json(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id));
