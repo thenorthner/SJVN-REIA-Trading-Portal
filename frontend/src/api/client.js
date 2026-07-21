@@ -383,6 +383,12 @@ export const api = {
     markRead: (id) => p(`/notifications/${id}/read`),
     markAllRead: () => p('/notifications/read-all'),
   },
+  alerts: {
+    board: () => g('/alerts/board'),
+    broadcasts: (params) => g('/alerts/broadcasts', params),
+    createBroadcast: (body) => p('/alerts/broadcasts', body),
+    deleteBroadcast: (id) => del(`/alerts/broadcasts/${id}`),
+  },
   auditLogs: {
     list: (params) => g('/audit-logs', params),
     get: (id) => g(`/audit-logs/${id}`),

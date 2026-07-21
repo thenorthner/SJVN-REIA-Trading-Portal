@@ -52,6 +52,20 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Admin-authored "flash" messages pinned on the Notification Board.
+CREATE TABLE IF NOT EXISTS broadcast_messages (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  severity TEXT NOT NULL DEFAULT 'INFO' CHECK (severity IN ('INFO','WARNING','CRITICAL')),
+  audience TEXT NOT NULL DEFAULT 'ALL',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  expires_at TEXT,
+  created_by TEXT,
+  created_by_name TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS documents (
   id TEXT PRIMARY KEY,
   entity_id TEXT REFERENCES entities(id),

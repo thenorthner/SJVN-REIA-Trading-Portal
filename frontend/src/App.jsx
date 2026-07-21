@@ -47,6 +47,7 @@ import BuyerPaymentSecurity from './pages/buyer/BuyerPaymentSecurity.jsx';
 
 import AuditLogs from './pages/AuditLogs.jsx';
 import MastersHub from './pages/masters/MastersHub.jsx';
+import NotificationBoard from './pages/NotificationBoard.jsx';
 
 // Internal SJVN REIA desk only — counterparties use their own portals below,
 // which scope every query to their own entity.
@@ -56,6 +57,7 @@ const SELLER_ROLES = [...ROLE_GROUPS.SELLER_ALL, 'SJVN_ADMIN'];
 const BUYER_ROLES = [...ROLE_GROUPS.BUYER_ALL, 'SJVN_ADMIN'];
 const AUDIT_ROLES = [...ROLE_GROUPS.AUDITOR];
 const MASTERS_ROLES = [...ROLE_GROUPS.MASTERS_READ];
+const BOARD_ROLES = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.TRADING_ALL])];
 
 /**
  * Landing route. The Consolidated Dashboard rolls up financials across every
@@ -135,6 +137,7 @@ export default function App() {
         <Route path="trading/billing-settlement" element={<ProtectedRoute roles={TRADING_ROLES}><BillingSettlement /></ProtectedRoute>} />
         <Route path="trading/market-analytics" element={<ProtectedRoute roles={TRADING_ROLES}><MarketAnalytics /></ProtectedRoute>} />
 
+        <Route path="notification-board" element={<ProtectedRoute roles={BOARD_ROLES}><NotificationBoard /></ProtectedRoute>} />
         <Route path="masters" element={<ProtectedRoute roles={MASTERS_ROLES}><MastersHub /></ProtectedRoute>} />
         <Route path="audit-logs" element={<ProtectedRoute roles={AUDIT_ROLES}><AuditLogs /></ProtectedRoute>} />
 

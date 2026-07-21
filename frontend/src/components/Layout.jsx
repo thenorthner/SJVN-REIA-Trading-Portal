@@ -13,6 +13,11 @@ const NAV_INTERNAL = [
     links: [{ to: '/', label: 'Consolidated Dashboard', end: true }],
   },
   {
+    section: 'Alerts',
+    roles: [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.TRADING_ALL])],
+    links: [{ to: '/notification-board', label: 'Notification Board' }],
+  },
+  {
     section: 'REIA Billing & Settlement',
     roles: ROLE_GROUPS.REIA_ALL,
     links: [

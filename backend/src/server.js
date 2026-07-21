@@ -26,6 +26,7 @@ import dashboardRoutes from './routes/dashboard.js';
 import sellerDashboardRoutes from './routes/sellerDashboard.js';
 import buyerDashboardRoutes from './routes/buyerDashboard.js';
 import notificationsRoutes from './routes/notifications.js';
+import alertsRoutes from './routes/alerts.js';
 import auditLogsRoutes from './routes/auditLogs.js';
 import documentsRoutes from './routes/documents.js';
 import usersRoutes from './routes/users.js';
@@ -84,6 +85,7 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/seller-dashboard', sellerDashboardRoutes);
 app.use('/api/buyer-dashboard', buyerDashboardRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/alerts', alertsRoutes);
 app.use('/api/audit-logs', auditLogsRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
