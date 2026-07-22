@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
-import { DocumentManager } from '../../components/DocumentManager.jsx';
+import { DocumentManager, PreviewModal, UploadModal } from '../../components/DocumentManager.jsx';
 import { fmtDate } from '../../datetime.js';
 import { catalogForEntityType, APPROVAL_STATUS_LABELS } from '../../constants/regulatoryApprovals.js';
 
@@ -37,6 +37,10 @@ export default function Entities() {
   const [editApproval, setEditApproval] = useState(null);
   const [approvalForm, setApprovalForm] = useState({});
   const [approveError, setApproveError] = useState('');
+  // Proof documents linked to each regulatory approval (matched by shared code).
+  const [entityDocs, setEntityDocs] = useState([]);
+  const [docPreview, setDocPreview] = useState(null);   // { versionId, fileName }
+  const [uploadFor, setUploadFor] = useState(null);      // { code, label }
 
   function load() {
     setLoading(true);
@@ -48,6 +52,22 @@ export default function Entities() {
   }
 
   useEffect(load, [filters.entity_type, filters.status]);
+
+  // Pull this entity's proof documents so each regulatory approval row can show
+  // its linked file (document_type === approval_code) inline.
+  function loadEntityDocs(entityId) {
+    if (!entityId) { setEntityDocs([]); return; }
+    api.documents.list({ entity_id: entityId }).then(setEntityDocs).catch(() => setEntityDocs([]));
+  }
+  useEffect(() => { loadEntityDocs(selected?.id); }, [selected?.id]);
+
+  // Latest document whose type matches an approval code (verified wins over pending).
+  function docForCode(code) {
+    const matches = entityDocs.filter((d) => d.document_type === code);
+    if (matches.length === 0) return null;
+    const rank = { VERIFIED: 3, PENDING: 2, REJECTED: 1 };
+    return matches.slice().sort((a, b) => (rank[b.verification_status] || 0) - (rank[a.verification_status] || 0))[0];
+  }
 
   function openDetail(row) {
     api.entities.get(row.id).then(setSelected);
@@ -484,6 +504,36 @@ export default function Entities() {
                       Verified by {item.verified_by}{item.verified_at ? ` · ${fmtDate(item.verified_at)}` : ''}
                     </div>
                   )}
+                  {(() => {
+                    const proof = docForCode(item.approval_code);
+                    const vs = proof?.verification_status;
+                    // Internal reviewers can't upload VERIFY proofs (SoD) — the
+                    // stakeholder does that from their own portal.
+                    const canUpload = !['SJVN_ADMIN', 'REIA_USER', 'FINANCE_USER', 'TRADING_USER'].includes(user?.role);
+                    return (
+                      <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        {proof ? (
+                          <>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: vs === 'VERIFIED' ? '#15803d' : vs === 'REJECTED' ? '#b91c1c' : '#b45309' }}>
+                              📎 {vs === 'VERIFIED' ? 'Proof verified' : vs === 'REJECTED' ? 'Proof rejected' : 'Proof uploaded — pending review'}
+                            </span>
+                            <button type="button" className="link-btn" style={{ fontSize: 12 }} onClick={() => setDocPreview({ versionId: proof.latest_version_id, fileName: proof.file_name })}>
+                              👁 View proof
+                            </button>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                            📎 No proof uploaded
+                            {canUpload ? (
+                              <button type="button" className="link-btn" style={{ fontSize: 12, marginLeft: 6 }} onClick={() => setUploadFor({ code: item.approval_code, label: item.label })}>
+                                Upload
+                              </button>
+                            ) : ' · awaiting stakeholder upload'}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 {CAN_WRITE.includes(user?.role) && (
                   <button type="button" className="btn btn-outline btn-sm" onClick={() => openApprovalEditor(item)}>Update</button>
@@ -655,6 +705,25 @@ export default function Entities() {
           </form>
         )}
       </Modal>
+
+      {/* Inline proof: preview a linked approval document */}
+      <PreviewModal
+        open={!!docPreview}
+        versionId={docPreview?.versionId}
+        fileName={docPreview?.fileName}
+        onClose={() => setDocPreview(null)}
+      />
+
+      {/* Inline proof: upload against a specific regulatory approval (type locked) */}
+      <UploadModal
+        open={!!uploadFor}
+        onClose={() => setUploadFor(null)}
+        onSuccess={() => loadEntityDocs(selected?.id)}
+        moduleName="STAKEHOLDERS"
+        entityId={selected?.id}
+        presetDocType={uploadFor?.code}
+        presetTitle={uploadFor?.label}
+      />
     </div>
   );
 }

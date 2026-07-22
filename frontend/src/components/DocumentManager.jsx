@@ -76,7 +76,7 @@ async function parseErrorBlob(err, fallback) {
   return message;
 }
 
-function PreviewModal({ open, versionId, fileName, onClose }) {
+export function PreviewModal({ open, versionId, fileName, onClose }) {
   const [state, setState] = useState({ loading: true, error: null, url: null, kind: 'other', name: fileName });
 
   useEffect(() => {
@@ -277,7 +277,7 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
   );
 }
 
-function UploadModal({ open, onClose, onSuccess, moduleName, entityId, contractId }) {
+export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, contractId, presetDocType = null, presetTitle = '' }) {
   const { user } = useAuth();
   // Segregation of duties: internal users (SJVN Admin / REIA / Finance / Trading)
   // are the reviewers — they can only upload RECORD-category documents. VERIFY
@@ -288,12 +288,13 @@ function UploadModal({ open, onClose, onSuccess, moduleName, entityId, contractI
   const fallbackTypes = filterTypes(DOCUMENT_TAXONOMY[moduleName] || [{ value: 'OTHER', label: 'Other Document', category: 'RECORD', reason: '' }]);
   const [availableTypes, setAvailableTypes] = useState(fallbackTypes);
   const [file, setFile] = useState(null);
-  const [docType, setDocType] = useState(fallbackTypes[0]?.value || 'OTHER');
-  const [title, setTitle] = useState('');
+  const [docType, setDocType] = useState(presetDocType || fallbackTypes[0]?.value || 'OTHER');
+  const [title, setTitle] = useState(presetTitle);
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+    setTitle(presetTitle);
     let cancelled = false;
     api.masters.documentTypes({ module: moduleName })
       .then((rows) => {
@@ -305,20 +306,26 @@ function UploadModal({ open, onClose, onSuccess, moduleName, entityId, contractI
           reason: r.reason || '',
         })));
         setAvailableTypes(mapped);
-        if (mapped.length > 0) setDocType(mapped[0].value);
+        // Honour a preset type when it survives the SoD filter, else fall back.
+        if (presetDocType && mapped.some((t) => t.value === presetDocType)) setDocType(presetDocType);
+        else if (mapped.length > 0) setDocType(mapped[0].value);
       })
       .catch(() => {
         // keep FE taxonomy fallback
         setAvailableTypes(fallbackTypes);
-        setDocType(fallbackTypes[0]?.value || 'OTHER');
+        setDocType(presetDocType || fallbackTypes[0]?.value || 'OTHER');
       });
     return () => { cancelled = true; };
-  }, [open, moduleName]);
+  }, [open, moduleName, presetDocType, presetTitle]);
 
   // Auto-resolve category based on taxonomy
   const activeDef = availableTypes.find(t => t.value === docType) || availableTypes[0] || fallbackTypes[0];
   const autoCategory = activeDef?.category || 'RECORD';
-  const noTypesAvailable = availableTypes.length === 0;
+  // A preset type the current user isn't allowed to upload (e.g. internal user +
+  // VERIFY doc) gets filtered out — treat that exactly like "nothing to upload".
+  const presetLocked = !!presetDocType;
+  const presetBlocked = presetLocked && !availableTypes.some((t) => t.value === presetDocType);
+  const noTypesAvailable = availableTypes.length === 0 || presetBlocked;
 
   if (!open) return null;
 
@@ -376,11 +383,16 @@ function UploadModal({ open, onClose, onSuccess, moduleName, entityId, contractI
           <input required placeholder="e.g., Q3 Payment Guarantee" value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
         <Field label="Document Type">
-          <select value={docType} onChange={e => setDocType(e.target.value)}>
+          <select value={docType} onChange={e => setDocType(e.target.value)} disabled={presetLocked} style={presetLocked ? { backgroundColor: '#f8fafc', color: '#334155' } : undefined}>
             {availableTypes.map(t => (
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>
+          {presetLocked && (
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+              Linked to this regulatory approval — type is fixed.
+            </div>
+          )}
           {activeDef.reason && (
             <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
               <i>Why is this needed?</i> {activeDef.reason}
