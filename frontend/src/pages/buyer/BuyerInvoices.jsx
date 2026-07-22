@@ -65,6 +65,22 @@ export default function BuyerInvoices() {
     setDisputeForm(DISPUTE_FORM);
   }
 
+  async function handleDownloadPdf() {
+    try {
+      const blob = await api.invoices.downloadPdf(selected.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Invoice_${selected.invoice_no}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Failed to download PDF: ' + (err.response?.data?.error || err.message || err));
+    }
+  }
+
   async function handleRaiseDispute(e) {
     e.preventDefault();
     setError('');
@@ -136,6 +152,9 @@ export default function BuyerInvoices() {
       <Modal open={!!selected} onClose={() => setSelected(null)} title={`Invoice: ${selected?.invoice_no}`} width={720}>
         {selected && (
           <div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+              <button onClick={handleDownloadPdf} className="btn btn-sm btn-outline">Download PDF Bill</button>
+            </div>
             <StatusStepper status={selected.status} />
 
             <div className="detail-grid mb-0" style={{ marginTop: 24 }}>

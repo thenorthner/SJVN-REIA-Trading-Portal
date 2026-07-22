@@ -426,6 +426,84 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res) 
     cellText(doc, amount, MARGIN + CONTENT_WIDTH - amtW, rowY, amtW, rowH, { bold, size: 8, align: 'right', valign: 'center', color: NAVY });
   }
 
+  // Hydro/PSP bills follow the CERC AFC format (A-params, C capacity+beta,
+  // E energy details, EE energy charges) — a different structure from the
+  // simple energy×tariff bill used for Solar/Wind.
+  const isHydro = ['Hydro', 'PSP'].includes(contract?.project_type);
+
+  let bdLines = [];
+  try { bdLines = JSON.parse(invoice.invoice_breakdown_json || '[]'); } catch { bdLines = []; }
+  const bd = (code) => { const l = bdLines.find((x) => x.code === code); return l ? l.value : null; };
+
+  // Hydro row: code | particular | value (label spans wide, value right-aligned).
+  function drawHydroRow(rowY, rowH, code, label, value, { bold = false } = {}) {
+    const codeW = 34;
+    const valW = 128;
+    doc.save().lineWidth(0.7).strokeColor(NAVY).rect(MARGIN, rowY, CONTENT_WIDTH, rowH).stroke().restore();
+    cellText(doc, code || '', MARGIN, rowY, codeW, rowH, { bold, size: 7.5, align: 'center', valign: 'center', color: NAVY });
+    drawVLine(doc, MARGIN + codeW, rowY, rowY + rowH);
+    cellText(doc, label, MARGIN + codeW, rowY, CONTENT_WIDTH - codeW - valW, rowH, { bold, size: 7.5, valign: 'center', color: bold ? NAVY : INK });
+    drawVLine(doc, MARGIN + CONTENT_WIDTH - valW, rowY, rowY + rowH);
+    cellText(doc, value != null ? String(value) : '', MARGIN + CONTENT_WIDTH - valW, rowY, valW, rowH, { bold, size: 7.5, align: 'right', valign: 'center', color: bold ? NAVY : INK });
+  }
+
+  if (isHydro) {
+    const afcAnnual = (Number(contract?.capacity_charges_total) || 0) * 12;
+    const aux = Number(contract?.normative_aux) || 0;
+    const fehs = Number(contract?.free_energy_home_state) || 0;
+    const capCharge = Number(invoice.capacity_charges) || 0;
+    const betaIncentive = Number(invoice.incentive_charges) || 0;
+    const betaVal = bd('BETA');
+    const betaStr = (betaVal != null && betaVal !== '') ? Number(betaVal).toFixed(3) : 'Pending (NRPC)';
+    const nrldcFees = Number(invoice.nrldc_fees) || 0;
+    const lpsAmt = Number(invoice.lps) || 0;
+    const energyCharges = Number(invoice.energy_charges) || 0;
+    const num = (v, d = 2) => (v != null && v !== '' ? fmtNum(Number(v), d) : '—');
+
+    drawBillingRow(y, 18, ['Sr', 'Particulars', '', '', '', `Value / ${CUR}`], { headerBand: true });
+    y += 18;
+
+    drawSpanRow(y, 16, 'A.  Tariff Parameters (as approved by CERC)', null, { center: true, band: true }); y += 16;
+    drawHydroRow(y, 16, 'A1', 'Annual Fixed Charges (AFC)', fmtMoney(afcAnnual)); y += 16;
+    drawHydroRow(y, 16, 'A3', 'Normative Auxiliary Consumption', `${aux} %`); y += 16;
+    drawHydroRow(y, 16, 'A4', 'Free Energy for Home State (FEHS)', `${fehs} %`); y += 16;
+    drawHydroRow(y, 16, 'A7', 'Installed Capacity', `${contract?.capacity_mw ?? '—'} MW`); y += 16;
+    drawHydroRow(y, 16, 'A12', 'Energy Charge Rate (ECR)', `${CUR} ${invoice.tariff_per_unit}/kWh`); y += 16;
+
+    drawSpanRow(y, 16, 'Capacity Charges (inclusive of incentive)', null, { center: true, band: true }); y += 16;
+    drawHydroRow(y, 16, 'C2', 'Capacity Charge for the month', fmtMoney(capCharge)); y += 16;
+    drawHydroRow(y, 16, 'C3', 'Beta Factor (as per REA, range 0 to 1)', betaStr); y += 16;
+    drawHydroRow(y, 20, 'C4', 'Incentive on account of Beta { (3% x Beta x 0.5 x AFC) / 12 }', fmtMoney(betaIncentive)); y += 20;
+    drawHydroRow(y, 18, 'C5', 'Total Capacity Charges (incl. Beta Incentive)', fmtMoney(capCharge + betaIncentive), { bold: true }); y += 18;
+
+    drawSpanRow(y, 16, 'Energy Details (MWh)', null, { center: true, band: true }); y += 16;
+    drawHydroRow(y, 16, 'E1', 'Gross Energy Generated', num(bd('E1'))); y += 16;
+    drawHydroRow(y, 16, 'E2', `Auxiliary Consumption (${aux}%)`, num(bd('E2'))); y += 16;
+    drawHydroRow(y, 16, 'E3', 'Net Ex-Bus Energy', num(bd('E3'))); y += 16;
+    drawHydroRow(y, 16, 'E4', `Free Power to Home State (${fehs}%)`, num(bd('E4'))); y += 16;
+    drawHydroRow(y, 16, 'E5', 'Saleable Energy', num(bd('E5'))); y += 16;
+
+    drawSpanRow(y, 16, 'Energy Charges', null, { center: true, band: true }); y += 16;
+    drawHydroRow(y, 18, 'EE1', 'Energy Charges (Saleable Energy x ECR)', fmtMoney(energyCharges)); y += 18;
+    if (nrldcFees) { drawHydroRow(y, 16, '', 'NRLDC / SLDC Fees', fmtMoney(nrldcFees)); y += 16; }
+    if (lpsAmt) { drawHydroRow(y, 16, '', 'Late Payment Surcharge (LPS)', fmtMoney(lpsAmt)); y += 16; }
+
+    const hydroGrand = invoice.total_amount != null
+      ? Number(invoice.total_amount)
+      : capCharge + betaIncentive + energyCharges + nrldcFees + lpsAmt;
+    drawSpanRow(y, 20, `Total Charges (${CUR})  (C5 + EE1${nrldcFees ? ' + NRLDC' : ''}${lpsAmt ? ' + LPS' : ''})`, fmtMoney(hydroGrand), { bold: true });
+    y += 20;
+
+    if (isDraft) {
+      doc.save();
+      doc.font('Helvetica-Bold').fontSize(48).fillColor('#9fb0cc').opacity(0.25);
+      doc.text('DRAFT', MARGIN, metaTop + metaH + 80, { width: CONTENT_WIDTH, align: 'center' });
+      doc.restore();
+      doc.fillColor(INK).opacity(1).strokeColor(NAVY);
+    }
+    y += 10;
+  } else {
+
   drawBillingRow(y, 18, ['Sr No', 'Description', 'Duration / Month', 'Units (kWh)', `Tariff (${CUR}/kWh)`, `Amount (${CUR})`], { headerBand: true });
   y += 18;
 
@@ -471,16 +549,41 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res) 
   drawSpanRow(y, 18, 'I. Sub-Total (A)', fmtMoney(subTotalA), { bold: true });
   y += 18;
 
-  drawSpanRow(y, 16, 'Part-B  Taxes, duties, levies, GST etc', null, { bold: true, center: true, band: true });
+  drawSpanRow(y, 16, 'Part-B  Other charges, taxes, duties, levies, GST etc', null, { bold: true, center: true, band: true });
   y += 16;
 
   const taxAmt = Number(invoice.taxes) || 0;
   const txCharges = Number(invoice.transmission_charges) || 0;
   const tradingMargin = Number(invoice.trading_margin) || 0;
+  const nrldcFees = Number(invoice.nrldc_fees) || 0;
   const lps = Number(invoice.lps) || 0;
-  const partB = taxAmt + txCharges + tradingMargin + lps;
+  const rebate = Number(invoice.rebate) || 0;
 
-  drawBillingRow(y, 18, ['', '', '', '', '', partB > 0 ? fmtMoney(partB) : '']);
+  // Itemise Part-B so the bill shows exactly what each rupee is — instead of a
+  // single lumped figure. Only non-zero charges are printed. Rebate (early-payment
+  // discount) shows as a negative line.
+  const partBItems = [
+    ['Trading Margin', tradingMargin],
+    ['NRLDC / SLDC Fees', nrldcFees],
+    ['Transmission / Wheeling Charges', txCharges],
+    ['Taxes / GST', taxAmt],
+    ['Late Payment Surcharge (LPS)', lps],
+    ['Early-Payment Rebate', rebate ? -rebate : 0],
+  ].filter(([, v]) => Number(v) !== 0);
+
+  let bSr = 0;
+  for (const [label, amount] of partBItems) {
+    bSr += 1;
+    drawBillingRow(y, 18, [`B${bSr}`, label, '', '', '', fmtMoney(amount)]);
+    y += 18;
+  }
+  if (partBItems.length === 0) {
+    drawBillingRow(y, 18, ['', 'No additional charges for this bill.', '', '', '', fmtMoney(0)]);
+    y += 18;
+  }
+
+  const partB = taxAmt + txCharges + tradingMargin + nrldcFees + lps - rebate;
+  drawSpanRow(y, 18, `II. Sub-Total (B)`, fmtMoney(partB), { bold: true });
   y += 18;
 
   const grand = invoice.total_amount != null ? Number(invoice.total_amount) : subTotalA + partB;
@@ -496,6 +599,7 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res) 
   }
 
   y += 10;
+  }
 
   // ========== BANK (left) + SIGNATURE (right) ==========
   const bankW = CONTENT_WIDTH * 0.58;

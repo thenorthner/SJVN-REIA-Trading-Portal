@@ -69,6 +69,14 @@ router.get('/:id/pdf', async (req, res) => {
   const seller = db.prepare('SELECT * FROM entities WHERE id = ?').get(contract.seller_id);
   const buyer = db.prepare('SELECT * FROM entities WHERE id = ?').get(contract.buyer_id);
 
+  // Counterparties may only download their own invoices (same scoping as the list).
+  if (req.user.role.startsWith('SELLER') && contract.seller_id !== req.user.linked_entity_id) {
+    return res.status(403).json({ error: 'You can only download your own invoices' });
+  }
+  if (req.user.role.startsWith('BUYER') && contract.buyer_id !== req.user.linked_entity_id) {
+    return res.status(403).json({ error: 'You can only download your own invoices' });
+  }
+
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename=Invoice_${inv.invoice_no}.pdf`);
 

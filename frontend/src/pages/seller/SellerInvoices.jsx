@@ -113,6 +113,22 @@ export default function SellerInvoices() {
     setDisputeForm({ reason_code: '', charge_line: 'energy_charges', issue_description: '', disputed_amount: '' });
   }
 
+  async function handleDownloadPdf() {
+    try {
+      const blob = await api.invoices.downloadPdf(selected.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Invoice_${selected.invoice_no}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Failed to download PDF: ' + (err.response?.data?.error || err.message || err));
+    }
+  }
+
   async function handleCreate(e, asDraft = false) {
     e.preventDefault();
     setError('');
@@ -285,6 +301,9 @@ export default function SellerInvoices() {
       <Modal open={!!selected} onClose={() => setSelected(null)} title={selected?.invoice_no} width={760}>
         {selected && (
           <div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+              <button onClick={handleDownloadPdf} className="btn btn-sm btn-outline">Download PDF Bill</button>
+            </div>
             {/* Status Stepper */}
             <StatusStepper status={selected.status} />
 
