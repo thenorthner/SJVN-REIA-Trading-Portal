@@ -77,11 +77,32 @@ router.get('/:id/pdf', async (req, res) => {
     return res.status(403).json({ error: 'You can only download your own invoices' });
   }
 
+  // Hydro/PSP PPA bills carry a beneficiary-allocation page — how the plant's
+  // charges split across the DISCOMs allocated to it (per REA / NRPC order),
+  // using the allocation effective for the billing month.
+  let beneficiaries = [];
+  if (['Hydro', 'PSP'].includes(contract?.project_type) && contract.contract_type === 'PPA') {
+    const pStart = `${inv.billing_period}-01`;
+    const pEnd = `${inv.billing_period}-31`;
+    const rows = db.prepare(`
+      SELECT b.name AS name, ca.allocation_percent AS allocation_percent
+      FROM contract_allocations ca
+      JOIN contracts s ON s.id = ca.psa_id
+      LEFT JOIN entities b ON b.id = s.buyer_id
+      WHERE ca.ppa_id = ?
+        AND ca.effective_from <= ?
+        AND (ca.effective_to IS NULL OR ca.effective_to >= ?)
+      ORDER BY ca.allocation_percent DESC
+    `).all(contract.id, pEnd, pStart);
+    const total = Number(inv.total_amount) || 0;
+    beneficiaries = rows.map((x) => ({ ...x, share: Math.round(total * (Number(x.allocation_percent) || 0) / 100) }));
+  }
+
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename=Invoice_${inv.invoice_no}.pdf`);
 
   try {
-    await generateInvoicePdf(inv, contract, seller, buyer, res);
+    await generateInvoicePdf(inv, contract, seller, buyer, res, beneficiaries);
   } catch (err) {
     console.error('PDF Generation Error:', err);
     if (!res.headersSent) {
@@ -246,8 +267,17 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     breakdown.push({ code: 'TM', label: `Trading Margin (₹${marginPerMwh}/MWh${isOverride ? ', contract-specific' : ''})`, value: tradingMargin });
   }
 
+  // GST on the taxable service component (trading margin). Sale of electricity
+  // itself is GST-exempt (HSN 2716), so energy & capacity charges are never
+  // taxed. Default rate is 0 → no GST line, matching real energy bills.
+  const gstRate = getParamNumber('gst_rate_percent', 0);
+  const gstAmount = gstRate > 0 ? Math.round(tradingMargin * gstRate / 100) : 0;
+  if (gstAmount) {
+    breakdown.push({ code: 'GST', label: `GST @ ${gstRate}% (on trading margin; energy is exempt)`, value: gstAmount });
+  }
+
   const penalty = 0;
-  const grossTotal = capacityCharges + energyCharges + incentiveCharges + tradingMargin + nrldcFees - freePowerDeduction - penalty;
+  const grossTotal = capacityCharges + energyCharges + incentiveCharges + tradingMargin + nrldcFees + gstAmount - freePowerDeduction - penalty;
   breakdown.push({ code: 'GROSS', label: 'Gross Amount (before provisional true-up)', value: grossTotal });
 
   const direction = directionForContract(contract);
@@ -304,7 +334,7 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     lps: 0,
     penalty,
     trading_margin: tradingMargin,
-    taxes: 0,
+    taxes: gstAmount,
     other_adjustments: otherAdjustments,
     total_amount: total,
     invoice_breakdown_json: JSON.stringify(breakdown),

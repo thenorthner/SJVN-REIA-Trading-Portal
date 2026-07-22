@@ -213,9 +213,24 @@ function resolveParties(invoice, contract, seller, buyer) {
   return { issuer: issuer || {}, recipient: recipient || {} };
 }
 
-export async function generateInvoicePdf(invoice, contract, seller, buyer, res) {
+export async function generateInvoicePdf(invoice, contract, seller, buyer, res, beneficiaries = []) {
   const { issuer, recipient } = resolveParties(invoice, contract, seller, buyer);
   const isDraft = !invoice.status || invoice.status === 'DRAFT';
+
+  // Split a GST amount into CGST+SGST (intra-state) or IGST (inter-state). The
+  // first two digits of a GSTIN are the state code, so same prefix = intra-state.
+  function gstLines(taxAmt) {
+    const t = Number(taxAmt) || 0;
+    if (!t) return [];
+    const stateOf = (g) => (g && String(g).length >= 2 ? String(g).slice(0, 2) : null);
+    const s = stateOf(issuer.gst_no);
+    const r = stateOf(recipient.gst_no);
+    if (s && r && s === r) {
+      const half = Math.round(t / 2);
+      return [['CGST', half], ['SGST', t - half]];
+    }
+    return [['IGST', t]];
+  }
 
   // Pre-render the verification QR (async) before we start streaming the doc.
   // Encodes a public verify URL with a tamper-proof HMAC token, so anyone can
@@ -486,6 +501,9 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res) 
     drawSpanRow(y, 16, 'Energy Charges', null, { center: true, band: true }); y += 16;
     drawHydroRow(y, 18, 'EE1', 'Energy Charges (Saleable Energy x ECR)', fmtMoney(energyCharges)); y += 18;
     if (nrldcFees) { drawHydroRow(y, 16, '', 'NRLDC / SLDC Fees', fmtMoney(nrldcFees)); y += 16; }
+    for (const [glabel, gamount] of gstLines(Number(invoice.taxes) || 0)) {
+      drawHydroRow(y, 16, '', glabel, fmtMoney(gamount)); y += 16;
+    }
     if (lpsAmt) { drawHydroRow(y, 16, '', 'Late Payment Surcharge (LPS)', fmtMoney(lpsAmt)); y += 16; }
 
     const hydroGrand = invoice.total_amount != null
@@ -566,7 +584,7 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res) 
     ['Trading Margin', tradingMargin],
     ['NRLDC / SLDC Fees', nrldcFees],
     ['Transmission / Wheeling Charges', txCharges],
-    ['Taxes / GST', taxAmt],
+    ...gstLines(taxAmt),
     ['Late Payment Surcharge (LPS)', lps],
     ['Early-Payment Rebate', rebate ? -rebate : 0],
   ].filter(([, v]) => Number(v) !== 0);
@@ -697,6 +715,36 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res) 
     } catch (e) {
       console.error('Failed to place QR:', e);
     }
+  }
+
+  // ========== PAGE 2: BENEFICIARY-WISE ALLOCATION (hydro) ==========
+  // Mirrors the NJHPS statement's second page — how the plant's charges split
+  // across the DISCOMs allocated to it (per REA / NRPC order).
+  if (Array.isArray(beneficiaries) && beneficiaries.length) {
+    doc.addPage();
+    let py = MARGIN;
+    doc.font('Helvetica-Bold').fontSize(13).fillColor(NAVY)
+      .text('Beneficiary-wise Allocation', MARGIN, py, { width: CONTENT_WIDTH, align: 'center' });
+    py = doc.y + 3;
+    doc.font('Helvetica').fontSize(8).fillColor(INK)
+      .text(`Allocation of charges to beneficiaries as per REA / NRPC order — ${periodLabel(invoice.billing_period)}`,
+        MARGIN, py, { width: CONTENT_WIDTH, align: 'center' });
+    py = doc.y + 12;
+
+    drawBillingRow(py, 18, ['Sr', 'Beneficiary (DISCOM)', '', '', 'Allocation %', `Share (${CUR})`], { headerBand: true });
+    py += 18;
+    beneficiaries.forEach((b, i) => {
+      drawBillingRow(py, 18, [String(i + 1), blank(b.name) || '—', '', '', `${b.allocation_percent}%`, fmtMoney(b.share)]);
+      py += 18;
+    });
+    const totPct = beneficiaries.reduce((s, b) => s + (Number(b.allocation_percent) || 0), 0);
+    const totShare = beneficiaries.reduce((s, b) => s + (Number(b.share) || 0), 0);
+    drawSpanRow(py, 20, `Total Allocated  (${totPct}%)`, fmtMoney(totShare), { bold: true });
+    py += 20;
+
+    doc.font('Helvetica-Oblique').fontSize(7).fillColor(INK)
+      .text('Note: Allocation percentages are as per the applicable REA / NRPC allocation order for the billing month. Share is the beneficiary’s portion of the total billed amount.',
+        MARGIN, py + 8, { width: CONTENT_WIDTH, align: 'left' });
   }
 
   doc.end();

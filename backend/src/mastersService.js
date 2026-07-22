@@ -11,6 +11,7 @@ const DEFAULT_PARAMS = [
   { category: 'BILLING', param_key: 'lps_annual_pct', param_value: '15', data_type: 'PERCENT', unit: '% p.a.', description: 'Late Payment Surcharge annual rate' },
   { category: 'BILLING', param_key: 'nrldc_fee_per_mw', param_value: '100', data_type: 'NUMBER', unit: 'INR/MW', description: 'NRLDC/SLDC fee per MW capacity' },
   { category: 'BILLING', param_key: 'default_payment_terms_days', param_value: '30', data_type: 'NUMBER', unit: 'days', description: 'Default payment terms when contract has none' },
+  { category: 'BILLING', param_key: 'gst_rate_percent', param_value: '0', data_type: 'PERCENT', unit: '%', description: 'GST on the taxable service component (trading margin). Default 0 — sale of electricity is GST-exempt (HSN 2716). Set >0 only where GST genuinely applies; PDF then splits CGST+SGST (intra-state) or IGST (inter-state).' },
   { category: 'REGULATORY', param_key: 'solar_base_cuf_pct', param_value: '22', data_type: 'PERCENT', unit: '%', description: 'Baseline CUF for Solar energy validation' },
   { category: 'REGULATORY', param_key: 'wind_base_cuf_pct', param_value: '30', data_type: 'PERCENT', unit: '%', description: 'Baseline CUF for Wind energy validation' },
   { category: 'REGULATORY', param_key: 'hydro_base_cuf_pct', param_value: '65', data_type: 'PERCENT', unit: '%', description: 'Baseline CUF for Hydro energy validation' },
