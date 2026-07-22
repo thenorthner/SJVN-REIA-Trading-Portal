@@ -2,6 +2,8 @@ import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { v4 as uuidv4 } from 'uuid';
+import { catalogForEntityType, summarizeApprovals } from '../regulatoryApprovals.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = path.join(__dirname, 'platform.db');
@@ -12,6 +14,10 @@ db.pragma('foreign_keys = ON');
 
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
 db.exec(schema);
+
+function localId(prefix) {
+  return `${prefix}-${uuidv4().slice(0, 8)}`;
+}
 
 /** Recreate disputes tables when upgrading from the old 4-status MVP schema. */
 function migrateDisputesSchema() {
@@ -102,6 +108,42 @@ function migrateBillingSchema() {
   }
 }
 migrateBillingSchema();
+
+/**
+ * Rebuild a table from schema.sql, preserving data by explicit column names.
+ * Must run with legacy_alter_table=ON so the RENAME does NOT rewrite FK/trigger
+ * references in *other* tables (which would leave them pointing at the _old copy).
+ */
+function rebuildTableFromSchema(name) {
+  const cols = db.prepare(`PRAGMA table_info(${name})`).all().map((c) => `"${c.name}"`).join(', ');
+  db.exec(`ALTER TABLE ${name} RENAME TO ${name}_old`);
+  db.exec(schema); // recreates `name` fresh; all other tables are IF NOT EXISTS no-ops
+  db.exec(`INSERT INTO ${name} (${cols}) SELECT ${cols} FROM ${name}_old`);
+  db.exec(`DROP TABLE ${name}_old`);
+}
+
+/**
+ * Relax invoices.invoice_type CHECK to allow 'ARREAR', and self-heal any table
+ * whose FK was accidentally rewritten to reference a dropped `invoices_old`.
+ * SQLite can't ALTER a CHECK, so the table is rebuilt from schema.sql.
+ */
+function migrateInvoiceArrearType() {
+  const inv = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='invoices'").get();
+  const needsArrear = inv && !inv.sql.includes("'ARREAR'");
+  const broken = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND sql LIKE '%invoices_old%'").all();
+  if (!needsArrear && broken.length === 0) return; // fresh/healthy DB
+
+  db.exec('PRAGMA foreign_keys=OFF');
+  db.exec('PRAGMA legacy_alter_table=ON'); // keep RENAME from touching other tables' FKs
+  try {
+    if (needsArrear) rebuildTableFromSchema('invoices');
+    for (const t of broken) rebuildTableFromSchema(t.name); // repair FK → invoices_old
+  } finally {
+    db.exec('PRAGMA legacy_alter_table=OFF');
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+migrateInvoiceArrearType();
 
 function migrateRBACSchema() {
   const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
@@ -609,6 +651,58 @@ try {
   migrateStationBetaSchema();
 } catch (e) {
   console.error('Station beta migration failed:', e.message);
+}
+
+/** Stakeholder regulatory approval checklist table + backfill for existing entities. */
+function migrateRegulatoryApprovalsSchema() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS entity_regulatory_approvals (
+      id TEXT PRIMARY KEY,
+      entity_id TEXT NOT NULL REFERENCES entities(id),
+      approval_code TEXT NOT NULL,
+      label TEXT NOT NULL,
+      is_mandatory INTEGER NOT NULL DEFAULT 1,
+      applies_to TEXT NOT NULL DEFAULT 'BOTH',
+      doc_type TEXT,
+      status TEXT NOT NULL DEFAULT 'NOT_STARTED' CHECK (status IN (
+        'NOT_STARTED','NOT_APPLICABLE','SUBMITTED','VERIFIED','EXPIRED','REJECTED'
+      )),
+      reference_no TEXT,
+      issued_by TEXT,
+      issued_on TEXT,
+      valid_until TEXT,
+      notes TEXT,
+      document_id TEXT,
+      verified_by TEXT,
+      verified_at TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(entity_id, approval_code)
+    )
+  `);
+
+  const entities = db.prepare('SELECT id, entity_type FROM entities').all();
+  const ins = db.prepare(`
+    INSERT OR IGNORE INTO entity_regulatory_approvals (
+      id, entity_id, approval_code, label, is_mandatory, applies_to, doc_type, status, sort_order
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'NOT_STARTED', ?)
+  `);
+  const updSummary = db.prepare('UPDATE entities SET regulatory_approvals = ? WHERE id = ?');
+  for (const e of entities) {
+    const catalog = catalogForEntityType(e.entity_type);
+    for (const item of catalog) {
+      ins.run(localId('REG'), e.id, item.code, item.label, item.is_mandatory ? 1 : 0, item.applies_to, item.doc_type, item.sort_order);
+    }
+    const rows = db.prepare('SELECT * FROM entity_regulatory_approvals WHERE entity_id = ?').all(e.id);
+    updSummary.run(summarizeApprovals(rows).summary_text, e.id);
+  }
+}
+
+try {
+  migrateRegulatoryApprovalsSchema();
+} catch (e) {
+  console.error('Regulatory approvals migration failed:', e.message);
 }
 
 export default db;

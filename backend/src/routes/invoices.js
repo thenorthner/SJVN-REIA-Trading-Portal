@@ -343,6 +343,59 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(id));
 });
 
+// Arrear bill — a manual recovery bill for a past period (charges missed / under-billed
+// earlier, e.g. retrospective tariff order, delayed adjustment). Mirrors SAP bill type 'A'.
+router.post('/arrear', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const { contract_id, arrear_period, amount, taxes, reason } = req.body;
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
+  if (!contract) return res.status(404).json({ error: 'Contract not found' });
+  const amt = Number(amount);
+  if (!arrear_period) return res.status(400).json({ error: 'arrear_period (YYYY-MM being recovered) is required' });
+  if (!Number.isFinite(amt) || amt === 0) return res.status(400).json({ error: 'A non-zero arrear amount is required' });
+  if (!reason || !reason.trim()) return res.status(400).json({ error: 'A reason for the arrear is required' });
+
+  const taxAmt = Number(taxes) || 0;
+  const total = Math.round(amt + taxAmt);
+  const direction = directionForContract(contract);
+  const billingFamilyRef = buildBillingFamilyRef(contract.contract_no, arrear_period, direction);
+  const id = newId('INV');
+  const breakdown = [
+    { code: 'ARR', label: `Arrear recovery for ${arrear_period} — ${reason.trim()}`, value: Math.round(amt) },
+  ];
+  if (taxAmt) breakdown.push({ code: 'TAX', label: 'Taxes / GST on arrear', value: Math.round(taxAmt) });
+  breakdown.push({ code: 'GROSS', label: 'Arrear Bill Total', value: total });
+
+  db.prepare(`
+    INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh,
+      tariff_per_unit, energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees,
+      transmission_charges, lps, penalty, trading_margin, taxes,
+      other_adjustments, total_amount, invoice_breakdown_json, disputed_amount, due_date, status,
+      parent_invoice_id, billing_family_ref, energy_data_id, created_by)
+    VALUES (@id, @invoice_no, @contract_id, 'ARREAR', @direction, @billing_period, 0,
+      0, @energy_charges, 0, 0, 0, 0,
+      0, 0, 0, 0, @taxes,
+      0, @total_amount, @invoice_breakdown_json, 0, @due_date, 'DRAFT',
+      NULL, @billing_family_ref, NULL, @created_by)
+  `).run({
+    id,
+    invoice_no: genInvoiceNo(contract.contract_type === 'PPA' ? 'ARR-PPA' : 'ARR-PSA'),
+    contract_id,
+    direction,
+    billing_period: arrear_period,
+    energy_charges: Math.round(amt),
+    taxes: taxAmt,
+    total_amount: total,
+    invoice_breakdown_json: JSON.stringify(breakdown),
+    due_date: computeDueDate(new Date(), contract, getParamNumber('default_payment_terms_days', 30)),
+    billing_family_ref: billingFamilyRef,
+    created_by: req.user.name,
+  });
+  db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)').run(newId('APR'), id, 'PENDING');
+  logAudit({ req, user: req.user, action: 'GENERATE_ARREAR', module: 'REIA', entityType: 'invoice', entityId: id, details: { contract_id, arrear_period, amount: amt, taxes: taxAmt, reason } });
+  pushNotification({ role: 'REIA_USER', type: 'ARREAR_RAISED', message: `Arrear bill raised for ${contract.contract_no} (${arrear_period}): ₹${total.toLocaleString('en-IN')}` });
+  res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(id));
+});
+
 // Seller invoice submission (manual upload)
 router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const b = req.body;

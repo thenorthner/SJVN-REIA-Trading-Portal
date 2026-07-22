@@ -30,6 +30,7 @@ const NAV_INTERNAL = [
       { to: '/reia/disputes', label: 'Dispute Management' },
       { to: '/reia/payment-security', label: 'Payment Security' },
       { to: '/reia/reconciliation', label: 'Reconciliation' },
+      { to: '/reia/deviation', label: 'Deviation Settlement (DSM)' },
     ],
   },
   {

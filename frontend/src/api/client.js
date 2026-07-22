@@ -38,6 +38,9 @@ export const api = {
     get: (id) => g(`/entities/${id}`),
     create: (body) => p('/entities', body),
     update: (id, body) => put(`/entities/${id}`, body),
+    regulatoryCatalog: (entity_type) => g('/entities/regulatory-catalog', { entity_type }),
+    updateRegulatoryApproval: (entityId, approvalId, body) =>
+      put(`/entities/${entityId}/regulatory-approvals/${approvalId}`, body),
     uploadLogo: (id, file) => {
       const formData = new FormData();
       formData.append('logo', file);
@@ -94,6 +97,7 @@ export const api = {
     get: (id) => g(`/invoices/${id}`),
     downloadPdf: (id) => client.get(`/invoices/${id}/pdf`, { responseType: 'blob' }).then(res => res.data),
     generate: (body) => p('/invoices/generate', body),
+    arrear: (body) => p('/invoices/arrear', body),
     submit: (body) => p('/invoices', body),
     submitL2: (id) => p(`/invoices/${id}/submit-l2`),
     approveL2: (id, comments) => p(`/invoices/${id}/approve-l2`, { comments }),
@@ -104,6 +108,16 @@ export const api = {
   },
   billingTrail: {
     get: (params) => g('/billing-trail', params),
+  },
+  deviation: {
+    list: (params) => g('/deviation', params),
+    summary: (params) => g('/deviation/summary', params),
+    get: (id) => g(`/deviation/${id}`),
+    create: (body) => p('/deviation', body),
+    update: (id, body) => put(`/deviation/${id}`, body),
+    submit: (id) => p(`/deviation/${id}/submit`),
+    dispatch: (id, body) => p(`/deviation/${id}/dispatch`, body),
+    remove: (id) => del(`/deviation/${id}`),
   },
   stationBeta: {
     list: (params) => g('/station-beta', params),

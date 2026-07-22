@@ -4,20 +4,23 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { fmtDate } from '../../datetime.js';
+import { catalogForEntityType, APPROVAL_STATUS_LABELS } from '../../constants/regulatoryApprovals.js';
 
-const CAN_APPROVE = ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN'];
-const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER', 'SELLER', 'BUYER', 'IT_SUPER_ADMIN'];
+const CAN_APPROVE = ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN', 'REIA_ADMIN'];
+const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER', 'SELLER', 'BUYER', 'IT_SUPER_ADMIN', 'REIA_ADMIN'];
+const CAN_VERIFY = ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN', 'REIA_ADMIN'];
 
 const EMPTY_FORM = {
-  parent_entity_id: '', entity_type: 'SELLER', category: '', name: '', 
+  parent_entity_id: '', entity_type: 'SELLER', category: '', name: '',
   pan_no: '', gst_no: '', cin: '', credit_rating: '',
   capacity_mw: '', technology: '', contracted_capacity_mw: '',
-  psa_tariff: '', supply_criteria: '', organization_details: '', regulatory_approvals: '', 
+  psa_tariff: '', supply_criteria: '', organization_details: '',
   address: '', bank_name: '', account_no: '', ifsc_code: '', branch_address: '',
   corporate_email: '', corporate_phone: '', corporate_website: '', tan_no: '',
   signatory_name: '', signatory_designation: '',
   contacts: [{ contact_type: 'COMMERCIAL', name: '', email: '', phone: '', is_primary: true }],
-  documents: [{ doc_type: 'Registration', url: '', validity_end: '' }]
+  documents: [],
+  regulatory_na: {}, // approval_code -> notes when marked N/A at create
 };
 
 export default function Entities() {
@@ -31,6 +34,9 @@ export default function Entities() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
   const [remarks, setRemarks] = useState('');
+  const [editApproval, setEditApproval] = useState(null);
+  const [approvalForm, setApprovalForm] = useState({});
+  const [approveError, setApproveError] = useState('');
 
   function load() {
     setLoading(true);
@@ -46,34 +52,86 @@ export default function Entities() {
   function openDetail(row) {
     api.entities.get(row.id).then(setSelected);
     setRemarks('');
+    setApproveError('');
+    setEditApproval(null);
   }
 
   async function handleCreate(e) {
     e.preventDefault();
     setError('');
     try {
+      const regulatory_checklist_init = Object.entries(form.regulatory_na || {})
+        .filter(([, notes]) => notes != null)
+        .map(([approval_code, notes]) => ({
+          approval_code,
+          status: 'NOT_APPLICABLE',
+          notes: notes || 'Marked N/A at onboarding',
+        }));
+
       const createdEntity = await api.entities.create({
         ...form,
         capacity_mw: form.capacity_mw ? Number(form.capacity_mw) : null,
         contracted_capacity_mw: form.contracted_capacity_mw ? Number(form.contracted_capacity_mw) : null,
         psa_tariff: form.psa_tariff ? Number(form.psa_tariff) : null,
-        parent_entity_id: form.parent_entity_id || null
+        parent_entity_id: form.parent_entity_id || null,
+        regulatory_checklist_init,
       });
       setShowCreate(false);
       setForm(EMPTY_FORM);
       load();
-      // Auto-open detail modal so the user can upload documents
       openDetail(createdEntity);
-
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to create stakeholder.');
     }
   }
 
   async function handleApprove(decision) {
-    await api.entities.approve(selected.id, decision, remarks);
-    setSelected(null);
-    load();
+    setApproveError('');
+    try {
+      await api.entities.approve(selected.id, decision, remarks);
+      setSelected(null);
+      load();
+    } catch (err) {
+      setApproveError(err.response?.data?.error || 'Approval failed');
+    }
+  }
+
+  function openApprovalEditor(item) {
+    setEditApproval(item);
+    setApprovalForm({
+      status: item.status,
+      reference_no: item.reference_no || '',
+      issued_by: item.issued_by || '',
+      issued_on: item.issued_on || '',
+      valid_until: item.valid_until || '',
+      notes: item.notes || '',
+    });
+  }
+
+  async function saveApproval(e) {
+    e.preventDefault();
+    try {
+      const res = await api.entities.updateRegulatoryApproval(selected.id, editApproval.id, approvalForm);
+      setSelected({
+        ...selected,
+        regulatory_checklist: res.checklist,
+        regulatory_summary: res.summary,
+        regulatory_approvals: res.summary?.summary_text,
+      });
+      setEditApproval(null);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to update approval');
+    }
+  }
+
+  function toggleNa(code, checked) {
+    setForm((prev) => {
+      const next = { ...prev.regulatory_na };
+      if (checked) next[code] = next[code] || '';
+      else delete next[code];
+      return { ...prev, regulatory_na: next };
+    });
   }
   
   async function handlePennyDrop() {
@@ -135,6 +193,16 @@ export default function Entities() {
         {r.is_penny_drop_verified ? <Badge status="ACTIVE" label="Bank Verified" /> : <Badge status="PENDING" label="Bank Unverified" />}
       </div>
     )},
+    { key: 'regulatory', header: 'Regulatory', render: (r) => {
+      const s = r.regulatory_summary;
+      if (!s) return <span style={{ color: '#94a3b8' }}>{r.regulatory_approvals || '—'}</span>;
+      return (
+        <Badge
+          status={s.ready_for_approval ? 'ACTIVE' : 'PENDING'}
+          label={s.summary_text}
+        />
+      );
+    }},
     { key: 'capacity', header: 'Capacity (MW)', render: (r) => fmtNumber(r.contracted_capacity_mw ?? r.capacity_mw) },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
     { key: 'created_at', header: 'Onboarded', render: (r) => fmtDate(r.created_at) },
@@ -179,7 +247,7 @@ export default function Entities() {
                 </select>
               </Field>
               <Field label="Entity Type">
-                <select value={form.entity_type} onChange={(e) => setForm({ ...form, entity_type: e.target.value })}>
+                <select value={form.entity_type} onChange={(e) => setForm({ ...form, entity_type: e.target.value, regulatory_na: {} })}>
                   <option value="SELLER">Seller</option>
                   <option value="BUYER">Buyer</option>
                 </select>
@@ -236,12 +304,71 @@ export default function Entities() {
               <Field label="Account No"><input required value={form.account_no} onChange={(e) => setForm({ ...form, account_no: e.target.value })} /></Field>
               <Field label="IFSC Code"><input required value={form.ifsc_code} onChange={(e) => setForm({ ...form, ifsc_code: e.target.value })} /></Field>
               <Field label="Branch Address"><input required value={form.branch_address} onChange={(e) => setForm({ ...form, branch_address: e.target.value })} /></Field>
-              <Field label="Regulatory Approvals"><input value={form.regulatory_approvals} onChange={(e) => setForm({ ...form, regulatory_approvals: e.target.value })} /></Field>
+            </div>
+          </div>
+
+          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+            <h4 style={{ margin: '0 0 8px 0' }}>4. Regulatory Approvals Checklist</h4>
+            <p style={{ fontSize: 13, color: '#64748b', marginTop: 0 }}>
+              Specific clearances required for {form.entity_type === 'SELLER' ? 'sellers' : 'buyers'}.
+              After create, upload supporting docs and mark each item Submitted / Verified.
+              Mark <strong>N/A</strong> only where genuinely not applicable (with a note).
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {catalogForEntityType(form.entity_type).map((item) => {
+                const na = Object.prototype.hasOwnProperty.call(form.regulatory_na, item.code);
+                return (
+                  <div
+                    key={item.code}
+                    style={{
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 8,
+                      padding: '10px 12px',
+                      background: na ? '#f8fafc' : '#fff',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>
+                          {item.label}
+                          {item.is_mandatory ? (
+                            <span style={{ color: '#b91c1c', marginLeft: 6, fontSize: 11 }}>Required</span>
+                          ) : (
+                            <span style={{ color: '#64748b', marginLeft: 6, fontSize: 11 }}>Optional</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#64748b' }}>{item.help}</div>
+                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, whiteSpace: 'nowrap' }}>
+                        <input
+                          type="checkbox"
+                          checked={na}
+                          onChange={(e) => toggleNa(item.code, e.target.checked)}
+                        />
+                        N/A
+                      </label>
+                    </div>
+                    {na && (
+                      <Field label="Why not applicable?">
+                        <input
+                          required
+                          placeholder="e.g. COD not yet — plant under construction"
+                          value={form.regulatory_na[item.code] || ''}
+                          onChange={(e) => setForm({
+                            ...form,
+                            regulatory_na: { ...form.regulatory_na, [item.code]: e.target.value },
+                          })}
+                        />
+                      </Field>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           <div style={{ padding: '12px 16px', background: '#eef2ff', borderRadius: 6, color: '#4f46e5', fontSize: 13, marginBottom: 20 }}>
-            <strong>Note:</strong> You will be prompted to upload required compliance documents (KYC, Bank Proof, Licenses) in the next step after creating the basic profile.
+            <strong>Next:</strong> After save, upload KYC / license PDFs under Documents, then REIA marks each checklist item Verified. Stakeholder approval is blocked until all mandatory items are Verified (or properly N/A) and bank penny-drop is done.
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
@@ -303,11 +430,68 @@ export default function Entities() {
                     </>
                   )}
                   <tr><td>Status</td><td><Badge status={selected.status} /></td></tr>
+                  <tr>
+                    <td>Regulatory</td>
+                    <td>
+                      {selected.regulatory_summary ? (
+                        <Badge
+                          status={selected.regulatory_summary.ready_for_approval ? 'ACTIVE' : 'PENDING'}
+                          label={selected.regulatory_summary.summary_text}
+                        />
+                      ) : (selected.regulatory_approvals || '—')}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
           </div>
           
+          <h4 style={{ margin: '20px 0 8px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Regulatory Approvals</h4>
+          <p style={{ fontSize: 13, color: '#64748b', marginTop: 0 }}>
+            Track each clearance with status, reference no., issuer and validity. Upload proof under Documents below (same doc types).
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
+            {(selected.regulatory_checklist || []).map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  background: '#fff',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  alignItems: 'flex-start',
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: 13 }}>{item.label}</strong>
+                    <Badge status={item.status === 'VERIFIED' ? 'ACTIVE' : item.status === 'NOT_APPLICABLE' ? 'DRAFT' : 'PENDING'} label={APPROVAL_STATUS_LABELS[item.status] || item.status} />
+                    {item.is_mandatory ? <span style={{ fontSize: 11, color: '#b91c1c' }}>Required</span> : <span style={{ fontSize: 11, color: '#64748b' }}>Optional</span>}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                    {item.reference_no ? `Ref: ${item.reference_no} · ` : ''}
+                    {item.issued_by ? `Issuer: ${item.issued_by} · ` : ''}
+                    {item.issued_on ? `Issued: ${item.issued_on} · ` : ''}
+                    {item.valid_until ? `Valid till: ${item.valid_until}` : ''}
+                    {!item.reference_no && !item.issued_by && !item.issued_on && !item.valid_until ? 'No details yet' : ''}
+                  </div>
+                  {item.notes && <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>{item.notes}</div>}
+                  {item.verified_by && (
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                      Verified by {item.verified_by}{item.verified_at ? ` · ${fmtDate(item.verified_at)}` : ''}
+                    </div>
+                  )}
+                </div>
+                {CAN_WRITE.includes(user?.role) && (
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => openApprovalEditor(item)}>Update</button>
+                )}
+              </div>
+            ))}
+          </div>
+
           <h4 style={{ margin: '20px 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Contacts</h4>
           {selected.contacts?.length > 0 ? (
             <Table columns={[{key:'type', header:'Role', render: r=>r.contact_type}, {key:'name', header:'Name'}, {key:'email', header:'Email'}, {key:'phone', header:'Phone'}]} rows={selected.contacts} />
@@ -398,7 +582,22 @@ export default function Entities() {
 
           {selected.status === 'PENDING' && CAN_APPROVE.includes(user?.role) && (
             <div style={{ marginTop: 20, padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-              <h4 style={{ margin: '0 0 12px 0' }}>Approval Action</h4>
+              <h4 style={{ margin: '0 0 8px 0' }}>Approval Action</h4>
+              {!selected.regulatory_summary?.ready_for_approval && (
+                <div style={{ fontSize: 13, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 10px', marginBottom: 10 }}>
+                  Mandatory regulatory items still pending
+                  {selected.regulatory_summary?.blocking?.length
+                    ? `: ${selected.regulatory_summary.blocking.join(', ')}`
+                    : '.'}
+                  {' '}Approve will be blocked until they are Verified or properly marked N/A.
+                </div>
+              )}
+              {!selected.is_penny_drop_verified && (
+                <div style={{ fontSize: 13, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 10px', marginBottom: 10 }}>
+                  Bank penny-drop verification is required before approval.
+                </div>
+              )}
+              {approveError && <div className="form-error" style={{ marginBottom: 10 }}>{approveError}</div>}
               <Field label="Remarks">
                 <input value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Required for rejection" />
               </Field>
@@ -410,6 +609,52 @@ export default function Entities() {
           )}
         </Modal>
       )}
+
+      <Modal open={!!editApproval} onClose={() => setEditApproval(null)} title={editApproval ? `Update: ${editApproval.label}` : 'Update approval'} width={560}>
+        {editApproval && (
+          <form onSubmit={saveApproval}>
+            <Field label="Status">
+              <select
+                value={approvalForm.status}
+                onChange={(e) => setApprovalForm({ ...approvalForm, status: e.target.value })}
+              >
+                {Object.entries(APPROVAL_STATUS_LABELS)
+                  .filter(([code]) => CAN_VERIFY.includes(user?.role) || code !== 'VERIFIED' || editApproval.status === 'VERIFIED')
+                  .map(([code, label]) => (
+                    <option key={code} value={code} disabled={code === 'VERIFIED' && !CAN_VERIFY.includes(user?.role)}>
+                      {label}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+            <div className="form-grid">
+              <Field label="Reference / Approval No.">
+                <input value={approvalForm.reference_no} onChange={(e) => setApprovalForm({ ...approvalForm, reference_no: e.target.value })} placeholder="e.g. CEA/REG/2024/…" />
+              </Field>
+              <Field label="Issued By">
+                <input value={approvalForm.issued_by} onChange={(e) => setApprovalForm({ ...approvalForm, issued_by: e.target.value })} placeholder="CEA / MoEF / SERC / CTU…" />
+              </Field>
+              <Field label="Issued On">
+                <input type="date" value={approvalForm.issued_on} onChange={(e) => setApprovalForm({ ...approvalForm, issued_on: e.target.value })} />
+              </Field>
+              <Field label="Valid Until">
+                <input type="date" value={approvalForm.valid_until} onChange={(e) => setApprovalForm({ ...approvalForm, valid_until: e.target.value })} />
+              </Field>
+            </div>
+            <Field label={approvalForm.status === 'NOT_APPLICABLE' ? 'Why N/A? (required for mandatory)' : 'Notes'}>
+              <input
+                value={approvalForm.notes}
+                onChange={(e) => setApprovalForm({ ...approvalForm, notes: e.target.value })}
+                placeholder="Optional context"
+              />
+            </Field>
+            <div className="form-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setEditApproval(null)}>Cancel</button>
+              <button type="submit" className="btn btn-primary">Save</button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }

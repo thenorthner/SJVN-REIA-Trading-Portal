@@ -30,5 +30,8 @@ backend/test*.pdf
 /*.PDF
 /*.docx
 
+# Reference/controlled documents (TCS manuals, real SJVN bills) — keep local, never commit
+docs/
+
 # Agent / editor local settings (keep launch.json shared, ignore machine-local)
 .claude/settings.local.json

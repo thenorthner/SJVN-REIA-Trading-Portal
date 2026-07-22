@@ -11,6 +11,7 @@ const CAN_APPROVE = ['SJVN_ADMIN', 'REIA_USER', 'FINANCE_USER'];
 const CAN_RECORD_PAYMENT = ['SJVN_ADMIN', 'FINANCE_USER', 'REIA_USER'];
 
 const GEN_FORM = { contract_id: '', period_month: '', invoice_type: 'PROVISIONAL' };
+const ARREAR_FORM = { contract_id: '', arrear_period: '', amount: '', taxes: '', reason: '' };
 const PAY_FORM = { amount: '', payment_date: '', mode: 'NEFT', reference: '', deduction: '' };
 
 export default function Invoices() {
@@ -22,6 +23,9 @@ export default function Invoices() {
   const [loading, setLoading] = useState(true);
   const [showGenerate, setShowGenerate] = useState(false);
   const [genForm, setGenForm] = useState(GEN_FORM);
+  const [showArrear, setShowArrear] = useState(false);
+  const [arrearForm, setArrearForm] = useState(ARREAR_FORM);
+  const [arrearError, setArrearError] = useState('');
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
   const [payForm, setPayForm] = useState(PAY_FORM);
@@ -72,6 +76,23 @@ export default function Invoices() {
       load();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to generate invoice.');
+    }
+  }
+
+  async function handleArrear(e) {
+    e.preventDefault();
+    setArrearError('');
+    try {
+      await api.invoices.arrear({
+        ...arrearForm,
+        amount: Number(arrearForm.amount),
+        taxes: arrearForm.taxes ? Number(arrearForm.taxes) : 0,
+      });
+      setShowArrear(false);
+      setArrearForm(ARREAR_FORM);
+      load();
+    } catch (err) {
+      setArrearError(err.response?.data?.error || 'Failed to raise arrear bill.');
     }
   }
 
@@ -174,7 +195,10 @@ export default function Invoices() {
           <>
             <button className="btn btn-secondary" onClick={() => navigate('/reia/reports')}>Billing Report</button>
             {CAN_WRITE.includes(user?.role) && (
-              <button className="btn btn-primary" onClick={() => setShowGenerate(true)}>+ Generate Invoice</button>
+              <>
+                <button className="btn btn-secondary" onClick={() => { setArrearForm(ARREAR_FORM); setArrearError(''); setShowArrear(true); }}>+ Arrear Bill</button>
+                <button className="btn btn-primary" onClick={() => setShowGenerate(true)}>+ Generate Invoice</button>
+              </>
             )}
           </>
         }
@@ -237,6 +261,42 @@ export default function Invoices() {
           <div className="form-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setShowGenerate(false)}>Cancel</button>
             <button type="submit" className="btn btn-primary">Generate</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={showArrear} onClose={() => setShowArrear(false)} title="Raise Arrear Bill" width={480}>
+        {arrearError && <div className="form-error">{arrearError}</div>}
+        <form onSubmit={handleArrear}>
+          <Field label="Contract">
+            <select required value={arrearForm.contract_id} onChange={(e) => setArrearForm({ ...arrearForm, contract_id: e.target.value })}>
+              <option value="">Select contract...</option>
+              {contracts.map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.project_type})</option>)}
+            </select>
+          </Field>
+          <div className="form-grid">
+            <Field label="Arrear Period (recovering for)">
+              <input required type="month" value={arrearForm.arrear_period} onChange={(e) => setArrearForm({ ...arrearForm, arrear_period: e.target.value })} />
+            </Field>
+            <Field label="Arrear Amount (₹)">
+              <input required type="number" step="0.01" value={arrearForm.amount} placeholder="e.g. 250000" onChange={(e) => setArrearForm({ ...arrearForm, amount: e.target.value })} />
+            </Field>
+          </div>
+          <div className="form-grid">
+            <Field label="Taxes / GST (₹)">
+              <input type="number" step="0.01" value={arrearForm.taxes} placeholder="0" onChange={(e) => setArrearForm({ ...arrearForm, taxes: e.target.value })} />
+            </Field>
+            <Field label="Total">
+              <input disabled value={`₹${((Number(arrearForm.amount) || 0) + (Number(arrearForm.taxes) || 0)).toLocaleString('en-IN')}`} />
+            </Field>
+          </div>
+          <Field label="Reason for arrear">
+            <textarea required rows={2} value={arrearForm.reason} placeholder="e.g. Retrospective tariff revision per CERC order dated…" onChange={(e) => setArrearForm({ ...arrearForm, reason: e.target.value })} style={{ width: '100%', resize: 'vertical' }} />
+          </Field>
+          <p className="inline-note">An arrear bill recovers charges missed or under-billed in a past period. It routes through the normal approval workflow.</p>
+          <div className="form-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setShowArrear(false)}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Raise Arrear</button>
           </div>
         </form>
       </Modal>

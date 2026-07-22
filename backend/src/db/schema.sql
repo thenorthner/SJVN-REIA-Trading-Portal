@@ -283,12 +283,38 @@ CREATE TABLE IF NOT EXISTS energy_data (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Stakeholder regulatory approval checklist (replaces free-text "Passed")
+CREATE TABLE IF NOT EXISTS entity_regulatory_approvals (
+  id TEXT PRIMARY KEY,
+  entity_id TEXT NOT NULL REFERENCES entities(id),
+  approval_code TEXT NOT NULL,
+  label TEXT NOT NULL,
+  is_mandatory INTEGER NOT NULL DEFAULT 1,
+  applies_to TEXT NOT NULL DEFAULT 'BOTH',
+  doc_type TEXT,
+  status TEXT NOT NULL DEFAULT 'NOT_STARTED' CHECK (status IN (
+    'NOT_STARTED','NOT_APPLICABLE','SUBMITTED','VERIFIED','EXPIRED','REJECTED'
+  )),
+  reference_no TEXT,
+  issued_by TEXT,
+  issued_on TEXT,
+  valid_until TEXT,
+  notes TEXT,
+  document_id TEXT,
+  verified_by TEXT,
+  verified_at TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(entity_id, approval_code)
+);
+
 -- Billing & Invoicing
 CREATE TABLE IF NOT EXISTS invoices (
   id TEXT PRIMARY KEY,
   invoice_no TEXT UNIQUE NOT NULL,
   contract_id TEXT NOT NULL REFERENCES contracts(id),
-  invoice_type TEXT NOT NULL CHECK (invoice_type IN ('PROVISIONAL','FINAL','SUPPLEMENTARY')),
+  invoice_type TEXT NOT NULL CHECK (invoice_type IN ('PROVISIONAL','FINAL','SUPPLEMENTARY','ARREAR')),
   direction TEXT NOT NULL CHECK (direction IN ('SELLER_TO_SJVN','SJVN_TO_BUYER')),
   billing_period TEXT NOT NULL, -- YYYY-MM
   energy_mwh REAL NOT NULL,
@@ -330,6 +356,35 @@ CREATE TABLE IF NOT EXISTS invoice_approvals (
   status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED')),
   comments TEXT,
   acted_at TEXT
+);
+
+-- Deviation Settlement Account (DSM) — weekly grid deviation charges/credits.
+-- Data (schedule vs actual, deviation amount) is provided by NRPC, entered
+-- per plant per week. Net = deviation_mwh × rate; positive = recoverable from
+-- beneficiary, negative = payable by SJVN.
+CREATE TABLE IF NOT EXISTS deviation_settlements (
+  id TEXT PRIMARY KEY,
+  dsm_no TEXT UNIQUE NOT NULL,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  plant_code TEXT,          -- NJHPS=001, RHPS=002
+  plant_name TEXT,
+  period_month TEXT NOT NULL,   -- YYYY-MM
+  week_no INTEGER NOT NULL,
+  week_date TEXT,               -- week start/ref date from NRPC statement
+  entry_type TEXT NOT NULL DEFAULT 'PRIMARY' CHECK (entry_type IN ('PRIMARY','REVISED')),
+  scheduled_mwh REAL NOT NULL DEFAULT 0,
+  actual_mwh REAL NOT NULL DEFAULT 0,
+  deviation_mwh REAL NOT NULL DEFAULT 0,       -- actual - scheduled
+  deviation_rate REAL NOT NULL DEFAULT 0,      -- ₹/MWh (DSM rate as per NRPC)
+  deviation_amount REAL NOT NULL DEFAULT 0,    -- net; + recoverable / - payable
+  status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','CALCULATED','SUBMITTED','DISPATCHED','CANCELLED')),
+  invoice_no TEXT,             -- linked bill number on dispatch
+  dispatch_date TEXT,
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(contract_id, period_month, week_no, entry_type)
 );
 
 CREATE TABLE IF NOT EXISTS invoice_mapping (

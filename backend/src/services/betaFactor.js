@@ -40,13 +40,16 @@ export function incentivePctForProject(projectType) {
 export function computeFreqResponseIncentive(monthlyCapacityCharge, betaValue, projectType) {
   const pct = incentivePctForProject(projectType);
   const minBeta = getParamNumber('freq_response_beta_min', 0.30);
+  // SJVN NJHPS applies a sharing factor of 0.5 in the beta incentive
+  // ((pct × β × factor × AFC)/12). Set to 1 in masters for pure CERC.
+  const sharing = getParamNumber('freq_response_beta_sharing_factor', 0.5);
   const beta = betaValue == null || betaValue === '' ? null : Number(betaValue);
 
   if (beta == null || !Number.isFinite(beta)) {
-    return { incentive: 0, eligible: false, beta: null, pct, minBeta, reason: 'β not yet certified (NRPC pending)' };
+    return { incentive: 0, eligible: false, beta: null, pct, minBeta, sharing, reason: 'β not yet certified (NRPC pending)' };
   }
   if (beta < 0 || beta > 1) {
-    return { incentive: 0, eligible: false, beta, pct, minBeta, reason: 'β out of range (0–1)' };
+    return { incentive: 0, eligible: false, beta, pct, minBeta, sharing, reason: 'β out of range (0–1)' };
   }
   if (beta <= minBeta) {
     return {
@@ -55,18 +58,20 @@ export function computeFreqResponseIncentive(monthlyCapacityCharge, betaValue, p
       beta,
       pct,
       minBeta,
+      sharing,
       reason: `β ${beta.toFixed(2)} ≤ ${minBeta} — incentive not payable`,
     };
   }
   const base = Number(monthlyCapacityCharge) || 0;
-  const incentive = Math.round((pct / 100) * beta * base);
+  const incentive = Math.round((pct / 100) * beta * sharing * base);
   return {
     incentive,
     eligible: true,
     beta,
     pct,
     minBeta,
-    reason: `CERC: (${pct}% × β ${beta.toFixed(2)} × monthly capacity)`,
+    sharing,
+    reason: `SJVN NJHPS: (${pct}% × β ${beta.toFixed(2)} × ${sharing} × monthly capacity)`,
   };
 }
 

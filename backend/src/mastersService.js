@@ -19,6 +19,7 @@ const DEFAULT_PARAMS = [
   { category: 'REGULATORY', param_key: 'freq_response_incentive_pct_hydro', param_value: '3', data_type: 'PERCENT', unit: '%', description: 'CERC Reg 65(4): Hydro/PSP frequency-response incentive = (pct × β × AFC)/12' },
   { category: 'REGULATORY', param_key: 'freq_response_incentive_pct_thermal', param_value: '1', data_type: 'PERCENT', unit: '%', description: 'CERC Reg 62(5): Thermal frequency-response incentive = (pct × β × AFC)/12' },
   { category: 'REGULATORY', param_key: 'freq_response_beta_min', param_value: '0.30', data_type: 'NUMBER', unit: '', description: 'Minimum β for incentive eligibility (CERC: payable only if β > 0.30)' },
+  { category: 'REGULATORY', param_key: 'freq_response_beta_sharing_factor', param_value: '0.5', data_type: 'NUMBER', unit: '', description: 'SJVN NJHPS sharing factor in beta incentive: (pct × β × factor × AFC)/12. Set 1 to disable (pure CERC).' },
 ];
 
 const DEFAULT_BANKS = [
