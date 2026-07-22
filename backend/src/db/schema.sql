@@ -202,9 +202,16 @@ CREATE TABLE IF NOT EXISTS contracts (
   pbg_amount REAL,
   pbg_type TEXT, -- BG / ISB / POI
   pbg_expiry TEXT,
-  rebate_rule TEXT,
-  lps_rule TEXT,
+  rebate_rule TEXT,        -- human-readable string, auto-generated from the structured fields below
+  lps_rule TEXT,           -- human-readable string, auto-generated
   payment_security_type TEXT,
+  -- Structured, machine-readable billing rules (these actually drive the calc engine)
+  payment_terms_days INTEGER,          -- due date = bill date + this many days
+  rebate_pct REAL,                     -- early-payment rebate %
+  rebate_days INTEGER,                 -- paid within this many days of the reference date
+  rebate_basis TEXT DEFAULT 'BILL_DATE', -- BILL_DATE | DUE_DATE (reference for rebate window)
+  lps_annual_pct REAL,                 -- Late Payment Surcharge, % per annum
+  lps_grace_days INTEGER DEFAULT 0,    -- no LPS until this many days past due
   trading_margin_per_mwh REAL, -- PSA-specific SJVN trading margin override (₹/MWh); NULL = use global default
   -- Hydro/CERC Specific Parameters
   normative_aux REAL, -- e.g. 1.2
@@ -237,6 +244,25 @@ CREATE TABLE IF NOT EXISTS contract_amendments (
   changed_fields_json TEXT NOT NULL,
   approved_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- CERC Average Monthly Frequency Response Performance (Beta β)
+-- Certified by RPC (~1 month late). Not computed by SJVN — stored & applied.
+CREATE TABLE IF NOT EXISTS station_beta (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  period_month TEXT NOT NULL, -- YYYY-MM (billing month the β applies to)
+  beta_value REAL NOT NULL CHECK (beta_value >= 0 AND beta_value <= 1),
+  station_code TEXT, -- e.g. NJHPS
+  station_name TEXT, -- e.g. NATHPA JHAKRI
+  source TEXT NOT NULL DEFAULT 'NRPC', -- NRPC / NRLDC / SLDC / MANUAL
+  certified_on TEXT, -- date RPC certified
+  document_id TEXT REFERENCES documents(id),
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(contract_id, period_month)
 );
 
 -- Energy Data Accounting & Validation

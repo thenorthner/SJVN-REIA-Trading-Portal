@@ -3,13 +3,14 @@ import { Link } from 'react-router-dom';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
-import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber, fmtCurrency } from '../../components/ui.jsx';
 
 const TABS = [
   { id: 'entities', label: 'Entities' },
   { id: 'contracts', label: 'Contracts' },
   { id: 'projects', label: 'Projects' },
   { id: 'banks', label: 'Banks' },
+  { id: 'beta', label: 'Frequency β' },
   { id: 'regulatory', label: 'Regulatory' },
   { id: 'billing', label: 'Billing Params' },
   { id: 'documents', label: 'Document Types' },
@@ -17,6 +18,10 @@ const TABS = [
 ];
 
 const EMPTY_BANK = { bank_name: '', ifsc_prefix: '', branch_name: '', city: '', swift_code: '' };
+const EMPTY_BETA = {
+  contract_id: '', period_month: '', beta_value: '1.00',
+  station_code: '', station_name: '', source: 'NRPC', certified_on: '', notes: '',
+};
 const EMPTY_PROJECT = {
   name: '', parent_entity_id: '', category: 'SPV', technology: 'Solar',
   capacity_mw: '', pan_no: '', gst_no: '', entity_type: 'SELLER',
@@ -38,6 +43,7 @@ export default function MastersHub() {
   const [projects, setProjects] = useState([]);
   const [parents, setParents] = useState([]);
   const [banks, setBanks] = useState([]);
+  const [betas, setBetas] = useState([]);
   const [params, setParams] = useState([]);
   const [docTypes, setDocTypes] = useState([]);
   const [lookups, setLookups] = useState([]);
@@ -47,6 +53,9 @@ export default function MastersHub() {
   const [bankForm, setBankForm] = useState(EMPTY_BANK);
   const [showBank, setShowBank] = useState(false);
   const [editBank, setEditBank] = useState(null);
+  const [betaForm, setBetaForm] = useState(EMPTY_BETA);
+  const [showBeta, setShowBeta] = useState(false);
+  const [editBeta, setEditBeta] = useState(null);
   const [projectForm, setProjectForm] = useState(EMPTY_PROJECT);
   const [showProject, setShowProject] = useState(false);
   const [editParam, setEditParam] = useState(null);
@@ -71,6 +80,10 @@ export default function MastersHub() {
       api.entities.list().then((all) => setParents(all.filter((e) => !e.parent_entity_id))).catch(() => {});
     }
     if (t === 'banks') api.masters.banks({ active: '0' }).then(setBanks).catch((e) => setError(e.response?.data?.error || 'Failed'));
+    if (t === 'beta') {
+      api.stationBeta.list().then(setBetas).catch((e) => setError(e.response?.data?.error || 'Failed'));
+      api.contracts.list().then(setContracts).catch(() => {});
+    }
     if (t === 'regulatory') api.masters.parameters({ category: 'REGULATORY', active: '0' }).then(setParams).catch((e) => setError(e.response?.data?.error || 'Failed'));
     if (t === 'billing') api.masters.parameters({ category: 'BILLING', active: '0' }).then(setParams).catch((e) => setError(e.response?.data?.error || 'Failed'));
     if (t === 'documents') api.masters.documentTypes({ active: '0' }).then(setDocTypes).catch((e) => setError(e.response?.data?.error || 'Failed'));
@@ -92,6 +105,50 @@ export default function MastersHub() {
       loadSummary();
     } catch (err) {
       alert(err.response?.data?.error || 'Save failed');
+    }
+  }
+
+  async function saveBeta(e) {
+    e.preventDefault();
+    try {
+      const body = {
+        ...betaForm,
+        beta_value: Number(betaForm.beta_value),
+        certified_on: betaForm.certified_on || null,
+        notes: betaForm.notes || null,
+      };
+      if (editBeta) await api.stationBeta.update(editBeta.id, body);
+      else await api.stationBeta.create(body);
+      setShowBeta(false);
+      setEditBeta(null);
+      setBetaForm(EMPTY_BETA);
+      loadTab('beta');
+      loadSummary();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Save failed');
+    }
+  }
+
+  async function trueUpBeta(row) {
+    if (!window.confirm(`Generate supplementary incentive true-up for ${row.contract_no} / ${row.period_month}?`)) return;
+    try {
+      const res = await api.stationBeta.trueUp(row.id);
+      if (res.delta === 0) alert(res.message || 'No true-up needed');
+      else alert(`Created ${res.invoice?.invoice_no}: ₹${Number(res.delta).toLocaleString('en-IN')}`);
+      loadTab('beta');
+    } catch (err) {
+      alert(err.response?.data?.error || 'True-up failed');
+    }
+  }
+
+  async function deleteBeta(row) {
+    if (!window.confirm(`Delete β for ${row.contract_no} / ${row.period_month}?`)) return;
+    try {
+      await api.stationBeta.remove(row.id);
+      loadTab('beta');
+      loadSummary();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Delete failed');
     }
   }
 
@@ -255,6 +312,7 @@ export default function MastersHub() {
             ['Contracts', summary.contracts],
             ['Projects', summary.projects],
             ['Banks', summary.banks],
+            ['Freq. β', summary.station_beta],
             ['Regulatory', summary.regulatory_params],
             ['Billing', summary.billing_params],
             ['Doc Types', summary.document_types],
@@ -381,6 +439,56 @@ export default function MastersHub() {
         </Card>
       )}
 
+      {tab === 'beta' && (
+        <Card
+          title="Frequency Response β (CERC)"
+          actions={canWrite && (
+            <button className="btn btn-primary btn-sm" onClick={() => { setEditBeta(null); setBetaForm(EMPTY_BETA); setShowBeta(true); }}>+ Enter Certified β</button>
+          )}
+        >
+          <p style={{ fontSize: 13, color: '#64748b', marginTop: 0 }}>
+            Store NRPC-certified Average Monthly Frequency Response Performance (β, 0–1).
+            Hydro/PSP incentive = (3% × β × AFC)/12 when β &gt; 0.30. Provisional bills stay unblocked; use True-up when β arrives late.
+          </p>
+          <Table
+            columns={[
+              { key: 'period_month', header: 'Period' },
+              { key: 'station_code', header: 'Station', render: (r) => r.station_code || r.station_name || '—' },
+              { key: 'contract_no', header: 'Contract' },
+              { key: 'beta_value', header: 'β', render: (r) => Number(r.beta_value).toFixed(2) },
+              { key: 'source', header: 'Source' },
+              { key: 'certified_on', header: 'Certified' },
+              { key: 'computed_incentive', header: 'Incentive', render: (r) => r.computed_incentive != null ? fmtCurrency(r.computed_incentive) : '—' },
+              { key: 'incentive_eligible', header: 'Eligible', render: (r) => r.incentive_eligible ? <Badge status="ACTIVE" label="Yes" /> : <Badge status="DRAFT" label="No" /> },
+              ...(canWrite ? [{
+                key: 'actions', header: '', render: (r) => (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button className="btn btn-outline btn-sm" onClick={() => {
+                      setEditBeta(r);
+                      setBetaForm({
+                        contract_id: r.contract_id,
+                        period_month: r.period_month,
+                        beta_value: String(r.beta_value),
+                        station_code: r.station_code || '',
+                        station_name: r.station_name || '',
+                        source: r.source || 'NRPC',
+                        certified_on: r.certified_on || '',
+                        notes: r.notes || '',
+                      });
+                      setShowBeta(true);
+                    }}>Edit</button>
+                    <button className="btn btn-primary btn-sm" onClick={() => trueUpBeta(r)}>True-up</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => deleteBeta(r)}>Delete</button>
+                  </div>
+                ),
+              }] : []),
+            ]}
+            rows={betas}
+            emptyMessage="No certified β records yet. Enter values from NRPC certificates (e.g. NJHPS May 2026 = 1.00)."
+          />
+        </Card>
+      )}
+
       {(tab === 'regulatory' || tab === 'billing') && (
         <Card
           title={tab === 'regulatory' ? 'Regulatory Parameter Master' : 'Billing Parameter Master'}
@@ -502,6 +610,75 @@ export default function MastersHub() {
           </div>
           <div className="form-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setShowBank(false)}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={showBeta} onClose={() => setShowBeta(false)} title={editBeta ? 'Edit Certified β' : 'Enter Certified β'}>
+        <form onSubmit={saveBeta}>
+          <Field label="Contract (Hydro/PSP PPA preferred)">
+            <select
+              required
+              disabled={!!editBeta}
+              value={betaForm.contract_id}
+              onChange={(e) => setBetaForm({ ...betaForm, contract_id: e.target.value })}
+            >
+              <option value="">Select contract...</option>
+              {contracts
+                .filter((c) => ['Hydro', 'PSP'].includes(c.project_type) || c.contract_type === 'PPA')
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.contract_no} · {c.project_type} · {c.contract_type}
+                  </option>
+                ))}
+            </select>
+          </Field>
+          <div className="form-grid">
+            <Field label="Billing Period (YYYY-MM)">
+              <input
+                required
+                pattern="\d{4}-\d{2}"
+                placeholder="2026-05"
+                disabled={!!editBeta}
+                value={betaForm.period_month}
+                onChange={(e) => setBetaForm({ ...betaForm, period_month: e.target.value })}
+              />
+            </Field>
+            <Field label="β Value (0–1)">
+              <input
+                required
+                type="number"
+                step="0.01"
+                min="0"
+                max="1"
+                value={betaForm.beta_value}
+                onChange={(e) => setBetaForm({ ...betaForm, beta_value: e.target.value })}
+              />
+            </Field>
+            <Field label="Station Code">
+              <input placeholder="NJHPS" value={betaForm.station_code} onChange={(e) => setBetaForm({ ...betaForm, station_code: e.target.value })} />
+            </Field>
+            <Field label="Station Name">
+              <input placeholder="NATHPA JHAKRI" value={betaForm.station_name} onChange={(e) => setBetaForm({ ...betaForm, station_name: e.target.value })} />
+            </Field>
+            <Field label="Source">
+              <select value={betaForm.source} onChange={(e) => setBetaForm({ ...betaForm, source: e.target.value })}>
+                <option value="NRPC">NRPC</option>
+                <option value="NRLDC">NRLDC</option>
+                <option value="SLDC">SLDC</option>
+                <option value="MANUAL">MANUAL</option>
+              </select>
+            </Field>
+            <Field label="Certified On">
+              <input type="date" value={betaForm.certified_on} onChange={(e) => setBetaForm({ ...betaForm, certified_on: e.target.value })} />
+            </Field>
+          </div>
+          <Field label="Notes">
+            <input value={betaForm.notes} onChange={(e) => setBetaForm({ ...betaForm, notes: e.target.value })} placeholder="e.g. NRPC letter dated 19.06.2026" />
+          </Field>
+          <div className="form-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setShowBeta(false)}>Cancel</button>
             <button type="submit" className="btn btn-primary">Save</button>
           </div>
         </form>

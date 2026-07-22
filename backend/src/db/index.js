@@ -90,6 +90,16 @@ function migrateBillingSchema() {
       ALTER TABLE contracts ADD COLUMN capacity_charges_total REAL;
     `);
   }
+  if (!conCols.includes('payment_terms_days')) {
+    db.exec(`
+      ALTER TABLE contracts ADD COLUMN payment_terms_days INTEGER;
+      ALTER TABLE contracts ADD COLUMN rebate_pct REAL;
+      ALTER TABLE contracts ADD COLUMN rebate_days INTEGER;
+      ALTER TABLE contracts ADD COLUMN rebate_basis TEXT DEFAULT 'BILL_DATE';
+      ALTER TABLE contracts ADD COLUMN lps_annual_pct REAL;
+      ALTER TABLE contracts ADD COLUMN lps_grace_days INTEGER DEFAULT 0;
+    `);
+  }
 }
 migrateBillingSchema();
 
@@ -492,6 +502,113 @@ try {
   migrateContractMarginSchema();
 } catch (e) {
   console.error('Contract margin migration failed:', e.message);
+}
+
+/** Ensure station_beta table exists on upgraded DBs. */
+function migrateStationBetaSchema() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS station_beta (
+      id TEXT PRIMARY KEY,
+      contract_id TEXT NOT NULL REFERENCES contracts(id),
+      period_month TEXT NOT NULL,
+      beta_value REAL NOT NULL CHECK (beta_value >= 0 AND beta_value <= 1),
+      station_code TEXT,
+      station_name TEXT,
+      source TEXT NOT NULL DEFAULT 'NRPC',
+      certified_on TEXT,
+      document_id TEXT REFERENCES documents(id),
+      notes TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(contract_id, period_month)
+    )
+  `);
+
+  // Soft-seed NJHPS hydro + May 2026 β=1.00 on existing DBs (idempotent).
+  const hasNjhps = db.prepare(`SELECT id FROM contracts WHERE contract_no = 'PPA/SJVN/NJHPS/001'`).get();
+  if (hasNjhps) {
+    const hasBeta = db.prepare(`
+      SELECT id FROM station_beta WHERE contract_id = ? AND period_month = '2026-05'
+    `).get(hasNjhps.id);
+    if (!hasBeta) {
+      db.prepare(`
+        INSERT INTO station_beta (
+          id, contract_id, period_month, beta_value, station_code, station_name,
+          source, certified_on, notes, created_by
+        ) VALUES (?, ?, '2026-05', 1.00, 'NJHPS', 'NATHPA JHAKRI', 'NRPC', '2026-06-19',
+          'NRPC Average Monthly Frequency Response Performance – May 2026', 'SYSTEM')
+      `).run('BETA-NJHPS-2026-05', hasNjhps.id);
+    }
+    return;
+  }
+
+  // Create demo seller + hydro PPA if entities table is usable
+  try {
+    const sellerId = 'SEL-NJHPS';
+    const existingSeller = db.prepare(`SELECT id FROM entities WHERE id = ?`).get(sellerId)
+      || db.prepare(`SELECT id FROM entities WHERE name LIKE '%Nathpa Jhakri%'`).get();
+    let sid = existingSeller?.id;
+    if (!sid) {
+      sid = sellerId;
+      db.prepare(`
+        INSERT INTO entities (
+          id, entity_type, category, name, pan_no, gst_no, capacity_mw, technology,
+          contracted_capacity_mw, bank_name, account_no, ifsc_code, branch_address,
+          is_penny_drop_verified, status, address, corporate_email
+        ) VALUES (
+          ?, 'SELLER', 'RE Generator', 'SJVN Nathpa Jhakri HEP', 'AABCS1234D', '02AABCS1234D1Z5',
+          1500, 'Hydro', 1500, 'SBI', '112233445566', 'SBIN0001234', 'Shimla',
+          1, 'APPROVED', 'Jhakri, Himachal Pradesh', 'billing@sjvn.nic.in'
+        )
+      `).run(sid);
+    }
+
+    const cid = 'CON-NJHPS-001';
+    db.prepare(`
+      INSERT OR IGNORE INTO contracts (
+        id, contract_no, contract_type, seller_id, project_type, capacity_mw, commissioned_capacity_mw,
+        cod_date, tariff_type, tariff_per_unit, tenure_start, tenure_end, billing_cycle, payment_terms, status,
+        normative_aux, free_energy_home_state, capacity_charges_total
+      ) VALUES (
+        ?, 'PPA/SJVN/NJHPS/001', 'PPA', ?, 'Hydro', 1500, 1500,
+        '2004-05-06', 'TWO_PART', 1.25, '2004-05-06', '2039-05-05', 'MONTHLY', 'Net 45 days', 'ACTIVE',
+        1.2, 12, 85000000
+      )
+    `).run(cid, sid);
+
+    // If INSERT OR IGNORE skipped due to different id, resolve by contract_no
+    const con = db.prepare(`SELECT id FROM contracts WHERE contract_no = 'PPA/SJVN/NJHPS/001'`).get();
+    if (con) {
+      db.prepare(`
+        UPDATE contracts SET normative_aux = COALESCE(normative_aux, 1.2),
+          free_energy_home_state = COALESCE(free_energy_home_state, 12),
+          capacity_charges_total = COALESCE(capacity_charges_total, 85000000)
+        WHERE id = ?
+      `).run(con.id);
+
+      const hasBeta = db.prepare(`
+        SELECT id FROM station_beta WHERE contract_id = ? AND period_month = '2026-05'
+      `).get(con.id);
+      if (!hasBeta) {
+        db.prepare(`
+          INSERT INTO station_beta (
+            id, contract_id, period_month, beta_value, station_code, station_name,
+            source, certified_on, notes, created_by
+          ) VALUES (?, ?, '2026-05', 1.00, 'NJHPS', 'NATHPA JHAKRI', 'NRPC', '2026-06-19',
+            'NRPC Average Monthly Frequency Response Performance – May 2026', 'SYSTEM')
+        `).run('BETA-NJHPS-2026-05', con.id);
+      }
+    }
+  } catch (e) {
+    console.warn('NJHPS beta demo seed skipped:', e.message);
+  }
+}
+
+try {
+  migrateStationBetaSchema();
+} catch (e) {
+  console.error('Station beta migration failed:', e.message);
 }
 
 export default db;

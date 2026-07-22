@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { buildBillingFamilyRef, directionForContract } from '../util.js';
+import { resolveBetaRow, computeFreqResponseIncentive, billedIncentiveTotal } from '../services/betaFactor.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -65,11 +66,32 @@ function buildTrail({ bfr, contract, period, direction }) {
     ? Math.round(((finalEnergy.energy_mwh || 0) - (provisionalEnergy.energy_mwh || 0)) * 100) / 100
     : null;
 
+  const betaRow = resolveBetaRow(contract, period);
+  let frequencyBeta = null;
+  if (['Hydro', 'PSP'].includes(contract.project_type) || betaRow) {
+    const calc = computeFreqResponseIncentive(
+      contract.capacity_charges_total,
+      betaRow?.beta_value,
+      contract.project_type || 'Hydro',
+    );
+    const alreadyInc = billedIncentiveTotal(contract.id, period, direction);
+    frequencyBeta = {
+      ...(betaRow || {}),
+      status: betaRow ? 'CERTIFIED' : 'PENDING',
+      computed_incentive: calc.incentive,
+      incentive_eligible: calc.eligible,
+      incentive_reason: calc.reason,
+      already_billed_incentive: alreadyInc,
+      true_up_delta: Math.round((calc.incentive || 0) - alreadyInc),
+    };
+  }
+
   return {
     billing_family_ref: bfr,
     contract_id: contract.id,
     contract_no: contract.contract_no,
     contract_type: contract.contract_type,
+    project_type: contract.project_type,
     billing_period: period,
     direction,
     provisional_energy: provisionalEnergy || null,
@@ -84,6 +106,7 @@ function buildTrail({ bfr, contract, period, direction }) {
       : null,
     other_adjustments: primaryFinal?.other_adjustments ?? null,
     net_due: primaryFinal ? primaryFinal.total_amount : null,
+    frequency_beta: frequencyBeta,
     summary: {
       has_provisional_energy: !!provisionalEnergy,
       has_final_energy: !!finalEnergy,
@@ -92,6 +115,8 @@ function buildTrail({ bfr, contract, period, direction }) {
       already_paid: alreadyPaid,
       net_due: primaryFinal ? primaryFinal.total_amount : null,
       delta_mwh: deltaMwh,
+      has_beta: !!betaRow,
+      beta_value: betaRow?.beta_value ?? null,
     },
   };
 }

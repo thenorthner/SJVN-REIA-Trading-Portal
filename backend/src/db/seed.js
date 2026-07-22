@@ -159,6 +159,58 @@ db.prepare(`
   VALUES (?, ?, ?, ?, ?)
 `).run(newId('ALC'), ppa.id, psa.id, 80, '2024-04-01');
 
+// ── NJHPS Hydro PPA (CERC capacity + β demo) ──
+const njhpsSeller = {
+  id: newId('SEL'), parent_entity_id: null, entity_type: 'SELLER', category: 'RE Generator',
+  name: 'SJVN Nathpa Jhakri HEP', pan_no: 'AABCS1234D', gst_no: '02AABCS1234D1Z5', cin: 'L40101HP1988GOI008409',
+  credit_rating: 'AAA', is_blacklisted: 0, capacity_mw: 1500, technology: 'Hydro', contracted_capacity_mw: 1500,
+  psa_tariff: null, supply_criteria: null, organization_details: 'NJHPS hydro station', regulatory_approvals: 'CERC',
+  bank_name: 'SBI', account_no: '112233445566', ifsc_code: 'SBIN0001234', branch_address: 'Shimla',
+  is_penny_drop_verified: 1, status: 'APPROVED', address: 'Jhakri, Himachal Pradesh',
+  corporate_email: 'billing@sjvn.nic.in', corporate_phone: '0177-2660089',
+};
+insertEntity.run(njhpsSeller);
+
+const njhpsPpa = {
+  id: newId('CON'),
+  contract_no: 'PPA/SJVN/NJHPS/001',
+  contract_type: 'PPA',
+  seller_id: njhpsSeller.id,
+  buyer_id: null,
+  project_type: 'Hydro',
+  capacity_mw: 1500,
+  commissioned_capacity_mw: 1500,
+  cod_date: '2004-05-06',
+  tariff_type: 'TWO_PART',
+  tariff_per_unit: 1.25,
+  tariff_structure_json: null,
+  tenure_start: '2004-05-06',
+  tenure_end: '2039-05-05',
+  billing_cycle: 'MONTHLY',
+  payment_terms: 'Net 45 days',
+  emd_amount: null,
+  pbg_amount: null,
+  pbg_type: null,
+  pbg_expiry: null,
+  termination_reason: null,
+  termination_date: null,
+  status: 'ACTIVE',
+};
+insertContract.run(njhpsPpa);
+
+db.prepare(`
+  UPDATE contracts SET normative_aux = ?, free_energy_home_state = ?, capacity_charges_total = ?
+  WHERE id = ?
+`).run(1.2, 12, 85000000, njhpsPpa.id); // ₹8.5 Cr monthly capacity (AFC/12 demo)
+
+db.prepare(`
+  INSERT INTO station_beta (
+    id, contract_id, period_month, beta_value, station_code, station_name,
+    source, certified_on, notes, created_by
+  ) VALUES (?, ?, '2026-05', 1.00, 'NJHPS', 'NATHPA JHAKRI', 'NRPC', '2026-06-19',
+    'NRPC Average Monthly Frequency Response Performance – May 2026', ?)
+`).run(newId('BETA'), njhpsPpa.id, 'Rahul (REIA Ops)');
+
 // ── One clear billing story for May 2026 (BFR demo) ──
 const period = '2026-05';
 const bfrPpa = buildBillingFamilyRef(ppa.contract_no, period, 'SELLER_TO_SJVN');
@@ -236,6 +288,7 @@ console.log('  reia@sjvn.in / admin@sjvn.in / seller@sunrise-solar.in / buyer@di
 console.log('Demo story: PPA/SJVN/2024/001 · period 2026-05');
 console.log('  Provisional energy + invoice (60% paid) + Final energy (same BFR)');
 console.log('  Open Invoices → click BFR / Settlement Trail');
+console.log('NJHPS Hydro: PPA/SJVN/NJHPS/001 · β=1.00 for 2026-05 (Masters → Frequency β)');
 console.log('Counts:', {
   entities: db.prepare('SELECT COUNT(*) c FROM entities').get().c,
   contracts: db.prepare('SELECT COUNT(*) c FROM contracts').get().c,

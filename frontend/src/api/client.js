@@ -105,6 +105,15 @@ export const api = {
   billingTrail: {
     get: (params) => g('/billing-trail', params),
   },
+  stationBeta: {
+    list: (params) => g('/station-beta', params),
+    get: (id) => g(`/station-beta/${id}`),
+    create: (body) => p('/station-beta', body),
+    update: (id, body) => put(`/station-beta/${id}`, body),
+    remove: (id) => del(`/station-beta/${id}`),
+    trueUp: (id) => p(`/station-beta/${id}/true-up`),
+    preview: (params) => g('/station-beta/preview/compute', params),
+  },
   masters: {
     summary: () => g('/masters/summary'),
     banks: (params) => g('/masters/banks', params),

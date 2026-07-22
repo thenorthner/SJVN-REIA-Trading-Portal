@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract } from '../util.js';
+import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct } from '../util.js';
 import { payableNow, lpsBaseAmount, accruedLps, tieredRebatePct, daysBetween } from '../disputesConstants.js';
 import { getParamNumber, getParam } from '../mastersService.js';
+import { resolveBetaRow, computeFreqResponseIncentive } from '../services/betaFactor.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -14,12 +15,16 @@ function paidTotalFor(invoiceId) {
 
 function withContract(inv) {
   if (!inv) return inv;
-  const contract = db.prepare('SELECT contract_no, contract_type, project_type FROM contracts WHERE id = ?').get(inv.contract_id);
+  const contract = db.prepare('SELECT contract_no, contract_type, project_type, lps_annual_pct, lps_grace_days FROM contracts WHERE id = ?').get(inv.contract_id);
   const paid = paidTotalFor(inv.id);
   const settled = ['PAID', 'CANCELLED', 'DRAFT'].includes(inv.status);
   const accrued = settled
     ? { days_overdue: 0, lps: 0, base: 0 }
-    : accruedLps(inv, { annualPct: getParamNumber('lps_annual_pct', 15), asOf: new Date(), paid });
+    : accruedLps(inv, {
+        annualPct: contract?.lps_annual_pct ?? getParamNumber('lps_annual_pct', 15),
+        graceDays: contract?.lps_grace_days ?? 0,
+        asOf: new Date(), paid,
+      });
   return {
     ...inv,
     contract_no: contract?.contract_no,
@@ -189,6 +194,32 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     nrldcFees = Math.round(contract.capacity_mw * nrldcPerMw);
     breakdown.push({ code: 'NR', label: 'NRLDC/SLDC Fees', value: nrldcFees });
 
+    // CERC Frequency Response Incentive (β) — Reg 65(4) Hydro/PSP
+    // β certified by NRPC ~1 month late; if missing, bill without incentive (true-up later).
+    const betaRow = resolveBetaRow(contract, period_month);
+    const fr = computeFreqResponseIncentive(capacityCharges, betaRow?.beta_value, contract.project_type);
+    incentiveCharges = fr.incentive;
+    if (betaRow) {
+      breakdown.push({
+        code: 'BETA',
+        label: `Frequency Response β ${Number(betaRow.beta_value).toFixed(2)}${betaRow.station_code ? ` (${betaRow.station_code})` : ''}${betaRow.certified_on ? ` · certified ${betaRow.certified_on}` : ''}`,
+        value: betaRow.beta_value,
+      });
+      breakdown.push({
+        code: 'INC',
+        label: fr.eligible
+          ? `Frequency Response Incentive — ${fr.reason}`
+          : `Frequency Response Incentive — ${fr.reason}`,
+        value: incentiveCharges,
+      });
+    } else {
+      breakdown.push({
+        code: 'BETA',
+        label: 'Frequency Response β — pending NRPC certificate (incentive true-up later)',
+        value: 0,
+      });
+    }
+
   } else {
     // ──── Simple RE Billing (Solar/Wind/Hybrid) ────
     // Charges = energy (kWh) × tariff (₹/kWh)
@@ -270,7 +301,9 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     total_amount: total,
     invoice_breakdown_json: JSON.stringify(breakdown),
     disputed_amount: 0,
-    due_date: null,
+    // Due date = bill date (today) + the contract's payment terms. Falls back to
+    // the global master default when the contract carries no structured terms.
+    due_date: computeDueDate(new Date(), contract, getParamNumber('default_payment_terms_days', 30)),
     status: 'DRAFT',
     parent_invoice_id: parentInvoiceId,
     billing_family_ref: billingFamilyRef,
@@ -316,14 +349,9 @@ router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) =>
   const id = newId('INV');
   const total = (b.energy_charges || 0) + (b.transmission_charges || 0) + (b.trading_margin || 0) + (b.taxes || 0) - (b.rebate || 0) + (b.lps || 0) + (b.penalty || 0) + (b.other_adjustments || 0);
   
-  // Calculate due date (Net 30 days default)
+  // Due date = bill date + the contract's structured payment terms (fallback 30d).
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(b.contract_id);
-  const termsStr = contract ? contract.payment_terms : '';
-  const match = (termsStr || '').match(/\d+/);
-  const days = match ? parseInt(match[0], 10) : 30;
-  const dueDate = new Date();
-  dueDate.setDate(dueDate.getDate() + days);
-  const dueDateStr = dueDate.toISOString().split('T')[0];
+  const dueDateStr = computeDueDate(new Date(), contract, getParamNumber('default_payment_terms_days', 30));
   const direction = 'SELLER_TO_SJVN';
   const billingFamilyRef = contract
     ? buildBillingFamilyRef(contract.contract_no, b.billing_period, direction)
@@ -437,7 +465,13 @@ router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status !== 'APPROVED') return res.status(400).json({ error: 'Invoice must be APPROVED before it can be sent' });
-  db.prepare(`UPDATE invoices SET status = 'SENT', updated_at = datetime('now') WHERE id = ?`).run(inv.id);
+  // Anchor the due date to presentation if it was never set (legacy invoices).
+  let dueDate = inv.due_date;
+  if (!dueDate) {
+    const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(inv.contract_id);
+    dueDate = computeDueDate(new Date(), contract, getParamNumber('default_payment_terms_days', 30));
+  }
+  db.prepare(`UPDATE invoices SET status = 'SENT', due_date = ?, updated_at = datetime('now') WHERE id = ?`).run(dueDate, inv.id);
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SEND', module: 'REIA', entityType: 'invoice', entityId: inv.id });
   pushNotification({ role: 'BUYER', type: 'INVOICE_SENT', message: `Invoice ${inv.invoice_no} has been sent for payment` });
   res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
@@ -460,10 +494,14 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req,
   // ── Tiered early-payment rebate (PPA / SELLER_TO_SJVN only, computed once) ──
   // Buyers (DISCOMs) do NOT get early-payment rebate on PSA invoices.
   if (inv.direction === 'SELLER_TO_SJVN' && (inv.rebate || 0) === 0) {
-    const daysFromBill = Math.max(0, daysBetween(new Date(inv.created_at), payDate));
-    let pct = tieredRebatePct(daysFromBill, getParam('early_payment_rebate_tiers', null));
+    // 1st priority: the contract's own structured rebate rule (what the user set).
+    const contract = db.prepare('SELECT rebate_pct, rebate_days, rebate_basis FROM contracts WHERE id = ?').get(inv.contract_id);
+    let pct = contractRebatePct(contract, { billDate: inv.created_at, dueDate: inv.due_date, payDate });
+    // 2nd: global tiered rebate. 3rd: flat % if paid on/before due date.
     if (pct === null) {
-      // No tiers configured → fall back to flat % if paid on/before due date
+      pct = tieredRebatePct(Math.max(0, daysBetween(new Date(inv.created_at), payDate)), getParam('early_payment_rebate_tiers', null));
+    }
+    if (pct === null) {
       pct = (inv.due_date && payDate <= new Date(inv.due_date)) ? getParamNumber('early_payment_rebate_pct', 2) : 0;
     }
     if (pct > 0) {
@@ -477,7 +515,12 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req,
     const paidBefore = db.prepare(
       'SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)),0) s FROM payments WHERE invoice_id = ? AND id != ?'
     ).get(inv.id, id).s;
-    const accrued = accruedLps(inv, { annualPct: getParamNumber('lps_annual_pct', 15), asOf: payDate, paid: paidBefore });
+    const lpsContract = db.prepare('SELECT lps_annual_pct, lps_grace_days FROM contracts WHERE id = ?').get(inv.contract_id);
+    const accrued = accruedLps(inv, {
+      annualPct: lpsContract?.lps_annual_pct ?? getParamNumber('lps_annual_pct', 15),
+      graceDays: lpsContract?.lps_grace_days ?? 0,
+      asOf: payDate, paid: paidBefore,
+    });
     if (accrued.lps > 0) newLps = accrued.lps;
   }
 

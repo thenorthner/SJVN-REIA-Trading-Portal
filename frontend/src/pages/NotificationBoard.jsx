@@ -12,7 +12,7 @@ const SEV = {
   INFO: { label: 'For information', cls: 'sev-info', dot: '#2563eb' },
 };
 
-const EMPTY_BROADCAST = { title: '', message: '', severity: 'INFO', expires_at: '' };
+const EMPTY_BROADCAST = { title: '', message: '', severity: 'INFO', audience: 'ALL', expires_at: '' };
 
 export default function NotificationBoard() {
   const { user } = useAuth();
@@ -175,11 +175,19 @@ export default function NotificationBoard() {
                 <option value="CRITICAL">Critical</option>
               </select>
             </Field>
+            <Field label="Who should see it">
+              <select value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })}>
+                <option value="ALL">Everyone</option>
+                <option value="INTERNAL">SJVN internal team only</option>
+                <option value="SELLERS">Sellers only</option>
+                <option value="BUYERS">Buyers only</option>
+              </select>
+            </Field>
             <Field label="Show until (optional)">
               <input type="date" value={form.expires_at} onChange={(e) => setForm({ ...form, expires_at: e.target.value })} />
             </Field>
           </div>
-          <p className="inline-note">This message will be pinned at the top of everyone's Notification Board.</p>
+          <p className="inline-note">The message is pinned at the top of the Notification Board for the chosen audience.</p>
           <div className="form-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setShowCompose(false)}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Posting…' : 'Post to Board'}</button>

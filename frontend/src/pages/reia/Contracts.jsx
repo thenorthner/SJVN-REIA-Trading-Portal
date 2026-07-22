@@ -8,9 +8,34 @@ const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
 const EMPTY_FORM = {
   contract_no: '', contract_type: 'PPA', seller_id: '', buyer_id: '', project_type: 'Solar', capacity_mw: '',
   tariff_type: 'FLAT', tariff_per_unit: '', tariff_structure: {}, 
-  tenure_start: '', tenure_end: '', billing_cycle: 'MONTHLY', payment_terms: '',
-  emd_amount: '', pbg_amount: '', pbg_type: '', pbg_expiry: '', trading_margin_per_mwh: '', projects: []
+  tenure_start: '', tenure_end: '', billing_cycle: 'MONTHLY',
+  emd_amount: '', pbg_amount: '', pbg_type: '', pbg_expiry: '', trading_margin_per_mwh: '',
+  // Structured billing rules (drive due dates, rebate & LPS calculations)
+  payment_terms_days: 30, rebate_pct: '', rebate_days: '', rebate_basis: 'BILL_DATE',
+  lps_annual_pct: '', lps_grace_days: 0, payment_security_type: 'LETTER_OF_CREDIT',
+  projects: []
 };
+
+const SECURITY_TYPES = [
+  { value: 'LETTER_OF_CREDIT', label: 'Letter of Credit (LC)' },
+  { value: 'BANK_GUARANTEE', label: 'Bank Guarantee (BG)' },
+  { value: 'CORPUS_FUND', label: 'Corpus Fund' },
+  { value: 'PAYMENT_SECURITY_FUND', label: 'Payment Security Fund' },
+  { value: 'ESCROW', label: 'Escrow Account' },
+  { value: 'NONE', label: 'None' },
+];
+
+// Live human-readable preview so the user sees exactly what the rule will do.
+function previewRebate(f) {
+  if (!f.rebate_pct) return 'No early-payment rebate';
+  const ref = f.rebate_basis === 'DUE_DATE' ? 'due date' : 'bill date';
+  return `${f.rebate_pct}% rebate if paid within ${f.rebate_days || 0} days from ${ref}`;
+}
+function previewLps(f) {
+  if (!f.lps_annual_pct) return 'No late-payment surcharge';
+  const grace = f.lps_grace_days ? ` after a ${f.lps_grace_days}-day grace period` : '';
+  return `${f.lps_annual_pct}% per annum on the overdue amount${grace}`;
+}
 
 export default function Contracts() {
   const { user } = useAuth();
@@ -273,11 +298,60 @@ export default function Contracts() {
             </div>
           </div>
           <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
-            <h4 style={{ margin: '0 0 12px 0' }}>4. Billing & Regulatory Rules (CERC)</h4>
-            <div className="form-grid">
-              <Field label="Rebate Rule"><input required placeholder="e.g. 2% if paid in 5 days" value={form.rebate_rule} onChange={(e) => setForm({ ...form, rebate_rule: e.target.value })} /></Field>
-              <Field label="LPS Rule"><input required placeholder="e.g. 1.25% per month" value={form.lps_rule} onChange={(e) => setForm({ ...form, lps_rule: e.target.value })} /></Field>
-              <Field label="Payment Security Mechanism"><input required placeholder="Letter of Credit / Corpus Fund" value={form.payment_security_type} onChange={(e) => setForm({ ...form, payment_security_type: e.target.value })} /></Field>
+            <h4 style={{ margin: '0 0 12px 0' }}>4. Billing &amp; Regulatory Rules (CERC)</h4>
+
+            {/* Payment terms → drives the invoice due date */}
+            <div className="rule-block">
+              <div className="rule-block-label">Payment Terms</div>
+              <div className="rule-inline">
+                <span>Payment is due</span>
+                <input type="number" min="0" className="rule-num" required value={form.payment_terms_days}
+                  onChange={(e) => setForm({ ...form, payment_terms_days: e.target.value })} />
+                <span>days from the bill date.</span>
+              </div>
+              <div className="rule-preview">Due date auto-calculates as <strong>bill date + {form.payment_terms_days || 0} days</strong>.</div>
+            </div>
+
+            {/* Early-payment rebate */}
+            <div className="rule-block">
+              <div className="rule-block-label">Early-Payment Rebate</div>
+              <div className="rule-inline">
+                <input type="number" step="0.01" min="0" className="rule-num" placeholder="2" value={form.rebate_pct}
+                  onChange={(e) => setForm({ ...form, rebate_pct: e.target.value })} />
+                <span>% rebate if paid within</span>
+                <input type="number" min="0" className="rule-num" placeholder="5" value={form.rebate_days}
+                  onChange={(e) => setForm({ ...form, rebate_days: e.target.value })} />
+                <span>days from</span>
+                <select className="rule-select" value={form.rebate_basis}
+                  onChange={(e) => setForm({ ...form, rebate_basis: e.target.value })}>
+                  <option value="BILL_DATE">bill date</option>
+                  <option value="DUE_DATE">due date</option>
+                </select>
+              </div>
+              <div className="rule-preview">{previewRebate(form)}</div>
+            </div>
+
+            {/* Late-payment surcharge */}
+            <div className="rule-block">
+              <div className="rule-block-label">Late-Payment Surcharge (LPS)</div>
+              <div className="rule-inline">
+                <input type="number" step="0.01" min="0" className="rule-num" placeholder="15" value={form.lps_annual_pct}
+                  onChange={(e) => setForm({ ...form, lps_annual_pct: e.target.value })} />
+                <span>% per annum, charged after a grace of</span>
+                <input type="number" min="0" className="rule-num" placeholder="0" value={form.lps_grace_days}
+                  onChange={(e) => setForm({ ...form, lps_grace_days: e.target.value })} />
+                <span>days past due.</span>
+              </div>
+              <div className="rule-preview">{previewLps(form)}</div>
+            </div>
+
+            {/* Payment security mechanism */}
+            <div className="rule-block" style={{ borderBottom: 'none', marginBottom: 0, paddingBottom: 0 }}>
+              <div className="rule-block-label">Payment Security Mechanism</div>
+              <select className="rule-select" style={{ minWidth: 260 }} value={form.payment_security_type}
+                onChange={(e) => setForm({ ...form, payment_security_type: e.target.value })}>
+                {SECURITY_TYPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
             </div>
           </div>
 
@@ -351,9 +425,10 @@ export default function Contracts() {
                   {selected.tariff_structure_json && <tr><td>Structure JSON</td><td><pre style={{fontSize: 10}}>{selected.tariff_structure_json}</pre></td></tr>}
                   <tr><td>Tenure</td><td>{selected.tenure_start} to {selected.tenure_end}</td></tr>
                   <tr><td>PBG / EMD</td><td>{fmtCurrency(selected.pbg_amount)} {selected.pbg_type && `(${selected.pbg_type})`}</td></tr>
+                  <tr><td>Payment Terms</td><td>{selected.payment_terms_days != null ? `Net ${selected.payment_terms_days} days from bill date` : (selected.payment_terms || '-')}</td></tr>
                   <tr><td>Rebate Rule</td><td>{selected.rebate_rule || '-'}</td></tr>
                   <tr><td>LPS Rule</td><td>{selected.lps_rule || '-'}</td></tr>
-                  <tr><td>Payment Security</td><td>{selected.payment_security_type || '-'}</td></tr>
+                  <tr><td>Payment Security</td><td>{(SECURITY_TYPES.find((s) => s.value === selected.payment_security_type) || {}).label || selected.payment_security_type || '-'}</td></tr>
                   <tr><td>Remarks</td><td>{selected.remarks || '-'}</td></tr>
                 </tbody>
               </table>

@@ -33,6 +33,7 @@ import usersRoutes from './routes/users.js';
 import mastersRoutes from './routes/masters.js';
 import reportsRoutes from './routes/reports.js';
 import verifyRoutes from './routes/verify.js';
+import stationBetaRoutes from './routes/stationBeta.js';
 import { ensureMasterDefaults } from './mastersService.js';
 
 import { assignTraceId, requireAuth } from './middleware/auth.js';
@@ -63,6 +64,7 @@ app.use('/api/contracts', requireAuth, contractsRoutes);
 app.use('/api/energy-data', requireAuth, energyDataRoutes);
 app.use('/api/invoices', requireAuth, invoicesRoutes);
 app.use('/api/billing-trail', requireAuth, billingTrailRoutes);
+app.use('/api/station-beta', requireAuth, stationBetaRoutes);
 app.use('/api/disputes', requireAuth, disputesRoutes);
 app.use('/api/payment-security', paymentSecurityRoutes);
 app.use('/api/reconciliation', reconciliationRoutes);

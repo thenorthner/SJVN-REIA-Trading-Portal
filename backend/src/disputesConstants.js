@@ -109,11 +109,12 @@ export function daysBetween(a, b) {
  * Accrued Late Payment Surcharge as of `asOf` on the OUTSTANDING undisputed amount.
  * Works before any payment is recorded (proactive display) and at payment time.
  */
-export function accruedLps(inv, { annualPct = 15, asOf = new Date(), paid = 0 } = {}) {
+export function accruedLps(inv, { annualPct = 15, asOf = new Date(), paid = 0, graceDays = 0 } = {}) {
   const empty = { days_overdue: 0, lps: 0, base: 0, annual_pct: annualPct };
   if (!inv || !inv.due_date) return empty;
   const daysOverdue = daysBetween(new Date(inv.due_date), new Date(asOf));
-  if (daysOverdue <= 0) return empty;
+  // No surcharge until the grace window past the due date has elapsed.
+  if (daysOverdue <= (graceDays || 0)) return empty;
   const undisputed = Math.max(0, (inv.total_amount || 0) - (inv.disputed_amount || 0));
   const outstanding = Math.max(0, undisputed - (paid || 0));
   const lps = Math.round(outstanding * (annualPct / 100 / 365) * daysOverdue);

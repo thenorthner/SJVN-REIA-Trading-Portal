@@ -22,6 +22,9 @@ router.get('/summary', requireRole(...MASTERS_READ), (req, res) => {
     billing_params: db.prepare(`SELECT COUNT(*) c FROM system_parameters WHERE category = 'BILLING' AND is_active = 1`).get().c,
     document_types: db.prepare('SELECT COUNT(*) c FROM document_type_master WHERE is_active = 1').get().c,
     lookups: db.prepare('SELECT COUNT(*) c FROM lookup_master WHERE is_active = 1').get().c,
+    station_beta: (() => {
+      try { return db.prepare('SELECT COUNT(*) c FROM station_beta').get().c; } catch { return 0; }
+    })(),
   });
 });
 

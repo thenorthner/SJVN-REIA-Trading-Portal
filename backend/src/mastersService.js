@@ -16,6 +16,9 @@ const DEFAULT_PARAMS = [
   { category: 'REGULATORY', param_key: 'hydro_base_cuf_pct', param_value: '65', data_type: 'PERCENT', unit: '%', description: 'Baseline CUF for Hydro energy validation' },
   { category: 'REGULATORY', param_key: 'energy_validate_tolerance_pct', param_value: '30', data_type: 'PERCENT', unit: '%', description: 'Deviation tolerance for Solar/Wind validation' },
   { category: 'REGULATORY', param_key: 'hydro_validate_tolerance_pct', param_value: '80', data_type: 'PERCENT', unit: '%', description: 'Deviation tolerance for Hydro (seasonality)' },
+  { category: 'REGULATORY', param_key: 'freq_response_incentive_pct_hydro', param_value: '3', data_type: 'PERCENT', unit: '%', description: 'CERC Reg 65(4): Hydro/PSP frequency-response incentive = (pct × β × AFC)/12' },
+  { category: 'REGULATORY', param_key: 'freq_response_incentive_pct_thermal', param_value: '1', data_type: 'PERCENT', unit: '%', description: 'CERC Reg 62(5): Thermal frequency-response incentive = (pct × β × AFC)/12' },
+  { category: 'REGULATORY', param_key: 'freq_response_beta_min', param_value: '0.30', data_type: 'NUMBER', unit: '', description: 'Minimum β for incentive eligibility (CERC: payable only if β > 0.30)' },
 ];
 
 const DEFAULT_BANKS = [
@@ -64,6 +67,7 @@ const DEFAULT_DOC_TYPES = [
   ['REIA_BILLING', 'SELLER_INVOICE', 'Seller Invoice (PDF)', 'VERIFY', 'Data match', 1, 1],
   ['REIA_BILLING', 'CALCULATION_SHEET', 'Supporting Calculation Sheet', 'RECORD', 'Reference', 0, 2],
   ['REIA_BILLING', 'SUPPLEMENTARY_NOTE', 'Supplementary Invoice Supporting Note', 'RECORD', 'Adjustment reason', 0, 3],
+  ['REIA_BILLING', 'BETA_CERTIFICATE', 'NRPC/NRLDC Beta (β) Frequency Response Certificate', 'VERIFY', 'Certified Average Monthly Frequency Response Performance', 0, 4],
   ['DISPUTES', 'DISPUTE_EVIDENCE', 'Dispute Evidence (Meter reading, email, calc)', 'VERIFY', 'Review evidence', 1, 1],
   ['DISPUTES', 'RESOLUTION_NOTE', 'Resolution/Settlement Note', 'RECORD', 'Final decision', 0, 2],
   ['RECONCILIATION', 'SIGNED_ACKNOWLEDGMENT', 'Signed Acknowledgment (Joint)', 'VERIFY', 'Joint validation', 1, 1],

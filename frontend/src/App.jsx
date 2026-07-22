@@ -57,7 +57,10 @@ const SELLER_ROLES = [...ROLE_GROUPS.SELLER_ALL, 'SJVN_ADMIN'];
 const BUYER_ROLES = [...ROLE_GROUPS.BUYER_ALL, 'SJVN_ADMIN'];
 const AUDIT_ROLES = [...ROLE_GROUPS.AUDITOR];
 const MASTERS_ROLES = [...ROLE_GROUPS.MASTERS_READ];
-const BOARD_ROLES = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.TRADING_ALL])];
+const BOARD_ROLES = [...new Set([
+  ...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.TRADING_ALL,
+  ...ROLE_GROUPS.SELLER_ALL, ...ROLE_GROUPS.BUYER_ALL,
+])];
 
 /**
  * Landing route. The Consolidated Dashboard rolls up financials across every

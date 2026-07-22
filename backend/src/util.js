@@ -78,3 +78,62 @@ export function buildBillingFamilyRef(contractNo, periodMonth, direction = 'SELL
 export function directionForContract(contract) {
   return contract?.contract_type === 'PSA' ? 'SJVN_TO_BUYER' : 'SELLER_TO_SJVN';
 }
+
+/* ─────────── Structured billing-rule helpers ───────────
+ * The contract carries machine-readable fields (payment_terms_days, rebate_pct,
+ * rebate_days, rebate_basis, lps_annual_pct, lps_grace_days). These helpers turn
+ * them into due dates, rebate eligibility and human-readable strings so the
+ * billing engine and the UI stay in sync.
+ */
+
+/** Payment-terms days: structured field → legacy text regex → default (30). */
+export function resolvePaymentTermsDays(contract, fallback = 30) {
+  if (contract?.payment_terms_days != null && contract.payment_terms_days !== '') {
+    return Number(contract.payment_terms_days);
+  }
+  const m = String(contract?.payment_terms || '').match(/\d+/);
+  return m ? parseInt(m[0], 10) : fallback;
+}
+
+/** Add whole days to a date and return an ISO YYYY-MM-DD string. */
+export function addDays(baseDate, days) {
+  const d = baseDate ? new Date(baseDate) : new Date();
+  d.setDate(d.getDate() + Number(days || 0));
+  return d.toISOString().split('T')[0];
+}
+
+/** Due date = bill date + payment terms. */
+export function computeDueDate(billDate, contract, fallback = 30) {
+  return addDays(billDate, resolvePaymentTermsDays(contract, fallback));
+}
+
+/**
+ * Early-payment rebate % this contract grants if paid by `payDate`.
+ * Deadline = (rebate_basis === 'DUE_DATE' ? dueDate : billDate) + rebate_days.
+ * Returns null when the contract defines no structured rebate (caller can fall
+ * back to global master params).
+ */
+export function contractRebatePct(contract, { billDate, dueDate, payDate }) {
+  const pct = Number(contract?.rebate_pct);
+  if (!pct || pct <= 0) return null;
+  const days = Number(contract?.rebate_days || 0);
+  const ref = contract?.rebate_basis === 'DUE_DATE' ? dueDate : billDate;
+  if (!ref) return null;
+  const deadline = new Date(addDays(ref, days) + 'T23:59:59');
+  return new Date(payDate) <= deadline ? pct : 0;
+}
+
+/** Human strings kept in sync with the structured fields (for display / PDF). */
+export function humanizePaymentTerms(days) {
+  return days ? `Net ${days} days from bill date` : '';
+}
+export function humanizeRebateRule({ rebate_pct, rebate_days, rebate_basis }) {
+  if (!rebate_pct) return '';
+  const ref = rebate_basis === 'DUE_DATE' ? 'due date' : 'bill date';
+  return `${rebate_pct}% if paid within ${rebate_days || 0} days from ${ref}`;
+}
+export function humanizeLpsRule({ lps_annual_pct, lps_grace_days }) {
+  if (!lps_annual_pct) return '';
+  const grace = lps_grace_days ? `, ${lps_grace_days}-day grace` : '';
+  return `${lps_annual_pct}% per annum on overdue amount${grace}`;
+}

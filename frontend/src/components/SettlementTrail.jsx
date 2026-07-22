@@ -79,7 +79,43 @@ export function SettlementTrailPanel({
         <Stat label="Already paid" value={fmtCurrency(trail.already_paid)} />
         <Stat label="Δ Energy" value={trail.delta_mwh != null ? `${fmtNumber(trail.delta_mwh)} MWh` : '—'} />
         <Stat label="Net due (final)" value={trail.net_due != null ? fmtCurrency(trail.net_due) : '—'} />
+        {trail.frequency_beta && (
+          <Stat
+            label="Freq. β"
+            value={trail.frequency_beta.status === 'CERTIFIED'
+              ? Number(trail.frequency_beta.beta_value).toFixed(2)
+              : 'Pending'}
+          />
+        )}
       </div>
+
+      {trail.frequency_beta && (
+        <TrailBlock title="Frequency Response Performance (β)" style={{ marginBottom: 12 }}>
+          {trail.frequency_beta.status === 'CERTIFIED' ? (
+            <>
+              <div>
+                β = <strong>{Number(trail.frequency_beta.beta_value).toFixed(2)}</strong>
+                {trail.frequency_beta.station_code ? ` · ${trail.frequency_beta.station_code}` : ''}
+                {trail.frequency_beta.station_name ? ` (${trail.frequency_beta.station_name})` : ''}
+                {' · '}<Badge status="ACTIVE" label={trail.frequency_beta.source || 'NRPC'} />
+              </div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                {trail.frequency_beta.certified_on ? `Certified ${trail.frequency_beta.certified_on} · ` : ''}
+                Incentive {fmtCurrency(trail.frequency_beta.computed_incentive || 0)}
+                {trail.frequency_beta.already_billed_incentive
+                  ? ` · billed ${fmtCurrency(trail.frequency_beta.already_billed_incentive)}`
+                  : ''}
+                {trail.frequency_beta.true_up_delta
+                  ? ` · true-up Δ ${fmtCurrency(trail.frequency_beta.true_up_delta)}`
+                  : ''}
+              </div>
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{trail.frequency_beta.incentive_reason}</div>
+            </>
+          ) : (
+            <span style={{ color: '#94a3b8' }}>Awaiting NRPC β certificate — provisional bills exclude incentive; true-up when certified</span>
+          )}
+        </TrailBlock>
+      )}
 
       {trail.direction === 'SJVN_TO_BUYER' && (
         <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10, padding: '6px 10px', background: '#eef2ff', borderRadius: 6 }}>

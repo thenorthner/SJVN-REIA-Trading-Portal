@@ -60,6 +60,7 @@ const NAV_SELLER = [
     roles: null,
     links: [
       { to: '/seller', label: 'My Dashboard', end: true },
+      { to: '/notification-board', label: 'Notification Board' },
       { to: '/seller/team', label: 'My Team' },
       { to: '/seller/contracts', label: 'My Contracts (PPAs)' },
       { to: '/seller/energy-data', label: 'Energy Data' },
@@ -78,6 +79,7 @@ const NAV_BUYER = [
     roles: null,
     links: [
       { to: '/buyer', label: 'My Dashboard', end: true },
+      { to: '/notification-board', label: 'Notification Board' },
       { to: '/buyer/team', label: 'My Team' },
       { to: '/buyer/contracts', label: 'My PSAs' },
       { to: '/buyer/energy-data', label: 'Energy Allocation' },
