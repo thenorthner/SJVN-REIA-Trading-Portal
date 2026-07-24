@@ -811,6 +811,11 @@ function migrateInvoiceCancelAndValidationSchema() {
   add('validation_json', 'ALTER TABLE invoices ADD COLUMN validation_json TEXT');
   add('validated_at', 'ALTER TABLE invoices ADD COLUMN validated_at TEXT');
   add('validated_by', 'ALTER TABLE invoices ADD COLUMN validated_by TEXT');
+  // Structured technical + commercial verification checklist (REIA Dashboard).
+  add('verification_status', 'ALTER TABLE invoices ADD COLUMN verification_status TEXT');
+  add('verification_json', 'ALTER TABLE invoices ADD COLUMN verification_json TEXT');
+  add('verified_at', 'ALTER TABLE invoices ADD COLUMN verified_at TEXT');
+  add('verified_by', 'ALTER TABLE invoices ADD COLUMN verified_by TEXT');
 }
 
 try {

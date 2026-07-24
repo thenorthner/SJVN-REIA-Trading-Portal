@@ -96,6 +96,8 @@ export const api = {
     list: (params) => g('/invoices', params),
     get: (id) => g(`/invoices/${id}`),
     downloadPdf: (id) => client.get(`/invoices/${id}/pdf`, { responseType: 'blob' }).then(res => res.data),
+    getVerification: (id) => g(`/invoices/${id}/verification`),
+    saveVerification: (id, body) => p(`/invoices/${id}/verification`, body),
     generate: (body) => p('/invoices/generate', body),
     arrear: (body) => p('/invoices/arrear', body),
     supplementary: (body) => p('/invoices/supplementary', body),

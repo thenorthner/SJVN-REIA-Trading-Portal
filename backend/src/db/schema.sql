@@ -357,6 +357,12 @@ CREATE TABLE IF NOT EXISTS invoices (
   validation_json TEXT,
   validated_at TEXT,
   validated_by TEXT,
+  verification_status TEXT CHECK (verification_status IS NULL OR verification_status IN (
+    'PENDING','IN_PROGRESS','VERIFIED','FAILED'
+  )),
+  verification_json TEXT,
+  verified_at TEXT,
+  verified_by TEXT,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))

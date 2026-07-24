@@ -12,6 +12,11 @@ import {
   findSystemCounterpart,
   persistValidation,
 } from '../services/sellerInvoiceMatch.js';
+import {
+  buildTemplate as buildVerificationTemplate,
+  mergeSaved as mergeSavedVerification,
+  rollupStatus as rollupVerification,
+} from '../services/invoiceVerification.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -769,6 +774,39 @@ router.post('/:id/validation/waive', requireRole(...ROLE_GROUPS.REIA_WRITE), (re
   let validation = null;
   try { validation = updated.validation_json ? JSON.parse(updated.validation_json) : null; } catch { /* ignore */ }
   res.json({ ...withContract(updated), validation });
+});
+
+// ── Structured Verification Checklist (Technical + Commercial) ──────────────
+// GET returns the saved checklist overlaid on a fresh auto-derived template so
+// the auto-hints (REA/energy/tariff/CUF/COD) stay current.
+router.get('/:id/verification', requireRole(...ROLE_GROUPS.REIA_ALL, ...SELLER_ROLES), (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  const template = buildVerificationTemplate(inv);
+  let saved = null;
+  try { saved = inv.verification_json ? JSON.parse(inv.verification_json) : null; } catch { /* ignore */ }
+  const merged = mergeSavedVerification(template, saved);
+  res.json({
+    ...merged,
+    verification_status: inv.verification_status || rollupVerification(merged.technical),
+    verified_at: inv.verified_at, verified_by: inv.verified_by,
+  });
+});
+
+router.post('/:id/verification', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  const template = buildVerificationTemplate(inv);
+  // Only accept known technical keys / commercial fields — recompute net server-side.
+  const merged = mergeSavedVerification(template, {
+    technical: Array.isArray(req.body.technical) ? req.body.technical : [],
+    commercial: req.body.commercial || {},
+  });
+  const status = rollupVerification(merged.technical);
+  db.prepare(`UPDATE invoices SET verification_status=?, verification_json=?, verified_at=datetime('now'), verified_by=?, updated_at=datetime('now') WHERE id=?`)
+    .run(status, JSON.stringify(merged), req.user.name, inv.id);
+  logAudit({ req, user: req.user, action: 'INVOICE_VERIFICATION', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: { status } });
+  res.json({ ...merged, verification_status: status, verified_at: new Date().toISOString(), verified_by: req.user.name });
 });
 
 // G. Invoice Approval Workflow

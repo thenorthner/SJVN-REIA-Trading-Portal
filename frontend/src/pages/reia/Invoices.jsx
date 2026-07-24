@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
+import VerificationChecklist from '../../components/VerificationChecklist.jsx';
 import {
   InvoiceBreakdown,
   InvoiceFinancialStrip,
@@ -528,6 +529,19 @@ export default function Invoices() {
 
             <InvoiceBreakdown invoice={selected} />
             <InvoiceFinancialStrip invoice={selected} />
+
+            {selected.direction === 'SELLER_TO_SJVN' && (
+              <details style={{ marginTop: 18 }} open>
+                <summary className="section-title" style={{ cursor: 'pointer' }}>Verification Checklist (Technical &amp; Commercial)</summary>
+                <div style={{ marginTop: 10 }}>
+                  <VerificationChecklist
+                    invoiceId={selected.id}
+                    canWrite={CAN_APPROVE.includes(user?.role)}
+                    onSaved={() => refreshSelected(selected.id)}
+                  />
+                </div>
+              </details>
+            )}
 
             {selected.approvals?.length > 0 && (
               <>
