@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { PageHeader, Card, Table, Badge, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, StatCard, fmtNumber, fmtCurrency } from '../../components/ui.jsx';
 import api from '../../api/client';
 
 export default function TradingDashboard() {
@@ -7,6 +7,15 @@ export default function TradingDashboard() {
   const [health, setHealth] = useState(null);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [overview, setOverview] = useState({ rec: {}, noar: {}, formIv: {} });
+
+  useEffect(() => {
+    Promise.all([
+      api.rec.summary().catch(() => ({})),
+      api.noar.summary().catch(() => ({})),
+      api.formIv.summary().catch(() => ({})),
+    ]).then(([rec, noar, formIv]) => setOverview({ rec, noar, formIv }));
+  }, []);
 
   useEffect(() => {
     fetchHealth();
@@ -184,7 +193,15 @@ export default function TradingDashboard() {
     <div style={{ padding: 24 }}>
       <PageHeader title="Trading Command Center" />
       {renderHealthBanner()}
-      
+
+      {/* SJVN Power Trading overview — REC, Open Access & compliance at a glance */}
+      <div className="kpi-grid" style={{ marginBottom: 20 }}>
+        <StatCard label="RECs Traded" value={fmtNumber(overview.rec?.sold_recs || 0, 0)} hint={`${fmtNumber(overview.rec?.total_recs || 0, 0)} total`} tone="green" />
+        <StatCard label="Profit from REC" value={fmtCurrency(overview.rec?.profit_from_rec || 0)} tone={(overview.rec?.profit_from_rec || 0) >= 0 ? 'green' : 'red'} />
+        <StatCard label="NOAR Wallet Balance" value={fmtCurrency(overview.noar?.balance || 0)} hint={`Charges ${fmtCurrency(overview.noar?.total_charges || 0)}`} tone={(overview.noar?.balance || 0) > 0 ? 'green' : 'amber'} />
+        <StatCard label="CERC Form-IV" value={overview.formIv?.latest_status || 'Pending'} hint={`${overview.formIv?.submitted || 0} submitted · ${overview.formIv?.pending || 0} pending`} tone={overview.formIv?.latest_status === 'SUBMITTED' ? 'green' : 'amber'} />
+      </div>
+
       <div style={{ marginBottom: 20, borderBottom: '1px solid #ddd', display: 'flex', gap: 20 }}>
         {['realtime', 'daily', 'periodic'].map(t => (
           <button 

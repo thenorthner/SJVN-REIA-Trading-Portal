@@ -9,8 +9,10 @@ import { newId, logAudit, genInvoiceNo, buildBillingFamilyRef, directionForContr
 import {
   resolveBetaRow,
   computeFreqResponseIncentive,
+  computeBetaFromAnnualAfc,
   billedIncentiveTotal,
 } from '../services/betaFactor.js';
+import { resolveAnnualAfc } from '../services/cercHydroBilling.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -20,16 +22,20 @@ const WRITE = [...ROLE_GROUPS.REIA_WRITE];
 
 function enrich(row) {
   if (!row) return row;
-  const c = db.prepare('SELECT contract_no, contract_type, project_type, capacity_charges_total FROM contracts WHERE id = ?').get(row.contract_id);
-  const calc = c?.capacity_charges_total
-    ? computeFreqResponseIncentive(c.capacity_charges_total, row.beta_value, c.project_type)
-    : null;
+  const c = db.prepare('SELECT contract_no, contract_type, project_type, capacity_charges_total, annual_afc FROM contracts WHERE id = ?').get(row.contract_id);
+  const afc = resolveAnnualAfc(c || {});
+  const calc = afc
+    ? computeBetaFromAnnualAfc(afc, row.beta_value, c.project_type)
+    : (c?.capacity_charges_total
+      ? computeFreqResponseIncentive(c.capacity_charges_total, row.beta_value, c.project_type)
+      : null);
   return {
     ...row,
     contract_no: c?.contract_no,
     contract_type: c?.contract_type,
     project_type: c?.project_type,
     capacity_charges_total: c?.capacity_charges_total ?? null,
+    annual_afc: c?.annual_afc ?? null,
     computed_incentive: calc?.incentive ?? null,
     incentive_eligible: calc?.eligible ?? false,
     incentive_reason: calc?.reason ?? null,
@@ -56,8 +62,8 @@ router.get('/preview/compute', requireRole(...READ), (req, res) => {
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
   const beta = resolveBetaRow(contract, period_month);
-  const calc = computeFreqResponseIncentive(
-    contract.capacity_charges_total,
+  const calc = computeBetaFromAnnualAfc(
+    contract.capacity_charges_total ? resolveAnnualAfc(contract) : resolveAnnualAfc(contract),
     beta?.beta_value,
     contract.project_type,
   );
@@ -196,15 +202,15 @@ router.post('/:id/true-up', requireRole(...WRITE), (req, res) => {
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
 
   const isHydro = ['Hydro', 'PSP'].includes(contract.project_type);
-  if (!isHydro || !contract.capacity_charges_total) {
+  if (!isHydro || !resolveAnnualAfc(contract)) {
     return res.status(400).json({
-      error: 'Frequency-response true-up applies to Hydro/PSP contracts with monthly capacity charges (AFC/12).',
+      error: 'Frequency-response true-up applies to Hydro/PSP contracts with AFC (annual_afc or capacity_charges_total).',
     });
   }
 
   const direction = directionForContract(contract);
-  const monthlyCap = Number(contract.capacity_charges_total);
-  const calc = computeFreqResponseIncentive(monthlyCap, betaRow.beta_value, contract.project_type);
+  const afc = resolveAnnualAfc(contract);
+  const calc = computeBetaFromAnnualAfc(afc, betaRow.beta_value, contract.project_type);
   const already = billedIncentiveTotal(contract.id, betaRow.period_month, direction);
   const delta = Math.round(calc.incentive - already);
 

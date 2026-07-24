@@ -5,6 +5,15 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
+import {
+  InvoiceBreakdown,
+  InvoiceFinancialStrip,
+  InvoiceStatusCell,
+  InvoiceValidationRow,
+  ValidationCompareModal,
+  downloadInvoicePdf,
+  INVOICE_STATUS_OPTIONS,
+} from '../../components/invoiceShared.jsx';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
 const CAN_APPROVE = ['SJVN_ADMIN', 'REIA_USER', 'FINANCE_USER'];
@@ -12,6 +21,10 @@ const CAN_RECORD_PAYMENT = ['SJVN_ADMIN', 'FINANCE_USER', 'REIA_USER'];
 
 const GEN_FORM = { contract_id: '', period_month: '', invoice_type: 'PROVISIONAL' };
 const ARREAR_FORM = { contract_id: '', arrear_period: '', amount: '', taxes: '', reason: '' };
+const SUPP_FORM = {
+  contract_id: '', billing_period: '', amount: '', taxes: '', transmission_charges: '',
+  reason_code: 'TARIFF_REVISION', reason: '', parent_invoice_id: '',
+};
 const PAY_FORM = { amount: '', payment_date: '', mode: 'NEFT', reference: '', deduction: '' };
 
 export default function Invoices() {
@@ -26,6 +39,9 @@ export default function Invoices() {
   const [showArrear, setShowArrear] = useState(false);
   const [arrearForm, setArrearForm] = useState(ARREAR_FORM);
   const [arrearError, setArrearError] = useState('');
+  const [showSupp, setShowSupp] = useState(false);
+  const [suppForm, setSuppForm] = useState(SUPP_FORM);
+  const [suppError, setSuppError] = useState('');
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
   const [payForm, setPayForm] = useState(PAY_FORM);
@@ -33,6 +49,17 @@ export default function Invoices() {
   const [trailBfr, setTrailBfr] = useState(null);
   const [contractDetail, setContractDetail] = useState(null);
   const [contractLoading, setContractLoading] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelError, setCancelError] = useState('');
+  const [showValidation, setShowValidation] = useState(false);
+  const [validationResult, setValidationResult] = useState(null);
+  const [showWaive, setShowWaive] = useState(false);
+  const [waiveReason, setWaiveReason] = useState('');
+  const [waiveError, setWaiveError] = useState('');
+
+  const CANCELABLE = ['DRAFT', 'SUBMITTED', 'REJECTED', 'PENDING_L2', 'UNDER_APPROVAL'];
+  const isCancelled = selected?.status === 'CANCELLED';
 
   function openContract(contractId) {
     if (!contractId) return;
@@ -57,13 +84,83 @@ export default function Invoices() {
   function openDetail(row) {
     api.invoices.get(row.id).then(setSelected);
     setPayForm(PAY_FORM);
-    setApproveComments('');
+    setApproveComments({});
+    setShowCancel(false);
+    setCancelReason('');
+    setCancelError('');
+    setShowValidation(false);
+    setValidationResult(null);
+    setShowWaive(false);
+    setWaiveReason('');
   }
 
   async function refreshSelected(id) {
     const fresh = await api.invoices.get(id);
     setSelected(fresh);
     load();
+  }
+
+  async function handleCancel(e) {
+    e.preventDefault();
+    setCancelError('');
+    if (!cancelReason.trim()) {
+      setCancelError('Cancel reason is required');
+      return;
+    }
+    try {
+      await api.invoices.cancel(selected.id, cancelReason.trim());
+      setShowCancel(false);
+      setCancelReason('');
+      await refreshSelected(selected.id);
+    } catch (err) {
+      setCancelError(err.response?.data?.error || 'Failed to cancel invoice');
+    }
+  }
+
+  async function handleValidate() {
+    try {
+      const res = await api.invoices.validate(selected.id);
+      setValidationResult(res.validation || res);
+      setShowValidation(true);
+      await refreshSelected(selected.id);
+    } catch (err) {
+      const v = err.response?.data?.validation;
+      if (v) {
+        setValidationResult(v);
+        setShowValidation(true);
+        if (err.response?.data?.invoice) setSelected(err.response.data.invoice);
+      } else {
+        alert(err.response?.data?.error || 'Validation failed');
+      }
+    }
+  }
+
+  async function handleWaive(e) {
+    e.preventDefault();
+    setWaiveError('');
+    if (!waiveReason.trim()) {
+      setWaiveError('Waive reason is required');
+      return;
+    }
+    try {
+      const res = await api.invoices.waiveValidation(selected.id, waiveReason.trim());
+      setShowWaive(false);
+      setWaiveReason('');
+      setValidationResult(res.validation || null);
+      await refreshSelected(selected.id);
+    } catch (err) {
+      setWaiveError(err.response?.data?.error || 'Failed to waive validation');
+    }
+  }
+
+  function openStoredValidation() {
+    if (!selected?.validation_json) return;
+    try {
+      setValidationResult(JSON.parse(selected.validation_json));
+      setShowValidation(true);
+    } catch {
+      alert('Could not parse stored validation result');
+    }
   }
 
   async function handleGenerate(e) {
@@ -96,6 +193,25 @@ export default function Invoices() {
     }
   }
 
+  async function handleSupp(e) {
+    e.preventDefault();
+    setSuppError('');
+    try {
+      await api.invoices.supplementary({
+        ...suppForm,
+        amount: Number(suppForm.amount),
+        taxes: suppForm.taxes ? Number(suppForm.taxes) : 0,
+        transmission_charges: suppForm.transmission_charges ? Number(suppForm.transmission_charges) : 0,
+        parent_invoice_id: suppForm.parent_invoice_id || null,
+      });
+      setShowSupp(false);
+      setSuppForm(SUPP_FORM);
+      load();
+    } catch (err) {
+      setSuppError(err.response?.data?.error || 'Failed to create supplementary invoice.');
+    }
+  }
+
   async function handleSubmitForApproval() {
     try {
       await refreshSelected((await api.invoices.submitForApproval(selected.id)).id);
@@ -121,24 +237,27 @@ export default function Invoices() {
   }
 
   async function handleSend() {
-    await api.invoices.send(selected.id);
-    refreshSelected(selected.id);
+    try {
+      const res = await api.invoices.send(selected.id);
+      const mode = res.delivery?.mode;
+      const to = (res.delivery?.to || []).join(', ');
+      if (mode === 'FILE_OUTBOX') {
+        alert(`Invoice marked SENT.\nSMTP not configured — PDF saved to backend/outbox/.\nTo: ${to || '—'}\n\nSet SMTP_HOST (or Masters → smtp_host) for live email.`);
+      } else {
+        alert(`Invoice emailed successfully (${mode}).\nTo: ${to || '—'}`);
+      }
+      refreshSelected(selected.id);
+    } catch (err) {
+      alert(err.response?.data?.error || err.message || 'Send failed');
+    }
   }
 
   async function handleDownloadPdf() {
     try {
-      const blob = await api.invoices.downloadPdf(selected.id);
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Invoice_${selected.invoice_no}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
+      await downloadInvoicePdf(api, selected);
     } catch (err) {
       console.error(err);
-      alert('Failed to download PDF: ' + (err.message || err));
+      alert('Failed to download PDF: ' + (err.response?.data?.error || err.message || err));
     }
   }
 
@@ -168,21 +287,10 @@ export default function Invoices() {
     )},
     { key: 'direction', header: 'Direction', render: (r) => r.direction === 'SJVN_TO_BUYER' ? 'SJVN → Buyer' : 'Seller → SJVN' },
     { key: 'billing_period', header: 'Period' },
+    { key: 'invoice_type', header: 'Type', render: (r) => r.invoice_type || '-' },
     { key: 'energy_mwh', header: 'Energy (MWh)', render: (r) => fmtNumber(r.energy_mwh) },
     { key: 'total_amount', header: 'Amount', render: (r) => fmtCurrency(r.total_amount) },
-    { key: 'status', header: 'Status', render: (r) => (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
-        <Badge status={r.status} />
-        {r.days_overdue > 0 && (
-          <span
-            title={`Overdue ${r.days_overdue} day(s) · accruing LPS`}
-            style={{ fontSize: 11, fontWeight: 600, color: '#b91c1c', background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap' }}
-          >
-            Overdue {r.days_overdue}d · LPS {fmtCurrency(r.accrued_lps)}
-          </span>
-        )}
-      </div>
-    )},
+    { key: 'status', header: 'Status', render: (r) => <InvoiceStatusCell row={r} showValidation /> },
     { key: 'due_date', header: 'Due Date', render: (r) => r.due_date || '-' },
   ];
 
@@ -197,6 +305,7 @@ export default function Invoices() {
             {CAN_WRITE.includes(user?.role) && (
               <>
                 <button className="btn btn-secondary" onClick={() => { setArrearForm(ARREAR_FORM); setArrearError(''); setShowArrear(true); }}>+ Arrear Bill</button>
+                <button className="btn btn-secondary" onClick={() => { setSuppForm(SUPP_FORM); setSuppError(''); setShowSupp(true); }}>+ Supplementary</button>
                 <button className="btn btn-primary" onClick={() => setShowGenerate(true)}>+ Generate Invoice</button>
               </>
             )}
@@ -207,7 +316,7 @@ export default function Invoices() {
       <div className="filters-bar">
         <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
           <option value="">All statuses</option>
-          {['DRAFT', 'SUBMITTED', 'UNDER_APPROVAL', 'APPROVED', 'REJECTED', 'SENT', 'DISPUTED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'].map((s) => <option key={s} value={s}>{s}</option>)}
+          {INVOICE_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={filters.direction} onChange={(e) => setFilters({ ...filters, direction: e.target.value })}>
           <option value="">All directions</option>
@@ -238,7 +347,6 @@ export default function Invoices() {
               <select value={genForm.invoice_type} onChange={(e) => setGenForm({ ...genForm, invoice_type: e.target.value })}>
                 <option value="PROVISIONAL">Provisional</option>
                 <option value="FINAL">Final</option>
-                <option value="SUPPLEMENTARY">Supplementary</option>
               </select>
             </Field>
           </div>
@@ -301,16 +409,89 @@ export default function Invoices() {
         </form>
       </Modal>
 
-      <Modal open={!!selected} onClose={() => setSelected(null)} title={selected?.invoice_no} width={720}>
+      <Modal open={showSupp} onClose={() => setShowSupp(false)} title="Manual Supplementary Invoice" width={520}>
+        {suppError && <div className="form-error">{suppError}</div>}
+        <form onSubmit={handleSupp}>
+          <Field label="Contract">
+            <select required value={suppForm.contract_id} onChange={(e) => setSuppForm({ ...suppForm, contract_id: e.target.value, parent_invoice_id: '' })}>
+              <option value="">Select contract...</option>
+              {contracts.map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.project_type})</option>)}
+            </select>
+          </Field>
+          <div className="form-grid">
+            <Field label="Billing Period">
+              <input required type="month" value={suppForm.billing_period} onChange={(e) => setSuppForm({ ...suppForm, billing_period: e.target.value })} />
+            </Field>
+            <Field label="Reason Category">
+              <select required value={suppForm.reason_code} onChange={(e) => setSuppForm({ ...suppForm, reason_code: e.target.value })}>
+                <option value="TARIFF_REVISION">Tariff revision</option>
+                <option value="CHANGE_IN_LAW">Change in law</option>
+                <option value="ENERGY_REVISION">Energy revision / true-up</option>
+                <option value="LPS_ADJUSTMENT">LPS adjustment</option>
+                <option value="BETA_TRUE_UP">β true-up</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </Field>
+          </div>
+          <div className="form-grid">
+            <Field label="Adjustment Amount (₹)">
+              <input required type="number" step="0.01" value={suppForm.amount} placeholder="positive debit / negative credit" onChange={(e) => setSuppForm({ ...suppForm, amount: e.target.value })} />
+            </Field>
+            <Field label="Taxes / GST (₹)">
+              <input type="number" step="0.01" value={suppForm.taxes} placeholder="0" onChange={(e) => setSuppForm({ ...suppForm, taxes: e.target.value })} />
+            </Field>
+          </div>
+          <div className="form-grid">
+            <Field label="Transmission (₹)">
+              <input type="number" step="0.01" value={suppForm.transmission_charges} placeholder="0" onChange={(e) => setSuppForm({ ...suppForm, transmission_charges: e.target.value })} />
+            </Field>
+            <Field label="Total">
+              <input disabled value={`₹${((Number(suppForm.amount) || 0) + (Number(suppForm.taxes) || 0) + (Number(suppForm.transmission_charges) || 0)).toLocaleString('en-IN')}`} />
+            </Field>
+          </div>
+          <Field label="Link to Parent Invoice (optional)">
+            <select value={suppForm.parent_invoice_id} onChange={(e) => setSuppForm({ ...suppForm, parent_invoice_id: e.target.value })}>
+              <option value="">None</option>
+              {rows.filter((r) => r.contract_id === suppForm.contract_id && r.invoice_type !== 'SUPPLEMENTARY').map((r) => (
+                <option key={r.id} value={r.id}>{r.invoice_no} · {r.billing_period} · {r.invoice_type}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Reason / Reference">
+            <textarea required rows={2} value={suppForm.reason} placeholder="e.g. CERC tariff revision order dated… / Change-in-law claim per clause…" onChange={(e) => setSuppForm({ ...suppForm, reason: e.target.value })} style={{ width: '100%', resize: 'vertical' }} />
+          </Field>
+          <p className="inline-note">Creates a SUPPLEMENTARY draft with billing family ref. Dispute auto-credits are unchanged — use this for tariff / change-in-law / energy / LPS adjustments.</p>
+          <div className="form-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setShowSupp(false)}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Create Supplementary</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={!!selected} onClose={() => setSelected(null)} title={selected?.invoice_no} width={760}>
         {selected && (
           <div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
-              <button onClick={handleDownloadPdf} className="btn btn-sm btn-outline">
+              <button type="button" onClick={handleDownloadPdf} className="btn btn-sm btn-outline">
                 Download PDF Bill
               </button>
             </div>
             <div className="detail-grid mb-0">
               <div className="detail-item"><span className="detail-label">Status</span><span className="detail-value"><Badge status={selected.status} /></span></div>
+              {selected.direction === 'SELLER_TO_SJVN' && (
+                <InvoiceValidationRow invoice={selected} onCompare={openStoredValidation} />
+              )}
+              {isCancelled && selected.cancel_reason && (
+                <div className="detail-item">
+                  <span className="detail-label">Cancel Reason</span>
+                  <span className="detail-value">
+                    {selected.cancel_reason}
+                    <div style={{ fontSize: 11, color: 'var(--text-light)' }}>
+                      {selected.cancelled_by || '—'} · {selected.cancelled_at || ''}
+                    </div>
+                  </span>
+                </div>
+              )}
               <div className="detail-item"><span className="detail-label">Contract</span><span className="detail-value">
                 {selected.contract_id ? (
                   <button type="button" className="btn-link" onClick={() => openContract(selected.contract_id)} title="View contract details">
@@ -320,6 +501,7 @@ export default function Invoices() {
               </span></div>
               <div className="detail-item"><span className="detail-label">Direction</span><span className="detail-value">{selected.direction === 'SJVN_TO_BUYER' ? 'SJVN → Buyer' : 'Seller → SJVN'}</span></div>
               <div className="detail-item"><span className="detail-label">Billing Period</span><span className="detail-value">{selected.billing_period}</span></div>
+              <div className="detail-item"><span className="detail-label">Type</span><span className="detail-value">{selected.invoice_type || '-'}</span></div>
               <div className="detail-item"><span className="detail-label">Due Date</span><span className="detail-value">{selected.due_date || 'Not set'}</span></div>
               {selected.days_overdue > 0 && (
                 <div className="detail-item">
@@ -344,99 +526,8 @@ export default function Invoices() {
 
             <SettlementTrailPanel invoiceId={selected.id} />
 
-            {/* ── CERC-style Breakdown Table ── */}
-            {selected.invoice_breakdown_json ? (() => {
-              let items = [];
-              try { items = JSON.parse(selected.invoice_breakdown_json); } catch(e) {}
-              return items.length > 0 && (
-                <div style={{ marginTop: 20, marginBottom: 20 }}>
-                  <h4 style={{ margin: '0 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Invoice Breakdown (CERC Format)</h4>
-                  <table className="detail-table" style={{ width: '100%' }}>
-                    <thead>
-                      <tr style={{ background: '#f8fafc' }}>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, color: '#64748b' }}>Code</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, color: '#64748b' }}>Description</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12, color: '#64748b' }}>Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item, i) => (
-                        <tr key={i} style={item.code === 'TOTAL' ? { fontWeight: 700, background: '#eef2ff', borderTop: '2px solid #4f46e5' } : {}}>
-                          <td style={{ padding: '6px 12px', fontFamily: 'monospace', fontSize: 12, color: '#4f46e5' }}>{item.code}</td>
-                          <td style={{ padding: '6px 12px', fontSize: 13 }}>{item.label}</td>
-                          <td style={{ padding: '6px 12px', textAlign: 'right', fontSize: 13, fontFamily: 'monospace' }}>
-                            {['E1','E2','E3','E4','E5'].includes(item.code) 
-                              ? `${fmtNumber(item.value)} MWh` 
-                              : fmtCurrency(item.value)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })() : (
-              /* Fallback: simple summary for older invoices without breakdown */
-              <div className="detail-grid mb-0" style={{ marginTop: 16 }}>
-                <div className="detail-item"><span className="detail-label">Energy</span><span className="detail-value">{fmtNumber(selected.energy_mwh)} MWh</span></div>
-                <div className="detail-item"><span className="detail-label">Energy Charges</span><span className="detail-value">{fmtCurrency(selected.energy_charges)}</span></div>
-                {selected.capacity_charges > 0 && <div className="detail-item"><span className="detail-label">Capacity Charges</span><span className="detail-value">{fmtCurrency(selected.capacity_charges)}</span></div>}
-                <div className="detail-item"><span className="detail-label">Transmission</span><span className="detail-value">{fmtCurrency(selected.transmission_charges)}</span></div>
-                <div className="detail-item"><span className="detail-label">Trading Margin</span><span className="detail-value">{fmtCurrency(selected.trading_margin)}</span></div>
-                <div className="detail-item"><span className="detail-label">Penalty (CUF)</span><span className="detail-value" style={{color: 'var(--error)'}}>-{fmtCurrency(selected.penalty)}</span></div>
-                <div className="detail-item"><span className="detail-label">Taxes</span><span className="detail-value">{fmtCurrency(selected.taxes)}</span></div>
-              </div>
-            )}
-
-            <div className="detail-grid mb-0">
-              <div className="detail-item"><span className="detail-label" style={{fontWeight: 600}}>Total Base Amount</span><span className="detail-value" style={{fontWeight: 600}}>{fmtCurrency(selected.total_amount)}</span></div>
-              
-              <div className="detail-item">
-                <span className="detail-label">
-                  Disputed | Payable Now
-                  <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>
-                    Disputed: {fmtCurrency(selected.disputed_amount || 0)} | Payable Now: {fmtCurrency(selected.payable_now ?? (
-                      selected.direction === 'SELLER_TO_SJVN'
-                        ? selected.total_amount - selected.rebate + selected.lps - selected.disputed_amount
-                        : selected.total_amount + selected.lps - selected.disputed_amount
-                    ))}
-                  </div>
-                </span>
-                <span className="detail-value" style={{color: 'var(--error)'}}>-{fmtCurrency(selected.disputed_amount)}</span>
-              </div>
-              {selected.direction === 'SELLER_TO_SJVN' && (
-                <div className="detail-item">
-                  <span className="detail-label">
-                    Early Pay Rebate
-                    <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>Formula: 2% of Energy Charges if SJVN pays Seller early</div>
-                  </span>
-                  <span className="detail-value" style={{color: 'var(--success)'}}>-{fmtCurrency(selected.rebate)}</span>
-                </div>
-              )}
-              <div className="detail-item">
-                <span className="detail-label">
-                  Late Pay Surcharge (LPS)
-                  <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>15% p.a. on undisputed amount only while dispute is open</div>
-                </span>
-                <span className="detail-value" style={{color: 'var(--error)'}}>+{fmtCurrency(selected.lps)}</span>
-              </div>
-              
-              <div className="detail-item">
-                <span className="detail-label">
-                  Payable Now
-                  <div style={{fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal'}}>
-                    Undisputed balance due by due date
-                  </div>
-                </span>
-                <span className="detail-value" style={{ fontSize: 16, fontWeight: 'bold' }}>
-                  {fmtCurrency(selected.payable_now ?? (
-                    selected.direction === 'SELLER_TO_SJVN'
-                      ? selected.total_amount - selected.rebate + selected.lps - selected.disputed_amount
-                      : selected.total_amount + selected.lps - selected.disputed_amount
-                  ))}
-                </span>
-              </div>
-            </div>
+            <InvoiceBreakdown invoice={selected} />
+            <InvoiceFinancialStrip invoice={selected} />
 
             {selected.approvals?.length > 0 && (
               <>
@@ -446,7 +537,7 @@ export default function Invoices() {
                     <div className="timeline-item" key={a.id}>
                       Level {a.level}: <Badge status={a.status} /> {a.approver_name ? `by ${a.approver_name}` : ''}
                       {a.comments && <div className="t-meta">{a.comments}</div>}
-                      {CAN_APPROVE.includes(user?.role) && a.status === 'PENDING' && (
+                      {CAN_APPROVE.includes(user?.role) && !isCancelled && a.status === 'PENDING' && (
                         <div style={{ marginTop: 8 }}>
                           <input placeholder="Comments (optional)" value={approveComments[a.level] || ''} onChange={(e) => setApproveComments({ ...approveComments, [a.level]: e.target.value })} style={{ marginBottom: 6, width: '100%', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 8px' }} />
                           <div className="cell-actions">
@@ -467,8 +558,8 @@ export default function Invoices() {
                 <div className="timeline">
                   {selected.disputes.map((d) => (
                     <div className="timeline-item" key={d.id}>
-                      <Badge status={d.status} /> {d.dispute_no || ''} {d.reason_code || ''} — {fmtCurrency(d.disputed_amount)}
-                      {d.issue_description && <div className="t-meta">{d.issue_description}</div>}
+                      <Badge status={d.status} /> {d.dispute_no || ''} {d.issue_description || d.reason_code || ''} — {fmtCurrency(d.disputed_amount)}
+                      {d.resolution_notes && <div className="t-meta">Resolution: {d.resolution_notes}</div>}
                     </div>
                   ))}
                 </div>
@@ -498,17 +589,35 @@ export default function Invoices() {
             </div>
 
             <div className="form-actions" style={{ flexWrap: 'wrap' }}>
-              {['SELLER_L1', 'BUYER_L1'].includes(user?.role) && selected.status === 'DRAFT' && (
+              {!isCancelled && ['SELLER_L1', 'BUYER_L1'].includes(user?.role) && selected.status === 'DRAFT' && (
                 <button className="btn btn-secondary" onClick={handleSubmitL2}>Submit to L2 (Checker)</button>
               )}
-              {['SELLER_L2', 'SELLER_L3', 'BUYER_L2', 'BUYER_L3'].includes(user?.role) && selected.status === 'PENDING_L2' && (
+              {!isCancelled && ['SELLER_L2', 'SELLER_L3', 'BUYER_L2', 'BUYER_L3'].includes(user?.role) && selected.status === 'PENDING_L2' && (
                 <button className="btn btn-primary" onClick={handleApproveL2}>Approve & Submit to SJVN</button>
               )}
-              {CAN_WRITE.includes(user?.role) && ['DRAFT', 'SUBMITTED', 'REJECTED'].includes(selected.status) && (
+              {!isCancelled && CAN_WRITE.includes(user?.role) && ['DRAFT', 'SUBMITTED', 'REJECTED'].includes(selected.status) && (
                 <button className="btn btn-secondary" onClick={handleSubmitForApproval}>Submit for SJVN Approval</button>
               )}
-              {CAN_WRITE.includes(user?.role) && selected.status === 'APPROVED' && selected.direction === 'SJVN_TO_BUYER' && (
-                <button className="btn btn-primary" onClick={handleSend}>Send to Buyer</button>
+              {!isCancelled && CAN_WRITE.includes(user?.role) && ['APPROVED', 'SENT'].includes(selected.status) && (
+                <button className="btn btn-primary" onClick={handleSend}>
+                  {selected.status === 'SENT'
+                    ? (selected.direction === 'SJVN_TO_BUYER' ? 'Resend Email to Buyer' : 'Resend Email to Seller')
+                    : (selected.direction === 'SJVN_TO_BUYER' ? 'Send Email to Buyer' : 'Send Email to Seller')}
+                </button>
+              )}
+              {!isCancelled && CAN_WRITE.includes(user?.role) && selected.direction === 'SELLER_TO_SJVN' && (
+                <button className="btn btn-secondary" onClick={handleValidate}>Validate vs System</button>
+              )}
+              {!isCancelled && CAN_WRITE.includes(user?.role) && selected.direction === 'SELLER_TO_SJVN'
+                && ['MISMATCH', 'PARTIAL', 'NO_COUNTERPART'].includes(selected.validation_status) && (
+                <button className="btn btn-secondary" onClick={() => { setWaiveReason(''); setWaiveError(''); setShowWaive(true); }}>
+                  Waive Validation
+                </button>
+              )}
+              {!isCancelled && CAN_WRITE.includes(user?.role) && CANCELABLE.includes(selected.status) && (
+                <button className="btn btn-danger" onClick={() => { setCancelReason(''); setCancelError(''); setShowCancel(true); }}>
+                  Cancel Invoice
+                </button>
               )}
             </div>
 
@@ -622,6 +731,62 @@ export default function Invoices() {
           </div>
         ) : null}
       </Modal>
+
+      <Modal open={showCancel} onClose={() => setShowCancel(false)} title="Cancel Invoice" width={480}>
+        {cancelError && <div className="form-error">{cancelError}</div>}
+        <p style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 13 }}>
+          Cancels <strong>{selected?.invoice_no}</strong> and blocks further approval/send. Only allowed for draft / submitted / rejected / under-approval invoices with no payments or open disputes.
+        </p>
+        <form onSubmit={handleCancel}>
+          <Field label="Cancel Reason">
+            <textarea
+              required
+              rows={3}
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="e.g. Duplicate bill / wrong period / superseded by final"
+              style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}
+            />
+          </Field>
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setShowCancel(false)}>Back</button>
+            <button type="submit" className="btn btn-danger">Confirm Cancel</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={showWaive} onClose={() => setShowWaive(false)} title="Waive Validation" width={480}>
+        {waiveError && <div className="form-error">{waiveError}</div>}
+        <p style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 13 }}>
+          Mark seller vs system validation as waived for <strong>{selected?.invoice_no}</strong> despite mismatch/partial result.
+        </p>
+        <form onSubmit={handleWaive}>
+          <Field label="Waive Reason">
+            <textarea
+              required
+              rows={3}
+              value={waiveReason}
+              onChange={(e) => setWaiveReason(e.target.value)}
+              placeholder="e.g. Rounding difference accepted / mapping to provisional OK"
+              style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}
+            />
+          </Field>
+          <div className="form-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setShowWaive(false)}>Back</button>
+            <button type="submit" className="btn btn-primary">Waive</button>
+          </div>
+        </form>
+      </Modal>
+
+      <ValidationCompareModal
+        open={showValidation}
+        onClose={() => setShowValidation(false)}
+        validationResult={validationResult}
+        selectedInvoiceNo={selected?.invoice_no}
+        perspective="reia"
+        canWaive={CAN_WRITE.includes(user?.role)}
+        onWaive={() => { setShowValidation(false); setShowWaive(true); }}
+      />
     </div>
   );
 }

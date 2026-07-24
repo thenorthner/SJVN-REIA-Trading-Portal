@@ -199,9 +199,10 @@ const njhpsPpa = {
 insertContract.run(njhpsPpa);
 
 db.prepare(`
-  UPDATE contracts SET normative_aux = ?, free_energy_home_state = ?, capacity_charges_total = ?
+  UPDATE contracts SET normative_aux = ?, free_energy_home_state = ?, capacity_charges_total = ?,
+    annual_afc = ?, annual_design_energy_mwh = ?, napaf_percent = ?
   WHERE id = ?
-`).run(1.2, 12, 85000000, njhpsPpa.id); // ₹8.5 Cr monthly capacity (AFC/12 demo)
+`).run(1.2, 12, Math.round(14615741000 / 12), 14615741000, 6612000, 87, njhpsPpa.id);
 
 db.prepare(`
   INSERT INTO station_beta (

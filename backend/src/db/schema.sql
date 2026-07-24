@@ -216,7 +216,12 @@ CREATE TABLE IF NOT EXISTS contracts (
   -- Hydro/CERC Specific Parameters
   normative_aux REAL, -- e.g. 1.2
   free_energy_home_state REAL, -- e.g. 12.0
-  capacity_charges_total REAL, -- e.g. AFC/12
+  capacity_charges_total REAL, -- legacy monthly AFC/12 (fallback when annual_afc null)
+  annual_afc REAL, -- CERC Annual Fixed Charges (₹)
+  annual_design_energy_mwh REAL, -- Annual Design Energy DE (MWh)
+  napaf_percent REAL, -- Normative Annual Plant Availability Factor % (e.g. 87)
+  transmission_charge_per_mwh REAL, -- ₹/MWh wheeling/transmission if applicable
+  min_cuf_percent REAL, -- Guaranteed / contractual min CUF % (Solar/Wind/Hybrid); NULL = master default
   version INTEGER NOT NULL DEFAULT 1,
   parent_contract_id TEXT,
   termination_reason TEXT,
@@ -343,9 +348,31 @@ CREATE TABLE IF NOT EXISTS invoices (
   parent_invoice_id TEXT, -- provisional→final true-up, or dispute supplementary credit
   billing_family_ref TEXT, -- same BFR as energy for this contract/period/direction
   energy_data_id TEXT, -- energy_data row used to compute this invoice
+  cancel_reason TEXT,
+  cancelled_at TEXT,
+  cancelled_by TEXT,
+  validation_status TEXT CHECK (validation_status IS NULL OR validation_status IN (
+    'PENDING','MATCHED','PARTIAL','MISMATCH','WAIVED','NO_COUNTERPART'
+  )),
+  validation_json TEXT,
+  validated_at TEXT,
+  validated_by TEXT,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Invoice email / SMS delivery audit (Send to Buyer / Seller)
+CREATE TABLE IF NOT EXISTS invoice_deliveries (
+  id TEXT PRIMARY KEY,
+  invoice_id TEXT NOT NULL REFERENCES invoices(id),
+  channel TEXT NOT NULL CHECK (channel IN ('EMAIL','SMS','PORTAL')),
+  recipient TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('SENT','FAILED','SIMULATED')),
+  mode TEXT, -- SMTP | FILE_OUTBOX | NONE
+  detail_json TEXT,
+  sent_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS invoice_approvals (
@@ -379,6 +406,7 @@ CREATE TABLE IF NOT EXISTS deviation_settlements (
   deviation_amount REAL NOT NULL DEFAULT 0,    -- net; + recoverable / - payable
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','CALCULATED','SUBMITTED','DISPATCHED','CANCELLED')),
   invoice_no TEXT,             -- linked bill number on dispatch
+  invoice_id TEXT REFERENCES invoices(id),  -- REIA supplementary invoice created on dispatch
   dispatch_date TEXT,
   notes TEXT,
   created_by TEXT,
@@ -798,6 +826,68 @@ CREATE TABLE IF NOT EXISTS market_rates (
   mcp_rate REAL NOT NULL, -- market clearing price
   forecast_rate REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Renewable Energy Certificate (REC) ledger — PT & BD REC management for CSPP:
+-- JMR → NLDC REC Registry application → issuance → trade on IEX/PXIL → redemption.
+-- Profit from REC = sale_amount − (quantity × issue_cost_per_rec). 1 REC = 1 MWh.
+CREATE TABLE IF NOT EXISTS rec_ledger (
+  id TEXT PRIMARY KEY,
+  rec_no TEXT UNIQUE NOT NULL,
+  source TEXT,                         -- generating station, e.g. CSPP (Charanka)
+  vintage_month TEXT NOT NULL,         -- YYYY-MM the generation belongs to
+  quantity INTEGER NOT NULL DEFAULT 0, -- number of RECs (MWh)
+  status TEXT NOT NULL DEFAULT 'APPLIED' CHECK (status IN ('APPLIED','ISSUED','LISTED','SOLD','REDEEMED','CANCELLED')),
+  application_date TEXT,
+  issuance_date TEXT,
+  issue_cost_per_rec REAL NOT NULL DEFAULT 0,  -- registry/issuance cost per REC
+  sale_rate_per_rec REAL NOT NULL DEFAULT 0,   -- realised sale price per REC
+  sale_amount REAL NOT NULL DEFAULT 0,         -- quantity × sale_rate
+  trade_platform TEXT,                 -- IEX / PXIL
+  trade_date TEXT,
+  buyer TEXT,
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- NOAR wallet ledger — PT & BD recharge the NOAR wallet and pay Open Access
+-- charges (ISTS / RLDC / application charges to Grid India & CTUIL). RECHARGE
+-- credits the wallet; CHARGE debits it. Running balance kept on each row.
+CREATE TABLE IF NOT EXISTS noar_wallet_txns (
+  id TEXT PRIMARY KEY,
+  txn_no TEXT UNIQUE NOT NULL,
+  txn_type TEXT NOT NULL CHECK (txn_type IN ('RECHARGE','CHARGE')),
+  category TEXT,                       -- CHARGE: ISTS / RLDC / APPLICATION / OTHER
+  amount REAL NOT NULL DEFAULT 0,
+  balance_after REAL NOT NULL DEFAULT 0,
+  payee TEXT,                          -- Grid India / CTUIL / NLDC
+  reference TEXT,
+  txn_date TEXT NOT NULL,
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- CERC Form-IV compliance register — PT & BD prepare and submit monthly and
+-- annual CERC Form-IV (inter-state trading transaction) reports.
+CREATE TABLE IF NOT EXISTS cerc_form_iv (
+  id TEXT PRIMARY KEY,
+  form_no TEXT UNIQUE NOT NULL,
+  period_type TEXT NOT NULL DEFAULT 'MONTHLY' CHECK (period_type IN ('MONTHLY','ANNUAL')),
+  period TEXT NOT NULL,                -- YYYY-MM or FY (e.g. 2026-27)
+  total_volume_mu REAL NOT NULL DEFAULT 0,   -- energy traded (MU)
+  total_revenue REAL NOT NULL DEFAULT 0,
+  trading_margin REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','PREPARED','SUBMITTED')),
+  submission_date TEXT,
+  reference_no TEXT,                   -- CERC ack / filing reference
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(period_type, period)
 );
 
 CREATE TABLE IF NOT EXISTS contract_allocations (

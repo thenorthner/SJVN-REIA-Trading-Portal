@@ -109,7 +109,7 @@ export function daysBetween(a, b) {
  * Accrued Late Payment Surcharge as of `asOf` on the OUTSTANDING undisputed amount.
  * Works before any payment is recorded (proactive display) and at payment time.
  */
-export function accruedLps(inv, { annualPct = 15, asOf = new Date(), paid = 0, graceDays = 0 } = {}) {
+export function accruedLps(inv, { annualPct = 15, asOf = new Date(), paid = 0, graceDays = 0, monthlyStepPct = 0, stepCapPct = 0 } = {}) {
   const empty = { days_overdue: 0, lps: 0, base: 0, annual_pct: annualPct };
   if (!inv || !inv.due_date) return empty;
   const daysOverdue = daysBetween(new Date(inv.due_date), new Date(asOf));
@@ -117,8 +117,25 @@ export function accruedLps(inv, { annualPct = 15, asOf = new Date(), paid = 0, g
   if (daysOverdue <= (graceDays || 0)) return empty;
   const undisputed = Math.max(0, (inv.total_amount || 0) - (inv.disputed_amount || 0));
   const outstanding = Math.max(0, undisputed - (paid || 0));
-  const lps = Math.round(outstanding * (annualPct / 100 / 365) * daysOverdue);
-  return { days_overdue: daysOverdue, lps, base: outstanding, annual_pct: annualPct };
+
+  // Escalating LPS per MoP LPS Rules 2022 (PSA Art. 6.3): base rate for the
+  // first 30-day month of default, then +monthlyStepPct for each successive
+  // month, capped at stepCapPct above base. With monthlyStepPct = 0 this
+  // collapses to a flat annual rate (backward-compatible).
+  const dailyUnit = outstanding / 100 / 365;
+  let lps = 0;
+  let remaining = daysOverdue;
+  let monthIdx = 0;
+  let effectivePct = annualPct;
+  while (remaining > 0) {
+    const daysThisMonth = Math.min(30, remaining);
+    const step = Math.min((monthlyStepPct || 0) * monthIdx, stepCapPct || 0);
+    effectivePct = annualPct + step;
+    lps += dailyUnit * effectivePct * daysThisMonth;
+    remaining -= daysThisMonth;
+    monthIdx += 1;
+  }
+  return { days_overdue: daysOverdue, lps: Math.round(lps), base: outstanding, annual_pct: annualPct, effective_pct: effectivePct };
 }
 
 /**

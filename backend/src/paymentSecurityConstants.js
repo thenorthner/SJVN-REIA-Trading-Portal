@@ -1,7 +1,8 @@
 /** Payment Security constants */
 
 export const INVOCATION_OVERDUE_DAYS = 30;
-export const DEFAULT_MONTHS_COVER = 1;
+// PSA Art. 6.5.2: Letter of Credit = 110% of estimated average monthly billing.
+export const DEFAULT_MONTHS_COVER = 1.1;
 export const ALERT_CASCADE_DAYS = [60, 30, 15, 7, 0];
 export const ACTIVE_STATUSES = ['ACTIVE', 'PARTIALLY_UTILIZED', 'RENEWED'];
 

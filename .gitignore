@@ -21,6 +21,8 @@ build/
 # Runtime uploads & generated/scraped files (keep folder, ignore contents)
 backend/uploads/*
 !backend/uploads/.gitkeep
+backend/outbox/*
+!backend/outbox/.gitkeep
 backend/rea_downloads/
 backend/temp/
 backend/test*.pdf

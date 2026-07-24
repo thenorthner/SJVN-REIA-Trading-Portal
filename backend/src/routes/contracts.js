@@ -12,6 +12,20 @@ router.use(requireAuth);
  * the human-readable `payment_terms` / `rebate_rule` / `lps_rule` strings so the
  * calc engine and every display stay consistent. Blank numeric inputs → null.
  */
+function hydroBillingFields(b) {
+  const num = (v) => (v === '' || v == null ? null : Number(v));
+  return {
+    normative_aux: num(b.normative_aux),
+    free_energy_home_state: num(b.free_energy_home_state),
+    capacity_charges_total: num(b.capacity_charges_total),
+    annual_afc: num(b.annual_afc),
+    annual_design_energy_mwh: num(b.annual_design_energy_mwh),
+    napaf_percent: num(b.napaf_percent),
+    transmission_charge_per_mwh: num(b.transmission_charge_per_mwh),
+    min_cuf_percent: num(b.min_cuf_percent),
+  };
+}
+
 function billingRuleFields(b) {
   const num = (v) => (v === '' || v == null ? null : Number(v));
   const payment_terms_days = num(b.payment_terms_days);
@@ -89,10 +103,12 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     db.prepare(`
       INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
         tariff_type, tariff_per_unit, tariff_structure_json, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type, pbg_expiry,
-        rebate_rule, lps_rule, payment_security_type, payment_terms_days, rebate_pct, rebate_days, rebate_basis, lps_annual_pct, lps_grace_days, trading_margin_per_mwh, status)
+        rebate_rule, lps_rule, payment_security_type, payment_terms_days, rebate_pct, rebate_days, rebate_basis, lps_annual_pct, lps_grace_days, trading_margin_per_mwh,
+        normative_aux, free_energy_home_state, capacity_charges_total, annual_afc, annual_design_energy_mwh, napaf_percent, transmission_charge_per_mwh, min_cuf_percent, status)
       VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
         @tariff_type, @tariff_per_unit, @tariff_structure_json, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type, @pbg_expiry,
-        @rebate_rule, @lps_rule, @payment_security_type, @payment_terms_days, @rebate_pct, @rebate_days, @rebate_basis, @lps_annual_pct, @lps_grace_days, @trading_margin_per_mwh, @status)
+        @rebate_rule, @lps_rule, @payment_security_type, @payment_terms_days, @rebate_pct, @rebate_days, @rebate_basis, @lps_annual_pct, @lps_grace_days, @trading_margin_per_mwh,
+        @normative_aux, @free_energy_home_state, @capacity_charges_total, @annual_afc, @annual_design_energy_mwh, @napaf_percent, @transmission_charge_per_mwh, @min_cuf_percent, @status)
     `).run({
       id,
       contract_no: b.contract_no,
@@ -117,6 +133,7 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
       trading_margin_per_mwh: (b.trading_margin_per_mwh === '' || b.trading_margin_per_mwh == null) ? null : Number(b.trading_margin_per_mwh),
       status: b.status || 'DRAFT',
       ...billingRuleFields(b),
+      ...hydroBillingFields(b),
     });
 
     if (b.projects && Array.isArray(b.projects)) {
@@ -170,11 +187,13 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
       INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
         tariff_type, tariff_per_unit, tariff_structure_json, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type,
         pbg_expiry, rebate_rule, lps_rule, payment_security_type, payment_terms_days, rebate_pct, rebate_days, rebate_basis, lps_annual_pct, lps_grace_days,
-        trading_margin_per_mwh, version, parent_contract_id, status, remarks)
+        trading_margin_per_mwh, normative_aux, free_energy_home_state, capacity_charges_total, annual_afc, annual_design_energy_mwh, napaf_percent,
+        transmission_charge_per_mwh, min_cuf_percent, version, parent_contract_id, status, remarks)
       VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
         @tariff_type, @tariff_per_unit, @tariff_structure_json, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type,
         @pbg_expiry, @rebate_rule, @lps_rule, @payment_security_type, @payment_terms_days, @rebate_pct, @rebate_days, @rebate_basis, @lps_annual_pct, @lps_grace_days,
-        @trading_margin_per_mwh, @version, @parent_contract_id, 'ACTIVE', @remarks)
+        @trading_margin_per_mwh, @normative_aux, @free_energy_home_state, @capacity_charges_total, @annual_afc, @annual_design_energy_mwh, @napaf_percent,
+        @transmission_charge_per_mwh, @min_cuf_percent, @version, @parent_contract_id, 'ACTIVE', @remarks)
     `).run({
       ...updated,
       id: newVersionId,
@@ -184,6 +203,7 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
       parent_contract_id: original.parent_contract_id || original.id,
       remarks: req.body.amendment_reason ?? null,
       ...billingRuleFields(updated),
+      ...hydroBillingFields(updated),
     });
     
     // Copy projects

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
@@ -18,6 +19,7 @@ function SignedAmount({ v }) {
 
 export default function DeviationSettlements() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const canWrite = ROLE_GROUPS.REIA_WRITE.includes(user?.role);
   const [rows, setRows] = useState([]);
   const [contracts, setContracts] = useState([]);
@@ -30,6 +32,7 @@ export default function DeviationSettlements() {
   const [error, setError] = useState('');
   const [dispatchRow, setDispatchRow] = useState(null);
   const [dispatchForm, setDispatchForm] = useState({ invoice_no: '', dispatch_date: '' });
+  const [dispatchError, setDispatchError] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
@@ -80,12 +83,19 @@ export default function DeviationSettlements() {
   }
   function openDispatch(r) {
     setDispatchRow(r);
+    setDispatchError('');
     setDispatchForm({ invoice_no: '', dispatch_date: new Date().toISOString().split('T')[0] });
   }
   async function doDispatch(e) {
     e.preventDefault();
-    await api.deviation.dispatch(dispatchRow.id, dispatchForm).catch(() => {});
-    setDispatchRow(null); load();
+    setDispatchError('');
+    try {
+      await api.deviation.dispatch(dispatchRow.id, dispatchForm);
+      setDispatchRow(null);
+      load();
+    } catch (err) {
+      setDispatchError(err.response?.data?.error || 'Failed to dispatch DSM bill.');
+    }
   }
 
   const columns = [
@@ -97,7 +107,26 @@ export default function DeviationSettlements() {
     { key: 'actual_mwh', header: 'Actual', render: (r) => `${fmtNumber(r.actual_mwh)} MWh` },
     { key: 'deviation_mwh', header: 'Deviation', render: (r) => `${r.deviation_mwh > 0 ? '+' : ''}${fmtNumber(r.deviation_mwh)} MWh` },
     { key: 'deviation_amount', header: 'Net Amount', render: (r) => <SignedAmount v={r.deviation_amount} /> },
-    { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (r) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Badge status={r.status} />
+          {(r.invoice_no || r.invoice_id) && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ padding: 0, fontSize: 11, textAlign: 'left', color: 'var(--primary)', fontWeight: 600 }}
+              onClick={(e) => { e.stopPropagation(); navigate('/reia/invoices'); }}
+              title={r.invoice_status ? `Invoice ${r.invoice_status}` : 'Open Invoices'}
+            >
+              {r.invoice_no || r.invoice_id}
+            </button>
+          )}
+        </div>
+      ),
+    },
     { key: 'actions', header: '', render: (r) => canWrite && r.status !== 'CANCELLED' && (
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
         {r.status !== 'DISPATCHED' && <button className="btn btn-xs btn-outline" onClick={() => openEdit(r)}>Edit</button>}
@@ -181,19 +210,23 @@ export default function DeviationSettlements() {
         </form>
       </Modal>
 
-      <Modal open={!!dispatchRow} onClose={() => setDispatchRow(null)} title="Dispatch DSM Bill" width={420}>
+      <Modal open={!!dispatchRow} onClose={() => { setDispatchRow(null); setDispatchError(''); }} title="Dispatch DSM Bill" width={420}>
         {dispatchRow && (
           <form onSubmit={doDispatch}>
+            {dispatchError && <div className="form-error">{dispatchError}</div>}
             <p className="inline-note">{dispatchRow.dsm_no} · Net <SignedAmount v={dispatchRow.deviation_amount} /></p>
+            <p style={{ fontSize: 13, color: 'var(--text-light)', margin: '0 0 12px' }}>
+              Dispatch creates a REIA Supplementary invoice linked to this DSM (approval workflow starts at Draft / Level 1).
+            </p>
             <Field label="Bill / Invoice No. (optional)">
-              <input value={dispatchForm.invoice_no} placeholder="auto-generated if blank" onChange={(e) => setDispatchForm({ ...dispatchForm, invoice_no: e.target.value })} />
+              <input value={dispatchForm.invoice_no} placeholder="auto-generated if blank (DSM-PPA / DSM-PSA)" onChange={(e) => setDispatchForm({ ...dispatchForm, invoice_no: e.target.value })} />
             </Field>
             <Field label="Dispatch Date">
               <input type="date" required value={dispatchForm.dispatch_date} onChange={(e) => setDispatchForm({ ...dispatchForm, dispatch_date: e.target.value })} />
             </Field>
             <div className="form-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setDispatchRow(null)}>Cancel</button>
-              <button type="submit" className="btn btn-primary">Dispatch</button>
+              <button type="button" className="btn btn-ghost" onClick={() => { setDispatchRow(null); setDispatchError(''); }}>Cancel</button>
+              <button type="submit" className="btn btn-primary">Dispatch &amp; Create Invoice</button>
             </div>
           </form>
         )}

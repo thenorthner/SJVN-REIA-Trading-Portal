@@ -29,7 +29,9 @@ const NAV_INTERNAL = [
       { to: '/reia/disputes', label: 'Dispute Management' },
       { to: '/reia/payment-security', label: 'Payment Security' },
       { to: '/reia/reconciliation', label: 'Reconciliation' },
-      { to: '/reia/deviation', label: 'Deviation Settlement (DSM)' },
+      // Hidden for solar-focused scope (DSM is hydro/scheduling). Route still
+      // exists in App.jsx — uncomment to restore for hydro/thermal.
+      // { to: '/reia/deviation', label: 'Deviation Settlement (DSM)' },
     ],
   },
   {
@@ -42,6 +44,9 @@ const NAV_INTERNAL = [
       { to: '/trading/bilateral', label: 'Bilateral Transactions' },
       { to: '/trading/billing-settlement', label: 'Trading Billing & Settlement' },
       { to: '/trading/market-analytics', label: 'Market Rates & Analytics' },
+      { to: '/trading/rec', label: 'REC Management' },
+      { to: '/trading/noar', label: 'NOAR Wallet (Open Access)' },
+      { to: '/trading/form-iv', label: 'CERC Form-IV' },
     ],
   },
   {

@@ -13,6 +13,7 @@ const EMPTY_FORM = {
   // Structured billing rules (drive due dates, rebate & LPS calculations)
   payment_terms_days: 30, rebate_pct: '', rebate_days: '', rebate_basis: 'BILL_DATE',
   lps_annual_pct: '', lps_grace_days: 0, payment_security_type: 'LETTER_OF_CREDIT',
+  min_cuf_percent: '',
   projects: []
 };
 
@@ -359,10 +360,41 @@ export default function Contracts() {
           <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 12px 0', color: '#0369a1' }}>4b. Hydro-Specific Parameters (CERC)</h4>
             <div className="form-grid">
+              <Field label="Annual Fixed Charges AFC (₹)">
+                <input type="number" step="1" placeholder="e.g. 14615741000" value={form.annual_afc || ''} onChange={(e) => setForm({ ...form, annual_afc: e.target.value })} />
+              </Field>
+              <Field label="Annual Design Energy DE (MWh)">
+                <input type="number" step="0.001" placeholder="e.g. 6612000" value={form.annual_design_energy_mwh || ''} onChange={(e) => setForm({ ...form, annual_design_energy_mwh: e.target.value })} />
+              </Field>
+              <Field label="NAPAF (%)">
+                <input type="number" step="0.01" placeholder="e.g. 87" value={form.napaf_percent || ''} onChange={(e) => setForm({ ...form, napaf_percent: e.target.value })} />
+              </Field>
               <Field label="Normative Auxiliary Consumption (%)"><input type="number" step="0.01" placeholder="e.g. 1.2" value={form.normative_aux || ''} onChange={(e) => setForm({ ...form, normative_aux: e.target.value })} /></Field>
               <Field label="Free Energy to Home State (%)"><input type="number" step="0.01" placeholder="e.g. 12" value={form.free_energy_home_state || ''} onChange={(e) => setForm({ ...form, free_energy_home_state: e.target.value })} /></Field>
-              <Field label="Monthly Capacity Charge (₹ AFC/12)"><input type="number" step="1" placeholder="e.g. 85000000" value={form.capacity_charges_total || ''} onChange={(e) => setForm({ ...form, capacity_charges_total: e.target.value })} /></Field>
+              <Field label="Legacy Monthly Capacity (₹ AFC/12) — optional fallback">
+                <input type="number" step="1" placeholder="only if AFC blank" value={form.capacity_charges_total || ''} onChange={(e) => setForm({ ...form, capacity_charges_total: e.target.value })} />
+              </Field>
+              <Field label="Transmission / Wheeling (₹/MWh)">
+                <input type="number" step="0.01" placeholder="Blank = master default" value={form.transmission_charge_per_mwh || ''} onChange={(e) => setForm({ ...form, transmission_charge_per_mwh: e.target.value })} />
+              </Field>
             </div>
+            <p style={{ fontSize: 12, color: '#64748b', margin: '8px 0 0' }}>
+              Capacity = AFC × 0.5 × days/year × (PAFM/NAPAF). ECR from AFC &amp; DE. PAFM comes from energy data availability %. β incentive = (3% × β × 0.5 × AFC)/12.
+            </p>
+          </div>
+          )}
+
+          {['Solar', 'Wind', 'Hybrid', 'FDRE'].includes(form.project_type) && (
+          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+            <h4 style={{ margin: '0 0 12px 0', color: '#0369a1' }}>4b. CUF Performance Threshold</h4>
+            <div className="form-grid">
+              <Field label="Min / Guaranteed CUF (%)">
+                <input type="number" step="0.01" min="0" max="100" placeholder="Blank = master default (Solar 22 / Wind 30 / Hybrid 25)" value={form.min_cuf_percent || ''} onChange={(e) => setForm({ ...form, min_cuf_percent: e.target.value })} />
+              </Field>
+            </div>
+            <p style={{ fontSize: 12, color: '#64748b', margin: '8px 0 0' }}>
+              If actual CUF (from energy data) is below this threshold, invoice generate applies a shortfall penalty = shortfall MWh × tariff (or master ₹/MWh rate).
+            </p>
           </div>
           )}
 
@@ -417,6 +449,9 @@ export default function Contracts() {
                 <tbody>
                   <tr><td>Tariff Type</td><td>{selected.tariff_type}</td></tr>
                   <tr><td>Tariff / Unit</td><td>₹{selected.tariff_per_unit}</td></tr>
+                  {['Solar', 'Wind', 'Hybrid', 'FDRE'].includes(selected.project_type) && (
+                    <tr><td>Min CUF %</td><td>{selected.min_cuf_percent != null ? `${selected.min_cuf_percent}%` : 'Master default'}</td></tr>
+                  )}
                   {selected.contract_type === 'PSA' && (
                     <tr><td>Trading Margin</td><td>{selected.trading_margin_per_mwh != null
                       ? `₹${selected.trading_margin_per_mwh}/MWh (contract-specific)`
@@ -532,6 +567,11 @@ export default function Contracts() {
               <Field label="Commissioned (MW)"><input type="number" step="0.01" value={amendForm.commissioned_capacity_mw} onChange={(e) => setAmendForm({ ...amendForm, commissioned_capacity_mw: e.target.value })} /></Field>
               <Field label="COD Date"><input type="date" value={amendForm.cod_date || ''} onChange={(e) => setAmendForm({ ...amendForm, cod_date: e.target.value })} /></Field>
               <Field label="Tariff (₹/unit)"><input type="number" step="0.01" value={amendForm.tariff_per_unit} onChange={(e) => setAmendForm({ ...amendForm, tariff_per_unit: e.target.value })} /></Field>
+              {['Solar', 'Wind', 'Hybrid', 'FDRE'].includes(amendForm.project_type) && (
+                <Field label="Min / Guaranteed CUF (%)">
+                  <input type="number" step="0.01" min="0" max="100" value={amendForm.min_cuf_percent ?? ''} onChange={(e) => setAmendForm({ ...amendForm, min_cuf_percent: e.target.value })} />
+                </Field>
+              )}
             </div>
             <Field label="Amendment Reason">
               <input required value={amendForm.amendment_reason || ''} onChange={(e) => setAmendForm({ ...amendForm, amendment_reason: e.target.value })} placeholder="Why is this being amended?" />

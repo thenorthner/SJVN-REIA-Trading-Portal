@@ -463,27 +463,36 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res, 
   }
 
   if (isHydro) {
-    const afcAnnual = (Number(contract?.capacity_charges_total) || 0) * 12;
+    const afcAnnual = Number(contract?.annual_afc) > 0
+      ? Number(contract.annual_afc)
+      : (Number(contract?.capacity_charges_total) || 0) * 12;
     const aux = Number(contract?.normative_aux) || 0;
     const fehs = Number(contract?.free_energy_home_state) || 0;
+    const napaf = Number(contract?.napaf_percent) || 87;
+    const de = Number(contract?.annual_design_energy_mwh) || 0;
     const capCharge = Number(invoice.capacity_charges) || 0;
     const betaIncentive = Number(invoice.incentive_charges) || 0;
-    const betaVal = bd('BETA');
-    const betaStr = (betaVal != null && betaVal !== '') ? Number(betaVal).toFixed(3) : 'Pending (NRPC)';
+    const betaVal = bd('C3') ?? bd('BETA');
+    const betaStr = (betaVal != null && betaVal !== '') ? Number(betaVal).toFixed(2) : 'Pending (NRPC)';
     const nrldcFees = Number(invoice.nrldc_fees) || 0;
+    const txAmt = Number(invoice.transmission_charges) || 0;
     const lpsAmt = Number(invoice.lps) || 0;
     const energyCharges = Number(invoice.energy_charges) || 0;
     const num = (v, d = 2) => (v != null && v !== '' ? fmtNum(Number(v), d) : '—');
+    // New shape: E1 ex-bus, E2 free power, E3 saleable. Legacy: E1–E5 gross→saleable.
+    const hasNewEnergyShape = bd('E3') != null && bd('E5') == null;
 
     drawBillingRow(y, 18, ['Sr', 'Particulars', '', '', '', `Value / ${CUR}`], { headerBand: true });
     y += 18;
 
     drawSpanRow(y, 16, 'A.  Tariff Parameters (as approved by CERC)', null, { center: true, band: true }); y += 16;
     drawHydroRow(y, 16, 'A1', 'Annual Fixed Charges (AFC)', fmtMoney(afcAnnual)); y += 16;
+    if (de) { drawHydroRow(y, 16, 'A2', 'Annual Design Energy (DE)', `${num(de)} MWh`); y += 16; }
     drawHydroRow(y, 16, 'A3', 'Normative Auxiliary Consumption', `${aux} %`); y += 16;
     drawHydroRow(y, 16, 'A4', 'Free Energy for Home State (FEHS)', `${fehs} %`); y += 16;
     drawHydroRow(y, 16, 'A7', 'Installed Capacity', `${contract?.capacity_mw ?? '—'} MW`); y += 16;
-    drawHydroRow(y, 16, 'A12', 'Energy Charge Rate (ECR)', `${CUR} ${invoice.tariff_per_unit}/kWh`); y += 16;
+    drawHydroRow(y, 16, 'A11', 'NAPAF', `${napaf} %`); y += 16;
+    drawHydroRow(y, 16, 'A12', 'Energy Charge Rate (ECR)', `${CUR} ${Number(invoice.tariff_per_unit || 0).toFixed(3)}/kWh`); y += 16;
 
     drawSpanRow(y, 16, 'Capacity Charges (inclusive of incentive)', null, { center: true, band: true }); y += 16;
     drawHydroRow(y, 16, 'C2', 'Capacity Charge for the month', fmtMoney(capCharge)); y += 16;
@@ -492,15 +501,22 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res, 
     drawHydroRow(y, 18, 'C5', 'Total Capacity Charges (incl. Beta Incentive)', fmtMoney(capCharge + betaIncentive), { bold: true }); y += 18;
 
     drawSpanRow(y, 16, 'Energy Details (MWh)', null, { center: true, band: true }); y += 16;
-    drawHydroRow(y, 16, 'E1', 'Gross Energy Generated', num(bd('E1'))); y += 16;
-    drawHydroRow(y, 16, 'E2', `Auxiliary Consumption (${aux}%)`, num(bd('E2'))); y += 16;
-    drawHydroRow(y, 16, 'E3', 'Net Ex-Bus Energy', num(bd('E3'))); y += 16;
-    drawHydroRow(y, 16, 'E4', `Free Power to Home State (${fehs}%)`, num(bd('E4'))); y += 16;
-    drawHydroRow(y, 16, 'E5', 'Saleable Energy', num(bd('E5'))); y += 16;
+    if (hasNewEnergyShape) {
+      drawHydroRow(y, 16, 'E1', 'Ex-bus Scheduled Energy', num(bd('E1'))); y += 16;
+      drawHydroRow(y, 16, 'E2', `Free Power to Home State (${fehs}%)`, num(bd('E2'))); y += 16;
+      drawHydroRow(y, 16, 'E3', 'Ex-bus Saleable Scheduled Energy', num(bd('E3'))); y += 16;
+    } else {
+      drawHydroRow(y, 16, 'E1', 'Gross Energy Generated', num(bd('E1'))); y += 16;
+      drawHydroRow(y, 16, 'E2', `Auxiliary Consumption (${aux}%)`, num(bd('E2'))); y += 16;
+      drawHydroRow(y, 16, 'E3', 'Net Ex-Bus Energy', num(bd('E3'))); y += 16;
+      drawHydroRow(y, 16, 'E4', `Free Power to Home State (${fehs}%)`, num(bd('E4'))); y += 16;
+      drawHydroRow(y, 16, 'E5', 'Saleable Energy', num(bd('E5'))); y += 16;
+    }
 
     drawSpanRow(y, 16, 'Energy Charges', null, { center: true, band: true }); y += 16;
     drawHydroRow(y, 18, 'EE1', 'Energy Charges (Saleable Energy x ECR)', fmtMoney(energyCharges)); y += 18;
     if (nrldcFees) { drawHydroRow(y, 16, '', 'NRLDC / SLDC Fees', fmtMoney(nrldcFees)); y += 16; }
+    if (txAmt) { drawHydroRow(y, 16, 'TX', 'Transmission / Wheeling', fmtMoney(txAmt)); y += 16; }
     for (const [glabel, gamount] of gstLines(Number(invoice.taxes) || 0)) {
       drawHydroRow(y, 16, '', glabel, fmtMoney(gamount)); y += 16;
     }
@@ -508,8 +524,8 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res, 
 
     const hydroGrand = invoice.total_amount != null
       ? Number(invoice.total_amount)
-      : capCharge + betaIncentive + energyCharges + nrldcFees + lpsAmt;
-    drawSpanRow(y, 20, `Total Charges (${CUR})  (C5 + EE1${nrldcFees ? ' + NRLDC' : ''}${lpsAmt ? ' + LPS' : ''})`, fmtMoney(hydroGrand), { bold: true });
+      : capCharge + betaIncentive + energyCharges + nrldcFees + txAmt + lpsAmt;
+    drawSpanRow(y, 20, `Total Charges (${CUR})  (C5 + EE1${nrldcFees ? ' + NRLDC' : ''}${txAmt ? ' + TX' : ''}${lpsAmt ? ' + LPS' : ''})`, fmtMoney(hydroGrand), { bold: true });
     y += 20;
 
     if (isDraft) {
@@ -748,4 +764,17 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res, 
   }
 
   doc.end();
+}
+
+/** Build PDF into a Buffer (for email attachment / outbox). */
+export async function generateInvoicePdfBuffer(invoice, contract, seller, buyer, beneficiaries = []) {
+  const { PassThrough } = await import('stream');
+  return new Promise((resolve, reject) => {
+    const stream = new PassThrough();
+    const chunks = [];
+    stream.on('data', (c) => chunks.push(c));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
+    generateInvoicePdf(invoice, contract, seller, buyer, stream, beneficiaries).catch(reject);
+  });
 }

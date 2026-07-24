@@ -35,6 +35,9 @@ import reportsRoutes from './routes/reports.js';
 import verifyRoutes from './routes/verify.js';
 import stationBetaRoutes from './routes/stationBeta.js';
 import deviationSettlementsRoutes from './routes/deviationSettlements.js';
+import recRoutes from './routes/rec.js';
+import noarRoutes from './routes/noar.js';
+import formIvRoutes from './routes/formIv.js';
 import { ensureMasterDefaults } from './mastersService.js';
 
 import { assignTraceId, requireAuth } from './middleware/auth.js';
@@ -74,6 +77,9 @@ app.use('/api/users', usersRoutes);
 
 // 3B. Power Trading Management System
 app.use('/api/trading-clients', tradingClientsRoutes);
+app.use('/api/rec', requireAuth, recRoutes);
+app.use('/api/noar', requireAuth, noarRoutes);
+app.use('/api/form-iv', requireAuth, formIvRoutes);
 app.use('/api/bids', bidsRoutes);
 app.use('/api/bilateral', bilateralRoutes);
 app.use('/api/billing-settlement', billingSettlementRoutes);

@@ -1,13 +1,24 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct } from '../util.js';
 import { payableNow, lpsBaseAmount, accruedLps, tieredRebatePct, daysBetween } from '../disputesConstants.js';
 import { getParamNumber, getParam } from '../mastersService.js';
-import { resolveBetaRow, computeFreqResponseIncentive } from '../services/betaFactor.js';
+import { resolveBetaRow } from '../services/betaFactor.js';
+import { computeCercHydroBill } from '../services/cercHydroBilling.js';
+import { computeCufPenalty } from '../services/cufPenalty.js';
+import {
+  compareSellerToSystem,
+  findSystemCounterpart,
+  persistValidation,
+} from '../services/sellerInvoiceMatch.js';
 
 const router = Router();
 router.use(requireAuth);
+
+/** Statuses safe to cancel (pre-settlement / pre-dispatch). */
+const CANCELABLE_STATUSES = ['DRAFT', 'SUBMITTED', 'REJECTED', 'PENDING_L2', 'UNDER_APPROVAL'];
+const OPEN_DISPUTE_STATUSES = ['RAISED', 'ACKNOWLEDGED', 'UNDER_REVIEW', 'INFO_REQUESTED', 'ESCALATED'];
 
 function paidTotalFor(invoiceId) {
   return db.prepare('SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)),0) s FROM payments WHERE invoice_id = ?').get(invoiceId).s;
@@ -23,6 +34,8 @@ function withContract(inv) {
     : accruedLps(inv, {
         annualPct: contract?.lps_annual_pct ?? getParamNumber('lps_annual_pct', 15),
         graceDays: contract?.lps_grace_days ?? 0,
+        monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0.5),
+        stepCapPct: getParamNumber('lps_step_cap_pct', 3),
         asOf: new Date(), paid,
       });
   return {
@@ -59,7 +72,8 @@ router.get('/', (req, res) => {
   res.json(db.prepare(sql).all(...params).map(withContract));
 });
 
-import { generateInvoicePdf } from '../scripts/invoicePdf.js';
+import { generateInvoicePdf, generateInvoicePdfBuffer } from '../scripts/invoicePdf.js';
+import { sendMail, formatInvoiceEmail } from '../services/mailService.js';
 
 router.get('/:id/pdf', async (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
@@ -179,82 +193,80 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   }
 
   const isHydro = ['Hydro', 'PSP'].includes(contract.project_type);
+  let appliedTariff = contract.tariff_per_unit;
+  let transmissionCharges = 0;
 
-  if (isHydro && contract.capacity_charges_total) {
+  if (isHydro && (contract.annual_afc || contract.capacity_charges_total || contract.annual_design_energy_mwh)) {
     // ──── CERC Hydro Billing (NJHPS-style) ────
-    const normAux = contract.normative_aux || 0; // % e.g. 1.2
-    const freePowerPct = contract.free_energy_home_state || 0; // % e.g. 12
-    const monthlyCapacity = contract.capacity_charges_total; // AFC/12 in ₹
-
-    // C1: Monthly Capacity Charge (from AFC divided across 12 months)
-    capacityCharges = Math.round(monthlyCapacity);
-    breakdown.push({ code: 'C1', label: 'Monthly Capacity Charge (AFC/12)', value: capacityCharges });
-
-    // E1: Gross Energy Generation (MWh)
-    const grossEnergy = allocated_energy_mwh;
-    breakdown.push({ code: 'E1', label: 'Gross Energy Generated (MWh)', value: grossEnergy });
-
-    // E2: Normative Auxiliary Consumption
-    const auxEnergy = Math.round(grossEnergy * normAux / 100 * 100) / 100;
-    breakdown.push({ code: 'E2', label: `Auxiliary Consumption (${normAux}%)`, value: auxEnergy });
-
-    // E3: Net Energy (ex-bus)
-    const netEnergy = Math.round((grossEnergy - auxEnergy) * 100) / 100;
-    breakdown.push({ code: 'E3', label: 'Net Energy (Ex-Bus) (MWh)', value: netEnergy });
-
-    // E4: Free Power to Home State
-    const freeEnergy = Math.round(netEnergy * freePowerPct / 100 * 100) / 100;
-    breakdown.push({ code: 'E4', label: `Free Power Home State (${freePowerPct}%)`, value: freeEnergy });
-
-    // E5: Saleable Energy
-    const saleableEnergy = Math.round((netEnergy - freeEnergy) * 100) / 100;
-    breakdown.push({ code: 'E5', label: 'Saleable Energy (MWh)', value: saleableEnergy });
-
-    // EE1: Energy Charges = Saleable Energy (kWh) * Tariff (₹/kWh)
-    energyCharges = Math.round(saleableEnergy * UNITS_PER_MWH * contract.tariff_per_unit);
-    breakdown.push({ code: 'EE1', label: `Energy Charges (${saleableEnergy} MWh × ₹${contract.tariff_per_unit}/unit)`, value: energyCharges });
-
-    // Free Power deduction in ₹ terms (kWh × tariff)
-    freePowerDeduction = Math.round(freeEnergy * UNITS_PER_MWH * contract.tariff_per_unit);
-    breakdown.push({ code: 'FP', label: 'Free Power Deduction (₹)', value: freePowerDeduction });
-
-    // NRLDC fees from billing master
-    const nrldcPerMw = getParamNumber('nrldc_fee_per_mw', 100);
-    nrldcFees = Math.round(contract.capacity_mw * nrldcPerMw);
-    breakdown.push({ code: 'NR', label: 'NRLDC/SLDC Fees', value: nrldcFees });
-
-    // CERC Frequency Response Incentive (β) — Reg 65(4) Hydro/PSP
-    // β certified by NRPC ~1 month late; if missing, bill without incentive (true-up later).
     const betaRow = resolveBetaRow(contract, period_month);
-    const fr = computeFreqResponseIncentive(capacityCharges, betaRow?.beta_value, contract.project_type);
-    incentiveCharges = fr.incentive;
-    if (betaRow) {
-      breakdown.push({
-        code: 'BETA',
-        label: `Frequency Response β ${Number(betaRow.beta_value).toFixed(2)}${betaRow.station_code ? ` (${betaRow.station_code})` : ''}${betaRow.certified_on ? ` · certified ${betaRow.certified_on}` : ''}`,
-        value: betaRow.beta_value,
-      });
-      breakdown.push({
-        code: 'INC',
-        label: fr.eligible
-          ? `Frequency Response Incentive — ${fr.reason}`
-          : `Frequency Response Incentive — ${fr.reason}`,
-        value: incentiveCharges,
-      });
-    } else {
-      breakdown.push({
-        code: 'BETA',
-        label: 'Frequency Response β — pending NRPC certificate (incentive true-up later)',
-        value: 0,
-      });
-    }
+    const hydro = computeCercHydroBill({
+      contract,
+      periodMonth: period_month,
+      exBusEnergyMwh: allocated_energy_mwh,
+      pafmPercent: energy.availability_percent,
+      betaValue: betaRow?.beta_value,
+    });
+
+    capacityCharges = hydro.capacityCharges;
+    energyCharges = hydro.energyCharges;
+    incentiveCharges = hydro.incentiveCharges;
+    freePowerDeduction = 0; // saleable already excludes free power
+    appliedTariff = hydro.ecr;
+
+    breakdown.push({ code: 'A1', label: 'Annual Fixed Charges (AFC)', value: hydro.afc, format: 'currency' });
+    if (hydro.de) breakdown.push({ code: 'A2', label: 'Annual Design Energy (DE) MWh', value: hydro.de, format: 'mwh' });
+    breakdown.push({ code: 'A3', label: `Normative Auxiliary (AUX)`, value: hydro.aux, format: 'pct' });
+    breakdown.push({ code: 'A4', label: `Free Energy Home State (FEHS)`, value: hydro.fehs, format: 'pct' });
+    breakdown.push({ code: 'A11', label: 'NAPAF %', value: hydro.napaf, format: 'pct' });
+    breakdown.push({ code: 'A12', label: `Energy Charge Rate (ECR) ₹/kWh`, value: hydro.ecr, format: 'ecr' });
+
+    breakdown.push({ code: 'C2', label: hydro.capacityLabel, value: capacityCharges });
+    breakdown.push({
+      code: 'C3',
+      label: betaRow
+        ? `Beta Factor β ${Number(betaRow.beta_value).toFixed(2)}${betaRow.station_code ? ` (${betaRow.station_code})` : ''}${betaRow.certified_on ? ` · certified ${betaRow.certified_on}` : ''}`
+        : 'Beta Factor β — pending NRPC certificate',
+      value: betaRow ? Number(betaRow.beta_value) : 0,
+      format: 'beta',
+    });
+    breakdown.push({
+      code: 'C4',
+      label: `Incentive on account of Beta — ${hydro.beta.reason}`,
+      value: incentiveCharges,
+    });
+    breakdown.push({
+      code: 'C5',
+      label: 'Total Capacity Charges (incl. Beta Incentive)',
+      value: capacityCharges + incentiveCharges,
+    });
+
+    breakdown.push({ code: 'E1', label: 'Ex-bus Scheduled Energy (MWh)', value: hydro.e1 });
+    breakdown.push({ code: 'E2', label: `Free Power Home State (${hydro.fehs}%)`, value: hydro.freeMwh });
+    breakdown.push({ code: 'E3', label: 'Ex-bus Saleable Scheduled Energy (MWh)', value: hydro.saleableMwh });
+    breakdown.push({
+      code: 'EE1',
+      label: `Energy Charges (${hydro.saleableMwh} MWh × ₹${hydro.ecr}/kWh)`,
+      value: energyCharges,
+    });
+
+    const nrldcPerMw = getParamNumber('nrldc_fee_per_mw', 100);
+    nrldcFees = Math.round((contract.capacity_mw || 0) * nrldcPerMw);
+    if (nrldcFees) breakdown.push({ code: 'NR', label: 'NRLDC/SLDC Fees', value: nrldcFees });
 
   } else {
     // ──── Simple RE Billing (Solar/Wind/Hybrid) ────
-    // Charges = energy (kWh) × tariff (₹/kWh)
     energyCharges = Math.round(allocated_units_kwh * contract.tariff_per_unit);
     breakdown.push({ code: 'E1', label: 'Total Energy (MWh)', value: allocated_energy_mwh });
     breakdown.push({ code: 'EE1', label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${contract.tariff_per_unit}/unit)`, value: energyCharges });
+  }
+
+  // Transmission / wheeling: contract override → master default (₹/MWh)
+  const txPerMwh = (contract.transmission_charge_per_mwh != null && contract.transmission_charge_per_mwh !== '')
+    ? Number(contract.transmission_charge_per_mwh)
+    : getParamNumber('transmission_charge_per_mwh', 0);
+  transmissionCharges = txPerMwh > 0 ? Math.round(allocated_energy_mwh * txPerMwh) : 0;
+  if (transmissionCharges) {
+    breakdown.push({ code: 'TX', label: `Transmission / Wheeling (₹${txPerMwh}/MWh)`, value: transmissionCharges });
   }
 
   // Trading Margin: per-contract override (contracts.trading_margin_per_mwh) else global billing master default (₹70/MWh).
@@ -276,8 +288,27 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     breakdown.push({ code: 'GST', label: `GST @ ${gstRate}% (on trading margin; energy is exempt)`, value: gstAmount });
   }
 
-  const penalty = 0;
-  const grossTotal = capacityCharges + energyCharges + incentiveCharges + tradingMargin + nrldcFees + gstAmount - freePowerDeduction - penalty;
+  // CUF shortfall penalty (Solar/Wind/Hybrid only — Hydro capacity already uses PAFM/NAPAF).
+  const cufPen = computeCufPenalty({
+    contract,
+    periodMonth: period_month,
+    energyMwh: allocated_energy_mwh,
+    capacityMw: contract.capacity_mw,
+    cufPercent: energy.cuf_percent,
+    tariffPerUnit: appliedTariff || contract.tariff_per_unit,
+  });
+  const penalty = cufPen.penalty || 0;
+  if (cufPen.applicable && cufPen.breakdown && penalty > 0) {
+    breakdown.push(cufPen.breakdown);
+  } else if (cufPen.applicable && cufPen.label && penalty === 0 && cufPen.actualCuf != null) {
+    breakdown.push({
+      code: 'PEN',
+      label: cufPen.label,
+      value: 0,
+    });
+  }
+
+  const grossTotal = capacityCharges + energyCharges + incentiveCharges + tradingMargin + nrldcFees + transmissionCharges + gstAmount - freePowerDeduction - penalty;
   breakdown.push({ code: 'GROSS', label: 'Gross Amount (before provisional true-up)', value: grossTotal });
 
   const direction = directionForContract(contract);
@@ -324,13 +355,13 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     direction,
     billing_period: period_month,
     energy_mwh: allocated_energy_mwh,
-    tariff_per_unit: contract.tariff_per_unit,
+    tariff_per_unit: appliedTariff,
     energy_charges: energyCharges,
     capacity_charges: capacityCharges,
     incentive_charges: incentiveCharges,
     free_power_deduction: freePowerDeduction,
     nrldc_fees: nrldcFees,
-    transmission_charges: 0,
+    transmission_charges: transmissionCharges,
     lps: 0,
     penalty,
     trading_margin: tradingMargin,
@@ -434,6 +465,119 @@ router.post('/arrear', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(id));
 });
 
+const SUPP_REASONS = [
+  'TARIFF_REVISION',
+  'CHANGE_IN_LAW',
+  'ENERGY_REVISION',
+  'LPS_ADJUSTMENT',
+  'BETA_TRUE_UP',
+  'OTHER',
+];
+
+/**
+ * Manual Supplementary invoice — tariff revision / change-in-law / energy revision / etc.
+ * Distinct from dispute auto-credit supplementary (which still uses its own path).
+ */
+router.post('/supplementary', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const {
+    contract_id,
+    billing_period,
+    amount,
+    taxes,
+    reason_code,
+    reason,
+    parent_invoice_id,
+    transmission_charges,
+  } = req.body;
+
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
+  if (!contract) return res.status(404).json({ error: 'Contract not found' });
+  if (!billing_period || !/^\d{4}-\d{2}$/.test(billing_period)) {
+    return res.status(400).json({ error: 'billing_period (YYYY-MM) is required' });
+  }
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt === 0) {
+    return res.status(400).json({ error: 'A non-zero adjustment amount is required' });
+  }
+  const code = reason_code || 'OTHER';
+  if (!SUPP_REASONS.includes(code)) {
+    return res.status(400).json({ error: `reason_code must be one of: ${SUPP_REASONS.join(', ')}` });
+  }
+  if (!reason || !String(reason).trim()) {
+    return res.status(400).json({ error: 'A reason description is required' });
+  }
+  if (code === 'OTHER' && String(reason).trim().length < 5) {
+    return res.status(400).json({ error: 'Please provide a clearer reason for OTHER' });
+  }
+
+  let parentId = parent_invoice_id || null;
+  if (parentId) {
+    const parent = db.prepare('SELECT * FROM invoices WHERE id = ? AND contract_id = ?').get(parentId, contract_id);
+    if (!parent) return res.status(400).json({ error: 'parent_invoice_id not found for this contract' });
+  }
+
+  const taxAmt = Number(taxes) || 0;
+  const txAmt = Number(transmission_charges) || 0;
+  const total = Math.round(amt + taxAmt + txAmt);
+  const direction = directionForContract(contract);
+  const billingFamilyRef = buildBillingFamilyRef(contract.contract_no, billing_period, direction);
+  const id = newId('INV');
+  const reasonLabel = {
+    TARIFF_REVISION: 'Tariff revision',
+    CHANGE_IN_LAW: 'Change in law',
+    ENERGY_REVISION: 'Energy revision / true-up',
+    LPS_ADJUSTMENT: 'LPS adjustment',
+    BETA_TRUE_UP: 'Frequency response β true-up',
+    OTHER: 'Other adjustment',
+  }[code];
+
+  const breakdown = [
+    { code: 'SUPP', label: `${reasonLabel} — ${String(reason).trim()}`, value: Math.round(amt) },
+  ];
+  if (txAmt) breakdown.push({ code: 'TX', label: 'Transmission / wheeling on adjustment', value: Math.round(txAmt) });
+  if (taxAmt) breakdown.push({ code: 'TAX', label: 'Taxes / GST on adjustment', value: Math.round(taxAmt) });
+  breakdown.push({ code: 'TOTAL', label: 'Supplementary Bill Total', value: total });
+
+  db.prepare(`
+    INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh,
+      tariff_per_unit, energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees,
+      transmission_charges, lps, penalty, trading_margin, taxes,
+      other_adjustments, total_amount, invoice_breakdown_json, disputed_amount, due_date, status,
+      parent_invoice_id, billing_family_ref, energy_data_id, created_by)
+    VALUES (@id, @invoice_no, @contract_id, 'SUPPLEMENTARY', @direction, @billing_period, 0,
+      0, @energy_charges, 0, 0, 0, 0,
+      @transmission_charges, 0, 0, 0, @taxes,
+      0, @total_amount, @invoice_breakdown_json, 0, @due_date, 'DRAFT',
+      @parent_invoice_id, @billing_family_ref, NULL, @created_by)
+  `).run({
+    id,
+    invoice_no: genInvoiceNo(contract.contract_type === 'PPA' ? 'SUPP-PPA' : 'SUPP-PSA'),
+    contract_id,
+    direction,
+    billing_period,
+    energy_charges: Math.round(amt),
+    transmission_charges: Math.round(txAmt),
+    taxes: taxAmt,
+    total_amount: total,
+    invoice_breakdown_json: JSON.stringify(breakdown),
+    due_date: computeDueDate(new Date(), contract, getParamNumber('default_payment_terms_days', 30)),
+    parent_invoice_id: parentId,
+    billing_family_ref: billingFamilyRef,
+    created_by: req.user.name,
+  });
+  db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)').run(newId('APR'), id, 'PENDING');
+  logAudit({
+    req, user: req.user, action: 'GENERATE_SUPPLEMENTARY', module: 'REIA', entityType: 'invoice', entityId: id,
+    details: { contract_id, billing_period, amount: amt, taxes: taxAmt, reason_code: code, reason },
+  });
+  pushNotification({
+    role: 'REIA_USER',
+    type: 'SUPPLEMENTARY_RAISED',
+    message: `Supplementary bill for ${contract.contract_no} (${billing_period}): ₹${total.toLocaleString('en-IN')} — ${reasonLabel}`,
+  });
+  res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(id));
+});
+
 // Seller invoice submission (manual upload)
 router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const b = req.body;
@@ -480,15 +624,160 @@ router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     created_by: req.user.name,
   });
   db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)').run(newId('APR'), id, 'PENDING');
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SUBMIT', module: 'REIA', entityType: 'invoice', entityId: id, details: b });
+
+  // Auto-validate against system counterpart when one exists for this period.
+  let created = db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
+  const systemCounterpart = findSystemCounterpart(created);
+  if (systemCounterpart) {
+    const match = compareSellerToSystem(created, systemCounterpart);
+    created = persistValidation(id, match, { userName: req.user.name || 'auto' });
+  } else {
+    db.prepare(`
+      UPDATE invoices SET validation_status = 'PENDING', updated_at = datetime('now') WHERE id = ?
+    `).run(id);
+    created = db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
+  }
+
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SUBMIT', module: 'REIA', entityType: 'invoice', entityId: id, details: { ...b, validation_status: created.validation_status } });
   pushNotification({ role: 'REIA_USER', type: 'INVOICE_SUBMITTED', message: `Seller invoice ${b.invoice_no || id} submitted for review` });
-  res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(id));
+  res.status(201).json(created);
+});
+
+// Cancel / reverse — REIA only; safe pre-settlement statuses
+router.post('/:id/cancel', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+
+  if (inv.status === 'CANCELLED') {
+    return res.status(400).json({ error: 'Invoice is already cancelled' });
+  }
+  if (!CANCELABLE_STATUSES.includes(inv.status)) {
+    return res.status(400).json({
+      error: `Cannot cancel invoice in status ${inv.status}. Allowed: ${CANCELABLE_STATUSES.join(', ')}`,
+    });
+  }
+
+  const paid = paidTotalFor(inv.id);
+  if (paid > 0) {
+    return res.status(400).json({ error: 'Cannot cancel invoice with recorded payments' });
+  }
+
+  const openDisputes = db.prepare(`
+    SELECT COUNT(*) c FROM disputes
+    WHERE invoice_id = ? AND status IN (${OPEN_DISPUTE_STATUSES.map(() => '?').join(',')})
+  `).get(inv.id, ...OPEN_DISPUTE_STATUSES).c;
+  if (openDisputes > 0) {
+    return res.status(400).json({ error: 'Cannot cancel invoice with open disputes — resolve or close them first' });
+  }
+
+  const reason = (req.body?.reason || '').trim();
+  if (!reason) return res.status(400).json({ error: 'Cancel reason is required' });
+
+  db.prepare(`
+    UPDATE invoices SET
+      status = 'CANCELLED',
+      cancel_reason = ?,
+      cancelled_at = datetime('now'),
+      cancelled_by = ?,
+      updated_at = datetime('now')
+    WHERE id = ?
+  `).run(reason, req.user.name || req.user.email || null, inv.id);
+
+  // Block further approval progress on cancelled bills
+  db.prepare(`
+    UPDATE invoice_approvals SET status = 'REJECTED', comments = ?, acted_at = datetime('now'), approver_name = ?
+    WHERE invoice_id = ? AND status = 'PENDING'
+  `).run(`Cancelled: ${reason}`, req.user.name || 'system', inv.id);
+
+  logAudit({
+    req, user: req.user, action: 'CANCEL', module: 'REIA', entityType: 'invoice', entityId: inv.id,
+    beforeValue: { status: inv.status },
+    afterValue: { status: 'CANCELLED' },
+    reason,
+  });
+  pushNotification({
+    role: 'REIA_USER',
+    type: 'INVOICE_CANCELLED',
+    message: `Invoice ${inv.invoice_no} cancelled by ${req.user.name || 'REIA'}: ${reason}`,
+  });
+
+  res.json(withContract(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id)));
+});
+
+// Validate seller invoice vs system-generated counterpart
+router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE, ...SELLER_ROLES), (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (inv.status === 'CANCELLED') {
+    return res.status(400).json({ error: 'Cannot validate a cancelled invoice' });
+  }
+  if (inv.direction !== 'SELLER_TO_SJVN') {
+    return res.status(400).json({ error: 'Validation applies to seller invoices (SELLER_TO_SJVN) only' });
+  }
+
+  const result = compareSellerToSystem(inv);
+  if (result.status === 'NO_COUNTERPART') {
+    const updated = persistValidation(inv.id, result, { userName: req.user.name });
+    return res.status(400).json({
+      error: 'No system counterpart invoice found for this contract and billing period',
+      validation: result,
+      invoice: withContract(updated),
+    });
+  }
+
+  const updated = persistValidation(inv.id, result, { userName: req.user.name });
+  logAudit({
+    req, user: req.user, action: 'VALIDATE', module: 'REIA', entityType: 'invoice', entityId: inv.id,
+    details: { status: result.status, system_invoice_id: result.system_invoice_id },
+  });
+  res.json({ ...withContract(updated), validation: result });
+});
+
+// Waive a mismatch / partial validation (REIA only)
+router.post('/:id/validation/waive', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (inv.status === 'CANCELLED') {
+    return res.status(400).json({ error: 'Cannot waive validation on a cancelled invoice' });
+  }
+
+  const reason = (req.body?.reason || '').trim();
+  if (!reason) return res.status(400).json({ error: 'Waive reason is required' });
+
+  let prior = null;
+  try { prior = inv.validation_json ? JSON.parse(inv.validation_json) : null; } catch { /* ignore */ }
+  const base = prior && prior.lines
+    ? { ...prior, status: 'WAIVED' }
+    : { ...compareSellerToSystem(inv), status: 'WAIVED' };
+
+  const updated = persistValidation(inv.id, { ...base, status: 'WAIVED' }, {
+    userName: req.user.name,
+    waiveReason: reason,
+  });
+
+  logAudit({
+    req, user: req.user, action: 'VALIDATION_WAIVE', module: 'REIA', entityType: 'invoice', entityId: inv.id,
+    reason,
+    details: { prior_status: inv.validation_status },
+  });
+  pushNotification({
+    role: 'REIA_USER',
+    type: 'INVOICE_VALIDATION_WAIVED',
+    message: `Validation waived for ${inv.invoice_no}: ${reason}`,
+  });
+
+  let validation = null;
+  try { validation = updated.validation_json ? JSON.parse(updated.validation_json) : null; } catch { /* ignore */ }
+  res.json({ ...withContract(updated), validation });
 });
 
 // G. Invoice Approval Workflow
 router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER'), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (inv.status === 'CANCELLED') {
+    return res.status(400).json({ error: 'Cannot submit a cancelled invoice for approval' });
+  }
   const allowed = ['DRAFT', 'SUBMITTED', 'REJECTED'];
   if (!allowed.includes(inv.status)) {
     return res.status(400).json({
@@ -509,6 +798,11 @@ router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, '
 });
 
 router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER'), (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (inv.status === 'CANCELLED') {
+    return res.status(400).json({ error: 'Cannot act on approvals for a cancelled invoice' });
+  }
   const { decision, comments } = req.body; // APPROVED | REJECTED
   const approval = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? AND level = ?').get(req.params.id, req.params.level);
   if (!approval) return res.status(404).json({ error: 'Approval step not found' });
@@ -551,27 +845,185 @@ router.post('/:id/approve-l2', requireRole('SELLER_L2', 'SELLER_L3', 'BUYER_L2',
   res.json({ success: true });
 });
 
-// Distribution - mark invoice as sent to buyer
-router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
-  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
-  if (inv.status !== 'APPROVED') return res.status(400).json({ error: 'Invoice must be APPROVED before it can be sent' });
-  // Anchor the due date to presentation if it was never set (legacy invoices).
-  let dueDate = inv.due_date;
-  if (!dueDate) {
+// Distribution — email PDF to counterparty + mark SENT
+router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res) => {
+  try {
+    const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+    if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+    if (inv.status === 'CANCELLED') {
+      return res.status(400).json({ error: 'Cannot send a cancelled invoice' });
+    }
+    if (!['APPROVED', 'SENT'].includes(inv.status)) {
+      return res.status(400).json({ error: 'Invoice must be APPROVED (or already SENT for resend) before distribution' });
+    }
+
     const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(inv.contract_id);
-    dueDate = computeDueDate(new Date(), contract, getParamNumber('default_payment_terms_days', 30));
+    if (!contract) return res.status(404).json({ error: 'Contract not found' });
+    const seller = contract.seller_id ? db.prepare('SELECT * FROM entities WHERE id = ?').get(contract.seller_id) : null;
+    const buyer = contract.buyer_id ? db.prepare('SELECT * FROM entities WHERE id = ?').get(contract.buyer_id) : null;
+
+    // Counterparty for this bill direction
+    const recipientEntity = inv.direction === 'SJVN_TO_BUYER' ? buyer : seller;
+    const contacts = recipientEntity
+      ? db.prepare(`
+          SELECT email, name, phone FROM entity_contacts
+          WHERE entity_id = ? AND email IS NOT NULL AND email != ''
+          ORDER BY is_primary DESC, contact_type = 'COMMERCIAL' DESC
+        `).all(recipientEntity.id)
+      : [];
+
+    const overrideTo = (req.body?.to || '').trim();
+    const emails = [];
+    if (overrideTo) emails.push(overrideTo);
+    if (recipientEntity?.corporate_email) emails.push(recipientEntity.corporate_email);
+    for (const c of contacts) {
+      if (c.email && !emails.includes(c.email)) emails.push(c.email);
+    }
+    const uniqueEmails = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))];
+
+    if (!uniqueEmails.length) {
+      return res.status(400).json({
+        error: 'No recipient email found. Set corporate email / commercial contact on the counterparty, or pass body.to',
+      });
+    }
+
+    // Due date at presentation
+    let dueDate = inv.due_date;
+    if (!dueDate) {
+      dueDate = computeDueDate(new Date(), contract, getParamNumber('default_payment_terms_days', 30));
+    }
+
+    let beneficiaries = [];
+    if (['Hydro', 'PSP'].includes(contract.project_type) && contract.contract_type === 'PPA') {
+      const pStart = `${inv.billing_period}-01`;
+      const pEnd = `${inv.billing_period}-31`;
+      const rows = db.prepare(`
+        SELECT b.name AS name, ca.allocation_percent AS allocation_percent
+        FROM contract_allocations ca
+        JOIN contracts s ON s.id = ca.psa_id
+        LEFT JOIN entities b ON b.id = s.buyer_id
+        WHERE ca.ppa_id = ?
+          AND ca.effective_from <= ?
+          AND (ca.effective_to IS NULL OR ca.effective_to >= ?)
+        ORDER BY ca.allocation_percent DESC
+      `).all(contract.id, pEnd, pStart);
+      const total = Number(inv.total_amount) || 0;
+      beneficiaries = rows.map((x) => ({ ...x, share: Math.round(total * (Number(x.allocation_percent) || 0) / 100) }));
+    }
+
+    const pdfBuffer = await generateInvoicePdfBuffer(inv, contract, seller, buyer, beneficiaries);
+    const { subject, text, html } = formatInvoiceEmail({
+      invoice: { ...inv, due_date: dueDate },
+      contract,
+      recipientName: recipientEntity?.name,
+    });
+
+    const mailResult = await sendMail({
+      to: uniqueEmails,
+      subject,
+      text,
+      html,
+      attachments: [{
+        filename: `Invoice_${String(inv.invoice_no).replace(/[^\w.-]+/g, '_')}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf',
+      }],
+    });
+
+    if (!mailResult.ok) {
+      db.prepare(`
+        INSERT INTO invoice_deliveries (id, invoice_id, channel, recipient, status, mode, detail_json, sent_by)
+        VALUES (?, ?, 'EMAIL', ?, 'FAILED', ?, ?, ?)
+      `).run(
+        newId('DLV'), inv.id, uniqueEmails.join(', '), mailResult.mode || 'NONE',
+        JSON.stringify(mailResult), req.user?.name || null,
+      );
+      return res.status(502).json({ error: mailResult.error || 'Email delivery failed', delivery: mailResult });
+    }
+
+    const deliveryStatus = mailResult.mode === 'FILE_OUTBOX' ? 'SIMULATED' : 'SENT';
+    db.prepare(`
+      INSERT INTO invoice_deliveries (id, invoice_id, channel, recipient, status, mode, detail_json, sent_by)
+      VALUES (?, ?, 'EMAIL', ?, ?, ?, ?, ?)
+    `).run(
+      newId('DLV'), inv.id, uniqueEmails.join(', '), deliveryStatus, mailResult.mode,
+      JSON.stringify(mailResult), req.user?.name || null,
+    );
+
+    // Optional SMS notice (logged only unless SMS_WEBHOOK_URL set)
+    const phone = recipientEntity?.corporate_phone || contacts.find((c) => c.phone)?.phone;
+    if (phone) {
+      let smsStatus = 'SIMULATED';
+      let smsDetail = { phone, message: `Invoice ${inv.invoice_no} for ₹${Number(inv.total_amount || 0).toLocaleString('en-IN')} is available. Due: ${dueDate}.` };
+      if (process.env.SMS_WEBHOOK_URL) {
+        try {
+          const r = await fetch(process.env.SMS_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: phone, ...smsDetail }),
+          });
+          smsStatus = r.ok ? 'SENT' : 'FAILED';
+          smsDetail.http_status = r.status;
+        } catch (e) {
+          smsStatus = 'FAILED';
+          smsDetail.error = e.message;
+        }
+      }
+      db.prepare(`
+        INSERT INTO invoice_deliveries (id, invoice_id, channel, recipient, status, mode, detail_json, sent_by)
+        VALUES (?, ?, 'SMS', ?, ?, ?, ?, ?)
+      `).run(
+        newId('DLV'), inv.id, phone, smsStatus,
+        process.env.SMS_WEBHOOK_URL ? 'WEBHOOK' : 'LOG_ONLY',
+        JSON.stringify(smsDetail), req.user?.name || null,
+      );
+    }
+
+    db.prepare(`UPDATE invoices SET status = 'SENT', due_date = ?, updated_at = datetime('now') WHERE id = ?`)
+      .run(dueDate, inv.id);
+
+    logAudit({
+      req, user: req.user, action: 'SEND', module: 'REIA', entityType: 'invoice', entityId: inv.id,
+      details: { to: uniqueEmails, mode: mailResult.mode, delivery_status: deliveryStatus },
+    });
+
+    const notifyRole = inv.direction === 'SJVN_TO_BUYER' ? 'BUYER' : 'SELLER';
+    pushNotification({
+      role: notifyRole,
+      type: 'INVOICE_SENT',
+      message: `Invoice ${inv.invoice_no} has been emailed (${mailResult.mode}) for payment`,
+    });
+
+    const deliveries = db.prepare(`
+      SELECT * FROM invoice_deliveries WHERE invoice_id = ? ORDER BY created_at DESC LIMIT 10
+    `).all(inv.id);
+
+    res.json({
+      ...withContract(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id)),
+      delivery: mailResult,
+      deliveries,
+    });
+  } catch (err) {
+    console.error('Invoice send failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to send invoice' });
   }
-  db.prepare(`UPDATE invoices SET status = 'SENT', due_date = ?, updated_at = datetime('now') WHERE id = ?`).run(dueDate, inv.id);
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SEND', module: 'REIA', entityType: 'invoice', entityId: inv.id });
-  pushNotification({ role: 'BUYER', type: 'INVOICE_SENT', message: `Invoice ${inv.invoice_no} has been sent for payment` });
-  res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
+});
+
+router.get('/:id/deliveries', requireRole(...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'), (req, res) => {
+  const inv = db.prepare('SELECT id FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  res.json(db.prepare(`
+    SELECT * FROM invoice_deliveries WHERE invoice_id = ? ORDER BY created_at DESC
+  `).all(req.params.id));
 });
 
 // Record payment against invoice (H. Payment Tracking)
 router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (inv.status === 'CANCELLED') {
+    return res.status(400).json({ error: 'Cannot record payment against a cancelled invoice' });
+  }
   const { amount, payment_date, mode, reference, deduction } = req.body;
   const id = newId('PAY');
   db.prepare(`INSERT INTO payments (id, invoice_id, amount, payment_date, mode, reference, deduction) VALUES (?, ?, ?, ?, ?, ?, ?)`)
@@ -610,6 +1062,8 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req,
     const accrued = accruedLps(inv, {
       annualPct: lpsContract?.lps_annual_pct ?? getParamNumber('lps_annual_pct', 15),
       graceDays: lpsContract?.lps_grace_days ?? 0,
+      monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0.5),
+      stepCapPct: getParamNumber('lps_step_cap_pct', 3),
       asOf: payDate, paid: paidBefore,
     });
     if (accrued.lps > 0) newLps = accrued.lps;

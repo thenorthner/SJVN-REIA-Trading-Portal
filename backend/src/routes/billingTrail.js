@@ -2,7 +2,8 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { buildBillingFamilyRef, directionForContract } from '../util.js';
-import { resolveBetaRow, computeFreqResponseIncentive, billedIncentiveTotal } from '../services/betaFactor.js';
+import { resolveBetaRow, computeBetaFromAnnualAfc, billedIncentiveTotal } from '../services/betaFactor.js';
+import { resolveAnnualAfc } from '../services/cercHydroBilling.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -69,8 +70,8 @@ function buildTrail({ bfr, contract, period, direction }) {
   const betaRow = resolveBetaRow(contract, period);
   let frequencyBeta = null;
   if (['Hydro', 'PSP'].includes(contract.project_type) || betaRow) {
-    const calc = computeFreqResponseIncentive(
-      contract.capacity_charges_total,
+    const calc = computeBetaFromAnnualAfc(
+      resolveAnnualAfc(contract),
       betaRow?.beta_value,
       contract.project_type || 'Hydro',
     );

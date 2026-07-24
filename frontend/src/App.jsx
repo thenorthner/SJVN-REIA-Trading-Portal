@@ -28,6 +28,9 @@ import Bids from './pages/trading/Bids.jsx';
 import Bilateral from './pages/trading/Bilateral.jsx';
 import BillingSettlement from './pages/trading/BillingSettlement.jsx';
 import MarketAnalytics from './pages/trading/MarketAnalytics.jsx';
+import RECManagement from './pages/trading/RECManagement.jsx';
+import NOARWallet from './pages/trading/NOARWallet.jsx';
+import CERCFormIV from './pages/trading/CERCFormIV.jsx';
 
 import SellerDashboard from './pages/seller/SellerDashboard.jsx';
 import SellerContracts from './pages/seller/SellerContracts.jsx';
@@ -144,6 +147,9 @@ export default function App() {
         <Route path="trading/bilateral" element={<ProtectedRoute roles={TRADING_ROLES}><Bilateral /></ProtectedRoute>} />
         <Route path="trading/billing-settlement" element={<ProtectedRoute roles={TRADING_ROLES}><BillingSettlement /></ProtectedRoute>} />
         <Route path="trading/market-analytics" element={<ProtectedRoute roles={TRADING_ROLES}><MarketAnalytics /></ProtectedRoute>} />
+        <Route path="trading/rec" element={<ProtectedRoute roles={TRADING_ROLES}><RECManagement /></ProtectedRoute>} />
+        <Route path="trading/noar" element={<ProtectedRoute roles={TRADING_ROLES}><NOARWallet /></ProtectedRoute>} />
+        <Route path="trading/form-iv" element={<ProtectedRoute roles={TRADING_ROLES}><CERCFormIV /></ProtectedRoute>} />
 
         <Route path="notification-board" element={<ProtectedRoute roles={BOARD_ROLES}><NotificationBoard /></ProtectedRoute>} />
         <Route path="masters" element={<ProtectedRoute roles={MASTERS_ROLES}><MastersHub /></ProtectedRoute>} />

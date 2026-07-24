@@ -10,7 +10,9 @@ const TABS = [
   { id: 'contracts', label: 'Contracts' },
   { id: 'projects', label: 'Projects' },
   { id: 'banks', label: 'Banks' },
-  { id: 'beta', label: 'Frequency β' },
+  // Hidden for solar-focused scope (β is a hydro/PSP frequency-response input).
+  // Uncomment to restore for hydro.
+  // { id: 'beta', label: 'Frequency β' },
   { id: 'regulatory', label: 'Regulatory' },
   { id: 'billing', label: 'Billing Params' },
   { id: 'documents', label: 'Document Types' },

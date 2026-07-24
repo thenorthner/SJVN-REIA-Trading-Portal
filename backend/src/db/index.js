@@ -705,4 +705,118 @@ try {
   console.error('Regulatory approvals migration failed:', e.message);
 }
 
+/** CERC hydro params: annual AFC, design energy, NAPAF, transmission ₹/MWh. */
+function migrateCercHydroContractSchema() {
+  const cols = db.prepare('PRAGMA table_info(contracts)').all().map((c) => c.name);
+  const add = (name, sql) => {
+    if (!cols.includes(name)) db.exec(sql);
+  };
+  add('annual_afc', 'ALTER TABLE contracts ADD COLUMN annual_afc REAL');
+  add('annual_design_energy_mwh', 'ALTER TABLE contracts ADD COLUMN annual_design_energy_mwh REAL');
+  add('napaf_percent', 'ALTER TABLE contracts ADD COLUMN napaf_percent REAL');
+  add('transmission_charge_per_mwh', 'ALTER TABLE contracts ADD COLUMN transmission_charge_per_mwh REAL');
+
+  // Soft-upgrade NJHPS demo contract to real CERC parameters (idempotent).
+  const njhps = db.prepare(`SELECT id FROM contracts WHERE contract_no = 'PPA/SJVN/NJHPS/001'`).get();
+  if (njhps) {
+    db.prepare(`
+      UPDATE contracts SET
+        annual_afc = COALESCE(annual_afc, 14615741000),
+        annual_design_energy_mwh = COALESCE(annual_design_energy_mwh, 6612000),
+        napaf_percent = COALESCE(napaf_percent, 87),
+        normative_aux = COALESCE(normative_aux, 1.2),
+        free_energy_home_state = COALESCE(free_energy_home_state, 12),
+        capacity_charges_total = COALESCE(capacity_charges_total, ROUND(14615741000.0 / 12)),
+        tariff_type = 'TWO_PART'
+      WHERE id = ?
+    `).run(njhps.id);
+  }
+}
+
+try {
+  migrateCercHydroContractSchema();
+} catch (e) {
+  console.error('CERC hydro contract migration failed:', e.message);
+}
+
+function migrateInvoiceDeliveriesSchema() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS invoice_deliveries (
+      id TEXT PRIMARY KEY,
+      invoice_id TEXT NOT NULL REFERENCES invoices(id),
+      channel TEXT NOT NULL CHECK (channel IN ('EMAIL','SMS','PORTAL')),
+      recipient TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('SENT','FAILED','SIMULATED')),
+      mode TEXT,
+      detail_json TEXT,
+      sent_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+}
+
+try {
+  migrateInvoiceDeliveriesSchema();
+} catch (e) {
+  console.error('Invoice deliveries migration failed:', e.message);
+}
+
+/** DSM → invoice wire: link deviation_settlements to REIA invoices. */
+function migrateDsmInvoiceLink() {
+  const cols = db.prepare('PRAGMA table_info(deviation_settlements)').all().map((c) => c.name);
+  const add = (name, sql) => {
+    if (!cols.includes(name)) db.exec(sql);
+  };
+  add('invoice_id', 'ALTER TABLE deviation_settlements ADD COLUMN invoice_id TEXT');
+}
+
+try {
+  migrateDsmInvoiceLink();
+} catch (e) {
+  console.error('DSM invoice link migration failed:', e.message);
+}
+
+/** Contractual min CUF % for Solar/Wind/Hybrid performance penalty. */
+function migrateMinCufContractSchema() {
+  const cols = db.prepare('PRAGMA table_info(contracts)').all().map((c) => c.name);
+  if (!cols.includes('min_cuf_percent')) {
+    db.exec('ALTER TABLE contracts ADD COLUMN min_cuf_percent REAL');
+  }
+  // Soft-set demo solar PPA to 22% if blank (matches seeded energy CUF story).
+  const solar = db.prepare(`SELECT id FROM contracts WHERE contract_no = 'PPA/SJVN/2024/001'`).get();
+  if (solar) {
+    db.prepare(`
+      UPDATE contracts SET min_cuf_percent = COALESCE(min_cuf_percent, 22)
+      WHERE id = ?
+    `).run(solar.id);
+  }
+}
+
+try {
+  migrateMinCufContractSchema();
+} catch (e) {
+  console.error('Min CUF contract migration failed:', e.message);
+}
+
+/** Cancel + seller-invoice validation columns on invoices. */
+function migrateInvoiceCancelAndValidationSchema() {
+  const cols = db.prepare('PRAGMA table_info(invoices)').all().map((c) => c.name);
+  const add = (name, sql) => {
+    if (!cols.includes(name)) db.exec(sql);
+  };
+  add('cancel_reason', 'ALTER TABLE invoices ADD COLUMN cancel_reason TEXT');
+  add('cancelled_at', 'ALTER TABLE invoices ADD COLUMN cancelled_at TEXT');
+  add('cancelled_by', 'ALTER TABLE invoices ADD COLUMN cancelled_by TEXT');
+  add('validation_status', 'ALTER TABLE invoices ADD COLUMN validation_status TEXT');
+  add('validation_json', 'ALTER TABLE invoices ADD COLUMN validation_json TEXT');
+  add('validated_at', 'ALTER TABLE invoices ADD COLUMN validated_at TEXT');
+  add('validated_by', 'ALTER TABLE invoices ADD COLUMN validated_by TEXT');
+}
+
+try {
+  migrateInvoiceCancelAndValidationSchema();
+} catch (e) {
+  console.error('Invoice cancel/validation migration failed:', e.message);
+}
+
 export default db;

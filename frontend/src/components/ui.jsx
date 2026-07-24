@@ -47,6 +47,8 @@ const TONE_MAP = {
   PARTIALLY_PAID: 'amber', PARTIALLY_CLEARED: 'amber', OPEN: 'amber', REJECTED: 'red', DISPUTED: 'red',
   EXPIRED: 'red', CANCELLED: 'gray', TERMINATED: 'gray', AMENDED: 'blue', INVOKED: 'red', OVERDUE: 'red',
   CLOSED: 'gray', NO_BID: 'gray', LOCKED: 'green', VALIDATED: 'blue',
+  // Seller invoice validation
+  MATCHED: 'green', PARTIAL: 'amber', MISMATCH: 'red', WAIVED: 'blue', NO_COUNTERPART: 'gray',
   // Dispute lifecycle
   RAISED: 'blue', ACKNOWLEDGED: 'blue', INFO_REQUESTED: 'amber', ESCALATED: 'red',
   RESOLVED_ACCEPTED: 'green', RESOLVED_REJECTED: 'red',
