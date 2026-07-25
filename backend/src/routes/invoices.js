@@ -29,6 +29,20 @@ function paidTotalFor(invoiceId) {
   return db.prepare('SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)),0) s FROM payments WHERE invoice_id = ?').get(invoiceId).s;
 }
 
+// Developer (PPA / SELLER_TO_SJVN) invoice pipeline per the REIA Dashboard doc:
+// Submitted → Under Verification → Commercial Verification → Finance Approval →
+// Approved → Payment Released. Derived from existing signals (verification,
+// approval status, payment) so every invoice reflects a real stage.
+const DEV_STAGES = ['SUBMITTED', 'UNDER_VERIFICATION', 'COMMERCIAL_VERIFICATION', 'FINANCE_APPROVAL', 'APPROVED', 'PAYMENT_RELEASED'];
+function computeDevStage(inv) {
+  if (inv.status === 'PAID') return 'PAYMENT_RELEASED';
+  if (['APPROVED', 'SENT', 'PARTIALLY_PAID'].includes(inv.status)) return 'APPROVED';
+  if (['UNDER_APPROVAL', 'PENDING_L2'].includes(inv.status)) return 'FINANCE_APPROVAL';
+  if (inv.verification_status === 'VERIFIED') return 'COMMERCIAL_VERIFICATION';
+  if (['IN_PROGRESS', 'FAILED'].includes(inv.verification_status)) return 'UNDER_VERIFICATION';
+  return 'SUBMITTED';
+}
+
 function withContract(inv) {
   if (!inv) return inv;
   const contract = db.prepare('SELECT contract_no, contract_type, project_type, lps_annual_pct, lps_grace_days FROM contracts WHERE id = ?').get(inv.contract_id);
@@ -51,6 +65,8 @@ function withContract(inv) {
     paid_total: paid,
     accrued_lps: accrued.lps,
     days_overdue: accrued.days_overdue,
+    dev_stage: inv.direction === 'SELLER_TO_SJVN' ? computeDevStage(inv) : null,
+    dev_stages: inv.direction === 'SELLER_TO_SJVN' ? DEV_STAGES : null,
   };
 }
 

@@ -6,6 +6,7 @@ import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } 
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
 import VerificationChecklist from '../../components/VerificationChecklist.jsx';
+import DevStageStepper from '../../components/DevStageStepper.jsx';
 import {
   InvoiceBreakdown,
   InvoiceFinancialStrip,
@@ -477,6 +478,12 @@ export default function Invoices() {
                 Download PDF Bill
               </button>
             </div>
+            {selected.direction === 'SELLER_TO_SJVN' && selected.dev_stage && (
+              <div style={{ marginBottom: 16 }}>
+                <div className="section-title" style={{ marginBottom: 6 }}>Developer Invoice Pipeline</div>
+                <DevStageStepper stages={selected.dev_stages} current={selected.dev_stage} />
+              </div>
+            )}
             <div className="detail-grid mb-0">
               <div className="detail-item"><span className="detail-label">Status</span><span className="detail-value"><Badge status={selected.status} /></span></div>
               {selected.direction === 'SELLER_TO_SJVN' && (
