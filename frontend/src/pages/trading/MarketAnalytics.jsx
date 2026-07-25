@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  LineChart, Line, BarChart, Bar, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import api from '../../api/client.js';
 import { PageHeader, StatCard, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
@@ -29,6 +29,8 @@ export default function MarketAnalytics() {
   const [events, setEvents] = useState([]);
   const [factors, setFactors] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [latestPrices, setLatestPrices] = useState(null);
+  const [blocks, setBlocks] = useState({ date: null, blocks: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -76,6 +78,15 @@ export default function MarketAnalytics() {
   }, [filters.start_date, filters.end_date, filters.exchange, filters.product]);
 
   useEffect(load, [load]);
+
+  // Exchange Price Dashboard: latest price snapshot + intraday MCP-vs-MCV blocks.
+  useEffect(() => {
+    api.marketAnalytics.getLatestPrices().then(setLatestPrices).catch(() => {});
+    const bp = {};
+    if (filters.exchange) bp.exchange = filters.exchange;
+    if (filters.product) bp.product = filters.product;
+    api.marketAnalytics.getBlocks(bp).then(setBlocks).catch(() => setBlocks({ date: null, blocks: [] }));
+  }, [filters.exchange, filters.product]);
 
   function openAdd() { setForm(EMPTY_ALERT); setFormError(''); setShow(true); }
 
@@ -203,6 +214,38 @@ export default function MarketAnalytics() {
       />
 
       {error && <div className="form-error">{error}</div>}
+
+      {/* Exchange Price Dashboard: latest DAM/RTM/GDAM/REC snapshot */}
+      {latestPrices && (
+        <div className="kpi-grid" style={{ marginBottom: 8 }}>
+          {latestPrices.products.map((p) => (
+            <StatCard key={p.product} label={`${p.product} Price`} value={p.mcp_rate != null ? `₹${p.mcp_rate}/unit` : '—'}
+              hint={p.date ? `${p.exchange || ''} · ${p.date}${p.volume_mw ? ` · ${fmtNumber(p.volume_mw, 0)} MW` : ''}` : 'No data'} />
+          ))}
+          <StatCard label="REC Price" value={latestPrices.rec?.price != null ? `₹${latestPrices.rec.price}` : '—'}
+            hint={latestPrices.rec?.date ? `traded ${latestPrices.rec.date}` : 'per REC'} tone="green" />
+        </div>
+      )}
+
+      {/* Time-block-wise MCP vs MCV (cleared volume) */}
+      {blocks.blocks?.length > 0 && (
+        <Card title={`Time-block MCP vs MCV — ${blocks.date}`} style={{ marginBottom: 16 }}>
+          <div style={{ width: '100%', height: 260 }}>
+            <ResponsiveContainer>
+              <ComposedChart data={blocks.blocks}>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                <XAxis dataKey="time_block" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
+                <YAxis yAxisId="mcv" tick={{ fontSize: 10 }} label={{ value: 'MCV (MW)', angle: -90, position: 'insideLeft', fontSize: 10 }} />
+                <YAxis yAxisId="mcp" orientation="right" tick={{ fontSize: 10 }} label={{ value: 'MCP (₹)', angle: 90, position: 'insideRight', fontSize: 10 }} />
+                <Tooltip />
+                <Legend />
+                <Bar yAxisId="mcv" dataKey="mcv" name="MCV (MW)" fill="#93c5fd" />
+                <Line yAxisId="mcp" type="monotone" dataKey="mcp" name="MCP (₹/unit)" stroke="#0b5fff" strokeWidth={2.2} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      )}
 
       <div className="kpi-grid">
         <StatCard

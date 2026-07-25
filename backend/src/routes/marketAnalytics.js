@@ -197,6 +197,42 @@ router.get('/summary', (req, res) => {
   });
 });
 
+// Latest price snapshot per product (DAM / RTM / GDAM) + latest REC price —
+// the "Exchange Price Dashboard" header per the Power Trading Dashboard doc.
+router.get('/latest-prices', (req, res) => {
+  const products = PRODUCTS.map((p) => {
+    const row = db.prepare(`
+      SELECT mcp_rate, volume_mw, rate_date, exchange FROM market_rates
+      WHERE product = ? ORDER BY rate_date DESC, created_at DESC LIMIT 1
+    `).get(p);
+    return { product: p, mcp_rate: round2(row?.mcp_rate), volume_mw: Math.round(row?.volume_mw || 0), date: row?.rate_date || null, exchange: row?.exchange || null };
+  });
+  const rec = db.prepare(`
+    SELECT sale_rate_per_rec, trade_date FROM rec_ledger
+    WHERE status IN ('SOLD','LISTED') AND sale_rate_per_rec > 0
+    ORDER BY COALESCE(trade_date, vintage_month) DESC, created_at DESC LIMIT 1
+  `).get();
+  res.json({ products, rec: { price: round2(rec?.sale_rate_per_rec), date: rec?.trade_date || null } });
+});
+
+// Time-block-wise MCP vs MCV (cleared volume) for a day — intraday comparison.
+router.get('/blocks', (req, res) => {
+  const f = parseFilters(req.query);
+  if (f.error) return res.status(400).json({ error: f.error });
+  const date = (req.query.date && isIsoDate(req.query.date))
+    ? req.query.date
+    : db.prepare("SELECT MAX(rate_date) d FROM market_rates WHERE time_block IS NOT NULL AND time_block != 'DAILY'").get()?.d;
+  if (!date) return res.json({ date: null, blocks: [] });
+  let sql = `SELECT time_block, AVG(mcp_rate) mcp, SUM(COALESCE(volume_mw,0)) mcv
+    FROM market_rates WHERE rate_date = ? AND time_block IS NOT NULL AND time_block != 'DAILY'`;
+  const params = [date];
+  if (f.exchange) { sql += ' AND exchange = ?'; params.push(f.exchange); }
+  if (f.product) { sql += ' AND product = ?'; params.push(f.product); }
+  sql += ' GROUP BY time_block ORDER BY time_block ASC';
+  const blocks = db.prepare(sql).all(...params).map((b) => ({ time_block: b.time_block, mcp: round2(b.mcp), mcv: Math.round(b.mcv || 0) }));
+  res.json({ date, blocks });
+});
+
 // ── Chart series ─────────────────────────────────────────────────────────────
 
 router.get('/trend', (req, res) => {
