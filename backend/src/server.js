@@ -39,6 +39,7 @@ import recRoutes from './routes/rec.js';
 import noarRoutes from './routes/noar.js';
 import formIvRoutes from './routes/formIv.js';
 import notesRoutes from './routes/notes.js';
+import powerDiversionRoutes from './routes/powerDiversion.js';
 import { ensureMasterDefaults } from './mastersService.js';
 
 import { assignTraceId, requireAuth } from './middleware/auth.js';
@@ -82,6 +83,7 @@ app.use('/api/rec', requireAuth, recRoutes);
 app.use('/api/noar', requireAuth, noarRoutes);
 app.use('/api/form-iv', requireAuth, formIvRoutes);
 app.use('/api/notes', requireAuth, notesRoutes);
+app.use('/api/power-diversion', requireAuth, powerDiversionRoutes);
 app.use('/api/bids', bidsRoutes);
 app.use('/api/bilateral', bilateralRoutes);
 app.use('/api/billing-settlement', billingSettlementRoutes);

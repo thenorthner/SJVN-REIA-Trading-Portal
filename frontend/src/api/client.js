@@ -118,6 +118,13 @@ export const api = {
     buyerOutstanding: (buyer_id) => g('/invoices/buyer-outstanding', { buyer_id }),
     waterfallPayment: (body) => p('/invoices/waterfall-payment', body),
   },
+  powerDiversion: {
+    list: (params) => g('/power-diversion', params),
+    summary: () => g('/power-diversion/summary'),
+    create: (body) => p('/power-diversion', body),
+    markRecovered: (id, body) => p(`/power-diversion/${id}/mark-recovered`, body),
+    remove: (id) => del(`/power-diversion/${id}`),
+  },
   notes: {
     list: (params) => g('/notes', params),
     summary: () => g('/notes/summary'),

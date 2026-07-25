@@ -28,6 +28,7 @@ const NAV_INTERNAL = [
       { to: '/reia/invoices', label: 'Billing & Invoicing' },
       { to: '/reia/disputes', label: 'Dispute Management' },
       { to: '/reia/payment-security', label: 'Payment Security' },
+      { to: '/reia/power-diversion', label: 'Power Diversion' },
       { to: '/reia/reconciliation', label: 'Reconciliation' },
       // Hidden for solar-focused scope (DSM is hydro/scheduling). Route still
       // exists in App.jsx — uncomment to restore for hydro/thermal.

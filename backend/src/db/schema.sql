@@ -394,6 +394,31 @@ CREATE TABLE IF NOT EXISTS invoice_approvals (
   acted_at TEXT
 );
 
+-- Power diversion on buyer default (PSA Art. 6.6): if a DISCOM defaults / does
+-- not requisition, SJVN diverts the power to a third party (power exchange). Net
+-- gain = sale − expenses; recovery is adjusted against the buyer's outstanding,
+-- and any deficit is made good by the buyer.
+CREATE TABLE IF NOT EXISTS power_diversions (
+  id TEXT PRIMARY KEY,
+  diversion_no TEXT UNIQUE NOT NULL,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  buyer_id TEXT REFERENCES entities(id),
+  period_month TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT 'PAYMENT_DEFAULT' CHECK (reason IN ('PAYMENT_DEFAULT','NON_REQUISITION')),
+  quantum_mwh REAL NOT NULL DEFAULT 0,
+  exchange_platform TEXT,               -- IEX / PXIL
+  sale_rate_per_mwh REAL NOT NULL DEFAULT 0,
+  sale_amount REAL NOT NULL DEFAULT 0,  -- quantum × rate
+  expenses REAL NOT NULL DEFAULT 0,     -- energy + transmission + incidental
+  net_gain REAL NOT NULL DEFAULT 0,     -- sale − expenses (+ gain / − deficit)
+  status TEXT NOT NULL DEFAULT 'RECORDED' CHECK (status IN ('RECORDED','RECOVERED','CANCELLED')),
+  applied_amount REAL NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Debit / Credit Notes — first-class adjustment documents against an invoice,
 -- typically for final/amended REA true-ups, change-in-law, transmission or LPS
 -- (PSA Art. 6.1.4). DEBIT increases the invoice's net amount (counterparty owes

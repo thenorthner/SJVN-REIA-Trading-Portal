@@ -20,6 +20,7 @@ import PaymentSecurity from './pages/reia/PaymentSecurity.jsx';
 import Reconciliation from './pages/reia/Reconciliation.jsx';
 import Reports from './pages/reia/Reports.jsx';
 import DeviationSettlements from './pages/reia/DeviationSettlements.jsx';
+import PowerDiversion from './pages/reia/PowerDiversion.jsx';
 
 import TradingDashboard from './pages/trading/TradingDashboard.jsx';
 import TradingClients from './pages/trading/TradingClients.jsx';
@@ -114,6 +115,7 @@ export default function App() {
         <Route path="reia/payment-security" element={<ProtectedRoute roles={REIA_ROLES}><PaymentSecurity /></ProtectedRoute>} />
         <Route path="reia/reconciliation" element={<ProtectedRoute roles={REIA_ROLES}><Reconciliation /></ProtectedRoute>} />
         <Route path="reia/deviation" element={<ProtectedRoute roles={REIA_ROLES}><DeviationSettlements /></ProtectedRoute>} />
+        <Route path="reia/power-diversion" element={<ProtectedRoute roles={REIA_ROLES}><PowerDiversion /></ProtectedRoute>} />
         <Route path="reia/reports" element={<ProtectedRoute roles={REIA_ROLES}><Reports /></ProtectedRoute>} />
 
         {/* Seller Portal */}
