@@ -114,6 +114,12 @@ export const api = {
     recordPayment: (id, body) => p(`/invoices/${id}/payments`, body),
     releaseToGenerator: (id, body) => p(`/invoices/${id}/release-to-generator`, body),
   },
+  notes: {
+    list: (params) => g('/notes', params),
+    summary: () => g('/notes/summary'),
+    create: (body) => p('/notes', body),
+    cancel: (id) => p(`/notes/${id}/cancel`),
+  },
   billingTrail: {
     get: (params) => g('/billing-trail', params),
   },

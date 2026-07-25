@@ -391,6 +391,30 @@ CREATE TABLE IF NOT EXISTS invoice_approvals (
   acted_at TEXT
 );
 
+-- Debit / Credit Notes — first-class adjustment documents against an invoice,
+-- typically for final/amended REA true-ups, change-in-law, transmission or LPS
+-- (PSA Art. 6.1.4). DEBIT increases the invoice's net amount (counterparty owes
+-- more); CREDIT decreases it. Issuing applies the signed amount to the invoice's
+-- other_adjustments + total_amount; cancelling reverses it.
+CREATE TABLE IF NOT EXISTS debit_credit_notes (
+  id TEXT PRIMARY KEY,
+  note_no TEXT UNIQUE NOT NULL,
+  note_type TEXT NOT NULL CHECK (note_type IN ('DEBIT','CREDIT')),
+  invoice_id TEXT NOT NULL REFERENCES invoices(id),
+  contract_id TEXT REFERENCES contracts(id),
+  period_month TEXT,
+  reason_code TEXT NOT NULL DEFAULT 'REVISED_REA' CHECK (reason_code IN
+    ('REVISED_REA','CHANGE_IN_LAW','TRANSMISSION_CHARGES','LPS','COMPENSATION_EVENT','LIQUIDATED_DAMAGES','OTHER')),
+  amount REAL NOT NULL,                 -- always positive; sign comes from note_type
+  reason TEXT,
+  status TEXT NOT NULL DEFAULT 'ISSUED' CHECK (status IN ('ISSUED','SETTLED','CANCELLED')),
+  issued_date TEXT,
+  settled_date TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Deviation Settlement Account (DSM) — weekly grid deviation charges/credits.
 -- Data (schedule vs actual, deviation amount) is provided by NRPC, entered
 -- per plant per week. Net = deviation_mwh × rate; positive = recoverable from
