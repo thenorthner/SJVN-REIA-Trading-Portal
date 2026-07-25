@@ -382,6 +382,12 @@ export default function Disputes() {
                   </Field>
                   <Field label="LPS / interest on settlement (₹)">
                     <input type="number" value={resolveForm.lps_on_resolution} onChange={(e) => setResolveForm({ ...resolveForm, lps_on_resolution: e.target.value })} />
+                    {detail.refund_interest_guidance?.amount > 0 && resolveForm.outcome !== 'REJECTED' && (
+                      <div className="inline-note" style={{ marginTop: 4 }}>
+                        Art. 6.7.3 — refund interest at LPS rate ({detail.refund_interest_guidance.lps_annual_pct}% p.a. × {detail.refund_interest_guidance.days}d): <strong>₹{detail.refund_interest_guidance.amount.toLocaleString('en-IN')}</strong>
+                        {' '}<button type="button" className="link-btn" onClick={() => setResolveForm((f) => ({ ...f, lps_on_resolution: String(detail.refund_interest_guidance.amount) }))}>use this</button>
+                      </div>
+                    )}
                   </Field>
                   <div className="form-actions">
                     <button type="submit" className="btn btn-primary">Confirm Resolution</button>

@@ -18,7 +18,9 @@ import {
   payableNow,
   genDisputeNo,
   ALLOWED_TRANSITIONS,
+  daysBetween,
 } from '../disputesConstants.js';
+import { getParamNumber } from '../mastersService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.join(__dirname, '../../uploads/disputes');
@@ -363,6 +365,12 @@ router.get('/:id', (req, res) => {
     ? db.prepare('SELECT id, invoice_no, total_amount, status, invoice_type FROM invoices WHERE id = ?').get(dispute.supplementary_invoice_id)
     : null;
 
+  // PSA Art. 6.7.3: an accepted (over-billed) claim is refunded with interest at
+  // the LPS rate. Suggest that interest on the disputed amount, from bill date to now.
+  const lpsPct = getParamNumber('lps_annual_pct', 15);
+  const interestDays = Math.max(0, daysBetween(new Date(invoice.created_at), new Date()));
+  const refundInterest = Math.round((Number(dispute.disputed_amount) || 0) * (lpsPct / 100 / 365) * interestDays);
+
   res.json({
     ...enrichDispute(dispute),
     invoice: {
@@ -370,6 +378,7 @@ router.get('/:id', (req, res) => {
       charge_breakdown: invoiceChargeBreakdown(invoice),
       ...payableNow(invoice),
     },
+    refund_interest_guidance: { lps_annual_pct: lpsPct, days: interestDays, amount: refundInterest },
     comments,
     events,
     assignee,
@@ -407,6 +416,16 @@ router.post('/', requireRole('SELLER', 'BUYER', ...REIA_WRITE), (req, res) => {
     JOIN contracts c ON c.id = i.contract_id WHERE i.id = ?
   `).get(invoice_id);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+
+  // PSA Art. 6.7.1: a bill not disputed within 15 days of presentation becomes
+  // conclusive and binding. Measured from the bill date; internal REIA users may
+  // still raise late (on the counterparty's behalf) but counterparties cannot.
+  const windowDays = getParamNumber('dispute_window_days', 15);
+  const daysSinceBill = daysBetween(new Date(invoice.created_at), new Date());
+  const raisedByCounterparty = ['SELLER', 'BUYER'].includes(req.user.role);
+  if (raisedByCounterparty && daysSinceBill > windowDays) {
+    return res.status(400).json({ error: `This bill is now conclusive — the ${windowDays}-day dispute window (from ${invoice.created_at?.split('T')[0]}) has passed.` });
+  }
 
   const userSide = counterpartySide(req.user);
   const role = raised_by_role || raised_by || userSide;
