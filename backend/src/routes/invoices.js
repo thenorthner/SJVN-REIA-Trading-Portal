@@ -43,6 +43,23 @@ function computeDevStage(inv) {
   return 'SUBMITTED';
 }
 
+// Pass-through "other charges" (transmission / RLDC-SLDC / CTU-STU / open access /
+// scheduling). Rebate is NOT allowed on these (PSA Art. 6.4).
+const OTHER_CHARGE_TYPES = {
+  TRANSMISSION: 'Transmission / wheeling charges',
+  RLDC_SLDC: 'RLDC / SLDC charges',
+  CTU_STU: 'CTU / STU charges',
+  OPEN_ACCESS: 'Open access charges',
+  SCHEDULING: 'Scheduling & system operation charges',
+  OTHER: 'Other pass-through charges',
+};
+function parseOtherCharges(inv) {
+  try { return JSON.parse(inv.other_charges_json || '[]'); } catch { return []; }
+}
+function otherChargesSum(inv) {
+  return parseOtherCharges(inv).reduce((a, c) => a + (Number(c.amount) || 0), 0);
+}
+
 function withContract(inv) {
   if (!inv) return inv;
   const contract = db.prepare('SELECT contract_no, contract_type, project_type, lps_annual_pct, lps_grace_days FROM contracts WHERE id = ?').get(inv.contract_id);
@@ -67,6 +84,7 @@ function withContract(inv) {
     days_overdue: accrued.days_overdue,
     dev_stage: inv.direction === 'SELLER_TO_SJVN' ? computeDevStage(inv) : null,
     dev_stages: inv.direction === 'SELLER_TO_SJVN' ? DEV_STAGES : null,
+    other_charges: parseOtherCharges(inv),
   };
 }
 
@@ -144,6 +162,22 @@ router.get('/:id/pdf', async (req, res) => {
       res.status(500).json({ error: 'Failed to generate PDF', details: err.message });
     }
   }
+});
+
+// Preview a buyer's outstanding position (for the waterfall payment modal).
+// Must be declared before '/:id' so it isn't captured as an invoice id.
+router.get('/buyer-outstanding', requireRole(...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE), (req, res) => {
+  const { buyer_id } = req.query;
+  if (!buyer_id) return res.status(400).json({ error: 'buyer_id is required' });
+  const items = buyerOutstanding(buyer_id).map((x) => ({
+    invoice_no: x.inv.invoice_no, billing_period: x.inv.billing_period, lps: x.lps, principal: x.principal, due: x.lps + x.principal,
+  }));
+  res.json({
+    items,
+    total_lps: items.reduce((a, i) => a + i.lps, 0),
+    total_principal: items.reduce((a, i) => a + i.principal, 0),
+    total_due: items.reduce((a, i) => a + i.due, 0),
+  });
 });
 
 router.get('/:id', (req, res) => {
@@ -1132,7 +1166,8 @@ function applyInvoicePayment(inv, { amount, payment_date, mode, reference, deduc
       pct = (inv.due_date && payDate <= new Date(inv.due_date)) ? getParamNumber('early_payment_rebate_pct', 2) : 0;
     }
     if (pct > 0) {
-      const base = Math.max(0, inv.total_amount || 0); // full billed amount, not just energy
+      // Rebate-eligible base excludes pass-through charges, taxes and LPS (PSA Art. 6.4).
+      const base = Math.max(0, (inv.total_amount || 0) - otherChargesSum(inv) - (Number(inv.taxes) || 0) - (Number(inv.lps) || 0));
       newRebate = Math.round(base * pct / 100);
     }
   }
@@ -1165,6 +1200,63 @@ function applyInvoicePayment(inv, { amount, payment_date, mode, reference, deduc
 
   return db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id);
 }
+
+// Outstanding position of a buyer's bills, oldest first — LPS accrued + principal.
+function buyerOutstanding(buyerId) {
+  const invs = db.prepare(`
+    SELECT i.* FROM invoices i JOIN contracts c ON c.id = i.contract_id
+    WHERE c.buyer_id = ? AND i.direction = 'SJVN_TO_BUYER'
+      AND i.status IN ('SENT','PARTIALLY_PAID','APPROVED','DISPUTED')
+    ORDER BY i.billing_period ASC, i.created_at ASC
+  `).all(buyerId);
+  return invs.map((inv) => {
+    const contract = db.prepare('SELECT lps_annual_pct, lps_grace_days FROM contracts WHERE id = ?').get(inv.contract_id);
+    const paid = paidTotalFor(inv.id);
+    const lps = accruedLps(inv, {
+      annualPct: contract?.lps_annual_pct ?? getParamNumber('lps_annual_pct', 15),
+      graceDays: contract?.lps_grace_days ?? 0,
+      monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0.5),
+      stepCapPct: getParamNumber('lps_step_cap_pct', 3),
+      asOf: new Date(), paid,
+    }).lps;
+    const principal = Math.max(0, (inv.total_amount || 0) - (inv.disputed_amount || 0) - paid);
+    return { inv, lps: Math.round(lps), principal: Math.round(principal) };
+  }).filter((x) => x.lps > 0 || x.principal > 0);
+}
+
+// Waterfall payment (PSA Art. 6.3): a buyer's lump payment is applied first to
+// Late Payment Surcharge (oldest bill first), then to the oldest bill's
+// principal and so on.
+router.post('/waterfall-payment', requireRole(...ROLE_GROUPS.FINANCE, ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const { buyer_id, amount, payment_date, reference } = req.body;
+  if (!buyer_id) return res.status(400).json({ error: 'buyer_id is required' });
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'A positive payment amount is required' });
+
+  const items = buyerOutstanding(buyer_id);
+  if (!items.length) return res.status(400).json({ error: 'No outstanding bills for this buyer' });
+
+  const alloc = new Map();
+  let remaining = amt;
+  // Pass 1: LPS, oldest first.
+  for (const it of items) { if (remaining <= 0) break; const a = Math.min(remaining, it.lps); if (a > 0) { alloc.set(it.inv.id, (alloc.get(it.inv.id) || 0) + a); remaining -= a; } }
+  // Pass 2: principal, oldest first.
+  for (const it of items) { if (remaining <= 0) break; const a = Math.min(remaining, it.principal); if (a > 0) { alloc.set(it.inv.id, (alloc.get(it.inv.id) || 0) + a); remaining -= a; } }
+
+  const payDate = payment_date || new Date().toISOString().split('T')[0];
+  const allocations = [];
+  const run = db.transaction(() => {
+    for (const it of items) {
+      const a = alloc.get(it.inv.id);
+      if (!a) continue;
+      const updated = applyInvoicePayment(it.inv, { amount: Math.round(a), payment_date: payDate, mode: 'WATERFALL', reference: reference || null, deduction: 0 }, req);
+      allocations.push({ invoice_no: it.inv.invoice_no, billing_period: it.inv.billing_period, lps_due: it.lps, principal_due: it.principal, allocated: Math.round(a), status: updated.status });
+    }
+  });
+  run();
+  logAudit({ req, user: req.user, action: 'WATERFALL_PAYMENT', module: 'REIA', entityType: 'entity', entityId: buyer_id, details: { amount: amt, allocations } });
+  res.status(201).json({ received: Math.round(amt), allocated: Math.round(amt - remaining), unallocated: Math.round(remaining), allocations });
+});
 
 router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
@@ -1224,6 +1316,31 @@ router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...
   logAudit({ req, user: req.user, action: 'RELEASE_TO_GENERATOR', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: { amount: amt, source, reference } });
   pushNotification({ role: 'SELLER', type: 'PAYMENT_RELEASED', message: `Payment of Rs.${amt.toLocaleString('en-IN')} released for ${inv.invoice_no} (${source.replace(/_/g, ' ').toLowerCase()})` });
   res.status(201).json(updated);
+});
+
+// Set the pass-through "other charges" on an invoice (transmission / RLDC-SLDC /
+// CTU-STU / open access / scheduling). Replaces the full set; adjusts the invoice
+// total by the delta. These are rebate-excluded.
+router.post('/:id/other-charges', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (['PAID', 'CANCELLED'].includes(inv.status)) return res.status(400).json({ error: `Cannot edit charges on a ${inv.status} invoice` });
+  const input = Array.isArray(req.body.charges) ? req.body.charges : [];
+  const charges = [];
+  for (const c of input) {
+    const type = OTHER_CHARGE_TYPES[c.type] ? c.type : null;
+    const amount = Math.round(Number(c.amount) || 0);
+    if (!type) return res.status(400).json({ error: `Invalid charge type. Allowed: ${Object.keys(OTHER_CHARGE_TYPES).join(', ')}` });
+    if (amount === 0) continue;
+    charges.push({ code: type, label: c.label || OTHER_CHARGE_TYPES[type], amount });
+  }
+  const oldSum = otherChargesSum(inv);
+  const newSum = charges.reduce((a, c) => a + c.amount, 0);
+  const delta = newSum - oldSum;
+  db.prepare(`UPDATE invoices SET other_charges_json = ?, total_amount = COALESCE(total_amount,0) + ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(JSON.stringify(charges), delta, inv.id);
+  logAudit({ req, user: req.user, action: 'SET_OTHER_CHARGES', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: { charges, delta } });
+  res.json(withContract(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id)));
 });
 
 export default router;

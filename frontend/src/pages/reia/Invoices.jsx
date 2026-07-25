@@ -49,6 +49,15 @@ export default function Invoices() {
   const [payForm, setPayForm] = useState(PAY_FORM);
   const [releaseForm, setReleaseForm] = useState({ amount: '', source: 'DISCOM_REALIZATION', payment_date: '', reference: '' });
   const [releaseError, setReleaseError] = useState('');
+  const [showWaterfall, setShowWaterfall] = useState(false);
+  const [buyers, setBuyers] = useState([]);
+  const [wfForm, setWfForm] = useState({ buyer_id: '', amount: '', payment_date: '', reference: '' });
+  const [wfOutstanding, setWfOutstanding] = useState(null);
+  const [wfResult, setWfResult] = useState(null);
+  const [wfError, setWfError] = useState('');
+  const [ocRows, setOcRows] = useState([]);
+  const [showOC, setShowOC] = useState(false);
+  const [ocError, setOcError] = useState('');
   const [invoiceNotes, setInvoiceNotes] = useState([]);
   const [noteForm, setNoteForm] = useState({ note_type: 'DEBIT', amount: '', reason_code: 'REVISED_REA', reason: '' });
   const [noteError, setNoteError] = useState('');
@@ -115,6 +124,55 @@ export default function Invoices() {
     setSelected(fresh);
     loadNotes(id);
     load();
+  }
+
+  function openWaterfall() {
+    setWfForm({ buyer_id: '', amount: '', payment_date: new Date().toISOString().split('T')[0], reference: '' });
+    setWfOutstanding(null); setWfResult(null); setWfError('');
+    if (!buyers.length) api.entities.list({ entity_type: 'BUYER' }).then(setBuyers).catch(() => {});
+    setShowWaterfall(true);
+  }
+  function onWfBuyer(buyer_id) {
+    setWfForm((f) => ({ ...f, buyer_id }));
+    setWfOutstanding(null); setWfResult(null);
+    if (buyer_id) api.invoices.buyerOutstanding(buyer_id).then(setWfOutstanding).catch(() => setWfOutstanding(null));
+  }
+  async function handleWaterfall(e) {
+    e.preventDefault();
+    setWfError('');
+    try {
+      const res = await api.invoices.waterfallPayment({ ...wfForm, amount: Number(wfForm.amount) });
+      setWfResult(res);
+      if (wfForm.buyer_id) api.invoices.buyerOutstanding(wfForm.buyer_id).then(setWfOutstanding).catch(() => {});
+      load();
+    } catch (err) {
+      setWfError(err.response?.data?.error || 'Waterfall payment failed.');
+    }
+  }
+
+  const OC_TYPES = {
+    TRANSMISSION: 'Transmission / wheeling',
+    RLDC_SLDC: 'RLDC / SLDC',
+    CTU_STU: 'CTU / STU',
+    OPEN_ACCESS: 'Open access',
+    SCHEDULING: 'Scheduling & SO',
+    OTHER: 'Other pass-through',
+  };
+  function openOtherCharges() {
+    setOcRows((selected?.other_charges || []).map((c) => ({ type: c.code, amount: c.amount })));
+    setOcError('');
+    setShowOC(true);
+  }
+  async function handleSaveOtherCharges(e) {
+    e.preventDefault();
+    setOcError('');
+    try {
+      await api.invoices.setOtherCharges(selected.id, { charges: ocRows.filter((r) => Number(r.amount) > 0) });
+      setShowOC(false);
+      await refreshSelected(selected.id);
+    } catch (err) {
+      setOcError(err.response?.data?.error || 'Failed to save charges.');
+    }
   }
 
   async function handleRaiseNote(e) {
@@ -352,6 +410,7 @@ export default function Invoices() {
             <button className="btn btn-secondary" onClick={() => navigate('/reia/reports')}>Billing Report</button>
             {CAN_WRITE.includes(user?.role) && (
               <>
+                <button className="btn btn-secondary" onClick={openWaterfall}>Receive Buyer Payment</button>
                 <button className="btn btn-secondary" onClick={() => { setArrearForm(ARREAR_FORM); setArrearError(''); setShowArrear(true); }}>+ Arrear Bill</button>
                 <button className="btn btn-secondary" onClick={() => { setSuppForm(SUPP_FORM); setSuppError(''); setShowSupp(true); }}>+ Supplementary</button>
                 <button className="btn btn-primary" onClick={() => setShowGenerate(true)}>+ Generate Invoice</button>
@@ -417,6 +476,56 @@ export default function Invoices() {
           <div className="form-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setShowGenerate(false)}>Cancel</button>
             <button type="submit" className="btn btn-primary">Generate</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={showWaterfall} onClose={() => setShowWaterfall(false)} title="Receive Buyer Payment (LPS-first waterfall)" width={560}>
+        <form onSubmit={handleWaterfall}>
+          <Field label="Buyer (DISCOM)">
+            <select required value={wfForm.buyer_id} onChange={(e) => onWfBuyer(e.target.value)}>
+              <option value="">Select buyer...</option>
+              {buyers.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </Field>
+          {wfOutstanding && (
+            <div className="callout" style={{ margin: '6px 0 10px', padding: '10px 12px', background: 'var(--navy-soft, #eaf0f9)', borderRadius: 8, fontSize: 13 }}>
+              Outstanding: <strong>{fmtCurrency(wfOutstanding.total_due)}</strong>
+              {'  ·  '}LPS <strong>{fmtCurrency(wfOutstanding.total_lps)}</strong>
+              {'  ·  '}Principal <strong>{fmtCurrency(wfOutstanding.total_principal)}</strong>
+              <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>{wfOutstanding.items.length} outstanding bill(s)</div>
+            </div>
+          )}
+          <div className="form-grid">
+            <Field label="Amount Received (₹)">
+              <input required type="number" value={wfForm.amount} onChange={(e) => setWfForm({ ...wfForm, amount: e.target.value })} />
+            </Field>
+            <Field label="Payment Date">
+              <input required type="date" value={wfForm.payment_date} onChange={(e) => setWfForm({ ...wfForm, payment_date: e.target.value })} />
+            </Field>
+          </div>
+          <Field label="Reference"><input value={wfForm.reference} onChange={(e) => setWfForm({ ...wfForm, reference: e.target.value })} /></Field>
+          <p className="inline-note">Payment is applied first to LPS (oldest bill first), then to the oldest bill's principal — per PSA Art. 6.3.</p>
+          {wfError && <div className="form-error">{wfError}</div>}
+          {wfResult && (
+            <div style={{ marginTop: 8 }}>
+              <div className="inline-note">Allocated {fmtCurrency(wfResult.allocated)}{wfResult.unallocated > 0 ? ` · ${fmtCurrency(wfResult.unallocated)} unallocated (no more dues)` : ''}:</div>
+              <table className="data-table" style={{ width: '100%', fontSize: 12.5, marginTop: 4 }}>
+                <tbody>
+                  {wfResult.allocations.map((a) => (
+                    <tr key={a.invoice_no}>
+                      <td><strong>{a.invoice_no}</strong> <span style={{ color: 'var(--text-light)' }}>{a.billing_period}</span></td>
+                      <td className="text-right mono">{fmtCurrency(a.allocated)}</td>
+                      <td><Badge status={a.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="form-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setShowWaterfall(false)}>Close</button>
+            <button type="submit" className="btn btn-primary">Apply Payment</button>
           </div>
         </form>
       </Modal>
@@ -761,6 +870,55 @@ export default function Invoices() {
                     <button type="submit" className="btn btn-primary">Record Payment</button>
                   </div>
                 </form>
+              </>
+            )}
+
+            {/* Pass-through "Other Charges" — transmission / RLDC-SLDC / CTU-STU / open access (rebate-excluded) */}
+            {!isCancelled && (
+              <>
+                <div className="section-title" style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Other / Pass-through Charges</span>
+                  {CAN_WRITE.includes(user?.role) && !['PAID'].includes(selected.status) && (
+                    <button type="button" className="btn btn-xs btn-outline" onClick={() => (showOC ? setShowOC(false) : openOtherCharges())}>
+                      {showOC ? 'Close' : 'Edit Charges'}
+                    </button>
+                  )}
+                </div>
+                {(selected.other_charges || []).length > 0 ? (
+                  <table className="data-table" style={{ width: '100%', fontSize: 13, marginBottom: 8 }}>
+                    <tbody>
+                      {selected.other_charges.map((c, i) => (
+                        <tr key={i}><td>{c.label}</td><td className="text-right mono">{fmtCurrency(c.amount)}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : <p className="inline-note" style={{ marginTop: 4 }}>No pass-through charges. (Rebate is never allowed on these.)</p>}
+
+                {showOC && (
+                  <>
+                    {ocError && <div className="form-error">{ocError}</div>}
+                    <form onSubmit={handleSaveOtherCharges}>
+                      {ocRows.map((row, i) => (
+                        <div className="form-grid" key={i} style={{ alignItems: 'end' }}>
+                          <Field label="Type">
+                            <select value={row.type} onChange={(e) => setOcRows(ocRows.map((r, j) => j === i ? { ...r, type: e.target.value } : r))}>
+                              {Object.entries(OC_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                            </select>
+                          </Field>
+                          <Field label="Amount (₹)">
+                            <input type="number" step="0.01" value={row.amount} onChange={(e) => setOcRows(ocRows.map((r, j) => j === i ? { ...r, amount: e.target.value } : r))} />
+                          </Field>
+                          <button type="button" className="btn btn-xs btn-ghost" onClick={() => setOcRows(ocRows.filter((_, j) => j !== i))}>Remove</button>
+                        </div>
+                      ))}
+                      <button type="button" className="btn btn-xs btn-outline" style={{ marginTop: 6 }} onClick={() => setOcRows([...ocRows, { type: 'TRANSMISSION', amount: '' }])}>+ Add charge</button>
+                      <p className="inline-note">These pass-through charges add to the bill total and are excluded from early-payment rebate.</p>
+                      <div className="form-actions">
+                        <button type="submit" className="btn btn-primary">Save Charges</button>
+                      </div>
+                    </form>
+                  </>
+                )}
               </>
             )}
 

@@ -154,6 +154,15 @@ function migratePaymentReleaseSource() {
 }
 migratePaymentReleaseSource();
 
+// Add other_charges_json (pass-through charges) to invoices on existing DBs.
+function migrateInvoiceOtherCharges() {
+  const cols = db.prepare('PRAGMA table_info(invoices)').all().map((c) => c.name);
+  if (!cols.includes('other_charges_json')) {
+    db.exec('ALTER TABLE invoices ADD COLUMN other_charges_json TEXT');
+  }
+}
+migrateInvoiceOtherCharges();
+
 function migrateRBACSchema() {
   const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   // Already on RBAC users schema — never re-run destructive rename migration

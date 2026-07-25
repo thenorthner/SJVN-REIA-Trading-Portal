@@ -330,6 +330,9 @@ CREATE TABLE IF NOT EXISTS invoices (
   free_power_deduction REAL DEFAULT 0,
   nrldc_fees REAL DEFAULT 0,
   transmission_charges REAL NOT NULL DEFAULT 0,
+  -- Pass-through "other charges" (transmission / RLDC-SLDC / CTU-STU / open access
+  -- / scheduling) as an array of {code,label,amount}. Rebate is NOT allowed on these.
+  other_charges_json TEXT,
   total_amount REAL NOT NULL,
   invoice_breakdown_json TEXT, -- detailed line-by-line math
   lps REAL NOT NULL DEFAULT 0,

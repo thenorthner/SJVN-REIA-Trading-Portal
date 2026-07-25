@@ -596,10 +596,15 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res, 
   // Itemise Part-B so the bill shows exactly what each rupee is — instead of a
   // single lumped figure. Only non-zero charges are printed. Rebate (early-payment
   // discount) shows as a negative line.
+  // Pass-through "other charges" (transmission / RLDC-SLDC / CTU-STU / open access).
+  let otherCharges = [];
+  try { otherCharges = JSON.parse(invoice.other_charges_json || '[]'); } catch { otherCharges = []; }
+
   const partBItems = [
     ['Trading Margin', tradingMargin],
     ['NRLDC / SLDC Fees', nrldcFees],
     ['Transmission / Wheeling Charges', txCharges],
+    ...otherCharges.map((c) => [c.label || c.code, Number(c.amount) || 0]),
     ...gstLines(taxAmt),
     ['Late Payment Surcharge (LPS)', lps],
     ['Early-Payment Rebate', rebate ? -rebate : 0],

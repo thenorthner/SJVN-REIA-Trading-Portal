@@ -114,6 +114,9 @@ export const api = {
     waiveValidation: (id, reason) => p(`/invoices/${id}/validation/waive`, { reason }),
     recordPayment: (id, body) => p(`/invoices/${id}/payments`, body),
     releaseToGenerator: (id, body) => p(`/invoices/${id}/release-to-generator`, body),
+    setOtherCharges: (id, body) => p(`/invoices/${id}/other-charges`, body),
+    buyerOutstanding: (buyer_id) => g('/invoices/buyer-outstanding', { buyer_id }),
+    waterfallPayment: (body) => p('/invoices/waterfall-payment', body),
   },
   notes: {
     list: (params) => g('/notes', params),
