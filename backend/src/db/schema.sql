@@ -850,7 +850,36 @@ CREATE TABLE IF NOT EXISTS bilateral_transactions (
   start_date TEXT NOT NULL,
   end_date TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','COMPLETED','CANCELLED')),
+  is_standing_clearance INTEGER NOT NULL DEFAULT 0,
+  -- NOAR portal contract lifecycle (bilateral open-access, per PT workflow doc).
+  noar_contract_no TEXT,
+  noar_status TEXT NOT NULL DEFAULT 'NOT_INITIATED' CHECK (noar_status IN ('NOT_INITIATED','FORMAT_D_PREPARED','CONTRACT_CREATED','SUBMITTED','APPROVED')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 15-minute block-wise schedules for a bilateral transaction (Format-D source).
+CREATE TABLE IF NOT EXISTS bilateral_schedules (
+  id TEXT PRIMARY KEY,
+  transaction_id TEXT NOT NULL REFERENCES bilateral_transactions(id),
+  schedule_date TEXT NOT NULL,
+  time_block TEXT NOT NULL,             -- 15-min block label (e.g. 00:00-00:15 or B1..B96)
+  approved_mw REAL NOT NULL DEFAULT 0,
+  curtailed_mw REAL NOT NULL DEFAULT 0,
+  actual_mw REAL,
+  deviation_mw REAL,
+  dsm_penalty_amount REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','CURTAILED','CANCELLED')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Multi-hop scheduling approvals (Injection SLDC → RLDC → NLDC → Drawee SLDC).
+CREATE TABLE IF NOT EXISTS bilateral_approvals (
+  id TEXT PRIMARY KEY,
+  schedule_id TEXT NOT NULL REFERENCES bilateral_schedules(id),
+  node_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  acted_by TEXT,
+  timestamp TEXT
 );
 
 CREATE TABLE IF NOT EXISTS trading_invoices (

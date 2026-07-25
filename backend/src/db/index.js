@@ -163,6 +163,19 @@ function migrateInvoiceOtherCharges() {
 }
 migrateInvoiceOtherCharges();
 
+// Add NOAR contract fields (+ standing clearance) to bilateral_transactions.
+function migrateBilateralNoar() {
+  const cols = db.prepare('PRAGMA table_info(bilateral_transactions)').all().map((c) => c.name);
+  if (!cols.includes('noar_status')) {
+    db.exec(`
+      ALTER TABLE bilateral_transactions ADD COLUMN is_standing_clearance INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE bilateral_transactions ADD COLUMN noar_contract_no TEXT;
+      ALTER TABLE bilateral_transactions ADD COLUMN noar_status TEXT NOT NULL DEFAULT 'NOT_INITIATED';
+    `);
+  }
+}
+migrateBilateralNoar();
+
 function migrateRBACSchema() {
   const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   // Already on RBAC users schema — never re-run destructive rename migration

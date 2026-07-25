@@ -66,6 +66,29 @@ export default function Bilateral() {
     }
   }
 
+  const NOAR_FLOW = ['NOT_INITIATED', 'FORMAT_D_PREPARED', 'CONTRACT_CREATED', 'SUBMITTED', 'APPROVED'];
+  async function handleAdvanceNoar(tx) {
+    const idx = NOAR_FLOW.indexOf(tx.noar_status || 'NOT_INITIATED');
+    const next = NOAR_FLOW[Math.min(idx + 1, NOAR_FLOW.length - 1)];
+    let contractNo = tx.noar_contract_no;
+    if (next === 'CONTRACT_CREATED' && !contractNo) {
+      contractNo = prompt('NOAR contract number:') || '';
+    }
+    try {
+      const updated = await api.bilateral.updateNoar(tx.id, { noar_status: next, noar_contract_no: contractNo });
+      setSelectedTx(updated); load();
+    } catch (err) { alert('Failed to update NOAR status'); }
+  }
+  async function handleDownloadFormatD(tx) {
+    try {
+      const blob = await api.bilateral.downloadFormatD(tx.id);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `FormatD_${tx.counterparty}.csv`;
+      document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+    } catch (err) { alert('Failed to download Format-D'); }
+  }
+
   async function handleNodeApproval(schedId, nodeType, status) {
     try {
       const updated = await api.bilateral.updateApproval(schedId, nodeType, status);
@@ -202,7 +225,17 @@ export default function Bilateral() {
             </div>
           </div>
 
-          <h4 style={{ marginBottom: 10, borderBottom: '1px solid #eee', paddingBottom: 5 }}>Daily Schedules & DSM Tracker</h4>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+            <strong style={{ fontSize: 13 }}>NOAR Portal:</strong>
+            <Badge status={selectedTx.noar_status === 'APPROVED' ? 'ACTIVE' : selectedTx.noar_status === 'NOT_INITIATED' ? 'DRAFT' : 'PENDING'} label={(selectedTx.noar_status || 'NOT_INITIATED').replace(/_/g, ' ')} />
+            {selectedTx.noar_contract_no && <span style={{ fontSize: 12, color: '#475569' }}>Contract: <strong>{selectedTx.noar_contract_no}</strong></span>}
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+              <button className="btn btn-sm btn-outline" onClick={() => handleDownloadFormatD(selectedTx)}>Download Format-D</button>
+              {selectedTx.noar_status !== 'APPROVED' && <button className="btn btn-sm btn-primary" onClick={() => handleAdvanceNoar(selectedTx)}>Advance NOAR →</button>}
+            </div>
+          </div>
+
+          <h4 style={{ marginBottom: 10, borderBottom: '1px solid #eee', paddingBottom: 5 }}>Daily Schedules & DSM Tracker (15-min blocks · Format-D)</h4>
           {selectedTx.schedules?.length === 0 ? <p style={{ color: '#777' }}>No schedules created yet.</p> : (
             <Table 
               columns={[

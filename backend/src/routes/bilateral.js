@@ -149,4 +149,42 @@ router.post('/schedules/:id/actuals', requireRole(...ROLE_GROUPS.TRADING_WRITE),
   res.json(withDetails(tx));
 });
 
+// Format-D: 15-minute block-wise schedule document (CSV) for a bilateral txn.
+router.get('/:id/format-d', (req, res) => {
+  const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(req.params.id);
+  if (!tx) return res.status(404).json({ error: 'Not found' });
+  const schedules = db.prepare('SELECT * FROM bilateral_schedules WHERE transaction_id = ? ORDER BY schedule_date ASC, time_block ASC').all(tx.id);
+
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [];
+  lines.push(`Format-D — Bilateral Open Access Schedule`);
+  lines.push(`Transaction,${esc(tx.id)}`);
+  lines.push(`Counterparty,${esc(tx.counterparty)}`);
+  lines.push(`Quantum (MW),${tx.quantum_mw}`);
+  lines.push(`Period,${esc(tx.start_date)} to ${esc(tx.end_date)}`);
+  lines.push(`NOAR Contract,${esc(tx.noar_contract_no || '')}`);
+  lines.push('');
+  lines.push('Sr,Date,Time Block,Scheduled MW,Curtailed MW,Status');
+  schedules.forEach((s, i) => {
+    lines.push([i + 1, esc(s.schedule_date), esc(s.time_block), s.approved_mw, s.curtailed_mw || 0, esc(s.status)].join(','));
+  });
+  if (!schedules.length) lines.push(',,,No block schedules yet,,');
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename=FormatD_${tx.id}.csv`);
+  res.send(lines.join('\n'));
+});
+
+// NOAR portal contract lifecycle update.
+router.post('/:id/noar', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+  const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(req.params.id);
+  if (!tx) return res.status(404).json({ error: 'Not found' });
+  const STATUSES = ['NOT_INITIATED', 'FORMAT_D_PREPARED', 'CONTRACT_CREATED', 'SUBMITTED', 'APPROVED'];
+  const noar_status = STATUSES.includes(req.body.noar_status) ? req.body.noar_status : tx.noar_status;
+  db.prepare("UPDATE bilateral_transactions SET noar_contract_no = ?, noar_status = ? WHERE id = ?")
+    .run(req.body.noar_contract_no ?? tx.noar_contract_no, noar_status, tx.id);
+  secureLogAudit(req, { action: 'NOAR_UPDATE', module: 'TRADING', entityType: 'bilateral_transaction', entityId: tx.id, details: { noar_status, noar_contract_no: req.body.noar_contract_no } });
+  res.json(withDetails(db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(tx.id)));
+});
+
 export default router;

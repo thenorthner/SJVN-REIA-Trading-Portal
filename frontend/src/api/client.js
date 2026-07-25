@@ -444,6 +444,9 @@ export const api = {
     updateApproval: (id, node_type, status) => p(`/bilateral/schedules/${id}/approvals`, { node_type, status }),
     curtail: (id, curtailed_mw) => p(`/bilateral/schedules/${id}/curtail`, { curtailed_mw }),
     recordActuals: (id, actual_mw) => p(`/bilateral/schedules/${id}/actuals`, { actual_mw }),
+    updateNoar: (id, body) => p(`/bilateral/${id}/noar`, body),
+    formatDUrl: (id) => `/api/bilateral/${id}/format-d`,
+    downloadFormatD: (id) => client.get(`/bilateral/${id}/format-d`, { responseType: 'blob' }).then((r) => r.data),
   },
   billingSettlement: {
     listInvoices: (params) => g('/billing-settlement/invoices', params),
