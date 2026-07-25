@@ -833,4 +833,191 @@ try {
   console.error('Invoice cancel/validation migration failed:', e.message);
 }
 
+/** Market Rates & Analytics: per-exchange rate detail + event/factor context tables. */
+function migrateMarketAnalyticsSchema() {
+  const cols = db.prepare('PRAGMA table_info(market_rates)').all().map((c) => c.name);
+  const add = (name, sql) => {
+    if (!cols.includes(name)) db.exec(sql);
+  };
+  add('exchange', 'ALTER TABLE market_rates ADD COLUMN exchange TEXT');
+  add('volume_mw', 'ALTER TABLE market_rates ADD COLUMN volume_mw REAL');
+  add('min_rate', 'ALTER TABLE market_rates ADD COLUMN min_rate REAL');
+  add('max_rate', 'ALTER TABLE market_rates ADD COLUMN max_rate REAL');
+  add('avg_rate', 'ALTER TABLE market_rates ADD COLUMN avg_rate REAL');
+  add('time_block', 'ALTER TABLE market_rates ADD COLUMN time_block TEXT');
+  add('data_source', 'ALTER TABLE market_rates ADD COLUMN data_source TEXT');
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_market_rates_lookup ON market_rates (rate_date, exchange, product);
+
+    CREATE TABLE IF NOT EXISTS market_events (
+      id TEXT PRIMARY KEY,
+      event_date TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      description TEXT,
+      impact_level TEXT NOT NULL DEFAULT 'LOW' CHECK (impact_level IN ('HIGH','MEDIUM','LOW')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS market_factors (
+      id TEXT PRIMARY KEY,
+      factor_date TEXT NOT NULL,
+      weather_index REAL,
+      renewable_forecast_mw REAL,
+      coal_price_index REAL,
+      demand_forecast_mw REAL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // Pre-existing rows predate the exchange split — treat them as IEX daily.
+  db.exec(`
+    UPDATE market_rates SET exchange = 'IEX' WHERE exchange IS NULL;
+    UPDATE market_rates SET time_block = 'DAILY' WHERE time_block IS NULL;
+  `);
+}
+
+try {
+  migrateMarketAnalyticsSchema();
+} catch (e) {
+  console.error('Market analytics migration failed:', e.message);
+}
+
+/** NOAR wallet: link Open Access charges to the bilateral deal / client they belong to. */
+function migrateNoarWalletSchema() {
+  const cols = db.prepare('PRAGMA table_info(noar_wallet_txns)').all().map((c) => c.name);
+  const add = (name, sql) => {
+    if (!cols.includes(name)) db.exec(sql);
+  };
+  add('bilateral_id', 'ALTER TABLE noar_wallet_txns ADD COLUMN bilateral_id TEXT');
+  add('client_id', 'ALTER TABLE noar_wallet_txns ADD COLUMN client_id TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_noar_txn_date ON noar_wallet_txns (txn_date, created_at)');
+}
+
+try {
+  migrateNoarWalletSchema();
+} catch (e) {
+  console.error('NOAR wallet migration failed:', e.message);
+}
+
+/** CERC Form-IV: transaction-wise lines + header roll-up and filing deadline. */
+function migrateFormIvSchema() {
+  const cols = db.prepare('PRAGMA table_info(cerc_form_iv)').all().map((c) => c.name);
+  const add = (name, sql) => {
+    if (!cols.includes(name)) db.exec(sql);
+  };
+  add('total_purchase_cost', 'ALTER TABLE cerc_form_iv ADD COLUMN total_purchase_cost REAL NOT NULL DEFAULT 0');
+  add('avg_margin_per_unit', 'ALTER TABLE cerc_form_iv ADD COLUMN avg_margin_per_unit REAL NOT NULL DEFAULT 0');
+  add('line_count', 'ALTER TABLE cerc_form_iv ADD COLUMN line_count INTEGER NOT NULL DEFAULT 0');
+  add('breach_count', 'ALTER TABLE cerc_form_iv ADD COLUMN breach_count INTEGER NOT NULL DEFAULT 0');
+  add('due_date', 'ALTER TABLE cerc_form_iv ADD COLUMN due_date TEXT');
+  add('generated_at', 'ALTER TABLE cerc_form_iv ADD COLUMN generated_at TEXT');
+  add('submitted_by', 'ALTER TABLE cerc_form_iv ADD COLUMN submitted_by TEXT');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS cerc_form_iv_lines (
+      id TEXT PRIMARY KEY,
+      form_id TEXT NOT NULL REFERENCES cerc_form_iv(id) ON DELETE CASCADE,
+      line_no INTEGER NOT NULL,
+      source TEXT NOT NULL DEFAULT 'BILATERAL' CHECK (source IN ('BILATERAL','EXCHANGE','MANUAL')),
+      bilateral_id TEXT,
+      seller_name TEXT NOT NULL,
+      buyer_name TEXT NOT NULL,
+      contract_ref TEXT,
+      period_from TEXT NOT NULL,
+      period_to TEXT NOT NULL,
+      quantum_mu REAL NOT NULL DEFAULT 0,
+      purchase_rate REAL NOT NULL DEFAULT 0,
+      sale_rate REAL NOT NULL DEFAULT 0,
+      trading_margin_per_unit REAL NOT NULL DEFAULT 0,
+      margin_cap REAL,
+      compliance_status TEXT NOT NULL DEFAULT 'COMPLIANT'
+        CHECK (compliance_status IN ('COMPLIANT','BREACH','EXEMPT')),
+      exempt_reason TEXT,
+      remarks TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_form_iv_lines_form ON cerc_form_iv_lines (form_id, line_no);
+  `);
+
+  // Trading margin can only be derived once both legs of the trade are known;
+  // the table originally stored only the sale-side tariff.
+  const btCols = db.prepare('PRAGMA table_info(bilateral_transactions)').all().map((c) => c.name);
+  if (!btCols.includes('purchase_rate_per_unit')) {
+    db.exec('ALTER TABLE bilateral_transactions ADD COLUMN purchase_rate_per_unit REAL');
+  }
+}
+
+try {
+  migrateFormIvSchema();
+} catch (e) {
+  console.error('Form-IV migration failed:', e.message);
+}
+
+/** REC: per-tranche disposals + issuance provenance on the lot. */
+function migrateRecSchema() {
+  const cols = db.prepare('PRAGMA table_info(rec_ledger)').all().map((c) => c.name);
+  const add = (name, sql) => {
+    if (!cols.includes(name)) db.exec(sql);
+  };
+  add('energy_mwh', 'ALTER TABLE rec_ledger ADD COLUMN energy_mwh REAL');
+  add('technology', 'ALTER TABLE rec_ledger ADD COLUMN technology TEXT');
+  add('certificate_multiplier', 'ALTER TABLE rec_ledger ADD COLUMN certificate_multiplier REAL NOT NULL DEFAULT 1');
+  add('contract_id', 'ALTER TABLE rec_ledger ADD COLUMN contract_id TEXT');
+  add('registry_ref', 'ALTER TABLE rec_ledger ADD COLUMN registry_ref TEXT');
+  add('sold_qty', 'ALTER TABLE rec_ledger ADD COLUMN sold_qty INTEGER NOT NULL DEFAULT 0');
+  add('redeemed_qty', 'ALTER TABLE rec_ledger ADD COLUMN redeemed_qty INTEGER NOT NULL DEFAULT 0');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rec_transactions (
+      id TEXT PRIMARY KEY,
+      lot_id TEXT NOT NULL REFERENCES rec_ledger(id),
+      txn_no TEXT UNIQUE NOT NULL,
+      txn_type TEXT NOT NULL CHECK (txn_type IN ('SALE','REDEMPTION')),
+      quantity INTEGER NOT NULL,
+      rate_per_rec REAL NOT NULL DEFAULT 0,
+      amount REAL NOT NULL DEFAULT 0,
+      trade_date TEXT NOT NULL,
+      platform TEXT,
+      buyer TEXT,
+      obligated_entity TEXT,
+      reference TEXT,
+      notes TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_rec_txn_lot ON rec_transactions (lot_id, trade_date);
+  `);
+
+  // Lots created before the tranche ledger carried the whole sale on the lot
+  // row. Fold that into a transaction so realised revenue has one source.
+  const legacy = db.prepare(`
+    SELECT * FROM rec_ledger
+    WHERE sale_amount > 0 AND sold_qty = 0
+      AND id NOT IN (SELECT lot_id FROM rec_transactions)
+  `).all();
+  for (const lot of legacy) {
+    db.prepare(`
+      INSERT INTO rec_transactions (id, lot_id, txn_no, txn_type, quantity, rate_per_rec, amount,
+        trade_date, platform, buyer, reference, created_by)
+      VALUES (?, ?, ?, 'SALE', ?, ?, ?, ?, ?, ?, 'Migrated from lot sale fields', ?)
+    `).run(
+      `RECTXN-MIG-${lot.id}`, lot.id, `RECT/MIG/${lot.id}`, lot.quantity,
+      lot.sale_rate_per_rec, lot.sale_amount,
+      lot.trade_date || lot.issuance_date || lot.vintage_month + '-01',
+      lot.trade_platform, lot.buyer, lot.created_by,
+    );
+    db.prepare('UPDATE rec_ledger SET sold_qty = ? WHERE id = ?').run(lot.quantity, lot.id);
+  }
+}
+
+try {
+  migrateRecSchema();
+} catch (e) {
+  console.error('REC migration failed:', e.message);
+}
+
 export default db;

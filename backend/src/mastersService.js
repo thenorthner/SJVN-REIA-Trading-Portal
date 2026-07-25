@@ -34,6 +34,12 @@ const DEFAULT_PARAMS = [
   { category: 'REGULATORY', param_key: 'freq_response_incentive_pct_thermal', param_value: '1', data_type: 'PERCENT', unit: '%', description: 'CERC Reg 62(5): Thermal frequency-response incentive = (pct × β × AFC)/12' },
   { category: 'REGULATORY', param_key: 'freq_response_beta_min', param_value: '0.30', data_type: 'NUMBER', unit: '', description: 'Minimum β for incentive eligibility (CERC: payable only if β > 0.30)' },
   { category: 'REGULATORY', param_key: 'freq_response_beta_sharing_factor', param_value: '0.5', data_type: 'NUMBER', unit: '', description: 'SJVN NJHPS sharing factor in beta incentive: (pct × β × factor × AFC)/12. Set 1 to disable (pure CERC).' },
+  { category: 'REGULATORY', param_key: 'cerc_margin_cap_price_threshold', param_value: '3', data_type: 'NUMBER', unit: 'INR/kWh', description: 'CERC (Fixation of Trading Margin) Regulations 2010: sale price at/below which the lower margin cap applies.' },
+  { category: 'REGULATORY', param_key: 'cerc_margin_cap_low', param_value: '0.04', data_type: 'NUMBER', unit: 'INR/kWh', description: 'CERC trading margin cap (4 paise/kWh) where sale price is at or below the threshold.' },
+  { category: 'REGULATORY', param_key: 'cerc_margin_cap_high', param_value: '0.07', data_type: 'NUMBER', unit: 'INR/kWh', description: 'CERC trading margin cap (7 paise/kWh) where sale price is above the threshold.' },
+  { category: 'REGULATORY', param_key: 'cerc_form_iv_due_days', param_value: '30', data_type: 'NUMBER', unit: 'days', description: 'Days after the reporting period ends by which Form-IV must be filed with CERC.' },
+  { category: 'REGULATORY', param_key: 'rec_certificate_multipliers', param_value: JSON.stringify({ Solar: 1, Wind: 1, Hybrid: 1, Hydro: 1.5, PSP: 1.5, MSW: 2, Cogeneration: 2, Biomass: 2.5, Biofuel: 2.5 }), data_type: 'JSON', unit: '', description: 'CERC REC Regulations 2022 cl.12(2) Certificate Multiplier by technology: RECs issued = injected MWh × multiplier. Wind/Solar 1, Hydro 1.5, MSW & non-fossil cogen 2, Biomass/Biofuel 2.5.' },
+  { category: 'REGULATORY', param_key: 'rec_issuance_fee_per_rec', param_value: '4', data_type: 'NUMBER', unit: 'INR/REC', description: 'Central Agency (Grid India) registry issuance charge per REC — default cost basis for a new lot.' },
 ];
 
 const DEFAULT_BANKS = [

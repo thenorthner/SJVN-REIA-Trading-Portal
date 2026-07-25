@@ -851,12 +851,45 @@ CREATE TABLE IF NOT EXISTS trading_payments (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Power exchange discovered prices per exchange/product/day (IEX, PXIL, HPX).
+-- `exchange` + `rate_date` + `product` + `time_block` identifies one observation.
 CREATE TABLE IF NOT EXISTS market_rates (
   id TEXT PRIMARY KEY,
   product TEXT NOT NULL,
   rate_date TEXT NOT NULL,
   mcp_rate REAL NOT NULL, -- market clearing price
   forecast_rate REAL,
+  exchange TEXT,          -- IEX / PXIL / HPX
+  volume_mw REAL,         -- cleared volume for the day
+  min_rate REAL,
+  max_rate REAL,
+  avg_rate REAL,
+  time_block TEXT,        -- DAILY, or a 15-min block label when intraday
+  data_source TEXT,       -- IEX_PORTAL / PXIL_PORTAL / HPX_PORTAL / MANUAL
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- (idx_market_rates_lookup is created by migrateMarketAnalyticsSchema in db/index.js,
+--  which runs after the ALTER TABLEs that back-fill these columns on older databases.)
+
+-- Narrative context behind price movement (outages, festivals, policy changes).
+CREATE TABLE IF NOT EXISTS market_events (
+  id TEXT PRIMARY KEY,
+  event_date TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  description TEXT,
+  impact_level TEXT NOT NULL DEFAULT 'LOW' CHECK (impact_level IN ('HIGH','MEDIUM','LOW')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Daily external drivers used for price forecasting sanity checks.
+CREATE TABLE IF NOT EXISTS market_factors (
+  id TEXT PRIMARY KEY,
+  factor_date TEXT NOT NULL,
+  weather_index REAL,            -- proxy for peak temperature (°C)
+  renewable_forecast_mw REAL,
+  coal_price_index REAL,
+  demand_forecast_mw REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -879,10 +912,41 @@ CREATE TABLE IF NOT EXISTS rec_ledger (
   trade_date TEXT,
   buyer TEXT,
   notes TEXT,
+  energy_mwh REAL,                     -- injected energy the lot was issued against
+  technology TEXT,                     -- drives the CERC certificate multiplier
+  certificate_multiplier REAL NOT NULL DEFAULT 1,
+  contract_id TEXT REFERENCES contracts(id),
+  registry_ref TEXT,                   -- Central Agency (Grid India) registry reference
+  sold_qty INTEGER NOT NULL DEFAULT 0,
+  redeemed_qty INTEGER NOT NULL DEFAULT 0,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Disposals against a REC lot. A lot is rarely cleared in one go — it is sold
+-- across several exchange trading sessions at different discovered prices — so
+-- realised revenue and the remaining position have to be tracked per tranche
+-- rather than as a single sale price on the lot.
+CREATE TABLE IF NOT EXISTS rec_transactions (
+  id TEXT PRIMARY KEY,
+  lot_id TEXT NOT NULL REFERENCES rec_ledger(id),
+  txn_no TEXT UNIQUE NOT NULL,
+  txn_type TEXT NOT NULL CHECK (txn_type IN ('SALE','REDEMPTION')),
+  quantity INTEGER NOT NULL,
+  rate_per_rec REAL NOT NULL DEFAULT 0,   -- nil for a redemption against own RPO
+  amount REAL NOT NULL DEFAULT 0,
+  trade_date TEXT NOT NULL,
+  platform TEXT,                          -- IEX / PXIL for a sale
+  buyer TEXT,
+  obligated_entity TEXT,                  -- entity whose RPO a redemption settles
+  reference TEXT,
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_rec_txn_lot ON rec_transactions (lot_id, trade_date);
 
 -- NOAR wallet ledger — PT & BD recharge the NOAR wallet and pay Open Access
 -- charges (ISTS / RLDC / application charges to Grid India & CTUIL). RECHARGE
@@ -898,6 +962,8 @@ CREATE TABLE IF NOT EXISTS noar_wallet_txns (
   reference TEXT,
   txn_date TEXT NOT NULL,
   notes TEXT,
+  bilateral_id TEXT,                   -- CHARGE: the Open Access deal it was paid for
+  client_id TEXT,                      -- CHARGE: trading client the charge is attributable to
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -912,6 +978,13 @@ CREATE TABLE IF NOT EXISTS cerc_form_iv (
   total_volume_mu REAL NOT NULL DEFAULT 0,   -- energy traded (MU)
   total_revenue REAL NOT NULL DEFAULT 0,
   trading_margin REAL NOT NULL DEFAULT 0,
+  total_purchase_cost REAL NOT NULL DEFAULT 0,
+  avg_margin_per_unit REAL NOT NULL DEFAULT 0,  -- volume-weighted ₹/kWh
+  line_count INTEGER NOT NULL DEFAULT 0,
+  breach_count INTEGER NOT NULL DEFAULT 0,      -- lines over the CERC margin cap
+  due_date TEXT,                                -- filing deadline (period end + due days)
+  generated_at TEXT,                            -- last auto-build from trade data
+  submitted_by TEXT,
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','PREPARED','SUBMITTED')),
   submission_date TEXT,
   reference_no TEXT,                   -- CERC ack / filing reference
@@ -921,6 +994,36 @@ CREATE TABLE IF NOT EXISTS cerc_form_iv (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(period_type, period)
 );
+
+-- One row per reported inter-state trading transaction. Form-IV is filed
+-- transaction-wise, and the CERC (Fixation of Trading Margin) Regulations cap
+-- is tested per transaction — not on the period average — so the cap check and
+-- any exemption live at this level.
+CREATE TABLE IF NOT EXISTS cerc_form_iv_lines (
+  id TEXT PRIMARY KEY,
+  form_id TEXT NOT NULL REFERENCES cerc_form_iv(id) ON DELETE CASCADE,
+  line_no INTEGER NOT NULL,
+  source TEXT NOT NULL DEFAULT 'BILATERAL' CHECK (source IN ('BILATERAL','EXCHANGE','MANUAL')),
+  bilateral_id TEXT,                   -- provenance when auto-derived
+  seller_name TEXT NOT NULL,           -- party SJVN purchased from
+  buyer_name TEXT NOT NULL,            -- party SJVN sold to
+  contract_ref TEXT,
+  period_from TEXT NOT NULL,
+  period_to TEXT NOT NULL,
+  quantum_mu REAL NOT NULL DEFAULT 0,
+  purchase_rate REAL NOT NULL DEFAULT 0,          -- ₹/kWh
+  sale_rate REAL NOT NULL DEFAULT 0,              -- ₹/kWh
+  trading_margin_per_unit REAL NOT NULL DEFAULT 0,-- ₹/kWh (sale − purchase)
+  margin_cap REAL,                                -- cap applied to this line
+  compliance_status TEXT NOT NULL DEFAULT 'COMPLIANT'
+    CHECK (compliance_status IN ('COMPLIANT','BREACH','EXEMPT')),
+  exempt_reason TEXT,                  -- why the cap does not apply (exchange / long-term)
+  remarks TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_form_iv_lines_form ON cerc_form_iv_lines (form_id, line_no);
 
 CREATE TABLE IF NOT EXISTS contract_allocations (
   id TEXT PRIMARY KEY,

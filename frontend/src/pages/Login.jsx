@@ -47,7 +47,7 @@ export default function Login() {
     <div className="login-screen">
       <div className="login-card">
         <div className="login-brand">
-          <div className="brand-mark">SJVN</div>
+          <img className="brand-logo brand-logo-sjvn login-brand-logo" src="/sjvn-logo.png" alt="SJVN" />
           <div className="brand-text" style={{ color: '#1c2536' }}>
             <strong style={{ color: '#1c2536' }}>RE Commercial &amp; Trading</strong>
             <span style={{ color: '#667085' }}>Platform</span>

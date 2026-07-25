@@ -25,6 +25,7 @@ client.interceptors.response.use(
 const g = (url, params) => client.get(url, { params }).then((r) => r.data);
 const p = (url, body) => client.post(url, body).then((r) => r.data);
 const put = (url, body) => client.put(url, body).then((r) => r.data);
+const patch = (url, body) => client.patch(url, body).then((r) => r.data);
 const del = (url) => client.delete(url).then((r) => r.data);
 
 export const api = {
@@ -137,21 +138,45 @@ export const api = {
   rec: {
     list: (params) => g('/rec', params),
     summary: (params) => g('/rec/summary', params),
+    reference: () => g('/rec/reference'),
+    issuable: (params) => g('/rec/issuable', params),
     get: (id) => g(`/rec/${id}`),
     create: (body) => p('/rec', body),
     update: (id, body) => put(`/rec/${id}`, body),
+    issue: (id, body) => p(`/rec/${id}/issue`, body),
+    addTxn: (id, body) => p(`/rec/${id}/transactions`, body),
+    deleteTxn: (txnId) => del(`/rec/transactions/${txnId}`),
     remove: (id) => del(`/rec/${id}`),
   },
   noar: {
     list: (params) => g('/noar', params),
     summary: () => g('/noar/summary'),
+    trend: () => g('/noar/trend'),
     create: (body) => p('/noar', body),
+    remove: (id) => del(`/noar/${id}`),
   },
   formIv: {
     list: (params) => g('/form-iv', params),
     summary: () => g('/form-iv/summary'),
+    get: (id) => g(`/form-iv/${id}`),
     create: (body) => p('/form-iv', body),
     update: (id, body) => put(`/form-iv/${id}`, body),
+    generate: (id) => p(`/form-iv/${id}/generate`),
+    submit: (id, body) => p(`/form-iv/${id}/submit`, body),
+    addLine: (id, body) => p(`/form-iv/${id}/lines`, body),
+    updateLine: (lineId, body) => put(`/form-iv/lines/${lineId}`, body),
+    deleteLine: (lineId) => del(`/form-iv/lines/${lineId}`),
+    exportCsv: async (id, formNo) => {
+      const res = await client.get(`/form-iv/${id}/export`, { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${String(formNo || id).replaceAll('/', '-')}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
   },
   stationBeta: {
     list: (params) => g('/station-beta', params),
@@ -419,9 +444,13 @@ export const api = {
   },
   marketAnalytics: {
     getRates: (params) => g('/market-analytics/rates', params),
+    getSummary: (params) => g('/market-analytics/summary', params),
+    getTrend: (params) => g('/market-analytics/trend', params),
     getContext: (params) => g('/market-analytics/context', params),
     getAlerts: () => g('/market-analytics/alerts'),
     createAlert: (body) => p('/market-analytics/alerts', body),
+    toggleAlert: (id, is_active) => patch(`/market-analytics/alerts/${id}`, { is_active }),
+    deleteAlert: (id) => del(`/market-analytics/alerts/${id}`),
   },
   dashboard: {
     reia: () => g('/dashboard/reia'),

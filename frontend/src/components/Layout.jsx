@@ -162,8 +162,8 @@ export default function Layout() {
             </div>
           </div>
         ) : (
-          <div className="brand">
-            <div className="brand-mark">SJVN</div>
+          <div className="brand brand-sjvn">
+            <img className="brand-logo brand-logo-sjvn" src="/sjvn-logo.png" alt="SJVN" />
             <div className="brand-text">
               <strong>RE Commercial &amp; Trading</strong>
               <span>Platform</span>
@@ -195,10 +195,15 @@ export default function Layout() {
       </aside>
       <div className="main-col">
         <header className="topbar">
-          <div className="topbar-title">
-            {branded
-              ? `${entity.name} — ${portalKind}`
-              : 'Integrated Renewable Energy Commercial, Billing, Settlement & Power Trading Management Platform'}
+          <div className="topbar-left">
+            {!branded && (
+              <img className="topbar-logo" src="/sjvn-logo.png" alt="SJVN" />
+            )}
+            <div className="topbar-title">
+              {branded
+                ? `${entity.name} — ${portalKind}`
+                : 'Integrated Renewable Energy Commercial, Billing, Settlement & Power Trading Management Platform'}
+            </div>
           </div>
           <div className="topbar-actions">
             <div className="notif-wrap">
