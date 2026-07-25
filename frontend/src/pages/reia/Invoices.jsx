@@ -25,7 +25,7 @@ const GEN_FORM = { contract_id: '', period_month: '', invoice_type: 'PROVISIONAL
 const ARREAR_FORM = { contract_id: '', arrear_period: '', amount: '', taxes: '', reason: '' };
 const SUPP_FORM = {
   contract_id: '', billing_period: '', amount: '', taxes: '', transmission_charges: '',
-  reason_code: 'TARIFF_REVISION', reason: '', parent_invoice_id: '',
+  reason_code: 'REVISED_REA', reason: '', parent_invoice_id: '',
 };
 const PAY_FORM = { amount: '', payment_date: '', mode: 'NEFT', reference: '', deduction: '' };
 
@@ -472,10 +472,10 @@ export default function Invoices() {
             </Field>
             <Field label="Reason Category">
               <select required value={suppForm.reason_code} onChange={(e) => setSuppForm({ ...suppForm, reason_code: e.target.value })}>
-                <option value="TARIFF_REVISION">Tariff revision</option>
-                <option value="CHANGE_IN_LAW">Change in law</option>
-                <option value="ENERGY_REVISION">Energy revision / true-up</option>
-                <option value="LPS_ADJUSTMENT">LPS adjustment</option>
+                <option value="REVISED_REA">Revised / amended REA true-up</option>
+                <option value="CHANGE_IN_LAW">Change in Law</option>
+                <option value="TRANSMISSION_CHARGES">Transmission charges</option>
+                <option value="LPS">Late Payment Surcharge (LPS)</option>
                 <option value="BETA_TRUE_UP">β true-up</option>
                 <option value="OTHER">Other</option>
               </select>

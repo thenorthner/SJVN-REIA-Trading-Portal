@@ -497,13 +497,20 @@ router.post('/arrear', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(id));
 });
 
+// Explicit supplementary-bill triggers per the REIA workflow (Supplementary
+// Billing): Change in Law / Revised REA / Transmission Charges / LPS. Legacy
+// codes are kept so older supplementary invoices still validate.
 const SUPP_REASONS = [
-  'TARIFF_REVISION',
+  'REVISED_REA',
   'CHANGE_IN_LAW',
-  'ENERGY_REVISION',
-  'LPS_ADJUSTMENT',
+  'TRANSMISSION_CHARGES',
+  'LPS',
   'BETA_TRUE_UP',
   'OTHER',
+  // legacy aliases
+  'TARIFF_REVISION',
+  'ENERGY_REVISION',
+  'LPS_ADJUSTMENT',
 ];
 
 /**
@@ -555,13 +562,17 @@ router.post('/supplementary', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res)
   const billingFamilyRef = buildBillingFamilyRef(contract.contract_no, billing_period, direction);
   const id = newId('INV');
   const reasonLabel = {
-    TARIFF_REVISION: 'Tariff revision',
-    CHANGE_IN_LAW: 'Change in law',
-    ENERGY_REVISION: 'Energy revision / true-up',
-    LPS_ADJUSTMENT: 'LPS adjustment',
+    REVISED_REA: 'Revised / amended REA true-up',
+    CHANGE_IN_LAW: 'Change in Law',
+    TRANSMISSION_CHARGES: 'Transmission / wheeling charges',
+    LPS: 'Late Payment Surcharge',
     BETA_TRUE_UP: 'Frequency response β true-up',
     OTHER: 'Other adjustment',
-  }[code];
+    // legacy aliases
+    TARIFF_REVISION: 'Tariff revision',
+    ENERGY_REVISION: 'Energy revision / true-up',
+    LPS_ADJUSTMENT: 'LPS adjustment',
+  }[code] || 'Adjustment';
 
   const breakdown = [
     { code: 'SUPP', label: `${reasonLabel} — ${String(reason).trim()}`, value: Math.round(amt) },
