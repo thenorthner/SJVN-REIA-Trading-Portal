@@ -112,6 +112,7 @@ export const api = {
     validate: (id) => p(`/invoices/${id}/validate`),
     waiveValidation: (id, reason) => p(`/invoices/${id}/validation/waive`, { reason }),
     recordPayment: (id, body) => p(`/invoices/${id}/payments`, body),
+    releaseToGenerator: (id, body) => p(`/invoices/${id}/release-to-generator`, body),
   },
   billingTrail: {
     get: (params) => g('/billing-trail', params),

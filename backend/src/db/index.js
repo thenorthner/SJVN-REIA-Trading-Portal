@@ -145,6 +145,15 @@ function migrateInvoiceArrearType() {
 }
 migrateInvoiceArrearType();
 
+// Add release_source to payments (generator pay-out source) on existing DBs.
+function migratePaymentReleaseSource() {
+  const cols = db.prepare('PRAGMA table_info(payments)').all().map((c) => c.name);
+  if (!cols.includes('release_source')) {
+    db.exec('ALTER TABLE payments ADD COLUMN release_source TEXT');
+  }
+}
+migratePaymentReleaseSource();
+
 function migrateRBACSchema() {
   const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   // Already on RBAC users schema — never re-run destructive rename migration

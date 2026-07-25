@@ -152,7 +152,18 @@ router.get('/:id', (req, res) => {
   const approvals = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? ORDER BY level').all(req.params.id);
   const payments = db.prepare('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date').all(req.params.id);
   const disputes = db.prepare('SELECT * FROM disputes WHERE invoice_id = ? ORDER BY created_at DESC').all(req.params.id);
-  res.json({ ...withContract(inv), approvals, payments, disputes });
+
+  // For developer (PPA) invoices, expose how much DISCOM realization is available
+  // to fund a pay-when-paid release, net of what's already been released from it.
+  let generator_realization = null;
+  if (inv.direction === 'SELLER_TO_SJVN') {
+    const { realized, linked_psa } = generatorRealization(inv.id);
+    const fromRealization = db.prepare(
+      "SELECT COALESCE(SUM(amount + COALESCE(deduction,0)),0) s FROM payments WHERE invoice_id = ? AND release_source = 'DISCOM_REALIZATION'"
+    ).get(inv.id).s;
+    generator_realization = { linked_psa, realized, released_from_realization: Math.round(fromRealization), available: Math.max(0, realized - Math.round(fromRealization)) };
+  }
+  res.json({ ...withContract(inv), approvals, payments, disputes, generator_realization });
 });
 
 // Automated invoice generation based on contract + locked energy data
@@ -1072,16 +1083,24 @@ router.get('/:id/deliveries', requireRole(...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_A
 });
 
 // Record payment against invoice (H. Payment Tracking)
-router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req, res) => {
-  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
-  if (inv.status === 'CANCELLED') {
-    return res.status(400).json({ error: 'Cannot record payment against a cancelled invoice' });
-  }
-  const { amount, payment_date, mode, reference, deduction } = req.body;
+// DISCOM realization available to fund a generator (developer) pay-out — the
+// amount the DISCOM(s) have actually paid on the PSA invoices linked to this
+// developer invoice (via invoice_mapping). This is what "pay-when-paid" draws on.
+function generatorRealization(devInvoiceId) {
+  const psa = db.prepare('SELECT buyer_invoice_id FROM invoice_mapping WHERE seller_invoice_id = ?')
+    .all(devInvoiceId).map((r) => r.buyer_invoice_id);
+  if (!psa.length) return { linked_psa: 0, realized: 0 };
+  const ph = psa.map(() => '?').join(',');
+  const realized = db.prepare(`SELECT COALESCE(SUM(amount + COALESCE(deduction,0)),0) s FROM payments WHERE invoice_id IN (${ph})`).get(...psa).s;
+  return { linked_psa: psa.length, realized: Math.round(realized) };
+}
+
+// Record a payment against an invoice and roll up rebate / LPS / status. Shared
+// by buyer payment recording and generator pay-out release.
+function applyInvoicePayment(inv, { amount, payment_date, mode, reference, deduction, release_source }, req) {
   const id = newId('PAY');
-  db.prepare(`INSERT INTO payments (id, invoice_id, amount, payment_date, mode, reference, deduction) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, inv.id, amount, payment_date, mode ?? null, reference ?? null, deduction || 0);
+  db.prepare(`INSERT INTO payments (id, invoice_id, amount, payment_date, mode, reference, deduction, release_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, inv.id, amount, payment_date, mode ?? null, reference ?? null, deduction || 0, release_source ?? null);
 
   // Advanced Logic: Rebate and LPS
   let newRebate = inv.rebate;
@@ -1133,8 +1152,67 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req,
   db.prepare(`UPDATE invoices SET status = ?, rebate = ?, lps = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(newStatus, newRebate, newLps, inv.id);
 
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'PAYMENT_RECORDED', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: req.body });
-  res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
+  return db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id);
+}
+
+router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (inv.status === 'CANCELLED') {
+    return res.status(400).json({ error: 'Cannot record payment against a cancelled invoice' });
+  }
+  const updated = applyInvoicePayment(inv, req.body, req);
+  logAudit({ req, user: req.user, action: 'PAYMENT_RECORDED', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: req.body });
+  res.status(201).json(updated);
+});
+
+// Pay-when-paid: SJVN releases a payment to the generator (developer) against
+// their PPA invoice, funded from DISCOM realization / own fund / payment security
+// fund. DISCOM_REALIZATION can only draw what the buyer has actually paid.
+const RELEASE_SOURCES = ['DISCOM_REALIZATION', 'OWN_FUND', 'PAYMENT_SECURITY_FUND'];
+router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (inv.direction !== 'SELLER_TO_SJVN') {
+    return res.status(400).json({ error: 'Payment release applies only to developer (PPA) invoices' });
+  }
+  if (inv.status === 'CANCELLED') return res.status(400).json({ error: 'Invoice is cancelled' });
+  if (!['APPROVED', 'SENT', 'PARTIALLY_PAID'].includes(inv.status)) {
+    return res.status(400).json({ error: 'Invoice must be APPROVED before releasing payment to the generator' });
+  }
+  const { amount, source, payment_date, reference } = req.body;
+  if (!RELEASE_SOURCES.includes(source)) {
+    return res.status(400).json({ error: `source must be one of ${RELEASE_SOURCES.join(', ')}` });
+  }
+  const amt = Number(amount);
+  if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'A positive release amount is required' });
+
+  // Enforce pay-when-paid for the DISCOM-realization source: can only release
+  // what the DISCOM(s) have actually paid, net of what was already released from
+  // realization.
+  if (source === 'DISCOM_REALIZATION') {
+    const { realized, linked_psa } = generatorRealization(inv.id);
+    if (!linked_psa) return res.status(400).json({ error: 'No PSA (buyer) invoices are mapped to this developer invoice — nothing realized. Use Own Fund or Payment Security Fund.' });
+    const alreadyFromRealization = db.prepare(
+      "SELECT COALESCE(SUM(amount + COALESCE(deduction,0)),0) s FROM payments WHERE invoice_id = ? AND release_source = 'DISCOM_REALIZATION'"
+    ).get(inv.id).s;
+    const headroom = realized - alreadyFromRealization;
+    if (amt > headroom) {
+      return res.status(400).json({ error: `Only ${Math.round(headroom).toLocaleString('en-IN')} realized from the DISCOM so far. Release the balance from Own Fund or Payment Security Fund.` });
+    }
+  }
+
+  const updated = applyInvoicePayment(inv, {
+    amount: amt,
+    payment_date: payment_date || new Date().toISOString().split('T')[0],
+    mode: `RELEASE:${source}`,
+    reference: reference || null,
+    deduction: 0,
+    release_source: source,
+  }, req);
+  logAudit({ req, user: req.user, action: 'RELEASE_TO_GENERATOR', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: { amount: amt, source, reference } });
+  pushNotification({ role: 'SELLER', type: 'PAYMENT_RELEASED', message: `Payment of Rs.${amt.toLocaleString('en-IN')} released for ${inv.invoice_no} (${source.replace(/_/g, ' ').toLowerCase()})` });
+  res.status(201).json(updated);
 });
 
 export default router;

@@ -47,6 +47,8 @@ export default function Invoices() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
   const [payForm, setPayForm] = useState(PAY_FORM);
+  const [releaseForm, setReleaseForm] = useState({ amount: '', source: 'DISCOM_REALIZATION', payment_date: '', reference: '' });
+  const [releaseError, setReleaseError] = useState('');
   const [approveComments, setApproveComments] = useState({}); // changed to object
   const [trailBfr, setTrailBfr] = useState(null);
   const [contractDetail, setContractDetail] = useState(null);
@@ -260,6 +262,18 @@ export default function Invoices() {
     } catch (err) {
       console.error(err);
       alert('Failed to download PDF: ' + (err.response?.data?.error || err.message || err));
+    }
+  }
+
+  async function handleRelease(e) {
+    e.preventDefault();
+    setReleaseError('');
+    try {
+      await api.invoices.releaseToGenerator(selected.id, { ...releaseForm, amount: Number(releaseForm.amount) });
+      setReleaseForm({ amount: '', source: 'DISCOM_REALIZATION', payment_date: '', reference: '' });
+      await refreshSelected(selected.id);
+    } catch (err) {
+      setReleaseError(err.response?.data?.error || 'Failed to release payment.');
     }
   }
 
@@ -642,10 +656,53 @@ export default function Invoices() {
               )}
             </div>
 
-            {CAN_RECORD_PAYMENT.includes(user?.role) && !['PAID', 'CANCELLED', 'DRAFT'].includes(selected.status) && (
+            {/* Pay-when-paid: structured release to the generator (developer) */}
+            {CAN_RECORD_PAYMENT.includes(user?.role) && selected.direction === 'SELLER_TO_SJVN'
+              && ['APPROVED', 'SENT', 'PARTIALLY_PAID'].includes(selected.status) && (
+              <>
+                <div className="section-title" style={{ marginTop: 18 }}>Release Payment to Generator (Pay-when-paid)</div>
+                {selected.generator_realization && (
+                  <div className="callout" style={{ margin: '6px 0 10px', padding: '10px 12px', background: 'var(--navy-soft, #eaf0f9)', borderRadius: 8, fontSize: 13 }}>
+                    DISCOM realized: <strong>{fmtCurrency(selected.generator_realization.realized)}</strong>
+                    {'  ·  '}Already released from realization: <strong>{fmtCurrency(selected.generator_realization.released_from_realization)}</strong>
+                    {'  ·  '}Available: <strong style={{ color: 'var(--green)' }}>{fmtCurrency(selected.generator_realization.available)}</strong>
+                    <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
+                      {selected.generator_realization.linked_psa ? `${selected.generator_realization.linked_psa} PSA invoice(s) linked` : 'No PSA invoice mapped — use Own Fund / Security Fund'}
+                    </div>
+                  </div>
+                )}
+                {releaseError && <div className="form-error">{releaseError}</div>}
+                <form onSubmit={handleRelease}>
+                  <div className="form-grid">
+                    <Field label="Amount (₹)">
+                      <input required type="number" value={releaseForm.amount} onChange={(e) => setReleaseForm({ ...releaseForm, amount: e.target.value })} />
+                    </Field>
+                    <Field label="Fund Source">
+                      <select value={releaseForm.source} onChange={(e) => setReleaseForm({ ...releaseForm, source: e.target.value })}>
+                        <option value="DISCOM_REALIZATION">DISCOM Realization</option>
+                        <option value="OWN_FUND">SJVN Own Fund</option>
+                        <option value="PAYMENT_SECURITY_FUND">Payment Security Fund</option>
+                      </select>
+                    </Field>
+                    <Field label="Payment Date">
+                      <input required type="date" value={releaseForm.payment_date} onChange={(e) => setReleaseForm({ ...releaseForm, payment_date: e.target.value })} />
+                    </Field>
+                    <Field label="Reference">
+                      <input value={releaseForm.reference} onChange={(e) => setReleaseForm({ ...releaseForm, reference: e.target.value })} />
+                    </Field>
+                  </div>
+                  <p className="inline-note">DISCOM Realization can only release what the buyer has actually paid; use Own Fund / Security Fund for the balance.</p>
+                  <div className="form-actions">
+                    <button type="submit" className="btn btn-primary">Release to Generator</button>
+                  </div>
+                </form>
+              </>
+            )}
+
+            {CAN_RECORD_PAYMENT.includes(user?.role) && selected.direction !== 'SELLER_TO_SJVN' && !['PAID', 'CANCELLED', 'DRAFT'].includes(selected.status) && (
               <>
                 <div className="section-title" style={{ marginTop: 18 }}>
-                  {selected.direction === 'SELLER_TO_SJVN' ? 'Record Payment (Outgoing to Seller)' : 'Record Payment (Incoming from Buyer)'}
+                  Record Payment (Incoming from Buyer)
                 </div>
                 <form onSubmit={handlePayment}>
                   <div className="form-grid">

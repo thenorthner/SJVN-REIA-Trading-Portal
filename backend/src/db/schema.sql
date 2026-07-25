@@ -548,6 +548,8 @@ CREATE TABLE IF NOT EXISTS payments (
   reference TEXT,
   deduction REAL NOT NULL DEFAULT 0,
   remarks TEXT,
+  -- For generator (developer) pay-outs: where the money came from.
+  release_source TEXT CHECK (release_source IN ('DISCOM_REALIZATION','OWN_FUND','PAYMENT_SECURITY_FUND')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
