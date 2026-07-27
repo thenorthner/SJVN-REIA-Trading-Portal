@@ -176,6 +176,47 @@ function migrateBilateralNoar() {
 }
 migrateBilateralNoar();
 
+// Bring the bids table up to what the exchange-bid workflow actually writes:
+// gate closure / approval / no-bid fields, and the OCF carry-forward leg columns.
+// bid_blocks and bid_events were referenced by the routes but never existed.
+function migrateBidsWorkflow() {
+  const cols = db.prepare('PRAGMA table_info(bids)').all().map((c) => c.name);
+  if (!cols.includes('approval_status')) {
+    db.exec(`
+      ALTER TABLE bids ADD COLUMN gate_closure_time TEXT;
+      ALTER TABLE bids ADD COLUMN is_no_bid INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE bids ADD COLUMN no_bid_reason TEXT;
+      ALTER TABLE bids ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'PENDING';
+      ALTER TABLE bids ADD COLUMN exchange_receipt_ref TEXT;
+    `);
+  }
+  if (!cols.includes('ocf_leg')) {
+    db.exec('ALTER TABLE bids ADD COLUMN ocf_leg INTEGER NOT NULL DEFAULT 0');
+  }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bid_blocks (
+      id TEXT PRIMARY KEY,
+      bid_id TEXT NOT NULL REFERENCES bids(id),
+      time_block TEXT NOT NULL,
+      quantum_mw REAL NOT NULL DEFAULT 0,
+      price_per_unit REAL NOT NULL DEFAULT 0,
+      cleared_quantum_mw REAL NOT NULL DEFAULT 0,
+      cleared_price REAL,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS bid_events (
+      id TEXT PRIMARY KEY,
+      bid_id TEXT NOT NULL REFERENCES bids(id),
+      actor_id TEXT,
+      event_type TEXT NOT NULL,
+      details TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+}
+migrateBidsWorkflow();
+
 function migrateRBACSchema() {
   const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   // Already on RBAC users schema — never re-run destructive rename migration

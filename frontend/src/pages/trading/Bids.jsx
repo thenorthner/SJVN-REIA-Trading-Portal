@@ -10,6 +10,27 @@ const EMPTY_FORM = {
 
 const EMPTY_BLOCK = { time_block: 'Block-1', quantum_mw: '', price_per_unit: '' };
 
+const BULK_COLUMNS = [
+  'client_id', 'exchange', 'product', 'bid_date', 'delivery_date',
+  'gate_closure_time', 'time_block', 'quantum_mw', 'price_per_unit',
+];
+
+// Parse pasted CSV / TSV (Excel copy-paste lands as tab-separated) into row objects.
+function parseTabular(text) {
+  const lines = text.trim().split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return [];
+  const split = (line) => (line.includes('\t') ? line.split('\t') : line.split(',')).map((c) => c.trim());
+
+  const first = split(lines[0]).map((c) => c.toLowerCase());
+  const hasHeader = first.includes('client_id') || first.includes('quantum_mw');
+  const headers = hasHeader ? first : BULK_COLUMNS;
+
+  return lines.slice(hasHeader ? 1 : 0).map((line) => {
+    const cells = split(line);
+    return headers.reduce((row, h, i) => ({ ...row, [h]: cells[i] ?? '' }), {});
+  });
+}
+
 export default function Bids() {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
@@ -21,6 +42,17 @@ export default function Bids() {
   const [error, setError] = useState('');
   const [selectedBid, setSelectedBid] = useState(null);
 
+  // Bulk upload
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkResult, setBulkResult] = useState(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  // OCF carry-forward + exchange result
+  const [chain, setChain] = useState(null);
+  const [resultForm, setResultForm] = useState(null);
+  const [ocfForm, setOcfForm] = useState(null);
+
   function load() {
     setLoading(true);
     api.bids.list().then(setRows).finally(() => setLoading(false));
@@ -28,6 +60,63 @@ export default function Bids() {
 
   useEffect(load, []);
   useEffect(() => { api.tradingClients.list({ status: 'ACTIVE' }).then(setClients).catch(() => {}); }, []);
+
+  // Refresh the OCF lineage whenever a different bid is opened.
+  useEffect(() => {
+    setChain(null); setResultForm(null); setOcfForm(null);
+    if (selectedBid) api.bids.chain(selectedBid.id).then(setChain).catch(() => {});
+  }, [selectedBid?.id]);
+
+  async function refreshSelected(id) {
+    const fresh = await api.bids.get(id);
+    setSelectedBid(fresh);
+    load();
+  }
+
+  async function runBulk(dryRun) {
+    const parsed = parseTabular(bulkText);
+    if (!parsed.length) { setBulkResult({ errors: [{ row: null, errors: ['Nothing to parse — paste rows first'] }] }); return; }
+    setBulkBusy(true);
+    try {
+      const res = await api.bids.bulk(parsed, dryRun);
+      setBulkResult(res);
+      if (!dryRun && res.bids_created) { load(); setBulkText(''); }
+    } catch (err) {
+      setBulkResult(err.response?.data || { errors: [{ row: null, errors: ['Upload failed'] }] });
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function handleRecordResult(e) {
+    e.preventDefault();
+    try {
+      const payload = Object.entries(resultForm).map(([time_block, v]) => ({
+        time_block,
+        cleared_quantum_mw: Number(v.cleared_quantum_mw || 0),
+        cleared_price: v.cleared_price === '' ? null : Number(v.cleared_price),
+      }));
+      await api.bids.recordResult(selectedBid.id, payload);
+      await refreshSelected(selectedBid.id);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to record result');
+    }
+  }
+
+  async function handleCarryForward(e) {
+    e.preventDefault();
+    try {
+      const created = await api.bids.carryForward(selectedBid.id, {
+        to_product: ocfForm.to_product,
+        premium_discount: Number(ocfForm.premium_discount || 0),
+        gate_closure_time: ocfForm.gate_closure_time || undefined,
+      });
+      setSelectedBid(created);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Carry-forward failed');
+    }
+  }
 
   function openCreate() {
     setForm(EMPTY_FORM);
@@ -88,10 +177,96 @@ export default function Bids() {
 
   return (
     <div style={{ padding: 20 }}>
-      <PageHeader title="Exchange Bid Management" onAdd={openCreate} addLabel="New Portfolio Bid" />
+      <PageHeader
+        title="Exchange Bid Management"
+        onAdd={openCreate}
+        addLabel="New Portfolio Bid"
+        actions={
+          <button className="btn btn-outline" onClick={() => { setBulkText(''); setBulkResult(null); setShowBulk(true); }}>
+            Bulk Upload
+          </button>
+        }
+      />
       <Card>
         <Table columns={columns} data={rows} loading={loading} />
       </Card>
+
+      {showBulk && (
+        <Modal open={true} onClose={() => setShowBulk(false)} title="Bulk Bid Upload" width={900}>
+          <p style={{ marginBottom: 10, color: '#555' }}>
+            Paste rows from Excel/CSV (tab or comma separated), or pick a .csv file. Rows sharing the same
+            client, exchange, product and dates are grouped into one portfolio bid.
+          </p>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center' }}>
+            <a className="btn btn-outline" href={api.bids.bulkTemplateUrl()} download>Download CSV Template</a>
+            <input
+              type="file"
+              accept=".csv,.txt,.tsv"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) file.text().then((t) => { setBulkText(t); setBulkResult(null); });
+              }}
+            />
+          </div>
+          <textarea
+            className="input"
+            style={{ width: '100%', minHeight: 160, fontFamily: 'monospace', fontSize: 12 }}
+            placeholder={BULK_COLUMNS.join(',')}
+            value={bulkText}
+            onChange={(e) => { setBulkText(e.target.value); setBulkResult(null); }}
+          />
+
+          {bulkResult && (
+            <div style={{ marginTop: 15 }}>
+              {bulkResult.bids_created > 0 && (
+                <div style={{ color: 'green', marginBottom: 10 }}>
+                  ✓ {bulkResult.bids_created} bid(s) created from {bulkResult.rows_received} row(s).
+                </div>
+              )}
+              {bulkResult.preview?.length > 0 && (
+                <>
+                  <h4 style={{ marginBottom: 8 }}>Bids to create</h4>
+                  <Table
+                    columns={[
+                      { key: 'client_name', label: 'Client' },
+                      { key: 'exchange', label: 'Exchange' },
+                      { key: 'product', label: 'Product' },
+                      { key: 'delivery_date', label: 'Delivery' },
+                      { key: 'blocks', label: 'Blocks' },
+                      { key: 'total_mw', label: 'Total MW' },
+                      { key: 'exposure', label: 'Exposure (₹)', render: (r) => fmtNumber(r.exposure) },
+                      { key: 'source_rows', label: 'From rows', render: (r) => (r.source_rows || []).join(', ') },
+                    ]}
+                    data={bulkResult.preview}
+                  />
+                </>
+              )}
+              {bulkResult.errors?.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <h4 style={{ marginBottom: 8, color: '#b00' }}>Errors ({bulkResult.errors.length})</h4>
+                  {bulkResult.errors.map((e, i) => (
+                    <div key={i} style={{ color: '#b00', fontSize: 13 }}>
+                      {e.row ? `Row ${e.row}: ` : ''}{e.errors.join('; ')}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <button className="btn btn-outline" onClick={() => setShowBulk(false)}>Close</button>
+            <button className="btn btn-outline" disabled={bulkBusy} onClick={() => runBulk(true)}>Validate (Preview)</button>
+            <button
+              className="btn btn-primary"
+              disabled={bulkBusy || !bulkResult || bulkResult.errors?.length > 0 || !bulkResult.preview?.length}
+              onClick={() => runBulk(false)}
+            >
+              Create {bulkResult?.preview?.length || ''} Bid(s)
+            </button>
+          </div>
+        </Modal>
+      )}
 
       {showCreate && (
         <Modal open={true} onClose={() => setShowCreate(false)} title="Create Block Bid Portfolio" width={800}>
@@ -167,9 +342,10 @@ export default function Bids() {
               <p><strong>Total Exposure:</strong> ₹{fmtNumber(selectedBid.blocks.reduce((a, b) => a + (b.quantum_mw * b.price_per_unit), 0))}</p>
             </div>
             <div style={{ flex: 1 }}>
-              <p><strong>Gate Closure:</strong> {new Date(selectedBid.gate_closure_time).toLocaleString()}</p>
+              <p><strong>Gate Closure:</strong> {selectedBid.gate_closure_time ? new Date(selectedBid.gate_closure_time).toLocaleString() : 'Not set'}</p>
               <p><strong>Approval Status:</strong> <Badge>{selectedBid.approval_status}</Badge></p>
               <p><strong>Exchange Status:</strong> <Badge>{selectedBid.status}</Badge></p>
+              <p><strong>Cleared / Uncleared:</strong> {fmtNumber(selectedBid.cleared_quantum_mw)} MW / {fmtNumber(selectedBid.uncleared_mw)} MW</p>
               <p><strong>Receipt Ref:</strong> {selectedBid.exchange_receipt_ref || 'N/A'}</p>
             </div>
           </div>
@@ -187,10 +363,125 @@ export default function Bids() {
             data={selectedBid.blocks || []} 
           />
 
+          {/* OCF carry-forward lineage across market segments */}
+          {chain?.legs?.length > 1 && (
+            <div style={{ marginTop: 20, padding: 12, background: '#f2f6fb', borderLeft: '4px solid #0b4a8f' }}>
+              <strong>OCF Carry-Forward Chain</strong>
+              <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                {chain.legs.map((l, i) => (
+                  <React.Fragment key={l.id}>
+                    {i > 0 && <span style={{ color: '#0b4a8f' }}>→</span>}
+                    <span
+                      style={{
+                        padding: '4px 8px', borderRadius: 4, fontSize: 12,
+                        background: l.id === selectedBid.id ? '#0b4a8f' : '#fff',
+                        color: l.id === selectedBid.id ? '#fff' : '#333',
+                        border: '1px solid #cbd7e6', cursor: 'pointer',
+                      }}
+                      onClick={() => setSelectedBid(l)}
+                      title={l.id}
+                    >
+                      <b>{l.product}</b> {fmtNumber(l.quantum_mw)} MW
+                      {l.premium_discount
+                        ? ` (${l.premium_discount > 0 ? '+' : '−'}₹${Math.abs(l.premium_discount).toFixed(2)})`
+                        : ''}
+                      {' · '}cleared {fmtNumber(l.cleared_quantum_mw)}
+                    </span>
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Record the exchange clearing result, block-wise */}
+          {selectedBid.status === 'SUBMITTED' && (
+            <div style={{ marginTop: 20 }}>
+              {!resultForm ? (
+                <button
+                  className="btn btn-outline"
+                  onClick={() => setResultForm(Object.fromEntries(
+                    (selectedBid.blocks || []).map((b) => [b.time_block, { cleared_quantum_mw: '', cleared_price: '' }])
+                  ))}
+                >
+                  Record Exchange Result
+                </button>
+              ) : (
+                <form onSubmit={handleRecordResult} style={{ padding: 12, border: '1px solid #ddd' }}>
+                  <h4 style={{ marginBottom: 10 }}>Exchange Clearing Result</h4>
+                  {(selectedBid.blocks || []).map((b) => (
+                    <div key={b.time_block} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 8 }}>
+                      <div style={{ minWidth: 150 }}>{b.time_block} — bid {b.quantum_mw} MW @ ₹{b.price_per_unit}</div>
+                      <Field label="Cleared MW">
+                        <input type="number" step="0.1" min="0" max={b.quantum_mw} className="input" required
+                          value={resultForm[b.time_block]?.cleared_quantum_mw ?? ''}
+                          onChange={(e) => setResultForm({ ...resultForm, [b.time_block]: { ...resultForm[b.time_block], cleared_quantum_mw: e.target.value } })} />
+                      </Field>
+                      <Field label="Cleared Price (₹)">
+                        <input type="number" step="0.01" min="0" className="input"
+                          value={resultForm[b.time_block]?.cleared_price ?? ''}
+                          onChange={(e) => setResultForm({ ...resultForm, [b.time_block]: { ...resultForm[b.time_block], cleared_price: e.target.value } })} />
+                      </Field>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                    <button type="button" className="btn btn-outline" onClick={() => setResultForm(null)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary">Save Result</button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
+          {selectedBid.carried_forward_to && (
+            <p style={{ marginTop: 16, color: '#555' }}>
+              Uncleared quantum already carried forward as <strong>{selectedBid.carried_forward_to}</strong>.
+            </p>
+          )}
+
+          {/* Carry the uncleared quantum into the next market segment */}
+          {selectedBid.uncleared_mw > 0 && !selectedBid.carried_forward_to
+            && (selectedBid.carry_forward_options || []).length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              {!ocfForm ? (
+                <button
+                  className="btn btn-outline"
+                  onClick={() => setOcfForm({ to_product: selectedBid.carry_forward_options[0], premium_discount: '', gate_closure_time: '' })}
+                >
+                  Carry Forward {fmtNumber(selectedBid.uncleared_mw)} MW uncleared →
+                </button>
+              ) : (
+                <form onSubmit={handleCarryForward} style={{ padding: 12, border: '1px solid #ddd' }}>
+                  <h4 style={{ marginBottom: 10 }}>
+                    OCF Carry-Forward — {fmtNumber(selectedBid.uncleared_mw)} MW from {selectedBid.product}
+                  </h4>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                    <Field label="To Segment" required>
+                      <select className="input" value={ocfForm.to_product}
+                        onChange={(e) => setOcfForm({ ...ocfForm, to_product: e.target.value })}>
+                        {selectedBid.carry_forward_options.map((p) => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Premium (+) / Discount (−) ₹/unit">
+                      <input type="number" step="0.01" className="input" placeholder="0.00"
+                        value={ocfForm.premium_discount}
+                        onChange={(e) => setOcfForm({ ...ocfForm, premium_discount: e.target.value })} />
+                    </Field>
+                    <Field label="Gate Closure (new leg)">
+                      <input type="datetime-local" className="input" value={ocfForm.gate_closure_time}
+                        onChange={(e) => setOcfForm({ ...ocfForm, gate_closure_time: e.target.value })} />
+                    </Field>
+                    <button type="button" className="btn btn-outline" style={{ marginBottom: 4 }} onClick={() => setOcfForm(null)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary" style={{ marginBottom: 4 }}>Create Carry-Forward Bid</button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+
           <div style={{ marginTop: 24 }}>
-            <DocumentManager 
+            <DocumentManager
               moduleName="EXCHANGE_BIDS"
-              title="Bid Documents & Exchange Receipts" 
+              title="Bid Documents & Exchange Receipts"
             />
           </div>
 

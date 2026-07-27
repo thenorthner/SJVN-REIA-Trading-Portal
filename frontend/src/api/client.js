@@ -435,6 +435,12 @@ export const api = {
     submit: (id) => p(`/bids/${id}/submit`),
     approve: (id, status, reason) => p(`/bids/${id}/approve`, { status, reason }),
     noBid: (body) => p('/bids/no-bid', body),
+    bulk: (rows, dryRun) => p('/bids/bulk', { rows, dry_run: !!dryRun }),
+    bulkTemplateUrl: () => '/api/bids/bulk-template',
+    ocfChains: () => g('/bids/ocf-chains'),
+    recordResult: (id, blocks) => p(`/bids/${id}/result`, { blocks }),
+    carryForward: (id, body) => p(`/bids/${id}/carry-forward`, body),
+    chain: (id) => g(`/bids/${id}/chain`),
   },
   bilateral: {
     list: (params) => g('/bilateral', params),

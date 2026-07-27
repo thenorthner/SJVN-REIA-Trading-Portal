@@ -822,16 +822,46 @@ CREATE TABLE IF NOT EXISTS bids (
   bid_date TEXT NOT NULL,
   delivery_date TEXT NOT NULL,
   time_block TEXT,
-  quantum_mw REAL NOT NULL,
-  price_per_unit REAL NOT NULL,
-  carry_forward_from TEXT, -- e.g. GDAM->DAM->RTM chain reference
-  premium_discount REAL NOT NULL DEFAULT 0,
+  -- Header-level roll-up of the child bid_blocks rows (total MW, weighted-avg price).
+  quantum_mw REAL NOT NULL DEFAULT 0,
+  price_per_unit REAL NOT NULL DEFAULT 0,
+  gate_closure_time TEXT,
+  is_no_bid INTEGER NOT NULL DEFAULT 0,
+  no_bid_reason TEXT,
+  approval_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (approval_status IN ('PENDING','APPROVED','REJECTED')),
+  exchange_receipt_ref TEXT,
+  carry_forward_from TEXT, -- source bid id this OCF leg was carried forward from
+  ocf_leg INTEGER NOT NULL DEFAULT 0, -- 0 = original bid, 1..n = carry-forward legs
+  premium_discount REAL NOT NULL DEFAULT 0, -- Rs/unit applied on carry-forward (+premium / -discount)
   cleared_quantum_mw REAL NOT NULL DEFAULT 0,
   cleared_price REAL,
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN (
     'DRAFT','SUBMITTED','CLEARED','PARTIALLY_CLEARED','REJECTED','CANCELLED','NO_BID'
   )),
   created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS bid_blocks (
+  id TEXT PRIMARY KEY,
+  bid_id TEXT NOT NULL REFERENCES bids(id),
+  time_block TEXT NOT NULL,
+  quantum_mw REAL NOT NULL DEFAULT 0,
+  price_per_unit REAL NOT NULL DEFAULT 0,
+  cleared_quantum_mw REAL NOT NULL DEFAULT 0,
+  cleared_price REAL,
+  status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN (
+    'PENDING','CLEARED','PARTIALLY_CLEARED','UNCLEARED'
+  )),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS bid_events (
+  id TEXT PRIMARY KEY,
+  bid_id TEXT NOT NULL REFERENCES bids(id),
+  actor_id TEXT,
+  event_type TEXT NOT NULL,
+  details TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
