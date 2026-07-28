@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
@@ -14,6 +15,44 @@ const BULK_COLUMNS = [
   'client_id', 'exchange', 'product', 'bid_date', 'delivery_date',
   'gate_closure_time', 'time_block', 'quantum_mw', 'price_per_unit',
 ];
+
+const SHEET_EXT = /\.(xlsx|xlsm|xls)$/i;
+
+/** Save a blob the browser already holds, without a second unauthenticated request. */
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Read a real Excel workbook and flatten its first sheet to CSV text. */
+async function sheetToCsv(file) {
+  const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  const sheetName = wb.SheetNames[0];
+  if (!sheetName) throw new Error('Workbook has no sheets');
+  // Dates come back as text so bid_date/delivery_date survive the round trip.
+  return XLSX.utils.sheet_to_csv(wb.Sheets[sheetName], { rawNumbers: false });
+}
+
+/** Turn an existing bid into paste-ready rows, so a past bid can be re-bid for a new day. */
+function bidToRows(bid, overrides = {}) {
+  const bidDate = overrides.bid_date || bid.bid_date || '';
+  const deliveryDate = overrides.delivery_date || bid.delivery_date || '';
+  const lines = [BULK_COLUMNS.join(',')];
+  (bid.blocks || []).forEach((b) => {
+    lines.push([
+      bid.client_id, bid.exchange, bid.product, bidDate, deliveryDate,
+      overrides.gate_closure_time ?? (bid.gate_closure_time || ''),
+      b.time_block, b.quantum_mw, b.price_per_unit,
+    ].join(','));
+  });
+  return lines.join('\n');
+}
 
 // Parse pasted CSV / TSV (Excel copy-paste lands as tab-separated) into row objects.
 function parseTabular(text) {
@@ -47,6 +86,8 @@ export default function Bids() {
   const [bulkText, setBulkText] = useState('');
   const [bulkResult, setBulkResult] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkFileNote, setBulkFileNote] = useState('');
+  const [reuseId, setReuseId] = useState('');
 
   // OCF carry-forward + exchange result
   const [chain, setChain] = useState(null);
@@ -71,6 +112,63 @@ export default function Bids() {
     const fresh = await api.bids.get(id);
     setSelectedBid(fresh);
     load();
+  }
+
+  function openBulk(prefillText = '') {
+    setBulkText(typeof prefillText === 'string' ? prefillText : '');
+    setBulkResult(null);
+    setBulkFileNote('');
+    setReuseId('');
+    setShowBulk(true);
+  }
+
+  /** Re-bid straight from the list — loads that bid's blocks into the bulk editor. */
+  function handleCloneBid(bid) {
+    openBulk(bidToRows(bid));
+    setBulkFileNote(`Copied ${bid.blocks?.length || 0} block(s) from ${bid.id}. Update the dates and gate closure, then Validate.`);
+  }
+
+  async function handleDownloadTemplate() {
+    try {
+      saveBlob(await api.bids.downloadBulkTemplate(), 'bid_bulk_template.csv');
+    } catch {
+      alert('Could not download the template. Please try again.');
+    }
+  }
+
+  // Accepts a real Excel workbook as well as CSV/TSV — .xlsx is a binary zip,
+  // so reading it as text would produce garbage.
+  async function handlePickFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkResult(null);
+    try {
+      const text = SHEET_EXT.test(file.name) ? await sheetToCsv(file) : await file.text();
+      setBulkText(text);
+      const rowCount = text.trim().split(/\r?\n/).filter((l) => l.trim()).length;
+      setBulkFileNote(`Loaded "${file.name}" — ${rowCount} line(s) including header. Review below, then Validate.`);
+    } catch (err) {
+      setBulkFileNote('');
+      setBulkResult({ errors: [{ row: null, errors: [`Could not read "${file.name}": ${err.message}`] }] });
+    }
+  }
+
+  async function handleReuseBid() {
+    if (!reuseId) return;
+    try {
+      // The list rows already carry blocks, but re-fetch so a stale list can't
+      // silently produce an empty re-bid.
+      const bid = await api.bids.get(reuseId);
+      if (!bid.blocks?.length) {
+        setBulkResult({ errors: [{ row: null, errors: ['That bid has no blocks to copy'] }] });
+        return;
+      }
+      setBulkText(bidToRows(bid));
+      setBulkResult(null);
+      setBulkFileNote(`Loaded ${bid.blocks.length} block(s) from ${bid.id}. Update the bid/delivery dates and gate closure before validating.`);
+    } catch {
+      setBulkResult({ errors: [{ row: null, errors: ['Could not load that bid'] }] });
+    }
   }
 
   async function runBulk(dryRun) {
@@ -172,7 +270,12 @@ export default function Bids() {
     { key: 'delivery_date', label: 'Delivery Date' },
     { key: 'approval_status', label: 'Approval', render: r => <Badge type={r.approval_status === 'APPROVED' ? 'success' : r.approval_status === 'REJECTED' ? 'danger' : 'warning'}>{r.approval_status}</Badge> },
     { key: 'status', label: 'Exchange Status', render: r => <Badge type={r.status === 'CLEARED' ? 'success' : r.status === 'DRAFT' ? 'neutral' : 'primary'}>{r.status}</Badge> },
-    { key: 'actions', label: 'Actions', render: r => <button className="btn btn-outline" onClick={() => setSelectedBid(r)}>View</button> }
+    { key: 'actions', label: 'Actions', render: r => (
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button className="btn btn-outline" onClick={() => setSelectedBid(r)}>View</button>
+        <button className="btn btn-outline" title="Re-bid using this bid's blocks" onClick={() => handleCloneBid(r)}>Re-bid</button>
+      </div>
+    ) }
   ];
 
   return (
@@ -182,7 +285,7 @@ export default function Bids() {
         onAdd={openCreate}
         addLabel="New Portfolio Bid"
         actions={
-          <button className="btn btn-outline" onClick={() => { setBulkText(''); setBulkResult(null); setShowBulk(true); }}>
+          <button className="btn btn-outline" onClick={openBulk}>
             Bulk Upload
           </button>
         }
@@ -194,20 +297,39 @@ export default function Bids() {
       {showBulk && (
         <Modal open={true} onClose={() => setShowBulk(false)} title="Bulk Bid Upload" width={900}>
           <p style={{ marginBottom: 10, color: '#555' }}>
-            Paste rows from Excel/CSV (tab or comma separated), or pick a .csv file. Rows sharing the same
-            client, exchange, product and dates are grouped into one portfolio bid.
+            Paste rows from Excel/CSV (tab or comma separated), upload an Excel workbook (.xlsx/.xls) or .csv file,
+            or reuse a previous bid. Rows sharing the same client, exchange, product and dates are grouped into
+            one portfolio bid.
           </p>
-          <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center' }}>
-            <a className="btn btn-outline" href={api.bids.bulkTemplateUrl()} download>Download CSV Template</a>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button className="btn btn-outline" onClick={handleDownloadTemplate}>Download CSV Template</button>
             <input
               type="file"
-              accept=".csv,.txt,.tsv"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) file.text().then((t) => { setBulkText(t); setBulkResult(null); });
-              }}
+              accept=".csv,.txt,.tsv,.xlsx,.xlsm,.xls"
+              onChange={handlePickFile}
             />
           </div>
+
+          {/* Re-bid: pull a past bid's blocks in, then edit the dates before submitting. */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{ fontSize: 13, color: '#555' }}>Copy from previous bid:</label>
+            <select
+              className="input"
+              style={{ maxWidth: 380 }}
+              value={reuseId}
+              onChange={(e) => setReuseId(e.target.value)}
+            >
+              <option value="">— select a bid —</option>
+              {rows.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.id} · {r.client_name} · {r.exchange}-{r.product} · {r.delivery_date}
+                </option>
+              ))}
+            </select>
+            <button className="btn btn-outline" disabled={!reuseId} onClick={handleReuseBid}>Load rows</button>
+          </div>
+
+          {bulkFileNote && <div style={{ marginBottom: 10, fontSize: 13, color: '#555' }}>{bulkFileNote}</div>}
           <textarea
             className="input"
             style={{ width: '100%', minHeight: 160, fontFamily: 'monospace', fontSize: 12 }}

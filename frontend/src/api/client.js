@@ -436,7 +436,9 @@ export const api = {
     approve: (id, status, reason) => p(`/bids/${id}/approve`, { status, reason }),
     noBid: (body) => p('/bids/no-bid', body),
     bulk: (rows, dryRun) => p('/bids/bulk', { rows, dry_run: !!dryRun }),
-    bulkTemplateUrl: () => '/api/bids/bulk-template',
+    // Must go through the axios client so the JWT is attached — a plain <a href>
+    // hits the API unauthenticated and downloads the 401 JSON body instead.
+    downloadBulkTemplate: () => client.get('/bids/bulk-template', { responseType: 'blob' }).then((r) => r.data),
     ocfChains: () => g('/bids/ocf-chains'),
     recordResult: (id, blocks) => p(`/bids/${id}/result`, { blocks }),
     carryForward: (id, body) => p(`/bids/${id}/carry-forward`, body),
