@@ -18,6 +18,12 @@ const NOAR_STEP_LABEL = {
   APPROVED: 'Approved by NLDC',
 };
 
+/** Open access losses are notified per leg; the deal-level figure is their sum. */
+function totalLosses(tx) {
+  return ['loss_injection_state', 'loss_inter_state', 'loss_drawee_state']
+    .reduce((sum, k) => sum + (Number(tx?.[k]) || 0), 0);
+}
+
 /** Approval turnaround reads in days; short gaps still need to be legible. */
 function fmtDuration(hours) {
   if (hours === null || hours === undefined) return null;
@@ -244,7 +250,12 @@ export default function Bilateral() {
               <p><strong>Total MW:</strong> {selectedTx.quantum_mw}</p>
             </div>
             <div style={{ flex: 1 }}>
-              <p><strong>Total Losses:</strong> {(selectedTx.loss_injection_state + selectedTx.loss_inter_state + selectedTx.loss_drawee_state).toFixed(2)}%</p>
+              <p>
+                <strong>Total Losses:</strong> {totalLosses(selectedTx).toFixed(2)}%
+                <span style={{ color: '#64748b', fontSize: 12 }}>
+                  {' '}(inj {Number(selectedTx.loss_injection_state) || 0} · ISTS {Number(selectedTx.loss_inter_state) || 0} · drawee {Number(selectedTx.loss_drawee_state) || 0})
+                </span>
+              </p>
               <p><strong>Period:</strong> {selectedTx.start_date} to {selectedTx.end_date}</p>
             </div>
             <div style={{ flex: 1, textAlign: 'right' }}>

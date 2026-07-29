@@ -876,7 +876,16 @@ CREATE TABLE IF NOT EXISTS bilateral_transactions (
   schedule_status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (schedule_status IN ('DRAFT','SUBMITTED','APPROVED','REVISED','CANCELLED')),
   wheeling_charges REAL NOT NULL DEFAULT 0,
   transmission_charges REAL NOT NULL DEFAULT 0,
+  -- Superseded by the three loss legs below; retained so migrated and fresh
+  -- databases keep the same shape. Nothing reads or writes it.
   losses_percent REAL NOT NULL DEFAULT 0,
+  -- Open access term: Short / Medium / Long, which drives the NOAR application route.
+  oa_type TEXT NOT NULL DEFAULT 'STOA' CHECK (oa_type IN ('STOA','MTOA','LTOA')),
+  -- Open access losses apply at three points, each notified separately:
+  -- intra-state at injection, ISTS between states, intra-state at drawal.
+  loss_injection_state REAL NOT NULL DEFAULT 0,
+  loss_inter_state REAL NOT NULL DEFAULT 0,
+  loss_drawee_state REAL NOT NULL DEFAULT 0,
   start_date TEXT NOT NULL,
   end_date TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','COMPLETED','CANCELLED')),

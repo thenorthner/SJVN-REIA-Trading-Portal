@@ -173,6 +173,17 @@ function migrateBilateralNoar() {
       ALTER TABLE bilateral_transactions ADD COLUMN noar_status TEXT NOT NULL DEFAULT 'NOT_INITIATED';
     `);
   }
+  // The create form, the INSERT and the list filter were all written against
+  // these columns, but they were never added to the table — so creating a
+  // bilateral deal failed outright and Total Losses rendered as NaN.
+  if (!cols.includes('oa_type')) {
+    db.exec(`
+      ALTER TABLE bilateral_transactions ADD COLUMN oa_type TEXT NOT NULL DEFAULT 'STOA';
+      ALTER TABLE bilateral_transactions ADD COLUMN loss_injection_state REAL NOT NULL DEFAULT 0;
+      ALTER TABLE bilateral_transactions ADD COLUMN loss_inter_state REAL NOT NULL DEFAULT 0;
+      ALTER TABLE bilateral_transactions ADD COLUMN loss_drawee_state REAL NOT NULL DEFAULT 0;
+    `);
+  }
   // Transition history for open-access approval tracking. Deliberately not
   // backfilled: transactions that already moved before this table existed have
   // no real transition times, and inventing them would misreport turnaround.

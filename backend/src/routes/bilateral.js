@@ -9,6 +9,7 @@ router.use(requireAuth);
 
 // NOAR open-access lifecycle, in the order the PT workflow walks it.
 const NOAR_STATUSES = ['NOT_INITIATED', 'FORMAT_D_PREPARED', 'CONTRACT_CREATED', 'SUBMITTED', 'APPROVED'];
+const OA_TYPES = ['STOA', 'MTOA', 'LTOA'];
 
 /** SQLite stores UTC as 'YYYY-MM-DD HH:MM:SS'; JS would otherwise read it as local time. */
 const parseUtc = (s) => (s ? new Date(`${String(s).replace(' ', 'T')}Z`) : null);
@@ -98,7 +99,28 @@ router.get('/:id', (req, res) => {
 router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   const b = req.body;
   const id = newId('BIL');
-  
+
+  // Validate before touching the DB, so a missing field is a 400 naming the
+  // field rather than a 500 carrying a raw SQLite constraint message.
+  const errors = [];
+  if (!b.client_id) errors.push('client_id is required');
+  else if (!db.prepare('SELECT 1 FROM trading_clients WHERE id = ?').get(b.client_id)) errors.push('client_id does not exist');
+  if (!String(b.counterparty || '').trim()) errors.push('counterparty is required');
+  const oaType = b.oa_type || 'STOA';
+  if (!OA_TYPES.includes(oaType)) errors.push(`oa_type must be one of: ${OA_TYPES.join(', ')}`);
+  const qty = Number(b.quantum_mw);
+  if (!Number.isFinite(qty) || qty <= 0) errors.push('quantum_mw must be a positive number');
+  const tariff = Number(b.tariff_per_unit);
+  if (!Number.isFinite(tariff) || tariff < 0) errors.push('tariff_per_unit must be a non-negative number');
+  if (!b.start_date) errors.push('start_date is required');
+  if (!b.end_date) errors.push('end_date is required');
+  if (b.start_date && b.end_date && b.end_date < b.start_date) errors.push('end_date cannot be before start_date');
+  for (const leg of ['loss_injection_state', 'loss_inter_state', 'loss_drawee_state']) {
+    const v = Number(b[leg] ?? 0);
+    if (!Number.isFinite(v) || v < 0 || v > 100) errors.push(`${leg} must be a percentage between 0 and 100`);
+  }
+  if (errors.length) return res.status(400).json({ error: errors[0], errors });
+
   db.prepare(`
     INSERT INTO bilateral_transactions (
       id, client_id, counterparty, loi_contract_ref, oa_type, is_standing_clearance, 
@@ -107,9 +129,9 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
       start_date, end_date, status
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
   `).run(
-    id, b.client_id, b.counterparty, b.loi_contract_ref, b.oa_type || 'STOA', b.is_standing_clearance ? 1 : 0,
-    b.quantum_mw, b.tariff_per_unit, b.wheeling_charges || 0, b.transmission_charges || 0,
-    b.loss_injection_state || 0, b.loss_inter_state || 0, b.loss_drawee_state || 0,
+    id, b.client_id, String(b.counterparty).trim(), b.loi_contract_ref || null, oaType, b.is_standing_clearance ? 1 : 0,
+    qty, tariff, Number(b.wheeling_charges) || 0, Number(b.transmission_charges) || 0,
+    Number(b.loss_injection_state) || 0, Number(b.loss_inter_state) || 0, Number(b.loss_drawee_state) || 0,
     b.start_date, b.end_date
   );
 
