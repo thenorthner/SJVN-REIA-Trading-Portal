@@ -4,6 +4,8 @@ import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, pushNotification } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { getParam, getParamNumber } from '../mastersService.js';
+import { generateNoarApprovalReportPdf } from '../scripts/noarApprovalReportPdf.js';
+import { sendMail } from '../services/mailService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -161,9 +163,9 @@ router.get('/', (req, res) => {
   res.json(db.prepare(sql).all(...params).map(withDetails));
 });
 
-// Portfolio view of open-access approval performance.
-// Declared before '/:id' so "noar-sla" is not swallowed as a transaction id.
-router.get('/noar-sla', (req, res) => {
+// Portfolio view of open-access approval performance. Shared by the API, the
+// PDF report and the weekly digest so all three quote the same figures.
+function noarSlaSummary() {
   const rows = db.prepare('SELECT * FROM bilateral_transactions').all();
   const counts = { NOT_APPLICABLE: 0, ON_TRACK: 0, AT_RISK: 0, BREACHED: 0, MET: 0, MISSED: 0, REJECTED: 0 };
   const attention = [];
@@ -192,7 +194,7 @@ router.get('/noar-sla', (req, res) => {
   attention.sort((a, b) => b.elapsed_days - a.elapsed_days);
 
   const decided = counts.MET + counts.MISSED;
-  res.json({
+  return {
     counts,
     pending_total: counts.ON_TRACK + counts.AT_RISK + counts.BREACHED,
     // Share of *decided* approvals that landed within target — pending ones
@@ -202,7 +204,67 @@ router.get('/noar-sla', (req, res) => {
     targets: getParam('noar_sla_days', DEFAULT_SLA_DAYS),
     warning_fraction: getParamNumber('noar_sla_warning_fraction', 0.7),
     needs_attention: attention,
-  });
+  };
+}
+
+/** Applications whose approval has been decided, most recently decided first. */
+function decidedApplications(limit = 40) {
+  return db.prepare("SELECT * FROM bilateral_transactions WHERE noar_status IN ('APPROVED','REJECTED')").all()
+    .map((tx) => {
+      const timeline = buildNoarTimeline(tx);
+      const sla = buildNoarSla(tx, timeline);
+      return {
+        id: tx.id,
+        counterparty: tx.counterparty,
+        noar_contract_no: tx.noar_contract_no,
+        oa_type: tx.oa_type,
+        state: sla.state,
+        elapsed_days: sla.elapsed_days,
+        submitted_at: timeline.submitted_at,
+        decided_at: timeline.approved_at || timeline.rejected_at,
+      };
+    })
+    .filter((r) => r.decided_at)
+    .sort((a, b) => String(b.decided_at).localeCompare(String(a.decided_at)))
+    .slice(0, limit);
+}
+
+const csvCell = (v) => {
+  const s = v === null || v === undefined ? '' : String(v);
+  // Quote when the value holds a delimiter, quote or newline; double inner quotes.
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+// These three are declared ahead of '/:id' so their paths are not read as
+// transaction ids — Express matches in declaration order.
+router.get('/noar-sla', (_req, res) => res.json(noarSlaSummary()));
+
+/** Every recorded transition, for audit and offline review. */
+router.get('/noar-timeline.csv', (_req, res) => {
+  const txs = db.prepare('SELECT * FROM bilateral_transactions ORDER BY created_at DESC').all();
+  const lines = [[
+    'transaction_id', 'client', 'counterparty', 'oa_type', 'noar_contract_no',
+    'status_from', 'status_to', 'changed_at_utc', 'changed_by', 'hours_in_previous_status', 'note',
+  ].join(',')];
+
+  for (const tx of txs) {
+    const client = db.prepare('SELECT name FROM trading_clients WHERE id = ?').get(tx.client_id)?.name;
+    for (const e of buildNoarTimeline(tx).entries) {
+      lines.push([
+        tx.id, client, tx.counterparty, tx.oa_type, e.noar_contract_no,
+        e.status_from, e.status_to, e.changed_at, e.changed_by_name,
+        e.hours_in_previous_status, e.note,
+      ].map(csvCell).join(','));
+    }
+  }
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="SJVN_NOAR_Timeline_${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.send(lines.join('\n'));
+});
+
+router.get('/noar-approval-report.pdf', (_req, res) => {
+  generateNoarApprovalReportPdf(noarSlaSummary(), decidedApplications(), res);
 });
 
 // Get single transaction
@@ -571,6 +633,55 @@ export function runNoarSlaAlerts() {
 // Manual trigger for the same sweep the scheduler runs.
 router.post('/noar-sla/check', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   res.json(runNoarSlaAlerts());
+});
+
+/**
+ * Weekly digest of where open-access approvals stand.
+ *
+ * Recipients come from master data and there is no fallback list — mailing a
+ * guessed address would be worse than not sending. With no SMTP host set,
+ * mailService writes the message to backend/outbox/ instead.
+ */
+export async function sendNoarWeeklyDigest() {
+  const raw = String(getParam('noar_sla_digest_recipients', '') || '').trim();
+  const to = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  if (!to.length) return { ok: false, skipped: 'No recipients configured (noar_sla_digest_recipients)' };
+
+  const s = noarSlaSummary();
+  const line = (a) => `  • ${a.counterparty} (${a.noar_contract_no || a.id}) — ${STATE_TEXT[a.state]}, ${a.elapsed_days}d of ${a.target_days}d target`
+    + (a.rejection_reason ? `\n      reason: ${a.rejection_reason}` : '');
+
+  const text = [
+    'NOAR open-access approvals — weekly digest',
+    '',
+    `Pending approvals : ${s.pending_total}  (${s.counts.ON_TRACK} on track, ${s.counts.AT_RISK} at risk, ${s.counts.BREACHED} overdue)`,
+    `Rejected, awaiting resubmission : ${s.counts.REJECTED}`,
+    `On-time rate : ${s.on_time_rate_pct === null ? 'no decided approvals yet' : `${s.on_time_rate_pct}% of ${s.counts.MET + s.counts.MISSED} decided`}`,
+    `Average approval time : ${s.avg_approval_days === null ? '—' : `${s.avg_approval_days} days`}`,
+    `Targets : ${Object.entries(s.targets).map(([k, v]) => `${k} ${v}d`).join(', ')}`,
+    '',
+    s.needs_attention.length ? `Needs attention (${s.needs_attention.length}):` : 'Nothing overdue, at risk or rejected.',
+    ...s.needs_attention.map(line),
+    '',
+    'Measured from submission to NLDC approval. Generated by the SJVN Energy Platform.',
+  ].join('\n');
+
+  const result = await sendMail({
+    to,
+    subject: `NOAR approvals — ${s.pending_total} pending, ${s.needs_attention.length} need attention`,
+    text,
+  });
+  return { ...result, recipients: to.length, needs_attention: s.needs_attention.length };
+}
+
+const STATE_TEXT = {
+  ON_TRACK: 'on track', AT_RISK: 'at risk', BREACHED: 'overdue', REJECTED: 'rejected',
+  MET: 'met target', MISSED: 'missed target', NOT_APPLICABLE: 'not submitted',
+};
+
+// Manual trigger, so the digest can be checked without waiting for Monday.
+router.post('/noar-sla/digest', requireRole(...ROLE_GROUPS.TRADING_WRITE), async (req, res) => {
+  res.json(await sendNoarWeeklyDigest());
 });
 
 // Full transition history for one transaction.

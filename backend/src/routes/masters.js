@@ -114,8 +114,15 @@ router.put('/parameters/:key', requireRole(...MASTERS_WRITE), (req, res) => {
   const existing = db.prepare('SELECT * FROM system_parameters WHERE param_key = ?').get(req.params.key);
   if (!existing) return res.status(404).json({ error: 'Parameter not found' });
   const { param_value, description, unit, is_active } = req.body;
-  if (param_value === undefined || param_value === null || param_value === '') {
+  // An empty string is a legitimate value: several TEXT parameters use "unset"
+  // to mean disabled (smtp_host, noar_sla_digest_recipients). Rejecting it left
+  // no way to switch those back off once configured. Omitting the field is
+  // still an error — that is a malformed request rather than a deliberate clear.
+  if (param_value === undefined || param_value === null) {
     return res.status(400).json({ error: 'param_value is required' });
+  }
+  if (param_value === '' && existing.data_type !== 'TEXT') {
+    return res.status(400).json({ error: `param_value cannot be empty for a ${existing.data_type} parameter` });
   }
   db.prepare(`
     UPDATE system_parameters

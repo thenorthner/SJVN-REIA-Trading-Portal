@@ -19,7 +19,7 @@ import reconciliationRoutes, { runScheduledReconciliations } from './routes/reco
 import { runStakeholderAlerts } from './stakeholderEngine.js';
 import tradingClientsRoutes from './routes/tradingClients.js';
 import bidsRoutes from './routes/bids.js';
-import bilateralRoutes, { runNoarSlaAlerts } from './routes/bilateral.js';
+import bilateralRoutes, { runNoarSlaAlerts, sendNoarWeeklyDigest } from './routes/bilateral.js';
 import billingSettlementRoutes from './routes/billingSettlement.js';
 import marketAnalyticsRoutes from './routes/marketAnalytics.js';
 import dashboardRoutes from './routes/dashboard.js';
@@ -157,6 +157,15 @@ app.listen(PORT, () => {
       console.error('[NOAR-SLA] sweep failed', err.message);
     }
   }, 60 * 60 * 1000);
+  // Weekly NOAR approval digest — Monday 09:00 IST (03:30 UTC)
+  cron.schedule('30 3 * * 1', async () => {
+    try {
+      const result = await sendNoarWeeklyDigest();
+      console.log(result.skipped ? `[NOAR-DIGEST] Skipped — ${result.skipped}` : `[NOAR-DIGEST] Sent to ${result.recipients} recipient(s) via ${result.mode}`);
+    } catch (err) {
+      console.error('[NOAR-DIGEST] failed', err.message);
+    }
+  });
 
   // ─── REA Scraper Scheduled Jobs ───────────────────────
   // Smart schedule: Daily at 6 AM IST during 1st-10th of each month

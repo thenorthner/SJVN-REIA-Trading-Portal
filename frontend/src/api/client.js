@@ -455,6 +455,8 @@ export const api = {
     updateNoar: (id, body) => p(`/bilateral/${id}/noar`, body),
     noarSla: () => g('/bilateral/noar-sla'),
     noarBulk: (body) => p('/bilateral/noar/bulk', body),
+    downloadNoarTimelineCsv: () => client.get('/bilateral/noar-timeline.csv', { responseType: 'blob' }).then((r) => r.data),
+    downloadNoarReportPdf: () => client.get('/bilateral/noar-approval-report.pdf', { responseType: 'blob' }).then((r) => r.data),
     formatDUrl: (id) => `/api/bilateral/${id}/format-d`,
     downloadFormatD: (id) => client.get(`/bilateral/${id}/format-d`, { responseType: 'blob' }).then((r) => r.data),
   },

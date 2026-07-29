@@ -152,6 +152,20 @@ export default function Bilateral() {
       setSelectedTx(updated); load();
     } catch (err) { alert('Failed to update NOAR status'); }
   }
+  /** Downloads go through the API client so the JWT is attached. */
+  async function download(fetcher, filename) {
+    try {
+      const blob = await fetcher();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert(`Could not download ${filename}.`);
+    }
+  }
+
   function togglePick(id) {
     setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
     setBulkPreview(null);
@@ -299,6 +313,16 @@ export default function Bilateral() {
               <div style={{ fontSize: 12, color: '#64748b' }}>
                 Targets: {Object.entries(sla.targets).map(([k, v]) => `${k} ${v}d`).join(' · ')}
               </div>
+            </div>
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignSelf: 'center' }}>
+              <button className="btn btn-outline btn-sm"
+                onClick={() => download(api.bilateral.downloadNoarTimelineCsv, `SJVN_NOAR_Timeline_${new Date().toISOString().slice(0, 10)}.csv`)}>
+                Timeline CSV
+              </button>
+              <button className="btn btn-outline btn-sm"
+                onClick={() => download(api.bilateral.downloadNoarReportPdf, `SJVN_NOAR_Approval_Report_${new Date().toISOString().slice(0, 10)}.pdf`)}>
+                Approval Report PDF
+              </button>
             </div>
             {sla.needs_attention.length > 0 && (
               <div style={{ flex: 1, minWidth: 260 }}>

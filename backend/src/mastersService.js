@@ -45,6 +45,7 @@ const DEFAULT_PARAMS = [
   { category: 'TRADING', param_key: 'ocf_default_premium', param_value: JSON.stringify({ 'GDAM>DAM': 0, 'GDAM>RTM': 0, 'DAM>RTM': 0 }), data_type: 'JSON', unit: 'INR/kWh', description: 'Default premium (+) or discount (−) in Rs/unit pre-filled on the carry-forward form, keyed "FROM>TO". The trader can still override it per bid.' },
   { category: 'TRADING', param_key: 'noar_sla_days', param_value: JSON.stringify({ STOA: 7, MTOA: 15, LTOA: 30 }), data_type: 'JSON', unit: 'days', description: 'SJVN internal target for NOAR open-access approval, measured from submission to NLDC approval, by open-access term. These are tracking targets set by SJVN, not statutory limits — set them to whatever the business commits to.' },
   { category: 'TRADING', param_key: 'noar_sla_warning_fraction', param_value: '0.7', data_type: 'NUMBER', unit: 'fraction', description: 'Fraction of the NOAR SLA target at which a pending approval is flagged AT_RISK (0.7 = warn once 70% of the allowed days have elapsed). Set to 1 to warn only on breach.' },
+  { category: 'TRADING', param_key: 'noar_sla_digest_recipients', param_value: '', data_type: 'TEXT', unit: '', description: 'Comma-separated email addresses for the weekly NOAR approval digest (Monday 09:00 IST). Empty = digest is skipped. With no SMTP host configured the mail is written to backend/outbox/ instead of being sent.' },
 ];
 
 const DEFAULT_BANKS = [
