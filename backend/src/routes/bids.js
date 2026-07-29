@@ -3,6 +3,7 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
+import { getParam } from '../mastersService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -12,10 +13,37 @@ const PRODUCTS = ['DAM', 'HPDAM', 'TAM', 'GDAM', 'RTM', 'GTAM', 'REC', 'ESCERT',
 
 // OCF (Open Contract Forward) / carry-forward chains permitted across market segments.
 // Covers the SOW-named flows: DAM->RTM, GDAM->DAM->RTM and GDAM->RTM.
-const OCF_CHAINS = {
+// Configured in system_parameters so a route can be opened or closed without a
+// code change; this constant is only the fallback if the parameter is missing.
+const DEFAULT_OCF_CHAINS = {
   GDAM: ['DAM', 'RTM'],
   DAM: ['RTM'],
 };
+
+/**
+ * Allowed carry-forward targets per source product.
+ * A malformed parameter must not take bidding down, so anything that isn't a
+ * clean {product: [product,...]} map falls back to the built-in chains.
+ */
+function ocfChains() {
+  const raw = getParam('ocf_carry_forward_chains', null);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return DEFAULT_OCF_CHAINS;
+  const clean = {};
+  for (const [from, targets] of Object.entries(raw)) {
+    if (!PRODUCTS.includes(from) || !Array.isArray(targets)) continue;
+    const valid = targets.filter((t) => PRODUCTS.includes(t) && t !== from);
+    if (valid.length) clean[from] = valid;
+  }
+  return Object.keys(clean).length ? clean : DEFAULT_OCF_CHAINS;
+}
+
+/** Pre-fill premium for a FROM>TO transition, 0 when not configured. */
+function ocfDefaultPremium(fromProduct, toProduct) {
+  const map = getParam('ocf_default_premium', null);
+  if (!map || typeof map !== 'object') return 0;
+  const n = Number(map[`${fromProduct}>${toProduct}`]);
+  return Number.isFinite(n) ? n : 0;
+}
 
 const withDetails = (bid) => {
   if (!bid) return bid;
@@ -25,7 +53,12 @@ const withDetails = (bid) => {
   bid.blocks = db.prepare('SELECT * FROM bid_blocks WHERE bid_id = ? ORDER BY time_block ASC').all(bid.id);
   bid.events = db.prepare('SELECT * FROM bid_events WHERE bid_id = ? ORDER BY created_at DESC').all(bid.id);
   bid.uncleared_mw = bid.blocks.reduce((a, b) => a + Math.max(0, b.quantum_mw - b.cleared_quantum_mw), 0);
-  bid.carry_forward_options = OCF_CHAINS[bid.product] || [];
+  const targets = ocfChains()[bid.product] || [];
+  bid.carry_forward_options = targets;
+  // Let the UI pre-fill the configured premium for each permitted route.
+  bid.carry_forward_defaults = targets.reduce(
+    (acc, t) => ({ ...acc, [t]: ocfDefaultPremium(bid.product, t) }), {}
+  );
   bid.carried_forward_to = db.prepare('SELECT id FROM bids WHERE carry_forward_from = ?').get(bid.id)?.id || null;
   return bid;
 };
@@ -94,7 +127,11 @@ router.get('/', (req, res) => {
 });
 
 // Permitted OCF carry-forward transitions (declared before /:id so it is not captured).
-router.get('/ocf-chains', (_req, res) => res.json(OCF_CHAINS));
+router.get('/ocf-chains', (_req, res) => res.json({
+  chains: ocfChains(),
+  default_premium: getParam('ocf_default_premium', {}) || {},
+  configured_via: 'system_parameters: ocf_carry_forward_chains, ocf_default_premium',
+}));
 
 // CSV template for bulk bid upload.
 router.get('/bulk-template', (_req, res) => {
@@ -352,10 +389,15 @@ router.post('/:id/carry-forward', requireRole(...ROLE_GROUPS.TRADING_WRITE), (re
   if (!source) return res.status(404).json({ error: 'Bid not found' });
 
   const toProduct = String(req.body.to_product ?? '').trim().toUpperCase();
-  const premium = Number(req.body.premium_discount ?? 0);
+  // Omitting the premium applies the configured default for this route;
+  // an explicit value (including 0) always wins.
+  const supplied = req.body.premium_discount;
+  const premium = supplied === undefined || supplied === null || supplied === ''
+    ? ocfDefaultPremium(source.product, toProduct)
+    : Number(supplied);
   if (!Number.isFinite(premium)) return res.status(400).json({ error: 'premium_discount must be a number' });
 
-  const allowed = OCF_CHAINS[source.product] || [];
+  const allowed = ocfChains()[source.product] || [];
   if (!allowed.includes(toProduct)) {
     return res.status(400).json({ error: `Carry-forward from ${source.product} is only allowed to: ${allowed.join(', ') || 'none'}` });
   }

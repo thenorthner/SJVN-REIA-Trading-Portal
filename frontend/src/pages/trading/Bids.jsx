@@ -18,6 +18,12 @@ const BULK_COLUMNS = [
 
 const SHEET_EXT = /\.(xlsx|xlsm|xls)$/i;
 
+/** Admin-configured default premium/discount for a carry-forward route, as form text. */
+function ocfDefaultFor(bid, toProduct) {
+  const v = bid?.carry_forward_defaults?.[toProduct];
+  return Number.isFinite(Number(v)) && Number(v) !== 0 ? String(v) : '';
+}
+
 /** Save a blob the browser already holds, without a second unauthenticated request. */
 function saveBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -567,7 +573,10 @@ export default function Bids() {
               {!ocfForm ? (
                 <button
                   className="btn btn-outline"
-                  onClick={() => setOcfForm({ to_product: selectedBid.carry_forward_options[0], premium_discount: '', gate_closure_time: '' })}
+                  onClick={() => {
+                    const to = selectedBid.carry_forward_options[0];
+                    setOcfForm({ to_product: to, premium_discount: ocfDefaultFor(selectedBid, to), gate_closure_time: '' });
+                  }}
                 >
                   Carry Forward {fmtNumber(selectedBid.uncleared_mw)} MW uncleared →
                 </button>
@@ -579,7 +588,12 @@ export default function Bids() {
                   <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                     <Field label="To Segment" required>
                       <select className="input" value={ocfForm.to_product}
-                        onChange={(e) => setOcfForm({ ...ocfForm, to_product: e.target.value })}>
+                        onChange={(e) => setOcfForm({
+                          ...ocfForm,
+                          to_product: e.target.value,
+                          // Re-apply the configured default for the newly chosen route.
+                          premium_discount: ocfDefaultFor(selectedBid, e.target.value),
+                        })}>
                         {selectedBid.carry_forward_options.map((p) => <option key={p} value={p}>{p}</option>)}
                       </select>
                     </Field>

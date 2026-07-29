@@ -41,6 +41,8 @@ const DEFAULT_PARAMS = [
   { category: 'REGULATORY', param_key: 'cerc_form_iv_due_days', param_value: '30', data_type: 'NUMBER', unit: 'days', description: 'Days after the reporting period ends by which Form-IV must be filed with CERC.' },
   { category: 'REGULATORY', param_key: 'rec_certificate_multipliers', param_value: JSON.stringify({ Solar: 1, Wind: 1, Hybrid: 1, Hydro: 1.5, PSP: 1.5, MSW: 2, Cogeneration: 2, Biomass: 2.5, Biofuel: 2.5 }), data_type: 'JSON', unit: '', description: 'CERC REC Regulations 2022 cl.12(2) Certificate Multiplier by technology: RECs issued = injected MWh × multiplier. Wind/Solar 1, Hydro 1.5, MSW & non-fossil cogen 2, Biomass/Biofuel 2.5.' },
   { category: 'REGULATORY', param_key: 'rec_issuance_fee_per_rec', param_value: '4', data_type: 'NUMBER', unit: 'INR/REC', description: 'Central Agency (Grid India) registry issuance charge per REC — default cost basis for a new lot.' },
+  { category: 'TRADING', param_key: 'ocf_carry_forward_chains', param_value: JSON.stringify({ GDAM: ['DAM', 'RTM'], DAM: ['RTM'] }), data_type: 'JSON', unit: '', description: 'OCF carry-forward: which market segments a bid\'s uncleared quantity may be carried forward into, keyed by the source product. Covers DAM→RTM, GDAM→DAM→RTM and GDAM→RTM. Edit to open or close a route without a code change.' },
+  { category: 'TRADING', param_key: 'ocf_default_premium', param_value: JSON.stringify({ 'GDAM>DAM': 0, 'GDAM>RTM': 0, 'DAM>RTM': 0 }), data_type: 'JSON', unit: 'INR/kWh', description: 'Default premium (+) or discount (−) in Rs/unit pre-filled on the carry-forward form, keyed "FROM>TO". The trader can still override it per bid.' },
 ];
 
 const DEFAULT_BANKS = [

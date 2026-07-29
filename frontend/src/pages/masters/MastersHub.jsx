@@ -15,6 +15,7 @@ const TABS = [
   // { id: 'beta', label: 'Frequency β' },
   { id: 'regulatory', label: 'Regulatory' },
   { id: 'billing', label: 'Billing Params' },
+  { id: 'trading', label: 'Trading Params' },
   { id: 'documents', label: 'Document Types' },
   { id: 'lookups', label: 'Lookups' },
 ];
@@ -88,6 +89,7 @@ export default function MastersHub() {
     }
     if (t === 'regulatory') api.masters.parameters({ category: 'REGULATORY', active: '0' }).then(setParams).catch((e) => setError(e.response?.data?.error || 'Failed'));
     if (t === 'billing') api.masters.parameters({ category: 'BILLING', active: '0' }).then(setParams).catch((e) => setError(e.response?.data?.error || 'Failed'));
+    if (t === 'trading') api.masters.parameters({ category: 'TRADING', active: '0' }).then(setParams).catch((e) => setError(e.response?.data?.error || 'Failed'));
     if (t === 'documents') api.masters.documentTypes({ active: '0' }).then(setDocTypes).catch((e) => setError(e.response?.data?.error || 'Failed'));
     if (t === 'lookups') api.masters.lookups({ active: '0' }).then(setLookups).catch((e) => setError(e.response?.data?.error || 'Failed'));
   }
@@ -491,7 +493,7 @@ export default function MastersHub() {
         </Card>
       )}
 
-      {(tab === 'regulatory' || tab === 'billing') && (
+      {(tab === 'regulatory' || tab === 'billing' || tab === 'trading') && (
         <Card
           title={tab === 'regulatory' ? 'Regulatory Parameter Master' : 'Billing Parameter Master'}
           actions={canWrite && (

@@ -217,6 +217,38 @@ function migrateBidsWorkflow() {
 }
 migrateBidsWorkflow();
 
+// system_parameters.category is a CHECK list, so a new category needs a table
+// rebuild — SQLite cannot alter a CHECK in place. Without this the TRADING
+// parameters are silently dropped by the INSERT OR IGNORE seeder.
+function migrateSystemParamCategories() {
+  const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='system_parameters'").get()?.sql;
+  if (!ddl || ddl.includes("'TRADING'")) return;
+  db.exec(`
+    PRAGMA foreign_keys=OFF;
+    BEGIN;
+    CREATE TABLE system_parameters_new (
+      id TEXT PRIMARY KEY,
+      category TEXT NOT NULL CHECK (category IN ('REGULATORY','BILLING','GENERAL','TRADING')),
+      param_key TEXT NOT NULL UNIQUE,
+      param_value TEXT NOT NULL,
+      data_type TEXT NOT NULL DEFAULT 'NUMBER' CHECK (data_type IN ('NUMBER','TEXT','PERCENT','JSON')),
+      unit TEXT,
+      description TEXT,
+      effective_from TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      updated_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    INSERT INTO system_parameters_new SELECT * FROM system_parameters;
+    DROP TABLE system_parameters;
+    ALTER TABLE system_parameters_new RENAME TO system_parameters;
+    COMMIT;
+    PRAGMA foreign_keys=ON;
+  `);
+}
+migrateSystemParamCategories();
+
 function migrateRBACSchema() {
   const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
   // Already on RBAC users schema — never re-run destructive rename migration
