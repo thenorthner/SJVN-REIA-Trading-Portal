@@ -11,6 +11,9 @@ router.use(requireAuth);
 // NOAR open-access lifecycle, in the order the PT workflow walks it.
 const NOAR_STATUSES = ['NOT_INITIATED', 'FORMAT_D_PREPARED', 'CONTRACT_CREATED', 'SUBMITTED', 'APPROVED', 'REJECTED'];
 const OA_TYPES = ['STOA', 'MTOA', 'LTOA'];
+// The linear happy path. REJECTED sits outside it — it is reached from
+// SUBMITTED and leaves by going back to SUBMITTED.
+const NOAR_FLOW_ORDER = ['NOT_INITIATED', 'FORMAT_D_PREPARED', 'CONTRACT_CREATED', 'SUBMITTED', 'APPROVED'];
 
 /** SQLite stores UTC as 'YYYY-MM-DD HH:MM:SS'; JS would otherwise read it as local time. */
 const parseUtc = (s) => (s ? new Date(`${String(s).replace(' ', 'T')}Z`) : null);
@@ -364,6 +367,112 @@ router.get('/:id/format-d', (req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename=FormatD_${tx.id}.csv`);
   res.send(lines.join('\n'));
+});
+
+// Bulk NOAR step for a selected set of transactions.
+//
+// Deliberately stricter than the single-transaction endpoint: a bulk move may
+// only take the next step in the flow, resubmit a rejected application, or
+// record a rejection. One mis-click here would otherwise mark a whole page of
+// draft transactions as approved.
+//
+// CONTRACT_CREATED is excluded because every application gets its own NOAR
+// contract number, which cannot come from a single shared field.
+const BULK_TARGETS = ['FORMAT_D_PREPARED', 'SUBMITTED', 'APPROVED', 'REJECTED'];
+
+router.post('/noar/bulk', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids : [];
+  const to = String(req.body.to_status ?? '').trim();
+  const dryRun = !!req.body.dry_run;
+
+  if (!ids.length) return res.status(400).json({ error: 'Select at least one transaction' });
+  if (!BULK_TARGETS.includes(to)) {
+    return res.status(400).json({ error: `to_status must be one of: ${BULK_TARGETS.join(', ')}` });
+  }
+  const rejectionReason = String(req.body.rejection_reason ?? '').trim();
+  if (to === 'REJECTED' && !rejectionReason) {
+    return res.status(400).json({ error: 'rejection_reason is required when recording rejections' });
+  }
+
+  /** The one move this transaction is allowed to make towards `to`. */
+  const check = (tx) => {
+    if (!tx) return 'Transaction not found';
+    if (tx.noar_status === to) return `Already ${to}`;
+    if (to === 'REJECTED') {
+      return tx.noar_status === 'SUBMITTED' ? null : `Only a SUBMITTED application can be rejected (is ${tx.noar_status})`;
+    }
+    if (tx.noar_status === 'REJECTED') {
+      // REJECTED is off the linear path, so index arithmetic would name a
+      // nonsense next step here.
+      return to === 'SUBMITTED' ? null : 'A rejected application can only be resubmitted (SUBMITTED)';
+    }
+    if (tx.noar_status === 'APPROVED') return 'Already approved — no further step';
+    const expected = NOAR_FLOW_ORDER[NOAR_FLOW_ORDER.indexOf(tx.noar_status) + 1];
+    return expected === to ? null : `Next step from ${tx.noar_status} is ${expected}, not ${to}`;
+  };
+
+  const rows = ids.map((id) => db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(id));
+  const results = rows.map((tx, i) => {
+    const problem = check(tx);
+    return {
+      id: ids[i],
+      counterparty: tx?.counterparty ?? null,
+      from: tx?.noar_status ?? null,
+      to,
+      ok: !problem,
+      reason: problem || undefined,
+    };
+  });
+  const eligible = results.filter((r) => r.ok);
+
+  // Skipping the ineligible rather than failing the whole batch: each
+  // application is independent, and the preview says exactly what will move.
+  if (!dryRun && eligible.length) {
+    const apply = db.transaction(() => {
+      for (const r of eligible) {
+        const tx = rows[ids.indexOf(r.id)];
+        const isResubmission = tx.noar_status === 'REJECTED' && to === 'SUBMITTED';
+        db.prepare(`UPDATE bilateral_transactions
+                    SET noar_status = ?, noar_sla_alerted_state = NULL,
+                        noar_rejection_category = ?, noar_rejection_reason = ?,
+                        noar_resubmit_count = noar_resubmit_count + ?
+                    WHERE id = ?`)
+          .run(
+            to,
+            to === 'REJECTED' ? (req.body.rejection_category || null) : null,
+            to === 'REJECTED' ? rejectionReason : null,
+            isResubmission ? 1 : 0,
+            tx.id,
+          );
+        const note = to === 'REJECTED'
+          ? [req.body.rejection_category, rejectionReason].filter(Boolean).join(' — ')
+          : (req.body.note || null);
+        db.prepare(`
+          INSERT INTO noar_status_timeline (id, transaction_id, status_from, status_to, noar_contract_no, changed_by, note)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(newId('NTL'), tx.id, tx.noar_status, to, tx.noar_contract_no || null, req.user.id, note);
+      }
+    });
+    apply();
+
+    if (to === 'REJECTED') {
+      pushNotification({
+        role: 'MANAGEMENT',
+        type: 'NOAR_REJECTED',
+        message: `${eligible.length} NOAR application(s) rejected — ${rejectionReason}`,
+      });
+    }
+    secureLogAudit(req, { action: 'NOAR_BULK_UPDATE', module: 'TRADING', entityType: 'bilateral_transaction', entityId: eligible.map((r) => r.id).join(','), details: { to, applied: eligible.length, skipped: results.length - eligible.length } });
+  }
+
+  res.json({
+    dry_run: dryRun,
+    requested: results.length,
+    will_apply: eligible.length,
+    applied: dryRun ? 0 : eligible.length,
+    skipped: results.length - eligible.length,
+    results,
+  });
 });
 
 // NOAR portal contract lifecycle update.

@@ -80,6 +80,11 @@ export default function Bilateral() {
   const [sla, setSla] = useState(null);
   const [rejectForm, setRejectForm] = useState(null);
   const [rejectReasons, setRejectReasons] = useState([]);
+  const [picked, setPicked] = useState([]);
+  const [bulkTo, setBulkTo] = useState('FORMAT_D_PREPARED');
+  const [bulkReason, setBulkReason] = useState({ rejection_category: '', rejection_reason: '' });
+  const [bulkPreview, setBulkPreview] = useState(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   function load() {
     setLoading(true);
@@ -147,6 +152,33 @@ export default function Bilateral() {
       setSelectedTx(updated); load();
     } catch (err) { alert('Failed to update NOAR status'); }
   }
+  function togglePick(id) {
+    setPicked((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+    setBulkPreview(null);
+  }
+
+  async function runBulk(dryRun) {
+    setBulkBusy(true);
+    try {
+      const res = await api.bilateral.noarBulk({
+        ids: picked,
+        to_status: bulkTo,
+        dry_run: dryRun,
+        ...(bulkTo === 'REJECTED' ? bulkReason : {}),
+      });
+      setBulkPreview(res);
+      if (!dryRun) {
+        // Keep only what did not move, so a second pass targets the leftovers.
+        setPicked(res.results.filter((r) => !r.ok).map((r) => r.id));
+        load();
+      }
+    } catch (err) {
+      setBulkPreview({ error: err.response?.data?.error || 'Bulk update failed' });
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   async function handleRejectNoar(e) {
     e.preventDefault();
     if (!rejectForm.rejection_reason.trim()) return;
@@ -207,6 +239,19 @@ export default function Bilateral() {
   }
 
   const columns = [
+    {
+      key: 'pick',
+      label: '',
+      render: (r) => (
+        <input
+          type="checkbox"
+          checked={picked.includes(r.id)}
+          onChange={() => togglePick(r.id)}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`Select ${r.id}`}
+        />
+      ),
+    },
     { key: 'id', label: 'TX Ref' },
     { key: 'client_name', label: 'Client' },
     { key: 'counterparty', label: 'Counterparty' },
@@ -267,6 +312,76 @@ export default function Bilateral() {
               </div>
             )}
           </div>
+        </Card>
+      )}
+
+      {/* Bulk NOAR step. Preview first — a batch usually contains rows that
+          cannot make the requested move, and they are skipped rather than
+          failing the whole run. */}
+      {picked.length > 0 && (
+        <Card>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <strong style={{ fontSize: 13, marginBottom: 8 }}>{picked.length} selected</strong>
+            <Field label="Move to">
+              <select className="input" value={bulkTo} onChange={(e) => { setBulkTo(e.target.value); setBulkPreview(null); }}>
+                <option value="FORMAT_D_PREPARED">Format-D prepared</option>
+                <option value="SUBMITTED">Submitted to NOAR (incl. resubmit)</option>
+                <option value="APPROVED">Approved by NLDC</option>
+                <option value="REJECTED">Rejected by NLDC</option>
+              </select>
+            </Field>
+            {bulkTo === 'REJECTED' && (
+              <>
+                <Field label="Reason category">
+                  <select className="input" value={bulkReason.rejection_category}
+                    onChange={(e) => setBulkReason({ ...bulkReason, rejection_category: e.target.value })}>
+                    <option value="">— not specified —</option>
+                    {rejectReasons.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="What NLDC said" required>
+                  <input type="text" className="input" style={{ minWidth: 300 }}
+                    placeholder="Shared reason for all selected"
+                    value={bulkReason.rejection_reason}
+                    onChange={(e) => setBulkReason({ ...bulkReason, rejection_reason: e.target.value })} />
+                </Field>
+              </>
+            )}
+            <button className="btn btn-outline" style={{ marginBottom: 4 }} disabled={bulkBusy} onClick={() => runBulk(true)}>Preview</button>
+            {/* Only a fresh preview enables Apply: once a run completes the
+                selection has changed underneath it, so the old counts no
+                longer describe what a second click would do. */}
+            <button
+              className="btn btn-primary"
+              style={{ marginBottom: 4 }}
+              disabled={bulkBusy || !bulkPreview?.dry_run || !bulkPreview.will_apply}
+              onClick={() => runBulk(false)}
+            >
+              Apply to {bulkPreview?.dry_run ? bulkPreview.will_apply : 0}
+            </button>
+            <button className="btn btn-outline" style={{ marginBottom: 4 }} onClick={() => { setPicked([]); setBulkPreview(null); }}>Clear</button>
+          </div>
+
+          {bulkPreview && (
+            <div style={{ marginTop: 12 }}>
+              {bulkPreview.error ? (
+                <div style={{ color: '#b00', fontSize: 13 }}>{bulkPreview.error}</div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13, marginBottom: 6 }}>
+                    {bulkPreview.dry_run
+                      ? `${bulkPreview.will_apply} of ${bulkPreview.requested} can move · ${bulkPreview.skipped} skipped`
+                      : `✓ ${bulkPreview.applied} moved · ${bulkPreview.skipped} skipped`}
+                  </div>
+                  {bulkPreview.results.map((r) => (
+                    <div key={r.id} style={{ fontSize: 12, color: r.ok ? '#166534' : '#92400e' }}>
+                      {r.ok ? '✓' : '•'} {r.id} ({r.counterparty}) — {r.ok ? `${r.from} → ${r.to}` : r.reason}
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
         </Card>
       )}
 
