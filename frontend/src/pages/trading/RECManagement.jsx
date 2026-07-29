@@ -154,9 +154,12 @@ export default function RECManagement() {
     }
   }
 
-  async function removeTxn(txn) {
-    if (!window.confirm(`Remove ${txn.txn_no} (${fmtNumber(txn.quantity, 0)} RECs)? The position will be recalculated.`)) return;
-    runOnDetail(() => api.rec.deleteTxn(txn.id), 'Failed to remove the transaction.');
+  // Offsetting entry rather than erasure — the certificates that moved stay
+  // on record for registry reconciliation.
+  async function reverseTxn(txn) {
+    const reason = window.prompt(`Reverse ${txn.txn_no} (${fmtNumber(txn.quantity, 0)} RECs)? An offsetting entry will be posted.\n\nReason:`);
+    if (reason === null) return;
+    runOnDetail(() => api.rec.reverseTxn(txn.id, reason), 'Failed to reverse the transaction.');
   }
 
   const multiplierPreview = reference.multipliers?.[lotForm.technology] ?? 1;
@@ -220,7 +223,7 @@ export default function RECManagement() {
     ...(canWrite ? [{
       key: 'actions',
       header: '',
-      render: (t) => <button className="btn btn-xs btn-ghost" onClick={() => removeTxn(t)}>Remove</button>,
+      render: (t) => <button className="btn btn-xs btn-ghost" disabled={!!t.reverses_txn_id} title={t.reverses_txn_id ? 'This is itself a reversal' : 'Post an offsetting entry'} onClick={() => reverseTxn(t)}>Reverse</button>,
     }] : []),
   ];
 

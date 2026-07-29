@@ -102,13 +102,16 @@ export default function NOARWallet() {
     }
   }
 
-  async function remove(row) {
-    if (!window.confirm(`Delete ${row.txn_no}? The running balance will be recalculated.`)) return;
+  // The ledger is append-only: a wrong entry is cancelled by an opposing
+  // entry, so the wallet still reconciles against the Grid India statement.
+  async function reverse(row) {
+    const reason = window.prompt(`Reverse ${row.txn_no}? An opposing entry will be posted.\n\nReason:`);
+    if (reason === null) return;
     try {
-      await api.noar.remove(row.id);
+      await api.noar.reverse(row.id, reason);
       load();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to delete transaction.');
+      setError(err.response?.data?.error || 'Failed to reverse transaction.');
     }
   }
 
@@ -142,7 +145,7 @@ export default function NOARWallet() {
       key: 'actions',
       header: '',
       render: (r) => (
-        <button className="btn btn-xs btn-ghost" onClick={(e) => { e.stopPropagation(); remove(r); }}>Delete</button>
+        <button className="btn btn-xs btn-ghost" disabled={!!r.reverses_txn_id} title={r.reverses_txn_id ? 'This is itself a reversal' : 'Post an opposing entry'} onClick={(e) => { e.stopPropagation(); reverse(r); }}>Reverse</button>
       ),
     }] : []),
   ];

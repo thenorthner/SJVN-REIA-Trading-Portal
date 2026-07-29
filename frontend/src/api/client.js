@@ -155,7 +155,7 @@ export const api = {
     update: (id, body) => put(`/rec/${id}`, body),
     issue: (id, body) => p(`/rec/${id}/issue`, body),
     addTxn: (id, body) => p(`/rec/${id}/transactions`, body),
-    deleteTxn: (txnId) => del(`/rec/transactions/${txnId}`),
+    reverseTxn: (txnId, reason) => p(`/rec/transactions/${txnId}/reverse`, { reason }),
     remove: (id) => del(`/rec/${id}`),
   },
   noar: {
@@ -163,7 +163,7 @@ export const api = {
     summary: () => g('/noar/summary'),
     trend: () => g('/noar/trend'),
     create: (body) => p('/noar', body),
-    remove: (id) => del(`/noar/${id}`),
+    reverse: (id, reason) => p(`/noar/${id}/reverse`, { reason }),
   },
   formIv: {
     list: (params) => g('/form-iv', params),

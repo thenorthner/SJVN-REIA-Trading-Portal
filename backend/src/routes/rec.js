@@ -247,13 +247,48 @@ router.post('/:id/transactions', requireRole(...WRITE), (req, res) => {
   res.status(201).json({ ...refreshLot(lot.id), transactions: getTransactions(lot.id) });
 });
 
-router.delete('/transactions/:txnId', requireRole(...WRITE), (req, res) => {
+/**
+ * Reverse a REC sale or redemption by booking the offsetting entry.
+ *
+ * Posted as the same txn_type with negative quantity and amount, so every
+ * SUM-based position and revenue figure nets out without special-casing —
+ * and the certificates that actually moved stay on the record, which a
+ * registry reconciliation needs.
+ */
+router.post('/transactions/:txnId/reverse', requireRole(...WRITE), (req, res) => {
   const txn = db.prepare('SELECT * FROM rec_transactions WHERE id = ?').get(req.params.txnId);
   if (!txn) return res.status(404).json({ error: 'REC transaction not found' });
+  if (txn.reverses_txn_id) return res.status(400).json({ error: 'A reversal cannot itself be reversed' });
 
-  db.prepare('DELETE FROM rec_transactions WHERE id = ?').run(txn.id);
-  logAudit({ req, user: req.user, action: 'DELETE_TXN', module: 'TRADING', entityType: 'rec_lot', entityId: txn.lot_id, beforeValue: txn });
-  res.json({ ...refreshLot(txn.lot_id), transactions: getTransactions(txn.lot_id) });
+  const already = db.prepare('SELECT id FROM rec_transactions WHERE reverses_txn_id = ?').get(txn.id);
+  if (already) return res.status(409).json({ error: `Already reversed by ${already.id}` });
+
+  const id = newId('RECTXN');
+  db.prepare(`
+    INSERT INTO rec_transactions (id, lot_id, txn_no, txn_type, quantity, rate_per_rec, amount,
+      trade_date, platform, buyer, obligated_entity, reference, notes, created_by, reverses_txn_id)
+    VALUES (@id, @lot_id, @txn_no, @txn_type, @quantity, @rate_per_rec, @amount,
+      @trade_date, @platform, @buyer, @obligated_entity, @reference, @notes, @created_by, @reverses_txn_id)
+  `).run({
+    id,
+    lot_id: txn.lot_id,
+    txn_no: `${txn.txn_no}-REV`,
+    txn_type: txn.txn_type,
+    quantity: -Number(txn.quantity || 0),
+    rate_per_rec: txn.rate_per_rec,
+    amount: -Number(txn.amount || 0),
+    trade_date: new Date().toISOString().slice(0, 10),
+    platform: txn.platform || null,
+    buyer: txn.buyer || null,
+    obligated_entity: txn.obligated_entity || null,
+    reference: txn.reference || null,
+    notes: `Reversal of ${txn.txn_no}${req.body?.reason ? ` — ${req.body.reason}` : ''}`,
+    created_by: req.user.name,
+    reverses_txn_id: txn.id,
+  });
+
+  logAudit({ req, user: req.user, action: 'REVERSE_TXN', module: 'TRADING', entityType: 'rec_lot', entityId: txn.lot_id, details: { reversal_id: id, reversed: txn.id, reason: req.body?.reason } });
+  res.status(201).json({ ...refreshLot(txn.lot_id), transactions: getTransactions(txn.lot_id) });
 });
 
 router.put('/:id', requireRole(...WRITE), (req, res) => {

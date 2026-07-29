@@ -207,24 +207,54 @@ router.post('/', requireRole(...WRITE), (req, res) => {
 });
 
 /**
- * Delete a transaction (wrongly-keyed entry) and rebuild the balance chain.
- * Refused when removing a recharge would drive any later balance negative.
+ * Reverse a wrongly-keyed transaction by posting the opposing entry.
+ *
+ * The original row stays. A wallet ledger that can have entries removed cannot
+ * be reconciled against Grid India's statement afterwards — the balance would
+ * be right while the history silently disagreed.
  */
-router.delete('/:id', requireRole(...WRITE), (req, res) => {
+router.post('/:id/reverse', requireRole(...WRITE), (req, res) => {
   const row = db.prepare('SELECT * FROM noar_wallet_txns WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Transaction not found' });
+  if (row.reverses_txn_id) return res.status(400).json({ error: 'A reversal cannot itself be reversed' });
 
-  if (row.txn_type === 'RECHARGE' && currentBalance() - Number(row.amount) < 0) {
-    return res.status(400).json({ error: 'Removing this recharge would leave the wallet overdrawn. Reverse the dependent charges first.' });
+  const already = db.prepare('SELECT id FROM noar_wallet_txns WHERE reverses_txn_id = ?').get(row.id);
+  if (already) return res.status(409).json({ error: `Already reversed by ${already.id}` });
+
+  // Reversing a recharge withdraws money that later charges may have spent.
+  const opposite = row.txn_type === 'RECHARGE' ? 'CHARGE' : 'RECHARGE';
+  if (opposite === 'CHARGE' && currentBalance() - Number(row.amount) < 0) {
+    return res.status(400).json({ error: 'Reversing this recharge would leave the wallet overdrawn. Reverse the dependent charges first.' });
   }
 
+  const id = newId('NOAR');
   db.transaction(() => {
-    db.prepare('DELETE FROM noar_wallet_txns WHERE id = ?').run(req.params.id);
+    db.prepare(`
+      INSERT INTO noar_wallet_txns (id, txn_no, txn_type, category, amount, balance_after, payee, reference,
+        txn_date, notes, bilateral_id, client_id, created_by, reverses_txn_id)
+      VALUES (@id, @txn_no, @txn_type, @category, @amount, 0, @payee, @reference,
+        @txn_date, @notes, @bilateral_id, @client_id, @created_by, @reverses_txn_id)
+    `).run({
+      id,
+      txn_no: nextTxnNo(),
+      txn_type: opposite,
+      // CHARGE rows carry a category; a reversal of a recharge is booked to OTHER.
+      category: opposite === 'CHARGE' ? (row.category || 'OTHER') : null,
+      amount: Number(row.amount),
+      payee: row.payee || null,
+      reference: row.reference || null,
+      txn_date: new Date().toISOString().slice(0, 10),
+      notes: `Reversal of ${row.txn_no}${req.body?.reason ? ` — ${req.body.reason}` : ''}`,
+      bilateral_id: row.bilateral_id || null,
+      client_id: row.client_id || null,
+      created_by: req.user.name,
+      reverses_txn_id: row.id,
+    });
     recomputeBalances();
   })();
 
-  logAudit({ req, user: req.user, action: 'DELETE', module: 'TRADING', entityType: 'noar_wallet', entityId: req.params.id, beforeValue: row });
-  res.json({ ok: true, balance: Math.round(currentBalance()) });
+  logAudit({ req, user: req.user, action: 'REVERSE', module: 'TRADING', entityType: 'noar_wallet', entityId: row.id, details: { reversal_id: id, reason: req.body?.reason } });
+  res.status(201).json({ ok: true, reversal: withRefs(db.prepare('SELECT * FROM noar_wallet_txns WHERE id = ?').get(id)), balance: Math.round(currentBalance()) });
 });
 
 export default router;

@@ -67,19 +67,43 @@ const logEvent = (bidId, actorId, eventType, details) =>
   db.prepare('INSERT INTO bid_events (id, bid_id, actor_id, event_type, details) VALUES (?, ?, ?, ?, ?)')
     .run(newId('BEV'), bidId, actorId, eventType, JSON.stringify(details ?? {}));
 
-// Header roll-up: total MW across blocks and the MW-weighted average price.
-const rollUp = (blocks) => {
+// Delivery duration of one bid block, by product. Configurable because it is a
+// market convention rather than a constant: DAM/GDAM clear 15-minute blocks,
+// while an RTM session covers a 30-minute delivery period.
+const DEFAULT_BLOCK_HOURS = { DAM: 0.25, GDAM: 0.25, GTAM: 0.25, RTM: 0.5 };
+
+function blockHours(product) {
+  const map = getParam('bid_block_duration_hours', null);
+  const n = Number(map && typeof map === 'object' ? map[product] : undefined);
+  return Number.isFinite(n) && n > 0 ? n : (DEFAULT_BLOCK_HOURS[product] ?? 0.25);
+}
+
+/**
+ * Rupee value of a block.
+ *
+ * quantum_mw is power and price_per_unit is Rs/kWh, so the two cannot be
+ * multiplied directly — money needs energy. Convert MW to kW and multiply by
+ * the block's delivery hours to get kWh first.
+ */
+const blockValue = (block, product) =>
+  Number(block.quantum_mw || 0) * 1000 * blockHours(product) * Number(block.price_per_unit || 0);
+
+// Header roll-up: total MW across blocks, the MW-weighted average price, and
+// the rupee exposure the bid would create.
+const rollUp = (blocks, product) => {
   const mw = blocks.reduce((a, b) => a + Number(b.quantum_mw || 0), 0);
-  const value = blocks.reduce((a, b) => a + Number(b.quantum_mw || 0) * Number(b.price_per_unit || 0), 0);
-  return { quantum_mw: mw, price_per_unit: mw > 0 ? value / mw : 0, exposure: value };
+  const priceWeighted = blocks.reduce((a, b) => a + Number(b.quantum_mw || 0) * Number(b.price_per_unit || 0), 0);
+  const exposure = blocks.reduce((a, b) => a + blockValue(b, product), 0);
+  return { quantum_mw: mw, price_per_unit: mw > 0 ? priceWeighted / mw : 0, exposure };
 };
 
-// Exposure already locked up by this client's live bids.
+// Exposure already locked up by this client's live bids. Computed in JS rather
+// than SQL because block duration comes from configuration, not the database.
 const utilizedExposure = (clientId) => db.prepare(`
-  SELECT COALESCE(SUM(blk.quantum_mw * blk.price_per_unit), 0) AS u
+  SELECT b.product AS product, blk.quantum_mw AS quantum_mw, blk.price_per_unit AS price_per_unit
   FROM bids b JOIN bid_blocks blk ON b.id = blk.bid_id
   WHERE b.client_id = ? AND b.status IN ('SUBMITTED', 'CLEARED')
-`).get(clientId).u;
+`).all(clientId).reduce((a, r) => a + blockValue(r, r.product), 0);
 
 const checkGateClosure = (gate_closure_time) => {
   if (!gate_closure_time) return false;
@@ -89,7 +113,7 @@ const checkGateClosure = (gate_closure_time) => {
 // Insert a bid header + its blocks. Shared by manual create, bulk upload and carry-forward.
 function insertBid(header, blocks, actorId) {
   const bidId = newId('BID');
-  const roll = rollUp(blocks);
+  const roll = rollUp(blocks, header.product);
 
   db.prepare(`
     INSERT INTO bids (
@@ -189,7 +213,7 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     return res.status(400).json({ error: 'At least one bid block is required' });
   }
 
-  const totalExposure = rollUp(b.blocks).exposure;
+  const totalExposure = rollUp(b.blocks, b.product).exposure;
   const currentUtilized = utilizedExposure(client.id);
 
   if ((currentUtilized + totalExposure) > client.exposure_limit) {
@@ -274,7 +298,7 @@ router.post('/bulk', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   // Exposure is checked per client across everything in this upload plus what is already live.
   const perClient = new Map();
   for (const group of groups.values()) {
-    const exposure = rollUp(group.blocks).exposure;
+    const exposure = rollUp(group.blocks, group.header.product).exposure;
     perClient.set(group.header.client_id, (perClient.get(group.header.client_id) || 0) + exposure);
   }
   for (const [clientId, requested] of perClient) {
@@ -297,8 +321,8 @@ router.post('/bulk', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     bid_date: g.header.bid_date,
     delivery_date: g.header.delivery_date,
     blocks: g.blocks.length,
-    total_mw: rollUp(g.blocks).quantum_mw,
-    exposure: rollUp(g.blocks).exposure,
+    total_mw: rollUp(g.blocks, g.header.product).quantum_mw,
+    exposure: rollUp(g.blocks, g.header.product).exposure,
     source_rows: g.rows,
   }));
 
@@ -422,7 +446,7 @@ router.post('/:id/carry-forward', requireRole(...ROLE_GROUPS.TRADING_WRITE), (re
   const client = db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(source.client_id);
   if (client?.status === 'SUSPENDED') return res.status(403).json({ error: 'Client is suspended. Bidding not allowed.' });
 
-  const exposure = rollUp(blocks).exposure;
+  const exposure = rollUp(blocks, toProduct).exposure;
   const utilized = utilizedExposure(source.client_id);
   if (utilized + exposure > client.exposure_limit) {
     return res.status(400).json({ error: 'Exposure limit breached.', limit: client.exposure_limit, utilized, requested: exposure });
@@ -453,10 +477,28 @@ router.post('/:id/carry-forward', requireRole(...ROLE_GROUPS.TRADING_WRITE), (re
 });
 
 // Approve/Reject Bid
-router.post('/:id/approve', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+router.post('/:id/approve', requireRole(...ROLE_GROUPS.TRADING_CHECKER), (req, res) => {
   const { status, reason } = req.body;
   const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(req.params.id);
   if (!bid) return res.status(404).json({ error: 'Bid not found' });
+
+  // Previously any string was written straight through, so a typo could park a
+  // bid in a status nothing else recognises.
+  if (!['APPROVED', 'REJECTED'].includes(status)) {
+    return res.status(400).json({ error: "status must be 'APPROVED' or 'REJECTED'" });
+  }
+  if (bid.approval_status !== 'PENDING') {
+    return res.status(409).json({ error: `Bid is already ${bid.approval_status}` });
+  }
+  // Maker-checker: the person who raised the bid cannot be the one who clears
+  // it. Configurable because a single-trader desk would otherwise be unable to
+  // approve anything at all — but it defaults on, and turning it off is a
+  // deliberate, audited change rather than a control that never existed.
+  if (getParam('trading_enforce_maker_checker', 'true') !== 'false' && bid.created_by === req.user.id) {
+    return res.status(403).json({
+      error: 'Maker-checker: you raised this bid, so it must be approved by someone else.',
+    });
+  }
 
   db.prepare('UPDATE bids SET approval_status = ?, status = ? WHERE id = ?').run(
     status, status === 'REJECTED' ? 'REJECTED' : bid.status, bid.id

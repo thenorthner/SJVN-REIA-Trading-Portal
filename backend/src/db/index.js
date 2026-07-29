@@ -257,6 +257,20 @@ function migrateBidsWorkflow() {
 }
 migrateBidsWorkflow();
 
+// Financial ledgers are append-only: a wrong entry is reversed by an opposing
+// entry, never erased. These columns link a reversal back to what it undoes.
+function migrateLedgerReversals() {
+  const noar = db.prepare('PRAGMA table_info(noar_wallet_txns)').all().map((c) => c.name);
+  if (noar.length && !noar.includes('reverses_txn_id')) {
+    db.exec('ALTER TABLE noar_wallet_txns ADD COLUMN reverses_txn_id TEXT');
+  }
+  const rec = db.prepare('PRAGMA table_info(rec_transactions)').all().map((c) => c.name);
+  if (rec.length && !rec.includes('reverses_txn_id')) {
+    db.exec('ALTER TABLE rec_transactions ADD COLUMN reverses_txn_id TEXT');
+  }
+}
+migrateLedgerReversals();
+
 // system_parameters.category is a CHECK list, so a new category needs a table
 // rebuild — SQLite cannot alter a CHECK in place. Without this the TRADING
 // parameters are silently dropped by the INSERT OR IGNORE seeder.
