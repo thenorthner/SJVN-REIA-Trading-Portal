@@ -184,6 +184,14 @@ function migrateBilateralNoar() {
       ALTER TABLE bilateral_transactions ADD COLUMN loss_drawee_state REAL NOT NULL DEFAULT 0;
     `);
   }
+  // Grid India can send an application back; the desk fixes it and resubmits.
+  if (!cols.includes('noar_rejection_reason')) {
+    db.exec(`
+      ALTER TABLE bilateral_transactions ADD COLUMN noar_rejection_category TEXT;
+      ALTER TABLE bilateral_transactions ADD COLUMN noar_rejection_reason TEXT;
+      ALTER TABLE bilateral_transactions ADD COLUMN noar_resubmit_count INTEGER NOT NULL DEFAULT 0;
+    `);
+  }
   // Last SLA state an alert was raised for, so the hourly sweep notifies on a
   // change rather than re-sending the same warning every run.
   if (!cols.includes('noar_sla_alerted_state')) {

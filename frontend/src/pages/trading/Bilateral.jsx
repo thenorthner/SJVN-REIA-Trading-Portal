@@ -16,6 +16,7 @@ const NOAR_STEP_LABEL = {
   CONTRACT_CREATED: 'Contract created on NOAR',
   SUBMITTED: 'Submitted to NOAR',
   APPROVED: 'Approved by NLDC',
+  REJECTED: 'Rejected by NLDC',
 };
 
 const SLA_STYLE = {
@@ -24,6 +25,7 @@ const SLA_STYLE = {
   BREACHED: { tone: '#991b1b', bg: '#fee2e2', label: 'Overdue' },
   MET: { tone: '#166534', bg: '#dcfce7', label: 'Met' },
   MISSED: { tone: '#991b1b', bg: '#fee2e2', label: 'Missed' },
+  REJECTED: { tone: '#9a3412', bg: '#ffedd5', label: 'Rejected' },
 };
 
 /** Compact SLA chip — omitted entirely when there is no approval clock running. */
@@ -76,10 +78,13 @@ export default function Bilateral() {
   const [error, setError] = useState('');
   const [selectedTx, setSelectedTx] = useState(null);
   const [sla, setSla] = useState(null);
+  const [rejectForm, setRejectForm] = useState(null);
+  const [rejectReasons, setRejectReasons] = useState([]);
 
   function load() {
     setLoading(true);
     api.bilateral.noarSla().then(setSla).catch(() => setSla(null));
+    api.masters.lookups({ category: 'NOAR_REJECTION_REASON' }).then(setRejectReasons).catch(() => setRejectReasons([]));
     api.bilateral.list().then(setRows).finally(() => setLoading(false));
   }
 
@@ -126,8 +131,11 @@ export default function Bilateral() {
 
   const NOAR_FLOW = ['NOT_INITIATED', 'FORMAT_D_PREPARED', 'CONTRACT_CREATED', 'SUBMITTED', 'APPROVED'];
   async function handleAdvanceNoar(tx) {
-    const idx = NOAR_FLOW.indexOf(tx.noar_status || 'NOT_INITIATED');
-    const next = NOAR_FLOW[Math.min(idx + 1, NOAR_FLOW.length - 1)];
+    // A rejected application does not continue down the linear flow — it goes
+    // back to NOAR as a fresh submission once the desk has fixed the issue.
+    const current = tx.noar_status || 'NOT_INITIATED';
+    const idx = NOAR_FLOW.indexOf(current);
+    const next = current === 'REJECTED' ? 'SUBMITTED' : NOAR_FLOW[Math.min(idx + 1, NOAR_FLOW.length - 1)];
     let contractNo = tx.noar_contract_no;
     if (next === 'CONTRACT_CREATED' && !contractNo) {
       contractNo = prompt('NOAR contract number:') || '';
@@ -139,6 +147,21 @@ export default function Bilateral() {
       setSelectedTx(updated); load();
     } catch (err) { alert('Failed to update NOAR status'); }
   }
+  async function handleRejectNoar(e) {
+    e.preventDefault();
+    if (!rejectForm.rejection_reason.trim()) return;
+    try {
+      const updated = await api.bilateral.updateNoar(selectedTx.id, {
+        noar_status: 'REJECTED',
+        rejection_category: rejectForm.rejection_category || undefined,
+        rejection_reason: rejectForm.rejection_reason.trim(),
+      });
+      setSelectedTx(updated); setRejectForm(null); load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to record rejection');
+    }
+  }
+
   async function handleDownloadFormatD(tx) {
     try {
       const blob = await api.bilateral.downloadFormatD(tx.id);
@@ -209,6 +232,9 @@ export default function Bilateral() {
               <div style={{ fontSize: 12, color: '#64748b' }}>
                 {sla.counts.ON_TRACK} on track · <span style={{ color: '#92400e' }}>{sla.counts.AT_RISK} at risk</span> ·{' '}
                 <span style={{ color: '#991b1b' }}>{sla.counts.BREACHED} overdue</span>
+                {sla.counts.REJECTED > 0 && (
+                  <> · <span style={{ color: '#9a3412' }}>{sla.counts.REJECTED} rejected</span></>
+                )}
               </div>
             </div>
             <div>
@@ -354,11 +380,61 @@ export default function Bilateral() {
                 Approval took <strong>{fmtDuration(selectedTx.noar_timeline.approval_turnaround_hours)}</strong>
               </span>
             )}
+            {selectedTx.noar_resubmit_count > 0 && (
+              <span style={{ fontSize: 12, color: '#9a3412' }}>
+                Resubmitted {selectedTx.noar_resubmit_count}×
+              </span>
+            )}
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
               <button className="btn btn-sm btn-outline" onClick={() => handleDownloadFormatD(selectedTx)}>Download Format-D</button>
-              {selectedTx.noar_status !== 'APPROVED' && <button className="btn btn-sm btn-primary" onClick={() => handleAdvanceNoar(selectedTx)}>Advance NOAR →</button>}
+              {selectedTx.noar_status === 'SUBMITTED' && (
+                <button className="btn btn-sm btn-outline" onClick={() => setRejectForm({ rejection_category: '', rejection_reason: '' })}>
+                  Record Rejection
+                </button>
+              )}
+              {selectedTx.noar_status !== 'APPROVED' && (
+                <button className="btn btn-sm btn-primary" onClick={() => handleAdvanceNoar(selectedTx)}>
+                  {selectedTx.noar_status === 'REJECTED' ? 'Resubmit to NOAR →' : 'Advance NOAR →'}
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Why NOAR sent it back, so the desk knows what to fix before resubmitting. */}
+          {selectedTx.noar_status === 'REJECTED' && selectedTx.noar_rejection_reason && (
+            <div style={{ marginBottom: 16, padding: '10px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8 }}>
+              <strong style={{ fontSize: 13, color: '#9a3412' }}>Rejected by NLDC</strong>
+              {selectedTx.noar_rejection_category && (
+                <span style={{ fontSize: 12, color: '#9a3412' }}>
+                  {' '}· {rejectReasons.find((r) => r.code === selectedTx.noar_rejection_category)?.label || selectedTx.noar_rejection_category}
+                </span>
+              )}
+              <div style={{ fontSize: 13, color: '#7c2d12', marginTop: 3 }}>{selectedTx.noar_rejection_reason}</div>
+            </div>
+          )}
+
+          {rejectForm && (
+            <form onSubmit={handleRejectNoar} style={{ marginBottom: 16, padding: '12px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8 }}>
+              <h4 style={{ marginBottom: 10 }}>Record NOAR Rejection</h4>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <Field label="Reason category">
+                  <select className="input" value={rejectForm.rejection_category}
+                    onChange={(e) => setRejectForm({ ...rejectForm, rejection_category: e.target.value })}>
+                    <option value="">— not specified —</option>
+                    {rejectReasons.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="What NLDC said" required>
+                  <input type="text" className="input" style={{ minWidth: 320 }} required
+                    placeholder="e.g. Format-D block totals do not match contract quantum"
+                    value={rejectForm.rejection_reason}
+                    onChange={(e) => setRejectForm({ ...rejectForm, rejection_reason: e.target.value })} />
+                </Field>
+                <button type="button" className="btn btn-outline" style={{ marginBottom: 4 }} onClick={() => setRejectForm(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary" style={{ marginBottom: 4 }}>Save Rejection</button>
+              </div>
+            </form>
+          )}
 
           {/* Open-access approval tracking — who moved it, when, and how long each step took. */}
           <div style={{ marginBottom: 16 }}>

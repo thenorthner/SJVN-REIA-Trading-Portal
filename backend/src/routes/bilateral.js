@@ -9,7 +9,7 @@ const router = Router();
 router.use(requireAuth);
 
 // NOAR open-access lifecycle, in the order the PT workflow walks it.
-const NOAR_STATUSES = ['NOT_INITIATED', 'FORMAT_D_PREPARED', 'CONTRACT_CREATED', 'SUBMITTED', 'APPROVED'];
+const NOAR_STATUSES = ['NOT_INITIATED', 'FORMAT_D_PREPARED', 'CONTRACT_CREATED', 'SUBMITTED', 'APPROVED', 'REJECTED'];
 const OA_TYPES = ['STOA', 'MTOA', 'LTOA'];
 
 /** SQLite stores UTC as 'YYYY-MM-DD HH:MM:SS'; JS would otherwise read it as local time. */
@@ -57,6 +57,8 @@ function buildNoarTimeline(tx) {
     contract_created_at: at('CONTRACT_CREATED'),
     submitted_at: at('SUBMITTED'),
     approved_at: at('APPROVED'),
+    rejected_at: at('REJECTED'),
+    resubmit_count: tx.noar_resubmit_count || 0,
     // Submission -> approval is the part Grid India controls.
     approval_turnaround_hours: hoursBetween(at('SUBMITTED'), at('APPROVED')),
     entries,
@@ -88,26 +90,40 @@ function slaDaysFor(oaType) {
  */
 function buildNoarSla(tx, timeline) {
   const targetDays = slaDaysFor(tx.oa_type);
-  const base = { oa_type: tx.oa_type, target_days: targetDays };
+  const base = { oa_type: tx.oa_type, target_days: targetDays, resubmit_count: tx.noar_resubmit_count || 0 };
+  const days = (from, to) => Math.round((hoursBetween(from, to) / 24) * 10) / 10;
 
-  if (!timeline.submitted_at) {
+  // The current status decides which branch applies, not merely which
+  // timestamps exist — after a resubmission the timeline still holds the
+  // earlier rejection, which is history rather than the live position.
+  if (!timeline.submitted_at || !['SUBMITTED', 'APPROVED', 'REJECTED'].includes(tx.noar_status)) {
     return { ...base, state: 'NOT_APPLICABLE', elapsed_days: null, days_remaining: null, is_open: false };
   }
 
-  const warnFraction = getParamNumber('noar_sla_warning_fraction', 0.7);
-  const endPoint = timeline.approved_at || new Date().toISOString().slice(0, 19).replace('T', ' ');
-  const elapsedDays = Math.round((hoursBetween(timeline.submitted_at, endPoint) / 24) * 10) / 10;
-  const overdue = elapsedDays > targetDays;
-
-  if (timeline.approved_at) {
+  if (tx.noar_status === 'APPROVED') {
+    const elapsed = days(timeline.submitted_at, timeline.approved_at);
     return {
-      ...base, state: overdue ? 'MISSED' : 'MET', elapsed_days: elapsedDays,
+      ...base, state: elapsed > targetDays ? 'MISSED' : 'MET', elapsed_days: elapsed,
       days_remaining: null, is_open: false, submitted_at: timeline.submitted_at, approved_at: timeline.approved_at,
     };
   }
+
+  // Rejected: the wait ended, and resubmitting is now on SJVN rather than on
+  // Grid India, so the approval clock stops instead of running up a breach.
+  if (tx.noar_status === 'REJECTED') {
+    return {
+      ...base, state: 'REJECTED', elapsed_days: days(timeline.submitted_at, timeline.rejected_at),
+      days_remaining: null, is_open: false,
+      submitted_at: timeline.submitted_at, rejected_at: timeline.rejected_at,
+      rejection_category: tx.noar_rejection_category, rejection_reason: tx.noar_rejection_reason,
+    };
+  }
+
+  const warnFraction = getParamNumber('noar_sla_warning_fraction', 0.7);
+  const elapsedDays = days(timeline.submitted_at, new Date().toISOString().slice(0, 19).replace('T', ' '));
   return {
     ...base,
-    state: overdue ? 'BREACHED' : (elapsedDays >= targetDays * warnFraction ? 'AT_RISK' : 'ON_TRACK'),
+    state: elapsedDays > targetDays ? 'BREACHED' : (elapsedDays >= targetDays * warnFraction ? 'AT_RISK' : 'ON_TRACK'),
     elapsed_days: elapsedDays,
     days_remaining: Math.round((targetDays - elapsedDays) * 10) / 10,
     is_open: true,
@@ -146,7 +162,7 @@ router.get('/', (req, res) => {
 // Declared before '/:id' so "noar-sla" is not swallowed as a transaction id.
 router.get('/noar-sla', (req, res) => {
   const rows = db.prepare('SELECT * FROM bilateral_transactions').all();
-  const counts = { NOT_APPLICABLE: 0, ON_TRACK: 0, AT_RISK: 0, BREACHED: 0, MET: 0, MISSED: 0 };
+  const counts = { NOT_APPLICABLE: 0, ON_TRACK: 0, AT_RISK: 0, BREACHED: 0, MET: 0, MISSED: 0, REJECTED: 0 };
   const attention = [];
   let closedTotalDays = 0; let closedCount = 0;
 
@@ -154,7 +170,9 @@ router.get('/noar-sla', (req, res) => {
     const sla = buildNoarSla(tx, buildNoarTimeline(tx));
     counts[sla.state] += 1;
     if (sla.state === 'MET' || sla.state === 'MISSED') { closedTotalDays += sla.elapsed_days; closedCount += 1; }
-    if (sla.state === 'AT_RISK' || sla.state === 'BREACHED') {
+    // Rejected applications are on the desk to fix and resubmit, so they belong
+    // on the same worklist as the ones running late.
+    if (['AT_RISK', 'BREACHED', 'REJECTED'].includes(sla.state)) {
       attention.push({
         id: tx.id,
         counterparty: tx.counterparty,
@@ -164,6 +182,7 @@ router.get('/noar-sla', (req, res) => {
         elapsed_days: sla.elapsed_days,
         target_days: sla.target_days,
         days_remaining: sla.days_remaining,
+        rejection_reason: sla.rejection_reason,
       });
     }
   }
@@ -356,28 +375,60 @@ router.post('/:id/noar', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) =
   }
   const noar_status = req.body.noar_status ?? tx.noar_status;
   const contractNo = req.body.noar_contract_no ?? tx.noar_contract_no;
+  const isTransition = noar_status !== tx.noar_status;
+
+  // Only a submitted application can come back rejected, and a rejection is
+  // only actionable if it says why.
+  const rejectionReason = String(req.body.rejection_reason ?? '').trim();
+  if (noar_status === 'REJECTED' && isTransition) {
+    if (tx.noar_status !== 'SUBMITTED') {
+      return res.status(400).json({ error: `Only a SUBMITTED application can be rejected (currently ${tx.noar_status})` });
+    }
+    if (!rejectionReason) return res.status(400).json({ error: 'rejection_reason is required when recording a rejection' });
+  }
+  const isResubmission = isTransition && tx.noar_status === 'REJECTED' && noar_status === 'SUBMITTED';
 
   // Record the transition before the row changes, so status_from is the real
   // previous value. A no-op save (same status) is not a transition.
-  const isTransition = noar_status !== tx.noar_status;
   const write = db.transaction(() => {
     // Clearing the alerted state on a move means a re-submission is allowed to
     // warn again, and an approved one stops carrying a stale breach flag.
+    // Rejection detail belongs to the current rejection only, so resubmitting
+    // clears it rather than leaving a stale reason on a live application.
     db.prepare(`UPDATE bilateral_transactions
                 SET noar_contract_no = ?, noar_status = ?,
-                    noar_sla_alerted_state = CASE WHEN ? THEN NULL ELSE noar_sla_alerted_state END
+                    noar_sla_alerted_state = CASE WHEN ? THEN NULL ELSE noar_sla_alerted_state END,
+                    noar_rejection_category = ?, noar_rejection_reason = ?,
+                    noar_resubmit_count = noar_resubmit_count + ?
                 WHERE id = ?`)
-      .run(contractNo, noar_status, isTransition ? 1 : 0, tx.id);
+      .run(
+        contractNo, noar_status, isTransition ? 1 : 0,
+        noar_status === 'REJECTED' ? (req.body.rejection_category || null) : null,
+        noar_status === 'REJECTED' ? (rejectionReason || tx.noar_rejection_reason) : null,
+        isResubmission ? 1 : 0,
+        tx.id,
+      );
     if (isTransition) {
+      const note = noar_status === 'REJECTED'
+        ? [req.body.rejection_category, rejectionReason].filter(Boolean).join(' — ')
+        : (req.body.note || null);
       db.prepare(`
         INSERT INTO noar_status_timeline (id, transaction_id, status_from, status_to, noar_contract_no, changed_by, note)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(newId('NTL'), tx.id, tx.noar_status, noar_status, contractNo || null, req.user.id, req.body.note || null);
+      `).run(newId('NTL'), tx.id, tx.noar_status, noar_status, contractNo || null, req.user.id, note);
     }
   });
   write();
 
-  secureLogAudit(req, { action: 'NOAR_UPDATE', module: 'TRADING', entityType: 'bilateral_transaction', entityId: tx.id, details: { from: tx.noar_status, to: noar_status, noar_contract_no: contractNo } });
+  if (noar_status === 'REJECTED' && isTransition) {
+    pushNotification({
+      role: 'MANAGEMENT',
+      type: 'NOAR_REJECTED',
+      message: `NOAR application rejected for ${tx.counterparty} (${contractNo || tx.id}) — ${rejectionReason}`,
+    });
+  }
+
+  secureLogAudit(req, { action: 'NOAR_UPDATE', module: 'TRADING', entityType: 'bilateral_transaction', entityId: tx.id, details: { from: tx.noar_status, to: noar_status, noar_contract_no: contractNo, rejection_reason: rejectionReason || undefined, resubmission: isResubmission || undefined } });
   res.json(withDetails(db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(tx.id)));
 });
 

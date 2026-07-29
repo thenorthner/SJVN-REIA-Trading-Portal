@@ -68,6 +68,14 @@ const DEFAULT_LOOKUPS = [
   { category: 'PBG_TYPE', code: 'BG', label: 'Bank Guarantee', sort_order: 1 },
   { category: 'PBG_TYPE', code: 'ISB', label: 'Insurance Surety Bond', sort_order: 2 },
   { category: 'PBG_TYPE', code: 'POI', label: 'Payment on Invoice / POI', sort_order: 3 },
+  // Why a NOAR open-access application came back rejected. Editable in Masters
+  // Hub so the desk can match whatever Grid India actually cites.
+  { category: 'NOAR_REJECTION_REASON', code: 'INCOMPLETE_DOCS', label: 'Incomplete or invalid documents', sort_order: 1 },
+  { category: 'NOAR_REJECTION_REASON', code: 'CORRIDOR_UNAVAILABLE', label: 'Transmission corridor unavailable', sort_order: 2 },
+  { category: 'NOAR_REJECTION_REASON', code: 'SCHEDULE_MISMATCH', label: 'Schedule / Format-D mismatch', sort_order: 3 },
+  { category: 'NOAR_REJECTION_REASON', code: 'INSUFFICIENT_WALLET', label: 'Insufficient NOAR wallet balance', sort_order: 4 },
+  { category: 'NOAR_REJECTION_REASON', code: 'COUNTERPARTY_CONSENT', label: 'Counterparty consent missing', sort_order: 5 },
+  { category: 'NOAR_REJECTION_REASON', code: 'OTHER', label: 'Other (see notes)', sort_order: 99 },
   { category: 'BILLING_CYCLE', code: 'MONTHLY', label: 'Monthly', sort_order: 1 },
   { category: 'BILLING_CYCLE', code: 'QUARTERLY', label: 'Quarterly', sort_order: 2 },
   { category: 'ENTITY_CATEGORY', code: 'RE Generator', label: 'RE Generator', sort_order: 1 },
