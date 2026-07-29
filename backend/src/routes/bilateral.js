@@ -7,10 +7,65 @@ import { secureLogAudit } from '../auditEngine.js';
 const router = Router();
 router.use(requireAuth);
 
+// NOAR open-access lifecycle, in the order the PT workflow walks it.
+const NOAR_STATUSES = ['NOT_INITIATED', 'FORMAT_D_PREPARED', 'CONTRACT_CREATED', 'SUBMITTED', 'APPROVED'];
+
+/** SQLite stores UTC as 'YYYY-MM-DD HH:MM:SS'; JS would otherwise read it as local time. */
+const parseUtc = (s) => (s ? new Date(`${String(s).replace(' ', 'T')}Z`) : null);
+const hoursBetween = (from, to) => {
+  const a = parseUtc(from); const b = parseUtc(to);
+  if (!a || !b) return null;
+  return Math.round(((b - a) / 36e5) * 10) / 10;
+};
+
+/**
+ * Transition history for one transaction, with the time spent in each status.
+ *
+ * Transactions that moved before this tracking existed have no rows here. That
+ * is reported as has_history:false rather than guessed at — a fabricated
+ * transition time would understate or overstate approval turnaround.
+ */
+function buildNoarTimeline(tx) {
+  const rows = db.prepare(
+    'SELECT * FROM noar_status_timeline WHERE transaction_id = ? ORDER BY changed_at ASC, rowid ASC'
+  ).all(tx.id);
+
+  const entries = rows.map((r, i) => ({
+    ...r,
+    changed_by_name: r.changed_by
+      ? db.prepare('SELECT name FROM users WHERE id = ?').get(r.changed_by)?.name || r.changed_by
+      : null,
+    // Time the transaction sat in status_from before this move.
+    hours_in_previous_status: i === 0 ? null : hoursBetween(rows[i - 1].changed_at, r.changed_at),
+  }));
+
+  const last = rows[rows.length - 1];
+  const nowIso = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const at = (status) => [...rows].reverse().find((r) => r.status_to === status)?.changed_at || null;
+
+  return {
+    transaction_id: tx.id,
+    current_status: tx.noar_status,
+    noar_contract_no: tx.noar_contract_no,
+    has_history: rows.length > 0,
+    tracking_started_at: rows[0]?.changed_at || null,
+    hours_in_current_status: last ? hoursBetween(last.changed_at, nowIso) : null,
+    // Derived milestones — used for approval turnaround reporting.
+    format_d_prepared_at: at('FORMAT_D_PREPARED'),
+    contract_created_at: at('CONTRACT_CREATED'),
+    submitted_at: at('SUBMITTED'),
+    approved_at: at('APPROVED'),
+    // Submission -> approval is the part Grid India controls.
+    approval_turnaround_hours: hoursBetween(at('SUBMITTED'), at('APPROVED')),
+    entries,
+  };
+}
+
 const withDetails = (tx) => {
   if (!tx) return tx;
   const client = db.prepare('SELECT name FROM trading_clients WHERE id = ?').get(tx.client_id);
   tx.client_name = client?.name;
+  tx.noar_timeline = buildNoarTimeline(tx);
   
   tx.schedules = db.prepare('SELECT * FROM bilateral_schedules WHERE transaction_id = ? ORDER BY schedule_date DESC, time_block ASC').all(tx.id);
   
@@ -179,12 +234,36 @@ router.get('/:id/format-d', (req, res) => {
 router.post('/:id/noar', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(req.params.id);
   if (!tx) return res.status(404).json({ error: 'Not found' });
-  const STATUSES = ['NOT_INITIATED', 'FORMAT_D_PREPARED', 'CONTRACT_CREATED', 'SUBMITTED', 'APPROVED'];
-  const noar_status = STATUSES.includes(req.body.noar_status) ? req.body.noar_status : tx.noar_status;
-  db.prepare("UPDATE bilateral_transactions SET noar_contract_no = ?, noar_status = ? WHERE id = ?")
-    .run(req.body.noar_contract_no ?? tx.noar_contract_no, noar_status, tx.id);
-  secureLogAudit(req, { action: 'NOAR_UPDATE', module: 'TRADING', entityType: 'bilateral_transaction', entityId: tx.id, details: { noar_status, noar_contract_no: req.body.noar_contract_no } });
+  if (req.body.noar_status !== undefined && !NOAR_STATUSES.includes(req.body.noar_status)) {
+    return res.status(400).json({ error: `noar_status must be one of: ${NOAR_STATUSES.join(', ')}` });
+  }
+  const noar_status = req.body.noar_status ?? tx.noar_status;
+  const contractNo = req.body.noar_contract_no ?? tx.noar_contract_no;
+
+  // Record the transition before the row changes, so status_from is the real
+  // previous value. A no-op save (same status) is not a transition.
+  const isTransition = noar_status !== tx.noar_status;
+  const write = db.transaction(() => {
+    db.prepare('UPDATE bilateral_transactions SET noar_contract_no = ?, noar_status = ? WHERE id = ?')
+      .run(contractNo, noar_status, tx.id);
+    if (isTransition) {
+      db.prepare(`
+        INSERT INTO noar_status_timeline (id, transaction_id, status_from, status_to, noar_contract_no, changed_by, note)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(newId('NTL'), tx.id, tx.noar_status, noar_status, contractNo || null, req.user.id, req.body.note || null);
+    }
+  });
+  write();
+
+  secureLogAudit(req, { action: 'NOAR_UPDATE', module: 'TRADING', entityType: 'bilateral_transaction', entityId: tx.id, details: { from: tx.noar_status, to: noar_status, noar_contract_no: contractNo } });
   res.json(withDetails(db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(tx.id)));
+});
+
+// Full transition history for one transaction.
+router.get('/:id/noar-timeline', (req, res) => {
+  const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(req.params.id);
+  if (!tx) return res.status(404).json({ error: 'Not found' });
+  res.json(buildNoarTimeline(tx));
 });
 
 export default router;

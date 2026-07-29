@@ -10,6 +10,31 @@ const EMPTY_FORM = {
   loss_injection_state: '', loss_inter_state: '', loss_drawee_state: '', start_date: '', end_date: '',
 };
 
+const NOAR_STEP_LABEL = {
+  NOT_INITIATED: 'Not initiated',
+  FORMAT_D_PREPARED: 'Format-D prepared',
+  CONTRACT_CREATED: 'Contract created on NOAR',
+  SUBMITTED: 'Submitted to NOAR',
+  APPROVED: 'Approved by NLDC',
+};
+
+/** Approval turnaround reads in days; short gaps still need to be legible. */
+function fmtDuration(hours) {
+  if (hours === null || hours === undefined) return null;
+  if (hours < 1) return `${Math.max(1, Math.round(hours * 60))} min`;
+  if (hours < 24) return `${Math.round(hours * 10) / 10} hr`;
+  const d = Math.floor(hours / 24);
+  const h = Math.round(hours % 24);
+  return h ? `${d}d ${h}h` : `${d}d`;
+}
+
+/** SQLite hands back UTC without a zone marker; show it in the user's local time. */
+function fmtStamp(s) {
+  if (!s) return '—';
+  const d = new Date(`${String(s).replace(' ', 'T')}Z`);
+  return Number.isNaN(d.getTime()) ? s : d.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
 export default function Bilateral() {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
@@ -74,8 +99,10 @@ export default function Bilateral() {
     if (next === 'CONTRACT_CREATED' && !contractNo) {
       contractNo = prompt('NOAR contract number:') || '';
     }
+    // Optional, but it is what makes the history readable months later.
+    const note = prompt(`Note for "${NOAR_STEP_LABEL[next]}" (optional):`) || '';
     try {
-      const updated = await api.bilateral.updateNoar(tx.id, { noar_status: next, noar_contract_no: contractNo });
+      const updated = await api.bilateral.updateNoar(tx.id, { noar_status: next, noar_contract_no: contractNo, note });
       setSelectedTx(updated); load();
     } catch (err) { alert('Failed to update NOAR status'); }
   }
@@ -229,10 +256,66 @@ export default function Bilateral() {
             <strong style={{ fontSize: 13 }}>NOAR Portal:</strong>
             <Badge status={selectedTx.noar_status === 'APPROVED' ? 'ACTIVE' : selectedTx.noar_status === 'NOT_INITIATED' ? 'DRAFT' : 'PENDING'} label={(selectedTx.noar_status || 'NOT_INITIATED').replace(/_/g, ' ')} />
             {selectedTx.noar_contract_no && <span style={{ fontSize: 12, color: '#475569' }}>Contract: <strong>{selectedTx.noar_contract_no}</strong></span>}
+            {selectedTx.noar_timeline?.hours_in_current_status != null && (
+              <span style={{ fontSize: 12, color: '#475569' }}>
+                In this status: <strong>{fmtDuration(selectedTx.noar_timeline.hours_in_current_status)}</strong>
+              </span>
+            )}
+            {selectedTx.noar_timeline?.approval_turnaround_hours != null && (
+              <span style={{ fontSize: 12, color: '#166534' }}>
+                Approval took <strong>{fmtDuration(selectedTx.noar_timeline.approval_turnaround_hours)}</strong>
+              </span>
+            )}
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
               <button className="btn btn-sm btn-outline" onClick={() => handleDownloadFormatD(selectedTx)}>Download Format-D</button>
               {selectedTx.noar_status !== 'APPROVED' && <button className="btn btn-sm btn-primary" onClick={() => handleAdvanceNoar(selectedTx)}>Advance NOAR →</button>}
             </div>
+          </div>
+
+          {/* Open-access approval tracking — who moved it, when, and how long each step took. */}
+          <div style={{ marginBottom: 16 }}>
+            <h4 style={{ marginBottom: 10, borderBottom: '1px solid #eee', paddingBottom: 5 }}>
+              Open Access Approval Timeline
+            </h4>
+            {!selectedTx.noar_timeline?.has_history ? (
+              <p style={{ color: '#777', fontSize: 13 }}>
+                No transitions recorded yet. This transaction currently sits at{' '}
+                <strong>{NOAR_STEP_LABEL[selectedTx.noar_status] || selectedTx.noar_status}</strong>
+                {selectedTx.noar_status !== 'NOT_INITIATED' && ' — it reached this status before timeline tracking was added, so earlier step times are not known'}.
+                Use <strong>Advance NOAR</strong> to record the next step.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {selectedTx.noar_timeline.entries.map((e, i) => (
+                  <div key={e.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 18 }}>
+                      <span style={{
+                        width: 11, height: 11, borderRadius: '50%', marginTop: 5,
+                        background: e.status_to === 'APPROVED' ? '#16a34a' : '#2563eb',
+                      }} />
+                      {i < selectedTx.noar_timeline.entries.length - 1 && (
+                        <span style={{ width: 2, flex: 1, minHeight: 26, background: '#cbd5e1' }} />
+                      )}
+                    </div>
+                    <div style={{ paddingBottom: 14, flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>
+                        {NOAR_STEP_LABEL[e.status_to] || e.status_to}
+                        {e.hours_in_previous_status != null && (
+                          <span style={{ fontWeight: 400, color: '#64748b' }}>
+                            {' '}· took {fmtDuration(e.hours_in_previous_status)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#64748b' }}>
+                        {fmtStamp(e.changed_at)}{e.changed_by_name ? ` · ${e.changed_by_name}` : ''}
+                        {e.noar_contract_no ? ` · ${e.noar_contract_no}` : ''}
+                      </div>
+                      {e.note && <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>{e.note}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <h4 style={{ marginBottom: 10, borderBottom: '1px solid #eee', paddingBottom: 5 }}>Daily Schedules & DSM Tracker (15-min blocks · Format-D)</h4>

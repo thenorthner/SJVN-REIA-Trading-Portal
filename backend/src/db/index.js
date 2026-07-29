@@ -173,6 +173,22 @@ function migrateBilateralNoar() {
       ALTER TABLE bilateral_transactions ADD COLUMN noar_status TEXT NOT NULL DEFAULT 'NOT_INITIATED';
     `);
   }
+  // Transition history for open-access approval tracking. Deliberately not
+  // backfilled: transactions that already moved before this table existed have
+  // no real transition times, and inventing them would misreport turnaround.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS noar_status_timeline (
+      id TEXT PRIMARY KEY,
+      transaction_id TEXT NOT NULL REFERENCES bilateral_transactions(id),
+      status_from TEXT,
+      status_to TEXT NOT NULL,
+      noar_contract_no TEXT,
+      changed_by TEXT,
+      note TEXT,
+      changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_noar_timeline_txn ON noar_status_timeline(transaction_id, changed_at);
+  `);
 }
 migrateBilateralNoar();
 

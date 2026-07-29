@@ -902,6 +902,21 @@ CREATE TABLE IF NOT EXISTS bilateral_schedules (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Audit trail of every NOAR open-access status transition, so approval turnaround
+-- can be measured instead of only knowing where a transaction currently sits.
+-- This table is the source of truth; per-status timestamps are derived from it.
+CREATE TABLE IF NOT EXISTS noar_status_timeline (
+  id TEXT PRIMARY KEY,
+  transaction_id TEXT NOT NULL REFERENCES bilateral_transactions(id),
+  status_from TEXT,                     -- NULL for the first recorded transition
+  status_to TEXT NOT NULL,
+  noar_contract_no TEXT,                -- contract number as it stood after this step
+  changed_by TEXT,
+  note TEXT,
+  changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_noar_timeline_txn ON noar_status_timeline(transaction_id, changed_at);
+
 -- Multi-hop scheduling approvals (Injection SLDC → RLDC → NLDC → Drawee SLDC).
 CREATE TABLE IF NOT EXISTS bilateral_approvals (
   id TEXT PRIMARY KEY,
