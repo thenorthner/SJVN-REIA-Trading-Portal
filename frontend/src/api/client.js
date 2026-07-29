@@ -453,6 +453,7 @@ export const api = {
     curtail: (id, curtailed_mw) => p(`/bilateral/schedules/${id}/curtail`, { curtailed_mw }),
     recordActuals: (id, actual_mw) => p(`/bilateral/schedules/${id}/actuals`, { actual_mw }),
     updateNoar: (id, body) => p(`/bilateral/${id}/noar`, body),
+    noarSla: () => g('/bilateral/noar-sla'),
     formatDUrl: (id) => `/api/bilateral/${id}/format-d`,
     downloadFormatD: (id) => client.get(`/bilateral/${id}/format-d`, { responseType: 'blob' }).then((r) => r.data),
   },

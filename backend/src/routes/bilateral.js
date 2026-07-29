@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { newId } from '../util.js';
+import { newId, pushNotification } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
+import { getParam, getParamNumber } from '../mastersService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -62,11 +63,64 @@ function buildNoarTimeline(tx) {
   };
 }
 
+const DEFAULT_SLA_DAYS = { STOA: 7, MTOA: 15, LTOA: 30 };
+
+/** SLA target in days for an open-access term, from configurable master data. */
+function slaDaysFor(oaType) {
+  const map = getParam('noar_sla_days', null);
+  const n = Number(map && typeof map === 'object' ? map[oaType] : undefined);
+  return Number.isFinite(n) && n > 0 ? n : (DEFAULT_SLA_DAYS[oaType] ?? DEFAULT_SLA_DAYS.STOA);
+}
+
+/**
+ * How the NOAR approval is tracking against its target.
+ *
+ * The clock runs from submission to approval — the stretch Grid India controls.
+ * Anything not yet submitted has no SLA to measure, which is reported as
+ * NOT_APPLICABLE rather than as a passing result.
+ *
+ *   NOT_APPLICABLE  not submitted yet
+ *   ON_TRACK        pending, inside the warning threshold
+ *   AT_RISK         pending, past the warning fraction of the target
+ *   BREACHED        pending, past the target
+ *   MET             approved within the target
+ *   MISSED          approved, but it took longer than the target
+ */
+function buildNoarSla(tx, timeline) {
+  const targetDays = slaDaysFor(tx.oa_type);
+  const base = { oa_type: tx.oa_type, target_days: targetDays };
+
+  if (!timeline.submitted_at) {
+    return { ...base, state: 'NOT_APPLICABLE', elapsed_days: null, days_remaining: null, is_open: false };
+  }
+
+  const warnFraction = getParamNumber('noar_sla_warning_fraction', 0.7);
+  const endPoint = timeline.approved_at || new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const elapsedDays = Math.round((hoursBetween(timeline.submitted_at, endPoint) / 24) * 10) / 10;
+  const overdue = elapsedDays > targetDays;
+
+  if (timeline.approved_at) {
+    return {
+      ...base, state: overdue ? 'MISSED' : 'MET', elapsed_days: elapsedDays,
+      days_remaining: null, is_open: false, submitted_at: timeline.submitted_at, approved_at: timeline.approved_at,
+    };
+  }
+  return {
+    ...base,
+    state: overdue ? 'BREACHED' : (elapsedDays >= targetDays * warnFraction ? 'AT_RISK' : 'ON_TRACK'),
+    elapsed_days: elapsedDays,
+    days_remaining: Math.round((targetDays - elapsedDays) * 10) / 10,
+    is_open: true,
+    submitted_at: timeline.submitted_at,
+  };
+}
+
 const withDetails = (tx) => {
   if (!tx) return tx;
   const client = db.prepare('SELECT name FROM trading_clients WHERE id = ?').get(tx.client_id);
   tx.client_name = client?.name;
   tx.noar_timeline = buildNoarTimeline(tx);
+  tx.noar_sla = buildNoarSla(tx, tx.noar_timeline);
   
   tx.schedules = db.prepare('SELECT * FROM bilateral_schedules WHERE transaction_id = ? ORDER BY schedule_date DESC, time_block ASC').all(tx.id);
   
@@ -86,6 +140,47 @@ router.get('/', (req, res) => {
   if (oa_type) { sql += ' AND oa_type = ?'; params.push(oa_type); }
   sql += ' ORDER BY created_at DESC';
   res.json(db.prepare(sql).all(...params).map(withDetails));
+});
+
+// Portfolio view of open-access approval performance.
+// Declared before '/:id' so "noar-sla" is not swallowed as a transaction id.
+router.get('/noar-sla', (req, res) => {
+  const rows = db.prepare('SELECT * FROM bilateral_transactions').all();
+  const counts = { NOT_APPLICABLE: 0, ON_TRACK: 0, AT_RISK: 0, BREACHED: 0, MET: 0, MISSED: 0 };
+  const attention = [];
+  let closedTotalDays = 0; let closedCount = 0;
+
+  for (const tx of rows) {
+    const sla = buildNoarSla(tx, buildNoarTimeline(tx));
+    counts[sla.state] += 1;
+    if (sla.state === 'MET' || sla.state === 'MISSED') { closedTotalDays += sla.elapsed_days; closedCount += 1; }
+    if (sla.state === 'AT_RISK' || sla.state === 'BREACHED') {
+      attention.push({
+        id: tx.id,
+        counterparty: tx.counterparty,
+        noar_contract_no: tx.noar_contract_no,
+        oa_type: tx.oa_type,
+        state: sla.state,
+        elapsed_days: sla.elapsed_days,
+        target_days: sla.target_days,
+        days_remaining: sla.days_remaining,
+      });
+    }
+  }
+  attention.sort((a, b) => b.elapsed_days - a.elapsed_days);
+
+  const decided = counts.MET + counts.MISSED;
+  res.json({
+    counts,
+    pending_total: counts.ON_TRACK + counts.AT_RISK + counts.BREACHED,
+    // Share of *decided* approvals that landed within target — pending ones
+    // have no outcome yet and would otherwise flatter the number.
+    on_time_rate_pct: decided ? Math.round((counts.MET / decided) * 1000) / 10 : null,
+    avg_approval_days: closedCount ? Math.round((closedTotalDays / closedCount) * 10) / 10 : null,
+    targets: getParam('noar_sla_days', DEFAULT_SLA_DAYS),
+    warning_fraction: getParamNumber('noar_sla_warning_fraction', 0.7),
+    needs_attention: attention,
+  });
 });
 
 // Get single transaction
@@ -266,8 +361,13 @@ router.post('/:id/noar', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) =
   // previous value. A no-op save (same status) is not a transition.
   const isTransition = noar_status !== tx.noar_status;
   const write = db.transaction(() => {
-    db.prepare('UPDATE bilateral_transactions SET noar_contract_no = ?, noar_status = ? WHERE id = ?')
-      .run(contractNo, noar_status, tx.id);
+    // Clearing the alerted state on a move means a re-submission is allowed to
+    // warn again, and an approved one stops carrying a stale breach flag.
+    db.prepare(`UPDATE bilateral_transactions
+                SET noar_contract_no = ?, noar_status = ?,
+                    noar_sla_alerted_state = CASE WHEN ? THEN NULL ELSE noar_sla_alerted_state END
+                WHERE id = ?`)
+      .run(contractNo, noar_status, isTransition ? 1 : 0, tx.id);
     if (isTransition) {
       db.prepare(`
         INSERT INTO noar_status_timeline (id, transaction_id, status_from, status_to, noar_contract_no, changed_by, note)
@@ -279,6 +379,38 @@ router.post('/:id/noar', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) =
 
   secureLogAudit(req, { action: 'NOAR_UPDATE', module: 'TRADING', entityType: 'bilateral_transaction', entityId: tx.id, details: { from: tx.noar_status, to: noar_status, noar_contract_no: contractNo } });
   res.json(withDetails(db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(tx.id)));
+});
+
+/**
+ * Raise a notification when a pending approval first becomes AT_RISK or
+ * BREACHED. The alerted state is stored so a long-pending application does not
+ * re-notify on every sweep; a transaction that moves on resets it.
+ */
+export function runNoarSlaAlerts() {
+  const rows = db.prepare("SELECT * FROM bilateral_transactions WHERE noar_status = 'SUBMITTED'").all();
+  let sent = 0;
+  for (const tx of rows) {
+    const sla = buildNoarSla(tx, buildNoarTimeline(tx));
+    const notable = sla.state === 'AT_RISK' || sla.state === 'BREACHED';
+    if (!notable || tx.noar_sla_alerted_state === sla.state) continue;
+
+    const ref = tx.noar_contract_no || tx.id;
+    pushNotification({
+      role: 'MANAGEMENT',
+      type: sla.state === 'BREACHED' ? 'NOAR_SLA_BREACHED' : 'NOAR_SLA_AT_RISK',
+      message: sla.state === 'BREACHED'
+        ? `NOAR approval overdue for ${tx.counterparty} (${ref}) — ${sla.elapsed_days}d pending against a ${sla.target_days}d ${tx.oa_type} target`
+        : `NOAR approval at risk for ${tx.counterparty} (${ref}) — ${sla.elapsed_days}d of ${sla.target_days}d ${tx.oa_type} target elapsed`,
+    });
+    db.prepare('UPDATE bilateral_transactions SET noar_sla_alerted_state = ? WHERE id = ?').run(sla.state, tx.id);
+    sent += 1;
+  }
+  return { sent };
+}
+
+// Manual trigger for the same sweep the scheduler runs.
+router.post('/noar-sla/check', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+  res.json(runNoarSlaAlerts());
 });
 
 // Full transition history for one transaction.

@@ -184,6 +184,11 @@ function migrateBilateralNoar() {
       ALTER TABLE bilateral_transactions ADD COLUMN loss_drawee_state REAL NOT NULL DEFAULT 0;
     `);
   }
+  // Last SLA state an alert was raised for, so the hourly sweep notifies on a
+  // change rather than re-sending the same warning every run.
+  if (!cols.includes('noar_sla_alerted_state')) {
+    db.exec("ALTER TABLE bilateral_transactions ADD COLUMN noar_sla_alerted_state TEXT");
+  }
   // Transition history for open-access approval tracking. Deliberately not
   // backfilled: transactions that already moved before this table existed have
   // no real transition times, and inventing them would misreport turnaround.

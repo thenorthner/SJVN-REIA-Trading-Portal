@@ -893,6 +893,8 @@ CREATE TABLE IF NOT EXISTS bilateral_transactions (
   -- NOAR portal contract lifecycle (bilateral open-access, per PT workflow doc).
   noar_contract_no TEXT,
   noar_status TEXT NOT NULL DEFAULT 'NOT_INITIATED' CHECK (noar_status IN ('NOT_INITIATED','FORMAT_D_PREPARED','CONTRACT_CREATED','SUBMITTED','APPROVED')),
+  -- Last SLA state alerted on, so the sweep notifies on change instead of repeating.
+  noar_sla_alerted_state TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

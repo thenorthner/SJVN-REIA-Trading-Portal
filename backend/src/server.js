@@ -19,7 +19,7 @@ import reconciliationRoutes, { runScheduledReconciliations } from './routes/reco
 import { runStakeholderAlerts } from './stakeholderEngine.js';
 import tradingClientsRoutes from './routes/tradingClients.js';
 import bidsRoutes from './routes/bids.js';
-import bilateralRoutes from './routes/bilateral.js';
+import bilateralRoutes, { runNoarSlaAlerts } from './routes/bilateral.js';
 import billingSettlementRoutes from './routes/billingSettlement.js';
 import marketAnalyticsRoutes from './routes/marketAnalytics.js';
 import dashboardRoutes from './routes/dashboard.js';
@@ -146,6 +146,15 @@ app.listen(PORT, () => {
       runStakeholderAlerts();
     } catch (err) {
       console.error('[STAKEHOLDER] alert cascade failed', err.message);
+    }
+  }, 60 * 60 * 1000);
+  // NOAR open-access approval SLA sweep every hour
+  setInterval(() => {
+    try {
+      const result = runNoarSlaAlerts();
+      if (result.sent > 0) console.log(`[NOAR-SLA] Raised ${result.sent} approval alert(s)`);
+    } catch (err) {
+      console.error('[NOAR-SLA] sweep failed', err.message);
     }
   }, 60 * 60 * 1000);
 

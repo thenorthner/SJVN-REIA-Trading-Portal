@@ -18,6 +18,31 @@ const NOAR_STEP_LABEL = {
   APPROVED: 'Approved by NLDC',
 };
 
+const SLA_STYLE = {
+  ON_TRACK: { tone: '#166534', bg: '#dcfce7', label: 'On track' },
+  AT_RISK: { tone: '#92400e', bg: '#fef3c7', label: 'At risk' },
+  BREACHED: { tone: '#991b1b', bg: '#fee2e2', label: 'Overdue' },
+  MET: { tone: '#166534', bg: '#dcfce7', label: 'Met' },
+  MISSED: { tone: '#991b1b', bg: '#fee2e2', label: 'Missed' },
+};
+
+/** Compact SLA chip — omitted entirely when there is no approval clock running. */
+function SlaChip({ sla }) {
+  const style = sla && SLA_STYLE[sla.state];
+  if (!style) return <span style={{ color: '#94a3b8' }}>—</span>;
+  const detail = sla.is_open
+    ? `${sla.elapsed_days}d / ${sla.target_days}d`
+    : `${sla.elapsed_days}d vs ${sla.target_days}d`;
+  return (
+    <span
+      title={`${sla.oa_type} target ${sla.target_days} days, measured submission → approval`}
+      style={{ background: style.bg, color: style.tone, padding: '2px 8px', borderRadius: 10, fontSize: 12, whiteSpace: 'nowrap' }}
+    >
+      {style.label} · {detail}
+    </span>
+  );
+}
+
 /** Open access losses are notified per leg; the deal-level figure is their sum. */
 function totalLosses(tx) {
   return ['loss_injection_state', 'loss_inter_state', 'loss_drawee_state']
@@ -50,9 +75,11 @@ export default function Bilateral() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState('');
   const [selectedTx, setSelectedTx] = useState(null);
+  const [sla, setSla] = useState(null);
 
   function load() {
     setLoading(true);
+    api.bilateral.noarSla().then(setSla).catch(() => setSla(null));
     api.bilateral.list().then(setRows).finally(() => setLoading(false));
   }
 
@@ -164,12 +191,59 @@ export default function Bilateral() {
     { key: 'quantum_mw', label: 'Quantum (MW)' },
     { key: 'tariff_per_unit', label: 'Tariff (₹)' },
     { key: 'status', label: 'Status', render: r => <Badge type={r.status === 'ACTIVE' ? 'success' : 'neutral'}>{r.status}</Badge> },
+    { key: 'noar_sla', label: 'OA Approval SLA', render: r => <SlaChip sla={r.noar_sla} /> },
     { key: 'actions', label: 'Actions', render: r => <button className="btn btn-outline" onClick={() => setSelectedTx(r)}>Manage Schedules</button> }
   ];
 
   return (
     <div style={{ padding: 20 }}>
       <PageHeader title="Bilateral Transactions & OA" onAdd={() => setShowCreate(true)} addLabel="New Bilateral Deal" />
+
+      {/* Open-access approval SLA at portfolio level. */}
+      {sla && (
+        <Card>
+          <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>Pending approvals</div>
+              <div style={{ fontSize: 22, fontWeight: 600 }}>{sla.pending_total}</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>
+                {sla.counts.ON_TRACK} on track · <span style={{ color: '#92400e' }}>{sla.counts.AT_RISK} at risk</span> ·{' '}
+                <span style={{ color: '#991b1b' }}>{sla.counts.BREACHED} overdue</span>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>On-time rate</div>
+              <div style={{ fontSize: 22, fontWeight: 600 }}>
+                {sla.on_time_rate_pct === null ? '—' : `${sla.on_time_rate_pct}%`}
+              </div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>
+                {sla.counts.MET + sla.counts.MISSED} decided ({sla.counts.MISSED} missed)
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>Avg approval time</div>
+              <div style={{ fontSize: 22, fontWeight: 600 }}>
+                {sla.avg_approval_days === null ? '—' : `${sla.avg_approval_days}d`}
+              </div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>
+                Targets: {Object.entries(sla.targets).map(([k, v]) => `${k} ${v}d`).join(' · ')}
+              </div>
+            </div>
+            {sla.needs_attention.length > 0 && (
+              <div style={{ flex: 1, minWidth: 260 }}>
+                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Needs attention</div>
+                {sla.needs_attention.slice(0, 4).map((a) => (
+                  <div key={a.id} style={{ fontSize: 12, marginBottom: 2 }}>
+                    <span style={{ color: a.state === 'BREACHED' ? '#991b1b' : '#92400e' }}>●</span>{' '}
+                    {a.counterparty} — {a.elapsed_days}d of {a.target_days}d ({a.noar_contract_no || a.id})
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
       <Card>
         <Table columns={columns} data={rows} loading={loading} />
       </Card>
@@ -267,6 +341,9 @@ export default function Bilateral() {
             <strong style={{ fontSize: 13 }}>NOAR Portal:</strong>
             <Badge status={selectedTx.noar_status === 'APPROVED' ? 'ACTIVE' : selectedTx.noar_status === 'NOT_INITIATED' ? 'DRAFT' : 'PENDING'} label={(selectedTx.noar_status || 'NOT_INITIATED').replace(/_/g, ' ')} />
             {selectedTx.noar_contract_no && <span style={{ fontSize: 12, color: '#475569' }}>Contract: <strong>{selectedTx.noar_contract_no}</strong></span>}
+            {selectedTx.noar_sla?.state && selectedTx.noar_sla.state !== 'NOT_APPLICABLE' && (
+              <SlaChip sla={selectedTx.noar_sla} />
+            )}
             {selectedTx.noar_timeline?.hours_in_current_status != null && (
               <span style={{ fontSize: 12, color: '#475569' }}>
                 In this status: <strong>{fmtDuration(selectedTx.noar_timeline.hours_in_current_status)}</strong>
