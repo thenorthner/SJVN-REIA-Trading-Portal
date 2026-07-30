@@ -11,6 +11,19 @@ const EMPTY_FORM = {
 
 const EMPTY_BLOCK = { time_block: 'Block-1', quantum_mw: '', price_per_unit: '' };
 
+// One workspace per exchange energy product, the way PTC separates DAM / GDAM /
+// RTM management. Certificate products (REC, ESCERT) have their own modules and
+// are intentionally not here. `members` groups the sibling products a tab owns.
+const PRODUCT_TABS = [
+  { key: 'DAM', label: 'DAM / HP-DAM', short: 'DAM', members: ['DAM', 'HPDAM'], hint: 'Day-ahead · 15-minute delivery blocks' },
+  { key: 'GDAM', label: 'GDAM / GTAM', short: 'GDAM', members: ['GDAM', 'GTAM'], hint: 'Green day-ahead / term-ahead · 15-minute blocks' },
+  { key: 'RTM', label: 'Real-Time (RTM)', short: 'RTM', members: ['RTM'], hint: 'Intra-day · 30-minute delivery blocks' },
+  { key: 'TAM', label: 'Term-Ahead (TAM)', short: 'TAM', members: ['TAM'], hint: 'Term-ahead contracts' },
+];
+
+// A bid is "history" once it is decided; everything else is still being worked.
+const isHistoryBid = (b) => b.status === 'CLEARED' || b.status === 'REJECTED' || b.approval_status === 'REJECTED';
+
 const BULK_COLUMNS = [
   'client_id', 'exchange', 'product', 'bid_date', 'delivery_date',
   'gate_closure_time', 'time_block', 'quantum_mw', 'price_per_unit',
@@ -82,6 +95,8 @@ export default function Bids() {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [activeTab, setActiveTab] = useState('DAM');
+  const [bidView, setBidView] = useState('manage');
   const [form, setForm] = useState(EMPTY_FORM);
   const [blocks, setBlocks] = useState([{ ...EMPTY_BLOCK }]);
   const [error, setError] = useState('');
@@ -223,7 +238,10 @@ export default function Bids() {
   }
 
   function openCreate() {
-    setForm(EMPTY_FORM);
+    // Default to the tab's primary product (e.g. the DAM tab covers DAM+HPDAM,
+    // create should start on DAM); the form still lets the user switch.
+    const tab = PRODUCT_TABS.find((t) => t.key === activeTab) || PRODUCT_TABS[0];
+    setForm({ ...EMPTY_FORM, product: tab.members[0] });
     setBlocks([{ ...EMPTY_BLOCK }]);
     setError('');
     setShowCreate(true);
@@ -284,20 +302,99 @@ export default function Bids() {
     ) }
   ];
 
+  const tab = PRODUCT_TABS.find((t) => t.key === activeTab) || PRODUCT_TABS[0];
+  const tabBids = rows.filter((r) => tab.members.includes(r.product));
+  const viewBids = tabBids.filter((b) => (bidView === 'history' ? isHistoryBid(b) : !isHistoryBid(b)));
+
+  // This product's position, from the blocks the list endpoint already returns.
+  const blockSum = (b, field) => (b.blocks || []).reduce((a, k) => a + Number(k[field] || 0), 0);
+  const summary = {
+    count: tabBids.length,
+    quantumBid: tabBids.reduce((a, b) => a + blockSum(b, 'quantum_mw'), 0),
+    clearedMw: tabBids.reduce((a, b) => a + blockSum(b, 'cleared_quantum_mw'), 0),
+    unclearedMw: tabBids.reduce((a, b) => a + Number(b.uncleared_mw || 0), 0),
+  };
+  summary.clearRatio = summary.quantumBid > 0 ? (summary.clearedMw / summary.quantumBid) * 100 : 0;
+
   return (
     <div style={{ padding: 20 }}>
       <PageHeader
         title="Exchange Bid Management"
         onAdd={openCreate}
-        addLabel="New Portfolio Bid"
+        addLabel={`New ${tab.short} Bid`}
         actions={
           <button className="btn btn-outline" onClick={openBulk}>
-            Bulk Upload
+            Bulk Upload ({tab.short})
           </button>
         }
       />
+
+      {/* Product tab strip — each is its own management workspace, not a sidebar item. */}
+      <div style={{ marginBottom: 16, borderBottom: '1px solid #ddd', display: 'flex', gap: 24 }}>
+        {PRODUCT_TABS.map((t) => {
+          const count = rows.filter((r) => t.members.includes(r.product)).length;
+          const on = activeTab === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => { setActiveTab(t.key); setBidView('manage'); }}
+              style={{
+                padding: '10px 0', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16,
+                borderBottom: on ? '2px solid #0052cc' : '2px solid transparent',
+                color: on ? '#0052cc' : '#555', fontWeight: on ? 'bold' : 'normal',
+              }}
+            >
+              {t.label}{count > 0 && <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 'normal' }}> ({count})</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>{tab.hint}</div>
+
+      {/* Per-product summary — this product's bidding position at a glance. */}
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
+          {[
+            { label: 'Bids', value: summary.count },
+            { label: 'Quantum bid', value: `${fmtNumber(summary.quantumBid)} MW` },
+            { label: 'Cleared', value: `${fmtNumber(summary.clearedMw)} MW`, tone: '#166534' },
+            { label: 'Uncleared', value: `${fmtNumber(summary.unclearedMw)} MW`, tone: summary.unclearedMw > 0 ? '#92400e' : undefined },
+            { label: 'Clear ratio', value: summary.quantumBid > 0 ? `${Math.round(summary.clearRatio)}%` : '—' },
+          ].map((s) => (
+            <div key={s.label}>
+              <div style={{ fontSize: 12, color: '#64748b' }}>{s.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 600, color: s.tone || '#0f172a' }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Manage (working) vs Bid History (decided) — PTC's two sub-views. */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {[
+          { key: 'manage', label: `Manage Bids (${tabBids.filter((b) => !isHistoryBid(b)).length})` },
+          { key: 'history', label: `Bid History (${tabBids.filter(isHistoryBid).length})` },
+        ].map((v) => (
+          <button
+            key={v.key}
+            className={`btn btn-sm ${bidView === v.key ? 'btn-primary' : 'btn-outline'}`}
+            onClick={() => setBidView(v.key)}
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+
       <Card>
-        <Table columns={columns} data={rows} loading={loading} />
+        <Table
+          columns={columns}
+          data={viewBids}
+          loading={loading}
+          emptyMessage={bidView === 'history'
+            ? `No decided ${tab.short} bids yet.`
+            : `No open ${tab.short} bids. Use "New ${tab.short} Bid" to create one.`}
+        />
       </Card>
 
       {showBulk && (
