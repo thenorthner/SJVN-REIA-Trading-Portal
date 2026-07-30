@@ -35,6 +35,15 @@ const REPORT_GROUPS = [
       { path: '/reports/activity/pdf', file: 'SJVN_Activity_Report.pdf', title: 'Activity Report', blurb: 'Who did what across modules — by user, module, action and day.' },
     ],
   },
+  {
+    // Compliance reports are not per-person data, so they follow the module
+    // read roles rather than the narrower governance gate.
+    vertical: 'COMPLIANCE',
+    label: 'Compliance',
+    reports: [
+      { path: '/reports/regulatory/pdf', file: 'SJVN_Regulatory_Report.pdf', title: 'Regulatory Report', blurb: 'Counterparty approval completeness, outstanding approvals and CERC filing status.' },
+    ],
+  },
 ];
 
 export default function ConsolidatedDashboard() {
@@ -72,6 +81,7 @@ export default function ConsolidatedDashboard() {
     REIA: canViewReia,
     TRADING: canViewTrading,
     GOVERNANCE: ROLE_GROUPS.GOVERNANCE_REPORTS.includes(user.role),
+    COMPLIANCE: canViewReia || canViewTrading,
   };
 
   const revenueChart = [

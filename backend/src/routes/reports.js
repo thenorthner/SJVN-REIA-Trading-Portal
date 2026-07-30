@@ -9,7 +9,8 @@ import { generateContractReportPdf } from '../scripts/contractReportPdf.js';
 import { generateReiaDashboardPdf } from '../scripts/reiaDashboardReportPdf.js';
 import { generateMarketAnalyticsPdf, generateTradingProfitabilityPdf, generateTradingDashboardPdf } from '../scripts/tradingReportsPdf.js';
 import { buildTradingRealtime, buildTradingDaily, buildTradingPeriodic } from './dashboard.js';
-import { generateActivityReportPdf } from '../scripts/governanceReportsPdf.js';
+import { generateActivityReportPdf, generateRegulatoryReportPdf } from '../scripts/governanceReportsPdf.js';
+import { getParamNumber } from '../mastersService.js';
 import { OPEN_STATUSES, REASON_LABELS, SLA_LONG_PENDING_DAYS } from '../disputesConstants.js';
 import { OPEN_RECON_STATUSES } from '../reconciliationConstants.js';
 
@@ -993,6 +994,117 @@ router.get('/activity/pdf', requireRole(...ACTIVITY_READ), (req, res) => {
     generateActivityReportPdf(buildActivitySummary(req.query), { generatedBy: req.user?.name || req.user?.email }, res);
   } catch (err) {
     console.error('Activity report PDF error:', err);
+    if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
+  }
+});
+
+// ─── Regulatory report ────────────────────────────────────────────────────
+/**
+ * Regulatory approval completeness per counterparty, plus the CERC filing and
+ * trading-margin-cap position.
+ *
+ * Approval validity is reported on what is actually captured: valid_until is
+ * not populated on any record today, so the report says so instead of showing
+ * an empty expiry table, which would read as "nothing is expiring".
+ */
+export function buildRegulatorySummary({ entity_id } = {}) {
+  const where = entity_id ? 'WHERE r.entity_id = ?' : '';
+  const params = entity_id ? [entity_id] : [];
+
+  const byEntity = db.prepare(`
+    SELECT e.id, e.name, e.entity_type,
+           COUNT(r.id) total,
+           -- Mandatory but marked not applicable is neither required nor
+           -- outstanding, so it is excluded from the denominator. Counting it
+           -- as outstanding made the headline disagree with the action list.
+           COALESCE(SUM(CASE WHEN r.is_mandatory = 1 AND r.status <> 'NOT_APPLICABLE' THEN 1 ELSE 0 END), 0) mandatory,
+           COALESCE(SUM(CASE WHEN r.is_mandatory = 1 AND r.status = 'VERIFIED' THEN 1 ELSE 0 END), 0) mandatory_verified,
+           COALESCE(SUM(CASE WHEN r.status = 'NOT_APPLICABLE' THEN 1 ELSE 0 END), 0) not_applicable
+    FROM entities e JOIN entity_regulatory_approvals r ON r.entity_id = e.id
+    ${where}
+    GROUP BY e.id ORDER BY e.entity_type, e.name`).all(...params)
+    .map((r) => ({
+      ...r,
+      mandatory_outstanding: r.mandatory - r.mandatory_verified,
+      completeness_pct: r.mandatory ? Math.round((r.mandatory_verified / r.mandatory) * 1000) / 10 : null,
+    }));
+
+  const byStatus = db.prepare(`
+    SELECT r.status, COUNT(*) count FROM entity_regulatory_approvals r ${where}
+    GROUP BY r.status ORDER BY count DESC`).all(...params);
+
+  // The actionable list: mandatory and not yet verified.
+  const gaps = db.prepare(`
+    SELECT e.name entity_name, e.entity_type, r.approval_code, r.label, r.status,
+           r.issued_by, r.reference_no, r.valid_until
+    FROM entity_regulatory_approvals r JOIN entities e ON e.id = r.entity_id
+    ${where ? `${where} AND` : 'WHERE'} r.is_mandatory = 1 AND r.status <> 'VERIFIED' AND r.status <> 'NOT_APPLICABLE'
+    ORDER BY e.entity_type, e.name, r.sort_order`).all(...params);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const withValidity = db.prepare(`
+    SELECT COUNT(*) n FROM entity_regulatory_approvals r
+    ${where ? `${where} AND` : 'WHERE'} r.valid_until IS NOT NULL AND r.valid_until <> ''`).get(...params).n;
+  const expiring = db.prepare(`
+    SELECT e.name entity_name, r.label, r.valid_until, r.status
+    FROM entity_regulatory_approvals r JOIN entities e ON e.id = r.entity_id
+    ${where ? `${where} AND` : 'WHERE'} r.valid_until IS NOT NULL AND r.valid_until <> ''
+      AND date(r.valid_until) <= date('now', '+90 days')
+    ORDER BY r.valid_until ASC`).all(...params);
+
+  // CERC Form-IV filings, with the margin cap that applied.
+  const capLow = getParamNumber('cerc_margin_cap_low', 0.04);
+  const capHigh = getParamNumber('cerc_margin_cap_high', 0.07);
+  const capThreshold = getParamNumber('cerc_margin_cap_price_threshold', 3);
+  const filings = db.prepare(`
+    SELECT form_no, period_type, period, status, due_date, submission_date,
+           total_volume_mu, total_revenue, trading_margin, avg_margin_per_unit,
+           line_count, breach_count
+    FROM cerc_form_iv ORDER BY period DESC`).all()
+    .map((f) => ({
+      ...f,
+      is_overdue: f.status !== 'SUBMITTED' && f.due_date && f.due_date < today,
+      days_to_due: f.due_date ? Math.round((new Date(f.due_date) - new Date(today)) / 864e5) : null,
+    }));
+
+  return {
+    filters: { entity_id: entity_id || null },
+    totals: {
+      entities: byEntity.length,
+      approvals: byEntity.reduce((a, r) => a + r.total, 0),
+      mandatory: byEntity.reduce((a, r) => a + r.mandatory, 0),
+      mandatory_verified: byEntity.reduce((a, r) => a + r.mandatory_verified, 0),
+      mandatory_outstanding: byEntity.reduce((a, r) => a + r.mandatory_outstanding, 0),
+      filings_overdue: filings.filter((f) => f.is_overdue).length,
+      margin_cap_breaches: filings.reduce((a, f) => a + (f.breach_count || 0), 0),
+    },
+    by_entity: byEntity,
+    by_status: byStatus,
+    gaps,
+    validity: {
+      records_with_expiry: withValidity,
+      expiring_within_90_days: expiring,
+      // Stated so an empty list is not mistaken for a clean bill of health.
+      note: withValidity === 0
+        ? 'No approval record carries a validity date yet, so expiry and renewal cannot be tracked from this data.'
+        : null,
+    },
+    cerc: {
+      margin_cap: { low: capLow, high: capHigh, price_threshold: capThreshold },
+      filings,
+    },
+  };
+}
+
+router.get('/regulatory', requireRole(...TRADING_REPORT_READ), (req, res) => {
+  res.json(buildRegulatorySummary(req.query));
+});
+
+router.get('/regulatory/pdf', requireRole(...TRADING_REPORT_READ), (req, res) => {
+  try {
+    generateRegulatoryReportPdf(buildRegulatorySummary(req.query), { generatedBy: req.user?.name || req.user?.email }, res);
+  } catch (err) {
+    console.error('Regulatory report PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
   }
 });

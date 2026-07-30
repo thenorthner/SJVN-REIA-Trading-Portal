@@ -22,6 +22,22 @@ export default function CERCFormIV() {
   const canWrite = ROLE_GROUPS.TRADING_WRITE.includes(user?.role);
 
   const [rows, setRows] = useState([]);
+  const [reportBusy, setReportBusy] = useState(false);
+
+  async function downloadRegulatoryReport() {
+    setReportBusy(true);
+    try {
+      await api.reports.downloadPdf(
+        '/reports/regulatory/pdf',
+        `SJVN_Regulatory_Report_${new Date().toISOString().slice(0, 10)}.pdf`,
+      );
+    } catch (err) {
+      alert(err.message || 'Could not generate the regulatory report.');
+    } finally {
+      setReportBusy(false);
+    }
+  }
+
   const [summary, setSummary] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -194,7 +210,14 @@ export default function CERCFormIV() {
       <PageHeader
         title="CERC Form-IV Compliance"
         subtitle="Transaction-wise return of inter-state trading, with the CERC trading margin cap enforced per trade"
-        actions={canWrite && <button className="btn btn-primary" onClick={() => { setForm(EMPTY_FORM); setFormError(''); setShowNew(true); }}>+ New Filing</button>}
+        actions={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-outline" disabled={reportBusy} onClick={downloadRegulatoryReport}>
+              {reportBusy ? 'Preparing…' : 'Regulatory Report (PDF)'}
+            </button>
+            {canWrite && <button className="btn btn-primary" onClick={() => { setForm(EMPTY_FORM); setFormError(''); setShowNew(true); }}>+ New Filing</button>}
+          </div>
+        }
       />
 
       {error && <div className="form-error">{error}</div>}

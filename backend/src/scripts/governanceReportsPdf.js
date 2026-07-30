@@ -4,8 +4,8 @@
  * Layout primitives come from reportPdfKit so every report reads as one family.
  */
 import {
-  M, CONTENT_W, MUTED,
-  stamp, nowLabel, newDoc, header, kpiBand, sectionTitle, table, ensureSpace, pageNumbers,
+  M, CONTENT_W, MUTED, RED, AMBER, GREEN, INK,
+  rs, stamp, nowLabel, newDoc, header, kpiBand, sectionTitle, table, notes, ensureSpace, pageNumbers,
 } from './reportPdfKit.js';
 
 // ─── Activity report ──────────────────────────────────────────────────────
@@ -91,6 +91,104 @@ export function generateActivityReportPdf(r, meta, res) {
     { label: 'Action', w: 106, value: (x) => x.action },
     { label: 'Record', w: 85, value: (x) => x.entity_id || x.entity_type || '—' },
   ], r.recent, ctx);
+
+  pageNumbers(doc);
+  doc.end();
+}
+
+// ─── Regulatory report ────────────────────────────────────────────────────
+export function generateRegulatoryReportPdf(r, meta, res) {
+  const generatedAt = nowLabel();
+  const t = r.totals;
+  const ctx = {
+    vertical: 'Compliance',
+    title: 'REGULATORY REPORT',
+    subtitle: 'Approval position and CERC filing status',
+    generatedAt,
+  };
+  const doc = newDoc(res, 'SJVN Regulatory Report', `SJVN_Regulatory_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+
+  header(doc, ctx);
+  let y = 84;
+
+  y = kpiBand(doc, y, [
+    { label: 'Mandatory approvals verified', value: `${t.mandatory_verified} of ${t.mandatory}` },
+    { label: 'Outstanding', value: String(t.mandatory_outstanding), tone: t.mandatory_outstanding ? RED : GREEN },
+    { label: 'Filings overdue', value: String(t.filings_overdue), tone: t.filings_overdue ? RED : GREEN },
+    { label: 'Margin cap breaches', value: String(t.margin_cap_breaches), tone: t.margin_cap_breaches ? RED : GREEN },
+  ]);
+
+  y = sectionTitle(doc, y, 'Approval completeness by counterparty',
+    'Mandatory approvals only. Records marked not applicable are excluded from the denominator.');
+  y = table(doc, y, [
+    { label: 'Counterparty', w: 175, value: (x) => x.name },
+    { label: 'Type', w: 60, value: (x) => x.entity_type },
+    { label: 'Mandatory', w: 68, align: 'right', value: (x) => x.mandatory },
+    { label: 'Verified', w: 60, align: 'right', value: (x) => x.mandatory_verified },
+    { label: 'Outstanding', w: 75, align: 'right', value: (x) => x.mandatory_outstanding, colour: (x) => (x.mandatory_outstanding ? RED : GREEN) },
+    { label: 'Complete', w: 85, align: 'right',
+      value: (x) => (x.completeness_pct === null ? '—' : `${x.completeness_pct}%`),
+      colour: (x) => (x.completeness_pct === 100 ? GREEN : x.completeness_pct >= 50 ? AMBER : RED) },
+  ], r.by_entity, ctx);
+  y += 18;
+
+  y = sectionTitle(doc, y, 'Approval status mix');
+  y = table(doc, y, [
+    { label: 'Status', w: 300, value: (x) => x.status },
+    { label: 'Records', w: 223, align: 'right', value: (x) => x.count },
+  ], r.by_status, ctx);
+  y += 18;
+
+  y = ensureSpace(doc, y, 170, ctx);
+  y = sectionTitle(doc, y, 'Outstanding mandatory approvals',
+    'The action list — mandatory approvals not yet verified.');
+  y = table(doc, y, [
+    { label: 'Counterparty', w: 140, value: (x) => x.entity_name },
+    { label: 'Approval', w: 200, value: (x) => x.label },
+    { label: 'Status', w: 90, value: (x) => x.status, colour: () => AMBER },
+    { label: 'Reference', w: 93, value: (x) => x.reference_no || '—' },
+  ], r.gaps, ctx, { emptyMessage: 'No outstanding mandatory approvals.' });
+  y += 18;
+
+  y = ensureSpace(doc, y, 120, ctx);
+  y = sectionTitle(doc, y, 'Approval validity');
+  if (r.validity.note) {
+    y = notes(doc, y, [r.validity.note]);
+  } else {
+    y = table(doc, y, [
+      { label: 'Counterparty', w: 180, value: (x) => x.entity_name },
+      { label: 'Approval', w: 200, value: (x) => x.label },
+      { label: 'Valid until', w: 143, align: 'right', value: (x) => x.valid_until, colour: () => AMBER },
+    ], r.validity.expiring_within_90_days, ctx, { emptyMessage: 'Nothing expiring within 90 days.' });
+  }
+  y += 18;
+
+  y = ensureSpace(doc, y, 170, ctx);
+  const cap = r.cerc.margin_cap;
+  y = sectionTitle(doc, y, 'CERC Form-IV filing position',
+    `Trading margin cap in force: Rs ${cap.low}/kWh where sale price is at or below Rs ${cap.price_threshold}/kWh, Rs ${cap.high}/kWh above it.`);
+  y = table(doc, y, [
+    { label: 'Form', w: 118, value: (x) => x.form_no },
+    { label: 'Period', w: 55, value: (x) => x.period },
+    { label: 'Status', w: 55, value: (x) => x.status, colour: (x) => (x.status === 'SUBMITTED' ? GREEN : AMBER) },
+    { label: 'Due', w: 62, value: (x) => x.due_date || '—', colour: (x) => (x.is_overdue ? RED : INK) },
+    { label: 'Volume MU', w: 60, align: 'right', value: (x) => x.total_volume_mu },
+    { label: 'Margin', w: 68, align: 'right', value: (x) => rs(x.trading_margin) },
+    { label: 'Rs/kWh', w: 48, align: 'right', value: (x) => x.avg_margin_per_unit },
+    { label: 'Breach', w: 57, align: 'right', value: (x) => x.breach_count, colour: (x) => (x.breach_count ? RED : GREEN) },
+  ], r.cerc.filings, ctx, { emptyMessage: 'No Form-IV records.' });
+  y += 18;
+
+  const overdue = r.cerc.filings.filter((f) => f.is_overdue);
+  const breaching = r.cerc.filings.filter((f) => f.breach_count > 0);
+  if (overdue.length || breaching.length) {
+    y = ensureSpace(doc, y, 80, ctx);
+    y = sectionTitle(doc, y, 'Points requiring attention');
+    notes(doc, y, [
+      ...overdue.map((f) => `${f.form_no} for ${f.period} is past its due date of ${f.due_date} and still ${f.status}.`),
+      ...breaching.map((f) => `${f.form_no} records ${f.breach_count} transaction line(s) breaching the trading margin cap.`),
+    ]);
+  }
 
   pageNumbers(doc);
   doc.end();
