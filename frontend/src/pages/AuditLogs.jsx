@@ -296,6 +296,25 @@ export default function AuditLogs() {
     }
   }
 
+  const [auditReportBusy, setAuditReportBusy] = useState(false);
+
+  // Control-assurance report: chain integrity, segregation of duties and
+  // privileged actions — the questions an auditor opens this module to answer.
+  async function downloadAuditReport() {
+    setAuditReportBusy(true);
+    try {
+      await api.reports.downloadPdf(
+        '/reports/audit/pdf',
+        `SJVN_Audit_Report_${new Date().toISOString().slice(0, 10)}.pdf`,
+        { from: filters.from_date, to: filters.to_date },
+      );
+    } catch (err) {
+      alert(err.message || 'Could not generate the audit report.');
+    } finally {
+      setAuditReportBusy(false);
+    }
+  }
+
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState(null);
   const [fullRecord, setFullRecord] = useState(null);
@@ -386,6 +405,9 @@ export default function AuditLogs() {
         subtitle="A complete, tamper-proof history of every action taken on the platform"
         actions={
           <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-outline" disabled={auditReportBusy} onClick={downloadAuditReport}>
+              {auditReportBusy ? 'Preparing…' : 'Audit Report (PDF)'}
+            </button>
             <button className="btn btn-outline" disabled={reportBusy} onClick={downloadActivityReport}>
               {reportBusy ? 'Preparing…' : 'Activity Report (PDF)'}
             </button>

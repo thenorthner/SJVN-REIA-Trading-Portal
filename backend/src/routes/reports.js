@@ -9,7 +9,8 @@ import { generateContractReportPdf } from '../scripts/contractReportPdf.js';
 import { generateReiaDashboardPdf } from '../scripts/reiaDashboardReportPdf.js';
 import { generateMarketAnalyticsPdf, generateTradingProfitabilityPdf, generateTradingDashboardPdf } from '../scripts/tradingReportsPdf.js';
 import { buildTradingRealtime, buildTradingDaily, buildTradingPeriodic } from './dashboard.js';
-import { generateActivityReportPdf, generateRegulatoryReportPdf } from '../scripts/governanceReportsPdf.js';
+import { generateActivityReportPdf, generateRegulatoryReportPdf, generateAuditReportPdf } from '../scripts/governanceReportsPdf.js';
+import { verifyLogIntegrity, detectSoDViolations } from '../auditEngine.js';
 import { getParamNumber } from '../mastersService.js';
 import { OPEN_STATUSES, REASON_LABELS, SLA_LONG_PENDING_DAYS } from '../disputesConstants.js';
 import { OPEN_RECON_STATUSES } from '../reconciliationConstants.js';
@@ -1105,6 +1106,82 @@ router.get('/regulatory/pdf', requireRole(...TRADING_REPORT_READ), (req, res) =>
     generateRegulatoryReportPdf(buildRegulatorySummary(req.query), { generatedBy: req.user?.name || req.user?.email }, res);
   } catch (err) {
     console.error('Regulatory report PDF error:', err);
+    if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
+  }
+});
+
+// ─── Audit report ─────────────────────────────────────────────────────────
+// Control assurance rather than activity volume: chain integrity, segregation
+// of duties, and the privileged actions an auditor would want to see. Same
+// restricted audience as the Activity report.
+const PRIVILEGED_ACTION_LIKE = ['%DELETE%', '%REVERSE%', '%CANCEL%', '%OVERRIDE%', '%WAIVE%', '%DEACTIVATE%'];
+
+export function buildAuditSummary({ from, to } = {}) {
+  const where = ['1=1'];
+  const params = [];
+  if (from) { where.push('date(created_at) >= ?'); params.push(from); }
+  if (to) { where.push('date(created_at) <= ?'); params.push(to); }
+  const w = `WHERE ${where.join(' AND ')}`;
+
+  const integrity = verifyLogIntegrity();
+  const sod = detectSoDViolations();
+
+  const totalEvents = db.prepare(`SELECT COUNT(*) c FROM audit_logs ${w}`).get(...params).c;
+
+  // Privileged actions — anything that removes or overturns a record.
+  const privClause = PRIVILEGED_ACTION_LIKE.map(() => 'action LIKE ?').join(' OR ');
+  const privileged = db.prepare(`
+    SELECT action, module, COUNT(*) count
+    FROM audit_logs ${w} AND (${privClause})
+    GROUP BY action, module ORDER BY count DESC`).all(...params, ...PRIVILEGED_ACTION_LIKE);
+  const privilegedRecent = db.prepare(`
+    SELECT created_at, COALESCE(user_name,'(system)') user_name, COALESCE(user_role,'—') user_role,
+           module, action, entity_type, entity_id, reason
+    FROM audit_logs ${w} AND (${privClause})
+    ORDER BY rowid DESC LIMIT 40`).all(...params, ...PRIVILEGED_ACTION_LIKE);
+  const privilegedTotal = privileged.reduce((a, r) => a + r.count, 0);
+
+  // Financial reversals specifically — the append-only-ledger corrections.
+  const reversals = db.prepare(`
+    SELECT created_at, COALESCE(user_name,'(system)') user_name, module, action, entity_id, reason
+    FROM audit_logs ${w} AND (action LIKE '%REVERSE%')
+    ORDER BY rowid DESC LIMIT 25`).all(...params);
+
+  const exports = db.prepare(`
+    SELECT COUNT(*) c FROM audit_logs ${w} AND (action LIKE '%EXPORT%')`).get(...params).c;
+
+  return {
+    window: { from: from || null, to: to || null },
+    integrity: {
+      is_valid: integrity.isValid,
+      message: integrity.message,
+      broken_at_index: integrity.brokenAtIndex ?? null,
+      broken_log_id: integrity.brokenLogId ?? null,
+      records_checked: totalEvents,
+    },
+    segregation_of_duties: {
+      violation_count: sod.length,
+      violations: sod.slice(0, 40),
+    },
+    privileged: {
+      total: privilegedTotal,
+      by_action: privileged,
+      recent: privilegedRecent,
+    },
+    reversals,
+    export_events: exports,
+  };
+}
+
+router.get('/audit', requireRole(...ACTIVITY_READ), (req, res) => {
+  res.json(buildAuditSummary(req.query));
+});
+
+router.get('/audit/pdf', requireRole(...ACTIVITY_READ), (req, res) => {
+  try {
+    generateAuditReportPdf(buildAuditSummary(req.query), { generatedBy: req.user?.name || req.user?.email }, res);
+  } catch (err) {
+    console.error('Audit report PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
   }
 });

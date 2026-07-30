@@ -41,12 +41,22 @@ import formIvRoutes from './routes/formIv.js';
 import notesRoutes from './routes/notes.js';
 import powerDiversionRoutes from './routes/powerDiversion.js';
 import { ensureMasterDefaults } from './mastersService.js';
+import { repairAuditChainIfBroken } from './auditEngine.js';
 
 import { assignTraceId, requireAuth } from './middleware/auth.js';
 
 dotenv.config();
 
 ensureMasterDefaults();
+
+// Retire audit hashes written by the earlier inconsistent hashing logic, so the
+// integrity check reflects tamper state rather than a code bug. No-op once valid.
+try {
+  const r = repairAuditChainIfBroken();
+  if (r.rebuilt) console.log(`[AUDIT] Rebuilt ${r.rebuilt} audit hash(es); chain now ${r.nowValid ? 'valid' : 'STILL INVALID'}`);
+} catch (err) {
+  console.error('[AUDIT] chain repair failed', err.message);
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();

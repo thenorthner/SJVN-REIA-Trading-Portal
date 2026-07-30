@@ -336,6 +336,7 @@ export const api = {
       a.remove();
       URL.revokeObjectURL(url);
     },
+    audit: (params) => g('/reports/audit', params),
     marketAnalytics: (params) => g('/reports/market-analytics', params),
     tradingProfitability: (params) => g('/reports/trading-profitability', params),
     // Shared PDF download: a blob that comes back as JSON is the API's error

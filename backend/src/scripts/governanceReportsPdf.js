@@ -193,3 +193,105 @@ export function generateRegulatoryReportPdf(r, meta, res) {
   pageNumbers(doc);
   doc.end();
 }
+
+// ─── Audit report ─────────────────────────────────────────────────────────
+export function generateAuditReportPdf(r, meta, res) {
+  const generatedAt = nowLabel();
+  const ig = r.integrity;
+  const sod = r.segregation_of_duties;
+  const ctx = {
+    vertical: 'Assurance',
+    title: 'AUDIT REPORT',
+    subtitle: `Control assurance${r.window.from || r.window.to ? ` · ${r.window.from || 'start'} to ${r.window.to || 'date'}` : ''}`,
+    generatedAt,
+  };
+  const doc = newDoc(res, 'SJVN Audit Report', `SJVN_Audit_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+
+  header(doc, ctx);
+  let y = 84;
+
+  y = kpiBand(doc, y, [
+    { label: 'Chain integrity', value: ig.is_valid ? 'Verified' : 'BROKEN', tone: ig.is_valid ? GREEN : RED },
+    { label: 'Records checked', value: String(ig.records_checked) },
+    { label: 'Duty conflicts', value: String(sod.violation_count), tone: sod.violation_count ? RED : GREEN },
+    { label: 'Privileged actions', value: String(r.privileged.total) },
+  ]);
+
+  // ── Integrity ──
+  y = sectionTitle(doc, y, 'Audit trail integrity',
+    'Every log entry is hash-chained to the one before it; the check re-hashes the whole chain.');
+  y = notes(doc, y, [
+    ig.is_valid
+      ? `The chain is intact across all ${ig.records_checked} record(s). No entry has been altered or removed since it was written.`
+      : `Integrity FAILED: ${ig.message} (record ${ig.broken_log_id}). Investigate immediately — a record has been altered or removed.`,
+  ]);
+  y += 10;
+
+  // ── Segregation of duties ──
+  y = ensureSpace(doc, y, 120, ctx);
+  y = sectionTitle(doc, y, 'Segregation of duties',
+    'The same person creating and approving one record. Bid maker-checker now blocks this at source; historical conflicts still surface here.');
+  if (!sod.violation_count) {
+    y = notes(doc, y, ['No segregation-of-duties conflicts found — creation and approval were performed by different users throughout.']);
+    y += 10;
+  } else {
+    y = table(doc, y, [
+      { label: 'Module', w: 90, value: (x) => x.module || '—' },
+      { label: 'Record', w: 150, value: (x) => x.entityId },
+      { label: 'User (created & approved)', w: 180, value: (x) => x.userName },
+      { label: 'When', w: 103, align: 'right', value: (x) => stamp(x.timestamp) },
+    ], sod.violations, ctx);
+    y += 18;
+  }
+
+  // ── Privileged actions ──
+  y = ensureSpace(doc, y, 150, ctx);
+  y = sectionTitle(doc, y, 'Privileged actions',
+    'Deletions, reversals, cancellations, overrides and validation waivers — actions that remove or overturn a record.');
+  y = table(doc, y, [
+    { label: 'Action', w: 260, value: (x) => x.action },
+    { label: 'Module', w: 160, value: (x) => x.module || '—' },
+    { label: 'Count', w: 103, align: 'right', value: (x) => x.count },
+  ], r.privileged.by_action, ctx, { emptyMessage: 'No privileged actions in this period.' });
+  y += 18;
+
+  if (r.privileged.recent.length) {
+    y = ensureSpace(doc, y, 150, ctx);
+    y = sectionTitle(doc, y, 'Privileged actions — detail', 'Most recent 40.');
+    y = table(doc, y, [
+      { label: 'When', w: 92, value: (x) => stamp(x.created_at) },
+      { label: 'User', w: 96, value: (x) => x.user_name },
+      { label: 'Action', w: 110, value: (x) => x.action, colour: () => AMBER },
+      { label: 'Module', w: 60, value: (x) => x.module || '—' },
+      { label: 'Record', w: 90, value: (x) => x.entity_id || x.entity_type || '—' },
+      { label: 'Reason', w: 75, value: (x) => x.reason || '—' },
+    ], r.privileged.recent, ctx);
+    y += 18;
+  }
+
+  // ── Reversals ──
+  if (r.reversals.length) {
+    y = ensureSpace(doc, y, 120, ctx);
+    y = sectionTitle(doc, y, 'Financial reversals',
+      'Append-only ledgers are corrected by an opposing entry, never by deletion. Each reversal is listed with its reason.');
+    y = table(doc, y, [
+      { label: 'When', w: 92, value: (x) => stamp(x.created_at) },
+      { label: 'User', w: 100, value: (x) => x.user_name },
+      { label: 'Action', w: 100, value: (x) => x.action },
+      { label: 'Record', w: 96, value: (x) => x.entity_id || '—' },
+      { label: 'Reason', w: 135, value: (x) => x.reason || '—' },
+    ], r.reversals, ctx);
+    y += 18;
+  }
+
+  y = ensureSpace(doc, y, 60, ctx);
+  y = sectionTitle(doc, y, 'Data exports');
+  notes(doc, y, [
+    r.export_events
+      ? `${r.export_events} data export event(s) were logged in this period.`
+      : 'No data export events were logged in this period.',
+  ]);
+
+  pageNumbers(doc);
+  doc.end();
+}

@@ -5,43 +5,164 @@ import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Badge, Modal } from
 import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../roles.js';
 
+const REPORT_ICONS = {
+  billing: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+      <line x1="10" y1="9" x2="8" y2="9" />
+    </svg>
+  ),
+  energy: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  ),
+  dispute: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m14 13 5 5" />
+      <path d="m3 21 5-5" />
+      <path d="m10 8 3 3" />
+      <path d="m6 12 3 3" />
+      <path d="m11 3 3 3" />
+      <path d="m15 7 3 3" />
+    </svg>
+  ),
+  recon: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21.5 2v6h-6" />
+      <path d="M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+    </svg>
+  ),
+  contract: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+    </svg>
+  ),
+  reiaSnapshot: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
+      <path d="M22 12A10 10 0 0 0 12 2v10z" />
+    </svg>
+  ),
+  tradingSnapshot: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+      <polyline points="17 6 23 6 23 12" />
+    </svg>
+  ),
+  analytics: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="20" x2="12" y2="10" />
+      <line x1="18" y1="20" x2="18" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="16" />
+    </svg>
+  ),
+  financial: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3h12" />
+      <path d="M6 8h12" />
+      <path d="M6 13h8" />
+      <path d="M6 13c3.5 0 6 2.5 6 6" />
+      <path d="M6 3v10" />
+    </svg>
+  ),
+  noar: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <polyline points="9 14 11 16 15 12" />
+    </svg>
+  ),
+  activity: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
+  regulatory: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <path d="M9 15l2 2 4-4" />
+    </svg>
+  ),
+  audit: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  ),
+};
+
+const SECTION_ICONS = {
+  REIA: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b5fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+    </svg>
+  ),
+  TRADING: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b5fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  ),
+  GOVERNANCE: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b5fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  ),
+  COMPLIANCE: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b5fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <polyline points="9 12 11 14 15 10" />
+    </svg>
+  ),
+};
+
 const REPORT_GROUPS = [
   {
     vertical: 'REIA',
-    label: 'REIA — Billing & Settlement',
+    label: 'REIA – Billing & Settlement',
     reports: [
-      { path: '/reports/billing-summary/pdf', file: 'SJVN_Billing_Report.pdf', title: 'Billing Summary', blurb: 'Month-wise sales, purchases, margin, LPS and collections.' },
-      { path: '/reports/energy-summary/pdf', file: 'SJVN_Energy_Report.pdf', title: 'Energy Data & Validation', blurb: 'Provisional vs final energy per contract, CUF and availability.' },
-      { path: '/reports/dispute-summary/pdf', file: 'SJVN_Dispute_Report.pdf', title: 'Dispute Summary', blurb: 'Open disputes by reason and ageing, with SLA breaches.' },
-      { path: '/reports/recon-summary/pdf', file: 'SJVN_Reconciliation_Report.pdf', title: 'Reconciliation', blurb: 'Metered vs billed vs paid, and unresolved variances.' },
-      { path: '/reports/contract-summary/pdf', file: 'SJVN_Contract_Report.pdf', title: 'Contract Summary', blurb: 'PPA/PSA portfolio, capacity and tariff position.' },
-      { path: '/reports/reia-dashboard/pdf', file: 'SJVN_REIA_Dashboard_Snapshot.pdf', title: 'REIA Dashboard Snapshot', blurb: 'Point-in-time snapshot of the REIA dashboard KPIs.' },
+      { path: '/reports/billing-summary/pdf', file: 'SJVN_Billing_Report.pdf', title: 'Billing Summary', blurb: 'Month-wise sales, purchases, margin, LPS and collections.', iconType: 'billing', iconBg: '#e0f2fe', iconColor: '#0284c7' },
+      { path: '/reports/energy-summary/pdf', file: 'SJVN_Energy_Report.pdf', title: 'Energy Data & Validation', blurb: 'Provisional vs final energy per contract, CUF and availability.', iconType: 'energy', iconBg: '#dcfce7', iconColor: '#16a34a' },
+      { path: '/reports/dispute-summary/pdf', file: 'SJVN_Dispute_Report.pdf', title: 'Dispute Summary', blurb: 'Open disputes by reason and ageing, with SLA breaches.', iconType: 'dispute', iconBg: '#fef3c7', iconColor: '#d97706' },
+      { path: '/reports/recon-summary/pdf', file: 'SJVN_Reconciliation_Report.pdf', title: 'Reconciliation', blurb: 'Metered vs billed vs paid, and unresolved variances.', iconType: 'recon', iconBg: '#f3e8ff', iconColor: '#9333ea' },
+      { path: '/reports/contract-summary/pdf', file: 'SJVN_Contract_Report.pdf', title: 'Contract Summary', blurb: 'PPA/PSA portfolio, capacity and tariff position.', iconType: 'contract', iconBg: '#e0f2fe', iconColor: '#0284c7' },
+      { path: '/reports/reia-dashboard/pdf', file: 'SJVN_REIA_Dashboard_Snapshot.pdf', title: 'REIA Dashboard Snapshot', blurb: 'Point-in-time snapshot of the REIA dashboard KPIs.', iconType: 'reiaSnapshot', iconBg: '#ccfbf1', iconColor: '#0d9488' },
     ],
   },
   {
     vertical: 'TRADING',
     label: 'Power Trading',
     reports: [
-      { path: '/reports/trading-dashboard/pdf', file: 'SJVN_Trading_Dashboard.pdf', title: 'Trading Dashboard Snapshot', blurb: 'Open positions, client exposure utilisation, today\'s bidding and volume trend.' },
-      { path: '/reports/market-analytics/pdf', file: 'SJVN_Market_Analytics.pdf', title: 'Market Rates & Analytics', blurb: 'Exchange price comparison, forecast accuracy and our execution vs market.' },
-      { path: '/reports/trading-profitability/pdf', file: 'SJVN_Trading_Profitability.pdf', title: 'Financial & Profitability', blurb: 'Margin by stream — REC, bilateral and exchange — net of open access charges.' },
-      { path: '/bilateral/noar-approval-report.pdf', file: 'SJVN_NOAR_Approval_Report.pdf', title: 'NOAR Approval Tracking', blurb: 'Open-access approval SLA performance and pending applications.' },
+      { path: '/reports/trading-dashboard/pdf', file: 'SJVN_Trading_Dashboard.pdf', title: 'Trading Dashboard Snapshot', blurb: 'Open positions, client exposure utilisation, today\'s bidding and volume trend.', iconType: 'tradingSnapshot', iconBg: '#fae8ff', iconColor: '#c026d3' },
+      { path: '/reports/market-analytics/pdf', file: 'SJVN_Market_Analytics.pdf', title: 'Market Rates & Analytics', blurb: 'Exchange price comparison, forecast accuracy and our execution vs market.', iconType: 'analytics', iconBg: '#fef3c7', iconColor: '#d97706' },
+      { path: '/reports/trading-profitability/pdf', file: 'SJVN_Trading_Profitability.pdf', title: 'Financial & Profitability', blurb: 'Margin by stream — REC, bilateral and exchange — net of open access charges.', iconType: 'financial', iconBg: '#dcfce7', iconColor: '#16a34a' },
+      { path: '/bilateral/noar-approval-report.pdf', file: 'SJVN_NOAR_Approval_Report.pdf', title: 'NOAR Approval Tracking', blurb: 'Open-access approval SLA performance and pending applications.', iconType: 'noar', iconBg: '#e0f2fe', iconColor: '#0284c7' },
     ],
   },
   {
     vertical: 'GOVERNANCE',
     label: 'Governance & Assurance',
     reports: [
-      { path: '/reports/activity/pdf', file: 'SJVN_Activity_Report.pdf', title: 'Activity Report', blurb: 'Who did what across modules — by user, module, action and day.' },
+      { path: '/reports/audit/pdf', file: 'SJVN_Audit_Report.pdf', title: 'Audit Report', blurb: 'Chain integrity, segregation of duties and privileged actions.', iconType: 'audit', iconBg: '#dcfce7', iconColor: '#16a34a' },
+      { path: '/reports/activity/pdf', file: 'SJVN_Activity_Report.pdf', title: 'Activity Report', blurb: 'Who did what across modules — by user, module, action and day.', iconType: 'activity', iconBg: '#f3e8ff', iconColor: '#9333ea' },
     ],
   },
   {
-    // Compliance reports are not per-person data, so they follow the module
-    // read roles rather than the narrower governance gate.
     vertical: 'COMPLIANCE',
     label: 'Compliance',
     reports: [
-      { path: '/reports/regulatory/pdf', file: 'SJVN_Regulatory_Report.pdf', title: 'Regulatory Report', blurb: 'Counterparty approval completeness, outstanding approvals and CERC filing status.' },
+      { path: '/reports/regulatory/pdf', file: 'SJVN_Regulatory_Report.pdf', title: 'Regulatory Report', blurb: 'Counterparty approval completeness, outstanding approvals and CERC filing status.', iconType: 'regulatory', iconBg: '#ccfbf1', iconColor: '#0d9488' },
     ],
   },
 ];
@@ -218,38 +339,144 @@ export default function ConsolidatedDashboard() {
         </Card>
       </div>
 
-      {/* One place for management to pull any report, rather than visiting each
-          module. Only the verticals the user can actually see are listed. */}
-      <div className="no-print" style={{ marginTop: 20 }}>
-        <Card title="Reports Centre">
-          <p style={{ fontSize: 13, color: '#64748b', marginTop: -4, marginBottom: 14 }}>
-            Every module report in one place. Each opens as a formatted PDF covering all available periods.
-          </p>
-          {reportError && <div style={{ color: '#b91c1c', fontSize: 13, marginBottom: 10 }}>{reportError}</div>}
-          {REPORT_GROUPS.filter((grp) => visibleVerticals[grp.vertical]).map((grp) => (
-            <div key={grp.vertical} style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: '#94a3b8', marginBottom: 8 }}>
+      {/* Reports & Dashboards Section */}
+      <div className="no-print" style={{ marginTop: 32 }}>
+        {/* Banner Card with Header & Decorative Graphic */}
+        <div style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '16px',
+          padding: '24px 32px',
+          marginBottom: '24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+        }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.02em' }}>
+              Reports &amp; Dashboards
+            </h2>
+            <p style={{ margin: '6px 0 0 0', fontSize: '14px', color: '#64748b' }}>
+              Access and download key operational reports across all modules.
+            </p>
+          </div>
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+            <svg width="140" height="76" viewBox="0 0 140 76" fill="none">
+              <rect x="15" y="8" width="85" height="60" rx="8" fill="#eff6ff" stroke="#bfdbfe" strokeWidth="1.5" />
+              <rect x="25" y="20" width="42" height="5" rx="2.5" fill="#0b5fff" />
+              <rect x="25" y="30" width="60" height="4" rx="2" fill="#93c5fd" />
+              <rect x="25" y="38" width="50" height="4" rx="2" fill="#cbd5e1" />
+              <rect x="25" y="46" width="35" height="4" rx="2" fill="#cbd5e1" />
+              <circle cx="82" cy="46" r="13" fill="#0b5fff" opacity="0.1" />
+              <path d="M75 50L80 43L84 46L89 40" stroke="#0b5fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <rect x="80" y="14" width="45" height="52" rx="7" fill="#ffffff" stroke="#93c5fd" strokeWidth="1.5" />
+              <rect x="87" y="22" width="28" height="4" rx="2" fill="#0b5fff" />
+              <rect x="87" y="30" width="22" height="3" rx="1.5" fill="#94a3b8" />
+              <rect x="87" y="36" width="24" height="3" rx="1.5" fill="#cbd5e1" />
+              <rect x="87" y="42" width="16" height="3" rx="1.5" fill="#60a5fa" />
+              <circle cx="106" cy="53" r="5" fill="#10b981" />
+              <path d="M104 53L105.5 54.5L108 52" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        </div>
+
+        {reportError && (
+          <div style={{ color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>
+            {reportError}
+          </div>
+        )}
+
+        {REPORT_GROUPS.filter((grp) => visibleVerticals[grp.vertical]).map((grp) => (
+          <div key={grp.vertical} style={{ marginBottom: 28 }}>
+            {/* Section Header with Icon */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {SECTION_ICONS[grp.vertical]}
+              </div>
+              <span style={{ fontSize: '15px', fontWeight: 600, color: '#0b5fff', letterSpacing: '0.1px' }}>
                 {grp.label}
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
-                {grp.reports.map((r) => (
-                  <div key={r.path} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{r.title}</div>
-                    <div style={{ fontSize: 12, color: '#64748b', flex: 1 }}>{r.blurb}</div>
-                    <button
-                      className="btn btn-outline btn-sm"
-                      disabled={busyReport === r.path}
-                      onClick={() => pullReport(r)}
-                      style={{ alignSelf: 'flex-start' }}
-                    >
-                      {busyReport === r.path ? 'Preparing…' : 'Download PDF'}
-                    </button>
-                  </div>
-                ))}
-              </div>
+              </span>
             </div>
-          ))}
-        </Card>
+
+            {/* Grid of Report Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 16 }}>
+              {grp.reports.map((r) => (
+                <div
+                  key={r.path}
+                  className="report-card-item"
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.03)',
+                  }}
+                >
+                  {/* Round Icon Badge */}
+                  <div
+                    style={{
+                      width: '42px',
+                      height: '42px',
+                      borderRadius: '50%',
+                      background: r.iconBg,
+                      color: r.iconColor,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      marginBottom: '14px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {REPORT_ICONS[r.iconType]}
+                  </div>
+
+                  {/* Title & Blurb */}
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', marginBottom: '6px', lineHeight: 1.3 }}>
+                    {r.title}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.45', marginBottom: '16px', flex: 1 }}>
+                    {r.blurb}
+                  </div>
+
+                  {/* Download PDF Button */}
+                  <button
+                    type="button"
+                    className="report-download-btn"
+                    disabled={busyReport === r.path}
+                    onClick={() => pullReport(r)}
+                    style={{
+                      alignSelf: 'flex-start',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 14px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      background: '#ffffff',
+                      color: '#0f172a',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      cursor: busyReport === r.path ? 'not-allowed' : 'pointer',
+                      opacity: busyReport === r.path ? 0.6 : 1,
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <span>{busyReport === r.path ? 'Preparing…' : 'Download PDF'}</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
       {showGlossary && (
