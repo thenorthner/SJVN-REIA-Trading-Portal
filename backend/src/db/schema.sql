@@ -52,6 +52,28 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Per-channel delivery attempts for a notification (email / SMS). One in-app
+-- notification can fan out to several rows here — the proof of what was sent,
+-- to whom, and whether it succeeded, plus the retry state.
+CREATE TABLE IF NOT EXISTS notification_deliveries (
+  id TEXT PRIMARY KEY,
+  notification_id TEXT REFERENCES notifications(id),
+  event TEXT,
+  channel TEXT NOT NULL CHECK (channel IN ('EMAIL','SMS')),
+  recipient_name TEXT,
+  address TEXT NOT NULL,
+  subject TEXT,
+  body TEXT,
+  status TEXT NOT NULL DEFAULT 'QUEUED' CHECK (status IN ('QUEUED','SENT','FAILED','SKIPPED')),
+  provider TEXT,
+  provider_ref TEXT,
+  error TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  sent_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_notif_deliveries_status ON notification_deliveries(status, channel);
+
 -- Admin-authored "flash" messages pinned on the Notification Board.
 CREATE TABLE IF NOT EXISTS broadcast_messages (
   id TEXT PRIMARY KEY,
@@ -811,6 +833,31 @@ CREATE TABLE IF NOT EXISTS trading_client_exchanges (
   exchange TEXT NOT NULL CHECK (exchange IN ('IEX','PXIL','HPX')),
   registration_id TEXT NOT NULL,
   is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS seller_availabilities (
+  id TEXT PRIMARY KEY,
+  seller_id TEXT NOT NULL REFERENCES trading_clients(id),
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  quantum_mw REAL NOT NULL,
+  expected_tariff REAL,
+  status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','PARTIALLY_BOOKED','FULLY_BOOKED','CANCELLED')),
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS buyer_consents (
+  id TEXT PRIMARY KEY,
+  availability_id TEXT NOT NULL REFERENCES seller_availabilities(id),
+  buyer_id TEXT NOT NULL REFERENCES trading_clients(id),
+  quantum_mw REAL NOT NULL,
+  offered_tariff REAL,
+  status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','CONFIRMED','REJECTED')),
+  linked_transaction_id TEXT,
+  created_by TEXT,
+  confirmed_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

@@ -257,6 +257,39 @@ function migrateBidsWorkflow() {
 }
 migrateBidsWorkflow();
 
+// Multi-channel notifications: a per-channel delivery log, and a phone column
+// on users so internal recipients can receive SMS once numbers are captured.
+function migrateNotificationDelivery() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notification_deliveries (
+      id TEXT PRIMARY KEY,
+      notification_id TEXT REFERENCES notifications(id),
+      event TEXT,
+      channel TEXT NOT NULL CHECK (channel IN ('EMAIL','SMS')),
+      recipient_name TEXT,
+      address TEXT NOT NULL,
+      subject TEXT,
+      body TEXT,
+      status TEXT NOT NULL DEFAULT 'QUEUED' CHECK (status IN ('QUEUED','SENT','FAILED','SKIPPED')),
+      provider TEXT,
+      provider_ref TEXT,
+      error TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      sent_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_notif_deliveries_status ON notification_deliveries(status, channel);
+  `);
+  // subject/body were added after the first cut of the table; keep both retry
+  // content faithful on databases created before this line.
+  const delCols = db.prepare('PRAGMA table_info(notification_deliveries)').all().map((c) => c.name);
+  if (!delCols.includes('subject')) db.exec('ALTER TABLE notification_deliveries ADD COLUMN subject TEXT');
+  if (!delCols.includes('body')) db.exec('ALTER TABLE notification_deliveries ADD COLUMN body TEXT');
+  const userCols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  if (!userCols.includes('phone')) db.exec('ALTER TABLE users ADD COLUMN phone TEXT');
+}
+migrateNotificationDelivery();
+
 // Financial ledgers are append-only: a wrong entry is reversed by an opposing
 // entry, never erased. These columns link a reversal back to what it undoes.
 function migrateLedgerReversals() {
