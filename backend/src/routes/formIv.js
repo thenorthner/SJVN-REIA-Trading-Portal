@@ -6,6 +6,7 @@ import {
   resolvePeriod, dueDateFor, deriveLines, evaluateLine, normalizeLine, getLines, refreshTotals,
   insertLine, submissionBlockers, toCsv,
 } from '../services/cercFormIv.js';
+import { generateFormIvPdf } from '../scripts/governanceReportsPdf.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -86,6 +87,19 @@ router.get('/:id/export', requireRole(...READ), (req, res) => {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${form.form_no.replaceAll('/', '-')}.csv"`);
   res.send(csv);
+});
+
+// Filing-format PDF — the return as it reads for review/submission, alongside
+// the raw CSV export above.
+router.get('/:id/pdf', requireRole(...READ), (req, res) => {
+  const form = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(req.params.id);
+  if (!form) return res.status(404).json({ error: 'Form-IV record not found' });
+  try {
+    generateFormIvPdf(form, getLines(form.id), { generatedBy: req.user?.name || req.user?.email }, res);
+  } catch (err) {
+    console.error('Form-IV PDF error:', err);
+    if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
+  }
 });
 
 router.post('/', requireRole(...WRITE), (req, res) => {

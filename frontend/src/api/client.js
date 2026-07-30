@@ -187,6 +187,7 @@ export const api = {
       a.remove();
       URL.revokeObjectURL(url);
     },
+    downloadPdf: (id, formNo) => api.reports.downloadPdf(`/form-iv/${id}/pdf`, `${String(formNo || id).replaceAll('/', '-')}.pdf`),
   },
   stationBeta: {
     list: (params) => g('/station-beta', params),
@@ -214,6 +215,14 @@ export const api = {
     updateLookup: (id, body) => put(`/masters/lookups/${id}`, body),
     projects: () => g('/masters/projects'),
     resolvedBilling: () => g('/masters/resolved-billing'),
+  },
+  preTrade: {
+    availabilities: (params) => g('/pre-trade/availabilities', params),
+    declareAvailability: (body) => p('/pre-trade/availabilities', body),
+    consents: (params) => g('/pre-trade/consents', params),
+    submitConsent: (availabilityId, body) => p(`/pre-trade/availabilities/${availabilityId}/consents`, body),
+    confirmConsent: (consentId) => p(`/pre-trade/consents/${consentId}/confirm`),
+    rejectConsent: (consentId) => p(`/pre-trade/consents/${consentId}/reject`),
   },
   reports: {
     billingSummary: (params) => g('/reports/billing-summary', params),

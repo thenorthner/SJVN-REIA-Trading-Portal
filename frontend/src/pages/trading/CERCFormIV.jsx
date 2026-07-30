@@ -329,6 +329,7 @@ export default function CERCFormIV() {
               )}
               {editable && <button className="btn btn-outline" onClick={() => openLine(null)}>+ Add transaction</button>}
               <button className="btn btn-ghost" onClick={() => api.formIv.exportCsv(detail.id, detail.form_no)}>Export CSV</button>
+              <button className="btn btn-outline" onClick={() => api.formIv.downloadPdf(detail.id, detail.form_no).catch((err) => alert(err.message || 'Could not generate the Form-IV PDF.'))}>Download PDF</button>
               {editable && blockers.length === 0 && (
                 <button className="btn btn-primary" disabled={busy} onClick={() => runOnDetail(() => api.formIv.submit(detail.id, {}), 'Failed to submit the filing.')}>
                   Mark Submitted to CERC

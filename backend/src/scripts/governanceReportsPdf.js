@@ -383,3 +383,74 @@ export function generateMisReportPdf(r, meta, res) {
   pageNumbers(doc);
   doc.end();
 }
+
+// ─── CERC Form-IV filing ──────────────────────────────────────────────────
+export function generateFormIvPdf(form, lines, meta, res) {
+  const generatedAt = nowLabel();
+  const ctx = {
+    vertical: 'Compliance',
+    title: 'CERC FORM-IV',
+    subtitle: `${form.form_no} · ${form.period}`,
+    generatedAt,
+  };
+  const doc = newDoc(res, `CERC Form-IV ${form.form_no}`, `${String(form.form_no).replace(/\//g, '-')}.pdf`);
+
+  header(doc, ctx);
+  let y = 84;
+
+  y = kpiBand(doc, y, [
+    { label: 'Volume traded', value: `${form.total_volume_mu} MU` },
+    { label: 'Trading margin', value: rs(form.trading_margin) },
+    { label: 'Avg margin', value: `Rs ${form.avg_margin_per_unit}/kWh` },
+    { label: 'Margin cap breaches', value: String(form.breach_count || 0), tone: form.breach_count ? RED : GREEN },
+  ]);
+
+  // Filing metadata — the return's identity and status.
+  y = sectionTitle(doc, y, 'Filing details');
+  y = table(doc, y, [
+    { label: 'Field', w: 200, value: (x) => x.k },
+    { label: 'Value', w: 323, value: (x) => x.v, colour: (x) => x.tone },
+  ], [
+    { k: 'Form number', v: form.form_no },
+    { k: 'Period', v: `${form.period} (${form.period_type})` },
+    { k: 'Status', v: form.status, tone: form.status === 'SUBMITTED' ? GREEN : AMBER },
+    { k: 'Due date', v: form.due_date || '—' },
+    { k: 'Submitted on', v: form.submission_date || 'Not yet submitted' },
+    { k: 'CERC reference', v: form.reference_no || '—' },
+    { k: 'Transaction lines', v: String(form.line_count || lines.length) },
+  ], ctx);
+  y += 18;
+
+  // The transaction-wise return itself.
+  y = ensureSpace(doc, y, 160, ctx);
+  y = sectionTitle(doc, y, 'Transaction-wise details',
+    'Inter-state trades in the period, with the CERC trading margin cap applied per trade.');
+  y = table(doc, y, [
+    { label: '#', w: 24, align: 'right', value: (x) => x.line_no },
+    { label: 'Seller', w: 105, value: (x) => x.seller_name },
+    { label: 'Buyer', w: 105, value: (x) => x.buyer_name },
+    { label: 'Vol MU', w: 48, align: 'right', value: (x) => x.quantum_mu },
+    { label: 'Purchase', w: 52, align: 'right', value: (x) => x.purchase_rate },
+    { label: 'Sale', w: 44, align: 'right', value: (x) => x.sale_rate },
+    { label: 'Margin', w: 48, align: 'right', value: (x) => x.trading_margin_per_unit },
+    { label: 'Cap', w: 40, align: 'right', value: (x) => x.margin_cap },
+    { label: 'Status', w: 57, value: (x) => (x.compliance_status === 'BREACH' ? 'BREACH' : x.compliance_status === 'EXEMPT' ? 'Exempt' : 'OK'),
+      colour: (x) => (x.compliance_status === 'BREACH' ? RED : x.compliance_status === 'EXEMPT' ? AMBER : GREEN) },
+  ], lines, ctx, { emptyMessage: 'No transaction lines on this filing.' });
+  y += 18;
+
+  // Compliance conclusion and the CERC basis.
+  y = ensureSpace(doc, y, 90, ctx);
+  y = sectionTitle(doc, y, 'Compliance');
+  const breaches = lines.filter((l) => l.compliance_status === 'BREACH');
+  y = notes(doc, y, [
+    'CERC (Fixation of Trading Margin) Regulations: the margin between sale and purchase price may not exceed the notified cap for each inter-state trade.',
+    breaches.length
+      ? `${breaches.length} of ${lines.length} line(s) breach the cap — margin exceeds the permitted ceiling and must be addressed before filing.`
+      : `All ${lines.length} line(s) are within the trading margin cap.`,
+    ...breaches.map((l) => `Line ${l.line_no}: ${l.seller_name} to ${l.buyer_name}, margin Rs ${l.trading_margin_per_unit}/kWh against a cap of Rs ${l.margin_cap}/kWh.`),
+  ]);
+
+  pageNumbers(doc);
+  doc.end();
+}
