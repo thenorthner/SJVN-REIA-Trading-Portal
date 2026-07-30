@@ -8,9 +8,9 @@ import { generateReconReportPdf } from '../scripts/reconReportPdf.js';
 import { generateContractReportPdf } from '../scripts/contractReportPdf.js';
 import { generateReiaDashboardPdf } from '../scripts/reiaDashboardReportPdf.js';
 import { generateMarketAnalyticsPdf, generateTradingProfitabilityPdf, generateTradingDashboardPdf } from '../scripts/tradingReportsPdf.js';
-import { buildTradingRealtime, buildTradingDaily, buildTradingPeriodic } from './dashboard.js';
-import { generateActivityReportPdf, generateRegulatoryReportPdf, generateAuditReportPdf } from '../scripts/governanceReportsPdf.js';
-import { verifyLogIntegrity, detectSoDViolations } from '../auditEngine.js';
+import { buildTradingRealtime, buildTradingDaily, buildTradingPeriodic, buildConsolidatedPortfolio } from './dashboard.js';
+import { generateActivityReportPdf, generateRegulatoryReportPdf, generateAuditReportPdf, generateMisReportPdf } from '../scripts/governanceReportsPdf.js';
+import { verifyLogIntegrity, detectSoDViolations, secureLogAudit } from '../auditEngine.js';
 import { getParamNumber } from '../mastersService.js';
 import { OPEN_STATUSES, REASON_LABELS, SLA_LONG_PENDING_DAYS } from '../disputesConstants.js';
 import { OPEN_RECON_STATUSES } from '../reconciliationConstants.js';
@@ -137,6 +137,7 @@ router.get('/billing-summary', requireRole(...REPORT_READ), (req, res) => {
 router.get('/billing-summary/pdf', requireRole(...REPORT_READ), (req, res) => {
   try {
     const report = buildBillingSummary({ from: req.query.from, to: req.query.to });
+    secureLogAudit(req, { action: 'EXPORT_PDF', module: 'REPORTS', entityType: 'BILLING_SUMMARY', details: `Downloaded billing summary for ${req.query.from || 'all'} to ${req.query.to || 'all'}` });
     generateBillingReportPdf(report, { generatedBy: req.user?.name || req.user?.email }, res);
   } catch (err) {
     console.error('Billing report PDF error:', err);
@@ -289,11 +290,8 @@ router.get('/energy-summary', requireRole(...REPORT_READ), (req, res) => {
 
 router.get('/energy-summary/pdf', requireRole(...REPORT_READ), (req, res) => {
   try {
-    const report = buildEnergySummary({
-      from: req.query.from,
-      to: req.query.to,
-      contract_id: req.query.contract_id,
-    });
+    const report = buildEnergySummary({ from: req.query.from, to: req.query.to, contract_id: req.query.contract_id });
+    secureLogAudit(req, { action: 'EXPORT_PDF', module: 'REPORTS', entityType: 'ENERGY_SUMMARY', details: 'Downloaded energy summary' });
     generateEnergyReportPdf(report, { generatedBy: req.user?.name || req.user?.email }, res);
   } catch (err) {
     console.error('Energy report PDF error:', err);
@@ -401,10 +399,11 @@ router.get('/dispute-summary', requireRole(...REPORT_READ), (req, res) => {
 
 router.get('/dispute-summary/pdf', requireRole(...REPORT_READ), (req, res) => {
   try {
-    const report = buildDisputeSummary({ from: req.query.from, to: req.query.to, status: req.query.status });
+    const report = buildDisputeSummary(req.query);
+    secureLogAudit(req, { action: 'EXPORT_PDF', module: 'REPORTS', entityType: 'DISPUTE_SUMMARY', details: 'Downloaded dispute summary' });
     generateDisputeReportPdf(report, { generatedBy: req.user?.name || req.user?.email }, res);
   } catch (err) {
-    console.error('Dispute report PDF error:', err);
+    console.error('Recon report PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
   }
 });
@@ -777,7 +776,9 @@ router.get('/market-analytics', requireRole(...TRADING_REPORT_READ), (req, res) 
 
 router.get('/market-analytics/pdf', requireRole(...TRADING_REPORT_READ), (req, res) => {
   try {
-    generateMarketAnalyticsPdf(buildMarketAnalyticsSummary(req.query), { generatedBy: req.user?.name || req.user?.email }, res);
+    const report = buildMarketAnalyticsSummary(req.query);
+    secureLogAudit(req, { action: 'EXPORT_PDF', module: 'REPORTS', entityType: 'MARKET_ANALYTICS', details: 'Downloaded market analytics report' });
+    generateMarketAnalyticsPdf(report, { generatedBy: req.user?.name || req.user?.email }, res);
   } catch (err) {
     console.error('Market analytics PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
@@ -880,7 +881,9 @@ router.get('/trading-profitability', requireRole(...TRADING_REPORT_READ), (req, 
 
 router.get('/trading-profitability/pdf', requireRole(...TRADING_REPORT_READ), (req, res) => {
   try {
-    generateTradingProfitabilityPdf(buildTradingProfitabilitySummary(req.query), { generatedBy: req.user?.name || req.user?.email }, res);
+    const report = buildTradingProfitabilitySummary(req.query);
+    secureLogAudit(req, { action: 'EXPORT_PDF', module: 'REPORTS', entityType: 'TRADING_PROFITABILITY', details: 'Downloaded trading profitability report' });
+    generateTradingProfitabilityPdf(report, { generatedBy: req.user?.name || req.user?.email }, res);
   } catch (err) {
     console.error('Trading profitability PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
@@ -1179,9 +1182,86 @@ router.get('/audit', requireRole(...ACTIVITY_READ), (req, res) => {
 
 router.get('/audit/pdf', requireRole(...ACTIVITY_READ), (req, res) => {
   try {
+    secureLogAudit(req, { action: 'EXPORT_PDF', module: 'REPORTS', entityType: 'AUDIT_REPORT', details: 'Downloaded security audit report' });
     generateAuditReportPdf(buildAuditSummary(req.query), { generatedBy: req.user?.name || req.user?.email }, res);
   } catch (err) {
     console.error('Audit report PDF error:', err);
+    if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
+  }
+});
+
+// ─── Internal MIS report ──────────────────────────────────────────────────
+// One management pack across both verticals for the executive audience the
+// Consolidated Dashboard serves. Every figure is drawn from the same builders
+// the individual reports use, so the pack cannot disagree with them.
+export function buildMisSummary() {
+  const p = buildConsolidatedPortfolio();
+  const billing = buildBillingSummary();
+  const profitability = buildTradingProfitabilitySummary();
+  const regulatory = buildRegulatorySummary();
+
+  const capacityPct = p.targetCapacity ? Math.round((p.reiaContractedCapacity / p.targetCapacity) * 1000) / 10 : null;
+
+  // Cross-module risk items worth a management eye, each with its live count.
+  const risks = [
+    { item: 'Overdue receivables (REIA)', value: p.reiaOverdue, kind: 'money' },
+    { item: 'Disputed amount (REIA)', value: p.reiaDisputedAmount, kind: 'money' },
+    { item: 'Open disputes', value: p.reiaOpenDisputes, kind: 'count' },
+    { item: 'Reconciliation exceptions', value: p.reiaReconExceptions, kind: 'count' },
+    { item: 'Trading outstanding', value: p.tradingOutstanding, kind: 'money' },
+    { item: 'Regulatory approvals outstanding', value: regulatory.totals.mandatory_outstanding, kind: 'count' },
+    { item: 'CERC filings overdue', value: regulatory.totals.filings_overdue, kind: 'count' },
+    { item: 'Margin cap breaches', value: regulatory.totals.margin_cap_breaches, kind: 'count' },
+  ];
+
+  return {
+    generated_for: 'SJVN Management',
+    executive_summary: p.executiveSummary,
+    portfolio: {
+      total_value: p.totalPortfolioValue,
+      contracted_capacity_mw: p.reiaContractedCapacity,
+      target_capacity_mw: p.targetCapacity,
+      capacity_pct: capacityPct,
+      overall_profitability: p.overallProfitability,
+      data_completeness_pct: p.dataCompleteness,
+    },
+    reia: {
+      billed_value: p.reiaBilledValue,
+      receivables: p.reiaReceivables,
+      payables: p.reiaPayables,
+      overdue: p.reiaOverdue,
+      collected: billing.totals.collected || 0,
+      net_profit: billing.totals.net_profit || 0,
+      months: billing.month_count,
+    },
+    trading: {
+      net_margin: profitability.net_margin,
+      cleared_quantum_mw: p.tradingClearedQuantum,
+      streams: profitability.streams,
+      open_access_charges: profitability.open_access_charges.total,
+    },
+    risk: {
+      total_unresolved_exposure: p.totalUnresolvedExposure,
+      security_coverage_pct: p.coverageRatio,
+      items: risks,
+    },
+    // Stated so the pack is honest about where the platform still has no data.
+    caveats: [
+      p.tradingRevenue === 0 ? 'Trading revenue is billed via ISET, not this platform yet — trading figures are margin-based, not invoiced.' : null,
+      ...profitability.caveats,
+    ].filter(Boolean),
+  };
+}
+
+router.get('/mis', requireRole(...ROLE_GROUPS.EXECUTIVE), (req, res) => {
+  res.json(buildMisSummary());
+});
+
+router.get('/mis/pdf', requireRole(...ROLE_GROUPS.EXECUTIVE), (req, res) => {
+  try {
+    generateMisReportPdf(buildMisSummary(), { generatedBy: req.user?.name || req.user?.email }, res);
+  } catch (err) {
+    console.error('MIS report PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
   }
 });

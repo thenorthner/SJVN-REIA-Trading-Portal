@@ -295,3 +295,91 @@ export function generateAuditReportPdf(r, meta, res) {
   pageNumbers(doc);
   doc.end();
 }
+
+// ─── Internal MIS report ──────────────────────────────────────────────────
+export function generateMisReportPdf(r, meta, res) {
+  const generatedAt = nowLabel();
+  const ctx = {
+    vertical: 'Management',
+    title: 'INTERNAL MIS REPORT',
+    subtitle: 'Enterprise portfolio · REIA + Power Trading',
+    generatedAt,
+  };
+  const doc = newDoc(res, 'SJVN Internal MIS Report', `SJVN_Internal_MIS_${new Date().toISOString().slice(0, 10)}.pdf`);
+
+  header(doc, ctx);
+  let y = 84;
+
+  const p = r.portfolio;
+  y = kpiBand(doc, y, [
+    { label: 'Portfolio value', value: rs(p.total_value) },
+    { label: 'Capacity vs 20 GW', value: p.capacity_pct === null ? '—' : `${p.capacity_pct}%` },
+    { label: 'Overall profitability', value: rs(p.overall_profitability), tone: p.overall_profitability >= 0 ? GREEN : RED },
+    { label: 'Unresolved exposure', value: rs(r.risk.total_unresolved_exposure), tone: r.risk.total_unresolved_exposure > 0 ? AMBER : GREEN },
+  ]);
+
+  y = notes(doc, y, [r.executive_summary]);
+  y += 8;
+
+  // ── Portfolio ──
+  y = sectionTitle(doc, y, 'Portfolio');
+  y = table(doc, y, [
+    { label: 'Measure', w: 300, value: (x) => x.k },
+    { label: 'Value', w: 223, align: 'right', value: (x) => x.v },
+  ], [
+    { k: 'Total portfolio value', v: rs(p.total_value) },
+    { k: 'Contracted capacity', v: `${p.contracted_capacity_mw} MW of ${p.target_capacity_mw} MW target` },
+    { k: 'Overall profitability', v: rs(p.overall_profitability) },
+    { k: 'Data completeness (energy records locked)', v: `${p.data_completeness_pct}%` },
+  ], ctx);
+  y += 18;
+
+  // ── REIA ──
+  y = sectionTitle(doc, y, 'REIA — Billing & Settlement', `${r.reia.months} month(s) of billing.`);
+  y = table(doc, y, [
+    { label: 'Measure', w: 300, value: (x) => x.k },
+    { label: 'Amount', w: 223, align: 'right', value: (x) => rs(x.v), colour: (x) => x.tone },
+  ], [
+    { k: 'Total billed value', v: r.reia.billed_value },
+    { k: 'Net profit', v: r.reia.net_profit, tone: r.reia.net_profit >= 0 ? GREEN : RED },
+    { k: 'Collected', v: r.reia.collected, tone: GREEN },
+    { k: 'Receivables outstanding', v: r.reia.receivables },
+    { k: 'Payables outstanding', v: r.reia.payables },
+    { k: 'Overdue receivables', v: r.reia.overdue, tone: r.reia.overdue > 0 ? RED : INK },
+  ], ctx);
+  y += 18;
+
+  // ── Trading ──
+  y = ensureSpace(doc, y, 140, ctx);
+  y = sectionTitle(doc, y, 'Power Trading', `${r.trading.cleared_quantum_mw} MW cleared on exchange.`);
+  y = table(doc, y, [
+    { label: 'Stream', w: 200, value: (x) => x.stream },
+    { label: 'Basis', w: 110, value: (x) => x.basis },
+    { label: 'Margin', w: 213, align: 'right', value: (x) => rs(x.margin), colour: (x) => (x.margin >= 0 ? GREEN : RED) },
+  ], r.trading.streams, ctx);
+  doc.fillColor(INK).font('Helvetica-Bold').fontSize(8)
+    .text(`Net trading margin: ${rs(r.trading.net_margin)}   ·   Open access charges: ${rs(r.trading.open_access_charges)}`, M, y + 4);
+  y += 22;
+
+  // ── Risk rollup ──
+  y = ensureSpace(doc, y, 160, ctx);
+  y = sectionTitle(doc, y, 'Cross-module risk rollup',
+    `Security coverage of unresolved exposure: ${Math.round(r.risk.security_coverage_pct)}%.`);
+  y = table(doc, y, [
+    { label: 'Risk item', w: 360, value: (x) => x.item },
+    { label: 'Value', w: 163, align: 'right',
+      value: (x) => (x.kind === 'money' ? rs(x.value) : String(x.value)),
+      colour: (x) => (x.value > 0 ? (x.kind === 'money' ? RED : AMBER) : GREEN) },
+  ], r.risk.items, ctx);
+  y += 18;
+
+  // ── Caveats ──
+  if (r.caveats.length) {
+    y = ensureSpace(doc, y, 80, ctx);
+    y = sectionTitle(doc, y, 'Basis and data gaps');
+    notes(doc, y, r.caveats);
+  }
+
+  pageNumbers(doc);
+  doc.end();
+}

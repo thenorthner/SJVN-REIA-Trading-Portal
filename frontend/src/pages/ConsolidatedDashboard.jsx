@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import api from '../api/client.js';
 import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Badge, Modal } from '../components/ui.jsx';
@@ -98,6 +99,12 @@ const REPORT_ICONS = {
       <path d="m9 12 2 2 4-4" />
     </svg>
   ),
+  mis: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M9 17V9" /><path d="M13 17V5" /><path d="M17 17v-4" />
+    </svg>
+  ),
 };
 
 const SECTION_ICONS = {
@@ -123,6 +130,12 @@ const SECTION_ICONS = {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b5fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       <polyline points="9 12 11 14 15 10" />
+    </svg>
+  ),
+  MANAGEMENT: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b5fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M9 17V9" /><path d="M13 17V5" /><path d="M17 17v-4" />
     </svg>
   ),
 };
@@ -165,10 +178,19 @@ const REPORT_GROUPS = [
       { path: '/reports/regulatory/pdf', file: 'SJVN_Regulatory_Report.pdf', title: 'Regulatory Report', blurb: 'Counterparty approval completeness, outstanding approvals and CERC filing status.', iconType: 'regulatory', iconBg: '#ccfbf1', iconColor: '#0d9488' },
     ],
   },
+  {
+    // Cross-vertical management pack — executive audience only.
+    vertical: 'MANAGEMENT',
+    label: 'Management',
+    reports: [
+      { path: '/reports/mis/pdf', file: 'SJVN_Internal_MIS.pdf', title: 'Internal MIS', blurb: 'Enterprise pack: portfolio, REIA billing, trading margin and cross-module risk rollup.', iconType: 'mis', iconBg: '#e0e7ff', iconColor: '#4338ca' },
+    ],
+  },
 ];
 
 export default function ConsolidatedDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [showGlossary, setShowGlossary] = useState(false);
@@ -203,6 +225,7 @@ export default function ConsolidatedDashboard() {
     TRADING: canViewTrading,
     GOVERNANCE: ROLE_GROUPS.GOVERNANCE_REPORTS.includes(user.role),
     COMPLIANCE: canViewReia || canViewTrading,
+    MANAGEMENT: ROLE_GROUPS.EXECUTIVE.includes(user.role),
   };
 
   const revenueChart = [
@@ -231,7 +254,11 @@ export default function ConsolidatedDashboard() {
           actions={
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn btn-outline" onClick={() => setShowGlossary(true)}>KPI Glossary</button>
-              <button className="btn" onClick={handlePrint}>Download Board Report (PDF)</button>
+              <button className="btn btn-outline" disabled={busyReport === '/reports/mis/pdf'}
+                onClick={() => pullReport({ path: '/reports/mis/pdf', file: 'SJVN_Internal_MIS.pdf', title: 'Internal MIS' })}>
+                {busyReport === '/reports/mis/pdf' ? 'Preparing…' : 'Internal MIS (PDF)'}
+              </button>
+              <button className="btn" onClick={handlePrint}>Print View</button>
             </div>
           }
         />
@@ -292,20 +319,20 @@ export default function ConsolidatedDashboard() {
 
       <h3 style={{ margin: '30px 0 15px 0', color: '#1c2536', borderBottom: '1px solid #eee', paddingBottom: 10 }}>Portfolio Overview</h3>
       <div className="kpi-grid">
-        <StatCard label="Total Portfolio Billed Value" value={fmtCurrency(data.totalPortfolioValue)} tone="blue" hint={<div>MoM Trend: {getTrendIcon(data.revenueTrend)}</div>} />
-        <StatCard label="Overall Trading Profitability" value={fmtCurrency(data.overallProfitability)} tone="green" hint="SJVN trading margin across all trades" />
+        <StatCard label="Total Portfolio Billed Value" value={fmtCurrency(data.totalPortfolioValue)} tone="blue" hint={<div>MoM Trend: {getTrendIcon(data.revenueTrend)}</div>} onClick={() => navigate('/reia')} />
+        <StatCard label="Overall Trading Profitability" value={fmtCurrency(data.overallProfitability)} tone="green" hint="SJVN trading margin across all trades" onClick={() => navigate('/trading')} />
       </div>
 
       {canViewReia && (
         <>
           <h3 style={{ margin: '30px 0 15px 0', color: '#1c2536', borderBottom: '1px solid #eee', paddingBottom: 10 }}>REIA Billing & Settlement</h3>
           <div className="kpi-grid">
-            <StatCard label="Contracted RE Capacity" value={`${fmtNumber(data.reiaContractedCapacity)} MW`} />
-            <StatCard label="REIA Receivables" value={fmtCurrency(data.reiaReceivables)} hint="Unpaid from buyers" />
-            <StatCard label="REIA Overdue" value={fmtCurrency(data.reiaOverdue)} tone={data.reiaOverdue > 100000 ? 'red' : 'amber'} hint="Past due date" />
-            <StatCard label="Disputed Amount" value={fmtCurrency(data.reiaDisputedAmount)} tone={data.reiaDisputedAmount > 50000 ? 'red' : 'default'} />
-            <StatCard label="Open Disputes" value={data.reiaOpenDisputes} tone={data.reiaOpenDisputes > 0 ? 'red' : 'default'} />
-            <StatCard label="Recon Exceptions" value={data.reiaReconExceptions} tone={data.reiaReconExceptions > 0 ? 'red' : 'default'} />
+            <StatCard label="Contracted RE Capacity" value={`${fmtNumber(data.reiaContractedCapacity)} MW`} onClick={() => navigate('/reia/contracts')} />
+            <StatCard label="REIA Receivables" value={fmtCurrency(data.reiaReceivables)} hint="Unpaid from buyers" onClick={() => navigate('/reia/invoices')} />
+            <StatCard label="REIA Overdue" value={fmtCurrency(data.reiaOverdue)} tone={data.reiaOverdue > 100000 ? 'red' : 'amber'} hint="Past due date" onClick={() => navigate('/reia/invoices')} />
+            <StatCard label="Disputed Amount" value={fmtCurrency(data.reiaDisputedAmount)} tone={data.reiaDisputedAmount > 50000 ? 'red' : 'default'} onClick={() => navigate('/reia/disputes')} />
+            <StatCard label="Open Disputes" value={data.reiaOpenDisputes} tone={data.reiaOpenDisputes > 0 ? 'red' : 'default'} onClick={() => navigate('/reia/disputes')} />
+            <StatCard label="Recon Exceptions" value={data.reiaReconExceptions} tone={data.reiaReconExceptions > 0 ? 'red' : 'default'} onClick={() => navigate('/reia/reconciliation')} />
           </div>
         </>
       )}
@@ -314,10 +341,10 @@ export default function ConsolidatedDashboard() {
         <>
           <h3 style={{ margin: '30px 0 15px 0', color: '#1c2536', borderBottom: '1px solid #eee', paddingBottom: 10 }}>Power Trading Operations</h3>
           <div className="kpi-grid">
-            <StatCard label="Trading Revenue" value={fmtCurrency(data.tradingRevenue)} tone="blue" />
-            <StatCard label="Trading Margin" value={fmtCurrency(data.tradingMargin)} tone="green" />
-            <StatCard label="Trading Outstanding" value={fmtCurrency(data.tradingOutstanding)} tone={data.tradingOutstanding > 500000 ? 'red' : 'amber'} hint="Unpaid trading invoices" />
-            <StatCard label="Trading Cleared Quantum" value={`${fmtNumber(data.tradingClearedQuantum)} MW`} />
+            <StatCard label="Trading Revenue" value={fmtCurrency(data.tradingRevenue)} tone="blue" onClick={() => navigate('/trading/billing-settlement')} />
+            <StatCard label="Trading Margin" value={fmtCurrency(data.tradingMargin)} tone="green" onClick={() => navigate('/trading/market-analytics')} />
+            <StatCard label="Trading Outstanding" value={fmtCurrency(data.tradingOutstanding)} tone={data.tradingOutstanding > 500000 ? 'red' : 'amber'} hint="Unpaid trading invoices" onClick={() => navigate('/trading/billing-settlement')} />
+            <StatCard label="Trading Cleared Quantum" value={`${fmtNumber(data.tradingClearedQuantum)} MW`} onClick={() => navigate('/trading/bids')} />
           </div>
         </>
       )}

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { OPEN_STATUSES } from '../disputesConstants.js';
 import { buildTradingProfitabilitySummary } from './reports.js';
 import { utilizedExposure } from './bids.js';
@@ -11,7 +11,7 @@ router.use(requireAuth);
 // Cross-module executive aggregates (every counterparty's financials rolled
 // up together). Hiding the nav link is not enough — the endpoint itself must
 // reject seller/buyer users, including their L1/L2/L3 sub-users.
-const EXECUTIVE_ROLES = ['SJVN_ADMIN', 'MANAGEMENT', 'FINANCE_USER', 'IT_SUPER_ADMIN'];
+const EXECUTIVE_ROLES = ROLE_GROUPS.EXECUTIVE;
 
 // M. REIA dashboards
 router.get('/reia', (req, res) => {
@@ -202,7 +202,9 @@ export function buildTradingPeriodic() {
 router.get('/trading/periodic', (_req, res) => res.json(buildTradingPeriodic()));
 
 // 3C. Consolidated Executive Dashboard
-router.get('/consolidated', requireRole(...EXECUTIVE_ROLES), (req, res) => {
+// Cross-vertical portfolio rollup, shared by the executive dashboard and the
+// Internal MIS report so both quote identical figures.
+export function buildConsolidatedPortfolio() {
   // 1. Single Source of Truth Aggregations
   const reiaReceivables = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE direction = 'SJVN_TO_BUYER' AND status NOT IN ('PAID','CANCELLED')`).get().s;
   const reiaPayables = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE direction = 'SELLER_TO_SJVN' AND status NOT IN ('PAID','CANCELLED')`).get().s;
@@ -250,30 +252,32 @@ router.get('/consolidated', requireRole(...EXECUTIVE_ROLES), (req, res) => {
   if (totalUnresolvedExposure > 500000) summary += `Attention required: High unresolved exposure of ₹${(totalUnresolvedExposure/1e7).toFixed(2)} Cr across modules. `;
   else summary += `Financial exposure is well contained within limits.`;
 
-  res.json({
-    portfolio: {
-      reiaContractedCapacity,
-      reiaBilledValue,
-      reiaReceivables,
-      reiaPayables,
-      reiaOverdue,
-      reiaDisputedAmount,
-      reiaOpenDisputes,
-      reiaReconExceptions,
-      tradingRevenue,
-      tradingMargin,
-      tradingOutstanding,
-      tradingClearedQuantum,
-      overallProfitability,
-      totalPortfolioValue,
-      totalUnresolvedExposure,
-      coverageRatio,
-      dataCompleteness,
-      revenueTrend,
-      executiveSummary: summary,
-      targetCapacity: 20000 // 20 GW target
-    },
-  });
+  return {
+    reiaContractedCapacity,
+    reiaBilledValue,
+    reiaReceivables,
+    reiaPayables,
+    reiaOverdue,
+    reiaDisputedAmount,
+    reiaOpenDisputes,
+    reiaReconExceptions,
+    tradingRevenue,
+    tradingMargin,
+    tradingOutstanding,
+    tradingClearedQuantum,
+    overallProfitability,
+    totalPortfolioValue,
+    totalUnresolvedExposure,
+    coverageRatio,
+    dataCompleteness,
+    revenueTrend,
+    executiveSummary: summary,
+    targetCapacity: 20000, // 20 GW target
+  };
+}
+
+router.get('/consolidated', requireRole(...EXECUTIVE_ROLES), (req, res) => {
+  res.json({ portfolio: buildConsolidatedPortfolio() });
 });
 
 export default router;
