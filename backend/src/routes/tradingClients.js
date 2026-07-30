@@ -35,9 +35,24 @@ router.get('/:id', (req, res) => {
   res.json(withDetails(client));
 });
 
+const CLIENT_TYPES = ['GENERATOR', 'DISCOM', 'TRADER', 'C&I', 'OTHER'];
+const RISK_RATINGS = ['LOW', 'MEDIUM', 'HIGH'];
+
 // 3. Create client
 router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   const b = req.body;
+
+  // Validate before the INSERT so a bad field is a 400 naming it, not a 500
+  // carrying a raw SQLite constraint message.
+  const errors = [];
+  if (!String(b.name || '').trim()) errors.push('name is required');
+  if (!CLIENT_TYPES.includes(b.client_type)) errors.push(`client_type must be one of: ${CLIENT_TYPES.join(', ')}`);
+  if (b.risk_rating && !RISK_RATINGS.includes(b.risk_rating)) errors.push(`risk_rating must be one of: ${RISK_RATINGS.join(', ')}`);
+  const limit = Number(b.exposure_limit ?? 0);
+  if (!Number.isFinite(limit) || limit < 0) errors.push('exposure_limit must be a non-negative number');
+  if (b.entity_id && !db.prepare('SELECT 1 FROM entities WHERE id = ?').get(b.entity_id)) errors.push('entity_id does not exist');
+  if (errors.length) return res.status(400).json({ error: errors[0], errors });
+
   const id = newId('TCL');
   db.prepare(`
     INSERT INTO trading_clients (id, entity_id, name, client_type, noc_valid_till, ppa_ref, exposure_limit, risk_rating, status, documents)
@@ -45,11 +60,11 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   `).run({
     id,
     entity_id: b.entity_id || null,
-    name: b.name,
+    name: String(b.name).trim(),
     client_type: b.client_type,
     noc_valid_till: b.noc_valid_till || null,
     ppa_ref: b.ppa_ref || null,
-    exposure_limit: b.exposure_limit || 0,
+    exposure_limit: limit,
     risk_rating: b.risk_rating || 'MEDIUM',
     documents: b.documents ? JSON.stringify(b.documents) : null,
   });
