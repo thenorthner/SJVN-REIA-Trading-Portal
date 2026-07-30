@@ -23,6 +23,7 @@ function ChangeHint({ percent }) {
 
 export default function MarketAnalytics() {
   const [filters, setFilters] = useState({ start_date: '', end_date: '', exchange: '', product: '' });
+  const [reportBusy, setReportBusy] = useState(false);
   const [summary, setSummary] = useState(null);
   const [trend, setTrend] = useState({ points: [], forecast: [], exchanges: [] });
   const [rates, setRates] = useState([]);
@@ -205,12 +206,35 @@ export default function MarketAnalytics() {
     },
   ];
 
+  /** The report honours whatever filters are on screen, so it matches what is shown. */
+  async function downloadReport() {
+    setReportBusy(true);
+    try {
+      await api.reports.downloadPdf(
+        '/reports/market-analytics/pdf',
+        `SJVN_Market_Analytics_${filters.end_date || new Date().toISOString().slice(0, 10)}.pdf`,
+        { from: filters.start_date, to: filters.end_date, exchange: filters.exchange, product: filters.product },
+      );
+    } catch (err) {
+      alert(err.message || 'Could not generate the report.');
+    } finally {
+      setReportBusy(false);
+    }
+  }
+
   return (
     <div>
       <PageHeader
         title="Market Rates & Analytics"
         subtitle="Multi-exchange price discovery (IEX · PXIL · HPX), forecast accuracy and market context"
-        actions={<button className="btn btn-primary" onClick={openAdd}>+ Set Price Alert</button>}
+        actions={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-outline" disabled={reportBusy} onClick={downloadReport}>
+              {reportBusy ? 'Preparing…' : 'Download Report (PDF)'}
+            </button>
+            <button className="btn btn-primary" onClick={openAdd}>+ Set Price Alert</button>
+          </div>
+        }
       />
 
       {error && <div className="form-error">{error}</div>}

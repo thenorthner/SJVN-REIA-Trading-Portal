@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { OPEN_STATUSES } from '../disputesConstants.js';
+import { buildTradingProfitabilitySummary } from './reports.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -202,7 +203,10 @@ router.get('/consolidated', requireRole(...EXECUTIVE_ROLES), (req, res) => {
   const totalUnresolvedExposure = reiaDisputedAmount + tradingOutstanding + reiaOverdue;
   const coverageRatio = totalUnresolvedExposure > 0 ? (activeSecurityAmount / totalUnresolvedExposure) * 100 : 100;
 
-  const overallProfitability = tradingMargin; // Trading margin acts as profitability proxy
+  // Same basis as the Financial & Profitability report, so management is not
+  // shown two different numbers for the same thing. trading_invoices carries no
+  // records, so the invoiced margin alone reads zero however much has traded.
+  const overallProfitability = tradingMargin || buildTradingProfitabilitySummary().net_margin;
   const totalPortfolioValue = reiaBilledValue + tradingRevenue;
 
   // 5. Executive Summary Generation

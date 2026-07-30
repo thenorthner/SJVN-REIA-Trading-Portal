@@ -336,6 +336,27 @@ export const api = {
       a.remove();
       URL.revokeObjectURL(url);
     },
+    marketAnalytics: (params) => g('/reports/market-analytics', params),
+    tradingProfitability: (params) => g('/reports/trading-profitability', params),
+    // Shared PDF download: a blob that comes back as JSON is the API's error
+    // body, which would otherwise be saved as a corrupt .pdf.
+    downloadPdf: async (path, filename, params = {}) => {
+      const qs = new URLSearchParams(
+        Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+      ).toString();
+      const res = await client.get(`${path}${qs ? `?${qs}` : ''}`, { responseType: 'blob' });
+      if (res.data?.type && res.data.type.includes('json')) {
+        const text = await res.data.text();
+        let msg = 'Failed to generate PDF';
+        try { msg = JSON.parse(text).error || msg; } catch { /* keep default */ }
+        throw new Error(msg);
+      }
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    },
     reiaDashboardPdf: async () => {
       const res = await client.get('/reports/reia-dashboard/pdf', { responseType: 'blob' });
       if (res.data?.type && res.data.type.includes('json')) {

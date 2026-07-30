@@ -5,11 +5,49 @@ import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Badge, Modal } from
 import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../roles.js';
 
+const REPORT_GROUPS = [
+  {
+    vertical: 'REIA',
+    label: 'REIA — Billing & Settlement',
+    reports: [
+      { path: '/reports/billing-summary/pdf', file: 'SJVN_Billing_Report.pdf', title: 'Billing Summary', blurb: 'Month-wise sales, purchases, margin, LPS and collections.' },
+      { path: '/reports/energy-summary/pdf', file: 'SJVN_Energy_Report.pdf', title: 'Energy Data & Validation', blurb: 'Provisional vs final energy per contract, CUF and availability.' },
+      { path: '/reports/dispute-summary/pdf', file: 'SJVN_Dispute_Report.pdf', title: 'Dispute Summary', blurb: 'Open disputes by reason and ageing, with SLA breaches.' },
+      { path: '/reports/recon-summary/pdf', file: 'SJVN_Reconciliation_Report.pdf', title: 'Reconciliation', blurb: 'Metered vs billed vs paid, and unresolved variances.' },
+      { path: '/reports/contract-summary/pdf', file: 'SJVN_Contract_Report.pdf', title: 'Contract Summary', blurb: 'PPA/PSA portfolio, capacity and tariff position.' },
+      { path: '/reports/reia-dashboard/pdf', file: 'SJVN_REIA_Dashboard_Snapshot.pdf', title: 'REIA Dashboard Snapshot', blurb: 'Point-in-time snapshot of the REIA dashboard KPIs.' },
+    ],
+  },
+  {
+    vertical: 'TRADING',
+    label: 'Power Trading',
+    reports: [
+      { path: '/reports/market-analytics/pdf', file: 'SJVN_Market_Analytics.pdf', title: 'Market Rates & Analytics', blurb: 'Exchange price comparison, forecast accuracy and our execution vs market.' },
+      { path: '/reports/trading-profitability/pdf', file: 'SJVN_Trading_Profitability.pdf', title: 'Financial & Profitability', blurb: 'Margin by stream — REC, bilateral and exchange — net of open access charges.' },
+      { path: '/bilateral/noar-approval-report.pdf', file: 'SJVN_NOAR_Approval_Report.pdf', title: 'NOAR Approval Tracking', blurb: 'Open-access approval SLA performance and pending applications.' },
+    ],
+  },
+];
+
 export default function ConsolidatedDashboard() {
   const { user } = useAuth();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [showGlossary, setShowGlossary] = useState(false);
+  const [busyReport, setBusyReport] = useState(null);
+  const [reportError, setReportError] = useState('');
+
+  async function pullReport(r) {
+    setBusyReport(r.path);
+    setReportError('');
+    try {
+      await api.reports.downloadPdf(r.path, r.file);
+    } catch (err) {
+      setReportError(`${r.title}: ${err.message || 'could not be generated.'}`);
+    } finally {
+      setBusyReport(null);
+    }
+  }
 
   useEffect(() => {
     api.dashboard.consolidated().then((res) => setData(res.portfolio)).catch(() => setError('Failed to load dashboard.'));
@@ -152,6 +190,40 @@ export default function ConsolidatedDashboard() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </Card>
+      </div>
+
+      {/* One place for management to pull any report, rather than visiting each
+          module. Only the verticals the user can actually see are listed. */}
+      <div className="no-print" style={{ marginTop: 20 }}>
+        <Card title="Reports Centre">
+          <p style={{ fontSize: 13, color: '#64748b', marginTop: -4, marginBottom: 14 }}>
+            Every module report in one place. Each opens as a formatted PDF covering all available periods.
+          </p>
+          {reportError && <div style={{ color: '#b91c1c', fontSize: 13, marginBottom: 10 }}>{reportError}</div>}
+          {REPORT_GROUPS.filter((grp) => (grp.vertical === 'REIA' ? canViewReia : canViewTrading)).map((grp) => (
+            <div key={grp.vertical} style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: '#94a3b8', marginBottom: 8 }}>
+                {grp.label}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 10 }}>
+                {grp.reports.map((r) => (
+                  <div key={r.path} style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{r.title}</div>
+                    <div style={{ fontSize: 12, color: '#64748b', flex: 1 }}>{r.blurb}</div>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      disabled={busyReport === r.path}
+                      onClick={() => pullReport(r)}
+                      style={{ alignSelf: 'flex-start' }}
+                    >
+                      {busyReport === r.path ? 'Preparing…' : 'Download PDF'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </Card>
       </div>
 

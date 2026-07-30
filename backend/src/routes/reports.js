@@ -7,6 +7,7 @@ import { generateDisputeReportPdf } from '../scripts/disputeReportPdf.js';
 import { generateReconReportPdf } from '../scripts/reconReportPdf.js';
 import { generateContractReportPdf } from '../scripts/contractReportPdf.js';
 import { generateReiaDashboardPdf } from '../scripts/reiaDashboardReportPdf.js';
+import { generateMarketAnalyticsPdf, generateTradingProfitabilityPdf } from '../scripts/tradingReportsPdf.js';
 import { OPEN_STATUSES, REASON_LABELS, SLA_LONG_PENDING_DAYS } from '../disputesConstants.js';
 import { OPEN_RECON_STATUSES } from '../reconciliationConstants.js';
 
@@ -14,6 +15,10 @@ const router = Router();
 router.use(requireAuth);
 
 const REPORT_READ = [...new Set([...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'])];
+// Power Trading reports additionally reach the trading desk — REPORT_READ is
+// built from the REIA groups and would otherwise lock TRADING_USER out of its
+// own module's reports.
+const TRADING_REPORT_READ = [...new Set([...REPORT_READ, ...ROLE_GROUPS.TRADING_ALL])];
 
 /** Shared month-wise billing aggregation used by JSON + PDF endpoints. */
 export function buildBillingSummary({ from, to } = {}) {
@@ -677,3 +682,203 @@ router.get('/reia-dashboard/pdf', requireRole(...REPORT_READ), (req, res) => {
 });
 
 export default router;
+
+// ─── Power Trading: Market Rates & Analytics ──────────────────────────────
+/**
+ * Exchange price behaviour over a window, plus how SJVN's own cleared bids
+ * compared with the market clearing price on the same day.
+ */
+export function buildMarketAnalyticsSummary({ from, to, exchange, product } = {}) {
+  const latest = db.prepare('SELECT MAX(rate_date) d FROM market_rates').get()?.d;
+  const end = to || latest;
+  const start = from || (end ? new Date(new Date(end) - 29 * 864e5).toISOString().slice(0, 10) : null);
+
+  const where = ['rate_date BETWEEN ? AND ?'];
+  const params = [start, end];
+  if (exchange) { where.push('exchange = ?'); params.push(exchange); }
+  if (product) { where.push('product = ?'); params.push(product); }
+  const w = `WHERE ${where.join(' AND ')}`;
+
+  const stats = (extraCols = '') => `
+    SELECT COUNT(*) observations, ROUND(AVG(mcp_rate),2) avg_rate,
+           ROUND(MIN(mcp_rate),2) min_rate, ROUND(MAX(mcp_rate),2) max_rate,
+           ROUND(COALESCE(SUM(volume_mw),0),0) total_volume_mw ${extraCols}
+    FROM market_rates ${w}`;
+
+  const overall = db.prepare(stats()).get(...params);
+
+  // Same-length window immediately before, for a like-for-like comparison.
+  const days = Math.max(1, Math.round((new Date(end) - new Date(start)) / 864e5) + 1);
+  const prevEnd = new Date(new Date(start) - 864e5).toISOString().slice(0, 10);
+  const prevStart = new Date(new Date(prevEnd) - (days - 1) * 864e5).toISOString().slice(0, 10);
+  const prevParams = [prevStart, prevEnd, ...params.slice(2)];
+  const previous = db.prepare(stats()).get(...prevParams);
+
+  const byExchange = db.prepare(`
+    SELECT exchange, COUNT(*) observations, ROUND(AVG(mcp_rate),2) avg_rate,
+           ROUND(MIN(mcp_rate),2) min_rate, ROUND(MAX(mcp_rate),2) max_rate,
+           ROUND(COALESCE(SUM(volume_mw),0),0) total_volume_mw
+    FROM market_rates ${w} GROUP BY exchange ORDER BY avg_rate ASC`).all(...params);
+
+  const byProduct = db.prepare(`
+    SELECT product, COUNT(*) observations, ROUND(AVG(mcp_rate),2) avg_rate,
+           ROUND(MIN(mcp_rate),2) min_rate, ROUND(MAX(mcp_rate),2) max_rate,
+           ROUND(COALESCE(SUM(volume_mw),0),0) total_volume_mw
+    FROM market_rates ${w} GROUP BY product ORDER BY avg_rate ASC`).all(...params);
+
+  // Forecast accuracy: MAPE over rows that actually carry a forecast.
+  const fc = db.prepare(`
+    SELECT COUNT(*) n, ROUND(AVG(ABS(mcp_rate - forecast_rate) / NULLIF(mcp_rate,0)) * 100, 2) mape
+    FROM market_rates ${w} AND forecast_rate IS NOT NULL AND mcp_rate > 0`).get(...params);
+
+  const daily = db.prepare(`
+    SELECT rate_date, ROUND(AVG(mcp_rate),2) avg_rate,
+           ROUND(MIN(mcp_rate),2) min_rate, ROUND(MAX(mcp_rate),2) max_rate,
+           ROUND(COALESCE(SUM(volume_mw),0),0) volume_mw
+    FROM market_rates ${w} GROUP BY rate_date ORDER BY rate_date DESC LIMIT 40`).all(...params);
+
+  // SJVN's own execution against the market on the same delivery date.
+  const execution = db.prepare(`
+    SELECT b.exchange, b.product, b.delivery_date,
+           ROUND(SUM(blk.cleared_quantum_mw),2) cleared_mw,
+           ROUND(SUM(blk.cleared_quantum_mw * blk.cleared_price) / NULLIF(SUM(blk.cleared_quantum_mw),0), 2) avg_cleared_price,
+           (SELECT ROUND(AVG(mr.mcp_rate),2) FROM market_rates mr
+             WHERE mr.exchange = b.exchange AND mr.product = b.product AND mr.rate_date = b.delivery_date) market_mcp
+    FROM bids b JOIN bid_blocks blk ON b.id = blk.bid_id
+    WHERE blk.cleared_quantum_mw > 0
+    GROUP BY b.exchange, b.product, b.delivery_date
+    ORDER BY b.delivery_date DESC LIMIT 25`).all()
+    .map((r) => ({ ...r, vs_market: r.market_mcp ? Math.round((r.avg_cleared_price - r.market_mcp) * 100) / 100 : null }));
+
+  const changePct = previous.avg_rate ? Math.round(((overall.avg_rate - previous.avg_rate) / previous.avg_rate) * 10000) / 100 : null;
+
+  return {
+    window: { start_date: start, end_date: end, days },
+    filters: { exchange: exchange || null, product: product || null },
+    overall,
+    previous: { window: { start_date: prevStart, end_date: prevEnd }, ...previous, change_percent: changePct },
+    by_exchange: byExchange,
+    by_product: byProduct,
+    forecast_accuracy: { observations_with_forecast: fc.n, mape_percent: fc.mape },
+    cheapest_exchange: byExchange[0] || null,
+    costliest_exchange: byExchange[byExchange.length - 1] || null,
+    daily,
+    execution,
+  };
+}
+
+router.get('/market-analytics', requireRole(...TRADING_REPORT_READ), (req, res) => {
+  res.json(buildMarketAnalyticsSummary(req.query));
+});
+
+router.get('/market-analytics/pdf', requireRole(...TRADING_REPORT_READ), (req, res) => {
+  try {
+    generateMarketAnalyticsPdf(buildMarketAnalyticsSummary(req.query), { generatedBy: req.user?.name || req.user?.email }, res);
+  } catch (err) {
+    console.error('Market analytics PDF error:', err);
+    if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
+  }
+});
+
+// ─── Power Trading: Financial & Profitability ─────────────────────────────
+/**
+ * Trading P&L built from the underlying deals rather than from
+ * trading_invoices, which is empty — summing it would report zero across the
+ * board. Each stream states the basis it is measured on, because they differ:
+ * REC and exchange figures are realised, bilateral is contracted.
+ */
+export function buildTradingProfitabilitySummary({ from, to } = {}) {
+  const dateWhere = (col) => {
+    const w = []; const p = [];
+    if (from) { w.push(`${col} >= ?`); p.push(from); }
+    if (to) { w.push(`${col} <= ?`); p.push(to); }
+    return { sql: w.length ? `AND ${w.join(' AND ')}` : '', params: p };
+  };
+
+  // REC — realised: sales booked against the lot's issuance cost.
+  const recD = dateWhere('t.trade_date');
+  const rec = db.prepare(`
+    SELECT COALESCE(SUM(t.amount),0) revenue,
+           COALESCE(SUM(t.quantity),0) qty,
+           COALESCE(SUM(t.quantity * COALESCE(l.issue_cost_per_rec,0)),0) cost
+    FROM rec_transactions t JOIN rec_ledger l ON l.id = t.lot_id
+    WHERE t.txn_type = 'SALE' ${recD.sql}`).get(...recD.params);
+  const recMargin = rec.revenue - rec.cost;
+
+  // Exchange — realised: what actually cleared, valued as energy.
+  const bidD = dateWhere('b.delivery_date');
+  const exch = db.prepare(`
+    SELECT b.product, COUNT(DISTINCT b.id) bids,
+           ROUND(SUM(blk.cleared_quantum_mw),2) cleared_mw,
+           ROUND(SUM(blk.cleared_quantum_mw * blk.cleared_price),2) value_per_mw_unit,
+           ROUND(SUM(blk.cleared_quantum_mw * (blk.cleared_price - blk.price_per_unit)),2) price_gain_per_mw_unit
+    FROM bids b JOIN bid_blocks blk ON b.id = blk.bid_id
+    WHERE blk.cleared_quantum_mw > 0 ${bidD.sql}
+    GROUP BY b.product ORDER BY cleared_mw DESC`).all(...bidD.params);
+
+  // Bilateral — contracted: schedules are not yet captured, so this is the
+  // margin the contract implies over its term, not delivered margin.
+  const bilD = dateWhere('start_date');
+  const bilateral = db.prepare(`
+    SELECT id, counterparty, oa_type, quantum_mw, tariff_per_unit, purchase_rate_per_unit,
+           start_date, end_date,
+           ROUND((tariff_per_unit - COALESCE(purchase_rate_per_unit, tariff_per_unit)), 4) margin_per_unit
+    FROM bilateral_transactions
+    WHERE status != 'CANCELLED' ${bilD.sql}
+    ORDER BY start_date DESC`).all(...bilD.params)
+    .map((r) => {
+      const days = Math.max(0, Math.round((new Date(r.end_date) - new Date(r.start_date)) / 864e5) + 1);
+      const energyKwh = Number(r.quantum_mw) * 1000 * 24 * days;
+      return { ...r, term_days: days, contracted_margin: Math.round(energyKwh * r.margin_per_unit) };
+    });
+  const bilateralMargin = bilateral.reduce((a, r) => a + r.contracted_margin, 0);
+
+  // Open access charges are a direct cost of running bilateral trades.
+  const oaD = dateWhere('txn_date');
+  const oaByCategory = db.prepare(`
+    SELECT COALESCE(category,'OTHER') category, ROUND(SUM(amount),2) amount, COUNT(*) txns
+    FROM noar_wallet_txns WHERE txn_type = 'CHARGE' ${oaD.sql}
+    GROUP BY category ORDER BY amount DESC`).all(...oaD.params);
+  const oaTotal = oaByCategory.reduce((a, r) => a + r.amount, 0);
+
+  const byClient = db.prepare(`
+    SELECT tc.name client_name,
+           COUNT(DISTINCT bt.id) bilateral_deals,
+           ROUND(SUM(bt.quantum_mw),2) contracted_mw
+    FROM trading_clients tc JOIN bilateral_transactions bt ON bt.client_id = tc.id
+    WHERE bt.status != 'CANCELLED'
+    GROUP BY tc.id ORDER BY contracted_mw DESC LIMIT 10`).all();
+
+  return {
+    window: { from: from || null, to: to || null },
+    streams: [
+      { stream: 'REC trading', basis: 'Realised', revenue: Math.round(rec.revenue), cost: Math.round(rec.cost), margin: Math.round(recMargin) },
+      { stream: 'Bilateral (open access)', basis: 'Contracted', revenue: null, cost: Math.round(oaTotal), margin: Math.round(bilateralMargin - oaTotal) },
+    ],
+    rec: { ...rec, revenue: Math.round(rec.revenue), cost: Math.round(rec.cost), margin: Math.round(recMargin) },
+    exchange: { products: exch, cleared_mw: exch.reduce((a, r) => a + (r.cleared_mw || 0), 0) },
+    bilateral: { deals: bilateral.length, contracted_margin: bilateralMargin, rows: bilateral.slice(0, 20) },
+    open_access_charges: { total: Math.round(oaTotal), by_category: oaByCategory },
+    by_client: byClient,
+    net_margin: Math.round(recMargin + bilateralMargin - oaTotal),
+    // Stated rather than silently assumed — the invoice ledger is empty.
+    caveats: [
+      'trading_invoices holds no records, so billed revenue and invoiced trading margin are not part of these figures.',
+      'Bilateral margin is contracted (tariff less purchase rate over the contract term), not delivered — block-wise schedules are not yet captured.',
+      'Exchange figures cover cleared bids only; open bids are excluded.',
+    ],
+  };
+}
+
+router.get('/trading-profitability', requireRole(...TRADING_REPORT_READ), (req, res) => {
+  res.json(buildTradingProfitabilitySummary(req.query));
+});
+
+router.get('/trading-profitability/pdf', requireRole(...TRADING_REPORT_READ), (req, res) => {
+  try {
+    generateTradingProfitabilityPdf(buildTradingProfitabilitySummary(req.query), { generatedBy: req.user?.name || req.user?.email }, res);
+  } catch (err) {
+    console.error('Trading profitability PDF error:', err);
+    if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
+  }
+});
