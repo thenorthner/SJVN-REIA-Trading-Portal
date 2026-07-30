@@ -22,6 +22,7 @@ const REPORT_GROUPS = [
     vertical: 'TRADING',
     label: 'Power Trading',
     reports: [
+      { path: '/reports/trading-dashboard/pdf', file: 'SJVN_Trading_Dashboard.pdf', title: 'Trading Dashboard Snapshot', blurb: 'Open positions, client exposure utilisation, today\'s bidding and volume trend.' },
       { path: '/reports/market-analytics/pdf', file: 'SJVN_Market_Analytics.pdf', title: 'Market Rates & Analytics', blurb: 'Exchange price comparison, forecast accuracy and our execution vs market.' },
       { path: '/reports/trading-profitability/pdf', file: 'SJVN_Trading_Profitability.pdf', title: 'Financial & Profitability', blurb: 'Margin by stream — REC, bilateral and exchange — net of open access charges.' },
       { path: '/bilateral/noar-approval-report.pdf', file: 'SJVN_NOAR_Approval_Report.pdf', title: 'NOAR Approval Tracking', blurb: 'Open-access approval SLA performance and pending applications.' },

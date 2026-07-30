@@ -3,6 +3,7 @@ import db from '../db/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { OPEN_STATUSES } from '../disputesConstants.js';
 import { buildTradingProfitabilitySummary } from './reports.js';
+import { utilizedExposure } from './bids.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -86,18 +87,20 @@ router.get('/trading/health', (req, res) => {
 });
 
 // 1. Real-Time / Intraday View
-router.get('/trading/realtime', (req, res) => {
+export function buildTradingRealtime() {
   // Open positions (bids submitted but not cleared/rejected)
   const openBids = db.prepare(`SELECT COUNT(*) c, COALESCE(SUM(quantum_mw),0) q FROM bids WHERE status IN ('SUBMITTED', 'DRAFT')`).get();
   
-  // Active Limits vs Utilized (simulating utilized from open bids)
+  // Limits vs utilisation, valued the same way the limit check in bids.js
+  // values it. This query used to carry its own MW x price formula, which is
+  // not money and disagreed with what enforcement actually blocks on.
   const clientLimits = db.prepare(`
-    SELECT tc.name, tc.exposure_limit, COALESCE(SUM(b.quantum_mw * b.price_per_unit), 0) as utilized
-    FROM trading_clients tc
-    LEFT JOIN bids b ON b.client_id = tc.id AND b.status IN ('SUBMITTED', 'CLEARED')
-    WHERE tc.status = 'ACTIVE'
-    GROUP BY tc.id
-  `).all();
+    SELECT id, name, exposure_limit FROM trading_clients WHERE status = 'ACTIVE'
+  `).all().map((c) => ({
+    name: c.name,
+    exposure_limit: c.exposure_limit,
+    utilized: Math.round(utilizedExposure(c.id)),
+  }));
 
   // Exchange wise open positions
   const exchangeExposure = db.prepare(`
@@ -106,16 +109,28 @@ router.get('/trading/realtime', (req, res) => {
     GROUP BY exchange
   `).all();
 
-  res.json({
+  // Latest recorded market clearing price per exchange. This used to be three
+  // hardcoded numbers, which is fine on a demo screen but cannot go into a
+  // report — a stated rate has to be traceable to a record.
+  const latestRates = db.prepare(`
+    SELECT exchange, ROUND(AVG(mcp_rate), 2) rate, MAX(rate_date) as_of
+    FROM market_rates
+    WHERE rate_date = (SELECT MAX(rate_date) FROM market_rates)
+    GROUP BY exchange
+  `).all();
+
+  return {
     open_positions: { count: openBids.c, quantum_mw: openBids.q },
     client_limits: clientLimits,
     exchange_exposure: exchangeExposure,
-    live_rates: { IEX: 4.25, PXIL: 4.10, HPX: 4.30 } // Mock live rates
-  });
-});
+    live_rates: Object.fromEntries(latestRates.map((r) => [r.exchange, r.rate])),
+    rates_as_of: latestRates[0]?.as_of || null,
+  };
+}
+router.get('/trading/realtime', (_req, res) => res.json(buildTradingRealtime()));
 
 // 2. Daily / Settlement View
-router.get('/trading/daily', (req, res) => {
+export function buildTradingDaily() {
   // Today's summary
   const totalBids = db.prepare(`SELECT COUNT(*) c FROM bids WHERE date(created_at) = date('now')`).get().c;
   const clearedBids = db.prepare(`SELECT COUNT(*) c FROM bids WHERE status IN ('CLEARED','PARTIALLY_CLEARED') AND date(created_at) = date('now')`).get().c;
@@ -125,35 +140,52 @@ router.get('/trading/daily', (req, res) => {
   
   const clearRatio = totalBids > 0 ? (clearedBids / totalBids) * 100 : 0;
 
-  // Realized vs Unrealized P&L
   const realizedPl = db.prepare(`SELECT COALESCE(SUM(trading_margin),0) s FROM trading_invoices WHERE status = 'PAID' AND date(created_at) = date('now')`).get().s;
-  const unrealizedPl = db.prepare(`SELECT COALESCE(SUM(quantum_mw * 0.05),0) s FROM bids WHERE status = 'CLEARED' AND date(created_at) = date('now')`).get().s; // Assuming 0.05 margin
+  // Gain against the bid price on what cleared today, valued as energy. This
+  // was quantum_mw * 0.05 — a flat assumed margin, not a measurement.
+  const unrealizedPl = db.prepare(`
+    SELECT COALESCE(SUM(blk.cleared_quantum_mw * 1000 * 0.25 * (blk.cleared_price - blk.price_per_unit)), 0) s
+    FROM bids b JOIN bid_blocks blk ON b.id = blk.bid_id
+    WHERE blk.cleared_quantum_mw > 0 AND date(b.created_at) = date('now')
+  `).get().s;
 
-  // Rejection reasons (Mocked based on NO_BID/REJECTED)
   const rejectedBids = db.prepare(`SELECT status, COUNT(*) c FROM bids WHERE status IN ('REJECTED', 'NO_BID') AND date(created_at) = date('now') GROUP BY status`).all();
 
-  res.json({
+  return {
     daily_summary: { totalBids, clearedBids, quantumBid, quantumCleared, clearRatio },
-    pnl: { realized: realizedPl, unrealized: unrealizedPl },
-    rejected_analysis: rejectedBids
-  });
-});
+    pnl: { realized: realizedPl, unrealized: Math.round(unrealizedPl) },
+    rejected_analysis: rejectedBids,
+  };
+}
+router.get('/trading/daily', (_req, res) => res.json(buildTradingDaily()));
 
 // 3. Periodic / Trend View
-router.get('/trading/periodic', (req, res) => {
+export function buildTradingPeriodic() {
   // Monthly volume trend
   const volumeTrend = db.prepare(`
     SELECT strftime('%Y-%m', bid_date) as month, COALESCE(SUM(quantum_mw),0) as bid_mw, COALESCE(SUM(cleared_quantum_mw),0) as cleared_mw
     FROM bids GROUP BY month ORDER BY month DESC LIMIT 6
   `).all();
 
-  // Client-wise profitability (trading margin)
+  // Client-wise margin. The invoice ledger holds no records, so the invoiced
+  // margin reads zero for every client; fall back to the contracted bilateral
+  // margin, which is what the Profitability report measures.
   const clientProfitability = db.prepare(`
-    SELECT tc.name as client_name, COALESCE(SUM(ti.trading_margin),0) as total_margin
+    SELECT tc.id, tc.name as client_name, COALESCE(SUM(ti.trading_margin),0) as total_margin
     FROM trading_clients tc
     LEFT JOIN trading_invoices ti ON ti.client_id = tc.id
-    GROUP BY tc.id ORDER BY total_margin DESC LIMIT 5
-  `).all();
+    GROUP BY tc.id
+  `).all().map((c) => {
+    if (c.total_margin) return { client_name: c.client_name, total_margin: c.total_margin, basis: 'Invoiced' };
+    const contracted = db.prepare(`
+      SELECT COALESCE(SUM(
+        quantum_mw * 1000 * 24 * (julianday(end_date) - julianday(start_date) + 1)
+        * (tariff_per_unit - COALESCE(purchase_rate_per_unit, tariff_per_unit))
+      ), 0) m
+      FROM bilateral_transactions WHERE client_id = ? AND status != 'CANCELLED'
+    `).get(c.id).m;
+    return { client_name: c.client_name, total_margin: Math.round(contracted), basis: 'Contracted' };
+  }).sort((a, b) => b.total_margin - a.total_margin).slice(0, 5);
 
   // Product wise
   const byProduct = db.prepare(`
@@ -161,12 +193,13 @@ router.get('/trading/periodic', (req, res) => {
     FROM bids WHERE status IN ('CLEARED', 'PARTIALLY_CLEARED') GROUP BY product
   `).all();
 
-  res.json({
+  return {
     volume_trend: volumeTrend.reverse(),
     client_profitability: clientProfitability,
-    product_mix: byProduct
-  });
-});
+    product_mix: byProduct,
+  };
+}
+router.get('/trading/periodic', (_req, res) => res.json(buildTradingPeriodic()));
 
 // 3C. Consolidated Executive Dashboard
 router.get('/consolidated', requireRole(...EXECUTIVE_ROLES), (req, res) => {

@@ -7,7 +7,8 @@ import { generateDisputeReportPdf } from '../scripts/disputeReportPdf.js';
 import { generateReconReportPdf } from '../scripts/reconReportPdf.js';
 import { generateContractReportPdf } from '../scripts/contractReportPdf.js';
 import { generateReiaDashboardPdf } from '../scripts/reiaDashboardReportPdf.js';
-import { generateMarketAnalyticsPdf, generateTradingProfitabilityPdf } from '../scripts/tradingReportsPdf.js';
+import { generateMarketAnalyticsPdf, generateTradingProfitabilityPdf, generateTradingDashboardPdf } from '../scripts/tradingReportsPdf.js';
+import { buildTradingRealtime, buildTradingDaily, buildTradingPeriodic } from './dashboard.js';
 import { OPEN_STATUSES, REASON_LABELS, SLA_LONG_PENDING_DAYS } from '../disputesConstants.js';
 import { OPEN_RECON_STATUSES } from '../reconciliationConstants.js';
 
@@ -879,6 +880,29 @@ router.get('/trading-profitability/pdf', requireRole(...TRADING_REPORT_READ), (r
     generateTradingProfitabilityPdf(buildTradingProfitabilitySummary(req.query), { generatedBy: req.user?.name || req.user?.email }, res);
   } catch (err) {
     console.error('Trading profitability PDF error:', err);
+    if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
+  }
+});
+
+// ─── Power Trading: Dashboard snapshot ────────────────────────────────────
+/** The three trading dashboard views captured as one report. */
+export function buildTradingDashboardSummary() {
+  return {
+    realtime: buildTradingRealtime(),
+    daily: buildTradingDaily(),
+    periodic: buildTradingPeriodic(),
+  };
+}
+
+router.get('/trading-dashboard', requireRole(...TRADING_REPORT_READ), (req, res) => {
+  res.json(buildTradingDashboardSummary());
+});
+
+router.get('/trading-dashboard/pdf', requireRole(...TRADING_REPORT_READ), (req, res) => {
+  try {
+    generateTradingDashboardPdf(buildTradingDashboardSummary(), { generatedBy: req.user?.name || req.user?.email }, res);
+  } catch (err) {
+    console.error('Trading dashboard PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
   }
 });

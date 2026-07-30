@@ -6,6 +6,22 @@ import api from '../../api/client';
 const num = (v, fallback = 0) => (Number.isFinite(Number(v)) ? Number(v) : fallback);
 
 export default function TradingDashboard() {
+  const [reportBusy, setReportBusy] = useState(false);
+
+  async function downloadReport() {
+    setReportBusy(true);
+    try {
+      await api.reports.downloadPdf(
+        '/reports/trading-dashboard/pdf',
+        `SJVN_Trading_Dashboard_${new Date().toISOString().slice(0, 10)}.pdf`,
+      );
+    } catch (err) {
+      alert(err.message || 'Could not generate the report.');
+    } finally {
+      setReportBusy(false);
+    }
+  }
+
   const [activeTab, setActiveTab] = useState('realtime');
   const [health, setHealth] = useState(null);
   const [data, setData] = useState(null);
@@ -208,7 +224,14 @@ export default function TradingDashboard() {
 
   return (
     <div style={{ padding: 24 }}>
-      <PageHeader title="Trading Command Center" />
+      <PageHeader
+        title="Trading Command Center"
+        actions={
+          <button className="btn btn-outline" disabled={reportBusy} onClick={downloadReport}>
+            {reportBusy ? 'Preparing…' : 'Download Report (PDF)'}
+          </button>
+        }
+      />
       {renderHealthBanner()}
 
       {/* SJVN Power Trading overview — REC, Open Access & compliance at a glance */}

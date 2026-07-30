@@ -97,13 +97,18 @@ const rollUp = (blocks, product) => {
   return { quantum_mw: mw, price_per_unit: mw > 0 ? priceWeighted / mw : 0, exposure };
 };
 
+// Statuses that represent a live commitment against the client's limit.
+// PARTIALLY_CLEARED belongs here: part of it has cleared and the rest is still
+// working, so leaving it out hid the exposure of every partially-filled bid.
+const LIVE_BID_STATUSES = ['SUBMITTED', 'CLEARED', 'PARTIALLY_CLEARED'];
+
 // Exposure already locked up by this client's live bids. Computed in JS rather
 // than SQL because block duration comes from configuration, not the database.
-const utilizedExposure = (clientId) => db.prepare(`
+export const utilizedExposure = (clientId) => db.prepare(`
   SELECT b.product AS product, blk.quantum_mw AS quantum_mw, blk.price_per_unit AS price_per_unit
   FROM bids b JOIN bid_blocks blk ON b.id = blk.bid_id
-  WHERE b.client_id = ? AND b.status IN ('SUBMITTED', 'CLEARED')
-`).all(clientId).reduce((a, r) => a + blockValue(r, r.product), 0);
+  WHERE b.client_id = ? AND b.status IN (${LIVE_BID_STATUSES.map(() => '?').join(',')})
+`).all(clientId, ...LIVE_BID_STATUSES).reduce((a, r) => a + blockValue(r, r.product), 0);
 
 const checkGateClosure = (gate_closure_time) => {
   if (!gate_closure_time) return false;

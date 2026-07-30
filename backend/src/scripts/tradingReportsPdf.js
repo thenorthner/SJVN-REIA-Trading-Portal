@@ -289,3 +289,109 @@ export function generateTradingProfitabilityPdf(r, meta, res) {
   pageNumbers(doc);
   doc.end();
 }
+
+// ─── Trading Dashboard snapshot ───────────────────────────────────────────
+export function generateTradingDashboardPdf(r, meta, res) {
+  const generatedAt = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+  const title = 'TRADING DASHBOARD';
+  const subtitle = `Snapshot as at ${generatedAt}`;
+  const ctx = { title, subtitle, generatedAt };
+  const doc = newDoc(res, 'SJVN Trading Dashboard Snapshot', `SJVN_Trading_Dashboard_${new Date().toISOString().slice(0, 10)}.pdf`);
+
+  header(doc, title, subtitle, generatedAt);
+  let y = 84;
+
+  const rt = r.realtime; const dy = r.daily; const pd = r.periodic;
+  y = kpiBand(doc, y, [
+    { label: 'Open positions', value: `${rt.open_positions.count} bid(s)` },
+    { label: 'Open quantum', value: `${rt.open_positions.quantum_mw} MW` },
+    { label: 'Cleared today', value: `${dy.daily_summary.quantumCleared} MW` },
+    { label: 'Clear ratio today', value: `${Math.round(dy.daily_summary.clearRatio)}%` },
+  ]);
+
+  y = sectionTitle(doc, y, 'Client exposure utilisation',
+    'Valued as energy against each client\'s limit — the same basis the limit check enforces.');
+  y = table(doc, y, [
+    { label: 'Client', w: 180, value: (x) => x.name },
+    { label: 'Limit', w: 110, align: 'right', value: (x) => rs(x.exposure_limit) },
+    { label: 'Utilised', w: 110, align: 'right', value: (x) => rs(x.utilized) },
+    { label: 'Used %', w: 123, align: 'right',
+      value: (x) => (x.exposure_limit ? `${Math.round((x.utilized / x.exposure_limit) * 1000) / 10}%` : '—'),
+      colour: (x) => (x.exposure_limit && x.utilized / x.exposure_limit > 0.8 ? RED : INK) },
+  ], rt.client_limits, ctx);
+  y += 18;
+
+  if (rt.exchange_exposure.length) {
+    y = sectionTitle(doc, y, 'Open position by exchange');
+    y = table(doc, y, [
+      { label: 'Exchange', w: 180, value: (x) => x.exchange },
+      { label: 'Open bids', w: 170, align: 'right', value: (x) => x.bid_count },
+      { label: 'Quantum MW', w: 173, align: 'right', value: (x) => x.total_mw },
+    ], rt.exchange_exposure, ctx);
+    y += 18;
+  }
+
+  const ratePairs = Object.entries(rt.live_rates || {});
+  if (ratePairs.length) {
+    y = sectionTitle(doc, y, 'Latest recorded market clearing price',
+      `As at ${rt.rates_as_of || 'unknown date'} — the most recent rates held on record, not a live feed.`);
+    y = table(doc, y, [
+      { label: 'Exchange', w: 261, value: (x) => x[0] },
+      { label: 'MCP Rs/kWh', w: 262, align: 'right', value: (x) => x[1] },
+    ], ratePairs, ctx);
+    y += 18;
+  }
+
+  if (y > PAGE_H - M - 150) { doc.addPage(); header(doc, title, subtitle, generatedAt); y = 84; }
+  y = sectionTitle(doc, y, "Today's bidding", 'Bids raised today, by count and quantum.');
+  y = table(doc, y, [
+    { label: 'Measure', w: 300, value: (x) => x.k },
+    { label: 'Value', w: 223, align: 'right', value: (x) => x.v },
+  ], [
+    { k: 'Bids raised', v: dy.daily_summary.totalBids },
+    { k: 'Bids cleared or partially cleared', v: dy.daily_summary.clearedBids },
+    { k: 'Quantum bid (MW)', v: dy.daily_summary.quantumBid },
+    { k: 'Quantum cleared (MW)', v: dy.daily_summary.quantumCleared },
+    { k: 'Realised P&L (invoiced)', v: rs(dy.pnl.realized) },
+    { k: 'Price gain on cleared blocks', v: rs(dy.pnl.unrealized) },
+  ], ctx);
+  y += 18;
+
+  if (dy.rejected_analysis.length) {
+    y = sectionTitle(doc, y, 'Rejections today');
+    y = table(doc, y, [
+      { label: 'Status', w: 300, value: (x) => x.status },
+      { label: 'Count', w: 223, align: 'right', value: (x) => x.c },
+    ], dy.rejected_analysis, ctx);
+    y += 18;
+  }
+
+  if (y > PAGE_H - M - 150) { doc.addPage(); header(doc, title, subtitle, generatedAt); y = 84; }
+  y = sectionTitle(doc, y, 'Monthly volume trend');
+  y = table(doc, y, [
+    { label: 'Month', w: 180, value: (x) => x.month },
+    { label: 'Bid MW', w: 170, align: 'right', value: (x) => x.bid_mw },
+    { label: 'Cleared MW', w: 173, align: 'right', value: (x) => x.cleared_mw },
+  ], pd.volume_trend, ctx);
+  y += 18;
+
+  y = sectionTitle(doc, y, 'Client margin', 'Basis is stated per client — invoiced where invoices exist, otherwise contracted.');
+  y = table(doc, y, [
+    { label: 'Client', w: 240, value: (x) => x.client_name },
+    { label: 'Basis', w: 100, value: (x) => x.basis || '—' },
+    { label: 'Margin', w: 183, align: 'right', value: (x) => rs(x.total_margin), colour: (x) => (x.total_margin >= 0 ? GREEN : RED) },
+  ], pd.client_profitability, ctx);
+  y += 18;
+
+  if (pd.product_mix.length) {
+    if (y > PAGE_H - M - 100) { doc.addPage(); header(doc, title, subtitle, generatedAt); y = 84; }
+    y = sectionTitle(doc, y, 'Cleared volume by product');
+    table(doc, y, [
+      { label: 'Product', w: 261, value: (x) => x.product },
+      { label: 'Cleared MW', w: 262, align: 'right', value: (x) => x.cleared_mw },
+    ], pd.product_mix, ctx);
+  }
+
+  pageNumbers(doc);
+  doc.end();
+}
