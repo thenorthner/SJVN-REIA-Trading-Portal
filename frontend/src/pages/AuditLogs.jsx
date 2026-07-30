@@ -277,6 +277,25 @@ export default function AuditLogs() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [reportBusy, setReportBusy] = useState(false);
+
+  // The report covers whatever the screen is filtered to, so the PDF and the
+  // list on screen describe the same set of events.
+  async function downloadActivityReport() {
+    setReportBusy(true);
+    try {
+      await api.reports.downloadPdf(
+        '/reports/activity/pdf',
+        `SJVN_Activity_Report_${new Date().toISOString().slice(0, 10)}.pdf`,
+        { from: filters.from_date, to: filters.to_date, module: filters.module },
+      );
+    } catch (err) {
+      alert(err.message || 'Could not generate the activity report.');
+    } finally {
+      setReportBusy(false);
+    }
+  }
+
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState(null);
   const [fullRecord, setFullRecord] = useState(null);
@@ -365,7 +384,14 @@ export default function AuditLogs() {
       <PageHeader
         title="Activity Log"
         subtitle="A complete, tamper-proof history of every action taken on the platform"
-        actions={<button className="btn btn-secondary" onClick={handleExport}>Export</button>}
+        actions={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-outline" disabled={reportBusy} onClick={downloadActivityReport}>
+              {reportBusy ? 'Preparing…' : 'Activity Report (PDF)'}
+            </button>
+            <button className="btn btn-secondary" onClick={handleExport}>Export</button>
+          </div>
+        }
       />
 
       <div className="kpi-grid">

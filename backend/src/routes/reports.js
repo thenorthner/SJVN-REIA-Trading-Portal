@@ -9,6 +9,7 @@ import { generateContractReportPdf } from '../scripts/contractReportPdf.js';
 import { generateReiaDashboardPdf } from '../scripts/reiaDashboardReportPdf.js';
 import { generateMarketAnalyticsPdf, generateTradingProfitabilityPdf, generateTradingDashboardPdf } from '../scripts/tradingReportsPdf.js';
 import { buildTradingRealtime, buildTradingDaily, buildTradingPeriodic } from './dashboard.js';
+import { generateActivityReportPdf } from '../scripts/governanceReportsPdf.js';
 import { OPEN_STATUSES, REASON_LABELS, SLA_LONG_PENDING_DAYS } from '../disputesConstants.js';
 import { OPEN_RECON_STATUSES } from '../reconciliationConstants.js';
 
@@ -903,6 +904,95 @@ router.get('/trading-dashboard/pdf', requireRole(...TRADING_REPORT_READ), (req, 
     generateTradingDashboardPdf(buildTradingDashboardSummary(), { generatedBy: req.user?.name || req.user?.email }, res);
   } catch (err) {
     console.error('Trading dashboard PDF error:', err);
+    if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
+  }
+});
+
+// ─── Activity report ──────────────────────────────────────────────────────
+// Who did what, when. Restricted to audit and management roles: this is
+// per-person activity data, not a general operational report.
+const ACTIVITY_READ = [...new Set([...ROLE_GROUPS.AUDITOR, 'MANAGEMENT'])];
+
+/**
+ * Activity across modules over a window.
+ *
+ * Sign-ins are counted separately from business actions throughout. LOGIN is
+ * roughly half of all events, so folding it in would make every distribution
+ * a report about logging in.
+ */
+export function buildActivitySummary({ from, to, module, user_id } = {}) {
+  const where = ['1=1'];
+  const params = [];
+  if (from) { where.push('date(created_at) >= ?'); params.push(from); }
+  if (to) { where.push('date(created_at) <= ?'); params.push(to); }
+  if (module) { where.push('module = ?'); params.push(module); }
+  if (user_id) { where.push('user_id = ?'); params.push(user_id); }
+  const w = `WHERE ${where.join(' AND ')}`;
+  const business = "AND action <> 'LOGIN'";
+
+  const totals = db.prepare(`
+    SELECT COUNT(*) events,
+           COALESCE(SUM(CASE WHEN action = 'LOGIN' THEN 1 ELSE 0 END), 0) sign_ins,
+           COALESCE(SUM(CASE WHEN action <> 'LOGIN' THEN 1 ELSE 0 END), 0) business_actions,
+           COUNT(DISTINCT user_id) distinct_users,
+           MIN(date(created_at)) first_day, MAX(date(created_at)) last_day
+    FROM audit_logs ${w}`).get(...params);
+
+  const byModule = db.prepare(`
+    SELECT module, COUNT(*) events,
+           COALESCE(SUM(CASE WHEN action <> 'LOGIN' THEN 1 ELSE 0 END), 0) business_actions,
+           COUNT(DISTINCT user_id) users
+    FROM audit_logs ${w} GROUP BY module ORDER BY events DESC`).all(...params);
+
+  const byUser = db.prepare(`
+    SELECT COALESCE(user_name, user_id, '(system)') user_name,
+           COALESCE(user_role, '—') user_role,
+           COUNT(*) events,
+           COALESCE(SUM(CASE WHEN action <> 'LOGIN' THEN 1 ELSE 0 END), 0) business_actions,
+           COUNT(DISTINCT module) modules_touched,
+           MAX(created_at) last_seen
+    FROM audit_logs ${w} GROUP BY user_id ORDER BY business_actions DESC, events DESC LIMIT 20`).all(...params);
+
+  const topActions = db.prepare(`
+    SELECT action, module, COUNT(*) count
+    FROM audit_logs ${w} ${business} GROUP BY action, module ORDER BY count DESC LIMIT 20`).all(...params);
+
+  const daily = db.prepare(`
+    SELECT date(created_at) day, COUNT(*) events,
+           COALESCE(SUM(CASE WHEN action = 'LOGIN' THEN 1 ELSE 0 END), 0) sign_ins,
+           COALESCE(SUM(CASE WHEN action <> 'LOGIN' THEN 1 ELSE 0 END), 0) business_actions,
+           COUNT(DISTINCT user_id) users
+    FROM audit_logs ${w} GROUP BY day ORDER BY day DESC LIMIT 40`).all(...params);
+
+  const recent = db.prepare(`
+    SELECT created_at, COALESCE(user_name, '(system)') user_name, COALESCE(user_role,'—') user_role,
+           module, action, entity_type, entity_id
+    FROM audit_logs ${w} ${business} ORDER BY rowid DESC LIMIT 60`).all(...params);
+
+  const busiest = [...daily].sort((a, b) => b.business_actions - a.business_actions)[0] || null;
+
+  return {
+    window: { from: from || totals.first_day, to: to || totals.last_day },
+    filters: { module: module || null, user_id: user_id || null },
+    totals,
+    busiest_day: busiest,
+    by_module: byModule,
+    by_user: byUser,
+    top_actions: topActions,
+    daily,
+    recent,
+  };
+}
+
+router.get('/activity', requireRole(...ACTIVITY_READ), (req, res) => {
+  res.json(buildActivitySummary(req.query));
+});
+
+router.get('/activity/pdf', requireRole(...ACTIVITY_READ), (req, res) => {
+  try {
+    generateActivityReportPdf(buildActivitySummary(req.query), { generatedBy: req.user?.name || req.user?.email }, res);
+  } catch (err) {
+    console.error('Activity report PDF error:', err);
     if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate PDF' });
   }
 });

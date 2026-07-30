@@ -28,6 +28,13 @@ const REPORT_GROUPS = [
       { path: '/bilateral/noar-approval-report.pdf', file: 'SJVN_NOAR_Approval_Report.pdf', title: 'NOAR Approval Tracking', blurb: 'Open-access approval SLA performance and pending applications.' },
     ],
   },
+  {
+    vertical: 'GOVERNANCE',
+    label: 'Governance & Assurance',
+    reports: [
+      { path: '/reports/activity/pdf', file: 'SJVN_Activity_Report.pdf', title: 'Activity Report', blurb: 'Who did what across modules — by user, module, action and day.' },
+    ],
+  },
 ];
 
 export default function ConsolidatedDashboard() {
@@ -59,6 +66,13 @@ export default function ConsolidatedDashboard() {
 
   const canViewReia = ROLE_GROUPS.REIA_ALL.includes(user.role);
   const canViewTrading = ROLE_GROUPS.TRADING_ALL.includes(user.role);
+  // Governance reports carry per-person activity, so they are gated separately
+  // from the module reports rather than riding on either vertical.
+  const visibleVerticals = {
+    REIA: canViewReia,
+    TRADING: canViewTrading,
+    GOVERNANCE: ROLE_GROUPS.GOVERNANCE_REPORTS.includes(user.role),
+  };
 
   const revenueChart = [
     { name: 'REIA Billing', Value: data.reiaBilledValue },
@@ -202,7 +216,7 @@ export default function ConsolidatedDashboard() {
             Every module report in one place. Each opens as a formatted PDF covering all available periods.
           </p>
           {reportError && <div style={{ color: '#b91c1c', fontSize: 13, marginBottom: 10 }}>{reportError}</div>}
-          {REPORT_GROUPS.filter((grp) => (grp.vertical === 'REIA' ? canViewReia : canViewTrading)).map((grp) => (
+          {REPORT_GROUPS.filter((grp) => visibleVerticals[grp.vertical]).map((grp) => (
             <div key={grp.vertical} style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, color: '#94a3b8', marginBottom: 8 }}>
                 {grp.label}

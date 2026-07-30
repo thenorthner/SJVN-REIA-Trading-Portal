@@ -21,6 +21,11 @@ export const ROLE_GROUPS = {
   // rejects, the user just gets a 403 on an empty page.
   AUDITOR: ['SJVN_ADMIN', 'COMPLIANCE_AUDITOR'],
 
+  // Governance reports (Activity, Audit). Per-person activity data, so this is
+  // audit plus management only — deliberately narrower than the module reports.
+  // Must stay in sync with ACTIVITY_READ in backend routes/reports.js.
+  GOVERNANCE_REPORTS: ['SJVN_ADMIN', 'COMPLIANCE_AUDITOR', 'MANAGEMENT'],
+
   // Configurable master data (SRS). Write = ops + admin; read includes finance/mgmt.
   MASTERS_WRITE: ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN'],
   MASTERS_READ: ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'MANAGEMENT'],
