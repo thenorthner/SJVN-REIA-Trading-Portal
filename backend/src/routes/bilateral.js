@@ -3,7 +3,9 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, pushNotification } from '../util.js';
 import { dispatch } from '../services/notificationService.js';
+import { syncSchedulesForDate, getWbesConfig } from '../services/wbesService.js';
 import { secureLogAudit } from '../auditEngine.js';
+import { generateLoiPdf } from '../scripts/tradingReportsPdf.js';
 import { getParam, getParamNumber } from '../mastersService.js';
 import { generateNoarApprovalReportPdf } from '../scripts/noarApprovalReportPdf.js';
 import { sendMail } from '../services/mailService.js';
@@ -324,28 +326,36 @@ router.post('/:id/schedules', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, r
   const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(req.params.id);
   if (!tx) return res.status(404).json({ error: 'Not found' });
 
-  const b = req.body;
-  const schedId = newId('SCH');
-
-  db.prepare(`
+  const blocks = Array.isArray(req.body.blocks) ? req.body.blocks : [req.body];
+  
+  const insertSchedule = db.prepare(`
     INSERT INTO bilateral_schedules (id, transaction_id, schedule_date, time_block, approved_mw, status)
     VALUES (?, ?, ?, ?, ?, 'PENDING')
-  `).run(schedId, tx.id, b.schedule_date, b.time_block, b.approved_mw);
-
-  // Initialize multi-hop approvals based on standing clearance
-  const nodes = ['INJECTION_SLDC', 'RLDC', 'NLDC', 'DRAWEE_SLDC'];
-  const initialStatus = tx.is_standing_clearance ? 'APPROVED' : 'PENDING';
+  `);
   
   const insertApproval = db.prepare(`INSERT INTO bilateral_approvals (id, schedule_id, node_type, status, acted_by, timestamp) VALUES (?, ?, ?, ?, ?, ?)`);
-  for (const node of nodes) {
-    insertApproval.run(newId('BAP'), schedId, node, initialStatus, tx.is_standing_clearance ? 'SYSTEM_AUTO' : null, tx.is_standing_clearance ? new Date().toISOString() : null);
-  }
+  const updateApproved = db.prepare(`UPDATE bilateral_schedules SET status = 'APPROVED' WHERE id = ?`);
 
-  if (tx.is_standing_clearance) {
-    db.prepare(`UPDATE bilateral_schedules SET status = 'APPROVED' WHERE id = ?`).run(schedId);
-  }
+  const createMany = db.transaction((blocksList) => {
+    for (const b of blocksList) {
+      const schedId = newId('SCH');
+      insertSchedule.run(schedId, tx.id, b.schedule_date || req.body.schedule_date, b.time_block, b.approved_mw);
+      
+      const nodes = ['INJECTION_SLDC', 'RLDC', 'NLDC', 'DRAWEE_SLDC'];
+      const initialStatus = tx.is_standing_clearance ? 'APPROVED' : 'PENDING';
+      
+      for (const node of nodes) {
+        insertApproval.run(newId('BAP'), schedId, node, initialStatus, tx.is_standing_clearance ? 'SYSTEM_AUTO' : null, tx.is_standing_clearance ? new Date().toISOString() : null);
+      }
+      
+      if (tx.is_standing_clearance) {
+        updateApproved.run(schedId);
+      }
+    }
+  });
 
-  secureLogAudit(req, { action: 'CREATE_SCHEDULE', module: 'TRADING', entityType: 'bilateral_schedule', entityId: schedId, details: b });
+  createMany(blocks);
+  secureLogAudit(req, { action: 'CREATE_SCHEDULE', module: 'TRADING', entityType: 'bilateral_schedule', entityId: tx.id, details: { block_count: blocks.length } });
   res.status(201).json(withDetails(db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(tx.id)));
 });
 
@@ -428,8 +438,17 @@ router.get('/:id/format-d', (req, res) => {
   if (!schedules.length) lines.push(',,,No block schedules yet,,');
 
   res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename=FormatD_${tx.id}.csv`);
+  res.setHeader('Content-Disposition', `attachment; filename="Format_D_Bilateral_${tx.id}.csv"`);
   res.send(lines.join('\n'));
+});
+
+// Generate LoI (Letter of Intent) PDF
+router.get('/:id/loi', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
+  const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(req.params.id);
+  if (!tx) return res.status(404).json({ error: 'Not found' });
+
+  secureLogAudit(req, { action: 'EXPORT_LOI', module: 'TRADING', entityType: 'bilateral_transaction', entityId: tx.id });
+  generateLoiPdf(tx, { generatedBy: req.user.name }, res);
 });
 
 // Bulk NOAR step for a selected set of transactions.
@@ -641,6 +660,43 @@ export function runNoarSlaAlerts() {
 }
 
 // Manual trigger for the same sweep the scheduler runs.
+// Pull approved 15-minute block schedules for a delivery date from the NOAR /
+// State WBES platform into bilateral_schedules. Read-only against WBES; runs in
+// stub mode until credentials are configured.
+router.post('/wbes/sync', requireRole(...ROLE_GROUPS.TRADING_WRITE), async (req, res) => {
+  const date = String(req.body?.date || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: 'date (YYYY-MM-DD) is required' });
+  }
+  const revisionNo = Number.isFinite(Number(req.body?.revision_no)) ? Number(req.body.revision_no) : -1;
+  const dryRun = !!req.body?.dry_run;
+  try {
+    const result = await syncSchedulesForDate(date, { revisionNo, dryRun });
+    if (!result.ok) return res.status(502).json(result);
+    if (!dryRun) {
+      secureLogAudit(req, { action: 'WBES_SCHEDULE_SYNC', module: 'TRADING', entityType: 'bilateral_schedule', entityId: date, details: { mode: result.mode, matched: result.matched.length, unmatched: result.unmatched.length, blocks: result.blocks_written } });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('WBES sync error:', err);
+    res.status(500).json({ error: err.message || 'WBES sync failed' });
+  }
+});
+
+router.get('/wbes/status', requireRole(...ROLE_GROUPS.TRADING_ALL), (_req, res) => {
+  const cfg = getWbesConfig();
+  res.json({
+    enabled: cfg.enabled,
+    live: cfg.live,
+    base_url_set: !!cfg.baseUrl,
+    api_key_set: !!cfg.apiKey,
+    username_set: !!cfg.userName,
+    utility_acronym: cfg.utility || null,
+    mode: cfg.live ? 'WBES' : 'STUB',
+    note: cfg.live ? null : 'Running in stub mode — set wbes_enabled, wbes_api_key and wbes_base_url to pull live schedules.',
+  });
+});
+
 router.post('/noar-sla/check', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   res.json(runNoarSlaAlerts());
 });
