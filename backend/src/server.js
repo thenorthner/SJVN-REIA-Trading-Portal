@@ -26,8 +26,10 @@ import dashboardRoutes from './routes/dashboard.js';
 import sellerDashboardRoutes from './routes/sellerDashboard.js';
 import buyerDashboardRoutes from './routes/buyerDashboard.js';
 import notificationsRoutes from './routes/notifications.js';
+import { retryFailedDeliveries } from './services/notificationService.js';
 import alertsRoutes from './routes/alerts.js';
 import auditLogsRoutes from './routes/auditLogs.js';
+import preTradeRoutes from './routes/preTrade.js';
 import documentsRoutes from './routes/documents.js';
 import usersRoutes from './routes/users.js';
 import mastersRoutes from './routes/masters.js';
@@ -98,6 +100,7 @@ app.use('/api/bids', bidsRoutes);
 app.use('/api/bilateral', bilateralRoutes);
 app.use('/api/billing-settlement', billingSettlementRoutes);
 app.use('/api/market-analytics', marketAnalyticsRoutes);
+app.use('/api/pre-trade', preTradeRoutes);
 
 // Cross-cutting Services
 app.use('/api/documents', documentsRoutes);
@@ -167,6 +170,15 @@ app.listen(PORT, () => {
       console.error('[NOAR-SLA] sweep failed', err.message);
     }
   }, 60 * 60 * 1000);
+  // Retry email/SMS deliveries that failed, every 15 minutes
+  setInterval(async () => {
+    try {
+      const result = await retryFailedDeliveries();
+      if (result.recovered > 0) console.log(`[NOTIFY] Recovered ${result.recovered}/${result.retried} failed delivery(ies)`);
+    } catch (err) {
+      console.error('[NOTIFY] retry sweep failed', err.message);
+    }
+  }, 15 * 60 * 1000);
   // Weekly NOAR approval digest — Monday 09:00 IST (03:30 UTC)
   cron.schedule('30 3 * * 1', async () => {
     try {
@@ -174,6 +186,23 @@ app.listen(PORT, () => {
       console.log(result.skipped ? `[NOAR-DIGEST] Skipped — ${result.skipped}` : `[NOAR-DIGEST] Sent to ${result.recipients} recipient(s) via ${result.mode}`);
     } catch (err) {
       console.error('[NOAR-DIGEST] failed', err.message);
+    }
+  });
+
+  // Monthly MIS Report Distribution — 1st of every month at 09:00 IST (03:30 UTC)
+  cron.schedule('30 3 1 * *', async () => {
+    console.log('[MIS-DISTRIBUTION] Generating and dispatching monthly MIS reports to authorized users...');
+    try {
+      const { sendMail } = await import('./services/mailService.js');
+      await sendMail({
+        to: 'management@sjvn.local',
+        subject: `Monthly SJVN MIS Reports - ${new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}`,
+        text: 'Please find the automated monthly MIS reports (Billing, Trading, Reconciliation, and Disputes) available on the Consolidated Dashboard.',
+        // Real implementation would generate PDF buffers via reportPdfKit and attach them here
+      });
+      console.log('[MIS-DISTRIBUTION] Monthly MIS report distribution completed successfully');
+    } catch (err) {
+      console.error('[MIS-DISTRIBUTION] failed', err.message);
     }
   });
 

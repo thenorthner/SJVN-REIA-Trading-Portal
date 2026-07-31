@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit } from '../util.js';
+import { dispatch } from '../services/notificationService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -203,6 +204,21 @@ router.post('/', requireRole(...WRITE), (req, res) => {
   })();
 
   logAudit({ req, user: req.user, action: txn_type, module: 'TRADING', entityType: 'noar_wallet', entityId: id, details: b });
+
+  // A charge that drops the wallet below the recharge threshold alerts the desk.
+  // Only when this charge crossed the line (was above before, below now), so a
+  // series of small charges below threshold does not re-alert on every one.
+  if (txn_type === 'CHARGE') {
+    const balNow = currentBalance();
+    if (balNow < LOW_BALANCE_THRESHOLD && bal >= LOW_BALANCE_THRESHOLD) {
+      dispatch({
+        event: 'NOAR_WALLET_LOW', role: 'TRADING_USER',
+        subject: 'NOAR wallet balance low',
+        message: `SJVN: NOAR wallet balance is Rs ${Math.round(balNow).toLocaleString('en-IN')}, below the Rs ${LOW_BALANCE_THRESHOLD.toLocaleString('en-IN')} threshold. Recharge before the next open-access charge.`,
+      }).catch((err) => console.error('[NOTIFY] NOAR_WALLET_LOW failed', err.message));
+    }
+  }
+
   res.status(201).json(withRefs(db.prepare('SELECT * FROM noar_wallet_txns WHERE id = ?').get(id)));
 });
 

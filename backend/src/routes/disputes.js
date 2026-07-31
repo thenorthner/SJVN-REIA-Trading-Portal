@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, genInvoiceNo } from '../util.js';
+import { dispatch } from '../services/notificationService.js';
 import {
   REASON_CODES,
   CHARGE_LINES,
@@ -168,17 +169,17 @@ export function runSlaEscalations() {
       WHERE id = ?
     `).run(now, now, d.id);
     recordEvent(d.id, { name: 'system' }, 'SLA_BREACH', from, 'ESCALATED', { sla_ack_due: d.sla_ack_due, sla_resolve_due: d.sla_resolve_due });
-    pushNotification({
-      role: 'MANAGEMENT',
-      type: 'DISPUTE_SLA_BREACHED',
-      message: `SLA breached on dispute ${d.dispute_no} — escalated`,
-    });
+    dispatch({
+      event: 'DISPUTE_SLA_BREACHED', role: 'MANAGEMENT',
+      subject: `Dispute SLA breached — ${d.dispute_no}`,
+      message: `SJVN: SLA breached on dispute ${d.dispute_no} — escalated.`,
+    }).catch((err) => console.error('[NOTIFY] DISPUTE_SLA_BREACHED failed', err.message));
     if (d.assigned_to) {
-      pushNotification({
-        userId: d.assigned_to,
-        type: 'DISPUTE_SLA_BREACHED',
-        message: `SLA breached on dispute ${d.dispute_no}`,
-      });
+      dispatch({
+        event: 'DISPUTE_SLA_BREACHED', userId: d.assigned_to,
+        subject: `Dispute SLA breached — ${d.dispute_no}`,
+        message: `SJVN: SLA breached on dispute ${d.dispute_no} assigned to you.`,
+      }).catch((err) => console.error('[NOTIFY] DISPUTE_SLA_BREACHED (assignee) failed', err.message));
     }
     count += 1;
   }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, pushNotification } from '../util.js';
+import { dispatch } from '../services/notificationService.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { getParam, getParamNumber } from '../mastersService.js';
 import { generateNoarApprovalReportPdf } from '../scripts/noarApprovalReportPdf.js';
@@ -518,11 +519,11 @@ router.post('/noar/bulk', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) 
     apply();
 
     if (to === 'REJECTED') {
-      pushNotification({
-        role: 'MANAGEMENT',
-        type: 'NOAR_REJECTED',
-        message: `${eligible.length} NOAR application(s) rejected — ${rejectionReason}`,
-      });
+      dispatch({
+        event: 'NOAR_REJECTED', role: 'MANAGEMENT',
+        subject: 'NOAR applications rejected',
+        message: `SJVN: ${eligible.length} NOAR application(s) rejected — ${rejectionReason}`,
+      }).catch((err) => console.error('[NOTIFY] NOAR_REJECTED (bulk) failed', err.message));
     }
     secureLogAudit(req, { action: 'NOAR_BULK_UPDATE', module: 'TRADING', entityType: 'bilateral_transaction', entityId: eligible.map((r) => r.id).join(','), details: { to, applied: eligible.length, skipped: results.length - eligible.length } });
   }
@@ -591,12 +592,20 @@ router.post('/:id/noar', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) =
   });
   write();
 
+  // Fire-and-forget so email/SMS latency never blocks the API response; the
+  // delivery log still records the outcome.
   if (noar_status === 'REJECTED' && isTransition) {
-    pushNotification({
-      role: 'MANAGEMENT',
-      type: 'NOAR_REJECTED',
-      message: `NOAR application rejected for ${tx.counterparty} (${contractNo || tx.id}) — ${rejectionReason}`,
-    });
+    dispatch({
+      event: 'NOAR_REJECTED', role: 'MANAGEMENT',
+      subject: `NOAR application rejected — ${tx.counterparty}`,
+      message: `SJVN: NOAR application rejected for ${tx.counterparty} (${contractNo || tx.id}) — ${rejectionReason}`,
+    }).catch((err) => console.error('[NOTIFY] NOAR_REJECTED failed', err.message));
+  } else if (noar_status === 'APPROVED' && isTransition) {
+    dispatch({
+      event: 'NOAR_APPROVED', role: 'TRADING_USER',
+      subject: `NOAR approval received — ${tx.counterparty}`,
+      message: `SJVN: NOAR open-access approved for ${tx.counterparty} (${contractNo || tx.id}). Schedules can now be punched.`,
+    }).catch((err) => console.error('[NOTIFY] NOAR_APPROVED failed', err.message));
   }
 
   secureLogAudit(req, { action: 'NOAR_UPDATE', module: 'TRADING', entityType: 'bilateral_transaction', entityId: tx.id, details: { from: tx.noar_status, to: noar_status, noar_contract_no: contractNo, rejection_reason: rejectionReason || undefined, resubmission: isResubmission || undefined } });
@@ -617,13 +626,14 @@ export function runNoarSlaAlerts() {
     if (!notable || tx.noar_sla_alerted_state === sla.state) continue;
 
     const ref = tx.noar_contract_no || tx.id;
-    pushNotification({
+    dispatch({
+      event: sla.state === 'BREACHED' ? 'NOAR_SLA_BREACHED' : 'NOAR_SLA_AT_RISK',
       role: 'MANAGEMENT',
-      type: sla.state === 'BREACHED' ? 'NOAR_SLA_BREACHED' : 'NOAR_SLA_AT_RISK',
+      subject: `NOAR approval ${sla.state === 'BREACHED' ? 'overdue' : 'at risk'} — ${tx.counterparty}`,
       message: sla.state === 'BREACHED'
-        ? `NOAR approval overdue for ${tx.counterparty} (${ref}) — ${sla.elapsed_days}d pending against a ${sla.target_days}d ${tx.oa_type} target`
-        : `NOAR approval at risk for ${tx.counterparty} (${ref}) — ${sla.elapsed_days}d of ${sla.target_days}d ${tx.oa_type} target elapsed`,
-    });
+        ? `SJVN: NOAR approval overdue for ${tx.counterparty} (${ref}) — ${sla.elapsed_days}d pending against a ${sla.target_days}d ${tx.oa_type} target`
+        : `SJVN: NOAR approval at risk for ${tx.counterparty} (${ref}) — ${sla.elapsed_days}d of ${sla.target_days}d ${tx.oa_type} target elapsed`,
+    }).catch((err) => console.error('[NOTIFY] NOAR_SLA failed', err.message));
     db.prepare('UPDATE bilateral_transactions SET noar_sla_alerted_state = ? WHERE id = ?').run(sla.state, tx.id);
     sent += 1;
   }

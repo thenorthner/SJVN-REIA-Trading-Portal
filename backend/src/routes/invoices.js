@@ -5,6 +5,8 @@ import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef,
 import { payableNow, lpsBaseAmount, accruedLps, tieredRebatePct, daysBetween } from '../disputesConstants.js';
 import { getParamNumber, getParam } from '../mastersService.js';
 import { resolveBetaRow } from '../services/betaFactor.js';
+import { sendSms } from '../services/smsService.js';
+import { channelsFor } from '../services/notificationService.js';
 import { computeCercHydroBill } from '../services/cercHydroBilling.js';
 import { computeCufPenalty } from '../services/cufPenalty.js';
 import {
@@ -1060,32 +1062,19 @@ router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res
       JSON.stringify(mailResult), req.user?.name || null,
     );
 
-    // Optional SMS notice (logged only unless SMS_WEBHOOK_URL set)
+    // SMS notice via the shared gateway, but only when the channel policy for
+    // INVOICE_SENT actually lists SMS — so it can be silenced from master data.
+    // No rupee amount in the text: a notice + portal, not sensitive detail.
     const phone = recipientEntity?.corporate_phone || contacts.find((c) => c.phone)?.phone;
-    if (phone) {
-      let smsStatus = 'SIMULATED';
-      let smsDetail = { phone, message: `Invoice ${inv.invoice_no} for ₹${Number(inv.total_amount || 0).toLocaleString('en-IN')} is available. Due: ${dueDate}.` };
-      if (process.env.SMS_WEBHOOK_URL) {
-        try {
-          const r = await fetch(process.env.SMS_WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ to: phone, ...smsDetail }),
-          });
-          smsStatus = r.ok ? 'SENT' : 'FAILED';
-          smsDetail.http_status = r.status;
-        } catch (e) {
-          smsStatus = 'FAILED';
-          smsDetail.error = e.message;
-        }
-      }
+    if (phone && channelsFor('INVOICE_SENT').includes('SMS')) {
+      const smsText = `SJVN: Invoice ${inv.invoice_no} is available for payment (due ${dueDate}). View on the portal.`;
+      const smsRes = await sendSms({ to: phone, text: smsText });
       db.prepare(`
         INSERT INTO invoice_deliveries (id, invoice_id, channel, recipient, status, mode, detail_json, sent_by)
         VALUES (?, ?, 'SMS', ?, ?, ?, ?, ?)
       `).run(
-        newId('DLV'), inv.id, phone, smsStatus,
-        process.env.SMS_WEBHOOK_URL ? 'WEBHOOK' : 'LOG_ONLY',
-        JSON.stringify(smsDetail), req.user?.name || null,
+        newId('DLV'), inv.id, phone, smsRes.ok ? 'SENT' : 'FAILED', smsRes.mode,
+        JSON.stringify(smsRes), req.user?.name || null,
       );
     }
 
@@ -1266,6 +1255,14 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req,
   }
   const updated = applyInvoicePayment(inv, req.body, req);
   logAudit({ req, user: req.user, action: 'PAYMENT_RECORDED', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: req.body });
+
+  const paid = Number(req.body.amount) || 0;
+  dispatch({
+    event: 'PAYMENT_RECEIVED', role: 'FINANCE_USER',
+    subject: `Payment recorded — ${inv.invoice_no}`,
+    message: `SJVN: Payment of Rs ${paid.toLocaleString('en-IN')} recorded against ${inv.invoice_no}. Status now ${updated.status}.`,
+  }).catch((err) => console.error('[NOTIFY] PAYMENT_RECEIVED failed', err.message));
+
   res.status(201).json(updated);
 });
 
