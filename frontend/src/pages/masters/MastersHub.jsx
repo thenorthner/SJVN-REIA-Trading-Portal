@@ -18,6 +18,7 @@ const TABS = [
   { id: 'trading', label: 'Trading Params' },
   { id: 'documents', label: 'Document Types' },
   { id: 'lookups', label: 'Lookups' },
+  { id: 'losses', label: 'Transmission Losses' },
 ];
 
 const EMPTY_BANK = { bank_name: '', ifsc_prefix: '', branch_name: '', city: '', swift_code: '' };
@@ -52,6 +53,9 @@ export default function MastersHub() {
   const [lookups, setLookups] = useState([]);
   const [lookupFilter, setLookupFilter] = useState('');
   const [docModuleFilter, setDocModuleFilter] = useState('');
+  
+  const [lossData, setLossData] = useState(null);
+  const [loadingLosses, setLoadingLosses] = useState(false);
 
   const [bankForm, setBankForm] = useState(EMPTY_BANK);
   const [showBank, setShowBank] = useState(false);

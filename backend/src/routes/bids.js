@@ -5,6 +5,7 @@ import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { getParam } from '../mastersService.js';
 import { placeOrder, getTradeResult, syncMarketRates, getIexConfig } from '../services/iexService.js';
+import { checkBidCompliance, getClearance } from '../services/standingClearance.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -124,12 +125,13 @@ function insertBid(header, blocks, actorId) {
   db.prepare(`
     INSERT INTO bids (
       id, client_id, exchange, product, bid_date, delivery_date, gate_closure_time,
-      quantum_mw, price_per_unit, carry_forward_from, ocf_leg, premium_discount,
+      quantum_mw, price_per_unit, bid_on, carry_forward_from, ocf_leg, premium_discount,
       is_no_bid, approval_status, status, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING', 'DRAFT', ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING', 'DRAFT', ?)
   `).run(
     bidId, header.client_id, header.exchange, header.product, header.bid_date, header.delivery_date,
     header.gate_closure_time || null, roll.quantum_mw, roll.price_per_unit,
+    header.bid_on === 'PERIPHERY' ? 'PERIPHERY' : 'EX-BUS',
     header.carry_forward_from || null, header.ocf_leg || 0, header.premium_discount || 0, actorId
   );
 
@@ -158,6 +160,28 @@ router.get('/', (req, res) => {
 
 // Permitted OCF carry-forward transitions (declared before /:id so it is not captured).
 // IEX connection state — which pulls are live and what is still stub.
+// Standing clearance on record for a client, with its derived state. Declared
+// before '/:id' so the literal path is not swallowed by the id route.
+router.get('/standing-clearance/:clientId', (req, res) => {
+  const clearance = getClearance(req.params.clientId);
+  if (!clearance) return res.status(404).json({ error: 'Client not found' });
+  res.json(clearance);
+});
+
+// Dry-run the clause 21-24/26 checks without writing a bid, so the bidding
+// screen can show the same findings the API would enforce.
+router.post('/compliance-check', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+  const b = req.body || {};
+  const client = db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(b.client_id);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const result = checkBidCompliance({
+    client, product: b.product, exchange: b.exchange, deliveryDate: b.delivery_date,
+    type: b.type, blocks: Array.isArray(b.blocks) ? b.blocks : [], bidOn: b.bid_on,
+    forcedOutage: !!b.forced_outage, excludeBidId: b.exclude_bid_id || null,
+  });
+  res.json({ ok: result.violations.length === 0, ...result });
+});
+
 router.get('/iex/status', (_req, res) => {
   const cfg = getIexConfig();
   res.json({
@@ -271,12 +295,30 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     });
   }
 
+  // SLDC standing clearance (clauses 21-24, 26). Enforced here as well as in the
+  // bidding screen — these are the terms the clearance was granted under, so a
+  // bid posted straight to the API has to satisfy them too.
+  const compliance = checkBidCompliance({
+    client, product: b.product, exchange: b.exchange, deliveryDate: b.delivery_date,
+    type: b.type, blocks: b.blocks, bidOn: b.bid_on, forcedOutage: !!b.forced_outage,
+  });
+  if (compliance.violations.length) {
+    return res.status(400).json({
+      error: 'Standing clearance compliance check failed.',
+      violations: compliance.violations,
+      warnings: compliance.warnings,
+    });
+  }
+
   const { bidId } = insertBid(b, b.blocks, req.user.id);
-  logEvent(bidId, req.user.id, 'CREATED', { totalExposure });
+  logEvent(bidId, req.user.id, 'CREATED', { totalExposure, complianceWarnings: compliance.warnings.map((w) => w.code) });
 
-  secureLogAudit(req, { action: 'CREATE_BID', module: 'TRADING', entityType: 'bid', entityId: bidId, details: { totalExposure } });
+  secureLogAudit(req, { action: 'CREATE_BID', module: 'TRADING', entityType: 'bid', entityId: bidId, details: { totalExposure, complianceWarnings: compliance.warnings } });
 
-  res.status(201).json(withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bidId)));
+  res.status(201).json({
+    ...withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bidId)),
+    compliance_warnings: compliance.warnings,
+  });
 });
 
 // Bulk bid upload — accepts parsed CSV/Excel/paste rows and groups them into portfolio bids.
@@ -406,6 +448,24 @@ router.post('/:id/submit', requireRole(...ROLE_GROUPS.TRADING_WRITE), async (req
     if (checkGateClosure(bid.gate_closure_time)) return res.status(400).json({ error: 'Gate closure time passed. Cannot submit.' });
 
     const fullBid = withDetails(bid);
+
+    // Re-check the clearance at the exchange boundary, not just at draft time.
+    // The clearance can lapse between the two, and a competing bid on another
+    // exchange only holds T-GNA capacity once it has itself been submitted.
+    const client = db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(bid.client_id);
+    const compliance = checkBidCompliance({
+      client, product: bid.product, exchange: bid.exchange, deliveryDate: bid.delivery_date,
+      type: bid.type, blocks: fullBid.blocks, bidOn: bid.bid_on,
+      forcedOutage: !!req.body?.forced_outage, excludeBidId: bid.id,
+    });
+    if (compliance.violations.length) {
+      return res.status(400).json({
+        error: 'Standing clearance compliance check failed — bid not sent to the exchange.',
+        violations: compliance.violations,
+        warnings: compliance.warnings,
+      });
+    }
+
     const response = await placeOrder(fullBid);
     const receiptRef = response.receiptRef || `EXC-RCPT-${Date.now()}`;
 

@@ -31,6 +31,12 @@ import { retryFailedDeliveries } from './services/notificationService.js';
 import alertsRoutes from './routes/alerts.js';
 import auditLogsRoutes from './routes/auditLogs.js';
 import preTradeRoutes from './routes/preTrade.js';
+import communicationsRoutes from './routes/communications.js';
+import bankTransactionsRoutes from './routes/bankTransactions.js';
+import schedulesRoutes from './routes/schedules.js';
+import archiveRoutes from './routes/archive.js';
+import dorRoutes from './routes/dor.js';
+import lossesRoutes from './routes/losses.js';
 import documentsRoutes from './routes/documents.js';
 import usersRoutes from './routes/users.js';
 import mastersRoutes from './routes/masters.js';
@@ -46,7 +52,11 @@ import powerDiversionRoutes from './routes/powerDiversion.js';
 import { ensureMasterDefaults } from './mastersService.js';
 import { repairAuditChainIfBroken } from './auditEngine.js';
 
-import { assignTraceId, requireAuth } from './middleware/auth.js';
+import { assignTraceId, requireAuth, requireRole, ROLE_GROUPS } from './middleware/auth.js';
+
+// Read-level access to the trading desk screens. There is no TRADING_READ group
+// — TRADING_ALL is the read tier; TRADING_WRITE is the narrower acting tier.
+const TRADING_READ = ROLE_GROUPS.TRADING_ALL;
 
 dotenv.config();
 
@@ -102,10 +112,16 @@ app.use('/api/bilateral', bilateralRoutes);
 app.use('/api/billing-settlement', billingSettlementRoutes);
 app.use('/api/generator-billing', generatorBillingRoutes);
 app.use('/api/market-analytics', marketAnalyticsRoutes);
-app.use('/api/pre-trade', preTradeRoutes);
+app.use('/api/pre-trade', requireAuth, preTradeRoutes);
+app.use('/api/communications', requireAuth, communicationsRoutes);
+app.use('/api/trading/bank-transactions', requireAuth, requireRole(...TRADING_READ), bankTransactionsRoutes);
+app.use('/api/trading/schedules', requireAuth, requireRole(...TRADING_READ), schedulesRoutes);
+app.use('/api/trading/archive', requireAuth, requireRole(...TRADING_READ), archiveRoutes);
+app.use('/api/trading/dor', requireAuth, requireRole(...TRADING_READ), dorRoutes);
 
 // Cross-cutting Services
 app.use('/api/documents', documentsRoutes);
+app.use('/api/masters/losses', requireAuth, lossesRoutes);
 app.use('/api/masters', requireAuth, mastersRoutes);
 app.use('/api/reports', requireAuth, reportsRoutes);
 

@@ -1370,3 +1370,31 @@ a { color: var(--primary); text-decoration: none; }
   color: #0b5fff !important;
 }
 
+
+/* ── Sample-data notice ───────────────────────────────────────────────────
+   Screens that are still running on generated figures rather than platform
+   data. These pages look production-real — tax invoices, obligation reports,
+   SAP references — so they must say plainly that the numbers are not SJVN's,
+   or somebody will read them as a position. Remove the banner from a screen
+   the moment it is wired to a real source. */
+.sample-data-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--amber);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--amber-bg);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.sample-data-notice strong {
+  color: var(--amber);
+  letter-spacing: 0.02em;
+}
+.sample-data-notice .sample-data-notice__detail {
+  color: var(--text-muted);
+}

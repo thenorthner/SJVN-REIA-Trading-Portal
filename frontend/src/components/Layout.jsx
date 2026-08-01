@@ -52,17 +52,26 @@ const NAV_INTERNAL = [
       { to: '/trading/rtm', label: 'RTM Management' },
       { to: '/trading/bilateral', label: 'Bilateral Transactions' },
       { to: '/trading/billing-settlement', label: 'Trading Billing & Settlement' },
+      { to: '/trading/energy-schedule', label: 'Energy Schedule & DSM Matrix' },
+      { to: '/trading/schedule-archive', label: 'Schedule Archive' },
+      { to: '/trading/daily-obligation-report', label: 'Daily Obligation Report (DOR)' },
       { to: '/trading/generator-billing', label: 'Generator Billing & Settlement' },
       { to: '/trading/market-analytics', label: 'Market Rates & Analytics' },
       { to: '/trading/rec', label: 'REC Management' },
+      { to: '/trading/escert', label: 'ESCERT Management' },
+      { to: '/trading/tam', label: 'TAM Management' },
+      { to: '/trading/gtam', label: 'GTAM Management' },
+      { to: '/trading/noar-registry', label: 'NOAR Registry & Clearances' },
       { to: '/trading/noar', label: 'NOAR Wallet (Open Access)' },
       { to: '/trading/form-iv', label: 'CERC Form-IV' },
+      { to: '/trading/bulk-communications', label: 'Bulk Communications' },
     ],
   },
   {
     section: 'Platform',
-    roles: [...new Set([...ROLE_GROUPS.AUDITOR, ...ROLE_GROUPS.MASTERS_READ])],
+    roles: [...new Set([...ROLE_GROUPS.AUDITOR, ...ROLE_GROUPS.MASTERS_READ, ...ROLE_GROUPS.TRADING_ALL])],
     links: [
+      { to: '/master/portfolio-registry', label: 'Portfolio Registry', roles: ROLE_GROUPS.TRADING_ALL },
       { to: '/masters', label: 'Master Data', roles: ROLE_GROUPS.MASTERS_READ },
       { to: '/audit-logs', label: 'Audit Trail', roles: ROLE_GROUPS.AUDITOR },
     ],
@@ -114,6 +123,8 @@ const NAV_TRADING_CLIENT = [
     section: 'Trading Client Portal',
     roles: null,
     links: [
+      { to: '/trading/home', label: 'Home Dashboard' },
+      { to: '/master/portfolio-registry', label: 'Portfolio Registry' },
       { to: '/trading/my-profile', label: 'My Profile & Portfolio' },
       { to: '/trading/pre-trade', label: 'Pre-Trade Board' },
       { to: '/trading/dam', label: 'My DAM Bids' },
@@ -251,14 +262,17 @@ export default function Layout() {
               </button>
               {showNotif && (
                 <div className="notif-dropdown">
-                  <div className="notif-header">
-                    <span>Notifications</span>
-                    <button className="link-btn" onClick={() => api.notifications.markAllRead().then(() => api.notifications.list().then(setNotifications))}>Mark all read</button>
+                  <div className="notif-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 600 }}>Inbox & System Alerts</span>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <button className="link-btn" onClick={() => alert('Compose Mail modal opened!')} style={{ color: '#0052cc', fontWeight: 600 }}>+ Compose Mail</button>
+                      <button className="link-btn" onClick={() => api.notifications.markAllRead().then(() => api.notifications.list().then(setNotifications))}>Mark all read</button>
+                    </div>
                   </div>
-                  {notifications.length === 0 && <div className="notif-empty">No notifications</div>}
+                  {notifications.length === 0 && <div className="notif-empty">No unread alerts. All clear.</div>}
                   {notifications.slice(0, 10).map((n) => (
-                    <div key={n.id} className={'notif-item' + (n.is_read ? '' : ' unread')}>
-                      <div className="notif-type">{n.type}</div>
+                    <div key={n.id} className={'notif-item' + (n.is_read ? '' : ' unread')} style={{ borderLeft: n.type === 'COMPLIANCE_ALERT' ? '3px solid #ef4444' : '3px solid transparent' }}>
+                      <div className="notif-type" style={{ color: n.type === 'COMPLIANCE_ALERT' ? '#ef4444' : '#64748b', fontWeight: 600 }}>{n.type}</div>
                       <div>{n.message}</div>
                     </div>
                   ))}
@@ -273,13 +287,15 @@ export default function Layout() {
               >
                 <div className="user-avatar">{user?.name?.[0] ?? '?'}</div>
                 <div className="user-meta">
-                  <strong>{user?.name}</strong>
-                  <span>{user?.role?.replaceAll('_', ' ')}</span>
+                  <strong>Welcome, {user?.name}</strong>
+                  <span style={{ color: '#0056b3' }}>
+                    {user?.linked_entity_id ? `Asset: ${user.linked_entity_id}` : user?.role?.replaceAll('_', ' ')}
+                  </span>
                 </div>
               </div>
               {showProfile && (
                 <div className="notif-dropdown" style={{ right: 0, width: 200, padding: 0 }}>
-                  <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => { navigate('/trading/my-profile'); setShowProfile(false); }}>
+                  <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => { navigate('/settings/user-profile'); setShowProfile(false); }}>
                     My Account
                   </div>
                   <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => { navigate('/trading/clients'); setShowProfile(false); }}>

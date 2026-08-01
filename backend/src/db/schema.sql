@@ -88,6 +88,37 @@ CREATE TABLE IF NOT EXISTS broadcast_messages (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS communication_logs (
+  id TEXT PRIMARY KEY,
+  subject TEXT NOT NULL,
+  body_html TEXT NOT NULL,
+  sender_id TEXT REFERENCES users(id),
+  target_groups TEXT,
+  channels TEXT,
+  attachment_paths TEXT,
+  sent_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS user_hidden_messages (
+  id TEXT PRIMARY KEY,
+  user_id TEXT REFERENCES users(id),
+  message_id TEXT NOT NULL,
+  hidden_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS bank_transactions (
+  id TEXT PRIMARY KEY,
+  portfolio_id TEXT NOT NULL,
+  van TEXT NOT NULL,
+  utr_no TEXT NOT NULL,
+  amount REAL NOT NULL,
+  transaction_date TEXT NOT NULL DEFAULT (datetime('now')),
+  recon_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (recon_status IN ('MATCHED', 'PENDING', 'UNRECONCILED')),
+  sap_sync_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (sap_sync_status IN ('SYNCED', 'PENDING', 'FAILED')),
+  sap_voucher_no TEXT
+);
+
+
 CREATE TABLE IF NOT EXISTS documents (
   id TEXT PRIMARY KEY,
   entity_id TEXT REFERENCES entities(id),
@@ -805,7 +836,24 @@ CREATE TABLE IF NOT EXISTS trading_clients (
   entity_id TEXT REFERENCES entities(id),
   name TEXT NOT NULL,
   client_type TEXT NOT NULL CHECK (client_type IN ('GENERATOR','DISCOM','TRADER','C&I','OTHER')),
+  -- SLDC Standing Clearance (Open Access NOC). noc_valid_till is its expiry;
+  -- the rest drive the clause 21-24 bid compliance checks. Generator status for
+  -- clause 23 is read from client_type, not duplicated here.
   noc_valid_till TEXT,
+  sldc_name TEXT,
+  standing_clearance_no TEXT,
+  noar_id TEXT,
+  tgna_approved_mw REAL,
+  max_ramp_rate_mw_per_min REAL,
+  -- Busbar-to-regional-periphery injection loss (state STU + corridor). T-GNA is
+  -- approved at the regional periphery, so an EX-BUS bid is measured against the
+  -- cap after this loss. Should move to the loss master once that is real data.
+  periphery_loss_percent REAL,
+  operating_charge_per_day REAL,
+  regional_tx_charge_per_mw_block REAL,
+  state_tx_charge_per_mwh REAL,
+  clearance_approver TEXT,
+  clearance_approver_designation TEXT,
   ppa_ref TEXT,
   pre_payment_balance REAL NOT NULL DEFAULT 0,
   margin_available REAL NOT NULL DEFAULT 0,

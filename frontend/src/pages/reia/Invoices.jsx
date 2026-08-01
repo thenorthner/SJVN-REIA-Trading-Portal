@@ -393,7 +393,27 @@ export default function Invoices() {
     )},
     { key: 'direction', header: 'Direction', render: (r) => r.direction === 'SJVN_TO_BUYER' ? 'SJVN → Buyer' : 'Seller → SJVN' },
     { key: 'billing_period', header: 'Period' },
-    { key: 'invoice_type', header: 'Type', render: (r) => r.invoice_type || '-' },
+    { key: 'invoice_type', header: 'Type', render: (r) => (
+      r.invoice_type === 'PROVISIONAL' ? (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 11, padding: '2px 6px', background: '#fef08a', color: '#854d0e', borderRadius: 4, fontWeight: 600 }}>PROVISIONAL</span>
+          {['SELLER_L1', 'SELLER_L2', 'SELLER_L3', 'BUYER_L1', 'BUYER_L2', 'BUYER_L3', 'TRADING_USER', 'REIA_USER', 'SYSTEM_ADMIN'].includes(user?.role) && (
+            <button 
+              className="btn btn-xs btn-outline" 
+              onClick={(e) => {
+                e.stopPropagation();
+                setSuppForm({ ...SUPP_FORM, contract_id: r.contract_id, billing_period: r.billing_period, parent_invoice_id: r.id, reason_code: 'REVISED_REA', reason: 'Final REA True-Up delta vs Provisional Invoice.' });
+                setSuppError('');
+                setShowSupp(true);
+              }}
+              style={{ fontSize: 10, padding: '2px 6px' }}
+            >
+              ⚡ True-Up
+            </button>
+          )}
+        </span>
+      ) : (r.invoice_type || '-')
+    )},
     { key: 'energy_mwh', header: 'Energy (MWh)', render: (r) => fmtNumber(r.energy_mwh) },
     { key: 'total_amount', header: 'Amount', render: (r) => fmtCurrency(r.total_amount) },
     { key: 'status', header: 'Status', render: (r) => <InvoiceStatusCell row={r} showValidation /> },

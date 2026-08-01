@@ -11,6 +11,8 @@ export default function BillingSettlement() {
   const [ledger, setLedger] = useState([]);
   const [soa, setSoa] = useState([]);
   
+  const [invFilter, setInvFilter] = useState({ portfolio: '', fromDate: '', toDate: '' });
+
   const [showGenerate, setShowGenerate] = useState(false);
   const [showNetting, setShowNetting] = useState(false);
   
@@ -67,12 +69,26 @@ export default function BillingSettlement() {
 
   const invoiceColumns = [
     { key: 'invoice_no', label: 'Invoice No' },
-    { key: 'client_name', label: 'Client' },
-    { key: 'invoice_kind', label: 'Type', render: r => <Badge type="primary">{r.invoice_kind}</Badge> },
-    { key: 'trade_date', label: 'Trade Date' },
-    { key: 'settlement_date', label: 'Settlement Date', render: r => <span style={{fontWeight:'bold'}}>{r.settlement_date}</span> },
-    { key: 'total_amount', label: 'Total (₹)', render: r => `₹${fmtNumber(r.total_amount)}` },
-    { key: 'status', label: 'Status', render: r => <Badge type={r.status === 'PAID' || r.status === 'SETTLED_VIA_NETTING' ? 'success' : 'warning'}>{r.status}</Badge> }
+    { key: 'trade_date', label: 'Invoice Date' },
+    // No placeholder period here — a fixed date range printed under every
+    // invoice that lacks one reads as a real delivery period.
+    { key: 'billing_period', label: 'Delivery Period', render: r => r.billing_period || '—' },
+    { key: 'quantum_mwh', label: 'Billed Energy (kWh)', render: r => fmtNumber((r.quantum_mwh || 0) * 1000) },
+    { key: 'rate_per_unit', label: 'Tariff (₹/kWh)', render: r => `₹${r.rate_per_unit || '0.00'}` },
+    { key: 'taxable_value', label: 'Taxable Value', render: r => `₹${fmtNumber((r.total_amount || 0) - (r.gst_amount || 0))}` },
+    { key: 'gst_amount', label: 'GST Amount', render: r => `₹${fmtNumber(r.gst_amount || 0)}` },
+    { key: 'total_amount', label: 'Total Payable/Receivable', render: r => <span style={{fontWeight:'bold'}}>₹{fmtNumber(r.total_amount)}</span> },
+    { key: 'sap_doc', label: 'SAP Doc', render: r => <a href="#" style={{color: '#0056b3'}}>SAP-{r.invoice_no.substring(0,6)}</a> },
+    { key: 'status', label: 'Status', render: r => {
+        let type = 'neutral';
+        let label = r.status;
+        if (r.status === 'PAID') { type = 'success'; label = '🟢 Paid'; }
+        else if (r.status === 'OVERDUE') { type = 'danger'; label = '🔴 Overdue'; }
+        else if (r.status === 'PARTIALLY_PAID') { type = 'warning'; label = '🟡 Partially Paid'; }
+        else if (r.status === 'DRAFT') { type = 'primary'; label = '🔵 Draft / Unbilled'; }
+        return <Badge type={type}>{label}</Badge>;
+    }},
+    { key: 'actions', label: 'Action', render: () => <button className="btn btn-sm" title="Download PDF" style={{padding: '2px 6px'}}>📄 PDF</button> }
   ];
 
   const ledgerColumns = [
@@ -107,7 +123,7 @@ export default function BillingSettlement() {
       />
 
       <div style={{ marginBottom: 20, borderBottom: '1px solid #ddd', display: 'flex', gap: 20 }}>
-        {['INVOICES', 'LEDGER', 'SOA'].map(t => (
+        {['INVOICES', 'LEDGER'].map(t => (
           <button 
             key={t}
             onClick={() => setTab(t)}
@@ -117,14 +133,43 @@ export default function BillingSettlement() {
               color: tab === t ? '#0052cc' : '#555', fontWeight: tab === t ? 'bold' : 'normal'
             }}
           >
-            {t === 'INVOICES' ? 'Invoices & Settlements' : t === 'LEDGER' ? 'Client Ledger (Passbook)' : 'Statements of Account (SOA)'}
+            {t === 'INVOICES' ? '📑 Invoices & Tax Statements' : '💳 Bank & Pool Ledger'}
           </button>
         ))}
       </div>
 
       <Card>
         {tab === 'INVOICES' && (
-          <Table columns={invoiceColumns} data={invoices} />
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 15, alignItems: 'end', marginBottom: 20, background: '#f5f7f9', padding: 15, borderRadius: 6 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Portfolio Id:</label>
+                <select className="input" value={invFilter.portfolio} onChange={e => setInvFilter({...invFilter, portfolio: e.target.value})}>
+                  <option value="">-- All Portfolios --</option>
+                  <option value="N1HP0PTC0850">N1HP0PTC0850</option>
+                  <option value="SJVN001">SJVN001</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>From Delivery Date:</label>
+                <input type="date" className="input" value={invFilter.fromDate} onChange={e => setInvFilter({...invFilter, fromDate: e.target.value})} />
+                <div style={{ marginTop: 4, display: 'flex', gap: 5 }}>
+                  <button className="btn btn-sm" style={{fontSize: 10, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, fromDate: '2026-08-01'})}>This Month</button>
+                  <button className="btn btn-sm" style={{fontSize: 10, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, fromDate: '2026-07-01'})}>Last Month</button>
+                  <button className="btn btn-sm" style={{fontSize: 10, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, fromDate: '2026-04-01'})}>FY 26-27</button>
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>To Delivery Date:</label>
+                <input type="date" className="input" value={invFilter.toDate} onChange={e => setInvFilter({...invFilter, toDate: e.target.value})} />
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="btn btn-primary">[ Search ]</button>
+                <button className="btn" style={{ background: '#28a745', color: '#fff' }}>[ EXCEL v ] Export File</button>
+              </div>
+            </div>
+            <Table columns={invoiceColumns} data={invoices} emptyMessage="Nothing found to display." />
+          </div>
         )}
         {tab === 'LEDGER' && (
           <div>

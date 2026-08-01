@@ -531,15 +531,64 @@ export const api = {
   sellerDashboard: () => g('/seller-dashboard'),
   buyerDashboard: () => g('/buyer-dashboard'),
   notifications: {
-    list: () => g('/notifications'),
-    markRead: (id) => p(`/notifications/${id}/read`),
-    markAllRead: () => p('/notifications/read-all'),
+    list: async () => {
+      const serverNotifs = await g('/notifications').catch(() => []);
+      // Inject mock COMPLIANCE_ALERT for Standing Clearance Expiry (15-day warning)
+      const mockAlert = {
+        id: 'mock-noc-alert-1',
+        type: 'COMPLIANCE_ALERT',
+        message: '⚠️ Standing Clearance (NOC/HPSLDC/NR/2023/32622) for Naitwar Mori HPS expires in 14 days. Please initiate renewal.',
+        is_read: false,
+        created_at: new Date().toISOString()
+      };
+      // Only inject if it hasn't been "read" in this mock session
+      if (!localStorage.getItem('sjvn_mock_noc_read')) {
+        return [mockAlert, ...serverNotifs];
+      }
+      return serverNotifs;
+    },
+    markRead: (id) => {
+      if (id === 'mock-noc-alert-1') {
+        localStorage.setItem('sjvn_mock_noc_read', 'true');
+        return Promise.resolve({ success: true });
+      }
+      return p(`/notifications/${id}/read`);
+    },
+    markAllRead: () => {
+      localStorage.setItem('sjvn_mock_noc_read', 'true');
+      return p('/notifications/read-all');
+    },
   },
   alerts: {
     board: () => g('/alerts/board'),
     broadcasts: (params) => g('/alerts/broadcasts', params),
     createBroadcast: (body) => p('/alerts/broadcasts', body),
     deleteBroadcast: (id) => del(`/alerts/broadcasts/${id}`),
+  },
+  // Trading desk operational screens. These go through the shared client so they
+  // pick up the JWT and the 401 -> login redirect; hand-rolled fetch calls read
+  // the wrong localStorage key and sent "Bearer null" on every request.
+  standingClearance: {
+    get: (clientId) => g(`/bids/standing-clearance/${clientId}`),
+    check: (body) => p('/bids/compliance-check', body),
+  },
+  tradingOps: {
+    dor: (params) => g('/trading/dor', params),
+    schedules: (params) => g('/trading/schedules', params),
+    archive: (params) => g('/trading/archive', params),
+    bankTransactions: (params) => g('/trading/bank-transactions', params),
+  },
+  losses: {
+    get: () => g('/masters/losses'),
+    update: (body) => p('/masters/losses', body),
+  },
+  communications: {
+    logs: () => g('/communications/logs'),
+    inbox: () => g('/communications/inbox'),
+    hide: (message_id) => p('/communications/inbox/hide', { message_id }),
+    broadcast: (formData) => client
+      .post('/communications/broadcast', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+      .then((r) => r.data),
   },
   auditLogs: {
     list: (params) => g('/audit-logs', params),

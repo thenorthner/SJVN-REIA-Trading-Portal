@@ -270,3 +270,26 @@ export function DemandLetterViewer({ letterStr }) {
     </div>
   );
 }
+export function Tabs({ children, style }) { return <div className="tabs-container" style={{ display: 'flex', borderBottom: '1px solid #ddd', ...style }}>{children}</div>; } export function Tab({ active, onClick, children }) { return <div onClick={onClick} style={{ padding: '10px 20px', cursor: 'pointer', borderBottom: active ? '2px solid #0056b3' : '2px solid transparent', color: active ? '#0056b3' : '#555', fontWeight: active ? 600 : 400, marginBottom: '-1px' }}>{children}</div>; }
+
+/**
+ * Marks a screen whose figures are generated, not read from the platform.
+ *
+ * Several trading screens were built ahead of their data sources and render
+ * convincing tax invoices, obligation reports and SAP references off local
+ * generators. Without a standing notice those read as real SJVN positions.
+ *
+ * `detail` should say what specifically is not connected, so the reader knows
+ * which part to distrust rather than dismissing the whole page.
+ */
+export function SampleDataNotice({ detail }) {
+  return (
+    <div className="sample-data-notice" role="note">
+      <span aria-hidden="true">⚠️</span>
+      <div>
+        <strong>SAMPLE DATA — NOT CONNECTED</strong>
+        {detail && <div className="sample-data-notice__detail">{detail}</div>}
+      </div>
+    </div>
+  );
+}

@@ -9,6 +9,7 @@ import Login from './pages/Login.jsx';
 import ConsolidatedDashboard from './pages/ConsolidatedDashboard.jsx';
 
 import ReiaDashboard from './pages/reia/ReiaDashboard.jsx';
+import HomeDashboard from './pages/trading/HomeDashboard.jsx';
 import Entities from './pages/reia/Entities.jsx';
 import Contracts from './pages/reia/Contracts.jsx';
 import EnergyData from './pages/reia/EnergyData.jsx';
@@ -26,6 +27,7 @@ import TradingDashboard from './pages/trading/TradingDashboard.jsx';
 import TradingClients from './pages/trading/TradingClients.jsx';
 import TradingClientProfile from './pages/trading/TradingClientProfile.jsx';
 import Bids from './pages/trading/Bids.jsx';
+import DayAheadMarketEngine from './pages/trading/DayAheadMarketEngine.jsx';
 import PreTradeBoard from './pages/trading/PreTradeBoard.jsx';
 import Bilateral from './pages/trading/Bilateral.jsx';
 import BillingSettlement from './pages/trading/BillingSettlement.jsx';
@@ -33,7 +35,16 @@ import GeneratorBilling from './pages/trading/GeneratorBilling.jsx';
 import MarketAnalytics from './pages/trading/MarketAnalytics.jsx';
 import RECManagement from './pages/trading/RECManagement.jsx';
 import NOARWallet from './pages/trading/NOARWallet.jsx';
+import NOARRegistry from './pages/trading/NOARRegistry.jsx';
 import CERCFormIV from './pages/trading/CERCFormIV.jsx';
+import BulkCommunications from './pages/trading/BulkCommunications.jsx';
+import InboxMailList from './pages/trading/InboxMailList.jsx';
+import CertificateOperationsHub from './pages/trading/CertificateOperationsHub.jsx';
+import TAMManagement from './pages/trading/TAMManagement.jsx';
+import BankTransactionsList from './pages/trading/BankTransactionsList.jsx';
+import EnergySchedule from './pages/trading/EnergySchedule.jsx';
+import EnergyScheduleArchive from './pages/trading/EnergyScheduleArchive.jsx';
+import DailyObligationReport from './pages/trading/DailyObligationReport.jsx';
 
 import SellerDashboard from './pages/seller/SellerDashboard.jsx';
 import SellerContracts from './pages/seller/SellerContracts.jsx';
@@ -56,6 +67,8 @@ import BuyerPaymentSecurity from './pages/buyer/BuyerPaymentSecurity.jsx';
 import AuditLogs from './pages/AuditLogs.jsx';
 import MastersHub from './pages/masters/MastersHub.jsx';
 import NotificationBoard from './pages/NotificationBoard.jsx';
+import PortfolioRegistry from './pages/masters/PortfolioRegistry.jsx';
+import UserProfile from './pages/settings/UserProfile.jsx';
 
 // Internal SJVN REIA desk only — counterparties use their own portals below,
 // which scope every query to their own entity.
@@ -154,12 +167,14 @@ export default function App() {
         <Route path="trading/clients" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TradingClients /></ProtectedRoute>} />
         <Route path="trading/clients/:id" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TradingClientProfile /></ProtectedRoute>} />
         <Route path="trading/pre-trade" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><PreTradeBoard /></ProtectedRoute>} />
-        <Route path="trading/dam" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><Bids product="DAM" /></ProtectedRoute>} />
-        <Route path="trading/gdam" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><Bids product="GDAM" /></ProtectedRoute>} />
+        <Route path="trading/dam" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><DayAheadMarketEngine marketType="CONVENTIONAL_DAM" /></ProtectedRoute>} />
+        <Route path="trading/gdam" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><DayAheadMarketEngine marketType="GREEN_DAM" /></ProtectedRoute>} />
         <Route path="trading/rtm" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><Bids product="RTM" /></ProtectedRoute>} />
         
         {/* Trading Client External specific route */}
+        <Route path="trading/home" element={<ProtectedRoute roles={TRADING_CLIENT_ROLES}><HomeDashboard /></ProtectedRoute>} />
         <Route path="trading/my-profile" element={<ProtectedRoute roles={TRADING_CLIENT_ROLES}><TradingClientProfile /></ProtectedRoute>} />
+        <Route path="settings/user-profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
 
         {/* Shared routes between Internal and External */}
         <Route path="trading/bilateral" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><Bilateral /></ProtectedRoute>} />
@@ -170,11 +185,22 @@ export default function App() {
         <Route path="trading/market-analytics" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><MarketAnalytics /></ProtectedRoute>} />
         
         {/* Internal only */}
-        <Route path="trading/rec" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RECManagement /></ProtectedRoute>} />
+        <Route path="trading/rec" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CertificateOperationsHub defaultTab="REC" /></ProtectedRoute>} />
         <Route path="trading/noar" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARWallet /></ProtectedRoute>} />
+        <Route path="trading/noar-registry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARRegistry /></ProtectedRoute>} />
         <Route path="trading/form-iv" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CERCFormIV /></ProtectedRoute>} />
+        <Route path="trading/bulk-communications" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BulkCommunications /></ProtectedRoute>} />
+        <Route path="trading/inbox" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><InboxMailList /></ProtectedRoute>} />
+        <Route path="trading/escert" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><CertificateOperationsHub defaultTab="ESCERT" /></ProtectedRoute>} />
+        <Route path="trading/tam" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><TAMManagement marketType="TAM" /></ProtectedRoute>} />
+        <Route path="trading/gtam" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><TAMManagement marketType="GTAM" /></ProtectedRoute>} />
+        <Route path="trading/bank-transactions" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><BankTransactionsList /></ProtectedRoute>} />
+        <Route path="trading/energy-schedule" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><EnergySchedule /></ProtectedRoute>} />
+        <Route path="trading/schedule-archive" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><EnergyScheduleArchive /></ProtectedRoute>} />
+        <Route path="trading/daily-obligation-report" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><DailyObligationReport /></ProtectedRoute>} />
 
         <Route path="notification-board" element={<ProtectedRoute roles={BOARD_ROLES}><NotificationBoard /></ProtectedRoute>} />
+        <Route path="master/portfolio-registry" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><PortfolioRegistry /></ProtectedRoute>} />
         <Route path="masters" element={<ProtectedRoute roles={MASTERS_ROLES}><MastersHub /></ProtectedRoute>} />
         <Route path="audit-logs" element={<ProtectedRoute roles={AUDIT_ROLES}><AuditLogs /></ProtectedRoute>} />
 

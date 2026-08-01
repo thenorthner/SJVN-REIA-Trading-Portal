@@ -1247,4 +1247,54 @@ try {
   console.error('Generator billing migration failed:', e.message);
 }
 
+/**
+ * SLDC Standing Clearance (Open Access NOC) parameters, per trading client.
+ *
+ * These drive the bid compliance checks for clauses 21-24 and 26 of the HP SLDC
+ * standing clearance. They were hard-coded in the bidding screen against one
+ * asset (Naitwar Mori HPS), which meant every client was validated against that
+ * one plant's 24 MW ceiling and one plant's expiry date.
+ *
+ * noc_valid_till already existed on this table and stays the expiry field.
+ * Generator status is read from client_type rather than duplicated here.
+ *
+ * Renewals overwrite the row; there is no clearance history yet. If SJVN needs
+ * to show which clearance a past trade was executed under, this becomes its own
+ * table with a validity range per row.
+ */
+function migrateStandingClearanceSchema() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (!tables.includes('trading_clients')) return;
+
+  // Added column by column rather than behind a single sentinel, so a later
+  // addition still lands on a database that already took the earlier ones.
+  const addColumn = (table, name, ddl) => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (!cols.includes(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${ddl};`);
+  };
+
+  addColumn('trading_clients', 'sldc_name', 'TEXT');
+  addColumn('trading_clients', 'standing_clearance_no', 'TEXT');
+  addColumn('trading_clients', 'noar_id', 'TEXT');
+  addColumn('trading_clients', 'tgna_approved_mw', 'REAL');
+  addColumn('trading_clients', 'max_ramp_rate_mw_per_min', 'REAL');
+  addColumn('trading_clients', 'periphery_loss_percent', 'REAL');
+  addColumn('trading_clients', 'operating_charge_per_day', 'REAL');
+  addColumn('trading_clients', 'regional_tx_charge_per_mw_block', 'REAL');
+  addColumn('trading_clients', 'state_tx_charge_per_mwh', 'REAL');
+  addColumn('trading_clients', 'clearance_approver', 'TEXT');
+  addColumn('trading_clients', 'clearance_approver_designation', 'TEXT');
+
+  // The bidding screen has always asked whether a bid is quoted EX-BUS (plant
+  // terminal) or at the regional periphery, but never stored the answer. The
+  // T-GNA check needs it, so persist it on the bid.
+  addColumn('bids', 'bid_on', "TEXT NOT NULL DEFAULT 'EX-BUS'");
+}
+
+try {
+  migrateStandingClearanceSchema();
+} catch (e) {
+  console.error('Standing clearance migration failed:', e.message);
+}
+
 export default db;
