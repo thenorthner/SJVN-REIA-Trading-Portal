@@ -467,7 +467,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
         addLabel={(!externalView || externalView === 'MANAGE') ? `New ${tab.short} Bid` : undefined}
         actions={
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <select className="input" value={globalClient} onChange={e => setGlobalClient(e.target.value)} style={{ padding: '4px 10px' }}>
+            <select className="input" aria-label="Filter bids by client portfolio" value={globalClient} onChange={e => setGlobalClient(e.target.value)} style={{ padding: '4px 10px' }}>
               <option value="">All Clients (Portfolio)</option>
               {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -571,28 +571,28 @@ export default function Bids({ product = 'DAM', externalView = null }) {
         <Card style={{ marginBottom: 20, background: '#f8fafc' }}>
           <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Portfolio Name</label>
-              <PortfolioSelect includeAll />
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-portfolio-name">Portfolio Name</label>
+              <PortfolioSelect id="bids-portfolio-name" includeAll />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Delivery Date</label>
-              <input type="date" className="input" value={deliveryDateFilter} onChange={e => setDeliveryDateFilter(e.target.value)} />
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-delivery-date">Delivery Date</label>
+              <input id="bids-delivery-date" type="date" className="input" value={deliveryDateFilter} onChange={e => setDeliveryDateFilter(e.target.value)} />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Submission Date</label>
-              <input type="date" className="input" />
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-submission-date">Submission Date</label>
+              <input id="bids-submission-date" type="date" className="input" />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Bid Type</label>
-              <select className="input"><option>--Select--</option><option>Sell</option><option>Buy</option></select>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid-type">Bid Type</label>
+              <select id="bids-bid-type" className="input"><option>--Select--</option><option>Sell</option><option>Buy</option></select>
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Bid</label>
-              <select className="input"><option>--Select--</option><option>Single</option><option>Block</option></select>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid">Bid</label>
+              <select id="bids-bid" className="input"><option>--Select--</option><option>Single</option><option>Block</option></select>
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Bid Source</label>
-              <select className="input"><option>--Select--</option><option>Web Portal</option><option>API Gateway</option><option>Excel Upload</option></select>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid-source">Bid Source</label>
+              <select id="bids-bid-source" className="input"><option>--Select--</option><option>Web Portal</option><option>API Gateway</option><option>Excel Upload</option></select>
             </div>
             
             <button className="btn btn-primary" onClick={() => setAppliedDeliveryDate(deliveryDateFilter)}>Search</button>
@@ -606,8 +606,8 @@ export default function Bids({ product = 'DAM', externalView = null }) {
       ) : (
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 20, background: 'var(--surface)', padding: 15, border: '1px solid var(--border)', borderRadius: 8 }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, marginBottom: 5, color: 'var(--text-muted)' }}>Delivery Date</label>
-            <input type="date" className="input" value={deliveryDateFilter} onChange={e => setDeliveryDateFilter(e.target.value)} />
+            <label style={{ display: 'block', fontSize: 12, marginBottom: 5, color: 'var(--text-muted)' }} htmlFor="bids-delivery-date-2">Delivery Date</label>
+            <input id="bids-delivery-date-2" type="date" className="input" value={deliveryDateFilter} onChange={e => setDeliveryDateFilter(e.target.value)} />
           </div>
           <button className="btn btn-primary" disabled={!deliveryDateFilter} onClick={() => setAppliedDeliveryDate(deliveryDateFilter)}>
             Display
@@ -721,8 +721,8 @@ export default function Bids({ product = 'DAM', externalView = null }) {
 
           {/* Re-bid: pull a past bid's blocks in, then edit the dates before submitting. */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ fontSize: 13, color: '#555' }}>Copy from previous bid:</label>
-            <select
+            <label style={{ fontSize: 13, color: '#555' }} htmlFor="bids-copy-from-previous-bid">Copy from previous bid:</label>
+            <select id="bids-copy-from-previous-bid"
               className="input"
               style={{ maxWidth: 380 }}
               value={reuseId}
@@ -873,14 +873,18 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                 </Field>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Portfolio <span style={{ color: '#ef4444' }}>*</span></label>
+                    <label htmlFor="bids-create-portfolio" style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>
+                      Portfolio
+                      <span aria-hidden="true" style={{ color: 'var(--red)' }}> *</span>
+                      <span className="sr-only"> (required)</span>
+                    </label>
                     {form.client_id && (
                       <button type="button" onClick={() => setShowProfile(true)} style={{ background: 'none', border: 'none', color: '#0b4a8f', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
                         View Profile
                       </button>
                     )}
                   </div>
-                  <select className="input" value={form.client_id} onChange={e => {
+                  <select id="bids-create-portfolio" className="input" value={form.client_id} onChange={e => {
                     const selectedClient = clients.find(c => c.id === e.target.value);
                     const isGenerator = selectedClient?.client_type === 'GENERATOR';
                     // State Reset: clear file attachment on portfolio switch, preserve block format radios
@@ -905,8 +909,8 @@ export default function Bids({ product = 'DAM', externalView = null }) {
               <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {/* Bid Type — Color-Coded (placed first to match PTC layout) */}
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#475569' }}>Bid Type</label>
-                  <div style={{ display: 'flex', gap: 16 }}>
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#475569' }}>Bid Type</span>
+                  <div role="group" aria-label="Bid Type" style={{ display: 'flex', gap: 16 }}>
                     {[
                       { value: 'Buy', emoji: '🟢', color: '#16a34a', bg: '#f0fdf4' },
                       { value: 'Sell', emoji: '🔴', color: '#dc2626', bg: '#fef2f2' },
@@ -930,8 +934,8 @@ export default function Bids({ product = 'DAM', externalView = null }) {
 
                 {/* Bid Structure */}
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#475569' }}>Bid</label>
-                  <div style={{ display: 'flex', gap: 20 }}>
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#475569' }}>Bid</span>
+                  <div role="group" aria-label="Bid" style={{ display: 'flex', gap: 20 }}>
                     {['Single', 'Block'].map(opt => (
                       <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: '#334155' }}>
                         <input type="radio" name="bidStructure" value={opt} checked={(form.structure || 'Single') === opt} onChange={e => setForm({...form, structure: e.target.value})} style={{ accentColor: '#0b4a8f' }} />
@@ -944,8 +948,8 @@ export default function Bids({ product = 'DAM', externalView = null }) {
 
                 {/* Bid On — EX-BUS vs Regional Periphery */}
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#475569' }}>Bid On</label>
-                  <div style={{ display: 'flex', gap: 20 }}>
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#475569' }}>Bid On</span>
+                  <div role="group" aria-label="Bid On" style={{ display: 'flex', gap: 20 }}>
                     {[
                       { value: 'EX-BUS', label: 'EX-BUS', hint: 'Plant Busbar' },
                       { value: 'PERIPHERY', label: 'Regional Periphery', hint: 'Grid Entry Point' },
@@ -969,8 +973,8 @@ export default function Bids({ product = 'DAM', externalView = null }) {
             <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 20, marginBottom: 20, background: '#fafbfc' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <div>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Select Excel File Bid Type to Upload :</label>
-                  <div style={{ display: 'flex', gap: 18, marginTop: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Select Excel File Bid Type to Upload :</span>
+                  <div role="group" aria-label="Select Excel File Bid Type to Upload " style={{ display: 'flex', gap: 18, marginTop: 8 }}>
                     {['24 Blocks', '50 Blocks', '96 Blocks'].map(opt => (
                       <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: '#334155' }}>
                         <input type="radio" name="blockGranularity" value={opt} defaultChecked={opt === '96 Blocks'} style={{ accentColor: '#0b4a8f' }} />

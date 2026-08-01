@@ -87,11 +87,13 @@ function TreeCheckbox({ node, selected, toggle }) {
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, width: 15 }}
           >
             {expanded ? '[-]' : '[+]'}
+            <span className="sr-only">{expanded ? `Collapse ${node.label}` : `Expand ${node.label}`}</span>
           </button>
         )}
         {!node.children && <span style={{ width: 15 }}></span>}
-        <input 
-          type="checkbox" 
+        <input
+          type="checkbox"
+          aria-label={`Send to ${node.label}`}
           checked={isChecked}
           onChange={() => toggle(node.id)}
         />
@@ -252,8 +254,8 @@ export default function BulkCommunications() {
             <form onSubmit={handleSend} style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
               
               <div style={{ background: '#f9f9f9', padding: 15, borderRadius: 6, border: '1px solid #e0e0e0' }}>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Load from Template:</label>
-                <select className="input" onChange={handleTemplateSelect} defaultValue="">
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }} htmlFor="bulkcommunications-load-from-template">Load from Template:</label>
+                <select id="bulkcommunications-load-from-template" className="input" onChange={handleTemplateSelect} defaultValue="">
                   <option value="" disabled>-- Select a Template --</option>
                   {TEMPLATES.map(t => (
                     <option key={t.id} value={t.id}>{t.label}</option>
@@ -262,8 +264,8 @@ export default function BulkCommunications() {
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Subject:</label>
-                <input 
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }} htmlFor="bulkcommunications-subject">Subject:</label>
+                <input id="bulkcommunications-subject" 
                   type="text" 
                   className="input" 
                   style={{ width: '100%' }}
@@ -274,8 +276,8 @@ export default function BulkCommunications() {
               </div>
               
               <div>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Attachments:</label>
-                <input 
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }} htmlFor="bulkcommunications-attachments">Attachments:</label>
+                <input id="bulkcommunications-attachments" 
                   type="file" 
                   multiple
                   onChange={handleFileChange}
@@ -289,8 +291,11 @@ export default function BulkCommunications() {
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Message Body:</label>
-                <div style={{ height: 300, marginBottom: 50 }}>
+                <span id="broadcast-body-label" style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Message Body:</span>
+                {/* Quill renders a contenteditable, not a form control, so a
+                    <label htmlFor> has nothing to bind to — the region carries
+                    the name instead. */}
+                <div role="group" aria-labelledby="broadcast-body-label" style={{ height: 300, marginBottom: 50 }}>
                   <ReactQuill 
                     theme="snow" 
                     value={bodyHtml} 
@@ -330,12 +335,12 @@ export default function BulkCommunications() {
           <table className="table" style={{ width: '100%' }}>
             <thead>
               <tr>
-                <th>Sent At</th>
-                <th>Subject</th>
-                <th>Sender</th>
-                <th>Channels</th>
-                <th>Recipients (Groups)</th>
-                <th>Attachments</th>
+                <th scope="col">Sent At</th>
+                <th scope="col">Subject</th>
+                <th scope="col">Sender</th>
+                <th scope="col">Channels</th>
+                <th scope="col">Recipients (Groups)</th>
+                <th scope="col">Attachments</th>
               </tr>
             </thead>
             <tbody>

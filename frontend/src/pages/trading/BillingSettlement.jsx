@@ -177,16 +177,16 @@ export default function BillingSettlement() {
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 15, alignItems: 'end', marginBottom: 20, background: '#f5f7f9', padding: 15, borderRadius: 6 }}>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Portfolio Id:</label>
-                <PortfolioSelect
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="billingsettlement-portfolio-id">Portfolio Id:</label>
+                <PortfolioSelect id="billingsettlement-portfolio-id"
                   includeAll
                   value={invFilter.portfolio}
                   onChange={(v) => setInvFilter({ ...invFilter, portfolio: v })}
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>From Delivery Date:</label>
-                <input type="date" className="input" value={invFilter.fromDate} onChange={e => setInvFilter({...invFilter, fromDate: e.target.value})} />
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="billingsettlement-from-delivery-date">From Delivery Date:</label>
+                <input id="billingsettlement-from-delivery-date" type="date" className="input" value={invFilter.fromDate} onChange={e => setInvFilter({...invFilter, fromDate: e.target.value})} />
                 <div style={{ marginTop: 4, display: 'flex', gap: 5 }}>
                   <button type="button" className="btn btn-sm" style={{fontSize: 10, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, ...monthRange(0)})}>This Month</button>
                   <button type="button" className="btn btn-sm" style={{fontSize: 10, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, ...monthRange(-1)})}>Last Month</button>
@@ -194,8 +194,8 @@ export default function BillingSettlement() {
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>To Delivery Date:</label>
-                <input type="date" className="input" value={invFilter.toDate} onChange={e => setInvFilter({...invFilter, toDate: e.target.value})} />
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="billingsettlement-to-delivery-date">To Delivery Date:</label>
+                <input id="billingsettlement-to-delivery-date" type="date" className="input" value={invFilter.toDate} onChange={e => setInvFilter({...invFilter, toDate: e.target.value})} />
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button className="btn btn-primary">[ Search ]</button>

@@ -184,11 +184,11 @@ export default function InboxMailList() {
           <table className="table" style={{ width: '100%' }}>
             <thead>
               <tr style={{ background: '#e9ecef' }}>
-                <th style={{ width: 40 }}><input type="checkbox" onChange={e => setSelectedMessages(e.target.checked ? filteredMessages.map(m=>m.id) : [])} checked={filteredMessages.length > 0 && selectedMessages.length === filteredMessages.length} /></th>
-                <th>Subject</th>
-                <th>Sender</th>
-                <th>Date</th>
-                <th style={{ textAlign: 'center' }}>Attachments</th>
+                <th scope="col" style={{ width: 40 }}><input type="checkbox" onChange={e => setSelectedMessages(e.target.checked ? filteredMessages.map(m=>m.id) : [])} checked={filteredMessages.length > 0 && selectedMessages.length === filteredMessages.length} /></th>
+                <th scope="col">Subject</th>
+                <th scope="col">Sender</th>
+                <th scope="col">Date</th>
+                <th scope="col" style={{ textAlign: 'center' }}>Attachments</th>
               </tr>
             </thead>
             <tbody>

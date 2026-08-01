@@ -68,8 +68,8 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
   const columns = [
     { 
       key: 'select', 
-      label: <input type="checkbox" checked={selectedRows.length === mockData.length} onChange={handleSelectAll} />,
-      render: r => <input type="checkbox" checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} />
+      label: <input type="checkbox" aria-label="Select all obligations" checked={selectedRows.length === mockData.length} onChange={handleSelectAll} />,
+      render: r => <input type="checkbox" aria-label={`Select obligation ${r.id}`} checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} />
     },
     { key: 'portfolioId', label: 'Portfolio Id' },
     { key: 'deliveryDate', label: 'Delivery Date' },
@@ -101,24 +101,24 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
       <Card style={{ marginBottom: 20, background: '#f8fafc' }}>
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Exchange</label>
-            <select className="input"><option>IEX</option><option>PXIL</option></select>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="gdamobligationconsole-exchange">Exchange</label>
+            <select id="gdamobligationconsole-exchange" className="input"><option>IEX</option><option>PXIL</option></select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Port Id</label>
-            <PortfolioSelect includeAll allLabel="---Select---" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="gdamobligationconsole-port-id">Port Id</label>
+            <PortfolioSelect id="gdamobligationconsole-port-id" includeAll allLabel="---Select---" />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Port Name</label>
-            <select className="input"><option>---Select---</option><option>Naitwar_Mori_HPS</option></select>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="gdamobligationconsole-port-name">Port Name</label>
+            <select id="gdamobligationconsole-port-name" className="input"><option>---Select---</option><option>Naitwar_Mori_HPS</option></select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>From Delivery Date</label>
-            <input type="date" className="input" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="gdamobligationconsole-from-delivery-date">From Delivery Date</label>
+            <input id="gdamobligationconsole-from-delivery-date" type="date" className="input" />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>To Delivery Date</label>
-            <input type="date" className="input" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="gdamobligationconsole-to-delivery-date">To Delivery Date</label>
+            <input id="gdamobligationconsole-to-delivery-date" type="date" className="input" />
           </div>
           <button className="btn btn-outline">Search</button>
 
@@ -170,8 +170,8 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
                <table style={{ width: '100%', marginTop: 30, borderCollapse: 'collapse', fontSize: 14 }}>
                   <thead>
                      <tr>
-                        <th style={{ padding: 8, border: '1px solid #000', textAlign: 'left' }}>LINE ITEM DESCRIPTION</th>
-                        <th style={{ padding: 8, border: '1px solid #000', textAlign: 'right' }}>AMOUNT IN ₹</th>
+                        <th scope="col" style={{ padding: 8, border: '1px solid #000', textAlign: 'left' }}>LINE ITEM DESCRIPTION</th>
+                        <th scope="col" style={{ padding: 8, border: '1px solid #000', textAlign: 'right' }}>AMOUNT IN ₹</th>
                      </tr>
                   </thead>
                   <tbody>

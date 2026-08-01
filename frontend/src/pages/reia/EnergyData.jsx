@@ -309,13 +309,13 @@ export default function EnergyData() {
                   <table className="data-table" style={{ margin: 0 }}>
                     <thead>
                       <tr>
-                        <th>RPC</th>
-                        <th>Period</th>
-                        <th>Type</th>
-                        <th>Status</th>
-                        <th>Records</th>
-                        <th>Fetched</th>
-                        <th>Error</th>
+                        <th scope="col">RPC</th>
+                        <th scope="col">Period</th>
+                        <th scope="col">Type</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Records</th>
+                        <th scope="col">Fetched</th>
+                        <th scope="col">Error</th>
                       </tr>
                     </thead>
                     <tbody>

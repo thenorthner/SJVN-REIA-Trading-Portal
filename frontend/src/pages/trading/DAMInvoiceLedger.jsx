@@ -70,8 +70,8 @@ export default function DAMInvoiceLedger() {
   const columns = [
     { 
       key: 'select', 
-      label: <input type="checkbox" checked={selectedRows.length === mockData.length} onChange={handleSelectAll} />,
-      render: r => <input type="checkbox" checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} />
+      label: <input type="checkbox" aria-label="Select all ledger entries" checked={selectedRows.length === mockData.length} onChange={handleSelectAll} />,
+      render: r => <input type="checkbox" aria-label={`Select ledger entry ${r.id}`} checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} />
     },
     { key: 'transType', label: 'Trans Type' },
     { key: 'deliveryDate', label: 'Delivery Date' },
@@ -106,7 +106,7 @@ export default function DAMInvoiceLedger() {
         key: 'totalSegmentDeductions', 
         label: (
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#c0392b', cursor: 'pointer' }} onClick={() => setDeductionsExpanded(true)}>
-            <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>➕</button>
+            <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }} aria-label="Add">➕</button>
             Total Segment Deductions
           </div>
         ),
@@ -121,7 +121,7 @@ export default function DAMInvoiceLedger() {
       key: 'view', 
       label: 'View', 
       render: () => (
-        <button className="icon-btn" style={{ color: '#0284c7', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }} title="View Details">📄</button>
+        <button className="icon-btn" style={{ color: '#0284c7', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }} title="View Details" aria-label="View Details">📄</button>
       )
     }
   ];
@@ -143,24 +143,24 @@ export default function DAMInvoiceLedger() {
       <Card style={{ marginBottom: 20, background: '#f8fafc' }}>
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Exchange</label>
-            <select className="input"><option>IEX</option><option>PXIL</option></select>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="daminvoiceledger-exchange">Exchange</label>
+            <select id="daminvoiceledger-exchange" className="input"><option>IEX</option><option>PXIL</option></select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>PortfolioId</label>
-            <PortfolioSelect includeAll />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="daminvoiceledger-portfolioid">PortfolioId</label>
+            <PortfolioSelect id="daminvoiceledger-portfolioid" includeAll />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>PortfolioName</label>
-            <select className="input"><option>SJVN Limited-Naitwar Mori HEP</option></select>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="daminvoiceledger-portfolioname">PortfolioName</label>
+            <select id="daminvoiceledger-portfolioname" className="input"><option>SJVN Limited-Naitwar Mori HEP</option></select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>From Date</label>
-            <input type="date" className="input" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="daminvoiceledger-from-date">From Date</label>
+            <input id="daminvoiceledger-from-date" type="date" className="input" />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>To Date</label>
-            <input type="date" className="input" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="daminvoiceledger-to-date">To Date</label>
+            <input id="daminvoiceledger-to-date" type="date" className="input" />
           </div>
           <button className="btn btn-primary">Search</button>
 

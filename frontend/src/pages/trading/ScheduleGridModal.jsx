@@ -71,9 +71,9 @@ export function ScheduleGridModal({ tx, onClose, onSubmit }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead style={{ position: 'sticky', top: 0, background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
               <tr>
-                <th style={{ padding: '8px 12px' }}>Block #</th>
-                <th style={{ padding: '8px 12px' }}>Time Range</th>
-                <th style={{ padding: '8px 12px' }}>Approved MW</th>
+                <th scope="col" style={{ padding: '8px 12px' }}>Block #</th>
+                <th scope="col" style={{ padding: '8px 12px' }}>Time Range</th>
+                <th scope="col" style={{ padding: '8px 12px' }}>Approved MW</th>
               </tr>
             </thead>
             <tbody>

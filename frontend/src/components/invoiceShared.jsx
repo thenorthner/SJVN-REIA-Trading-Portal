@@ -73,9 +73,9 @@ export function InvoiceBreakdown({ invoice, title = 'Invoice Breakdown' }) {
         <table className="detail-table" style={{ width: '100%' }}>
           <thead>
             <tr style={{ background: '#f8fafc' }}>
-              <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, color: '#64748b' }}>Code</th>
-              <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, color: '#64748b' }}>Description</th>
-              <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12, color: '#64748b' }}>Value</th>
+              <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, color: '#64748b' }}>Code</th>
+              <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, color: '#64748b' }}>Description</th>
+              <th scope="col" style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12, color: '#64748b' }}>Value</th>
             </tr>
           </thead>
           <tbody>
@@ -287,11 +287,11 @@ export function ValidationCompareModal({
           <table className="detail-table" style={{ width: '100%', marginTop: 16 }}>
             <thead>
               <tr style={{ background: '#f8fafc' }}>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12 }}>Field</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12 }}>{claimLabel}</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12 }}>System</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12 }}>Diff</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: 12 }}>Match</th>
+                <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12 }}>Field</th>
+                <th scope="col" style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12 }}>{claimLabel}</th>
+                <th scope="col" style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12 }}>System</th>
+                <th scope="col" style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12 }}>Diff</th>
+                <th scope="col" style={{ padding: '8px 12px', textAlign: 'center', fontSize: 12 }}>Match</th>
               </tr>
             </thead>
             <tbody>

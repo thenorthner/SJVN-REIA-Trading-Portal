@@ -55,10 +55,10 @@ export default function DailyObligationReport() {
   const TableHeader = () => (
     <thead>
       <tr style={{ background: '#343a40', color: '#fff' }}>
-        <th style={{ padding: 8, textAlign: 'left' }}>Time Block</th>
-        <th style={{ padding: 8, textAlign: 'right' }}>Qty (MW)</th>
-        <th style={{ padding: 8, textAlign: 'right' }}>Rate (₹/MWh)</th>
-        <th style={{ padding: 8, textAlign: 'right' }}>Amount (₹)</th>
+        <th scope="col" style={{ padding: 8, textAlign: 'left' }}>Time Block</th>
+        <th scope="col" style={{ padding: 8, textAlign: 'right' }}>Qty (MW)</th>
+        <th scope="col" style={{ padding: 8, textAlign: 'right' }}>Rate (₹/MWh)</th>
+        <th scope="col" style={{ padding: 8, textAlign: 'right' }}>Amount (₹)</th>
       </tr>
     </thead>
   );
@@ -99,16 +99,16 @@ export default function DailyObligationReport() {
       <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
         <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Trading Date:</label>
-            <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="dailyobligationreport-trading-date">Trading Date:</label>
+            <input id="dailyobligationreport-trading-date" type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Portfolio Tag:</label>
-            <PortfolioSelect scope="global" allLabel="-- Select portfolio --" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="dailyobligationreport-portfolio-tag">Portfolio Tag:</label>
+            <PortfolioSelect id="dailyobligationreport-portfolio-tag" scope="global" allLabel="-- Select portfolio --" />
           </div>
           <div style={{ marginLeft: 'auto', borderLeft: '1px solid #ccc', paddingLeft: 20 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Matrix Layout:</label>
-            <div style={{ display: 'flex', gap: 5 }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Matrix Layout:</span>
+            <div role="group" aria-label="Matrix Layout" style={{ display: 'flex', gap: 5 }}>
               <button 
                 className={`btn btn-sm ${layout === 'SPLIT' ? 'btn-primary' : 'btn-outline'}`}
                 onClick={() => setLayout('SPLIT')}
@@ -272,10 +272,10 @@ export default function DailyObligationReport() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 20 }}>
                  <thead>
                     <tr style={{ background: '#f5f7f9' }}>
-                       <th style={{ padding: 10, borderBottom: '2px solid #ccc', textAlign: 'left' }}>GL Account Name</th>
-                       <th style={{ padding: 10, borderBottom: '2px solid #ccc', textAlign: 'center' }}>Cost Center</th>
-                       <th style={{ padding: 10, borderBottom: '2px solid #ccc', textAlign: 'right' }}>Debit (₹)</th>
-                       <th style={{ padding: 10, borderBottom: '2px solid #ccc', textAlign: 'right' }}>Credit (₹)</th>
+                       <th scope="col" style={{ padding: 10, borderBottom: '2px solid #ccc', textAlign: 'left' }}>GL Account Name</th>
+                       <th scope="col" style={{ padding: 10, borderBottom: '2px solid #ccc', textAlign: 'center' }}>Cost Center</th>
+                       <th scope="col" style={{ padding: 10, borderBottom: '2px solid #ccc', textAlign: 'right' }}>Debit (₹)</th>
+                       <th scope="col" style={{ padding: 10, borderBottom: '2px solid #ccc', textAlign: 'right' }}>Credit (₹)</th>
                     </tr>
                  </thead>
                  <tbody>
@@ -358,8 +358,8 @@ export default function DailyObligationReport() {
                        <table style={{ width: '100%', marginTop: 30, borderCollapse: 'collapse', fontSize: 14 }}>
                           <thead>
                              <tr>
-                                <th style={{ padding: 8, border: '1px solid #000', textAlign: 'left' }}>LINE ITEM DESCRIPTION</th>
-                                <th style={{ padding: 8, border: '1px solid #000', textAlign: 'right' }}>AMOUNT IN ₹</th>
+                                <th scope="col" style={{ padding: 8, border: '1px solid #000', textAlign: 'left' }}>LINE ITEM DESCRIPTION</th>
+                                <th scope="col" style={{ padding: 8, border: '1px solid #000', textAlign: 'right' }}>AMOUNT IN ₹</th>
                              </tr>
                           </thead>
                           <tbody>

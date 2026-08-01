@@ -69,8 +69,8 @@ export default function EnergyScheduleArchive() {
   const columns = [
     { 
       key: 'checkbox', 
-      label: <input type="checkbox" onChange={handleSelectAll} checked={archives.length > 0 && selectedRows.length === archives.length} />, 
-      render: r => <input type="checkbox" checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} /> 
+      label: <input type="checkbox" aria-label="Select all archives" onChange={handleSelectAll} checked={archives.length > 0 && selectedRows.length === archives.length} />, 
+      render: r => <input type="checkbox" aria-label={`Select archive ${r.filename || r.id}`} checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} /> 
     },
     { key: 'portfolio_id', label: 'PORTFOLIO ID' },
     { key: 'trade_date', label: 'TRADE DATE' },
@@ -109,13 +109,13 @@ export default function EnergyScheduleArchive() {
         <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
           <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Portfolio ID:</label>
-              <PortfolioSelect scope="global" allLabel="-- Select portfolio --" />
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedulearchive-portfolio-id">Portfolio ID:</label>
+              <PortfolioSelect id="energyschedulearchive-portfolio-id" scope="global" allLabel="-- Select portfolio --" />
             </div>
             
             <div style={{ marginLeft: 20, borderLeft: '1px solid #ccc', paddingLeft: 20 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Quick Dates:</label>
-              <div style={{ display: 'flex', gap: 5 }}>
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Quick Dates:</span>
+              <div role="group" aria-label="Quick Dates" style={{ display: 'flex', gap: 5 }}>
                 <button 
                   className={`btn btn-sm ${dateFilter === 'LAST_7' ? 'btn-primary' : 'btn-outline'}`}
                   onClick={() => setDateFilter('LAST_7')}

@@ -201,8 +201,8 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
         { key: 'updationDate', label: 'Updation Date' },
         { key: 'modify', label: 'Modify', render: () => (
           <div style={{ display: 'flex', gap: 5 }}>
-            <button className="btn btn-sm btn-outline" title="Edit">✏️</button>
-            <button className="btn btn-sm btn-outline" title="Delete">🗑️</button>
+            <button className="btn btn-sm btn-outline" title="Edit" aria-label="Edit">✏️</button>
+            <button className="btn btn-sm btn-outline" title="Delete" aria-label="Delete">🗑️</button>
           </div>
         )}
       ];
@@ -219,10 +219,10 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
         { key: 'totalAmount', label: 'Total (₹)', render: r => <span style={{ color: '#27ae60', fontWeight: 'bold' }}>{fmtNumber(r.totalAmount)}</span> },
         { key: 'fileName', label: 'File Name', render: r => <span style={{ color: '#2980b9', textDecoration: 'underline', cursor: 'pointer' }}>{r.fileName}</span> },
         ...(activeTab === 'REC' ? [
-          { key: 'solar', label: 'Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Solar Details">☀️</button> },
-          { key: 'nonsolar', label: 'Non-Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Non-Solar Details">💨</button> }
+          { key: 'solar', label: 'Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Solar Details" aria-label="View Solar Details">☀️</button> },
+          { key: 'nonsolar', label: 'Non-Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Non-Solar Details" aria-label="View Non-Solar Details">💨</button> }
         ] : []),
-        { key: 'cert', label: `${activeTab} Certificate`, render: () => <button className="btn btn-sm btn-outline" title="View POSOCO/BEE Transfer Slip">📜</button> }
+        { key: 'cert', label: `${activeTab} Certificate`, render: () => <button className="btn btn-sm btn-outline" title="View POSOCO/BEE Transfer Slip" aria-label="View POSOCO/BEE Transfer Slip">📜</button> }
       ];
     } 
     else if (activeSubView === 'OBLIGATION') {
@@ -241,14 +241,14 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
         { key: 'totalAmount', label: 'Total (₹)', render: r => <span style={{ color: '#333', fontWeight: 'bold' }}>{fmtNumber(r.totalAmount)}</span> },
         { key: 'fileName', label: 'File Name', render: r => <span style={{ color: '#2980b9', textDecoration: 'underline', cursor: 'pointer' }}>{r.fileName}</span> },
         ...(activeTab === 'REC' ? [
-          { key: 'solar', label: 'Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Solar Details">☀️</button> },
-          { key: 'nonsolar', label: 'Non-Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Non-Solar Details">💨</button> }
+          { key: 'solar', label: 'Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Solar Details" aria-label="View Solar Details">☀️</button> },
+          { key: 'nonsolar', label: 'Non-Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Non-Solar Details" aria-label="View Non-Solar Details">💨</button> }
         ] : []),
         { key: 'actions', label: 'Actions', render: () => (
           <div style={{ display: 'flex', gap: 5 }}>
-            <button className="btn btn-sm btn-outline" title="Exchange PDF">📄</button>
-            <button className="btn btn-sm btn-outline" title="NLDC Transfer Slip">📜</button>
-            <button className="btn btn-sm btn-outline" title="Breakup Details">🔍</button>
+            <button className="btn btn-sm btn-outline" title="Exchange PDF" aria-label="Exchange PDF">📄</button>
+            <button className="btn btn-sm btn-outline" title="NLDC Transfer Slip" aria-label="NLDC Transfer Slip">📜</button>
+            <button className="btn btn-sm btn-outline" title="Breakup Details" aria-label="Breakup Details">🔍</button>
           </div>
         )}
       ];
@@ -386,29 +386,29 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
       <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
         <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Exchange:</label>
-            <select className="input" value={exchange} onChange={e => setExchange(e.target.value)}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-exchange">Exchange:</label>
+            <select id="certificateoperationshub-exchange" className="input" value={exchange} onChange={e => setExchange(e.target.value)}>
               <option value="ALL">---Select---</option>
               <option value="IEX">IEX</option>
               <option value="PXIL">PXIL</option>
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Portfolio:</label>
-            <PortfolioSelect includeAll />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-portfolio">Portfolio:</label>
+            <PortfolioSelect id="certificateoperationshub-portfolio" includeAll />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>From Date:</label>
-            <input type="date" className="input" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-from-date">From Date:</label>
+            <input id="certificateoperationshub-from-date" type="date" className="input" />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>To Date:</label>
-            <input type="date" className="input" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-to-date">To Date:</label>
+            <input id="certificateoperationshub-to-date" type="date" className="input" />
           </div>
           {activeSubView === 'BIDDING' && (
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Status:</label>
-              <select className="input">
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-status">Status:</label>
+              <select id="certificateoperationshub-status" className="input">
                 <option value="ALL">New</option>
                 <option value="APPROVED">Approved</option>
               </select>

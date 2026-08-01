@@ -126,16 +126,16 @@ export default function EnergySchedule() {
       <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
         <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Trading Date:</label>
-            <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedule-trading-date">Trading Date:</label>
+            <input id="energyschedule-trading-date" type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Portfolio Id:</label>
-            <PortfolioSelect scope="global" allLabel="-- Select portfolio --" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedule-portfolio-id">Portfolio Id:</label>
+            <PortfolioSelect id="energyschedule-portfolio-id" scope="global" allLabel="-- Select portfolio --" />
           </div>
           <div style={{ marginLeft: 'auto', borderLeft: '1px solid #ccc', paddingLeft: 20 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Aggregation Level:</label>
-            <div style={{ display: 'flex', gap: 5 }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Aggregation Level:</span>
+            <div role="group" aria-label="Aggregation Level" style={{ display: 'flex', gap: 5 }}>
               <button 
                 className={`btn btn-sm ${viewMode === 'BLOCK' ? 'btn-primary' : 'btn-outline'}`}
                 onClick={() => setViewMode('BLOCK')}
@@ -151,8 +151,8 @@ export default function EnergySchedule() {
             </div>
           </div>
           <div style={{ marginLeft: 20, borderLeft: '1px solid #ccc', paddingLeft: 20 }}>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Periphery View:</label>
-            <div style={{ display: 'flex', gap: 5 }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Periphery View:</span>
+            <div role="group" aria-label="Periphery View" style={{ display: 'flex', gap: 5 }}>
               <button 
                 className={`btn btn-sm ${peripheryView === 'BOTH' ? 'btn-primary' : 'btn-outline'}`}
                 onClick={() => setPeripheryView('BOTH')}

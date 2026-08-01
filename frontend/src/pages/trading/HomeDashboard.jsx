@@ -61,13 +61,13 @@ export default function HomeDashboard() {
           <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
               <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #cbd5e1', textAlign: 'left' }}>
-                <th style={{ padding: '12px 20px', color: '#475569', fontWeight: 600 }}>Delivery Date</th>
-                <th style={{ padding: '12px 20px', color: '#475569', fontWeight: 600 }}>Portfolio Name</th>
-                <th style={{ padding: '12px 20px', color: '#475569', fontWeight: 600 }}>Bid Type</th>
-                <th style={{ padding: '12px 20px', color: '#475569', fontWeight: 600, textAlign: 'right' }}>Bid Placed (MWH)</th>
-                <th style={{ padding: '12px 20px', color: '#475569', fontWeight: 600, textAlign: 'right' }}>Bid Cleared (MWH)</th>
-                <th style={{ padding: '12px 20px', color: '#475569', fontWeight: 600, textAlign: 'right' }}>Exchange Oblig(Rs)</th>
-                <th style={{ padding: '12px 20px', color: '#475569', fontWeight: 600, textAlign: 'right' }}>Grand Total (Rs)</th>
+                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600 }}>Delivery Date</th>
+                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600 }}>Portfolio Name</th>
+                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600 }}>Bid Type</th>
+                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600, textAlign: 'right' }}>Bid Placed (MWH)</th>
+                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600, textAlign: 'right' }}>Bid Cleared (MWH)</th>
+                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600, textAlign: 'right' }}>Exchange Oblig(Rs)</th>
+                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600, textAlign: 'right' }}>Grand Total (Rs)</th>
               </tr>
             </thead>
             <tbody>

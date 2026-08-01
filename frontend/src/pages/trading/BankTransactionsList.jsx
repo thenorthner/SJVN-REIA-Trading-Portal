@@ -64,28 +64,28 @@ export default function BankTransactionsList() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 15, alignItems: 'end' }}>
           
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Portfolio Name:</label>
-            <PortfolioSelect includeAll value={portfolio} onChange={setPortfolio} />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-portfolio-name">Portfolio Name:</label>
+            <PortfolioSelect id="banktransactionslist-portfolio-name" includeAll value={portfolio} onChange={setPortfolio} />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>From Date:</label>
-            <input type="date" className="input" value={fromDate} onChange={e => setFromDate(e.target.value)} />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-from-date">From Date:</label>
+            <input id="banktransactionslist-from-date" type="date" className="input" value={fromDate} onChange={e => setFromDate(e.target.value)} />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>To Date:</label>
-            <input type="date" className="input" value={toDate} onChange={e => setToDate(e.target.value)} />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-to-date">To Date:</label>
+            <input id="banktransactionslist-to-date" type="date" className="input" value={toDate} onChange={e => setToDate(e.target.value)} />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Virtual Account Number:</label>
-            <input type="text" className="input" value={van} onChange={e => setVan(e.target.value)} placeholder="VAN-SJVN-..." />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-virtual-account-number">Virtual Account Number:</label>
+            <input id="banktransactionslist-virtual-account-number" type="text" className="input" value={van} onChange={e => setVan(e.target.value)} placeholder="VAN-SJVN-..." />
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>UTR NO:</label>
-            <input type="text" className="input" value={utr} onChange={e => setUtr(e.target.value)} placeholder="Search by UTR" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="banktransactionslist-utr-no">UTR NO:</label>
+            <input id="banktransactionslist-utr-no" type="text" className="input" value={utr} onChange={e => setUtr(e.target.value)} placeholder="Search by UTR" />
           </div>
 
         </div>
@@ -103,13 +103,13 @@ export default function BankTransactionsList() {
         <table className="table" style={{ width: '100%' }}>
           <thead>
             <tr style={{ background: '#e9ecef' }}>
-              <th>Date & Time</th>
-              <th>Portfolio ID</th>
-              <th>Virtual Account No</th>
-              <th>UTR No</th>
-              <th style={{ textAlign: 'right' }}>Amount (₹)</th>
-              <th>Reconciliation Status</th>
-              <th>SAP Integration</th>
+              <th scope="col">Date & Time</th>
+              <th scope="col">Portfolio ID</th>
+              <th scope="col">Virtual Account No</th>
+              <th scope="col">UTR No</th>
+              <th scope="col" style={{ textAlign: 'right' }}>Amount (₹)</th>
+              <th scope="col">Reconciliation Status</th>
+              <th scope="col">SAP Integration</th>
             </tr>
           </thead>
           <tbody>

@@ -19,10 +19,19 @@ export function PageHeader({ title, subtitle, actions, onAdd, addLabel }) {
 
 export function StatCard({ label, value, hint, tone = 'default', onClick }) {
   return (
-    <div 
+    <div
       className={`stat-card tone-${tone} ${onClick ? 'clickable' : ''}`}
       onClick={onClick}
       style={{ cursor: onClick ? 'pointer' : 'default' }}
+      // Focusable and Enter/Space-activated when it does something, so the card
+      // is reachable without a mouse.
+      {...(onClick ? {
+        tabIndex: 0,
+        role: 'button',
+        onKeyDown: (e) => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e); }
+        },
+      } : {})}
     >
       <div className="stat-label">{label}</div>
       <div className="stat-value">{value}</div>
@@ -80,14 +89,21 @@ export function Badge({ status, type, label, children }) {
 // `rows` (REIA-style) and `data` (Trading-style) are both supported so this
 // one component works for every module without each caller needing to match
 // an exact prop name.
-export function Table({ columns, rows, data, onRowClick, loading, emptyMessage = 'No records found.' }) {
+export function Table({
+  columns, rows, data, onRowClick, loading,
+  emptyMessage = 'No records found.', caption,
+}) {
   const list = rows ?? data ?? [];
   return (
     <div className="table-wrap">
-      <table className="data-table">
+      {/* aria-busy tells assistive tech the table is mid-load rather than empty. */}
+      <table className="data-table" aria-busy={loading || undefined}>
+        {caption && <caption className="sr-only">{caption}</caption>}
         <thead>
           <tr>
-            {columns.map((c) => <th key={c.key}>{c.header ?? c.label}</th>)}
+            {/* scope="col" is what associates a data cell with its header; without
+                it a screen reader reads cells with no idea which column they are in. */}
+            {columns.map((c) => <th key={c.key} scope="col">{c.header ?? c.label}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -95,7 +111,20 @@ export function Table({ columns, rows, data, onRowClick, loading, emptyMessage =
             <tr><td colSpan={columns.length} className="empty-cell">{loading ? 'Loading...' : emptyMessage}</td></tr>
           )}
           {list.map((row, i) => (
-            <tr key={row.id ?? i} onClick={() => onRowClick?.(row)} className={onRowClick ? 'clickable' : ''}>
+            <tr
+              key={row.id ?? i}
+              onClick={() => onRowClick?.(row)}
+              className={onRowClick ? 'clickable' : ''}
+              // A row that responds to a click has to respond to a keyboard too,
+              // or the whole table is unusable without a mouse.
+              {...(onRowClick ? {
+                tabIndex: 0,
+                role: 'button',
+                onKeyDown: (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(row); }
+                },
+              } : {})}
+            >
               {columns.map((c) => <td key={c.key}>{c.render ? c.render(row) : row[c.key]}</td>)}
             </tr>
           ))}
@@ -105,14 +134,38 @@ export function Table({ columns, rows, data, onRowClick, loading, emptyMessage =
   );
 }
 
+let modalSeq = 0;
+
 export function Modal({ open, onClose, title, children, width = 560 }) {
+  const titleId = React.useMemo(() => `modal-title-${++modalSeq}`, []);
+  const panelRef = React.useRef(null);
+
+  // Escape closes, and focus moves into the dialog when it opens — otherwise a
+  // keyboard user stays parked behind it on the page they just left.
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    document.addEventListener('keydown', onKey);
+    panelRef.current?.focus();
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" style={{ maxWidth: width }} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal"
+        style={{ maxWidth: width }}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        ref={panelRef}
+      >
         <div className="modal-header">
-          <h3>{title}</h3>
-          <button className="icon-btn" onClick={onClose}>✕</button>
+          <h3 id={titleId}>{title}</h3>
+          <button className="icon-btn" onClick={onClose} aria-label="Close dialog">✕</button>
         </div>
         <div className="modal-body">{children}</div>
       </div>
@@ -120,10 +173,22 @@ export function Modal({ open, onClose, title, children, width = 560 }) {
   );
 }
 
-export function Field({ label, children, required }) {
+/**
+ * Wrapping <label>, so the control inside is associated without needing an id.
+ * `htmlFor` is there for the cases where the control cannot be a child.
+ */
+export function Field({ label, children, required, htmlFor }) {
   return (
-    <label className="field">
-      <span className="field-label">{label}{required && <span style={{ color: '#dc2626' }}> *</span>}</span>
+    <label className="field" htmlFor={htmlFor}>
+      <span className="field-label">
+        {label}
+        {required && (
+          <>
+            <span aria-hidden="true" style={{ color: 'var(--red)' }}> *</span>
+            <span className="sr-only"> (required)</span>
+          </>
+        )}
+      </span>
       {children}
     </label>
   );
@@ -169,12 +234,12 @@ export function StatementViewer({ statement }) {
         <table className="data-table" style={{ margin: 0 }}>
           <thead style={{ background: '#f1f5f9' }}>
             <tr>
-              <th>Check Item</th>
-              <th>Status</th>
-              <th>Metered / Expected</th>
-              <th>Billed / Actual</th>
-              <th>Variance</th>
-              <th>Notes</th>
+              <th scope="col">Check Item</th>
+              <th scope="col">Status</th>
+              <th scope="col">Metered / Expected</th>
+              <th scope="col">Billed / Actual</th>
+              <th scope="col">Variance</th>
+              <th scope="col">Notes</th>
             </tr>
           </thead>
           <tbody>
@@ -270,7 +335,42 @@ export function DemandLetterViewer({ letterStr }) {
     </div>
   );
 }
-export function Tabs({ children, style }) { return <div className="tabs-container" style={{ display: 'flex', borderBottom: '1px solid #ddd', ...style }}>{children}</div>; } export function Tab({ active, onClick, children }) { return <div onClick={onClick} style={{ padding: '10px 20px', cursor: 'pointer', borderBottom: active ? '2px solid #0056b3' : '2px solid transparent', color: active ? '#0056b3' : '#555', fontWeight: active ? 600 : 400, marginBottom: '-1px' }}>{children}</div>; }
+export function Tabs({ children, style }) {
+  return (
+    <div
+      className="tabs-container"
+      role="tablist"
+      style={{ display: 'flex', borderBottom: '1px solid var(--border)', ...style }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** A real <button>: the previous <div onClick> could not be reached or activated by keyboard. */
+export function Tab({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={!!active}
+      onClick={onClick}
+      style={{
+        padding: '10px 20px',
+        cursor: 'pointer',
+        background: 'transparent',
+        border: 'none',
+        borderBottom: active ? '2px solid var(--primary)' : '2px solid transparent',
+        color: active ? 'var(--primary)' : 'var(--text-muted)',
+        fontWeight: active ? 600 : 400,
+        marginBottom: '-1px',
+        font: 'inherit',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 /**
  * Marks a screen whose figures are generated, not read from the platform.

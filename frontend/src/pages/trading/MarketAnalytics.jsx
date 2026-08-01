@@ -78,12 +78,12 @@ export default function MarketAnalytics() {
       <Card>
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', marginBottom: 20 }}>
           <div style={{ flex: 1, maxWidth: 200 }}>
-            <label style={{ display: 'block', fontSize: 12, marginBottom: 5, fontWeight: 600, color: '#475569' }}>From Trading Date</label>
-            <input type="date" className="input" value={dateRange.from} onChange={e => setDateRange({...dateRange, from: e.target.value})} />
+            <label style={{ display: 'block', fontSize: 12, marginBottom: 5, fontWeight: 600, color: '#475569' }} htmlFor="marketanalytics-from-trading-date">From Trading Date</label>
+            <input id="marketanalytics-from-trading-date" type="date" className="input" value={dateRange.from} onChange={e => setDateRange({...dateRange, from: e.target.value})} />
           </div>
           <div style={{ flex: 1, maxWidth: 200 }}>
-            <label style={{ display: 'block', fontSize: 12, marginBottom: 5, fontWeight: 600, color: '#475569' }}>To Trading Date</label>
-            <input type="date" className="input" value={dateRange.to} onChange={e => setDateRange({...dateRange, to: e.target.value})} />
+            <label style={{ display: 'block', fontSize: 12, marginBottom: 5, fontWeight: 600, color: '#475569' }} htmlFor="marketanalytics-to-trading-date">To Trading Date</label>
+            <input id="marketanalytics-to-trading-date" type="date" className="input" value={dateRange.to} onChange={e => setDateRange({...dateRange, to: e.target.value})} />
           </div>
           <button className="btn btn-primary">Search Analytics</button>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>

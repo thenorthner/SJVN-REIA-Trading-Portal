@@ -201,13 +201,13 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
           <table className="data-table" style={{ margin: 0 }}>
             <thead>
               <tr>
-                <th>Type</th>
-                <th>Title</th>
-                <th>Category</th>
-                <th>Status</th>
-                <th>Version</th>
-                <th>Uploaded</th>
-                <th>Actions</th>
+                <th scope="col">Type</th>
+                <th scope="col">Title</th>
+                <th scope="col">Category</th>
+                <th scope="col">Status</th>
+                <th scope="col">Version</th>
+                <th scope="col">Uploaded</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>

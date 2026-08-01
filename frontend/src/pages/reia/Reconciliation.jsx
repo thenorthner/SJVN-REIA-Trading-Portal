@@ -305,7 +305,7 @@ export default function Reconciliation() {
             <table className="data-table" style={{ width: '100%', fontSize: 13 }}>
               <thead>
                 <tr>
-                  <th>Type</th><th>Metered</th><th>Billed</th><th>Paid/SAP</th><th>Var</th><th>Match</th><th></th>
+                  <th scope="col">Type</th><th scope="col">Metered</th><th scope="col">Billed</th><th scope="col">Paid/SAP</th><th scope="col">Var</th><th scope="col">Match</th><th scope="col"></th>
                 </tr>
               </thead>
               <tbody>

@@ -179,8 +179,8 @@ export default function TAMManagement({ marketType = 'TAM' }) {
       <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
         <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Exchange:</label>
-            <select className="input" value={exchange} onChange={e => setExchange(e.target.value)}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tammanagement-exchange">Exchange:</label>
+            <select id="tammanagement-exchange" className="input" value={exchange} onChange={e => setExchange(e.target.value)}>
               <option value="ALL">All Exchanges</option>
               <option value="IEX">IEX</option>
               <option value="PXIL">PXIL</option>
@@ -188,20 +188,20 @@ export default function TAMManagement({ marketType = 'TAM' }) {
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Port Id:</label>
-            <PortfolioSelect includeAll />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tammanagement-port-id">Port Id:</label>
+            <PortfolioSelect id="tammanagement-port-id" includeAll />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Port Name:</label>
-            <select className="input"><option>SJVN Limited-Naitwar Mori HPS</option></select>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tammanagement-port-name">Port Name:</label>
+            <select id="tammanagement-port-name" className="input"><option>SJVN Limited-Naitwar Mori HPS</option></select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>From Trading Date:</label>
-            <input type="date" className="input" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tammanagement-from-trading-date">From Trading Date:</label>
+            <input id="tammanagement-from-trading-date" type="date" className="input" />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>To Trading Date:</label>
-            <input type="date" className="input" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tammanagement-to-trading-date">To Trading Date:</label>
+            <input id="tammanagement-to-trading-date" type="date" className="input" />
           </div>
           <div style={{ marginTop: 20 }}>
             <button className="btn btn-primary">Search</button>
@@ -230,14 +230,14 @@ export default function TAMManagement({ marketType = 'TAM' }) {
           <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #ddd', textAlign: 'left' }}>
-                <th style={{ padding: 10, width: 40 }}></th>
-                <th style={{ padding: 10 }}>Trading Date</th>
-                <th style={{ padding: 10 }}>Delivery Date</th>
-                <th style={{ padding: 10 }}>Acceptance No</th>
-                <th style={{ padding: 10 }}>Contract</th>
-                <th style={{ padding: 10 }}>Total Vol</th>
-                <th style={{ padding: 10 }}>Net Amount (₹)</th>
-                <th style={{ padding: 10 }}>Actions</th>
+                <th scope="col" style={{ padding: 10, width: 40 }}></th>
+                <th scope="col" style={{ padding: 10 }}>Trading Date</th>
+                <th scope="col" style={{ padding: 10 }}>Delivery Date</th>
+                <th scope="col" style={{ padding: 10 }}>Acceptance No</th>
+                <th scope="col" style={{ padding: 10 }}>Contract</th>
+                <th scope="col" style={{ padding: 10 }}>Total Vol</th>
+                <th scope="col" style={{ padding: 10 }}>Net Amount (₹)</th>
+                <th scope="col" style={{ padding: 10 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -254,7 +254,7 @@ export default function TAMManagement({ marketType = 'TAM' }) {
                             {isExpanded ? '▼' : '▶'}
                           </button>
                         ) : <span style={{ width: 14 }}></span>}
-                        <input type="checkbox" checked={selectedRows.includes(record.id)} onChange={() => handleSelectRow(record.id, childrenIds)} />
+                        <input type="checkbox" aria-label={`Select contract ${record.id}`} checked={selectedRows.includes(record.id)} onChange={() => handleSelectRow(record.id, childrenIds)} />
                       </td>
                       <td style={{ padding: 10 }}>{record.tradeDate}</td>
                       <td style={{ padding: 10 }}>
@@ -272,9 +272,9 @@ export default function TAMManagement({ marketType = 'TAM' }) {
                       <td style={{ padding: 10 }}>
                         <div style={{ display: 'flex', gap: 5 }}>
                           <button className="btn btn-sm btn-outline" title="View Details" onClick={() => setSelectedTamRecord(record)}>📄</button>
-                          <button className="btn btn-sm btn-outline" title="View PDFs (IEX Voucher)">💻</button>
-                          <button className="btn btn-sm btn-outline" title="View Certificate (Standing Clearance)">📜</button>
-                          <button className="btn btn-sm btn-outline" style={{ color: '#e74c3c' }} title="Cancel/Archive">❌</button>
+                          <button className="btn btn-sm btn-outline" title="View PDFs (IEX Voucher)" aria-label="View PDFs (IEX Voucher)">💻</button>
+                          <button className="btn btn-sm btn-outline" title="View Certificate (Standing Clearance)" aria-label="View Certificate (Standing Clearance)">📜</button>
+                          <button className="btn btn-sm btn-outline" style={{ color: '#e74c3c' }} title="Cancel/Archive" aria-label="Cancel/Archive">❌</button>
                         </div>
                       </td>
                     </tr>
@@ -284,7 +284,7 @@ export default function TAMManagement({ marketType = 'TAM' }) {
                       <tr key={child.id} style={{ background: '#f8f9fc', borderBottom: '1px solid #eee' }}>
                         <td style={{ padding: 10, textAlign: 'right' }}>
                            <span style={{ color: '#aaa' }}>├─</span>
-                           <input type="checkbox" checked={selectedRows.includes(child.id)} onChange={() => handleSelectRow(child.id)} style={{ marginLeft: 5 }} />
+                           <input type="checkbox" aria-label={`Select obligation ${child.id}`} checked={selectedRows.includes(child.id)} onChange={() => handleSelectRow(child.id)} style={{ marginLeft: 5 }} />
                         </td>
                         <td style={{ padding: 10, color: '#666' }}>{child.tradeDate}</td>
                         <td style={{ padding: 10, color: '#666' }}>{child.deliveryDate}</td>
@@ -295,7 +295,7 @@ export default function TAMManagement({ marketType = 'TAM' }) {
                         <td style={{ padding: 10 }}>
                            <div style={{ display: 'flex', gap: 5 }}>
                              <button className="btn btn-sm btn-outline" title="View Details" onClick={() => setSelectedTamRecord(child)}>📄</button>
-                             <button className="btn btn-sm btn-outline" title="View PDFs (IEX Voucher)">💻</button>
+                             <button className="btn btn-sm btn-outline" title="View PDFs (IEX Voucher)" aria-label="View PDFs (IEX Voucher)">💻</button>
                            </div>
                         </td>
                       </tr>

@@ -1444,3 +1444,17 @@ a { color: var(--primary); text-decoration: none; }
   white-space: nowrap;
 }
 .topbar-portfolio__select { min-width: 200px; max-width: 260px; }
+
+/* Visible to assistive technology only — captions and clarifiers that would be
+   redundant on screen but are the only cue a screen reader gets. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

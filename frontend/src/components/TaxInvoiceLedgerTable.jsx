@@ -27,8 +27,8 @@ export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
     )},
     { key: 'cert', label: 'Voucher', render: () => (
       <div style={{ display: 'flex', gap: 5 }}>
-        <button className="btn btn-sm btn-outline" title="View Tax Invoice PDF">💻</button>
-        {isCert && <button className="btn btn-sm btn-outline" title="View Registry Slip">📜</button>}
+        <button className="btn btn-sm btn-outline" title="View Tax Invoice PDF" aria-label="View Tax Invoice PDF">💻</button>
+        {isCert && <button className="btn btn-sm btn-outline" title="View Registry Slip" aria-label="View Registry Slip">📜</button>}
       </div>
     )}
   ];
