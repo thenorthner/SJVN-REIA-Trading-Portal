@@ -1,6 +1,24 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'sjvn-dev-secret-change-me';
+const DEV_SECRET = 'sjvn-dev-secret-change-me';
+
+/**
+ * Token signing key.
+ *
+ * The development fallback is committed to a public repository, so anyone who
+ * can read the source can mint a valid SJVN_ADMIN token. That is tolerable on a
+ * laptop and not tolerable anywhere else, so a production start without a real
+ * JWT_SECRET fails loudly rather than quietly accepting forged tokens.
+ */
+const JWT_SECRET = process.env.JWT_SECRET || DEV_SECRET;
+
+if (process.env.NODE_ENV === 'production' && JWT_SECRET === DEV_SECRET) {
+  throw new Error(
+    'JWT_SECRET is not set. The built-in development secret is public, so it '
+    + 'cannot be used on a deployed server. Generate one with '
+    + '`openssl rand -hex 32` and put it in backend/.env before starting.'
+  );
+}
 
 export function signToken(user) {
   return jwt.sign(

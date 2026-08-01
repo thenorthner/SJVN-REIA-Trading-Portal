@@ -1,0 +1,32 @@
+# SJVN REIA & Power Trading Platform
+#
+#   sudo cp sjvn-platform.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now sjvn-platform
+#
+# Edit User= and WorkingDirectory= if the checkout lives somewhere else.
+
+[Unit]
+Description=SJVN REIA & Power Trading Platform
+After=network.target
+
+[Service]
+Type=simple
+User=user01
+WorkingDirectory=/home/user01/sjvn-energy-platform/backend
+EnvironmentFile=/home/user01/sjvn-energy-platform/backend/.env
+ExecStart=/usr/bin/node src/server.js
+Restart=always
+RestartSec=5
+
+# The SQLite file and the uploads/outbox directories are the only writable
+# state; everything else can stay read-only.
+NoNewPrivileges=true
+PrivateTmp=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sjvn-platform
+
+[Install]
+WantedBy=multi-user.target

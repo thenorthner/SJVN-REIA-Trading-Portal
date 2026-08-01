@@ -33,7 +33,11 @@ backend/test*.pdf
 /*.docx
 
 # Reference/controlled documents (TCS manuals, real SJVN bills) — keep local, never commit
-docs/
+# Exclude the contents, not the directory itself — git will not descend into an
+# excluded directory, so `docs/` followed by `!docs/*.md` silently keeps
+# everything out.
+docs/*
+!docs/*.md
 
 # Agent / editor local settings (keep launch.json shared, ignore machine-local)
 .claude/settings.local.json

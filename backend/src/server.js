@@ -3,6 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 import { reaScraper } from './services/reaScraper.js';
@@ -73,7 +74,14 @@ try {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-app.use(cors());
+// Same-origin in production (the API and the UI are served by this process),
+// so no cross-origin access is needed. CORS_ORIGIN opens it only where a
+// separate front end genuinely has to reach the API.
+app.use(cors(
+  process.env.CORS_ORIGIN
+    ? { origin: process.env.CORS_ORIGIN.split(',').map((o) => o.trim()) }
+    : (process.env.NODE_ENV === 'production' ? { origin: false } : undefined)
+));
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
@@ -133,6 +141,25 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/alerts', alertsRoutes);
 app.use('/api/audit-logs', auditLogsRoutes);
 
+// ── Built front end ───────────────────────────────────────────────────
+// One process serves both the API and the UI, so the platform is reachable on
+// a single address with no reverse proxy to configure. Skipped when the build
+// is absent, which is the normal case in development (Vite serves it there).
+const CLIENT_DIR = process.env.CLIENT_DIR
+  || path.resolve(__dirname, '../../frontend/dist');
+
+if (fs.existsSync(path.join(CLIENT_DIR, 'index.html'))) {
+  app.use(express.static(CLIENT_DIR));
+  // Anything that is not an API route is a client-side route: hand back
+  // index.html and let React Router resolve it.
+  app.get(/^(?!\/api\/|\/verify\/|\/uploads\/).*/, (req, res) => {
+    res.sendFile(path.join(CLIENT_DIR, 'index.html'));
+  });
+  console.log(`[WEB] Serving the built front end from ${CLIENT_DIR}`);
+} else {
+  console.log('[WEB] No frontend build found — API only. Run `npm run build` in frontend/ to serve the UI from here.');
+}
+
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
 // eslint-disable-next-line no-unused-vars
@@ -142,8 +169,11 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`SJVN Energy Platform API listening on http://localhost:${PORT}`);
+// 0.0.0.0 so the server answers on the machine's LAN address, not only on
+// loopback — otherwise nobody else on the network can reach it.
+const HOST = process.env.HOST || '0.0.0.0';
+app.listen(PORT, HOST, () => {
+  console.log(`SJVN Energy Platform listening on http://${HOST}:${PORT}`);
   // SLA escalation sweep every 15 minutes
   setInterval(() => {
     try {
