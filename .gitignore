@@ -41,3 +41,16 @@ docs/*
 
 # Agent / editor local settings (keep launch.json shared, ignore machine-local)
 .claude/settings.local.json
+
+# Ad-hoc SSH tunnel / remote-deploy helpers. These tend to accumulate hardcoded
+# hosts and passwords; deployment is deploy.sh + docs/deployment.md instead.
+tunnel*.py
+tunnel*.sh
+start*tunnel*
+*.exp
+askpass.sh
+deploy_remote*.py
+deploy_runner.py
+add_key_to_remote.py
+remote-deploy-exec.sh
+run_tunnel_auto.py
