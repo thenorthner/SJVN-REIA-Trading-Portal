@@ -1202,4 +1202,49 @@ try {
   console.error('REC migration failed:', e.message);
 }
 
+/**
+ * Generator billing: record how the Energy Charge Rate was arrived at, and stop
+ * the same station-month being billed twice.
+ *
+ * ECR used to be free-typed with no tie back to AFC, so a bill could recover the
+ * capacity half of AFC and an unrelated energy amount. design_energy_mu lets the
+ * rate be derived instead, and ecr_source records which path a bill took.
+ */
+function migrateGeneratorBillingSchema() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (!tables.includes('generator_bills')) return;
+
+  const cols = db.prepare('PRAGMA table_info(generator_bills)').all().map((c) => c.name);
+  if (!cols.includes('design_energy_mu')) {
+    db.exec(`
+      ALTER TABLE generator_bills ADD COLUMN design_energy_mu REAL;
+      ALTER TABLE generator_bills ADD COLUMN ecr_source TEXT NOT NULL DEFAULT 'MANUAL';
+    `);
+  }
+
+  // One bill per station + beneficiary + month. Existing duplicates would make
+  // the index fail, so report them and leave the data alone rather than losing a
+  // bill to a migration.
+  const dupes = db.prepare(`
+    SELECT station_name, beneficiary_id, billing_month, COUNT(*) AS n
+    FROM generator_bills
+    GROUP BY station_name, beneficiary_id, billing_month
+    HAVING n > 1
+  `).all();
+  if (dupes.length) {
+    console.warn(`[GEN-BILL] ${dupes.length} duplicate station-month bill(s) present; unique index not created. Resolve them, then restart.`);
+    return;
+  }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_generator_bills_station_month
+      ON generator_bills (station_name, beneficiary_id, billing_month);
+  `);
+}
+
+try {
+  migrateGeneratorBillingSchema();
+} catch (e) {
+  console.error('Generator billing migration failed:', e.message);
+}
+
 export default db;

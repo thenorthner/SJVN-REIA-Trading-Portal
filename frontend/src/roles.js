@@ -10,6 +10,9 @@ export const ROLE_GROUPS = {
   // excludes SELLER_L1/L2/L3 and drops them into the internal SJVN nav.
   SELLER_ALL: ['SELLER', 'SELLER_L1', 'SELLER_L2', 'SELLER_L3'],
   BUYER_ALL: ['BUYER', 'BUYER_L1', 'BUYER_L2', 'BUYER_L3'],
+  
+  // Trading Client external portal roles (Maker/Checker)
+  TRADING_CLIENT_ALL: ['TRADING_CLIENT', 'TRADING_CLIENT_ADMIN', 'TRADING_CLIENT_MAKER', 'TRADING_CLIENT_CHECKER', 'TRADING_CLIENT_VIEWER'],
 
   // Cross-module executive view (Consolidated Dashboard). Deliberately narrow:
   // it aggregates REIA + Trading financials across every counterparty, so no
@@ -34,3 +37,4 @@ export const ROLE_GROUPS = {
 export const isSellerRole = (role) => ROLE_GROUPS.SELLER_ALL.includes(role);
 export const isBuyerRole = (role) => ROLE_GROUPS.BUYER_ALL.includes(role);
 export const isCounterpartyRole = (role) => isSellerRole(role) || isBuyerRole(role);
+export const isTradingClientRole = (role) => ROLE_GROUPS.TRADING_CLIENT_ALL.includes(role);

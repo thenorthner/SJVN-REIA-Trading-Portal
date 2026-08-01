@@ -1005,6 +1005,31 @@ CREATE TABLE IF NOT EXISTS trading_invoices (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS generator_bills (
+  id TEXT PRIMARY KEY,
+  bill_no TEXT UNIQUE NOT NULL,
+  station_name TEXT NOT NULL,
+  beneficiary_id TEXT NOT NULL REFERENCES entities(id),
+  billing_month TEXT NOT NULL,
+  afc REAL NOT NULL,
+  napaf REAL NOT NULL,
+  actual_paf REAL NOT NULL,
+  ex_bus_energy REAL NOT NULL,
+  design_energy_mu REAL,
+  ecr REAL NOT NULL,
+  ecr_source TEXT NOT NULL DEFAULT 'MANUAL',
+  capacity_charge REAL NOT NULL,
+  energy_charge REAL NOT NULL,
+  total_amount REAL NOT NULL,
+  status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','FINAL','PAID')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One bill per station, beneficiary and billing month. billing_month is
+-- normalised to YYYY-MM on write so "June-2026" and "2026-06" cannot both pass.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_generator_bills_station_month
+  ON generator_bills (station_name, beneficiary_id, billing_month);
+
 CREATE TABLE IF NOT EXISTS trading_payments (
   id TEXT PRIMARY KEY,
   trading_invoice_id TEXT NOT NULL REFERENCES trading_invoices(id),

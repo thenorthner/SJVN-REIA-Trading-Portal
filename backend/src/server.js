@@ -21,6 +21,7 @@ import tradingClientsRoutes from './routes/tradingClients.js';
 import bidsRoutes from './routes/bids.js';
 import bilateralRoutes, { runNoarSlaAlerts, sendNoarWeeklyDigest } from './routes/bilateral.js';
 import billingSettlementRoutes from './routes/billingSettlement.js';
+import generatorBillingRoutes from './routes/generatorBilling.js';
 import marketAnalyticsRoutes from './routes/marketAnalytics.js';
 import dashboardRoutes from './routes/dashboard.js';
 import sellerDashboardRoutes from './routes/sellerDashboard.js';
@@ -99,6 +100,7 @@ app.use('/api/power-diversion', requireAuth, powerDiversionRoutes);
 app.use('/api/bids', bidsRoutes);
 app.use('/api/bilateral', bilateralRoutes);
 app.use('/api/billing-settlement', billingSettlementRoutes);
+app.use('/api/generator-billing', generatorBillingRoutes);
 app.use('/api/market-analytics', marketAnalyticsRoutes);
 app.use('/api/pre-trade', preTradeRoutes);
 

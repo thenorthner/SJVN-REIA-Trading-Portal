@@ -3,6 +3,7 @@ import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
+import { ScheduleGridModal } from './ScheduleGridModal.jsx';
 
 const EMPTY_FORM = {
   client_id: '', counterparty: '', loi_contract_ref: '', oa_type: 'STOA', is_standing_clearance: false,
@@ -85,10 +86,17 @@ export default function Bilateral() {
   const [bulkReason, setBulkReason] = useState({ rejection_category: '', rejection_reason: '' });
   const [bulkPreview, setBulkPreview] = useState(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [showScheduleGrid, setShowScheduleGrid] = useState(false);
+  const [wbesStatus, setWbesStatus] = useState(null);
+  const [syncModalOpen, setSyncModalOpen] = useState(false);
+  const [syncForm, setSyncForm] = useState({ date: new Date().toISOString().split('T')[0] });
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
 
   function load() {
     setLoading(true);
     api.bilateral.noarSla().then(setSla).catch(() => setSla(null));
+    api.bilateral.wbesStatus().then(setWbesStatus).catch(() => setWbesStatus(null));
     api.masters.lookups({ category: 'NOAR_REJECTION_REASON' }).then(setRejectReasons).catch(() => setRejectReasons([]));
     api.bilateral.list().then(setRows).finally(() => setLoading(false));
   }
@@ -118,19 +126,14 @@ export default function Bilateral() {
     }
   }
 
-  async function handleAddSchedule(txId) {
-    const mw = prompt("Enter Approved MW for the schedule:");
-    if (!mw) return;
+  async function handleScheduleSubmit(blocks) {
     try {
-      const updated = await api.bilateral.createSchedule(txId, {
-        schedule_date: new Date().toISOString().split('T')[0],
-        time_block: 'Block-1',
-        approved_mw: Number(mw)
-      });
+      const updated = await api.bilateral.createSchedule(selectedTx.id, { blocks });
       setSelectedTx(updated);
+      setShowScheduleGrid(false);
       load();
     } catch (err) {
-      alert("Failed to add schedule");
+      alert(err.response?.data?.error || "Failed to add schedule");
     }
   }
 
@@ -218,6 +221,17 @@ export default function Bilateral() {
     } catch (err) { alert('Failed to download Format-D'); }
   }
 
+  async function handleDownloadLoi(tx) {
+    try {
+      const res = await api.client.get(`/trading/bilateral/${tx.id}/loi`, { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `SJVN_LoI_${tx.id}.pdf`;
+      a.click();
+    } catch (err) { alert('Failed to download LoI'); }
+  }
+
   async function handleNodeApproval(schedId, nodeType, status) {
     try {
       const updated = await api.bilateral.updateApproval(schedId, nodeType, status);
@@ -237,6 +251,21 @@ export default function Bilateral() {
       load();
     } catch (err) {
       alert("Failed to record actuals");
+    }
+  }
+
+  async function handleWbesSync(e) {
+    e.preventDefault();
+    setSyncBusy(true);
+    setSyncResult(null);
+    try {
+      const res = await api.bilateral.wbesSync({ date: syncForm.date });
+      setSyncResult(res);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'WBES sync failed');
+    } finally {
+      setSyncBusy(false);
     }
   }
 
@@ -277,9 +306,25 @@ export default function Bilateral() {
     { key: 'actions', label: 'Actions', render: r => <button className="btn btn-outline" onClick={() => setSelectedTx(r)}>Manage Schedules</button> }
   ];
 
+  if (loading) return <div className="page-loading">Loading transactions...</div>;
+
   return (
     <div style={{ padding: 20 }}>
-      <PageHeader title="Bilateral Transactions & OA" onAdd={() => setShowCreate(true)} addLabel="New Bilateral Deal" />
+      <PageHeader 
+        title="Bilateral Transactions & OA" 
+        actions={
+          <div style={{ display: 'flex', gap: 10 }}>
+            {wbesStatus?.enabled && (
+              <button className="btn btn-secondary" onClick={() => { setSyncModalOpen(true); setSyncResult(null); }}>
+                Sync NOAR Schedules
+              </button>
+            )}
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+              New Bilateral Deal
+            </button>
+          </div>
+        }
+      />
 
       {/* Open-access approval SLA at portfolio level. */}
       {sla && (
@@ -497,8 +542,11 @@ export default function Bilateral() {
               </p>
               <p><strong>Period:</strong> {selectedTx.start_date} to {selectedTx.end_date}</p>
             </div>
-            <div style={{ flex: 1, textAlign: 'right' }}>
-              <button className="btn btn-primary" onClick={() => handleAddSchedule(selectedTx.id)}>+ Add Schedule</button>
+            <div style={{ marginTop: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'between', alignItems: 'center', marginBottom: 10 }}>
+                <h4 style={{ margin: 0 }}>Schedules (15-min Blocks)</h4>
+                <button className="btn btn-primary" onClick={() => setShowScheduleGrid(true)}>+ Generate 96-Block Schedule</button>
+              </div>
             </div>
           </div>
 
@@ -526,6 +574,7 @@ export default function Bilateral() {
             )}
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
               <button className="btn btn-sm btn-outline" onClick={() => handleDownloadFormatD(selectedTx)}>Download Format-D</button>
+              <button className="btn btn-sm btn-outline" onClick={() => handleDownloadLoi(selectedTx)}>Download LoI (PDF)</button>
               {selectedTx.noar_status === 'SUBMITTED' && (
                 <button className="btn btn-sm btn-outline" onClick={() => setRejectForm({ rejection_category: '', rejection_reason: '' })}>
                   Record Rejection
@@ -670,6 +719,52 @@ export default function Bilateral() {
             />
           </div>
 
+        </Modal>
+      )}
+
+      {showScheduleGrid && selectedTx && (
+        <ScheduleGridModal 
+          tx={selectedTx} 
+          onClose={() => setShowScheduleGrid(false)} 
+          onSubmit={handleScheduleSubmit} 
+        />
+      )}
+
+      {syncModalOpen && (
+        <Modal open={true} onClose={() => setSyncModalOpen(false)} title="Sync NOAR Schedules">
+          <div style={{ padding: '10px 0' }}>
+            {!syncResult ? (
+              <form onSubmit={handleWbesSync}>
+                <p style={{ marginBottom: 15, color: '#475569' }}>
+                  Pull approved 15-minute block schedules from NOAR / State WBES for a specific delivery date. 
+                  Schedules will be automatically matched to your contracts using the NOAR Contract / Approval No.
+                  {!wbesStatus?.live && <><br/><br/><strong>Note:</strong> WBES is running in Stub Mode. A sample schedule will be returned.</>}
+                </p>
+                <Field label="Delivery Date" required>
+                  <input type="date" className="input" value={syncForm.date} onChange={(e) => setSyncForm({ ...syncForm, date: e.target.value })} required />
+                </Field>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+                  <button type="button" className="btn btn-outline" onClick={() => setSyncModalOpen(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" disabled={syncBusy}>
+                    {syncBusy ? 'Syncing...' : 'Sync Schedules'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div>
+                <p style={{ color: '#16a34a', fontWeight: 600, marginBottom: 15 }}>✓ Sync Complete</p>
+                <ul style={{ marginBottom: 20, lineHeight: 1.6, color: '#334155' }}>
+                  <li><strong>Schedules Received:</strong> {syncResult.lines_received}</li>
+                  <li><strong>Matched to Contracts:</strong> {syncResult.matched?.length || 0}</li>
+                  <li><strong>Unmatched:</strong> {syncResult.unmatched?.length || 0}</li>
+                  <li><strong>Blocks Written:</strong> {syncResult.blocks_written}</li>
+                </ul>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button className="btn btn-primary" onClick={() => setSyncModalOpen(false)}>Close</button>
+                </div>
+              </div>
+            )}
+          </div>
         </Modal>
       )}
     </div>

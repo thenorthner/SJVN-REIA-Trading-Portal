@@ -17,9 +17,13 @@ export function PageHeader({ title, subtitle, actions, onAdd, addLabel }) {
   );
 }
 
-export function StatCard({ label, value, hint, tone = 'default' }) {
+export function StatCard({ label, value, hint, tone = 'default', onClick }) {
   return (
-    <div className={`stat-card tone-${tone}`}>
+    <div 
+      className={`stat-card tone-${tone} ${onClick ? 'clickable' : ''}`}
+      onClick={onClick}
+      style={{ cursor: onClick ? 'pointer' : 'default' }}
+    >
       <div className="stat-label">{label}</div>
       <div className="stat-value">{value}</div>
       {hint && <div className="stat-hint">{hint}</div>}

@@ -472,6 +472,7 @@ export const api = {
     downloadBulkTemplate: () => client.get('/bids/bulk-template', { responseType: 'blob' }).then((r) => r.data),
     ocfChains: () => g('/bids/ocf-chains'),
     recordResult: (id, blocks) => p(`/bids/${id}/result`, { blocks }),
+    syncResult: (id) => p(`/bids/${id}/sync-result`),
     carryForward: (id, body) => p(`/bids/${id}/carry-forward`, body),
     chain: (id) => g(`/bids/${id}/chain`),
   },
@@ -484,6 +485,8 @@ export const api = {
     curtail: (id, curtailed_mw) => p(`/bilateral/schedules/${id}/curtail`, { curtailed_mw }),
     recordActuals: (id, actual_mw) => p(`/bilateral/schedules/${id}/actuals`, { actual_mw }),
     updateNoar: (id, body) => p(`/bilateral/${id}/noar`, body),
+    wbesStatus: () => g('/bilateral/wbes/status'),
+    wbesSync: (body) => p('/bilateral/wbes/sync', body),
     noarSla: () => g('/bilateral/noar-sla'),
     noarBulk: (body) => p('/bilateral/noar/bulk', body),
     downloadNoarTimelineCsv: () => client.get('/bilateral/noar-timeline.csv', { responseType: 'blob' }).then((r) => r.data),
@@ -497,6 +500,11 @@ export const api = {
     getLedger: (clientId) => g(`/billing-settlement/ledger/${clientId}`),
     getSoa: () => g('/billing-settlement/soa'),
     applyNetting: (body) => p('/billing-settlement/netting', body),
+  },
+  generatorBilling: {
+    list: (params) => g('/generator-billing', params),
+    generate: (body) => p('/generator-billing/generate', body),
+    updateStatus: (id, status) => p(`/generator-billing/${id}/status`, { status }),
   },
   marketAnalytics: {
     getRates: (params) => g('/market-analytics/rates', params),

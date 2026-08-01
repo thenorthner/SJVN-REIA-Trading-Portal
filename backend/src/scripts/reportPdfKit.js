@@ -11,7 +11,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const LOGO_PATH = path.join(__dirname, '../assets/sjvn_logo.png');
+export const LOGO_PATH = path.join(__dirname, '../assets/sjvn_logo.jpg');
 
 export const PAGE_W = 595.28;
 export const PAGE_H = 841.89;
@@ -91,43 +91,53 @@ export function sectionTitle(doc, y, text, note) {
  * the band and the column heads.
  */
 export function table(doc, startY, cols, rows, ctx, opts = {}) {
-  const rowH = opts.rowH ?? 15;
+  const baseRowH = opts.rowH ?? 15;
   const fontSize = opts.fontSize ?? 7;
   let y = startY;
 
   const head = () => {
-    roundedRect(doc, M, y, CONTENT_W, rowH, 2, NAVY_SOFT);
+    roundedRect(doc, M, y, CONTENT_W, baseRowH, 2, NAVY_SOFT);
     doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(fontSize);
     let x = M + 6;
     cols.forEach((c) => { doc.text(c.label, x, y + 4.5, { width: c.w - 8, align: c.align || 'left', lineBreak: false }); x += c.w; });
-    y += rowH;
+    y += baseRowH;
   };
   head();
 
   doc.font('Helvetica').fontSize(fontSize);
   if (!rows.length) {
     doc.fillColor(MUTED).text(opts.emptyMessage || 'No records.', M + 6, y + 4, { width: CONTENT_W - 12, lineBreak: false });
-    return y + rowH;
+    return y + baseRowH;
   }
   for (const r of rows) {
-    // Break before a row, never through one.
-    if (y + rowH > PAGE_H - M - 14) {
+    let maxH = baseRowH;
+    const vals = cols.map(c => {
+      const v = c.value(r);
+      return v === null || v === undefined || v === '' ? '—' : String(v).replace(/\r?\n|\r/g, ' ').replace(/\s+/g, ' ');
+    });
+    
+    vals.forEach((textVal, i) => {
+       const h = doc.heightOfString(textVal, { width: cols[i].w - 8, align: cols[i].align || 'left' });
+       if (h + 8 > maxH) maxH = h + 8;
+    });
+
+    if (y + maxH > PAGE_H - M - 14) {
       doc.addPage();
       header(doc, ctx);
       y = 84; head();
       doc.font('Helvetica').fontSize(fontSize);
     }
     let x = M + 6;
-    cols.forEach((c) => {
-      const v = c.value(r);
+    vals.forEach((textVal, i) => {
+      const c = cols[i];
       doc.fillColor(c.colour ? c.colour(r) : INK);
-      doc.text(v === null || v === undefined || v === '' ? '—' : String(v), x, y + 4, {
-        width: c.w - 8, align: c.align || 'left', lineBreak: false, ellipsis: true,
+      doc.text(textVal, x, y + 4, {
+        width: c.w - 8, align: c.align || 'left', lineBreak: true
       });
       x += c.w;
     });
-    doc.moveTo(M, y + rowH).lineTo(M + CONTENT_W, y + rowH).strokeColor('#e8edf5').lineWidth(0.5).stroke();
-    y += rowH;
+    doc.moveTo(M, y + maxH).lineTo(M + CONTENT_W, y + maxH).strokeColor('#e8edf5').lineWidth(0.5).stroke();
+    y += maxH;
   }
   return y;
 }
@@ -166,7 +176,7 @@ export function pageNumbers(doc) {
 export function newDoc(res, docTitle, filename) {
   const doc = new PDFDocument({
     size: [PAGE_W, PAGE_H],
-    margins: { top: M, bottom: M, left: M, right: M },
+    margins: { top: M, bottom: 20, left: M, right: M },
     bufferPages: true,
     info: { Title: docTitle, Author: 'SJVN Limited', Creator: 'SJVN Energy Platform' },
   });

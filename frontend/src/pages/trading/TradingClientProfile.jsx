@@ -1,19 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext.jsx';
+import { isTradingClientRole } from '../../roles.js';
 import api from '../../api/client';
 import { PageHeader, Card, Table, Badge, Modal } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { fmtDate } from '../../datetime.js';
 
 export default function TradingClientProfile() {
-  const { id } = useParams();
+  const { id: paramId } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  
+  const isClient = isTradingClientRole(user?.role);
+  const id = isClient ? user?.entity_id : paramId;
+
   const [client, setClient] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showSuspendModal, setShowSuspendModal] = useState(false);
 
   useEffect(() => {
-    fetchProfile();
+    if (id) fetchProfile();
+    else setLoading(false);
   }, [id]);
 
   const fetchProfile = () => {
@@ -37,6 +45,7 @@ export default function TradingClientProfile() {
   };
 
   if (loading) return <div style={{ padding: 24 }}>Loading...</div>;
+  if (!id) return <div style={{ padding: 24 }}>Invalid Profile ID</div>;
   if (!client) return <div style={{ padding: 24 }}>Client not found</div>;
 
   return (
@@ -44,14 +53,16 @@ export default function TradingClientProfile() {
       <PageHeader 
         title={`Profile: ${client.name}`} 
         actions={
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-outline" onClick={() => navigate('/trading/clients')}>Back to List</button>
-            {client.status === 'ACTIVE' && (
-              <button className="btn btn-outline" style={{ borderColor: 'red', color: 'red' }} onClick={() => setShowSuspendModal(true)}>
-                Suspend Client
-              </button>
-            )}
-          </div>
+          !isClient && (
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-outline" onClick={() => navigate('/trading/clients')}>Back to List</button>
+              {client.status === 'ACTIVE' && (
+                <button className="btn btn-outline" style={{ borderColor: 'red', color: 'red' }} onClick={() => setShowSuspendModal(true)}>
+                  Suspend Client
+                </button>
+              )}
+            </div>
+          )
         }
       />
 

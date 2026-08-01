@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../api/client.js';
-import { ROLE_GROUPS, isSellerRole, isBuyerRole } from '../roles.js';
+import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from '../roles.js';
 
 const NAV_INTERNAL = [
   {
@@ -29,6 +29,11 @@ const NAV_INTERNAL = [
       { to: '/reia/disputes', label: 'Dispute Management' },
       { to: '/reia/payment-security', label: 'Payment Security' },
       { to: '/reia/power-diversion', label: 'Power Diversion' },
+      // Raising a CERC two-part tariff bill is a REIA job, but the page lives in
+      // the Power Trading section — without this entry the only roles allowed to
+      // create these bills had no way to reach it. Scoped to the REIA-only roles
+      // so nobody sees the same link twice.
+      { to: '/trading/generator-billing', label: 'Generator Billing & Settlement', roles: ['REIA_USER', 'REIA_ADMIN'] },
       { to: '/reia/reconciliation', label: 'Reconciliation' },
       // Hidden for solar-focused scope (DSM is hydro/scheduling). Route still
       // exists in App.jsx — uncomment to restore for hydro/thermal.
@@ -37,13 +42,17 @@ const NAV_INTERNAL = [
   },
   {
     section: 'Power Trading',
-    roles: [...ROLE_GROUPS.TRADING_ALL, 'TRADING_CLIENT'],
+    roles: ROLE_GROUPS.TRADING_ALL,
     links: [
       { to: '/trading', label: 'Trading Dashboard', end: true },
       { to: '/trading/clients', label: 'Clients & Counterparties' },
-      { to: '/trading/bids', label: 'Exchange Bid Management' },
+      { to: '/trading/pre-trade', label: 'Pre-Trade Board' },
+      { to: '/trading/dam', label: 'DAM Management' },
+      { to: '/trading/gdam', label: 'GDAM Management' },
+      { to: '/trading/rtm', label: 'RTM Management' },
       { to: '/trading/bilateral', label: 'Bilateral Transactions' },
       { to: '/trading/billing-settlement', label: 'Trading Billing & Settlement' },
+      { to: '/trading/generator-billing', label: 'Generator Billing & Settlement' },
       { to: '/trading/market-analytics', label: 'Market Rates & Analytics' },
       { to: '/trading/rec', label: 'REC Management' },
       { to: '/trading/noar', label: 'NOAR Wallet (Open Access)' },
@@ -100,12 +109,30 @@ const NAV_BUYER = [
   },
 ];
 
+const NAV_TRADING_CLIENT = [
+  {
+    section: 'Trading Client Portal',
+    roles: null,
+    links: [
+      { to: '/trading/my-profile', label: 'My Profile & Portfolio' },
+      { to: '/trading/pre-trade', label: 'Pre-Trade Board' },
+      { to: '/trading/dam', label: 'My DAM Bids' },
+      { to: '/trading/gdam', label: 'My GDAM Bids' },
+      { to: '/trading/rtm', label: 'My RTM Bids' },
+      { to: '/trading/bilateral', label: 'My Bilateral Deals' },
+      { to: '/trading/billing-settlement', label: 'My Billing & Settlement' },
+      { to: '/trading/market-analytics', label: 'Market Rates & Analytics' },
+    ],
+  },
+];
+
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [notifications, setNotifications] = useState([]);
   const [showNotif, setShowNotif] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
 
   // Auto-redirect counterparties to their own portals on first load. This must
   // cover the L1/L2/L3 sub-users too, not just the company admin role.
@@ -113,6 +140,7 @@ export default function Layout() {
     if (location.pathname !== '/') return;
     if (isSellerRole(user?.role)) navigate('/seller', { replace: true });
     else if (isBuyerRole(user?.role)) navigate('/buyer', { replace: true });
+    else if (isTradingClientRole(user?.role)) navigate('/trading/my-profile', { replace: true });
   }, [user, location.pathname, navigate]);
 
   useEffect(() => {
@@ -132,14 +160,20 @@ export default function Layout() {
     ? NAV_SELLER
     : isBuyerRole(user?.role)
       ? NAV_BUYER
-      : NAV_INTERNAL;
+      : isTradingClientRole(user?.role)
+        ? NAV_TRADING_CLIENT
+        : NAV_INTERNAL;
 
   // White-label the shell for counterparties: show their own logo + name in
   // place of the SJVN brand. Internal SJVN staff keep the platform branding.
-  const isCounterparty = isSellerRole(user?.role) || isBuyerRole(user?.role);
+  const isCounterparty = isSellerRole(user?.role) || isBuyerRole(user?.role) || isTradingClientRole(user?.role);
   const entity = user?.entity;
   const branded = isCounterparty && entity;
-  const portalKind = isSellerRole(user?.role) ? 'Seller Portal' : 'Buyer Portal';
+  const portalKind = isSellerRole(user?.role) 
+    ? 'Seller Portal' 
+    : isBuyerRole(user?.role)
+      ? 'Buyer Portal'
+      : 'Trading Portal';
   const logoSrc = branded && entity.logo_url ? `http://localhost:4000${entity.logo_url}` : null;
 
   function handleLogout() {
@@ -231,14 +265,35 @@ export default function Layout() {
                 </div>
               )}
             </div>
-            <div className="user-chip">
-              <div className="user-avatar">{user?.name?.[0] ?? '?'}</div>
-              <div className="user-meta">
-                <strong>{user?.name}</strong>
-                <span>{user?.role?.replaceAll('_', ' ')}</span>
+            <div className="notif-wrap" style={{ position: 'relative' }}>
+              <div 
+                className="user-chip" 
+                style={{ cursor: 'pointer' }}
+                onClick={() => setShowProfile((s) => !s)}
+              >
+                <div className="user-avatar">{user?.name?.[0] ?? '?'}</div>
+                <div className="user-meta">
+                  <strong>{user?.name}</strong>
+                  <span>{user?.role?.replaceAll('_', ' ')}</span>
+                </div>
               </div>
+              {showProfile && (
+                <div className="notif-dropdown" style={{ right: 0, width: 200, padding: 0 }}>
+                  <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => { navigate('/trading/my-profile'); setShowProfile(false); }}>
+                    My Account
+                  </div>
+                  <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => { navigate('/trading/clients'); setShowProfile(false); }}>
+                    Manage Portfolio
+                  </div>
+                  <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => setShowProfile(false)}>
+                    Change Password
+                  </div>
+                  <div className="notif-item" style={{ cursor: 'pointer', borderTop: '1px solid var(--border)', color: 'var(--red)' }} onClick={handleLogout}>
+                    Log out
+                  </div>
+                </div>
+              )}
             </div>
-            <button className="btn btn-ghost" onClick={handleLogout}>Log out</button>
           </div>
         </header>
         <main className="content">

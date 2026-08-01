@@ -83,6 +83,36 @@ export default function Reports() {
     }
   }
 
+  function downloadCsv() {
+    if (!data || !data.months || data.months.length === 0) {
+      setError('No data available to export.');
+      return;
+    }
+    const headers = ['Month', 'Sales Billed', 'Purchases', 'Gross Margin', 'Trading Margin', 'Rebate Saved', 'LPS Receivable', 'Net Profit', 'Collected', 'Outstanding Receivable', 'Energy (MWh)'];
+    const rows = (data.months || []).map(r => [
+      r.billing_period, r.sales_billed, r.purchase_billed, r.gross_margin, r.trading_margin, r.rebate_saved, r.lps_receivable, r.net_profit, r.collected, r.outstanding_receivable, r.energy_mwh
+    ]);
+    if (data.totals) {
+      const t = data.totals;
+      rows.push(['TOTAL', t.sales_billed, t.purchase_billed, t.gross_margin, t.trading_margin, t.rebate_saved, t.lps_receivable, t.net_profit, t.collected, t.outstanding_receivable, t.energy_mwh]);
+    }
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(r => r.map(cell => `"${cell || 0}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `SJVN_Billing_Report_${range.from || 'start'}_to_${range.to || 'end'}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setSuccess('CSV downloaded successfully.');
+  }
+
   const t = data?.totals || {};
 
   const columns = [
@@ -123,14 +153,24 @@ export default function Reports() {
         title="Billing & Invoicing Reports"
         subtitle="Month-wise summary — download a professional PDF (not a screenshot)"
         actions={
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={pdfLoading || loading}
-            onClick={downloadPdf}
-          >
-            {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={loading || !data?.months?.length}
+              onClick={downloadCsv}
+            >
+              Export CSV
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={pdfLoading || loading}
+              onClick={downloadPdf}
+            >
+              {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
+            </button>
+          </div>
         }
       />
 

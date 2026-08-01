@@ -33,7 +33,7 @@ html, body, #root { height: 100%; }
 
 body {
   margin: 0;
-  font-family: 'American Typewriter', 'Courier New', Courier, 'Nimbus Mono PS', monospace;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
@@ -1026,10 +1026,17 @@ a { color: var(--primary); text-decoration: none; }
 .print-only { display: none; }
 
 @media print {
+  html, body, .app-shell, #root { 
+    height: auto !important; 
+    min-height: auto !important; 
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important; 
+  }
   .no-print, .sidebar, .topbar { display: none !important; }
   .print-only { display: block; }
-  .content { padding: 0; }
-  .card { box-shadow: none; break-inside: avoid; }
+  .content { padding: 0 !important; margin: 0 !important; }
+  .card { box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
 }
 
 /* ---------------- Audit Trail ---------------- */
@@ -1349,3 +1356,17 @@ a { color: var(--primary); text-decoration: none; }
 .audit-day-body { display: block; }
 
 .audit-changes + .audit-changes { margin-top: 14px; }
+
+/* --- Reports & Dashboards --- */
+.report-card-item:hover {
+  border-color: #cbd5e1 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04) !important;
+}
+
+.report-download-btn:hover:not(:disabled) {
+  background: #f8fafc !important;
+  border-color: #94a3b8 !important;
+  color: #0b5fff !important;
+}
+

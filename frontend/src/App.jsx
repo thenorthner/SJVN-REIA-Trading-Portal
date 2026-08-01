@@ -2,7 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
-import { ROLE_GROUPS, isSellerRole, isBuyerRole } from './roles.js';
+import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from './roles.js';
 import { useAuth } from './context/AuthContext.jsx';
 
 import Login from './pages/Login.jsx';
@@ -26,8 +26,10 @@ import TradingDashboard from './pages/trading/TradingDashboard.jsx';
 import TradingClients from './pages/trading/TradingClients.jsx';
 import TradingClientProfile from './pages/trading/TradingClientProfile.jsx';
 import Bids from './pages/trading/Bids.jsx';
+import PreTradeBoard from './pages/trading/PreTradeBoard.jsx';
 import Bilateral from './pages/trading/Bilateral.jsx';
 import BillingSettlement from './pages/trading/BillingSettlement.jsx';
+import GeneratorBilling from './pages/trading/GeneratorBilling.jsx';
 import MarketAnalytics from './pages/trading/MarketAnalytics.jsx';
 import RECManagement from './pages/trading/RECManagement.jsx';
 import NOARWallet from './pages/trading/NOARWallet.jsx';
@@ -58,13 +60,18 @@ import NotificationBoard from './pages/NotificationBoard.jsx';
 // Internal SJVN REIA desk only — counterparties use their own portals below,
 // which scope every query to their own entity.
 const REIA_ROLES = [...ROLE_GROUPS.REIA_ALL];
-const TRADING_ROLES = [...ROLE_GROUPS.TRADING_ALL, 'TRADING_CLIENT'];
+const TRADING_INTERNAL_ROLES = [...ROLE_GROUPS.TRADING_ALL];
+const TRADING_CLIENT_ROLES = [...ROLE_GROUPS.TRADING_CLIENT_ALL];
+const TRADING_COMBINED_ROLES = [...new Set([...TRADING_INTERNAL_ROLES, ...TRADING_CLIENT_ROLES])];
+// CERC generator billing sits in the Power Trading nav but is raised by REIA,
+// so it needs both — a trading-only guard locked out its own authors.
+const GENERATOR_BILLING_ROLES = [...new Set([...TRADING_INTERNAL_ROLES, ...ROLE_GROUPS.REIA_ALL])];
 const SELLER_ROLES = [...ROLE_GROUPS.SELLER_ALL, 'SJVN_ADMIN'];
 const BUYER_ROLES = [...ROLE_GROUPS.BUYER_ALL, 'SJVN_ADMIN'];
 const AUDIT_ROLES = [...ROLE_GROUPS.AUDITOR];
 const MASTERS_ROLES = [...ROLE_GROUPS.MASTERS_READ];
 const BOARD_ROLES = [...new Set([
-  ...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.TRADING_ALL,
+  ...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.TRADING_ALL, ...ROLE_GROUPS.TRADING_CLIENT_ALL,
   ...ROLE_GROUPS.SELLER_ALL, ...ROLE_GROUPS.BUYER_ALL,
 ])];
 
@@ -80,7 +87,8 @@ function HomeRoute() {
 
   if (isSellerRole(role)) return <Navigate to="/seller" replace />;
   if (isBuyerRole(role)) return <Navigate to="/buyer" replace />;
-  if (role === 'TRADING_CLIENT' || role === 'TRADING_USER') return <Navigate to="/trading" replace />;
+  if (isTradingClientRole(role)) return <Navigate to="/trading/my-profile" replace />;
+  if (role === 'TRADING_USER') return <Navigate to="/trading" replace />;
   if (role === 'REIA_USER') return <Navigate to="/reia" replace />;
   if (role === 'COMPLIANCE_AUDITOR') return <Navigate to="/audit-logs" replace />;
 
@@ -142,16 +150,29 @@ export default function App() {
         <Route path="buyer/reconciliation" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerReconciliation /></ProtectedRoute>} />
         <Route path="buyer/payment-security" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerPaymentSecurity /></ProtectedRoute>} />
 
-        <Route path="trading" element={<ProtectedRoute roles={TRADING_ROLES}><TradingDashboard /></ProtectedRoute>} />
-        <Route path="trading/clients" element={<ProtectedRoute roles={TRADING_ROLES}><TradingClients /></ProtectedRoute>} />
-        <Route path="trading/clients/:id" element={<ProtectedRoute roles={TRADING_ROLES}><TradingClientProfile /></ProtectedRoute>} />
-        <Route path="trading/bids" element={<ProtectedRoute roles={TRADING_ROLES}><Bids /></ProtectedRoute>} />
-        <Route path="trading/bilateral" element={<ProtectedRoute roles={TRADING_ROLES}><Bilateral /></ProtectedRoute>} />
-        <Route path="trading/billing-settlement" element={<ProtectedRoute roles={TRADING_ROLES}><BillingSettlement /></ProtectedRoute>} />
-        <Route path="trading/market-analytics" element={<ProtectedRoute roles={TRADING_ROLES}><MarketAnalytics /></ProtectedRoute>} />
-        <Route path="trading/rec" element={<ProtectedRoute roles={TRADING_ROLES}><RECManagement /></ProtectedRoute>} />
-        <Route path="trading/noar" element={<ProtectedRoute roles={TRADING_ROLES}><NOARWallet /></ProtectedRoute>} />
-        <Route path="trading/form-iv" element={<ProtectedRoute roles={TRADING_ROLES}><CERCFormIV /></ProtectedRoute>} />
+        <Route path="trading" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TradingDashboard /></ProtectedRoute>} />
+        <Route path="trading/clients" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TradingClients /></ProtectedRoute>} />
+        <Route path="trading/clients/:id" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TradingClientProfile /></ProtectedRoute>} />
+        <Route path="trading/pre-trade" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><PreTradeBoard /></ProtectedRoute>} />
+        <Route path="trading/dam" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><Bids product="DAM" /></ProtectedRoute>} />
+        <Route path="trading/gdam" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><Bids product="GDAM" /></ProtectedRoute>} />
+        <Route path="trading/rtm" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><Bids product="RTM" /></ProtectedRoute>} />
+        
+        {/* Trading Client External specific route */}
+        <Route path="trading/my-profile" element={<ProtectedRoute roles={TRADING_CLIENT_ROLES}><TradingClientProfile /></ProtectedRoute>} />
+
+        {/* Shared routes between Internal and External */}
+        <Route path="trading/bilateral" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><Bilateral /></ProtectedRoute>} />
+        <Route path="trading/billing-settlement" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><BillingSettlement /></ProtectedRoute>} />
+        {/* Generator billing is written by REIA and read by trading — its guard
+            spans both, matching the API's own role set for /api/generator-billing. */}
+        <Route path="trading/generator-billing" element={<ProtectedRoute roles={GENERATOR_BILLING_ROLES}><GeneratorBilling /></ProtectedRoute>} />
+        <Route path="trading/market-analytics" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><MarketAnalytics /></ProtectedRoute>} />
+        
+        {/* Internal only */}
+        <Route path="trading/rec" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RECManagement /></ProtectedRoute>} />
+        <Route path="trading/noar" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARWallet /></ProtectedRoute>} />
+        <Route path="trading/form-iv" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CERCFormIV /></ProtectedRoute>} />
 
         <Route path="notification-board" element={<ProtectedRoute roles={BOARD_ROLES}><NotificationBoard /></ProtectedRoute>} />
         <Route path="masters" element={<ProtectedRoute roles={MASTERS_ROLES}><MastersHub /></ProtectedRoute>} />

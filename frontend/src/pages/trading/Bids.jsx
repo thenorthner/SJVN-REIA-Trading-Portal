@@ -89,13 +89,16 @@ function parseTabular(text) {
   });
 }
 
-export default function Bids() {
+export default function Bids({ product = 'DAM' }) {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [activeTab, setActiveTab] = useState('DAM');
+  const activeTab = product;
+  const [globalClient, setGlobalClient] = useState('');
+  const [deliveryDateFilter, setDeliveryDateFilter] = useState('');
+  const [appliedDeliveryDate, setAppliedDeliveryDate] = useState('');
   const [bidView, setBidView] = useState('manage');
   const [form, setForm] = useState(EMPTY_FORM);
   const [blocks, setBlocks] = useState([{ ...EMPTY_BLOCK }]);
@@ -113,6 +116,7 @@ export default function Bids() {
   // OCF carry-forward + exchange result
   const [chain, setChain] = useState(null);
   const [resultForm, setResultForm] = useState(null);
+  const [syncBusy, setSyncBusy] = useState(false);
   const [ocfForm, setOcfForm] = useState(null);
 
   function load() {
@@ -222,6 +226,21 @@ export default function Bids() {
     }
   }
 
+  async function handleSyncResult(e) {
+    e.preventDefault();
+    setSyncBusy(true);
+    try {
+      const updated = await api.bids.syncResult(selectedBid.id);
+      setSelectedBid(updated);
+      setResultForm(null);
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to sync IEX result');
+    } finally {
+      setSyncBusy(false);
+    }
+  }
+
   async function handleCarryForward(e) {
     e.preventDefault();
     try {
@@ -303,7 +322,9 @@ export default function Bids() {
   ];
 
   const tab = PRODUCT_TABS.find((t) => t.key === activeTab) || PRODUCT_TABS[0];
-  const tabBids = rows.filter((r) => tab.members.includes(r.product));
+  let tabBids = rows.filter((r) => tab.members.includes(r.product));
+  if (globalClient) tabBids = tabBids.filter(r => r.client_id === globalClient);
+  if (appliedDeliveryDate) tabBids = tabBids.filter(r => r.delivery_date === appliedDeliveryDate);
   const viewBids = tabBids.filter((b) => (bidView === 'history' ? isHistoryBid(b) : !isHistoryBid(b)));
 
   // This product's position, from the blocks the list endpoint already returns.
@@ -319,35 +340,44 @@ export default function Bids() {
   return (
     <div style={{ padding: 20 }}>
       <PageHeader
-        title="Exchange Bid Management"
+        title={`${tab.label} Management`}
         onAdd={openCreate}
         addLabel={`New ${tab.short} Bid`}
         actions={
-          <button className="btn btn-outline" onClick={openBulk}>
-            Bulk Upload ({tab.short})
-          </button>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <select className="input" value={globalClient} onChange={e => setGlobalClient(e.target.value)} style={{ padding: '4px 10px' }}>
+              <option value="">All Clients (Portfolio)</option>
+              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <button className="btn btn-outline" onClick={openBulk}>
+              Bulk Upload ({tab.short})
+            </button>
+          </div>
         }
       />
 
-      {/* Product tab strip — each is its own management workspace, not a sidebar item. */}
-      <div style={{ marginBottom: 16, borderBottom: '1px solid #ddd', display: 'flex', gap: 24 }}>
-        {PRODUCT_TABS.map((t) => {
-          const count = rows.filter((r) => t.members.includes(r.product)).length;
-          const on = activeTab === t.key;
-          return (
-            <button
-              key={t.key}
-              onClick={() => { setActiveTab(t.key); setBidView('manage'); }}
-              style={{
-                padding: '10px 0', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16,
-                borderBottom: on ? '2px solid #0052cc' : '2px solid transparent',
-                color: on ? '#0052cc' : '#555', fontWeight: on ? 'bold' : 'normal',
-              }}
-            >
-              {t.label}{count > 0 && <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 'normal' }}> ({count})</span>}
-            </button>
-          );
-        })}
+      {/* Alert / Countdown Banner */}
+      <div style={{ background: '#fff3cd', border: '1px solid #ffe69c', padding: '10px 15px', borderRadius: 6, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ color: '#664d03', fontWeight: 600 }}>
+          <span style={{ marginRight: 8 }}>⏳</span>
+          Closing in 2 Hrs 15 Mins for {tab.short} bid (Gate Closure: 12:00 PM)
+        </div>
+      </div>
+
+      {/* Delivery Date Picker & Filter */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 20, background: 'var(--surface)', padding: 15, border: '1px solid var(--border)', borderRadius: 8 }}>
+        <div>
+          <label style={{ display: 'block', fontSize: 12, marginBottom: 5, color: 'var(--text-muted)' }}>Delivery Date</label>
+          <input type="date" className="input" value={deliveryDateFilter} onChange={e => setDeliveryDateFilter(e.target.value)} />
+        </div>
+        <button className="btn btn-primary" disabled={!deliveryDateFilter} onClick={() => setAppliedDeliveryDate(deliveryDateFilter)}>
+          Display
+        </button>
+        {appliedDeliveryDate && (
+          <button className="btn btn-outline" onClick={() => { setDeliveryDateFilter(''); setAppliedDeliveryDate(''); }}>
+            Clear Filter
+          </button>
+        )}
       </div>
 
       <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>{tab.hint}</div>
@@ -622,14 +652,23 @@ export default function Bids() {
           {selectedBid.status === 'SUBMITTED' && (
             <div style={{ marginTop: 20 }}>
               {!resultForm ? (
-                <button
-                  className="btn btn-outline"
-                  onClick={() => setResultForm(Object.fromEntries(
-                    (selectedBid.blocks || []).map((b) => [b.time_block, { cleared_quantum_mw: '', cleared_price: '' }])
-                  ))}
-                >
-                  Record Exchange Result
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    className="btn btn-outline"
+                    onClick={() => setResultForm(Object.fromEntries(
+                      (selectedBid.blocks || []).map((b) => [b.time_block, { cleared_quantum_mw: '', cleared_price: '' }])
+                    ))}
+                  >
+                    Record Exchange Result
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={handleSyncResult}
+                    disabled={syncBusy}
+                  >
+                    {syncBusy ? 'Syncing...' : 'Sync IEX Result'}
+                  </button>
+                </div>
               ) : (
                 <form onSubmit={handleRecordResult} style={{ padding: 12, border: '1px solid #ddd' }}>
                   <h4 style={{ marginBottom: 10 }}>Exchange Clearing Result</h4>
