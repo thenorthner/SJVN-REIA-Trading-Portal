@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit } from '../util.js';
+import { getParam } from '../mastersService.js';
 import {
   withPosition, getTransactions, refreshLot, issuableEnergy, certificatesFor,
   multiplierFor, multiplierTable, issuanceFeePerRec, tradingSessions,
@@ -100,6 +101,10 @@ router.get('/reference', requireRole(...READ), (req, res) => {
     multipliers: multiplierTable(),
     issuance_fee_per_rec: issuanceFeePerRec(),
     next_sessions: tradingSessions(today(), 6),
+    // Regulatory price bands per certificate. The bidding screen hard-coded a
+    // single 0-2500 range for RECs and applied nothing at all to ESCerts, whose
+    // bands are set separately by BEE.
+    price_bands: getParam('certificate_price_bands', { REC: {}, ESCERT: {} }),
   });
 });
 

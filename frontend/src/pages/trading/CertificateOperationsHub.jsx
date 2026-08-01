@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { api } from '../../api/client.js';
 import { PortfolioSelect } from '../../context/PortfolioContext.jsx';
 import { SampleDataNotice, PageHeader, Card, Table, fmtNumber, Badge, Modal, Field } from '../../components/ui.jsx';
 import TaxInvoiceLedgerTable from '../../components/TaxInvoiceLedgerTable.jsx';
@@ -98,28 +99,54 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
     price: ''
   });
   const [formError, setFormError] = useState('');
-  const [priceWarning, setPriceWarning] = useState('');
+  const [priceError, setPriceError] = useState('');
+  const [priceNote, setPriceNote] = useState('');
+  const [priceBands, setPriceBands] = useState(null);
 
-  // Real-time Price Band Guardrails Effect
+  // Floor and forbearance prices are set by CERC (RECs) and BEE (ESCerts) and
+  // are revised by order, so they come from master data rather than a literal.
+  // The screen previously tested one hard-coded 0-2,500 band for RECs and
+  // applied nothing at all to ESCerts, whose bands are set separately.
   useEffect(() => {
-    if (createForm.price) {
-      const p = Number(createForm.price);
-      if (activeTab === 'REC') {
-        // Mock CERC Price Band limits for REC
-        if (p < 0 || p > 2500) {
-          setPriceWarning('Warning: Entered price falls outside typical CERC regulatory price bands (₹ 0 - ₹ 2,500).');
-        } else {
-          setPriceWarning('');
-        }
-      } else {
-        setPriceWarning('');
-      }
-    } else {
-      setPriceWarning('');
-    }
-  }, [createForm.price, activeTab]);
+    api.rec.reference()
+      .then((r) => setPriceBands(r.price_bands || null))
+      .catch(() => setPriceBands(null));
+  }, []);
 
-  const isFormValid = Boolean(createForm.exchange && createForm.portfolioId && createForm.type && createForm.qty && createForm.price && !priceWarning);
+  useEffect(() => {
+    setPriceError('');
+    setPriceNote('');
+    if (!createForm.price) return;
+
+    const price = Number(createForm.price);
+    if (!Number.isFinite(price)) return;
+
+    const band = priceBands?.[activeTab];
+    if (!band) {
+      setPriceNote(`No ${activeTab} price band is configured, so the bid is not being checked against a regulatory floor or ceiling.`);
+      return;
+    }
+
+    const floor = Number(band.floor);
+    const ceiling = band.forbearance == null ? null : Number(band.forbearance);
+
+    if (Number.isFinite(floor) && price < floor) {
+      setPriceError(`₹${price} is below the ${activeTab} floor price of ₹${floor} per certificate.`);
+      return;
+    }
+    if (ceiling != null && price > ceiling) {
+      setPriceError(`₹${price} exceeds the ${activeTab} forbearance (ceiling) price of ₹${ceiling} per certificate.`);
+      return;
+    }
+    if (ceiling == null) {
+      setPriceNote(`No forbearance (ceiling) price is recorded for ${activeTab}, so only the floor of ₹${Number.isFinite(floor) ? floor : 0} was checked.`);
+    }
+  }, [createForm.price, activeTab, priceBands]);
+
+  // A price outside the band blocks the bid. It used to be worded as a
+  // "Warning" while also disabling submit, which told the trader the opposite
+  // of what the control did.
+  const isFormValid = Boolean(createForm.exchange && createForm.portfolioId && createForm.type && createForm.qty && createForm.price && !priceError);
 
   const handleCreateSubmit = (e) => {
     e.preventDefault();
@@ -458,8 +485,11 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
                 </Field>
                 <Field label={`Per Certificate Price (₹)`} style={{ flex: 1 }}>
                   <input type="number" className="input" value={createForm.price} onChange={e => setCreateForm({...createForm, price: e.target.value})} placeholder="e.g. 1500" />
-                  {priceWarning && (
-                    <div style={{ marginTop: 5, fontSize: 11, color: '#d35400', fontWeight: 'bold' }}>⚠️ {priceWarning}</div>
+                  {priceError && (
+                    <div style={{ marginTop: 5, fontSize: 11, color: '#c22b3a', fontWeight: 'bold' }}>⚠️ {priceError}</div>
+                  )}
+                  {!priceError && priceNote && (
+                    <div style={{ marginTop: 5, fontSize: 11, color: '#667085' }}>{priceNote}</div>
                   )}
                 </Field>
               </div>

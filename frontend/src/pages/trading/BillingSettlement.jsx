@@ -1,8 +1,30 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { PortfolioSelect, usePortfolios } from '../../context/PortfolioContext.jsx';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
+
+const iso = (d) => d.toISOString().slice(0, 10);
+
+/** Whole calendar month, `offset` months from the current one. */
+function monthRange(offset) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
+  return { fromDate: iso(start), toDate: iso(end) };
+}
+
+/** Indian financial year: 1 April to 31 March. */
+function financialYearRange() {
+  const now = new Date();
+  const startYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  return { fromDate: `${startYear}-04-01`, toDate: `${startYear + 1}-03-31` };
+}
+function financialYearLabel() {
+  const now = new Date();
+  const startYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  return `${String(startYear).slice(2)}-${String(startYear + 1).slice(2)}`;
+}
 
 export default function BillingSettlement() {
   const [tab, setTab] = useState('INVOICES');
@@ -68,9 +90,20 @@ export default function BillingSettlement() {
     }
   }
 
+  // trading_invoices has no trade_date column; created_at is the invoice date.
+  const invoiceDate = (r) => (r.created_at || '').slice(0, 10);
+
+  const visibleInvoices = useMemo(() => invoices.filter((r) => {
+    if (invFilter.portfolio && r.client_id !== invFilter.portfolio) return false;
+    const d = invoiceDate(r);
+    if (invFilter.fromDate && (!d || d < invFilter.fromDate)) return false;
+    if (invFilter.toDate && (!d || d > invFilter.toDate)) return false;
+    return true;
+  }), [invoices, invFilter]);
+
   const invoiceColumns = [
     { key: 'invoice_no', label: 'Invoice No' },
-    { key: 'trade_date', label: 'Invoice Date' },
+    { key: 'created_at', label: 'Invoice Date', render: r => invoiceDate(r) || '—' },
     // No placeholder period here — a fixed date range printed under every
     // invoice that lacks one reads as a real delivery period.
     { key: 'billing_period', label: 'Delivery Period', render: r => r.billing_period || '—' },
@@ -99,7 +132,7 @@ export default function BillingSettlement() {
     { key: 'description', label: 'Description' },
     { key: 'debit', label: 'Debit (Dr)', render: r => r.debit ? `₹${fmtNumber(r.debit)}` : '-' },
     { key: 'credit', label: 'Credit (Cr)', render: r => r.credit ? `₹${fmtNumber(r.credit)}` : '-' },
-    { key: 'running_balance', label: 'Balance', render: r => <span style={{fontWeight:'bold', color: r.running_balance < 0 ? 'red' : 'green'}}>₹${fmtNumber(r.running_balance)}</span> }
+    { key: 'running_balance', label: 'Balance', render: r => <span style={{fontWeight:'bold', color: r.running_balance < 0 ? 'var(--red)' : 'var(--green)'}}>₹{fmtNumber(r.running_balance)}</span> }
   ];
 
   const soaColumns = [
@@ -155,9 +188,9 @@ export default function BillingSettlement() {
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>From Delivery Date:</label>
                 <input type="date" className="input" value={invFilter.fromDate} onChange={e => setInvFilter({...invFilter, fromDate: e.target.value})} />
                 <div style={{ marginTop: 4, display: 'flex', gap: 5 }}>
-                  <button className="btn btn-sm" style={{fontSize: 10, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, fromDate: '2026-08-01'})}>This Month</button>
-                  <button className="btn btn-sm" style={{fontSize: 10, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, fromDate: '2026-07-01'})}>Last Month</button>
-                  <button className="btn btn-sm" style={{fontSize: 10, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, fromDate: '2026-04-01'})}>FY 26-27</button>
+                  <button type="button" className="btn btn-sm" style={{fontSize: 10, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, ...monthRange(0)})}>This Month</button>
+                  <button type="button" className="btn btn-sm" style={{fontSize: 10, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, ...monthRange(-1)})}>Last Month</button>
+                  <button type="button" className="btn btn-sm" style={{fontSize: 10, padding: '2px 4px'}} onClick={() => setInvFilter({...invFilter, ...financialYearRange()})}>FY {financialYearLabel()}</button>
                 </div>
               </div>
               <div>
@@ -169,7 +202,17 @@ export default function BillingSettlement() {
                 <button className="btn" style={{ background: '#28a745', color: '#fff' }}>[ EXCEL v ] Export File</button>
               </div>
             </div>
-            <Table columns={invoiceColumns} data={invoices} emptyMessage="Nothing found to display." />
+            {visibleInvoices.length !== invoices.length && (
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                Showing {visibleInvoices.length} of {invoices.length} invoice(s) —{' '}
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => setInvFilter({ portfolio: '', fromDate: '', toDate: '' })}
+                >clear filters</button>
+              </div>
+            )}
+            <Table columns={invoiceColumns} data={visibleInvoices} emptyMessage="Nothing found to display." />
           </div>
         )}
         {tab === 'LEDGER' && (

@@ -18,10 +18,13 @@ router.use(requireRole('SJVN_ADMIN', 'TRADING_USER', 'TRADING_CLIENT', 'FINANCE_
 router.get('/invoices', (req, res) => {
   const { status, client_id, invoice_kind } = req.query;
   let sql = `
-    SELECT i.*, c.name as client_name 
-    FROM trading_invoices i 
+    SELECT i.*, COALESCE(c.name, tc.name) AS client_name
+    FROM trading_invoices i
     JOIN trading_clients tc ON i.client_id = tc.id
-    JOIN entities c ON tc.entity_id = c.id
+    -- LEFT JOIN: a trading client need not be linked to an entity, and an inner
+    -- join silently dropped every invoice belonging to one that is not, so the
+    -- list looked empty rather than incomplete.
+    LEFT JOIN entities c ON tc.entity_id = c.id
     WHERE 1=1
   `;
   const params = [];
