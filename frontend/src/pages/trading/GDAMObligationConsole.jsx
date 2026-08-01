@@ -83,7 +83,7 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
         <button 
           className="icon-btn" 
           onClick={() => handleViewPdf(r)}
-          style={{ color: '#0284c7', background: 'none', border: 'none', cursor: 'pointer' }}
+          style={{ color: 'var(--sky)', background: 'none', border: 'none', cursor: 'pointer' }}
           title="View Clearing Statement PDF"
         >
           📄 View
@@ -98,7 +98,7 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
       {/* Filter Control Toolbar */}
       <SampleDataNotice detail="Obligation and settlement figures on this screen are generated, not computed from cleared bids." />
 
-      <Card style={{ marginBottom: 20, background: '#f8fafc' }}>
+      <Card style={{ marginBottom: 20, background: 'var(--slate-50)' }}>
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="gdamobligationconsole-exchange">Exchange</label>
@@ -153,7 +153,7 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: 20, background: '#f8f9fa', borderBottom: '1px solid #dee2e6' }}>
             <div>
               <h3 style={{ margin: 0 }}>Document Viewer - {activePdf.pdfUrl}</h3>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 5 }}>Portfolio: {activePdf.portfolioId} | Delivery: {activePdf.deliveryDate}</div>
+              <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 5 }}>Portfolio: {activePdf.portfolioId} | Delivery: {activePdf.deliveryDate}</div>
             </div>
             <button onClick={() => setPdfModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
           </div>

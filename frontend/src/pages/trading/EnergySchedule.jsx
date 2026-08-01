@@ -118,7 +118,7 @@ export default function EnergySchedule() {
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="btn btn-outline">Format-D (RLDC)</button>
             <button className="btn btn-primary" style={{ background: '#28a745' }}>[ EXCEL v ] Export</button>
-            <button className="btn btn-primary" style={{ background: '#0284c7' }}>⚡ Sync to RLDC / SLDC Portal</button>
+            <button className="btn btn-primary" style={{ background: 'var(--sky)' }}>⚡ Sync to RLDC / SLDC Portal</button>
           </div>
         }
       />

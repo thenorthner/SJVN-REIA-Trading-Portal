@@ -7,7 +7,7 @@ import { PageHeader, Card, StatCard, Modal, Field } from '../components/ui.jsx';
 import { fmtDateTime } from '../datetime.js';
 
 const SEV = {
-  CRITICAL: { label: 'Critical', cls: 'sev-critical', dot: '#dc2626' },
+  CRITICAL: { label: 'Critical', cls: 'sev-critical', dot: 'var(--red-strong)' },
   WARNING: { label: 'Attention', cls: 'sev-warning', dot: '#d97706' },
   INFO: { label: 'For information', cls: 'sev-info', dot: '#2563eb' },
 };

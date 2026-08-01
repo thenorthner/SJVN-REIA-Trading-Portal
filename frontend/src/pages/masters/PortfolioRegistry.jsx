@@ -61,26 +61,26 @@ export default function PortfolioRegistry() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
         {MOCK_ASSETS.map((asset, i) => (
           <Card key={i} style={{ padding: 0, overflow: 'hidden' }}>
-            <div style={{ background: '#f8fafc', padding: '16px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ background: 'var(--slate-50)', padding: '16px 24px', borderBottom: '1px solid var(--slate-200)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: 24 }}>🏢</span>
               <div>
-                <h3 style={{ margin: 0, color: '#0f172a', fontSize: 18 }}>{asset.company}</h3>
-                <span style={{ color: '#64748b', fontSize: 13 }}>{asset.plantName}</span>
+                <h3 style={{ margin: 0, color: 'var(--slate-900)', fontSize: 18 }}>{asset.company}</h3>
+                <span style={{ color: 'var(--slate-500)', fontSize: 13 }}>{asset.plantName}</span>
               </div>
             </div>
             
             <div style={{ padding: '0' }}>
               {asset.portfolios.map((p, j) => (
-                <div key={p.id} style={{ padding: '20px 24px', borderBottom: j < asset.portfolios.length - 1 ? '1px solid #e2e8f0' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <div key={p.id} style={{ padding: '20px 24px', borderBottom: j < asset.portfolios.length - 1 ? '1px solid var(--slate-200)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--slate-50)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                   
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
                     <div style={{ fontSize: 24, marginTop: 2 }}>{p.type === 'Regional' ? '🌐' : '⚡'}</div>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                        <span style={{ fontSize: 15, fontWeight: 700, color: '#0b4a8f' }}>{p.id}</span>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)' }}>{p.id}</span>
                         <Badge type={p.status === 'Active' ? 'success' : 'default'}>{p.status}</Badge>
                       </div>
-                      <div style={{ fontSize: 13, color: '#475569', fontWeight: 500 }}>
+                      <div style={{ fontSize: 13, color: 'var(--slate-600)', fontWeight: 500 }}>
                         {p.type} Portfolio <span style={{ opacity: 0.5 }}>•</span> {p.description}
                       </div>
                     </div>
@@ -104,7 +104,7 @@ export default function PortfolioRegistry() {
       {viewProfile && (
         <Modal open={true} onClose={() => setViewProfile(null)} title="Portfolio Profile" width={640}>
           <div style={{ padding: '0 20px 20px 20px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, border: '1px solid #e2e8f0' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, border: '1px solid var(--slate-200)' }}>
               <tbody>
                 {[
                   { k: 'Portfolio State:', v: viewProfile.profile.state },
@@ -113,7 +113,7 @@ export default function PortfolioRegistry() {
                   { k: 'Portfolio ID:', v: viewProfile.id },
                   { k: 'Portfolio Name:', v: viewProfile.plantName },
                   { k: 'Joining Date:', v: viewProfile.profile.joiningDate },
-                  { k: 'Status:', v: <span style={{ color: '#16a34a', fontWeight: 600 }}>{viewProfile.status}</span> },
+                  { k: 'Status:', v: <span style={{ color: 'var(--green-strong)', fontWeight: 600 }}>{viewProfile.status}</span> },
                   { k: 'Tick Value:', v: viewProfile.profile.tickValue },
                   { k: 'Bid:', v: viewProfile.profile.bid },
                   { k: 'Bid On:', v: viewProfile.profile.bidOn },
@@ -122,9 +122,9 @@ export default function PortfolioRegistry() {
                   { k: 'Zip Code:', v: viewProfile.profile.zipCode },
                   { k: 'Mobile No.1:', v: viewProfile.profile.mobile },
                 ].map((row, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #e2e8f0', background: i % 2 === 0 ? '#f8fafc' : '#ffffff' }}>
-                    <td style={{ padding: '8px 12px', fontWeight: 600, color: '#475569', width: '35%', borderRight: '1px solid #e2e8f0' }}>{row.k}</td>
-                    <td style={{ padding: '8px 12px', color: '#1e293b' }}>{row.v}</td>
+                  <tr key={i} style={{ borderBottom: '1px solid var(--slate-200)', background: i % 2 === 0 ? 'var(--slate-50)' : '#ffffff' }}>
+                    <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--slate-600)', width: '35%', borderRight: '1px solid var(--slate-200)' }}>{row.k}</td>
+                    <td style={{ padding: '8px 12px', color: 'var(--slate-800)' }}>{row.v}</td>
                   </tr>
                 ))}
               </tbody>

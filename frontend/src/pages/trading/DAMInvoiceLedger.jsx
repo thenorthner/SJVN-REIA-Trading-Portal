@@ -121,7 +121,7 @@ export default function DAMInvoiceLedger() {
       key: 'view', 
       label: 'View', 
       render: () => (
-        <button className="icon-btn" style={{ color: '#0284c7', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }} title="View Details" aria-label="View Details">📄</button>
+        <button className="icon-btn" style={{ color: 'var(--sky)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }} title="View Details" aria-label="View Details">📄</button>
       )
     }
   ];
@@ -140,7 +140,7 @@ export default function DAMInvoiceLedger() {
       <SampleDataNotice detail="This ledger renders generated invoice rows. Amounts, taxes and SAP references are not SJVN records." />
 
       {/* Filter Control Toolbar */}
-      <Card style={{ marginBottom: 20, background: '#f8fafc' }}>
+      <Card style={{ marginBottom: 20, background: 'var(--slate-50)' }}>
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="daminvoiceledger-exchange">Exchange</label>
@@ -178,7 +178,7 @@ export default function DAMInvoiceLedger() {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 15, alignItems: 'center' }}>
           <div>
             <h3 style={{ margin: 0 }}>DAM Invoice Record List (Cross-Market Ledger)</h3>
-            <p style={{ margin: '5px 0 0', fontSize: 12, color: '#64748b' }}>
+            <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--slate-500)' }}>
               Central clearinghouse view. Deductions from other markets (RTM, REC, TAM, GDAM) are settled against DAM receivables here.
             </p>
           </div>

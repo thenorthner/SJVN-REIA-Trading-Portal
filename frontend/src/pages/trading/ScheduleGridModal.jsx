@@ -67,9 +67,9 @@ export function ScheduleGridModal({ tx, onClose, onSubmit }) {
           </div>
         </div>
 
-        <div style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 4 }}>
+        <div style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid var(--slate-200)', borderRadius: 4 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead style={{ position: 'sticky', top: 0, background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+            <thead style={{ position: 'sticky', top: 0, background: 'var(--slate-50)', borderBottom: '2px solid var(--slate-200)' }}>
               <tr>
                 <th scope="col" style={{ padding: '8px 12px' }}>Block #</th>
                 <th scope="col" style={{ padding: '8px 12px' }}>Time Range</th>
@@ -78,8 +78,8 @@ export function ScheduleGridModal({ tx, onClose, onSubmit }) {
             </thead>
             <tbody>
               {blocks.map((b, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                  <td style={{ padding: '4px 12px', color: '#64748b' }}>{i + 1}</td>
+                <tr key={i} style={{ borderBottom: '1px solid var(--slate-200)' }}>
+                  <td style={{ padding: '4px 12px', color: 'var(--slate-500)' }}>{i + 1}</td>
                   <td style={{ padding: '4px 12px', fontWeight: '500' }}>{b.time_block}</td>
                   <td style={{ padding: '4px 12px' }}>
                     <input 
@@ -100,13 +100,13 @@ export function ScheduleGridModal({ tx, onClose, onSubmit }) {
         </div>
 
         {error && (
-          <div style={{ marginTop: 12, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, color: '#b91c1c', fontSize: 13 }}>
+          <div style={{ marginTop: 12, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, color: 'var(--red-deep)', fontSize: 13 }}>
             {error}
           </div>
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 20 }}>
-          <span style={{ fontSize: 12, color: '#64748b' }}>
+          <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>
             Contracted quantum: <strong>{contracted} MW</strong> — no block may exceed this.
           </span>
           <div style={{ display: 'flex', gap: 10 }}>

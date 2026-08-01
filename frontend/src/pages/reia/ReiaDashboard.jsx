@@ -4,7 +4,7 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import api from '../../api/client.js';
 import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Modal, Table } from '../../components/ui.jsx';
 
-const COLORS = ['#0b5fff', '#12875a', '#b3760a', '#c22b3a', '#1f5cd6', '#7a5bd6'];
+const COLORS = ['var(--primary)', 'var(--green)', '#b3760a', 'var(--red)', '#1f5cd6', '#7a5bd6'];
 
 export default function ReiaDashboard() {
   const navigate = useNavigate();
@@ -94,12 +94,12 @@ export default function ReiaDashboard() {
           <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthlyBilling}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e6ed" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="billing_period" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${(v / 1e7).toFixed(1)}Cr`} />
                 <Tooltip formatter={(v) => fmtCurrency(v)} />
                 <Legend />
-                <Line type="monotone" dataKey="total" name="Billed Amount" stroke="#0b5fff" strokeWidth={2.5} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="total" name="Billed Amount" stroke="var(--primary)" strokeWidth={2.5} dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -123,7 +123,7 @@ export default function ReiaDashboard() {
         <div className="chart-box">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={byStatus}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e6ed" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="status" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
               <Tooltip />
@@ -135,7 +135,7 @@ export default function ReiaDashboard() {
 
       {showCapacityModal && (
         <Modal open={true} onClose={() => setShowCapacityModal(false)} title="Contracted Capacity Breakdown">
-          <p style={{ marginBottom: 15, color: '#475569' }}>
+          <p style={{ marginBottom: 15, color: 'var(--slate-600)' }}>
             The total contracted capacity of <strong>{fmtNumber(kpis.contractedCapacity)} MW</strong> is aggregated from all active PPAs/PSAs currently managed by the REIA desk. Here is the breakdown by project type:
           </p>
           <Table 

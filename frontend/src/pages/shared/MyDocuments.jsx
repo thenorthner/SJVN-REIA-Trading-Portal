@@ -28,7 +28,7 @@ export default function MyDocuments() {
       <div>
         <PageHeader title="My Documents & KYC" subtitle="Upload your registration, licences and regulatory proofs" />
         <Card>
-          <p style={{ margin: 0, color: '#64748b' }}>
+          <p style={{ margin: 0, color: 'var(--slate-500)' }}>
             Your login isn't linked to a company record yet. Please ask the SJVN REIA team to link your
             account to your entity before uploading documents.
           </p>
@@ -51,7 +51,7 @@ export default function MyDocuments() {
           <span style={{ fontSize: 20 }}>📎</span>
           <div>
             <strong style={{ fontSize: 14 }}>How this works</strong>
-            <p style={{ margin: '4px 0 0', fontSize: 13.5, color: '#475569', lineHeight: 1.55 }}>
+            <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'var(--slate-600)', lineHeight: 1.55 }}>
               Use <strong>Upload Document</strong> below and pick the matching document type (e.g. Generation
               License, Company Registration). These are <strong>Verify</strong> documents — once uploaded they
               go to SJVN for verification, and the status appears against the matching item in your Regulatory
@@ -69,14 +69,14 @@ export default function MyDocuments() {
                 key={item.id}
                 style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
-                  padding: '8px 4px', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap',
+                  padding: '8px 4px', borderBottom: '1px solid var(--slate-100)', flexWrap: 'wrap',
                 }}
               >
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <strong style={{ fontSize: 13 }}>{item.label}</strong>
                   {item.is_mandatory
-                    ? <span style={{ fontSize: 11, color: '#b91c1c' }}>Required</span>
-                    : <span style={{ fontSize: 11, color: '#64748b' }}>Optional</span>}
+                    ? <span style={{ fontSize: 11, color: 'var(--red-deep)' }}>Required</span>
+                    : <span style={{ fontSize: 11, color: 'var(--slate-500)' }}>Optional</span>}
                 </div>
                 <Badge
                   status={item.status === 'VERIFIED' ? 'ACTIVE' : item.status === 'NOT_APPLICABLE' ? 'DRAFT' : 'PENDING'}
@@ -86,7 +86,7 @@ export default function MyDocuments() {
             ))}
           </div>
           {pending.length > 0 && (
-            <p style={{ margin: '12px 0 0', fontSize: 12.5, color: '#b45309' }}>
+            <p style={{ margin: '12px 0 0', fontSize: 12.5, color: 'var(--amber-strong)' }}>
               {pending.length} mandatory {pending.length === 1 ? 'clearance' : 'clearances'} still awaiting a verified proof.
             </p>
           )}

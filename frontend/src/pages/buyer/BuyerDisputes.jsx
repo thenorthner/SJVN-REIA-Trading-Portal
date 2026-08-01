@@ -133,7 +133,7 @@ export default function BuyerDisputes() {
                   <li key={c.value}>{c.label}: {fmtCurrency(breakdown[c.value] || 0)}</li>
                 ))}
               </ul>
-              <div style={{ marginTop: 6, color: 'var(--error, #b91c1c)' }}>
+              <div style={{ marginTop: 6, color: 'var(--error, var(--red-deep))' }}>
                 Disputed: {fmtCurrency(selectedInvoice.disputed_amount || 0)} | Payable now: {fmtCurrency(selectedInvoice.payable_now ?? (selectedInvoice.total_amount - (selectedInvoice.disputed_amount || 0)))}
               </div>
             </div>

@@ -44,7 +44,7 @@ export function InvoiceStatusCell({ row, showValidation = false }) {
         <span
           title={`Overdue ${row.days_overdue} day(s) · accruing LPS`}
           style={{
-            fontSize: 11, fontWeight: 600, color: '#b91c1c', background: '#fee2e2',
+            fontSize: 11, fontWeight: 600, color: 'var(--red-deep)', background: '#fee2e2',
             border: '1px solid #fecaca', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap',
           }}
         >
@@ -72,10 +72,10 @@ export function InvoiceBreakdown({ invoice, title = 'Invoice Breakdown' }) {
         <div className="section-title" style={{ marginBottom: 12 }}>{title} (CERC Format)</div>
         <table className="detail-table" style={{ width: '100%' }}>
           <thead>
-            <tr style={{ background: '#f8fafc' }}>
-              <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, color: '#64748b' }}>Code</th>
-              <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, color: '#64748b' }}>Description</th>
-              <th scope="col" style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12, color: '#64748b' }}>Value</th>
+            <tr style={{ background: 'var(--slate-50)' }}>
+              <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, color: 'var(--slate-500)' }}>Code</th>
+              <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12, color: 'var(--slate-500)' }}>Description</th>
+              <th scope="col" style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12, color: 'var(--slate-500)' }}>Value</th>
             </tr>
           </thead>
           <tbody>
@@ -286,7 +286,7 @@ export function ValidationCompareModal({
         {validationResult.lines?.length > 0 && (
           <table className="detail-table" style={{ width: '100%', marginTop: 16 }}>
             <thead>
-              <tr style={{ background: '#f8fafc' }}>
+              <tr style={{ background: 'var(--slate-50)' }}>
                 <th scope="col" style={{ padding: '8px 12px', textAlign: 'left', fontSize: 12 }}>Field</th>
                 <th scope="col" style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12 }}>{claimLabel}</th>
                 <th scope="col" style={{ padding: '8px 12px', textAlign: 'right', fontSize: 12 }}>System</th>
@@ -308,7 +308,7 @@ export function ValidationCompareModal({
                     {line.diff != null
                       ? (line.kind === 'qty' ? fmtNumber(line.diff) : fmtCurrency(line.diff))
                       : '—'}
-                    {line.diff_pct != null && <span style={{ color: '#94a3b8' }}> ({line.diff_pct}%)</span>}
+                    {line.diff_pct != null && <span style={{ color: 'var(--text-subtle)' }}> ({line.diff_pct}%)</span>}
                   </td>
                   <td style={{ padding: '6px 12px', textAlign: 'center' }}>
                     <Badge status={line.matched ? 'MATCHED' : 'MISMATCH'} label={line.matched ? 'OK' : 'DIFF'} />

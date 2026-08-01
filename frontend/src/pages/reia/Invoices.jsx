@@ -691,7 +691,7 @@ export default function Invoices() {
                   <span className="detail-label">Overdue / Accrued LPS</span>
                   <span className="detail-value" style={{ color: 'var(--error)', fontWeight: 600 }}>
                     {selected.days_overdue} day(s) · {fmtCurrency(selected.accrued_lps)}
-                    <span style={{ fontWeight: 400, color: '#64748b', fontSize: 12 }}> (accruing until paid)</span>
+                    <span style={{ fontWeight: 400, color: 'var(--slate-500)', fontSize: 12 }}> (accruing until paid)</span>
                   </span>
                 </div>
               )}

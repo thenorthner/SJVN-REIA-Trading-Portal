@@ -80,7 +80,7 @@ export default function GeneratorBilling() {
     { key: 'ecr', label: 'ECR (₹/kWh)', render: r => (
         <div>
           {Number(r.ecr).toFixed(4)}
-          <div style={{ fontSize: 10, color: '#64748b' }}>
+          <div style={{ fontSize: 10, color: 'var(--slate-500)' }}>
             {r.ecr_source === 'DERIVED_FROM_AFC' ? 'from AFC' : 'entered'}
           </div>
         </div>
@@ -115,7 +115,7 @@ export default function GeneratorBilling() {
         <Modal open={true} onClose={() => { setShowGenerate(false); setError(''); }} title="Generate Generator Bill" width={700}>
           <form onSubmit={handleGenerate} style={{ display: 'grid', gap: 15, gridTemplateColumns: '1fr 1fr' }}>
             {error && (
-              <div style={{ gridColumn: '1 / -1', padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, color: '#b91c1c', fontSize: 13 }}>
+              <div style={{ gridColumn: '1 / -1', padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, color: 'var(--red-deep)', fontSize: 13 }}>
                 {error}
               </div>
             )}
@@ -158,7 +158,7 @@ export default function GeneratorBilling() {
               {derivedEcr != null ? (
                 <div>
                   <input type="number" className="input" value={derivedEcr.toFixed(4)} readOnly disabled />
-                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                  <div style={{ fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
                     {(AFC_ENERGY_SHARE * 100).toFixed(0)}% of AFC ÷ design energy. Clear design energy to type a rate instead.
                   </div>
                 </div>

@@ -326,8 +326,8 @@ export default function MastersHub() {
             ['Doc Types', summary.document_types],
             ['Lookups', summary.lookups],
           ].map(([label, val]) => (
-            <div key={label} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 12px' }}>
-              <div style={{ fontSize: 11, color: '#64748b' }}>{label}</div>
+            <div key={label} style={{ background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8, padding: '10px 12px' }}>
+              <div style={{ fontSize: 11, color: 'var(--slate-500)' }}>{label}</div>
               <div style={{ fontSize: 18, fontWeight: 700 }}>{val}</div>
             </div>
           ))}
@@ -351,7 +351,7 @@ export default function MastersHub() {
 
       {tab === 'entities' && (
         <Card title="Entity Master">
-          <p style={{ fontSize: 13, color: '#64748b', marginTop: 0 }}>
+          <p style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 0 }}>
             Operational onboarding lives under Stakeholders. This master view lists all registered entities.
             {' '}<Link to="/reia/entities">Open Stakeholders →</Link>
           </p>
@@ -372,7 +372,7 @@ export default function MastersHub() {
 
       {tab === 'contracts' && (
         <Card title="Contract Master">
-          <p style={{ fontSize: 13, color: '#64748b', marginTop: 0 }}>
+          <p style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 0 }}>
             PPA/PSA lifecycle is managed under Contracts.
             {' '}<Link to="/reia/contracts">Open Contracts →</Link>
           </p>
@@ -398,7 +398,7 @@ export default function MastersHub() {
             <button className="btn btn-primary btn-sm" onClick={() => { setProjectForm(EMPTY_PROJECT); setShowProject(true); }}>+ Add Project</button>
           )}
         >
-          <p style={{ fontSize: 13, color: '#64748b', marginTop: 0 }}>
+          <p style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 0 }}>
             Projects are child entities (SPVs) under a parent group, with capacity and technology.
           </p>
           <Table
@@ -454,7 +454,7 @@ export default function MastersHub() {
             <button className="btn btn-primary btn-sm" onClick={() => { setEditBeta(null); setBetaForm(EMPTY_BETA); setShowBeta(true); }}>+ Enter Certified β</button>
           )}
         >
-          <p style={{ fontSize: 13, color: '#64748b', marginTop: 0 }}>
+          <p style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 0 }}>
             Store NRPC-certified Average Monthly Frequency Response Performance (β, 0–1).
             Hydro/PSP incentive = (3% × β × AFC)/12 when β &gt; 0.30. Provisional bills stay unblocked; use True-up when β arrives late.
           </p>
@@ -504,7 +504,7 @@ export default function MastersHub() {
             <button className="btn btn-primary btn-sm" onClick={() => { setNewParamForm(EMPTY_PARAM); setShowParam(true); }}>+ Add Parameter</button>
           )}
         >
-          <p style={{ fontSize: 13, color: '#64748b', marginTop: 0 }}>
+          <p style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 0 }}>
             These values drive energy validation and invoice generation. Changes apply immediately to new calculations.
           </p>
           <Table
@@ -715,7 +715,7 @@ export default function MastersHub() {
       <Modal open={!!editParam} onClose={() => setEditParam(null)} title={`Edit: ${editParam?.param_key || ''}`}>
         {editParam && (
           <form onSubmit={saveParam}>
-            <p style={{ fontSize: 12, color: '#64748b', marginTop: 0 }}>
+            <p style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 0 }}>
               <code>{editParam.param_key}</code> · {editParam.category} · {editParam.data_type}
             </p>
             <Field label={`Value (${editParam.unit || editParam.data_type})`}>

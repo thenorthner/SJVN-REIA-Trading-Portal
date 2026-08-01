@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo} from 'react';
 import { PortfolioSelect } from '../../context/PortfolioContext.jsx';
 import * as XLSX from 'xlsx';
 import { api } from '../../api/client.js';
@@ -90,6 +90,27 @@ function parseTabular(text) {
   });
 }
 
+/**
+ * Wall clock, isolated so its tick does not re-render the bidding screen.
+ *
+ * The interval used to live in the page component: every second the whole
+ * 1,500-line tree — column definitions, filtered rows, the roll-up — was
+ * rebuilt to move a colon. Harmless at a handful of bids, but this is the
+ * screen that grows to hundreds of bids x 96 blocks.
+ */
+function LiveClock({ format = 'time', prefix = '' }) {
+  const [now, setNow] = React.useState(new Date());
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  if (format === 'date') {
+    return <>{prefix}{now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')}</>;
+  }
+  if (format === 'time24') return <>{prefix}{now.toLocaleTimeString('en-GB', { hour12: false })}</>;
+  return <>{prefix}{now.toLocaleTimeString('en-US', { hour12: false })}</>;
+}
+
 export default function Bids({ product = 'DAM', externalView = null }) {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
@@ -118,12 +139,6 @@ export default function Bids({ product = 'DAM', externalView = null }) {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkFileNote, setBulkFileNote] = useState('');
   const [reuseId, setReuseId] = useState('');
-  const [currentTime, setCurrentTime] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   // OCF carry-forward + exchange result
   const [chain, setChain] = useState(null);
@@ -398,14 +413,14 @@ export default function Bids({ product = 'DAM', externalView = null }) {
     { key: 'type', label: 'Bid Type', render: r => r.type || 'Sell' },
     { key: 'revision_no', label: 'Rev No', render: r => r.revision_no || 1 },
     { key: 'internal_status', label: 'Internal Status', render: r => (
-      bidView === 'history' ? <span style={{ color: '#16a34a', fontWeight: '500', fontSize: 12 }}>🟢 File Prepared</span> : 
+      bidView === 'history' ? <span style={{ color: 'var(--green-strong)', fontWeight: '500', fontSize: 12 }}>🟢 File Prepared</span> : 
       <Badge type={r.approval_status === 'APPROVED' ? 'success' : r.approval_status === 'REJECTED' ? 'danger' : 'warning'}>{r.approval_status}</Badge>
     ) },
     { key: 'status', label: 'Exchange Status', render: r => {
       if (tab.short === 'RTM') {
-        if (r.status === 'SUBMITTED') return <span style={{ color: '#16a34a', fontWeight: 'bold', fontSize: 12 }}>🟢 Submitted to Exchange</span>;
+        if (r.status === 'SUBMITTED') return <span style={{ color: 'var(--green-strong)', fontWeight: 'bold', fontSize: 12 }}>🟢 Submitted to Exchange</span>;
         if (r.status === 'PENDING') return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 12 }}>🟡 Pending Gateway</span>;
-        if (r.status === 'REJECTED') return <span style={{ color: '#dc2626', fontWeight: 'bold', fontSize: 12, cursor: 'help' }} title={r.rejection_reason || 'Error Code 402: Bid quantity exceeds standing clearance limit'}>🔴 Rejected by Exchange</span>;
+        if (r.status === 'REJECTED') return <span style={{ color: 'var(--red-strong)', fontWeight: 'bold', fontSize: 12, cursor: 'help' }} title={r.rejection_reason || 'Error Code 402: Bid quantity exceeds standing clearance limit'}>🔴 Rejected by Exchange</span>;
         return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 12 }}>🟡 Pending Gateway</span>; // Default mock for new RTM bids
       }
       return <Badge type={r.status === 'CLEARED' ? 'success' : r.status === 'DRAFT' ? 'neutral' : 'primary'}>{r.status}</Badge>;
@@ -444,20 +459,35 @@ export default function Bids({ product = 'DAM', externalView = null }) {
   ];
 
   const tab = PRODUCT_TABS.find((t) => t.key === activeTab) || PRODUCT_TABS[0];
-  let tabBids = rows.filter((r) => tab.members.includes(r.product));
-  if (globalClient) tabBids = tabBids.filter(r => r.client_id === globalClient);
-  if (appliedDeliveryDate) tabBids = tabBids.filter(r => r.delivery_date === appliedDeliveryDate);
-  const viewBids = tabBids.filter((b) => (bidView === 'history' ? isHistoryBid(b) : !isHistoryBid(b)));
+
+  // Filtering and rolling up every bid's blocks is the expensive part of this
+  // render, and it only changes when the data or a filter does.
+  const tabBids = useMemo(() => {
+    let list = rows.filter((r) => tab.members.includes(r.product));
+    if (globalClient) list = list.filter((r) => r.client_id === globalClient);
+    if (appliedDeliveryDate) list = list.filter((r) => r.delivery_date === appliedDeliveryDate);
+    return list;
+  }, [rows, tab, globalClient, appliedDeliveryDate]);
+
+  const { manageBids, historyBids } = useMemo(() => ({
+    manageBids: tabBids.filter((b) => !isHistoryBid(b)),
+    historyBids: tabBids.filter(isHistoryBid),
+  }), [tabBids]);
+
+  const viewBids = bidView === 'history' ? historyBids : manageBids;
 
   // This product's position, from the blocks the list endpoint already returns.
-  const blockSum = (b, field) => (b.blocks || []).reduce((a, k) => a + Number(k[field] || 0), 0);
-  const summary = {
-    count: tabBids.length,
-    quantumBid: tabBids.reduce((a, b) => a + blockSum(b, 'quantum_mw'), 0),
-    clearedMw: tabBids.reduce((a, b) => a + blockSum(b, 'cleared_quantum_mw'), 0),
-    unclearedMw: tabBids.reduce((a, b) => a + Number(b.uncleared_mw || 0), 0),
-  };
-  summary.clearRatio = summary.quantumBid > 0 ? (summary.clearedMw / summary.quantumBid) * 100 : 0;
+  const summary = useMemo(() => {
+    const blockSum = (b, field) => (b.blocks || []).reduce((a, k) => a + Number(k[field] || 0), 0);
+    const s = {
+      count: tabBids.length,
+      quantumBid: tabBids.reduce((a, b) => a + blockSum(b, 'quantum_mw'), 0),
+      clearedMw: tabBids.reduce((a, b) => a + blockSum(b, 'cleared_quantum_mw'), 0),
+      unclearedMw: tabBids.reduce((a, b) => a + Number(b.uncleared_mw || 0), 0),
+    };
+    s.clearRatio = s.quantumBid > 0 ? (s.clearedMw / s.quantumBid) * 100 : 0;
+    return s;
+  }, [tabBids]);
 
   return (
     <div style={{ padding: 20 }}>
@@ -484,10 +514,10 @@ export default function Bids({ product = 'DAM', externalView = null }) {
         // it does not stop trading. Only a clearance that has actually lapsed
         // blocks bids, and that refusal is enforced by the API.
         const tone = {
-          EXPIRED:       { bg: '#fef2f2', border: '#fecaca', fg: '#dc2626', label: 'EXPIRED' },
-          RENEWAL_DUE:   { bg: '#fffbeb', border: '#fde68a', fg: '#b45309', label: 'RENEWAL DUE' },
-          ACTIVE:        { bg: '#f0fdf4', border: '#bbf7d0', fg: '#16a34a', label: 'ACTIVE' },
-          NOT_ON_RECORD: { bg: '#f8fafc', border: '#e2e8f0', fg: '#64748b', label: 'NOT ON RECORD' },
+          EXPIRED:       { bg: '#fef2f2', border: '#fecaca', fg: 'var(--red-strong)', label: 'EXPIRED' },
+          RENEWAL_DUE:   { bg: '#fffbeb', border: '#fde68a', fg: 'var(--amber-strong)', label: 'RENEWAL DUE' },
+          ACTIVE:        { bg: '#f0fdf4', border: '#bbf7d0', fg: 'var(--green-strong)', label: 'ACTIVE' },
+          NOT_ON_RECORD: { bg: 'var(--slate-50)', border: 'var(--slate-200)', fg: 'var(--slate-500)', label: 'NOT ON RECORD' },
         }[clearance.state];
         return (
           <div style={{
@@ -498,11 +528,11 @@ export default function Bids({ product = 'DAM', externalView = null }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 16 }}>🛡️</span>
               <div>
-                <span style={{ fontWeight: 700, fontSize: 13, color: '#334155' }}>
+                <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--slate-700)' }}>
                   {clearance.sldc_name || 'SLDC'} Standing Clearance:{' '}
                 </span>
                 <span style={{ fontWeight: 700, fontSize: 13, color: tone.fg }}>{tone.label}</span>
-                <span style={{ fontSize: 12, color: '#64748b', marginLeft: 8 }}>
+                <span style={{ fontSize: 12, color: 'var(--slate-500)', marginLeft: 8 }}>
                   {clearance.client_name}
                   {clearance.tgna_approved_mw != null && ` | T-GNA Cap: ${clearance.tgna_approved_mw} MW`}
                   {clearance.standing_clearance_no && ` | ${clearance.standing_clearance_no}`}
@@ -512,32 +542,32 @@ export default function Bids({ product = 'DAM', externalView = null }) {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {clearance.state === 'ACTIVE' && (
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a' }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--green-strong)' }}>
                   Expires in: {clearance.days_left} days
                 </span>
               )}
               {clearance.state === 'RENEWAL_DUE' && (
                 <>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#b45309' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--amber-strong)' }}>
                     Expires in: {clearance.days_left} day(s) — bidding continues
                   </span>
-                  <button className="btn btn-sm" style={{ background: '#b45309', color: '#fff', fontSize: 11 }}>
+                  <button className="btn btn-sm" style={{ background: 'var(--amber-strong)', color: '#fff', fontSize: 11 }}>
                     ⚠️ Trigger Renewal Declaration
                   </button>
                 </>
               )}
               {clearance.state === 'EXPIRED' && (
                 <>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#dc2626' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--red-strong)' }}>
                     Lapsed {Math.abs(clearance.days_left)} day(s) ago — new bids refused
                   </span>
-                  <button className="btn btn-sm" style={{ background: '#dc2626', color: '#fff', fontSize: 11 }}>
+                  <button className="btn btn-sm" style={{ background: 'var(--red-strong)', color: '#fff', fontSize: 11 }}>
                     🚨 Submit Renewal NOW
                   </button>
                 </>
               )}
               {clearance.state === 'NOT_ON_RECORD' && (
-                <span style={{ fontSize: 12, color: '#64748b' }}>
+                <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>
                   No NOC captured for this client — capacity limits cannot be checked
                 </span>
               )}
@@ -554,7 +584,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
             ⏳ Active Window: RTM Session #29 | Gate Closes In: 08m 42s
           </div>
           <div style={{ color: '#065f46', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-            🕒 Current Time: {currentTime.toLocaleTimeString('en-US', { hour12: false })} IST
+            🕒 Current Time: <LiveClock /> IST
           </div>
         </div>
       ) : (
@@ -568,7 +598,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
 
       {/* Conditional Filter Bar */}
       {bidView === 'history' && tab.short === 'DAM' ? (
-        <Card style={{ marginBottom: 20, background: '#f8fafc' }}>
+        <Card style={{ marginBottom: 20, background: 'var(--slate-50)' }}>
           <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-portfolio-name">Portfolio Name</label>
@@ -620,7 +650,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
         </div>
       )}
 
-      <div style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>{tab.hint}</div>
+      <div style={{ fontSize: 12, color: 'var(--slate-500)', marginBottom: 14 }}>{tab.hint}</div>
 
       {/* Per-product summary — this product's bidding position at a glance. */}
       <Card style={{ marginBottom: 16 }}>
@@ -645,8 +675,8 @@ export default function Bids({ product = 'DAM', externalView = null }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8 }}>
             {[
-              { key: 'manage', label: `Manage Bids (${tabBids.filter((b) => !isHistoryBid(b)).length})` },
-              { key: 'history', label: `Bid History (${tabBids.filter(isHistoryBid).length})` },
+              { key: 'manage', label: `Manage Bids (${manageBids.length})` },
+              { key: 'history', label: `Bid History (${historyBids.length})` },
             ].map((v) => (
               <button
                 key={v.key}
@@ -695,21 +725,21 @@ export default function Bids({ product = 'DAM', externalView = null }) {
             htmlFor="bulk-file-upload"
             style={{ 
               display: 'block',
-              border: '2px dashed #cbd5e1', 
+              border: '2px dashed var(--slate-300)', 
               borderRadius: 8, 
               padding: '40px 20px', 
               textAlign: 'center', 
-              background: '#f8fafc', 
+              background: 'var(--slate-50)', 
               marginBottom: 20,
               cursor: 'pointer',
               transition: 'all 0.2s'
             }}
-            onMouseOver={e => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.borderColor = '#94a3b8'; }}
-            onMouseOut={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+            onMouseOver={e => { e.currentTarget.style.background = 'var(--slate-100)'; e.currentTarget.style.borderColor = 'var(--slate-400)'; }}
+            onMouseOut={e => { e.currentTarget.style.background = 'var(--slate-50)'; e.currentTarget.style.borderColor = 'var(--slate-300)'; }}
           >
             <div style={{ fontSize: 40, marginBottom: 10 }}>📁</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: '#334155' }}>Drag & Drop Bid CSV/Excel Here</div>
-            <div style={{ fontSize: 13, color: '#64748b', marginTop: 5 }}>or click to <strong>Browse Files</strong></div>
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--slate-700)' }}>Drag & Drop Bid CSV/Excel Here</div>
+            <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 5 }}>or click to <strong>Browse Files</strong></div>
             <input
               id="bulk-file-upload"
               type="file"
@@ -795,25 +825,25 @@ export default function Bids({ product = 'DAM', externalView = null }) {
       {(showCreate || externalView === 'CREATE') && (
         <Modal open={true} onClose={() => { setShowCreate(false); }} title="" width={960}>
           {/* ── PTC-Style CREATE DAM NEW BID Header with Clock Fallback ── */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '2px solid #0b4a8f', marginBottom: 20 }}>
-            <h3 style={{ margin: 0, color: '#0b4a8f', fontWeight: 700, letterSpacing: 0.5 }}>CREATE DAM NEW BID</h3>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontFamily: 'monospace', fontSize: 13, color: '#334155', background: '#f1f5f9', padding: '6px 14px', borderRadius: 4, border: '1px solid #cbd5e1' }}>
-              <span>DATE : {currentTime.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')}</span>
-              <span style={{ margin: '0 6px', color: '#94a3b8' }}>|</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '2px solid var(--navy)', marginBottom: 20 }}>
+            <h3 style={{ margin: 0, color: 'var(--navy)', fontWeight: 700, letterSpacing: 0.5 }}>CREATE DAM NEW BID</h3>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontFamily: 'monospace', fontSize: 13, color: 'var(--slate-700)', background: 'var(--slate-100)', padding: '6px 14px', borderRadius: 4, border: '1px solid var(--slate-300)' }}>
+              <span>DATE : <LiveClock format="date" /></span>
+              <span style={{ margin: '0 6px', color: 'var(--text-subtle)' }}>|</span>
               {/* Clock Fallback: if server clock payload is empty, use local synced clock with visual indicator */}
-              <span>TIME : {currentTime.toLocaleTimeString('en-GB', { hour12: false }) || ''}</span>
-              <span style={{ fontSize: 9, color: '#16a34a', animation: 'pulse 2s infinite', marginLeft: 4 }} title="Local clock sync — server WebSocket fallback active">● SYNC</span>
+              <span>TIME : <LiveClock format="time24" /></span>
+              <span style={{ fontSize: 9, color: 'var(--green-strong)', animation: 'pulse 2s infinite', marginLeft: 4 }} title="Local clock sync — server WebSocket fallback active">● SYNC</span>
             </div>
           </div>
 
           <form onSubmit={handleCreate}>
             {/* ── Asset Verification Card (NOAR / Standing Clearance) ── */}
             {clearance && clearance.state !== 'NOT_ON_RECORD' && (
-              <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', padding: '12px 16px', borderRadius: 8, marginBottom: 20 }}>
+              <div style={{ background: 'var(--slate-50)', border: '1px solid var(--slate-300)', padding: '12px 16px', borderRadius: 8, marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                   <div>
-                    <h4 style={{ margin: '0 0 4px 0', color: '#0b4a8f', fontSize: 14 }}>{clearance.client_name}</h4>
-                    <div style={{ fontSize: 12, color: '#475569', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <h4 style={{ margin: '0 0 4px 0', color: 'var(--navy)', fontSize: 14 }}>{clearance.client_name}</h4>
+                    <div style={{ fontSize: 12, color: 'var(--slate-600)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                       {clearance.noar_id && <span>NOAR ID: <strong>{clearance.noar_id}</strong></span>}
                       {clearance.standing_clearance_no && <span>NOC: <strong>{clearance.standing_clearance_no}</strong></span>}
                       {clearance.tgna_approved_mw != null && <span>T-GNA Cap: <strong>{clearance.tgna_approved_mw} MW</strong></span>}
@@ -825,7 +855,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                   </div>
                 </div>
 
-                <div style={{ fontSize: 12, color: '#475569', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 12, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                   <span>Valid till <strong>{clearance.valid_till}</strong></span>
                   {clearance.periphery_loss_percent != null && (
                     <span>Injection loss to periphery: <strong>{clearance.periphery_loss_percent}%</strong></span>
@@ -834,16 +864,16 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                     <span>Operating charge: <strong>₹{clearance.operating_charge_per_day}/day</strong></span>
                   )}
                   {clearance.is_generator && (
-                    <span style={{ color: '#b45309' }}>Clause 23: BUY only during a forced outage</span>
+                    <span style={{ color: 'var(--amber-strong)' }}>Clause 23: BUY only during a forced outage</span>
                   )}
                 </div>
               </div>
             )}
 
             {/* ── Row 1: Core Selectors (Left) + Radio Groups (Right) ── */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0, marginBottom: 20, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0, marginBottom: 20, border: '1px solid var(--slate-200)', borderRadius: 8, overflow: 'hidden' }}>
               {/* LEFT — Dropdowns */}
-              <div style={{ padding: 20, borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ padding: 20, borderRight: '1px solid var(--slate-200)', display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <Field label="Exchange" required>
                   <select className="input" value={form.exchange} onChange={e => {
                     // State Reset: clear file attachment on exchange switch, preserve block format radios
@@ -856,30 +886,30 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                   </select>
                   {/* Dynamic CERC Price Limit Hint */}
                   {form.exchange && (
-                    <div style={{ fontSize: 11, marginTop: 4, color: '#0284c7', display: 'flex', gap: 12 }}>
+                    <div style={{ fontSize: 11, marginTop: 4, color: 'var(--sky)', display: 'flex', gap: 12 }}>
                       <span>Floor: ₹0.00/kWh</span>
                       <span>Ceiling: {form.exchange === 'IEX' ? '₹12.00' : '₹10.00'}/kWh</span>
-                      <span style={{ color: '#16a34a' }}>● Gateway Active</span>
+                      <span style={{ color: 'var(--green-strong)' }}>● Gateway Active</span>
                     </div>
                   )}
                 </Field>
                 {/* Segment Tag — Read-only */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Segment:</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#0b4a8f', background: '#e0f2fe', padding: '2px 10px', borderRadius: 4 }}>{tab.short}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--slate-600)' }}>Segment:</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', background: '#e0f2fe', padding: '2px 10px', borderRadius: 4 }}>{tab.short}</span>
                 </div>
                 <Field label="Delivery Date" required>
                   <input type="date" className="input" value={form.delivery_date} onChange={e => setForm({...form, delivery_date: e.target.value})} required />
                 </Field>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <label htmlFor="bids-create-portfolio" style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>
+                    <label htmlFor="bids-create-portfolio" style={{ fontSize: 12, fontWeight: 600, color: 'var(--slate-600)' }}>
                       Portfolio
                       <span aria-hidden="true" style={{ color: 'var(--red)' }}> *</span>
                       <span className="sr-only"> (required)</span>
                     </label>
                     {form.client_id && (
-                      <button type="button" onClick={() => setShowProfile(true)} style={{ background: 'none', border: 'none', color: '#0b4a8f', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
+                      <button type="button" onClick={() => setShowProfile(true)} style={{ background: 'none', border: 'none', color: 'var(--navy)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
                         View Profile
                       </button>
                     )}
@@ -909,23 +939,23 @@ export default function Bids({ product = 'DAM', externalView = null }) {
               <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {/* Bid Type — Color-Coded (placed first to match PTC layout) */}
                 <div>
-                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#475569' }}>Bid Type</span>
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid Type</span>
                   <div role="group" aria-label="Bid Type" style={{ display: 'flex', gap: 16 }}>
                     {[
-                      { value: 'Buy', emoji: '🟢', color: '#16a34a', bg: '#f0fdf4' },
-                      { value: 'Sell', emoji: '🔴', color: '#dc2626', bg: '#fef2f2' },
-                      { value: 'Both', emoji: '', color: '#475569', bg: 'transparent' },
+                      { value: 'Buy', emoji: '🟢', color: 'var(--green-strong)', bg: '#f0fdf4' },
+                      { value: 'Sell', emoji: '🔴', color: 'var(--red-strong)', bg: '#fef2f2' },
+                      { value: 'Both', emoji: '', color: 'var(--slate-600)', bg: 'transparent' },
                     ].map(opt => (
                       <label key={opt.value} style={{
                         display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer',
-                        color: (form.type || 'Sell') === opt.value ? opt.color : '#64748b',
+                        color: (form.type || 'Sell') === opt.value ? opt.color : 'var(--slate-500)',
                         fontWeight: (form.type || 'Sell') === opt.value ? 700 : 400,
                         background: (form.type || 'Sell') === opt.value ? opt.bg : 'transparent',
                         padding: '4px 10px', borderRadius: 6,
                         border: (form.type || 'Sell') === opt.value ? `1px solid ${opt.color}30` : '1px solid transparent',
                         transition: 'all 0.15s',
                       }}>
-                        <input type="radio" name="bidType" value={opt.value} checked={(form.type || 'Sell') === opt.value} onChange={e => setForm({...form, type: e.target.value})} style={{ accentColor: opt.color || '#0b4a8f' }} />
+                        <input type="radio" name="bidType" value={opt.value} checked={(form.type || 'Sell') === opt.value} onChange={e => setForm({...form, type: e.target.value})} style={{ accentColor: opt.color || 'var(--navy)' }} />
                         {opt.emoji && <span>{opt.emoji}</span>}{opt.value}
                       </label>
                     ))}
@@ -934,11 +964,11 @@ export default function Bids({ product = 'DAM', externalView = null }) {
 
                 {/* Bid Structure */}
                 <div>
-                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#475569' }}>Bid</span>
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid</span>
                   <div role="group" aria-label="Bid" style={{ display: 'flex', gap: 20 }}>
                     {['Single', 'Block'].map(opt => (
-                      <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: '#334155' }}>
-                        <input type="radio" name="bidStructure" value={opt} checked={(form.structure || 'Single') === opt} onChange={e => setForm({...form, structure: e.target.value})} style={{ accentColor: '#0b4a8f' }} />
+                      <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: 'var(--slate-700)' }}>
+                        <input type="radio" name="bidStructure" value={opt} checked={(form.structure || 'Single') === opt} onChange={e => setForm({...form, structure: e.target.value})} style={{ accentColor: 'var(--navy)' }} />
                         {opt}
                       </label>
                     ))}
@@ -948,19 +978,19 @@ export default function Bids({ product = 'DAM', externalView = null }) {
 
                 {/* Bid On — EX-BUS vs Regional Periphery */}
                 <div>
-                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#475569' }}>Bid On</span>
+                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid On</span>
                   <div role="group" aria-label="Bid On" style={{ display: 'flex', gap: 20 }}>
                     {[
                       { value: 'EX-BUS', label: 'EX-BUS', hint: 'Plant Busbar' },
                       { value: 'PERIPHERY', label: 'Regional Periphery', hint: 'Grid Entry Point' },
                     ].map(opt => (
-                      <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: '#334155' }} title={opt.hint}>
-                        <input type="radio" name="bidOn" value={opt.value} checked={(form.bid_on || 'EX-BUS') === opt.value} onChange={e => setForm({...form, bid_on: e.target.value})} style={{ accentColor: '#0b4a8f' }} />
+                      <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: 'var(--slate-700)' }} title={opt.hint}>
+                        <input type="radio" name="bidOn" value={opt.value} checked={(form.bid_on || 'EX-BUS') === opt.value} onChange={e => setForm({...form, bid_on: e.target.value})} style={{ accentColor: 'var(--navy)' }} />
                         {opt.label}
                       </label>
                     ))}
                   </div>
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>
                     {(form.bid_on || 'EX-BUS') === 'EX-BUS'
                       ? 'Losses borne by buyer · ₹/kWh at plant terminal'
                       : 'Includes CTU/STU transmission loss adjustment'}
@@ -970,25 +1000,25 @@ export default function Bids({ product = 'DAM', externalView = null }) {
             </div>
 
             {/* ── Row 2: Excel File Upload Zone with Block Granularity ── */}
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 20, marginBottom: 20, background: '#fafbfc' }}>
+            <div style={{ border: '1px solid var(--slate-200)', borderRadius: 8, padding: 20, marginBottom: 20, background: '#fafbfc' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <div>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: '#475569' }}>Select Excel File Bid Type to Upload :</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--slate-600)' }}>Select Excel File Bid Type to Upload :</span>
                   <div role="group" aria-label="Select Excel File Bid Type to Upload " style={{ display: 'flex', gap: 18, marginTop: 8 }}>
                     {['24 Blocks', '50 Blocks', '96 Blocks'].map(opt => (
-                      <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: '#334155' }}>
-                        <input type="radio" name="blockGranularity" value={opt} defaultChecked={opt === '96 Blocks'} style={{ accentColor: '#0b4a8f' }} />
+                      <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: 'var(--slate-700)' }}>
+                        <input type="radio" name="blockGranularity" value={opt} defaultChecked={opt === '96 Blocks'} style={{ accentColor: 'var(--navy)' }} />
                         {opt}
                       </label>
                     ))}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, fontSize: 12 }}>
-                  <span style={{ color: '#64748b' }}>Download formats:</span>
+                  <span style={{ color: 'var(--slate-500)' }}>Download formats:</span>
                   {['24 blocks', '50 blocks', '96 blocks'].map((t, i) => (
                     <React.Fragment key={t}>
-                      {i > 0 && <span style={{ color: '#cbd5e1' }}>|</span>}
-                      <button type="button" onClick={handleDownloadTemplate} style={{ background: 'none', border: 'none', color: '#0b4a8f', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: 12 }}>{t}</button>
+                      {i > 0 && <span style={{ color: 'var(--slate-300)' }}>|</span>}
+                      <button type="button" onClick={handleDownloadTemplate} style={{ background: 'none', border: 'none', color: 'var(--navy)', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: 12 }}>{t}</button>
                     </React.Fragment>
                   ))}
                 </div>
@@ -999,18 +1029,18 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                 htmlFor="dam-file-upload"
                 style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                  border: '2px dashed #94a3b8', borderRadius: 8, padding: '30px 20px',
+                  border: '2px dashed var(--slate-400)', borderRadius: 8, padding: '30px 20px',
                   background: '#fff', cursor: 'pointer', transition: 'all 0.2s',
                   minHeight: 100,
                 }}
-                onMouseOver={e => { e.currentTarget.style.background = '#f0f7ff'; e.currentTarget.style.borderColor = '#0b4a8f'; }}
-                onMouseOut={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#94a3b8'; }}
-                onDragOver={e => { e.preventDefault(); e.currentTarget.style.background = '#e0f2fe'; e.currentTarget.style.borderColor = '#0284c7'; }}
-                onDragLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#94a3b8'; }}
+                onMouseOver={e => { e.currentTarget.style.background = '#f0f7ff'; e.currentTarget.style.borderColor = 'var(--navy)'; }}
+                onMouseOut={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = 'var(--slate-400)'; }}
+                onDragOver={e => { e.preventDefault(); e.currentTarget.style.background = '#e0f2fe'; e.currentTarget.style.borderColor = 'var(--sky)'; }}
+                onDragLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = 'var(--slate-400)'; }}
                 onDrop={e => {
                   e.preventDefault();
                   e.currentTarget.style.background = '#fff';
-                  e.currentTarget.style.borderColor = '#94a3b8';
+                  e.currentTarget.style.borderColor = 'var(--slate-400)';
                   const file = e.dataTransfer.files?.[0];
                   if (file) {
                     // Reuse the existing handlePickFile logic
@@ -1020,8 +1050,8 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                 }}
               >
                 <div style={{ fontSize: 36, marginBottom: 8 }}>📁</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: '#334155' }}>Drag & Drop .xlsx Bid File Here</div>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>or click to <strong>Browse Files</strong></div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-700)' }}>Drag & Drop .xlsx Bid File Here</div>
+                <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 4 }}>or click to <strong>Browse Files</strong></div>
                 <input
                   id="dam-file-upload"
                   type="file"
@@ -1030,9 +1060,9 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                   style={{ display: 'none' }}
                 />
               </label>
-              {bulkFileNote && <div style={{ marginTop: 10, fontSize: 13, color: '#0b4a8f', fontWeight: 500 }}>✓ {bulkFileNote}</div>}
+              {bulkFileNote && <div style={{ marginTop: 10, fontSize: 13, color: 'var(--navy)', fontWeight: 500 }}>✓ {bulkFileNote}</div>}
               <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-primary" style={{ background: '#0b4a8f' }} disabled={!bulkText} onClick={() => runBulk(true)}>Import File Data</button>
+                <button type="button" className="btn btn-primary" style={{ background: 'var(--navy)' }} disabled={!bulkText} onClick={() => runBulk(true)}>Import File Data</button>
               </div>
             </div>
 
@@ -1106,31 +1136,31 @@ export default function Bids({ product = 'DAM', externalView = null }) {
               return (
                 <div style={{ marginBottom: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                   {/* Quantum Limit Guardrail */}
-                  <div style={{ padding: 12, borderRadius: 8, background: '#f8fafc', border: '1px solid #cbd5e1' }}>
+                  <div style={{ padding: 12, borderRadius: 8, background: 'var(--slate-50)', border: '1px solid var(--slate-300)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>⚡ Approved NOAR Cap: {clearance.tgna_approved_mw} MW</span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: utilPercent > 100 ? '#dc2626' : '#0ea5e9' }}>{utilPercent.toFixed(1)}% Utilized</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--slate-700)' }}>⚡ Approved NOAR Cap: {clearance.tgna_approved_mw} MW</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: utilPercent > 100 ? 'var(--red-strong)' : '#0ea5e9' }}>{utilPercent.toFixed(1)}% Utilized</span>
                     </div>
-                    <div style={{ height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
-                      <div style={{ height: '100%', background: utilPercent > 100 ? '#dc2626' : '#0ea5e9', width: `${Math.min(100, utilPercent)}%` }} />
+                    <div style={{ height: 6, background: 'var(--slate-200)', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+                      <div style={{ height: '100%', background: utilPercent > 100 ? 'var(--red-strong)' : '#0ea5e9', width: `${Math.min(100, utilPercent)}%` }} />
                     </div>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>
+                    <div style={{ fontSize: 11, color: 'var(--slate-500)' }}>
                       Current Bid: {maxBidMW.toFixed(2)} MW {isExBus ? `(EX-BUS) → ${regionalMW.toFixed(2)} MW (Periphery)` : '(Regional Periphery)'}
                     </div>
                   </div>
 
                   {/* Net Financial Estimator */}
                   <div style={{ padding: 12, borderRadius: 8, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-                    <h4 style={{ fontSize: 13, color: '#16a34a', margin: '0 0 8px 0' }}>Automated Clearing Net Financial Estimator</h4>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#475569', marginBottom: 4 }}>
+                    <h4 style={{ fontSize: 13, color: 'var(--green-strong)', margin: '0 0 8px 0' }}>Automated Clearing Net Financial Estimator</h4>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--slate-600)', marginBottom: 4 }}>
                       <span>Gross Revenue (Estimated):</span>
                       <span>₹ {grossRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#dc2626', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--red-strong)', marginBottom: 4 }}>
                       <span>Transmission & SLDC Fees:</span>
                       <span>- ₹ {(regionalTxFee + stateTxFee + dailySLDCFee).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#16a34a', fontWeight: 700, marginTop: 8, paddingTop: 8, borderTop: '1px solid #bbf7d0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--green-strong)', fontWeight: 700, marginTop: 8, paddingTop: 8, borderTop: '1px solid #bbf7d0' }}>
                       <span>Net Realization:</span>
                       <span>₹ {netRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                     </div>
@@ -1141,7 +1171,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
 
             {/* ── Manual Block Entry (fallback/alternative) ── */}
             <details style={{ marginBottom: 20 }}>
-              <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 10 }}>
+              <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--slate-600)', marginBottom: 10 }}>
                 ▸ Manual Block Entry (add blocks individually)
               </summary>
               <div style={{ paddingTop: 10 }}>
@@ -1167,9 +1197,9 @@ export default function Bids({ product = 'DAM', externalView = null }) {
 
             {error && <div style={{ color: 'red', marginBottom: 15 }}>{error}</div>}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid #e2e8f0', paddingTop: 15 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid var(--slate-200)', paddingTop: 15 }}>
               <button type="button" className="btn btn-outline" onClick={() => setShowCreate(false)}>Cancel</button>
-              <button type="submit" className="btn btn-primary" style={{ background: '#0b4a8f' }}>Create Draft Portfolio</button>
+              <button type="submit" className="btn btn-primary" style={{ background: 'var(--navy)' }}>Create Draft Portfolio</button>
             </div>
           </form>
         </Modal>
@@ -1208,16 +1238,16 @@ export default function Bids({ product = 'DAM', externalView = null }) {
 
           {/* OCF carry-forward lineage across market segments */}
           {chain?.legs?.length > 1 && (
-            <div style={{ marginTop: 20, padding: 12, background: '#f2f6fb', borderLeft: '4px solid #0b4a8f' }}>
+            <div style={{ marginTop: 20, padding: 12, background: '#f2f6fb', borderLeft: '4px solid var(--navy)' }}>
               <strong>OCF Carry-Forward Chain</strong>
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 {chain.legs.map((l, i) => (
                   <React.Fragment key={l.id}>
-                    {i > 0 && <span style={{ color: '#0b4a8f' }}>→</span>}
+                    {i > 0 && <span style={{ color: 'var(--navy)' }}>→</span>}
                     <span
                       style={{
                         padding: '4px 8px', borderRadius: 4, fontSize: 12,
-                        background: l.id === selectedBid.id ? '#0b4a8f' : '#fff',
+                        background: l.id === selectedBid.id ? 'var(--navy)' : '#fff',
                         color: l.id === selectedBid.id ? '#fff' : '#333',
                         border: '1px solid #cbd7e6', cursor: 'pointer',
                       }}
@@ -1366,11 +1396,11 @@ export default function Bids({ product = 'DAM', externalView = null }) {
               const bid = rows.find(r => r.id === id);
               if (!bid) return null;
               return (
-                <div key={id} style={{ flex: 1, border: '1px solid #e2e8f0', borderRadius: 8, padding: 15, background: index === 0 ? '#f8fafc' : '#f0fdf4' }}>
-                  <h4 style={{ marginBottom: 10, color: index === 0 ? '#475569' : '#166534' }}>
+                <div key={id} style={{ flex: 1, border: '1px solid var(--slate-200)', borderRadius: 8, padding: 15, background: index === 0 ? 'var(--slate-50)' : '#f0fdf4' }}>
+                  <h4 style={{ marginBottom: 10, color: index === 0 ? 'var(--slate-600)' : '#166534' }}>
                     {index === 0 ? 'Base Revision' : 'Target Revision'} ({bid.revision_no || '1'})
                   </h4>
-                  <div style={{ fontSize: 13, marginBottom: 15, color: '#64748b' }}>
+                  <div style={{ fontSize: 13, marginBottom: 15, color: 'var(--slate-500)' }}>
                     <p><strong>Ref:</strong> {bid.id}</p>
                     <p><strong>Status:</strong> {bid.status}</p>
                   </div>
@@ -1401,19 +1431,19 @@ export default function Bids({ product = 'DAM', externalView = null }) {
               <div key={bid.id} style={{ display: 'flex', gap: 15, marginBottom: 20 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <div style={{ width: 12, height: 12, borderRadius: '50%', background: bid.status === 'REJECTED' ? '#ef4444' : '#10b981' }}></div>
-                  {i !== arr.length - 1 && <div style={{ width: 2, flex: 1, background: '#e2e8f0', marginTop: 4 }}></div>}
+                  {i !== arr.length - 1 && <div style={{ width: 2, flex: 1, background: 'var(--slate-200)', marginTop: 4 }}></div>}
                 </div>
                 <div>
-                  <div style={{ fontWeight: 600, color: '#334155' }}>Revision {bid.revision_no || 1}</div>
-                  <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
+                  <div style={{ fontWeight: 600, color: 'var(--slate-700)' }}>Revision {bid.revision_no || 1}</div>
+                  <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
                     <strong>Submitted:</strong> {bid.id} | <strong>Type:</strong> {bid.type}
                   </div>
                   <div style={{ fontSize: 13, marginTop: 4, display: 'flex', gap: 10 }}>
-                    <span style={{ color: '#16a34a' }}>🟢 File Prepared</span>
+                    <span style={{ color: 'var(--green-strong)' }}>🟢 File Prepared</span>
                     <span>|</span>
                     {bid.status === 'REJECTED' ? 
-                      <span style={{ color: '#dc2626' }}>🔴 Exchange Error 402</span> : 
-                      <span style={{ color: '#16a34a' }}>🟢 Exchange Cleared</span>
+                      <span style={{ color: 'var(--red-strong)' }}>🔴 Exchange Error 402</span> : 
+                      <span style={{ color: 'var(--green-strong)' }}>🟢 Exchange Cleared</span>
                     }
                   </div>
                 </div>
@@ -1432,22 +1462,22 @@ export default function Bids({ product = 'DAM', externalView = null }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: 20, background: '#f8f9fa', borderBottom: '1px solid #dee2e6' }}>
             <div>
               <h3 style={{ margin: 0 }}>Audit Trail Viewer: {auditBid.id}</h3>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 5 }}>Portfolio: {auditBid.client_name} | Delivery: {auditBid.delivery_date}</div>
+              <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 5 }}>Portfolio: {auditBid.client_name} | Delivery: {auditBid.delivery_date}</div>
             </div>
             <button onClick={() => setAuditBid(null)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
           </div>
           <div style={{ flex: 1, padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ background: '#f8fafc', padding: 15, borderRadius: 6, border: '1px solid #e2e8f0', marginBottom: 20 }}>
-               <h4 style={{ margin: '0 0 10px 0', color: '#334155' }}>Digital Signature & Provenance</h4>
+            <div style={{ background: 'var(--slate-50)', padding: 15, borderRadius: 6, border: '1px solid var(--slate-200)', marginBottom: 20 }}>
+               <h4 style={{ margin: '0 0 10px 0', color: 'var(--slate-700)' }}>Digital Signature & Provenance</h4>
                <div style={{ fontSize: 13, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <div><strong>Bid Source:</strong> API Gateway</div>
                   <div><strong>Origin Timestamp:</strong> {auditBid.bid_date} 10:45:12 UTC</div>
                   <div><strong>User Agent:</strong> SJVN_Algo_Bot/2.1</div>
-                  <div><strong>Signature Hash:</strong> <span style={{ fontFamily: 'monospace', color: '#0284c7' }}>e3b0c44298fc...</span></div>
+                  <div><strong>Signature Hash:</strong> <span style={{ fontFamily: 'monospace', color: 'var(--sky)' }}>e3b0c44298fc...</span></div>
                </div>
             </div>
             
-            <h4 style={{ marginBottom: 10, color: '#334155' }}>Submitted 96-Block MW/Price Matrix</h4>
+            <h4 style={{ marginBottom: 10, color: 'var(--slate-700)' }}>Submitted 96-Block MW/Price Matrix</h4>
             <Table 
               columns={[
                 { key: 'time_block', label: 'Time Block' },
@@ -1466,22 +1496,22 @@ export default function Bids({ product = 'DAM', externalView = null }) {
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
               <div style={{ fontSize: 32 }}>⚠️</div>
               <div>
-                <h4 style={{ margin: '0 0 8px 0', color: '#dc2626', fontSize: 16 }}>Regulatory Constraint Violation Risk</h4>
-                <p style={{ margin: 0, fontSize: 13, color: '#334155', lineHeight: 1.5 }}>
+                <h4 style={{ margin: '0 0 8px 0', color: 'var(--red-strong)', fontSize: 16 }}>Regulatory Constraint Violation Risk</h4>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--slate-700)', lineHeight: 1.5 }}>
                   As per its SLDC Standing Clearance, <strong>{clearance?.client_name || 'this generating station'}</strong> is strictly prohibited from submitting <strong>BUY</strong> bids on the power exchange unless the plant is undergoing an active <strong>Forced Outage</strong>.
                 </p>
               </div>
             </div>
             
-            <div style={{ background: '#f8fafc', padding: 15, borderRadius: 8, border: '1px solid #e2e8f0', marginBottom: 24 }}>
+            <div style={{ background: 'var(--slate-50)', padding: 15, borderRadius: 8, border: '1px solid var(--slate-200)', marginBottom: 24 }}>
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
                 <input 
                   type="checkbox" 
                   checked={outageAcknowledged} 
                   onChange={e => setOutageAcknowledged(e.target.checked)} 
-                  style={{ marginTop: 4, accentColor: '#dc2626', width: 16, height: 16 }}
+                  style={{ marginTop: 4, accentColor: 'var(--red-strong)', width: 16, height: 16 }}
                 />
-                <span style={{ fontSize: 13, color: '#475569', fontWeight: 500 }}>
+                <span style={{ fontSize: 13, color: 'var(--slate-600)', fontWeight: 500 }}>
                   I confirm that {clearance?.client_name || 'this generating station'} is currently experiencing a forced outage and this BUY bid is for replacement power. I understand that false declarations may result in {clearance?.sldc_name || 'the SLDC'} revoking the standing clearance (Clause 28).
                 </span>
               </label>
@@ -1491,7 +1521,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
               <button className="btn btn-outline" onClick={() => setShowOutageModal(false)}>Cancel Bid</button>
               <button 
                 className="btn btn-primary" 
-                style={{ background: outageAcknowledged ? '#dc2626' : '#94a3b8', borderColor: outageAcknowledged ? '#b91c1c' : '#94a3b8' }} 
+                style={{ background: outageAcknowledged ? 'var(--red-strong)' : 'var(--slate-400)', borderColor: outageAcknowledged ? 'var(--red-deep)' : 'var(--slate-400)' }} 
                 disabled={!outageAcknowledged}
                 onClick={(e) => {
                   setShowOutageModal(false);
@@ -1508,7 +1538,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
       {showProfile && (
         <Modal open={true} onClose={() => setShowProfile(false)} title="Portfolio Profile" width={640}>
           <div style={{ padding: '0 20px 20px 20px' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, border: '1px solid #e2e8f0' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, border: '1px solid var(--slate-200)' }}>
               <tbody>
                 {[
                   { k: 'Portfolio ID:', v: clearance?.client_id || '—' },
@@ -1518,7 +1548,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                   { k: 'Issuing SLDC:', v: clearance?.sldc_name || '—' },
                   { k: 'Valid Till:', v: clearance?.valid_till || '—' },
                   { k: 'T-GNA Cap:', v: clearance?.tgna_approved_mw != null ? `${clearance.tgna_approved_mw} MW` : '—' },
-                  { k: 'Status:', v: <span style={{ color: '#16a34a', fontWeight: 600 }}>Active</span> },
+                  { k: 'Status:', v: <span style={{ color: 'var(--green-strong)', fontWeight: 600 }}>Active</span> },
                   { k: 'Tick Value:', v: '1' },
                   { k: 'Bid:', v: 'Single' },
                   { k: 'Bid On:', v: 'Regional Periphery' },
@@ -1527,9 +1557,9 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                   { k: 'Zip Code:', v: '171006' },
                   { k: 'Mobile No.1:', v: '8894300943' },
                 ].map((row, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid #e2e8f0', background: i % 2 === 0 ? '#f8fafc' : '#ffffff' }}>
-                    <td style={{ padding: '8px 12px', fontWeight: 600, color: '#475569', width: '35%', borderRight: '1px solid #e2e8f0' }}>{row.k}</td>
-                    <td style={{ padding: '8px 12px', color: '#1e293b' }}>{row.v}</td>
+                  <tr key={i} style={{ borderBottom: '1px solid var(--slate-200)', background: i % 2 === 0 ? 'var(--slate-50)' : '#ffffff' }}>
+                    <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--slate-600)', width: '35%', borderRight: '1px solid var(--slate-200)' }}>{row.k}</td>
+                    <td style={{ padding: '8px 12px', color: 'var(--slate-800)' }}>{row.v}</td>
                   </tr>
                 ))}
               </tbody>

@@ -215,7 +215,7 @@ export default function Entities() {
     )},
     { key: 'regulatory', header: 'Regulatory', render: (r) => {
       const s = r.regulatory_summary;
-      if (!s) return <span style={{ color: '#94a3b8' }}>{r.regulatory_approvals || '—'}</span>;
+      if (!s) return <span style={{ color: 'var(--text-subtle)' }}>{r.regulatory_approvals || '—'}</span>;
       return (
         <Badge
           status={s.ready_for_approval ? 'ACTIVE' : 'PENDING'}
@@ -329,7 +329,7 @@ export default function Entities() {
 
           <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 8px 0' }}>4. Regulatory Approvals Checklist</h4>
-            <p style={{ fontSize: 13, color: '#64748b', marginTop: 0 }}>
+            <p style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 0 }}>
               Specific clearances required for {form.entity_type === 'SELLER' ? 'sellers' : 'buyers'}.
               After create, upload supporting docs and mark each item Submitted / Verified.
               Mark <strong>N/A</strong> only where genuinely not applicable (with a note).
@@ -341,10 +341,10 @@ export default function Entities() {
                   <div
                     key={item.code}
                     style={{
-                      border: '1px solid #e2e8f0',
+                      border: '1px solid var(--slate-200)',
                       borderRadius: 8,
                       padding: '10px 12px',
-                      background: na ? '#f8fafc' : '#fff',
+                      background: na ? 'var(--slate-50)' : '#fff',
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
@@ -352,12 +352,12 @@ export default function Entities() {
                         <div style={{ fontWeight: 600, fontSize: 13 }}>
                           {item.label}
                           {item.is_mandatory ? (
-                            <span style={{ color: '#b91c1c', marginLeft: 6, fontSize: 11 }}>Required</span>
+                            <span style={{ color: 'var(--red-deep)', marginLeft: 6, fontSize: 11 }}>Required</span>
                           ) : (
-                            <span style={{ color: '#64748b', marginLeft: 6, fontSize: 11 }}>Optional</span>
+                            <span style={{ color: 'var(--slate-500)', marginLeft: 6, fontSize: 11 }}>Optional</span>
                           )}
                         </div>
-                        <div style={{ fontSize: 12, color: '#64748b' }}>{item.help}</div>
+                        <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{item.help}</div>
                       </div>
                       <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, whiteSpace: 'nowrap' }}>
                         <input
@@ -467,7 +467,7 @@ export default function Entities() {
           </div>
           
           <h4 style={{ margin: '20px 0 8px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Regulatory Approvals</h4>
-          <p style={{ fontSize: 13, color: '#64748b', marginTop: 0 }}>
+          <p style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 0 }}>
             Track each clearance with status, reference no., issuer and validity. Upload proof under Documents below (same doc types).
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
@@ -475,7 +475,7 @@ export default function Entities() {
               <div
                 key={item.id}
                 style={{
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--slate-200)',
                   borderRadius: 8,
                   padding: '10px 12px',
                   background: '#fff',
@@ -489,18 +489,18 @@ export default function Entities() {
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <strong style={{ fontSize: 13 }}>{item.label}</strong>
                     <Badge status={item.status === 'VERIFIED' ? 'ACTIVE' : item.status === 'NOT_APPLICABLE' ? 'DRAFT' : 'PENDING'} label={APPROVAL_STATUS_LABELS[item.status] || item.status} />
-                    {item.is_mandatory ? <span style={{ fontSize: 11, color: '#b91c1c' }}>Required</span> : <span style={{ fontSize: 11, color: '#64748b' }}>Optional</span>}
+                    {item.is_mandatory ? <span style={{ fontSize: 11, color: 'var(--red-deep)' }}>Required</span> : <span style={{ fontSize: 11, color: 'var(--slate-500)' }}>Optional</span>}
                   </div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                  <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 4 }}>
                     {item.reference_no ? `Ref: ${item.reference_no} · ` : ''}
                     {item.issued_by ? `Issuer: ${item.issued_by} · ` : ''}
                     {item.issued_on ? `Issued: ${item.issued_on} · ` : ''}
                     {item.valid_until ? `Valid till: ${item.valid_until}` : ''}
                     {!item.reference_no && !item.issued_by && !item.issued_on && !item.valid_until ? 'No details yet' : ''}
                   </div>
-                  {item.notes && <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>{item.notes}</div>}
+                  {item.notes && <div style={{ fontSize: 12, color: 'var(--slate-600)', marginTop: 2 }}>{item.notes}</div>}
                   {item.verified_by && (
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 }}>
                       Verified by {item.verified_by}{item.verified_at ? ` · ${fmtDate(item.verified_at)}` : ''}
                     </div>
                   )}
@@ -522,7 +522,7 @@ export default function Entities() {
                             </button>
                           </>
                         ) : (
-                          <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                          <span style={{ fontSize: 12, color: 'var(--text-subtle)' }}>
                             📎 No proof uploaded
                             {canUpload ? (
                               <button type="button" className="link-btn" style={{ fontSize: 12, marginLeft: 6 }} onClick={() => setUploadFor({ code: item.approval_code, label: item.label })}>
@@ -548,11 +548,11 @@ export default function Entities() {
           ) : <div style={{ fontSize: 13, color: '#666' }}>No contacts found.</div>}
 
           {selected.entity_type === 'SELLER' && CAN_WRITE.includes(user?.role) && (
-            <div style={{ marginTop: 24, padding: 16, background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 8 }}>
+            <div style={{ marginTop: 24, padding: 16, background: 'var(--slate-50)', border: '1px dashed var(--slate-300)', borderRadius: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <h4 style={{ margin: '0 0 8px 0', color: '#334155' }}>Invoice Letterhead / Template</h4>
-                  <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
+                  <h4 style={{ margin: '0 0 8px 0', color: 'var(--slate-700)' }}>Invoice Letterhead / Template</h4>
+                  <p style={{ fontSize: 13, color: 'var(--slate-500)', margin: 0 }}>
                     Please upload the Seller's invoice logo below. This logo will be displayed on the top left of the generated PDF.
                   </p>
                 </div>
@@ -567,11 +567,11 @@ export default function Entities() {
                 </div>
               )}
 
-              <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #e2e8f0' }}>
+              <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--slate-200)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
-                    <h4 style={{ margin: '0 0 8px 0', color: '#334155' }}>Digital Signature</h4>
-                    <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
+                    <h4 style={{ margin: '0 0 8px 0', color: 'var(--slate-700)' }}>Digital Signature</h4>
+                    <p style={{ fontSize: 13, color: 'var(--slate-500)', margin: 0 }}>
                       Upload the authorised signatory's signature image. It appears in the "For &amp; on behalf of" box on the invoice, with the signatory name and date as a digital-signature stamp.
                     </p>
                   </div>
@@ -582,7 +582,7 @@ export default function Entities() {
                 </div>
                 {selected.signature_url && (
                   <div style={{ marginTop: 16 }}>
-                    <img src={`http://localhost:4000${selected.signature_url}`} alt="Signature" style={{ maxHeight: 50, objectFit: 'contain', background: '#fff', padding: 4, border: '1px solid #e2e8f0', borderRadius: 4 }} />
+                    <img src={`http://localhost:4000${selected.signature_url}`} alt="Signature" style={{ maxHeight: 50, objectFit: 'contain', background: '#fff', padding: 4, border: '1px solid var(--slate-200)', borderRadius: 4 }} />
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'flex-end' }}>
@@ -631,10 +631,10 @@ export default function Entities() {
           </div>
 
           {selected.status === 'PENDING' && CAN_APPROVE.includes(user?.role) && (
-            <div style={{ marginTop: 20, padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+            <div style={{ marginTop: 20, padding: 16, background: 'var(--slate-50)', borderRadius: 8, border: '1px solid var(--slate-200)' }}>
               <h4 style={{ margin: '0 0 8px 0' }}>Approval Action</h4>
               {!selected.regulatory_summary?.ready_for_approval && (
-                <div style={{ fontSize: 13, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 10px', marginBottom: 10 }}>
+                <div style={{ fontSize: 13, color: 'var(--amber-strong)', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 10px', marginBottom: 10 }}>
                   Mandatory regulatory items still pending
                   {selected.regulatory_summary?.blocking?.length
                     ? `: ${selected.regulatory_summary.blocking.join(', ')}`
@@ -643,7 +643,7 @@ export default function Entities() {
                 </div>
               )}
               {!selected.is_penny_drop_verified && (
-                <div style={{ fontSize: 13, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 10px', marginBottom: 10 }}>
+                <div style={{ fontSize: 13, color: 'var(--amber-strong)', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 10px', marginBottom: 10 }}>
                   Bank penny-drop verification is required before approval.
                 </div>
               )}

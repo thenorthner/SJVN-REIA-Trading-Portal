@@ -15,7 +15,7 @@ const CATEGORY_LABEL = {
   OTHER: 'Other Grid India / NLDC charges',
 };
 const PAYEES = ['Grid India', 'CTUIL', 'NLDC', 'RLDC'];
-const CATEGORY_COLOR = { ISTS: '#0b5fff', RLDC: '#f59e0b', APPLICATION: '#10b981', OTHER: '#94a3b8' };
+const CATEGORY_COLOR = { ISTS: 'var(--primary)', RLDC: '#f59e0b', APPLICATION: '#10b981', OTHER: 'var(--slate-400)' };
 
 const today = () => new Date().toISOString().split('T')[0];
 const EMPTY = {
@@ -226,13 +226,13 @@ export default function NOARWallet() {
             <div className="chart-box">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={trend}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e6ed" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
                   <Tooltip formatter={(v, name) => [fmtCurrency(v), name]} />
                   <Legend />
-                  <Bar dataKey="recharge" name="Recharged" fill="#12875a" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="charge" name="OA charges" fill="#c22b3a" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="recharge" name="Recharged" fill="var(--green)" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="charge" name="OA charges" fill="var(--red)" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -244,11 +244,11 @@ export default function NOARWallet() {
             <div className="chart-box">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trend}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e6ed" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
                   <Tooltip formatter={(v) => [fmtCurrency(v), 'Closing balance']} />
-                  <Line type="monotone" dataKey="closing_balance" name="Closing balance" stroke="#0b5fff" strokeWidth={2.4} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="closing_balance" name="Closing balance" stroke="var(--primary)" strokeWidth={2.4} dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -262,11 +262,11 @@ export default function NOARWallet() {
           <div className="chart-box" style={{ height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={categoryBars} layout="vertical" margin={{ left: 24 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e6ed" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
                 <YAxis type="category" dataKey="category" tick={{ fontSize: 12 }} width={100} />
                 <Tooltip formatter={(v, _n, p) => [fmtCurrency(v), CATEGORY_LABEL[p?.payload?.category] || 'Charges']} />
-                <Bar dataKey="amount" name="Paid" radius={[0, 6, 6, 0]} fill="#0b5fff" />
+                <Bar dataKey="amount" name="Paid" radius={[0, 6, 6, 0]} fill="var(--primary)" />
               </BarChart>
             </ResponsiveContainer>
           </div>

@@ -210,11 +210,11 @@ export function StatementViewer({ statement }) {
   const isHealthy = m.items_exception === 0 && m.auto_match_pct >= 90;
 
   return (
-    <div className="statement-viewer" style={{ background: 'var(--bg-main, #f8fafc)', borderRadius: 8, padding: 16, border: '1px solid #e2e8f0' }}>
+    <div className="statement-viewer" style={{ background: 'var(--bg-main, var(--slate-50))', borderRadius: 8, padding: 16, border: '1px solid var(--slate-200)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
-          <h4 style={{ margin: 0, color: '#1e293b' }}>Statement {statement.recon_no}</h4>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Period: {statement.period} ({statement.period_type}) • Basis: {statement.data_basis}</div>
+          <h4 style={{ margin: 0, color: 'var(--slate-800)' }}>Statement {statement.recon_no}</h4>
+          <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 4 }}>Period: {statement.period} ({statement.period_type}) • Basis: {statement.data_basis}</div>
         </div>
         <Badge status={statement.status} />
       </div>
@@ -230,9 +230,9 @@ export function StatementViewer({ statement }) {
         <strong style={{ color: isHealthy ? '#166534' : '#991b1b' }}>{isHealthy ? '✅ Data is fully reconciled and ready for sign-off.' : '⚠️ Exceptions detected. Review required before sign-off.'}</strong>
       </div>
 
-      <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ border: '1px solid var(--slate-200)', borderRadius: 8, overflow: 'hidden' }}>
         <table className="data-table" style={{ margin: 0 }}>
-          <thead style={{ background: '#f1f5f9' }}>
+          <thead style={{ background: 'var(--slate-100)' }}>
             <tr>
               <th scope="col">Check Item</th>
               <th scope="col">Status</th>
@@ -252,20 +252,20 @@ export function StatementViewer({ statement }) {
                 <td style={{ color: it.variance !== 0 ? '#e53e3e' : '#10b981', fontWeight: it.variance !== 0 ? 600 : 400 }}>
                   {it.variance != null ? fmtNumber(it.variance, 2) : '-'}
                 </td>
-                <td style={{ fontSize: 12, color: '#64748b' }}>{it.notes}</td>
+                <td style={{ fontSize: 12, color: 'var(--slate-500)' }}>{it.notes}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       
-      <div style={{ display: 'flex', gap: 24, marginTop: 16, borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+      <div style={{ display: 'flex', gap: 24, marginTop: 16, borderTop: '1px solid var(--slate-200)', paddingTop: 16 }}>
         <div>
-          <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase' }}>SJVN Sign-off</div>
+          <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase' }}>SJVN Sign-off</div>
           <div style={{ fontWeight: 500 }}>{statement.sign_off?.sjvn ? `✅ ${statement.sign_off.sjvn.by}` : 'Pending'}</div>
         </div>
         <div>
-          <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase' }}>Counterparty Sign-off</div>
+          <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase' }}>Counterparty Sign-off</div>
           <div style={{ fontWeight: 500 }}>{statement.sign_off?.counterparty ? `✅ ${statement.sign_off.counterparty.by}` : 'Pending'}</div>
         </div>
       </div>
@@ -283,45 +283,45 @@ export function DemandLetterViewer({ letterStr }) {
   }
 
   return (
-    <div className="card" style={{ border: '1px solid #cbd5e1', borderRadius: 8, overflow: 'hidden', margin: '16px 0', background: 'white' }}>
-      <div style={{ background: '#f8fafc', padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+    <div className="card" style={{ border: '1px solid var(--slate-300)', borderRadius: 8, overflow: 'hidden', margin: '16px 0', background: 'white' }}>
+      <div style={{ background: 'var(--slate-50)', padding: '16px 20px', borderBottom: '1px solid var(--slate-200)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <div style={{ fontSize: 12, textTransform: 'uppercase', color: '#64748b', fontWeight: 600, letterSpacing: 0.5 }}>Official Demand Letter</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', marginTop: 4 }}>{letter.subject}</div>
+          <div style={{ fontSize: 12, textTransform: 'uppercase', color: 'var(--slate-500)', fontWeight: 600, letterSpacing: 0.5 }}>Official Demand Letter</div>
+          <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--slate-900)', marginTop: 4 }}>{letter.subject}</div>
         </div>
         <Badge status="NOTICE_ISSUED" />
       </div>
       
       <div style={{ padding: '20px' }}>
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: '#64748b' }}>To:</div>
-          <div style={{ fontSize: 15, fontWeight: 500, color: '#1e293b' }}>{letter.to}</div>
+          <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>To:</div>
+          <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--slate-800)' }}>{letter.to}</div>
         </div>
         
         <div style={{ display: 'flex', gap: 32, marginBottom: 20 }}>
           <div>
-            <div style={{ fontSize: 13, color: '#64748b' }}>Demand Amount</div>
-            <div style={{ fontSize: 20, fontWeight: 600, color: '#b91c1c' }}>{fmtCurrency(letter.amount)}</div>
+            <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Demand Amount</div>
+            <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--red-deep)' }}>{fmtCurrency(letter.amount)}</div>
           </div>
           <div>
-            <div style={{ fontSize: 13, color: '#64748b' }}>Date Issued</div>
+            <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Date Issued</div>
             <div style={{ fontSize: 15, fontWeight: 500 }}>{new Date().toLocaleDateString('en-IN')}</div>
           </div>
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 4 }}>Outstanding Invoices Covered:</div>
+          <div style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 4 }}>Outstanding Invoices Covered:</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {letter.invoice_ids?.map((inv) => (
-              <span key={inv} style={{ padding: '4px 8px', background: '#f1f5f9', borderRadius: 4, fontSize: 13, border: '1px solid #e2e8f0' }}>{inv}</span>
+              <span key={inv} style={{ padding: '4px 8px', background: 'var(--slate-100)', borderRadius: 4, fontSize: 13, border: '1px solid var(--slate-200)' }}>{inv}</span>
             ))}
           </div>
         </div>
 
         {letter.waterfall?.length > 0 && (
           <div>
-            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 4 }}>Invocation Waterfall Sequence:</div>
-            <ol style={{ margin: 0, paddingLeft: 20, fontSize: 14, color: '#334155' }}>
+            <div style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 4 }}>Invocation Waterfall Sequence:</div>
+            <ol style={{ margin: 0, paddingLeft: 20, fontSize: 14, color: 'var(--slate-700)' }}>
               {letter.waterfall.map((step, i) => (
                 <li key={i} style={{ marginBottom: 4 }}>{step}</li>
               ))}

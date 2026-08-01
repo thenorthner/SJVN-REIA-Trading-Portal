@@ -109,7 +109,7 @@ const REPORT_ICONS = {
 
 const SECTION_ICONS = {
   REIA: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b5fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
       <polyline points="14 2 14 8 20 8" />
       <line x1="16" y1="13" x2="8" y2="13" />
@@ -117,23 +117,23 @@ const SECTION_ICONS = {
     </svg>
   ),
   TRADING: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b5fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
     </svg>
   ),
   GOVERNANCE: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b5fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </svg>
   ),
   COMPLIANCE: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b5fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       <polyline points="9 12 11 14 15 10" />
     </svg>
   ),
   MANAGEMENT: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0b5fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <path d="M9 17V9" /><path d="M13 17V5" /><path d="M17 17v-4" />
     </svg>
@@ -145,11 +145,11 @@ const REPORT_GROUPS = [
     vertical: 'REIA',
     label: 'REIA – Billing & Settlement',
     reports: [
-      { path: '/reports/billing-summary/pdf', file: 'SJVN_Billing_Report.pdf', title: 'Billing Summary', blurb: 'Month-wise sales, purchases, margin, LPS and collections.', iconType: 'billing', iconBg: '#e0f2fe', iconColor: '#0284c7' },
-      { path: '/reports/energy-summary/pdf', file: 'SJVN_Energy_Report.pdf', title: 'Energy Data & Validation', blurb: 'Provisional vs final energy per contract, CUF and availability.', iconType: 'energy', iconBg: '#dcfce7', iconColor: '#16a34a' },
+      { path: '/reports/billing-summary/pdf', file: 'SJVN_Billing_Report.pdf', title: 'Billing Summary', blurb: 'Month-wise sales, purchases, margin, LPS and collections.', iconType: 'billing', iconBg: '#e0f2fe', iconColor: 'var(--sky)' },
+      { path: '/reports/energy-summary/pdf', file: 'SJVN_Energy_Report.pdf', title: 'Energy Data & Validation', blurb: 'Provisional vs final energy per contract, CUF and availability.', iconType: 'energy', iconBg: '#dcfce7', iconColor: 'var(--green-strong)' },
       { path: '/reports/dispute-summary/pdf', file: 'SJVN_Dispute_Report.pdf', title: 'Dispute Summary', blurb: 'Open disputes by reason and ageing, with SLA breaches.', iconType: 'dispute', iconBg: '#fef3c7', iconColor: '#d97706' },
       { path: '/reports/recon-summary/pdf', file: 'SJVN_Reconciliation_Report.pdf', title: 'Reconciliation', blurb: 'Metered vs billed vs paid, and unresolved variances.', iconType: 'recon', iconBg: '#f3e8ff', iconColor: '#9333ea' },
-      { path: '/reports/contract-summary/pdf', file: 'SJVN_Contract_Report.pdf', title: 'Contract Summary', blurb: 'PPA/PSA portfolio, capacity and tariff position.', iconType: 'contract', iconBg: '#e0f2fe', iconColor: '#0284c7' },
+      { path: '/reports/contract-summary/pdf', file: 'SJVN_Contract_Report.pdf', title: 'Contract Summary', blurb: 'PPA/PSA portfolio, capacity and tariff position.', iconType: 'contract', iconBg: '#e0f2fe', iconColor: 'var(--sky)' },
       { path: '/reports/reia-dashboard/pdf', file: 'SJVN_REIA_Dashboard_Snapshot.pdf', title: 'REIA Dashboard Snapshot', blurb: 'Point-in-time snapshot of the REIA dashboard KPIs.', iconType: 'reiaSnapshot', iconBg: '#ccfbf1', iconColor: '#0d9488' },
     ],
   },
@@ -271,7 +271,7 @@ export default function ConsolidatedDashboard() {
       </div>
 
       {/* Auto-generated Executive Summary */}
-      <Card style={{ marginBottom: 20, backgroundColor: '#f8faff', borderLeft: '4px solid #0b5fff' }}>
+      <Card style={{ marginBottom: 20, backgroundColor: '#f8faff', borderLeft: '4px solid var(--primary)' }}>
         <h4 style={{ margin: '0 0 10px 0', color: '#1c2536' }}>Executive Summary</h4>
         <p style={{ margin: 0, fontSize: 16, lineHeight: 1.5, color: '#333' }}>
           {data.executiveSummary}
@@ -309,10 +309,10 @@ export default function ConsolidatedDashboard() {
               <strong>Current: {fmtNumber(data.reiaContractedCapacity)} MW</strong>
               <strong>Target: {fmtNumber(data.targetCapacity)} MW</strong>
             </div>
-            <div style={{ width: '100%', backgroundColor: '#e2e8f0', borderRadius: 8, height: 24, overflow: 'hidden' }}>
-              <div style={{ width: `${capacityProgress}%`, backgroundColor: '#0b5fff', height: '100%', transition: 'width 0.5s ease' }} />
+            <div style={{ width: '100%', backgroundColor: 'var(--slate-200)', borderRadius: 8, height: 24, overflow: 'hidden' }}>
+              <div style={{ width: `${capacityProgress}%`, backgroundColor: 'var(--primary)', height: '100%', transition: 'width 0.5s ease' }} />
             </div>
-            <p style={{ textAlign: 'right', marginTop: 8, fontSize: 13, color: '#667085' }}>{capacityProgress.toFixed(1)}% achieved</p>
+            <p style={{ textAlign: 'right', marginTop: 8, fontSize: 13, color: 'var(--text-muted)' }}>{capacityProgress.toFixed(1)}% achieved</p>
           </div>
         </Card>
       </div>
@@ -354,12 +354,12 @@ export default function ConsolidatedDashboard() {
           <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={revenueChart}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e6ed" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${(v / 1e7).toFixed(1)}Cr`} />
                 <Tooltip formatter={(v) => fmtCurrency(v)} />
                 <Legend />
-                <Bar dataKey="Value" fill="#0b5fff" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Value" fill="var(--primary)" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -371,7 +371,7 @@ export default function ConsolidatedDashboard() {
         {/* Banner Card with Header & Decorative Graphic */}
         <div style={{
           background: '#ffffff',
-          border: '1px solid #e2e8f0',
+          border: '1px solid var(--slate-200)',
           borderRadius: '16px',
           padding: '24px 32px',
           marginBottom: '24px',
@@ -381,26 +381,26 @@ export default function ConsolidatedDashboard() {
           boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
         }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.02em' }}>
+            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: 'var(--slate-900)', letterSpacing: '-0.02em' }}>
               Reports &amp; Dashboards
             </h2>
-            <p style={{ margin: '6px 0 0 0', fontSize: '14px', color: '#64748b' }}>
+            <p style={{ margin: '6px 0 0 0', fontSize: '14px', color: 'var(--slate-500)' }}>
               Access and download key operational reports across all modules.
             </p>
           </div>
           <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
             <svg width="140" height="76" viewBox="0 0 140 76" fill="none">
               <rect x="15" y="8" width="85" height="60" rx="8" fill="#eff6ff" stroke="#bfdbfe" strokeWidth="1.5" />
-              <rect x="25" y="20" width="42" height="5" rx="2.5" fill="#0b5fff" />
+              <rect x="25" y="20" width="42" height="5" rx="2.5" fill="var(--primary)" />
               <rect x="25" y="30" width="60" height="4" rx="2" fill="#93c5fd" />
-              <rect x="25" y="38" width="50" height="4" rx="2" fill="#cbd5e1" />
-              <rect x="25" y="46" width="35" height="4" rx="2" fill="#cbd5e1" />
-              <circle cx="82" cy="46" r="13" fill="#0b5fff" opacity="0.1" />
-              <path d="M75 50L80 43L84 46L89 40" stroke="#0b5fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <rect x="25" y="38" width="50" height="4" rx="2" fill="var(--slate-300)" />
+              <rect x="25" y="46" width="35" height="4" rx="2" fill="var(--slate-300)" />
+              <circle cx="82" cy="46" r="13" fill="var(--primary)" opacity="0.1" />
+              <path d="M75 50L80 43L84 46L89 40" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               <rect x="80" y="14" width="45" height="52" rx="7" fill="#ffffff" stroke="#93c5fd" strokeWidth="1.5" />
-              <rect x="87" y="22" width="28" height="4" rx="2" fill="#0b5fff" />
-              <rect x="87" y="30" width="22" height="3" rx="1.5" fill="#94a3b8" />
-              <rect x="87" y="36" width="24" height="3" rx="1.5" fill="#cbd5e1" />
+              <rect x="87" y="22" width="28" height="4" rx="2" fill="var(--primary)" />
+              <rect x="87" y="30" width="22" height="3" rx="1.5" fill="var(--slate-400)" />
+              <rect x="87" y="36" width="24" height="3" rx="1.5" fill="var(--slate-300)" />
               <rect x="87" y="42" width="16" height="3" rx="1.5" fill="#60a5fa" />
               <circle cx="106" cy="53" r="5" fill="#10b981" />
               <path d="M104 53L105.5 54.5L108 52" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
@@ -409,7 +409,7 @@ export default function ConsolidatedDashboard() {
         </div>
 
         {reportError && (
-          <div style={{ color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>
+          <div style={{ color: 'var(--red-deep)', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>
             {reportError}
           </div>
         )}
@@ -421,7 +421,7 @@ export default function ConsolidatedDashboard() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {SECTION_ICONS[grp.vertical]}
               </div>
-              <span style={{ fontSize: '15px', fontWeight: 600, color: '#0b5fff', letterSpacing: '0.1px' }}>
+              <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--primary)', letterSpacing: '0.1px' }}>
                 {grp.label}
               </span>
             </div>
@@ -434,7 +434,7 @@ export default function ConsolidatedDashboard() {
                   className="report-card-item"
                   style={{
                     background: '#ffffff',
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--slate-200)',
                     borderRadius: '12px',
                     padding: '20px',
                     display: 'flex',
@@ -462,10 +462,10 @@ export default function ConsolidatedDashboard() {
                   </div>
 
                   {/* Title & Blurb */}
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', marginBottom: '6px', lineHeight: 1.3 }}>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--slate-900)', marginBottom: '6px', lineHeight: 1.3 }}>
                     {r.title}
                   </div>
-                  <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.45', marginBottom: '16px', flex: 1 }}>
+                  <div style={{ fontSize: '12px', color: 'var(--slate-500)', lineHeight: '1.45', marginBottom: '16px', flex: 1 }}>
                     {r.blurb}
                   </div>
 
@@ -482,9 +482,9 @@ export default function ConsolidatedDashboard() {
                       gap: '6px',
                       padding: '6px 14px',
                       borderRadius: '6px',
-                      border: '1px solid #cbd5e1',
+                      border: '1px solid var(--slate-300)',
                       background: '#ffffff',
-                      color: '#0f172a',
+                      color: 'var(--slate-900)',
                       fontSize: '12px',
                       fontWeight: 500,
                       cursor: busyReport === r.path ? 'not-allowed' : 'pointer',

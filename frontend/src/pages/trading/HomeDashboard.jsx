@@ -36,9 +36,9 @@ export default function HomeDashboard() {
 
       {/* Bottom Full-Width Data Table: Last 10 days bid summary */}
       <Card style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--slate-200)', background: 'var(--slate-50)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 16, color: '#1e293b' }}>Last 10 days bid summary</h3>
+            <h3 style={{ margin: 0, fontSize: 16, color: 'var(--slate-800)' }}>Last 10 days bid summary</h3>
             <div style={{ display: 'flex', gap: 12 }}>
               <Badge type="info" style={{ fontSize: 13, padding: '4px 8px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}>
                 <strong>Total Cleared Volume (7 Days):</strong> 479.35 MWh
@@ -60,30 +60,30 @@ export default function HomeDashboard() {
         <div style={{ overflowX: 'auto' }}>
           <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
-              <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #cbd5e1', textAlign: 'left' }}>
-                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600 }}>Delivery Date</th>
-                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600 }}>Portfolio Name</th>
-                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600 }}>Bid Type</th>
-                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600, textAlign: 'right' }}>Bid Placed (MWH)</th>
-                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600, textAlign: 'right' }}>Bid Cleared (MWH)</th>
-                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600, textAlign: 'right' }}>Exchange Oblig(Rs)</th>
-                <th scope="col" style={{ padding: '12px 20px', color: '#475569', fontWeight: 600, textAlign: 'right' }}>Grand Total (Rs)</th>
+              <tr style={{ background: 'var(--slate-100)', borderBottom: '2px solid var(--slate-300)', textAlign: 'left' }}>
+                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600 }}>Delivery Date</th>
+                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600 }}>Portfolio Name</th>
+                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600 }}>Bid Type</th>
+                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600, textAlign: 'right' }}>Bid Placed (MWH)</th>
+                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600, textAlign: 'right' }}>Bid Cleared (MWH)</th>
+                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600, textAlign: 'right' }}>Exchange Oblig(Rs)</th>
+                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600, textAlign: 'right' }}>Grand Total (Rs)</th>
               </tr>
             </thead>
             <tbody>
               {mockSummaryData.map((row, idx) => (
-                <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0', background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
-                  <td style={{ padding: '12px 20px', fontWeight: 500, color: '#334155' }}>{row.date}</td>
-                  <td style={{ padding: '12px 20px', color: '#475569' }}>{row.portfolio}</td>
+                <tr key={idx} style={{ borderBottom: '1px solid var(--slate-200)', background: idx % 2 === 0 ? '#fff' : 'var(--slate-50)' }}>
+                  <td style={{ padding: '12px 20px', fontWeight: 500, color: 'var(--slate-700)' }}>{row.date}</td>
+                  <td style={{ padding: '12px 20px', color: 'var(--slate-600)' }}>{row.portfolio}</td>
                   <td style={{ padding: '12px 20px' }}>
-                    <span style={{ color: '#dc2626', fontWeight: 600 }}>{row.type}</span>
+                    <span style={{ color: 'var(--red-strong)', fontWeight: 600 }}>{row.type}</span>
                   </td>
-                  <td style={{ padding: '12px 20px', textAlign: 'right', color: '#475569' }}>{row.bidPlaced.toFixed(2)}</td>
-                  <td style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 600, color: '#0f172a' }}>{row.bidCleared.toFixed(2)}</td>
-                  <td style={{ padding: '12px 20px', textAlign: 'right', color: '#475569' }}>
+                  <td style={{ padding: '12px 20px', textAlign: 'right', color: 'var(--slate-600)' }}>{row.bidPlaced.toFixed(2)}</td>
+                  <td style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 600, color: 'var(--slate-900)' }}>{row.bidCleared.toFixed(2)}</td>
+                  <td style={{ padding: '12px 20px', textAlign: 'right', color: 'var(--slate-600)' }}>
                     {row.exchangeObligation.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
-                  <td style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 600, color: '#16a34a' }}>
+                  <td style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 600, color: 'var(--green-strong)' }}>
                     {row.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </td>
                 </tr>

@@ -299,11 +299,11 @@ export default function RECManagement() {
             <div className="chart-box">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={agingData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e6ed" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="bucket" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v) => [`${fmtNumber(v, 0)} RECs`, 'Held']} />
-                  <Bar dataKey="recs" name="Held RECs" fill="#0b5fff" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="recs" name="Held RECs" fill="var(--primary)" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -318,13 +318,13 @@ export default function RECManagement() {
             <div className="chart-box">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={techData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e6ed" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="technology" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v, name) => [`${fmtNumber(v, 0)} RECs`, name]} />
                   <Legend />
-                  <Bar dataKey="sold" name="Sold" fill="#12875a" radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="held" name="Held" fill="#0b5fff" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="sold" name="Sold" fill="var(--green)" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="held" name="Held" fill="var(--primary)" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

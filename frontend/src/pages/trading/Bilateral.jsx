@@ -32,7 +32,7 @@ const SLA_STYLE = {
 /** Compact SLA chip — omitted entirely when there is no approval clock running. */
 function SlaChip({ sla }) {
   const style = sla && SLA_STYLE[sla.state];
-  if (!style) return <span style={{ color: '#94a3b8' }}>—</span>;
+  if (!style) return <span style={{ color: 'var(--text-subtle)' }}>—</span>;
   const detail = sla.is_open
     ? `${sla.elapsed_days}d / ${sla.target_days}d`
     : `${sla.elapsed_days}d vs ${sla.target_days}d`;
@@ -331,9 +331,9 @@ export default function Bilateral() {
         <Card>
           <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             <div>
-              <div style={{ fontSize: 12, color: '#64748b' }}>Pending approvals</div>
+              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>Pending approvals</div>
               <div style={{ fontSize: 22, fontWeight: 600 }}>{sla.pending_total}</div>
-              <div style={{ fontSize: 12, color: '#64748b' }}>
+              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>
                 {sla.counts.ON_TRACK} on track · <span style={{ color: '#92400e' }}>{sla.counts.AT_RISK} at risk</span> ·{' '}
                 <span style={{ color: '#991b1b' }}>{sla.counts.BREACHED} overdue</span>
                 {sla.counts.REJECTED > 0 && (
@@ -342,20 +342,20 @@ export default function Bilateral() {
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 12, color: '#64748b' }}>On-time rate</div>
+              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>On-time rate</div>
               <div style={{ fontSize: 22, fontWeight: 600 }}>
                 {sla.on_time_rate_pct === null ? '—' : `${sla.on_time_rate_pct}%`}
               </div>
-              <div style={{ fontSize: 12, color: '#64748b' }}>
+              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>
                 {sla.counts.MET + sla.counts.MISSED} decided ({sla.counts.MISSED} missed)
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 12, color: '#64748b' }}>Avg approval time</div>
+              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>Avg approval time</div>
               <div style={{ fontSize: 22, fontWeight: 600 }}>
                 {sla.avg_approval_days === null ? '—' : `${sla.avg_approval_days}d`}
               </div>
-              <div style={{ fontSize: 12, color: '#64748b' }}>
+              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>
                 Targets: {Object.entries(sla.targets).map(([k, v]) => `${k} ${v}d`).join(' · ')}
               </div>
             </div>
@@ -371,7 +371,7 @@ export default function Bilateral() {
             </div>
             {sla.needs_attention.length > 0 && (
               <div style={{ flex: 1, minWidth: 260 }}>
-                <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Needs attention</div>
+                <div style={{ fontSize: 12, color: 'var(--slate-500)', marginBottom: 4 }}>Needs attention</div>
                 {sla.needs_attention.slice(0, 4).map((a) => (
                   <div key={a.id} style={{ fontSize: 12, marginBottom: 2 }}>
                     <span style={{ color: a.state === 'BREACHED' ? '#991b1b' : '#92400e' }}>●</span>{' '}
@@ -536,7 +536,7 @@ export default function Bilateral() {
             <div style={{ flex: 1 }}>
               <p>
                 <strong>Total Losses:</strong> {totalLosses(selectedTx).toFixed(2)}%
-                <span style={{ color: '#64748b', fontSize: 12 }}>
+                <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>
                   {' '}(inj {Number(selectedTx.loss_injection_state) || 0} · ISTS {Number(selectedTx.loss_inter_state) || 0} · drawee {Number(selectedTx.loss_drawee_state) || 0})
                 </span>
               </p>
@@ -550,15 +550,15 @@ export default function Bilateral() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: 'var(--slate-50)', borderRadius: 8, border: '1px solid var(--slate-200)' }}>
             <strong style={{ fontSize: 13 }}>NOAR Portal:</strong>
             <Badge status={selectedTx.noar_status === 'APPROVED' ? 'ACTIVE' : selectedTx.noar_status === 'NOT_INITIATED' ? 'DRAFT' : 'PENDING'} label={(selectedTx.noar_status || 'NOT_INITIATED').replace(/_/g, ' ')} />
-            {selectedTx.noar_contract_no && <span style={{ fontSize: 12, color: '#475569' }}>Contract: <strong>{selectedTx.noar_contract_no}</strong></span>}
+            {selectedTx.noar_contract_no && <span style={{ fontSize: 12, color: 'var(--slate-600)' }}>Contract: <strong>{selectedTx.noar_contract_no}</strong></span>}
             {selectedTx.noar_sla?.state && selectedTx.noar_sla.state !== 'NOT_APPLICABLE' && (
               <SlaChip sla={selectedTx.noar_sla} />
             )}
             {selectedTx.noar_timeline?.hours_in_current_status != null && (
-              <span style={{ fontSize: 12, color: '#475569' }}>
+              <span style={{ fontSize: 12, color: 'var(--slate-600)' }}>
                 In this status: <strong>{fmtDuration(selectedTx.noar_timeline.hours_in_current_status)}</strong>
               </span>
             )}
@@ -643,26 +643,26 @@ export default function Bilateral() {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 18 }}>
                       <span style={{
                         width: 11, height: 11, borderRadius: '50%', marginTop: 5,
-                        background: e.status_to === 'APPROVED' ? '#16a34a' : '#2563eb',
+                        background: e.status_to === 'APPROVED' ? 'var(--green-strong)' : '#2563eb',
                       }} />
                       {i < selectedTx.noar_timeline.entries.length - 1 && (
-                        <span style={{ width: 2, flex: 1, minHeight: 26, background: '#cbd5e1' }} />
+                        <span style={{ width: 2, flex: 1, minHeight: 26, background: 'var(--slate-300)' }} />
                       )}
                     </div>
                     <div style={{ paddingBottom: 14, flex: 1 }}>
                       <div style={{ fontSize: 13, fontWeight: 600 }}>
                         {NOAR_STEP_LABEL[e.status_to] || e.status_to}
                         {e.hours_in_previous_status != null && (
-                          <span style={{ fontWeight: 400, color: '#64748b' }}>
+                          <span style={{ fontWeight: 400, color: 'var(--slate-500)' }}>
                             {' '}· took {fmtDuration(e.hours_in_previous_status)}
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: 12, color: '#64748b' }}>
+                      <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>
                         {fmtStamp(e.changed_at)}{e.changed_by_name ? ` · ${e.changed_by_name}` : ''}
                         {e.noar_contract_no ? ` · ${e.noar_contract_no}` : ''}
                       </div>
-                      {e.note && <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>{e.note}</div>}
+                      {e.note && <div style={{ fontSize: 12, color: 'var(--slate-600)', marginTop: 2 }}>{e.note}</div>}
                     </div>
                   </div>
                 ))}
@@ -735,7 +735,7 @@ export default function Bilateral() {
           <div style={{ padding: '10px 0' }}>
             {!syncResult ? (
               <form onSubmit={handleWbesSync}>
-                <p style={{ marginBottom: 15, color: '#475569' }}>
+                <p style={{ marginBottom: 15, color: 'var(--slate-600)' }}>
                   Pull approved 15-minute block schedules from NOAR / State WBES for a specific delivery date. 
                   Schedules will be automatically matched to your contracts using the NOAR Contract / Approval No.
                   {!wbesStatus?.live && <><br/><br/><strong>Note:</strong> WBES is running in Stub Mode. A sample schedule will be returned.</>}
@@ -752,8 +752,8 @@ export default function Bilateral() {
               </form>
             ) : (
               <div>
-                <p style={{ color: '#16a34a', fontWeight: 600, marginBottom: 15 }}>✓ Sync Complete</p>
-                <ul style={{ marginBottom: 20, lineHeight: 1.6, color: '#334155' }}>
+                <p style={{ color: 'var(--green-strong)', fontWeight: 600, marginBottom: 15 }}>✓ Sync Complete</p>
+                <ul style={{ marginBottom: 20, lineHeight: 1.6, color: 'var(--slate-700)' }}>
                   <li><strong>Schedules Received:</strong> {syncResult.lines_received}</li>
                   <li><strong>Matched to Contracts:</strong> {syncResult.matched?.length || 0}</li>
                   <li><strong>Unmatched:</strong> {syncResult.unmatched?.length || 0}</li>

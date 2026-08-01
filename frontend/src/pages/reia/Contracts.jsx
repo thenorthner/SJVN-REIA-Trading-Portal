@@ -378,7 +378,7 @@ export default function Contracts() {
                 <input type="number" step="0.01" placeholder="Blank = master default" value={form.transmission_charge_per_mwh || ''} onChange={(e) => setForm({ ...form, transmission_charge_per_mwh: e.target.value })} />
               </Field>
             </div>
-            <p style={{ fontSize: 12, color: '#64748b', margin: '8px 0 0' }}>
+            <p style={{ fontSize: 12, color: 'var(--slate-500)', margin: '8px 0 0' }}>
               Capacity = AFC × 0.5 × days/year × (PAFM/NAPAF). ECR from AFC &amp; DE. PAFM comes from energy data availability %. β incentive = (3% × β × 0.5 × AFC)/12.
             </p>
           </div>
@@ -392,7 +392,7 @@ export default function Contracts() {
                 <input type="number" step="0.01" min="0" max="100" placeholder="Blank = master default (Solar 22 / Wind 30 / Hybrid 25)" value={form.min_cuf_percent || ''} onChange={(e) => setForm({ ...form, min_cuf_percent: e.target.value })} />
               </Field>
             </div>
-            <p style={{ fontSize: 12, color: '#64748b', margin: '8px 0 0' }}>
+            <p style={{ fontSize: 12, color: 'var(--slate-500)', margin: '8px 0 0' }}>
               If actual CUF (from energy data) is below this threshold, invoice generate applies a shortfall penalty = shortfall MWh × tariff (or master ₹/MWh rate).
             </p>
           </div>
@@ -491,7 +491,7 @@ export default function Contracts() {
               ) : <div style={{ fontSize: 13, color: '#666' }}>No PSAs mapped to this PPA yet.</div>}
 
               {allocationForm ? (
-                <form onSubmit={handleAddAllocation} style={{ marginTop: 16, padding: 16, border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                <form onSubmit={handleAddAllocation} style={{ marginTop: 16, padding: 16, border: '1px solid var(--slate-200)', borderRadius: 8 }}>
                   <h5 style={{ margin: '0 0 12px 0' }}>Map new PSA to this PPA</h5>
                   <div className="form-grid">
                     <Field label="Select PSA">

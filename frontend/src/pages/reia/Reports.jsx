@@ -11,12 +11,12 @@ function inrCompact(v) {
 }
 
 function StatCard({ label, value, sub, tone }) {
-  const color = tone === 'good' ? '#047857' : tone === 'bad' ? '#b91c1c' : '#0f172a';
+  const color = tone === 'good' ? '#047857' : tone === 'bad' ? 'var(--red-deep)' : 'var(--slate-900)';
   return (
-    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '14px 16px' }}>
-      <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
+    <div style={{ background: '#fff', border: '1px solid var(--slate-200)', borderRadius: 8, padding: '14px 16px' }}>
+      <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase', letterSpacing: 0.4 }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 700, color, marginTop: 4 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 12, color: 'var(--text-subtle)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -122,17 +122,17 @@ export default function Reports() {
     { key: 'sales_billed', header: 'Sales Billed (S→B)', render: (r) => fmtCurrency(r.sales_billed) },
     { key: 'purchase_billed', header: 'Purchases (Dev→SJVN)', render: (r) => fmtCurrency(r.purchase_billed) },
     { key: 'gross_margin', header: 'Gross Margin', render: (r) => (
-      <span style={{ color: r.gross_margin >= 0 ? '#047857' : '#b91c1c', fontWeight: 600 }}>{fmtCurrency(r.gross_margin)}</span>
+      <span style={{ color: r.gross_margin >= 0 ? '#047857' : 'var(--red-deep)', fontWeight: 600 }}>{fmtCurrency(r.gross_margin)}</span>
     )},
     { key: 'trading_margin', header: 'Trading Margin', render: (r) => fmtCurrency(r.trading_margin) },
     { key: 'rebate_saved', header: 'Rebate Saved', render: (r) => fmtCurrency(r.rebate_saved) },
     { key: 'lps_receivable', header: 'LPS Recv.', render: (r) => fmtCurrency(r.lps_receivable) },
     { key: 'net_profit', header: 'Net Profit', render: (r) => (
-      <span style={{ color: r.net_profit >= 0 ? '#047857' : '#b91c1c', fontWeight: 700 }}>{fmtCurrency(r.net_profit)}</span>
+      <span style={{ color: r.net_profit >= 0 ? '#047857' : 'var(--red-deep)', fontWeight: 700 }}>{fmtCurrency(r.net_profit)}</span>
     )},
     { key: 'collected', header: 'Collected', render: (r) => fmtCurrency(r.collected) },
     { key: 'outstanding_receivable', header: 'Outstanding Recv.', render: (r) => (
-      <span style={{ color: r.outstanding_receivable > 0 ? '#b45309' : '#64748b' }}>{fmtCurrency(r.outstanding_receivable)}</span>
+      <span style={{ color: r.outstanding_receivable > 0 ? 'var(--amber-strong)' : 'var(--slate-500)' }}>{fmtCurrency(r.outstanding_receivable)}</span>
     )},
     { key: 'energy_mwh', header: 'Energy (MWh)', render: (r) => fmtNumber(r.energy_mwh) },
   ];
@@ -212,13 +212,13 @@ export default function Reports() {
             </button>
           )}
         </div>
-        <p style={{ margin: '10px 0 0', fontSize: 13, color: '#64748b' }}>
+        <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--slate-500)' }}>
           Preview below matches the PDF. Click <strong>Download PDF Report</strong> for a landscape SJVN-branded document with executive summary, month table, and notes.
         </p>
       </Card>
 
       {error && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', padding: '10px 14px', borderRadius: 8, marginBottom: 12 }}>
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: 'var(--red-deep)', padding: '10px 14px', borderRadius: 8, marginBottom: 12 }}>
           {error}
         </div>
       )}
@@ -229,10 +229,10 @@ export default function Reports() {
       )}
 
       {loading && !data ? (
-        <Card><div style={{ padding: 20, color: '#64748b' }}>Loading report…</div></Card>
+        <Card><div style={{ padding: 20, color: 'var(--slate-500)' }}>Loading report…</div></Card>
       ) : !data?.months?.length ? (
         <Card>
-          <div style={{ padding: 20, color: '#64748b' }}>
+          <div style={{ padding: 20, color: 'var(--slate-500)' }}>
             No billing data for the selected period. Generate invoices under <strong>Billing &amp; Invoicing</strong> first.
           </div>
         </Card>

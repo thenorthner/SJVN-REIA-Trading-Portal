@@ -129,10 +129,10 @@ export function PreviewModal({ open, versionId, fileName, onClose }) {
   return (
     <Modal open={open} onClose={onClose} title={state.name || 'Document Preview'} width={state.kind === 'other' ? 480 : 880}>
       {state.loading && (
-        <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Loading preview...</div>
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--slate-500)' }}>Loading preview...</div>
       )}
       {!state.loading && state.error && (
-        <div style={{ padding: 20, color: '#b91c1c' }}>{state.error}</div>
+        <div style={{ padding: 20, color: 'var(--red-deep)' }}>{state.error}</div>
       )}
       {!state.loading && !state.error && state.kind === 'image' && (
         <img
@@ -145,11 +145,11 @@ export function PreviewModal({ open, versionId, fileName, onClose }) {
         <iframe
           src={state.url}
           title={state.name}
-          style={{ width: '100%', height: '70vh', border: '1px solid #e2e8f0', borderRadius: 6 }}
+          style={{ width: '100%', height: '70vh', border: '1px solid var(--slate-200)', borderRadius: 6 }}
         />
       )}
       {!state.loading && !state.error && state.kind === 'other' && (
-        <div style={{ padding: 20, textAlign: 'center', color: '#64748b' }}>
+        <div style={{ padding: 20, textAlign: 'center', color: 'var(--slate-500)' }}>
           Preview isn't available for this file type. Use the button below to download it instead.
         </div>
       )}
@@ -223,7 +223,7 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
                     {doc.verification_status === 'VERIFIED' ? <Badge status="ACTIVE" /> :
                      doc.verification_status === 'REJECTED' ? <Badge status="REJECTED" /> :
                      doc.verification_status === 'PENDING' ? <Badge status="PENDING" /> :
-                     <span style={{ color: '#64748b', fontSize: 12 }}>Not Required</span>}
+                     <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>Not Required</span>}
                   </td>
                   <td>v{doc.version_number}</td>
                   <td>{fmtDate(doc.created_at)}</td>
@@ -333,10 +333,10 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
     return (
       <Modal open={open} onClose={onClose} title="Upload Document">
         <div style={{ padding: '8px 0 16px' }}>
-          <p style={{ fontSize: 14, color: '#334155', margin: '0 0 8px' }}>
+          <p style={{ fontSize: 14, color: 'var(--slate-700)', margin: '0 0 8px' }}>
             There are no documents for you to upload here.
           </p>
-          <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
+          <p style={{ fontSize: 13, color: 'var(--slate-500)', margin: 0 }}>
             The documents required for this section are <strong>VERIFY-category</strong> and must be uploaded
             by the stakeholder (Seller / Buyer) from their own login. As an internal reviewer, you can only
             <strong> review and verify</strong> the documents they submit.
@@ -383,28 +383,28 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
           <input required placeholder="e.g., Q3 Payment Guarantee" value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
         <Field label="Document Type">
-          <select value={docType} onChange={e => setDocType(e.target.value)} disabled={presetLocked} style={presetLocked ? { backgroundColor: '#f8fafc', color: '#334155' } : undefined}>
+          <select value={docType} onChange={e => setDocType(e.target.value)} disabled={presetLocked} style={presetLocked ? { backgroundColor: 'var(--slate-50)', color: 'var(--slate-700)' } : undefined}>
             {availableTypes.map(t => (
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>
           {presetLocked && (
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
               Linked to this regulatory approval — type is fixed.
             </div>
           )}
           {activeDef.reason && (
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
               <i>Why is this needed?</i> {activeDef.reason}
             </div>
           )}
         </Field>
         <Field label="Classification Category (Auto-assigned)">
-          <select value={autoCategory} disabled style={{ backgroundColor: '#f8fafc', color: autoCategory === 'VERIFY' ? '#b91c1c' : '#334155', fontWeight: autoCategory === 'VERIFY' ? 'bold' : 'normal' }}>
+          <select value={autoCategory} disabled style={{ backgroundColor: 'var(--slate-50)', color: autoCategory === 'VERIFY' ? 'var(--red-deep)' : 'var(--slate-700)', fontWeight: autoCategory === 'VERIFY' ? 'bold' : 'normal' }}>
             <option value="RECORD">Record Only (No approval workflow)</option>
             <option value="VERIFY">Verify (Requires SJVN Admin approval)</option>
           </select>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
             This is strictly enforced by the platform's cross-module document taxonomy rules.
           </div>
         </Field>
@@ -452,7 +452,7 @@ function ReviewModal({ open, doc, onClose, onSuccess }) {
     <Modal open={open} onClose={onClose} title="Review Document">
       <div style={{ marginBottom: 20 }}>
         <strong>{doc.title}</strong> (v{doc.version_number})
-        <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
+        <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
           Uploaded on {fmtDateTime(doc.created_at)}
         </div>
         <div style={{ marginTop: 12 }}>

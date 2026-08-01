@@ -121,7 +121,7 @@ export default function PreTradeBoard() {
       case 'OPEN': return '#10b981'; // Green
       case 'PARTIALLY_BOOKED': return '#f59e0b'; // Amber
       case 'FULLY_BOOKED': return '#3b82f6'; // Blue
-      case 'CANCELLED': return '#64748b'; // Slate
+      case 'CANCELLED': return 'var(--slate-500)'; // Slate
       default: return '#6b7280';
     }
   };
@@ -152,7 +152,7 @@ export default function PreTradeBoard() {
                   <div>
                     <strong>{fmtNumber(left)} MW</strong>
                     {left !== r.quantum_mw && (
-                      <div style={{ fontSize: 11, color: '#64748b' }}>of {fmtNumber(r.quantum_mw)} declared</div>
+                      <div style={{ fontSize: 11, color: 'var(--slate-500)' }}>of {fmtNumber(r.quantum_mw)} declared</div>
                     )}
                   </div>
                 );
@@ -162,11 +162,11 @@ export default function PreTradeBoard() {
                 <Badge color={getStatusColor(r.status)}>{r.status}</Badge>
             ) },
             { key: 'consents', header: 'Consents', render: (r) => {
-                if (!r.consents || r.consents.length === 0) return <span style={{ color: '#94a3b8' }}>None</span>;
+                if (!r.consents || r.consents.length === 0) return <span style={{ color: 'var(--text-subtle)' }}>None</span>;
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {r.consents.map(c => (
-                      <div key={c.id} style={{ fontSize: 12, border: '1px solid #e2e8f0', padding: '4px 8px', borderRadius: 4, background: '#f8fafc' }}>
+                      <div key={c.id} style={{ fontSize: 12, border: '1px solid var(--slate-200)', padding: '4px 8px', borderRadius: 4, background: 'var(--slate-50)' }}>
                         <div><strong>{c.buyer_name}</strong>: {c.quantum_mw} MW @ ₹{c.offered_tariff || r.expected_tariff}</div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                            <Badge color={c.status === 'CONFIRMED' ? '#10b981' : c.status === 'REJECTED' ? '#ef4444' : '#f59e0b'}>{c.status}</Badge>
@@ -201,7 +201,7 @@ export default function PreTradeBoard() {
       {showCreate && (
         <Modal open onClose={() => { setShowCreate(false); setError(''); }} title="Declare Power Availability">
           <form onSubmit={handleCreate}>
-            {error && <div style={{ color: '#dc2626', marginBottom: 16 }}>{error}</div>}
+            {error && <div style={{ color: 'var(--red-strong)', marginBottom: 16 }}>{error}</div>}
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
               <Field label="Seller Client">
@@ -244,17 +244,17 @@ export default function PreTradeBoard() {
       {/* Submit Consent Modal */}
       {consentTarget && (
         <Modal open onClose={() => { setConsentTarget(null); setError(''); }} title={`Submit Consent to ${consentTarget.seller_name}`}>
-          <div style={{ marginBottom: 16, padding: 12, background: '#f8fafc', borderRadius: 6, fontSize: 14 }}>
+          <div style={{ marginBottom: 16, padding: 12, background: 'var(--slate-50)', borderRadius: 6, fontSize: 14 }}>
              <div><strong>Available Period:</strong> {consentTarget.start_date} to {consentTarget.end_date}</div>
              <div>
                <strong>Uncommitted MW:</strong> {fmtNumber(remainingMw(consentTarget))} MW
-               <span style={{ color: '#64748b' }}> (of {fmtNumber(consentTarget.quantum_mw)} MW declared)</span>
+               <span style={{ color: 'var(--slate-500)' }}> (of {fmtNumber(consentTarget.quantum_mw)} MW declared)</span>
              </div>
              <div><strong>Expected Tariff:</strong> {consentTarget.expected_tariff ? `₹${consentTarget.expected_tariff}` : 'Not specified'}</div>
           </div>
           
           <form onSubmit={handleConsentSubmit}>
-            {error && <div style={{ color: '#dc2626', marginBottom: 16 }}>{error}</div>}
+            {error && <div style={{ color: 'var(--red-strong)', marginBottom: 16 }}>{error}</div>}
             
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16, marginBottom: 16 }}>
               <Field label="Buyer Client (Your entity)">

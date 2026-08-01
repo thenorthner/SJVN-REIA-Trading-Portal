@@ -155,7 +155,7 @@ export default function TradingClients() {
                 </Field>
               </div>
             </div>
-            <p style={{ fontSize: 12, color: '#64748b', marginTop: 10 }}>
+            <p style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 10 }}>
               Authorised signatories and exchange registrations are added from the client's profile after onboarding.
             </p>
             <div style={{ marginTop: 18, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>

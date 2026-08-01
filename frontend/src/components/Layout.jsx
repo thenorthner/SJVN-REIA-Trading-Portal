@@ -289,7 +289,7 @@ export default function Layout() {
                   {notifications.length === 0 && <div className="notif-empty">No unread alerts. All clear.</div>}
                   {notifications.slice(0, 10).map((n) => (
                     <div key={n.id} className={'notif-item' + (n.is_read ? '' : ' unread')} style={{ borderLeft: n.type === 'COMPLIANCE_ALERT' ? '3px solid #ef4444' : '3px solid transparent' }}>
-                      <div className="notif-type" style={{ color: n.type === 'COMPLIANCE_ALERT' ? '#ef4444' : '#64748b', fontWeight: 600 }}>{n.type}</div>
+                      <div className="notif-type" style={{ color: n.type === 'COMPLIANCE_ALERT' ? '#ef4444' : 'var(--slate-500)', fontWeight: 600 }}>{n.type}</div>
                       <div>{n.message}</div>
                     </div>
                   ))}

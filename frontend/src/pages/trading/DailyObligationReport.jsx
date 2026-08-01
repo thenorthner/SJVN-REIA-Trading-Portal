@@ -145,7 +145,7 @@ export default function DailyObligationReport() {
                 portfolio or the real record. A settlement report asserting an
                 open-access approval that was never checked is the kind of claim
                 an auditor would rely on, so it states the gap instead. */}
-            <div style={{ marginBottom: 20, padding: '10px 15px', background: '#f8fafc', color: '#475569', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+            <div style={{ marginBottom: 20, padding: '10px 15px', background: 'var(--slate-50)', color: 'var(--slate-600)', borderRadius: 4, border: '1px solid var(--slate-200)' }}>
                <strong>Standing Clearance (NOC):</strong> not shown — this report is not yet linked to the
                portfolio's clearance record. Check the client's clearance on the bidding screen.
             </div>
@@ -258,7 +258,7 @@ export default function DailyObligationReport() {
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
            <div style={{ background: '#fff', width: 800, borderRadius: 8, padding: 30, boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #eee', paddingBottom: 15, marginBottom: 20 }}>
-                 <h3 style={{ margin: 0 }}>SAP FI Journal Voucher Preview <span style={{ fontSize: 12, fontWeight: 400, color: '#b45309' }}>· sample figures</span></h3>
+                 <h3 style={{ margin: 0 }}>SAP FI Journal Voucher Preview <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--amber-strong)' }}>· sample figures</span></h3>
                  <button onClick={() => setSapModalOpen(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>&times;</button>
               </div>
               

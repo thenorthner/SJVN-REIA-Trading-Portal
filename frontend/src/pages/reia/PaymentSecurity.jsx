@@ -144,7 +144,7 @@ export default function PaymentSecurity() {
       key: 'coverage',
       header: 'Coverage',
       render: (r) => (
-        <span style={{ color: (r.coverage_ratio || 0) < 1 ? 'var(--danger, #b91c1c)' : undefined }}>
+        <span style={{ color: (r.coverage_ratio || 0) < 1 ? 'var(--danger, var(--red-deep))' : undefined }}>
           {r.coverage_ratio != null ? r.coverage_ratio.toFixed(2) : '—'}
         </span>
       ),
@@ -156,7 +156,7 @@ export default function PaymentSecurity() {
         <span>
           {r.validity_end || '—'}
           {r.days_to_expiry != null && r.days_to_expiry <= 30 && (
-            <span style={{ marginLeft: 6, fontSize: 11, color: '#b45309' }}>{r.days_to_expiry}d</span>
+            <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--amber-strong)' }}>{r.days_to_expiry}d</span>
           )}
         </span>
       ),

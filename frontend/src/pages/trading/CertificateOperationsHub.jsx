@@ -486,10 +486,10 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
                 <Field label={`Per Certificate Price (₹)`} style={{ flex: 1 }}>
                   <input type="number" className="input" value={createForm.price} onChange={e => setCreateForm({...createForm, price: e.target.value})} placeholder="e.g. 1500" />
                   {priceError && (
-                    <div style={{ marginTop: 5, fontSize: 11, color: '#c22b3a', fontWeight: 'bold' }}>⚠️ {priceError}</div>
+                    <div style={{ marginTop: 5, fontSize: 11, color: 'var(--red)', fontWeight: 'bold' }}>⚠️ {priceError}</div>
                   )}
                   {!priceError && priceNote && (
-                    <div style={{ marginTop: 5, fontSize: 11, color: '#667085' }}>{priceNote}</div>
+                    <div style={{ marginTop: 5, fontSize: 11, color: 'var(--text-muted)' }}>{priceNote}</div>
                   )}
                 </Field>
               </div>

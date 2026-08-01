@@ -78,11 +78,11 @@ export default function MarketAnalytics() {
       <Card>
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', marginBottom: 20 }}>
           <div style={{ flex: 1, maxWidth: 200 }}>
-            <label style={{ display: 'block', fontSize: 12, marginBottom: 5, fontWeight: 600, color: '#475569' }} htmlFor="marketanalytics-from-trading-date">From Trading Date</label>
+            <label style={{ display: 'block', fontSize: 12, marginBottom: 5, fontWeight: 600, color: 'var(--slate-600)' }} htmlFor="marketanalytics-from-trading-date">From Trading Date</label>
             <input id="marketanalytics-from-trading-date" type="date" className="input" value={dateRange.from} onChange={e => setDateRange({...dateRange, from: e.target.value})} />
           </div>
           <div style={{ flex: 1, maxWidth: 200 }}>
-            <label style={{ display: 'block', fontSize: 12, marginBottom: 5, fontWeight: 600, color: '#475569' }} htmlFor="marketanalytics-to-trading-date">To Trading Date</label>
+            <label style={{ display: 'block', fontSize: 12, marginBottom: 5, fontWeight: 600, color: 'var(--slate-600)' }} htmlFor="marketanalytics-to-trading-date">To Trading Date</label>
             <input id="marketanalytics-to-trading-date" type="date" className="input" value={dateRange.to} onChange={e => setDateRange({...dateRange, to: e.target.value})} />
           </div>
           <button className="btn btn-primary">Search Analytics</button>
@@ -96,15 +96,15 @@ export default function MarketAnalytics() {
       {/* KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 20 }}>
         <Card style={{ borderTop: '4px solid #3b82f6' }}>
-          <div style={{ color: '#64748b', fontSize: 13, fontWeight: 600, marginBottom: 5 }}>Avg DAM MCP (₹/MWh)</div>
-          <div style={{ fontSize: 24, fontWeight: 'bold', color: '#1e293b' }}>₹{avgDamPrice.toLocaleString()}</div>
+          <div style={{ color: 'var(--slate-500)', fontSize: 13, fontWeight: 600, marginBottom: 5 }}>Avg DAM MCP (₹/MWh)</div>
+          <div style={{ fontSize: 24, fontWeight: 'bold', color: 'var(--slate-800)' }}>₹{avgDamPrice.toLocaleString()}</div>
         </Card>
         <Card style={{ borderTop: '4px solid #10b981' }}>
-          <div style={{ color: '#64748b', fontSize: 13, fontWeight: 600, marginBottom: 5 }}>Avg GDAM MCP (₹/MWh)</div>
-          <div style={{ fontSize: 24, fontWeight: 'bold', color: '#1e293b' }}>₹{avgGdamPrice.toLocaleString()}</div>
+          <div style={{ color: 'var(--slate-500)', fontSize: 13, fontWeight: 600, marginBottom: 5 }}>Avg GDAM MCP (₹/MWh)</div>
+          <div style={{ fontSize: 24, fontWeight: 'bold', color: 'var(--slate-800)' }}>₹{avgGdamPrice.toLocaleString()}</div>
         </Card>
         <Card style={{ borderTop: `4px solid ${avgPremium > 0 ? '#10b981' : '#ef4444'}`, background: avgPremium > 0 ? '#f0fdf4' : '#fef2f2' }}>
-          <div style={{ color: '#64748b', fontSize: 13, fontWeight: 600, marginBottom: 5 }}>Net Green Premium</div>
+          <div style={{ color: 'var(--slate-500)', fontSize: 13, fontWeight: 600, marginBottom: 5 }}>Net Green Premium</div>
           <div style={{ fontSize: 24, fontWeight: 'bold', color: avgPremium > 0 ? '#166534' : '#991b1b' }}>
             {avgPremium > 0 ? '+' : ''}₹{avgPremium.toLocaleString()}
           </div>
@@ -119,7 +119,7 @@ export default function MarketAnalytics() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 20 }}>💡</span>
           <div>
-            <div style={{ fontWeight: 600, color: '#b45309' }}>Automated Dispatch Suggestion</div>
+            <div style={{ fontWeight: 600, color: 'var(--amber-strong)' }}>Automated Dispatch Suggestion</div>
             <div style={{ color: '#92400e', fontSize: 14 }}>{suggestedAction}</div>
           </div>
         </div>
@@ -134,17 +134,17 @@ export default function MarketAnalytics() {
 
       {/* Price Curves Chart */}
       <Card style={{ marginBottom: 20 }}>
-        <h3 style={{ marginBottom: 20, fontSize: 16, color: '#334155' }}>96-Block Market Clearing Price (MCP) Curve</h3>
+        <h3 style={{ marginBottom: 20, fontSize: 16, color: 'var(--slate-700)' }}>96-Block Market Clearing Price (MCP) Curve</h3>
         <div style={{ height: 400 }}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="time" minTickGap={30} tick={{ fontSize: 12 }} />
-              <YAxis yAxisId="left" tick={{ fontSize: 12 }} label={{ value: 'Price (₹/MWh)', angle: -90, position: 'insideLeft', style: {textAnchor: 'middle', fill: '#64748b'} }} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} label={{ value: 'Premium (₹/MWh)', angle: 90, position: 'insideRight', style: {textAnchor: 'middle', fill: '#64748b'} }} />
+              <YAxis yAxisId="left" tick={{ fontSize: 12 }} label={{ value: 'Price (₹/MWh)', angle: -90, position: 'insideLeft', style: {textAnchor: 'middle', fill: 'var(--slate-500)'} }} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} label={{ value: 'Premium (₹/MWh)', angle: 90, position: 'insideRight', style: {textAnchor: 'middle', fill: 'var(--slate-500)'} }} />
               <Tooltip 
                 contentStyle={{ borderRadius: 8, border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-                labelStyle={{ fontWeight: 'bold', color: '#1e293b', marginBottom: 5 }}
+                labelStyle={{ fontWeight: 'bold', color: 'var(--slate-800)', marginBottom: 5 }}
               />
               <Legend verticalAlign="top" height={36}/>
               
@@ -160,13 +160,13 @@ export default function MarketAnalytics() {
 
       {/* Volume Bar Chart */}
       <Card>
-        <h3 style={{ marginBottom: 20, fontSize: 16, color: '#334155' }}>Market Clearing Volume (MCV) Distribution</h3>
+        <h3 style={{ marginBottom: 20, fontSize: 16, color: 'var(--slate-700)' }}>Market Clearing Volume (MCV) Distribution</h3>
         <div style={{ height: 300 }}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="time" minTickGap={30} tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} label={{ value: 'Volume (MWh)', angle: -90, position: 'insideLeft', style: {textAnchor: 'middle', fill: '#64748b'} }} />
+              <YAxis tick={{ fontSize: 12 }} label={{ value: 'Volume (MWh)', angle: -90, position: 'insideLeft', style: {textAnchor: 'middle', fill: 'var(--slate-500)'} }} />
               <Tooltip />
               <Legend verticalAlign="top" height={36}/>
               <Bar dataKey="DAM_MCV" stackId="a" fill="#93c5fd" name="DAM Volume" />

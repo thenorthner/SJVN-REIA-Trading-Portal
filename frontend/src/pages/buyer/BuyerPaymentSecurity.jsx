@@ -70,7 +70,7 @@ export default function BuyerPaymentSecurity() {
               key: 'coverage_ratio',
               header: 'Coverage',
               render: (r) => (
-                <span style={{ color: (r.coverage_ratio || 0) < 1 ? '#b91c1c' : undefined }}>
+                <span style={{ color: (r.coverage_ratio || 0) < 1 ? 'var(--red-deep)' : undefined }}>
                   {r.coverage_ratio != null ? r.coverage_ratio.toFixed(2) : '—'}
                 </span>
               ),

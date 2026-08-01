@@ -49,8 +49,8 @@ const CustomTooltip = ({ active, payload, label }) => {
     const p = payload[0].payload;
     const deltaVolume = p.bidQty - p.receivedQty;
     return (
-      <div style={{ background: '#0f172a', color: '#f8fafc', padding: '12px 16px', borderRadius: 6, border: '1px solid #334155', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.3)', fontSize: 13, minWidth: 200 }}>
-        <p style={{ fontWeight: 600, color: '#cbd5e1', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #334155' }}>
+      <div style={{ background: 'var(--slate-900)', color: 'var(--slate-50)', padding: '12px 16px', borderRadius: 6, border: '1px solid var(--slate-700)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.3)', fontSize: 13, minWidth: 200 }}>
+        <p style={{ fontWeight: 600, color: 'var(--slate-300)', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--slate-700)' }}>
           Time Block: {label}
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 16px' }}>
@@ -59,8 +59,8 @@ const CustomTooltip = ({ active, payload, label }) => {
           <span style={{ color: '#60a5fa' }}>Received Qty:</span> <span style={{ fontWeight: 'bold' }}>{p.receivedQty} MW</span>
           <span style={{ color: '#4ade80' }}>Received Price:</span> <span style={{ fontWeight: 'bold' }}>₹{p.receivedPrice}</span>
         </div>
-        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed #475569', display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ color: '#94a3b8', fontWeight: 600 }}>Δ Volume:</span>
+        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--slate-600)', display: 'flex', justifyContent: 'space-between' }}>
+          <span style={{ color: 'var(--text-subtle)', fontWeight: 600 }}>Δ Volume:</span>
           <span style={{ fontWeight: 'bold', color: deltaVolume > 0 ? '#ef4444' : '#22c55e' }}>{deltaVolume} MW</span>
         </div>
       </div>
@@ -84,11 +84,11 @@ export default function BidVsClearedAnalytics() {
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
       {/* ── Control Panel ── */}
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--slate-200)', background: 'var(--slate-50)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>Delivery date:</label>
-            <div style={{ display: 'flex', border: '1px solid #cbd5e1', borderRadius: 4, overflow: 'hidden', background: '#fff' }}>
+            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--slate-600)' }}>Delivery date:</label>
+            <div style={{ display: 'flex', border: '1px solid var(--slate-300)', borderRadius: 4, overflow: 'hidden', background: '#fff' }}>
               <input 
                 type="date" 
                 value={date} 
@@ -97,7 +97,7 @@ export default function BidVsClearedAnalytics() {
               />
               <button 
                 onClick={() => setDate('')} 
-                style={{ background: 'none', border: 'none', borderLeft: '1px solid #cbd5e1', padding: '0 8px', cursor: 'pointer', color: '#ef4444' }}
+                style={{ background: 'none', border: 'none', borderLeft: '1px solid var(--slate-300)', padding: '0 8px', cursor: 'pointer', color: '#ef4444' }}
                 title="Clear"
               >
                 ✖
@@ -106,7 +106,7 @@ export default function BidVsClearedAnalytics() {
             <button className="btn btn-sm btn-outline" style={{ background: '#fff', marginLeft: 4 }}>Display</button>
           </div>
           
-          <div style={{ width: 1, height: 24, background: '#cbd5e1' }} />
+          <div style={{ width: 1, height: 24, background: 'var(--slate-300)' }} />
           
           {/* Quick Date Pills */}
           <div style={{ display: 'flex', gap: 6 }}>
@@ -117,7 +117,7 @@ export default function BidVsClearedAnalytics() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 16, color: '#1e293b' }}>Bided And Received Energy</h3>
+          <h3 style={{ margin: 0, fontSize: 16, color: 'var(--slate-800)' }}>Bided And Received Energy</h3>
           
           <div style={{ position: 'relative' }}>
             <button 
@@ -135,14 +135,14 @@ export default function BidVsClearedAnalytics() {
               id="bid-vs-cleared-export-menu"
               style={{ 
                 display: 'none', position: 'absolute', right: 0, top: '100%', marginTop: 4, width: 160, 
-                background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, 
+                background: '#fff', border: '1px solid var(--slate-200)', borderRadius: 6, 
                 boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', zIndex: 10 
               }}
             >
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }} onClick={() => alert('Print')}>🖨️ Print chart</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }} onClick={() => alert('Download PNG')}>🖼️ Download PNG image</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }} onClick={() => alert('Download JPEG')}>🖼️ Download JPEG image</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }} onClick={() => alert('Download PDF')}>📄 Download PDF document</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Print')}>🖨️ Print chart</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Download PNG')}>🖼️ Download PNG image</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Download JPEG')}>🖼️ Download JPEG image</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Download PDF')}>📄 Download PDF document</div>
               <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer' }} onClick={() => alert('Download SVG')}>📐 Download SVG vector image</div>
             </div>
           </div>
@@ -153,23 +153,23 @@ export default function BidVsClearedAnalytics() {
       <div style={{ padding: '20px 20px 10px 20px', height: 420 }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--slate-200)" />
             
             <XAxis 
               dataKey="timeBlock" 
               tickFormatter={(val) => val.endsWith(':00') ? parseInt(val.split(':')[0]) : ''}
-              tick={{ fontSize: 12, fill: '#64748b' }} 
-              axisLine={{ stroke: '#cbd5e1' }}
-              label={{ value: 'Hour', position: 'insideBottom', offset: -15, fill: '#64748b', fontSize: 13 }}
+              tick={{ fontSize: 12, fill: 'var(--slate-500)' }} 
+              axisLine={{ stroke: 'var(--slate-300)' }}
+              label={{ value: 'Hour', position: 'insideBottom', offset: -15, fill: 'var(--slate-500)', fontSize: 13 }}
             />
             
             {/* Primary Y-Axis (Left) - Price */}
             <YAxis 
               yAxisId="left" 
               orientation="left" 
-              tick={{ fontSize: 12, fill: '#64748b' }}
-              axisLine={{ stroke: '#cbd5e1' }}
-              label={{ value: 'Price (Rs/MWH)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#475569', fontSize: 13, fontWeight: 500 } }} 
+              tick={{ fontSize: 12, fill: 'var(--slate-500)' }}
+              axisLine={{ stroke: 'var(--slate-300)' }}
+              label={{ value: 'Price (Rs/MWH)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'var(--slate-600)', fontSize: 13, fontWeight: 500 } }} 
             />
             
             {/* Secondary Y-Axis (Right) - Qty */}
@@ -177,12 +177,12 @@ export default function BidVsClearedAnalytics() {
               yAxisId="right" 
               orientation="right"
               domain={[0, 300]}
-              tick={{ fontSize: 12, fill: '#64748b' }} 
-              axisLine={{ stroke: '#cbd5e1' }}
-              label={{ value: 'QTY (MW)', angle: 90, position: 'insideRight', style: { textAnchor: 'middle', fill: '#475569', fontSize: 13, fontWeight: 500 } }} 
+              tick={{ fontSize: 12, fill: 'var(--slate-500)' }} 
+              axisLine={{ stroke: 'var(--slate-300)' }}
+              label={{ value: 'QTY (MW)', angle: 90, position: 'insideRight', style: { textAnchor: 'middle', fill: 'var(--slate-600)', fontSize: 13, fontWeight: 500 } }} 
             />
 
-            <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '3 3' }} />
+            <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--slate-300)', strokeWidth: 1, strokeDasharray: '3 3' }} />
             
             <Legend 
               verticalAlign="bottom" 
@@ -190,15 +190,15 @@ export default function BidVsClearedAnalytics() {
               iconType="circle"
             />
             
-            <ReferenceLine y={0} yAxisId="left" stroke="#94a3b8" strokeWidth={2} />
-            <ReferenceLine y={0} yAxisId="right" stroke="#94a3b8" strokeWidth={2} />
+            <ReferenceLine y={0} yAxisId="left" stroke="var(--slate-400)" strokeWidth={2} />
+            <ReferenceLine y={0} yAxisId="right" stroke="var(--slate-400)" strokeWidth={2} />
 
             {/* Traces based on screenshot legend */}
             <Line yAxisId="right" type="monotone" dataKey="bidQty" name="Bid Qty" stroke="#ef4444" strokeWidth={2} dot={{ r: 4, fill: '#ef4444' }} activeDot={{ r: 6 }} />
             <Line yAxisId="left" type="stepAfter" dataKey="bidPrice" name="Bid Price" stroke="#854d0e" strokeWidth={2} dot={{ r: 4, fill: '#854d0e', strokeWidth: 0, shape: 'diamond' }} />
             
             <Line yAxisId="right" type="monotone" dataKey="receivedQty" name="Received Energy Qty" stroke="#1e3a8a" strokeWidth={2} dot={{ r: 4, fill: '#1e3a8a', shape: 'square' }} />
-            <Line yAxisId="left" type="stepAfter" dataKey="receivedPrice" name="Received Energy Price" stroke="#16a34a" strokeWidth={2} dot={{ r: 4, fill: '#16a34a', shape: 'star' }} />
+            <Line yAxisId="left" type="stepAfter" dataKey="receivedPrice" name="Received Energy Price" stroke="var(--green-strong)" strokeWidth={2} dot={{ r: 4, fill: 'var(--green-strong)', shape: 'star' }} />
             
           </ComposedChart>
         </ResponsiveContainer>

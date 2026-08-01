@@ -38,7 +38,7 @@ export default function NOARRegistry() {
   }, [filters]);
 
   const columns = [
-    { key: 'nocNo', header: 'NOC No.', render: r => <span style={{ fontWeight: 600, color: '#0b4a8f' }}>{r.nocNo}</span> },
+    { key: 'nocNo', header: 'NOC No.', render: r => <span style={{ fontWeight: 600, color: 'var(--navy)' }}>{r.nocNo}</span> },
     { key: 'validityFrom', header: 'Validity From', render: r => new Date(r.validityFrom).toLocaleDateString('en-GB').replace(/\//g, '-') },
     { key: 'validityTo', header: 'Validity To', render: r => new Date(r.validityTo).toLocaleDateString('en-GB').replace(/\//g, '-') },
     { key: 'issueDate', header: 'Issue Date', render: r => new Date(r.issueDate).toLocaleDateString('en-GB').replace(/\//g, '-') },
@@ -71,16 +71,16 @@ export default function NOARRegistry() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontSize: 24 }}>{daysToExpiry <= 7 ? '🚨' : '⚠️'}</span>
             <div>
-              <h4 style={{ margin: '0 0 4px 0', color: daysToExpiry <= 7 ? '#b91c1c' : '#b45309', fontSize: 15 }}>
+              <h4 style={{ margin: '0 0 4px 0', color: daysToExpiry <= 7 ? 'var(--red-deep)' : 'var(--amber-strong)', fontSize: 15 }}>
                 Action Required: SLDC Clearance Renewal
               </h4>
-              <p style={{ margin: 0, fontSize: 13, color: '#475569' }}>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--slate-600)' }}>
                 Active clearance <strong>{activeNoc.nocNo}</strong> expires in <strong>{daysToExpiry} days</strong> ({new Date(activeNoc.validityTo).toLocaleDateString('en-GB')}). 
                 {daysToExpiry <= 7 && " Clause 26 mandates immediate renewal drafting to prevent trading suspension."}
               </p>
             </div>
           </div>
-          <button className="btn btn-primary" style={{ background: daysToExpiry <= 7 ? '#dc2626' : '#d97706', borderColor: 'transparent' }}>
+          <button className="btn btn-primary" style={{ background: daysToExpiry <= 7 ? 'var(--red-strong)' : '#d97706', borderColor: 'transparent' }}>
             Draft Renewal Application
           </button>
         </div>
@@ -120,8 +120,8 @@ export default function NOARRegistry() {
         <Modal open={true} onClose={() => setViewingNoc(null)} title={`Standing Clearance Document: ${viewingNoc.nocNo}`} width={900}>
           <div style={{ padding: 20 }}>
             <div style={{ display: 'flex', gap: 20, marginBottom: 20 }}>
-              <div style={{ flex: 1, background: '#f8fafc', padding: 16, borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                <h4 style={{ margin: '0 0 12px 0', color: '#0b4a8f' }}>Entity Master Configuration</h4>
+              <div style={{ flex: 1, background: 'var(--slate-50)', padding: 16, borderRadius: 8, border: '1px solid var(--slate-200)' }}>
+                <h4 style={{ margin: '0 0 12px 0', color: 'var(--navy)' }}>Entity Master Configuration</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
                   <div><strong>SLDC:</strong> {viewingNoc.sldc}</div>
                   <div><strong>NOAR ID:</strong> NOSNA48142</div>
@@ -132,8 +132,8 @@ export default function NOARRegistry() {
                 </div>
               </div>
               <div style={{ flex: 1, background: '#fef2f2', padding: 16, borderRadius: 8, border: '1px solid #fca5a5' }}>
-                <h4 style={{ margin: '0 0 12px 0', color: '#dc2626' }}>Market Restrictions</h4>
-                <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: '#475569', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <h4 style={{ margin: '0 0 12px 0', color: 'var(--red-strong)' }}>Market Restrictions</h4>
+                <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: 'var(--slate-600)', display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <li><strong>HP-DAM:</strong> Not Applicable (Blocked)</li>
                   <li><strong>TRAS:</strong> Not Applicable (Blocked)</li>
                   <li><strong>IEX / PXIL Collective:</strong> Active (29.29 MW Cap)</li>
@@ -142,12 +142,12 @@ export default function NOARRegistry() {
             </div>
             
             <h4 style={{ marginBottom: 12 }}>Extracted Document Clauses</h4>
-            <div style={{ background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8, padding: 16, maxHeight: 400, overflowY: 'auto', fontFamily: 'serif', fontSize: 14, lineHeight: 1.6, color: '#334155' }}>
+            <div style={{ background: '#fff', border: '1px solid var(--slate-300)', borderRadius: 8, padding: 16, maxHeight: 400, overflowY: 'auto', fontFamily: 'serif', fontSize: 14, lineHeight: 1.6, color: 'var(--slate-700)' }}>
               <p><strong>14. Maximum MW (at regional periphery) allowed for injection:</strong> 29.29 MW</p>
               <p><strong>15. Maximum MW (at regional periphery) allowed for drawal:</strong> 29.29 MW</p>
               <p><strong>16. Transmission Losses:</strong> State Transmission Losses: 0.75% | Any Other Losses: 0.33%</p>
               <p><strong>17. Applicable Charges:</strong> Regional Transmission Charges: ₹107.630 / MW / Block | State Transmission Charges: ₹67.7 / MWh | SLDC Operating Charges: ₹2000 / Day</p>
-              <hr style={{ margin: '16px 0', borderColor: '#e2e8f0' }} />
+              <hr style={{ margin: '16px 0', borderColor: 'var(--slate-200)' }} />
               <p><strong>Declarations:</strong></p>
               <p>20. It is verified that availability of transmission capacity in the intrastate network for the sell and purchase of power, as applicable for M/s Naitwar Mori HPS is in place.</p>
               <p>23. It needs to be ensured that M/s Naitwar Mori HPS shall utilize this standing clearance for purchase of power only in case of forced outage.</p>
