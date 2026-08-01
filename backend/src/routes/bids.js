@@ -4,6 +4,7 @@ import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { getParam } from '../mastersService.js';
+import { placeOrder, getTradeResult, syncMarketRates, getIexConfig } from '../services/iexService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -156,6 +157,46 @@ router.get('/', (req, res) => {
 });
 
 // Permitted OCF carry-forward transitions (declared before /:id so it is not captured).
+// IEX connection state — which pulls are live and what is still stub.
+router.get('/iex/status', (_req, res) => {
+  const cfg = getIexConfig();
+  res.json({
+    enabled: cfg.enabled,
+    live: cfg.live,
+    base_url_set: !!cfg.baseUrl,
+    token_set: !!cfg.token,
+    login_user_id_set: !!cfg.loginUserId,
+    participant_id: cfg.participantId || null,
+    mode: cfg.live ? 'IEX' : 'STUB',
+    capabilities: {
+      cleared_results: cfg.live ? 'LIVE' : 'STUB',
+      market_prices: cfg.live ? 'LIVE' : 'STUB',
+      // Two-way and money-moving: stays manual until a controlled rollout.
+      bid_submission: 'STUB',
+    },
+  });
+});
+
+// Pull a delivery date's market clearing prices into market_rates, so analytics
+// runs on exchange observations rather than seeded data.
+router.post('/iex/market-rates/sync', requireRole(...ROLE_GROUPS.TRADING_WRITE), async (req, res) => {
+  const date = String(req.body?.date || '').trim();
+  const product = String(req.body?.product || 'DAM').trim().toUpperCase();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'date (YYYY-MM-DD) is required' });
+  if (!PRODUCTS.includes(product)) return res.status(400).json({ error: `product must be one of: ${PRODUCTS.join(', ')}` });
+  try {
+    const result = await syncMarketRates(product, date, { exchange: String(req.body?.exchange || 'IEX').toUpperCase() });
+    if (!result.ok) return res.status(502).json(result);
+    if (result.rows_written) {
+      secureLogAudit(req, { action: 'IEX_MARKET_RATES_SYNC', module: 'TRADING', entityType: 'market_rate', entityId: `${product}:${date}`, details: result });
+    }
+    res.json(result);
+  } catch (err) {
+    console.error('IEX market rates sync error:', err);
+    res.status(500).json({ error: err.message || 'Market rates sync failed' });
+  }
+});
+
 router.get('/ocf-chains', (_req, res) => res.json({
   chains: ocfChains(),
   default_premium: getParam('ocf_default_premium', {}) || {},
@@ -356,21 +397,84 @@ router.post('/bulk', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   res.status(201).json({ rows_received: rows.length, bids_created: created.length, bid_ids: created, preview, errors: [] });
 });
 
-// Submit Bid to Exchange (Simulated)
-router.post('/:id/submit', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
-  const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(req.params.id);
-  if (!bid) return res.status(404).json({ error: 'Bid not found' });
-  if (bid.approval_status !== 'APPROVED') return res.status(400).json({ error: 'Bid must be approved before submission' });
-  if (checkGateClosure(bid.gate_closure_time)) return res.status(400).json({ error: 'Gate closure time passed. Cannot submit.' });
+// Submit Bid to Exchange (Automated via IEX FO API)
+router.post('/:id/submit', requireRole(...ROLE_GROUPS.TRADING_WRITE), async (req, res) => {
+  try {
+    const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(req.params.id);
+    if (!bid) return res.status(404).json({ error: 'Bid not found' });
+    if (bid.approval_status !== 'APPROVED') return res.status(400).json({ error: 'Bid must be approved before submission' });
+    if (checkGateClosure(bid.gate_closure_time)) return res.status(400).json({ error: 'Gate closure time passed. Cannot submit.' });
 
-  const receiptRef = `EXC-RCPT-${Date.now()}`;
+    const fullBid = withDetails(bid);
+    const response = await placeOrder(fullBid);
+    const receiptRef = response.receiptRef || `EXC-RCPT-${Date.now()}`;
 
-  db.prepare("UPDATE bids SET status = 'SUBMITTED', exchange_receipt_ref = ? WHERE id = ?").run(receiptRef, bid.id);
-  logEvent(bid.id, req.user.id, 'SUBMITTED', { receiptRef });
+    db.prepare("UPDATE bids SET status = 'SUBMITTED', exchange_receipt_ref = ? WHERE id = ?").run(receiptRef, bid.id);
+    logEvent(bid.id, req.user.id, 'SUBMITTED', { receiptRef });
 
-  secureLogAudit(req, { action: 'SUBMIT_BID', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: { receiptRef } });
+    secureLogAudit(req, { action: 'SUBMIT_BID', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: { receiptRef } });
 
-  res.json(withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
+    res.json(withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to submit to exchange' });
+  }
+});
+
+// Sync result from IEX Back Office (BO) API
+router.post('/:id/sync-result', requireRole(...ROLE_GROUPS.TRADING_WRITE), async (req, res) => {
+  try {
+    const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(req.params.id);
+    if (!bid) return res.status(404).json({ error: 'Bid not found' });
+    if (bid.status !== 'SUBMITTED') return res.status(400).json({ error: 'Only a submitted bid can be synced' });
+
+    const fullBid = withDetails(bid);
+    const response = await getTradeResult(fullBid);
+
+    if (!response.success || !response.blocks) {
+      return res.status(400).json({ error: response.message || 'Failed to sync result' });
+    }
+
+    const blocks = db.prepare('SELECT * FROM bid_blocks WHERE bid_id = ?').all(bid.id);
+    const byBlock = new Map(blocks.map((b) => [String(b.time_block), b]));
+
+    for (const r of response.blocks) {
+      const block = byBlock.get(String(r.time_block));
+      if (!block) continue;
+      const cleared = Number(r.cleared_mw);
+      const status = cleared === 0 ? 'UNCLEARED' : cleared >= block.quantum_mw ? 'CLEARED' : 'PARTIALLY_CLEARED';
+      // cleared_price is Rs/kWh everywhere in this platform — the same scale as
+      // price_per_unit, the CERC caps and the exposure formula. The service has
+      // already converted from the exchange's Rs/MWh; writing an unconverted
+      // figure here would be out by 1000x and poison P&L and exposure.
+      const clearedPrice = r.cleared_price_rs_per_kwh ?? null;
+      db.prepare('UPDATE bid_blocks SET cleared_quantum_mw = ?, cleared_price = ?, status = ? WHERE id = ?')
+        .run(cleared, clearedPrice, status, block.id);
+    }
+
+    for (const b of blocks) {
+      if (!response.blocks.find(r => String(r.time_block) === String(b.time_block))) {
+        db.prepare('UPDATE bid_blocks SET cleared_quantum_mw = 0, status = ? WHERE id = ?').run('UNCLEARED', b.id);
+      }
+    }
+
+    const updated = db.prepare('SELECT * FROM bid_blocks WHERE bid_id = ?').all(bid.id);
+    const totalReq = updated.reduce((a, b) => a + b.quantum_mw, 0);
+    const totalCleared = updated.reduce((a, b) => a + b.cleared_quantum_mw, 0);
+    const clearedValue = updated.reduce((a, b) => a + (b.cleared_quantum_mw * (b.cleared_price ?? b.price_per_unit)), 0);
+    const headerStatus = totalCleared === 0 ? 'REJECTED' : totalCleared >= totalReq ? 'CLEARED' : 'PARTIALLY_CLEARED';
+
+    db.prepare('UPDATE bids SET cleared_quantum_mw = ?, cleared_price = ?, status = ? WHERE id = ?')
+      .run(totalCleared, totalCleared > 0 ? clearedValue / totalCleared : null, headerStatus, bid.id);
+
+    // Record which source the numbers came from — a stub clearing and a real
+    // exchange result must never be indistinguishable after the fact.
+    logEvent(bid.id, req.user.id, 'RESULT_SYNCED', { totalReq, totalCleared, headerStatus, source: response.mode || 'UNKNOWN' });
+    secureLogAudit(req, { action: 'SYNC_BID_RESULT', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: { totalCleared, headerStatus, source: response.mode } });
+
+    res.json(withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to sync exchange result' });
+  }
 });
 
 // Record the exchange clearing result block-wise. Whatever does not clear becomes
