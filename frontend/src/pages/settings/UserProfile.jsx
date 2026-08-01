@@ -1,8 +1,10 @@
 import React from 'react';
+import { usePortfolios } from '../../context/PortfolioContext.jsx';
 import { PageHeader, Card, Badge, Field } from '../../components/ui.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 
 export default function UserProfile() {
+  const { portfolios } = usePortfolios();
   const { user } = useAuth();
   
   // Hydrated defaults as requested (Auto-Populated Fallback State)
@@ -87,22 +89,24 @@ export default function UserProfile() {
             </div>
           </Card>
 
-          <Card title="🔑 Assigned Portfolios">
+          <Card title="🔑 Portfolios on the desk">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ padding: 12, border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span>🌐</span>
-                  <span style={{ fontWeight: 600, color: '#0b4a8f' }}>N1HP0PTC0850</span>
+              {/* Two fixed portfolio ids used to be printed here for every user.
+                  There is no per-user portfolio assignment in the platform yet,
+                  so this lists what the desk can reach rather than claiming an
+                  assignment that was never made. */}
+              {portfolios.length === 0 && (
+                <div style={{ fontSize: 13, color: '#64748b' }}>No portfolios available.</div>
+              )}
+              {portfolios.map((pf) => (
+                <div key={pf.id} style={{ padding: 12, border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span>⚡</span>
+                    <span style={{ fontWeight: 600, color: '#0b4a8f' }}>{pf.name}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginLeft: 26 }}>{pf.id} · {pf.client_type}</div>
                 </div>
-                <div style={{ fontSize: 12, color: '#64748b', marginLeft: 26 }}>Regional Portfolio</div>
-              </div>
-              <div style={{ padding: 12, border: '1px solid #e2e8f0', borderRadius: 6, background: '#fff' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                  <span>⚡</span>
-                  <span style={{ fontWeight: 600, color: '#0b4a8f' }}>HPDC10110008</span>
-                </div>
-                <div style={{ fontSize: 12, color: '#64748b', marginLeft: 26 }}>State Portfolio</div>
-              </div>
+              ))}
               <button 
                 className="btn btn-sm btn-ghost" 
                 style={{ marginTop: 8, width: '100%' }}

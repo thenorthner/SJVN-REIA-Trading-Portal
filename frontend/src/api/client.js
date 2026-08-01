@@ -531,33 +531,51 @@ export const api = {
   sellerDashboard: () => g('/seller-dashboard'),
   buyerDashboard: () => g('/buyer-dashboard'),
   notifications: {
+    /**
+     * Server notifications, plus any live standing-clearance findings.
+     *
+     * A fabricated alert used to be injected here — a fixed 14-day expiry
+     * warning for Naitwar Mori HPS, shown to every user regardless of the real
+     * clearance state and indistinguishable from a genuine notification. The
+     * platform now holds actual clearance records, so the warnings are derived
+     * from those and disappear when a clearance is renewed.
+     */
     list: async () => {
-      const serverNotifs = await g('/notifications').catch(() => []);
-      // Inject mock COMPLIANCE_ALERT for Standing Clearance Expiry (15-day warning)
-      const mockAlert = {
-        id: 'mock-noc-alert-1',
-        type: 'COMPLIANCE_ALERT',
-        message: '⚠️ Standing Clearance (NOC/HPSLDC/NR/2023/32622) for Naitwar Mori HPS expires in 14 days. Please initiate renewal.',
-        is_read: false,
-        created_at: new Date().toISOString()
-      };
-      // Only inject if it hasn't been "read" in this mock session
-      if (!localStorage.getItem('sjvn_mock_noc_read')) {
-        return [mockAlert, ...serverNotifs];
-      }
-      return serverNotifs;
+      const [serverNotifs, clearance] = await Promise.all([
+        g('/notifications').catch(() => []),
+        g('/bids/standing-clearance').catch(() => null),
+      ]);
+      if (!clearance) return serverNotifs;
+
+      const dismissed = JSON.parse(localStorage.getItem('sjvn_clearance_dismissed') || '[]');
+      const alerts = [
+        ...clearance.expired.map((c) => ({
+          id: `clearance-expired-${c.client_id}`,
+          type: 'COMPLIANCE_ALERT',
+          message: `Standing clearance${c.standing_clearance_no ? ` (${c.standing_clearance_no})` : ''} for ${c.client_name} lapsed on ${c.valid_till}. New bids are being refused.`,
+        })),
+        ...clearance.renewal_due.map((c) => ({
+          id: `clearance-renewal-${c.client_id}`,
+          type: 'COMPLIANCE_ALERT',
+          message: `Standing clearance${c.standing_clearance_no ? ` (${c.standing_clearance_no})` : ''} for ${c.client_name} expires in ${c.days_left} day(s) on ${c.valid_till}. Clause 26 requires the renewal declaration ${c.renewal_notice_days} days ahead.`,
+        })),
+      ]
+        .filter((a) => !dismissed.includes(a.id))
+        .map((a) => ({ ...a, is_read: false, created_at: new Date().toISOString() }));
+
+      return [...alerts, ...serverNotifs];
     },
     markRead: (id) => {
-      if (id === 'mock-noc-alert-1') {
-        localStorage.setItem('sjvn_mock_noc_read', 'true');
+      // Clearance alerts are derived, not rows — dismissing one is local, and it
+      // comes back if the clearance is still in that state on the next load.
+      if (String(id).startsWith('clearance-')) {
+        const dismissed = JSON.parse(localStorage.getItem('sjvn_clearance_dismissed') || '[]');
+        localStorage.setItem('sjvn_clearance_dismissed', JSON.stringify([...new Set([...dismissed, id])]));
         return Promise.resolve({ success: true });
       }
       return p(`/notifications/${id}/read`);
     },
-    markAllRead: () => {
-      localStorage.setItem('sjvn_mock_noc_read', 'true');
-      return p('/notifications/read-all');
-    },
+    markAllRead: () => p('/notifications/read-all'),
   },
   alerts: {
     board: () => g('/alerts/board'),

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { PortfolioSelect } from '../../context/PortfolioContext.jsx';
 import * as XLSX from 'xlsx';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -571,7 +572,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
           <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Portfolio Name</label>
-              <select className="input"><option>N1HP0PTC0850</option></select>
+              <PortfolioSelect includeAll />
             </div>
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Delivery Date</label>
@@ -1463,7 +1464,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
               <div>
                 <h4 style={{ margin: '0 0 8px 0', color: '#dc2626', fontSize: 16 }}>Regulatory Constraint Violation Risk</h4>
                 <p style={{ margin: 0, fontSize: 13, color: '#334155', lineHeight: 1.5 }}>
-                  As per SLDC Standing Clearance, <strong>Naitwar Mori HPS (Generator)</strong> is strictly prohibited from submitting <strong>BUY</strong> bids on the power exchange unless the plant is undergoing an active <strong>Forced Outage</strong>.
+                  As per its SLDC Standing Clearance, <strong>{clearance?.client_name || 'this generating station'}</strong> is strictly prohibited from submitting <strong>BUY</strong> bids on the power exchange unless the plant is undergoing an active <strong>Forced Outage</strong>.
                 </p>
               </div>
             </div>
@@ -1477,7 +1478,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                   style={{ marginTop: 4, accentColor: '#dc2626', width: 16, height: 16 }}
                 />
                 <span style={{ fontSize: 13, color: '#475569', fontWeight: 500 }}>
-                  I confirm that Naitwar Mori HPS is currently experiencing a forced outage and this BUY bid is for replacement power. I understand that false declarations may result in SLDC revoking the standing clearance (Clause 28).
+                  I confirm that {clearance?.client_name || 'this generating station'} is currently experiencing a forced outage and this BUY bid is for replacement power. I understand that false declarations may result in {clearance?.sldc_name || 'the SLDC'} revoking the standing clearance (Clause 28).
                 </span>
               </label>
             </div>
@@ -1506,12 +1507,13 @@ export default function Bids({ product = 'DAM', externalView = null }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, border: '1px solid #e2e8f0' }}>
               <tbody>
                 {[
-                  { k: 'Portfolio State:', v: 'Himachal Pradesh' },
-                  { k: 'Region Code:', v: 'N1' },
-                  { k: 'Company:', v: 'NAITWAR MORI HEP' },
-                  { k: 'Portfolio ID:', v: 'N1HP0PTC0850' },
-                  { k: 'Portfolio Name:', v: 'SJVN Limited-Naitwar Mori HPS' },
-                  { k: 'Joining Date:', v: '28-09-2023' },
+                  { k: 'Portfolio ID:', v: clearance?.client_id || '—' },
+                  { k: 'Portfolio Name:', v: clearance?.client_name || '—' },
+                  { k: 'NOAR ID:', v: clearance?.noar_id || '—' },
+                  { k: 'Standing Clearance:', v: clearance?.standing_clearance_no || 'not on record' },
+                  { k: 'Issuing SLDC:', v: clearance?.sldc_name || '—' },
+                  { k: 'Valid Till:', v: clearance?.valid_till || '—' },
+                  { k: 'T-GNA Cap:', v: clearance?.tgna_approved_mw != null ? `${clearance.tgna_approved_mw} MW` : '—' },
                   { k: 'Status:', v: <span style={{ color: '#16a34a', fontWeight: 600 }}>Active</span> },
                   { k: 'Tick Value:', v: '1' },
                   { k: 'Bid:', v: 'Single' },

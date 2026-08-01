@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PortfolioSelect } from '../../context/PortfolioContext.jsx';
 import { SampleDataNotice, Card, Table, Badge } from '../../components/ui.jsx';
 
 export default function GDAMObligationConsole({ product = 'GDAM' }) {
@@ -105,7 +106,7 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Port Id</label>
-            <select className="input"><option>---Select---</option><option>N1HP0PTC0850</option></select>
+            <PortfolioSelect includeAll allLabel="---Select---" />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>Port Name</label>

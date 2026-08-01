@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PortfolioSelect } from '../../context/PortfolioContext.jsx';
 import { SampleDataNotice, Card, Table, Badge, fmtNumber } from '../../components/ui.jsx';
 
 export default function DAMInvoiceLedger() {
@@ -147,7 +148,7 @@ export default function DAMInvoiceLedger() {
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>PortfolioId</label>
-            <select className="input"><option>N1HP0PTC0850</option></select>
+            <PortfolioSelect includeAll />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }}>PortfolioName</label>

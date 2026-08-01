@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { PortfolioSelect, usePortfolios } from '../../context/PortfolioContext.jsx';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
@@ -144,11 +145,11 @@ export default function BillingSettlement() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 15, alignItems: 'end', marginBottom: 20, background: '#f5f7f9', padding: 15, borderRadius: 6 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Portfolio Id:</label>
-                <select className="input" value={invFilter.portfolio} onChange={e => setInvFilter({...invFilter, portfolio: e.target.value})}>
-                  <option value="">-- All Portfolios --</option>
-                  <option value="N1HP0PTC0850">N1HP0PTC0850</option>
-                  <option value="SJVN001">SJVN001</option>
-                </select>
+                <PortfolioSelect
+                  includeAll
+                  value={invFilter.portfolio}
+                  onChange={(v) => setInvFilter({ ...invFilter, portfolio: v })}
+                />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>From Delivery Date:</label>

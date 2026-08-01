@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PortfolioSelect, usePortfolios } from '../../context/PortfolioContext.jsx';
 import { api } from '../../api/client.js';
 import { SampleDataNotice, PageHeader, Card, Badge, Table, fmtNumber } from '../../components/ui.jsx';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -9,7 +10,7 @@ export default function EnergySchedule() {
   const [viewMode, setViewMode] = useState('BLOCK'); // 'BLOCK' (96) or 'HOURLY' (24)
   const [peripheryView, setPeripheryView] = useState('BOTH'); // 'BOTH', 'BUSBAR', 'GRID'
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [portfolio, setPortfolio] = useState('N1HP0PTC0850');
+  const { activeId: portfolio, active: activePortfolio } = usePortfolios();
   const [lossesConfig, setLossesConfig] = useState(null);
 
   const fetchSchedule = async () => {
@@ -130,10 +131,7 @@ export default function EnergySchedule() {
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Portfolio Id:</label>
-            <select className="input" value={portfolio} onChange={e => setPortfolio(e.target.value)}>
-              <option value="N1HP0PTC0850">N1HP0PTC0850 (Naitwar Mori HEP)</option>
-              <option value="SJVN_SOLAR_001">SJVN_SOLAR_001</option>
-            </select>
+            <PortfolioSelect scope="global" allLabel="-- Select portfolio --" />
           </div>
           <div style={{ marginLeft: 'auto', borderLeft: '1px solid #ccc', paddingLeft: 20 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Aggregation Level:</label>
@@ -181,7 +179,7 @@ export default function EnergySchedule() {
       <Card>
         <div style={{ marginBottom: 20, padding: 15, background: '#e9ecef', borderRadius: 4, display: 'flex', justifyContent: 'space-between' }}>
           <div>
-            <strong>Asset:</strong> Naitwar Mori HPS (Portfolio: {portfolio})<br/>
+            <strong>Asset:</strong> {activePortfolio?.name || 'No portfolio selected'}<br/>
             <strong>Schedule Date:</strong> {new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-')}
           </div>
           <div>

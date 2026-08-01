@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { PortfolioSelect } from '../../context/PortfolioContext.jsx';
 import { SampleDataNotice, PageHeader, Card, Badge, fmtNumber } from '../../components/ui.jsx';
 import TAMObligationDetailsModal from './TAMObligationDetailsModal.jsx';
 
@@ -188,7 +189,7 @@ export default function TAMManagement({ marketType = 'TAM' }) {
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Port Id:</label>
-            <select className="input"><option>N1HPOPTC0850</option></select>
+            <PortfolioSelect includeAll />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Port Name:</label>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PortfolioSelect, usePortfolios } from '../../context/PortfolioContext.jsx';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Badge } from '../../components/ui.jsx';
 
@@ -13,11 +14,7 @@ export default function BankTransactionsList() {
   const [van, setVan] = useState('');
   const [utr, setUtr] = useState('');
 
-  const portfolios = [
-    'NR-HP-HYDRO-NAITWAR0850',
-    'WR-GJ-SOLAR-SJVN001',
-    'SR-TN-WIND-SJVN002'
-  ];
+  // Portfolio options come from the shared trading-client list.
 
   const fetchTransactions = async () => {
     setLoading(true);
@@ -68,10 +65,7 @@ export default function BankTransactionsList() {
           
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Portfolio Name:</label>
-            <select className="input" value={portfolio} onChange={e => setPortfolio(e.target.value)}>
-              <option value="">-- All Portfolios --</option>
-              {portfolios.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
+            <PortfolioSelect includeAll value={portfolio} onChange={setPortfolio} />
           </div>
 
           <div>

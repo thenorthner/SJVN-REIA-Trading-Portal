@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { PortfolioSelect } from '../../context/PortfolioContext.jsx';
 import { SampleDataNotice, PageHeader, Card, Table, fmtNumber, Badge, Modal, Field } from '../../components/ui.jsx';
 import TaxInvoiceLedgerTable from '../../components/TaxInvoiceLedgerTable.jsx';
 
@@ -367,7 +368,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Portfolio:</label>
-            <select className="input"><option>N1HP0PTC0850 - SJVN</option></select>
+            <PortfolioSelect includeAll />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>From Date:</label>
@@ -430,15 +431,11 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
                 <input type="date" className="input" value={createForm.date} onChange={e => setCreateForm({...createForm, date: e.target.value})} />
               </Field>
               <Field label="Portfolio Id">
-                <select className="input" value={createForm.portfolioId} onChange={e => setCreateForm({...createForm, portfolioId: e.target.value})}>
-                  <option value="N1HP0PTC0850">N1HP0PTC0850</option>
-                  <option value="HPDC10110008">HPDC10110008</option>
-                </select>
-                {createForm.portfolioId === 'N1HP0PTC0850' && (
-                  <div style={{ marginTop: 8, padding: 8, background: '#e8f4fd', border: '1px solid #b6d4fe', borderRadius: 4, fontSize: 11, color: '#084298' }}>
-                    <strong>Asset Context:</strong> SJVN Naitwar Mori HEP | Tech: Hydro (60 MW) | Accredited RECs Available: 1,250
-                  </div>
-                )}
+                <PortfolioSelect
+                  value={createForm.portfolioId}
+                  onChange={(v) => setCreateForm({ ...createForm, portfolioId: v })}
+                  allLabel="-- Select portfolio --"
+                />
               </Field>
               <Field label="Type">
                 <select className="input" value={createForm.type} onChange={e => setCreateForm({...createForm, type: e.target.value})}>

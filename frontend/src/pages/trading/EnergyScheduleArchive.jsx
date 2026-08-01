@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { PortfolioSelect, usePortfolios } from '../../context/PortfolioContext.jsx';
 import { api } from '../../api/client.js';
 import { SampleDataNotice, PageHeader, Card, Table, Badge } from '../../components/ui.jsx';
 
 export default function EnergyScheduleArchive() {
   const [archives, setArchives] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [portfolio, setPortfolio] = useState('N1HPOPTC0850');
+  const { activeId: portfolio } = usePortfolios();
   const [dateFilter, setDateFilter] = useState('LAST_30'); // 'LAST_7', 'LAST_30', 'CUSTOM'
   
   const [selectedRows, setSelectedRows] = useState([]);
@@ -109,10 +110,7 @@ export default function EnergyScheduleArchive() {
           <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Portfolio ID:</label>
-              <select className="input" value={portfolio} onChange={e => setPortfolio(e.target.value)}>
-                <option value="N1HPOPTC0850">N1HPOPTC0850</option>
-                <option value="SJVN_SOLAR_001">SJVN_SOLAR_001</option>
-              </select>
+              <PortfolioSelect scope="global" allLabel="-- Select portfolio --" />
             </div>
             
             <div style={{ marginLeft: 20, borderLeft: '1px solid #ccc', paddingLeft: 20 }}>

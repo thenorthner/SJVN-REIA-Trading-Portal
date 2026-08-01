@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { PortfolioSelect, usePortfolios } from '../../context/PortfolioContext.jsx';
 import { api } from '../../api/client.js';
 import { SampleDataNotice, PageHeader, Card, Badge, fmtNumber } from '../../components/ui.jsx';
 
@@ -9,7 +10,7 @@ export default function DailyObligationReport() {
   // undeclared identifier and the page threw on first render.
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [layout, setLayout] = useState('SPLIT'); // 'SPLIT' (1-48 | 49-96) or 'SINGLE'
-  const [portfolio, setPortfolio] = useState('PTC0850_HP0_Naitwar_Mori_HPS');
+  const { activeId: portfolio } = usePortfolios();
   const [sapModalOpen, setSapModalOpen] = useState(false);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
 
@@ -103,10 +104,7 @@ export default function DailyObligationReport() {
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Portfolio Tag:</label>
-            <select className="input" value={portfolio} onChange={e => setPortfolio(e.target.value)}>
-              <option value="PTC0850_HP0_Naitwar_Mori_HPS">PTC0850_HP0_Naitwar_Mori_HPS</option>
-              <option value="SJVN_SOLAR_001">SJVN_SOLAR_001</option>
-            </select>
+            <PortfolioSelect scope="global" allLabel="-- Select portfolio --" />
           </div>
           <div style={{ marginLeft: 'auto', borderLeft: '1px solid #ccc', paddingLeft: 20 }}>
             <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Matrix Layout:</label>

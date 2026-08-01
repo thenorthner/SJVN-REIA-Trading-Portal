@@ -5,7 +5,7 @@ import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { getParam } from '../mastersService.js';
 import { placeOrder, getTradeResult, syncMarketRates, getIexConfig } from '../services/iexService.js';
-import { checkBidCompliance, getClearance } from '../services/standingClearance.js';
+import { checkBidCompliance, getClearance, clearancesNeedingAttention } from '../services/standingClearance.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -160,6 +160,12 @@ router.get('/', (req, res) => {
 
 // Permitted OCF carry-forward transitions (declared before /:id so it is not captured).
 // IEX connection state — which pulls are live and what is still stub.
+// Clearance states across the desk — drives the compliance ticker and the
+// clearance alerts on the notification bell. Declared before '/:id'.
+router.get('/standing-clearance', (req, res) => {
+  res.json(clearancesNeedingAttention());
+});
+
 // Standing clearance on record for a client, with its derived state. Declared
 // before '/:id' so the literal path is not swallowed by the id route.
 router.get('/standing-clearance/:clientId', (req, res) => {

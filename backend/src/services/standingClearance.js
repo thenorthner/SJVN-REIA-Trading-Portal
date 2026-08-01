@@ -246,3 +246,21 @@ export function checkBidCompliance({
 
   return { violations, warnings, clearance };
 }
+
+/**
+ * Clearances that need attention — lapsed, or inside the clause 26 notice window.
+ *
+ * Feeds the compliance ticker and the notification bell. Clients with no NOC
+ * captured are reported separately: that is a data gap for the desk to close,
+ * not a regulatory breach to alarm on.
+ */
+export function clearancesNeedingAttention() {
+  const ids = db.prepare(`SELECT id FROM trading_clients WHERE status != 'INACTIVE'`).all().map((r) => r.id);
+  const all = ids.map(getClearance).filter(Boolean);
+  return {
+    expired: all.filter((c) => c.state === 'EXPIRED'),
+    renewal_due: all.filter((c) => c.state === 'RENEWAL_DUE'),
+    not_on_record: all.filter((c) => c.state === 'NOT_ON_RECORD'),
+    active: all.filter((c) => c.state === 'ACTIVE'),
+  };
+}
