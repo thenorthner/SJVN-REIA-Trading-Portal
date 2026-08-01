@@ -1398,3 +1398,49 @@ a { color: var(--primary); text-decoration: none; }
 .sample-data-notice .sample-data-notice__detail {
   color: var(--text-muted);
 }
+
+/* ── Compliance ticker ────────────────────────────────────────────────────
+   Standing-clearance state and the next certificate windows, across the top of
+   the trading screens. Every value is derived from a record; nothing here is
+   decorative. */
+.compliance-ticker {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+.compliance-ticker__chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.compliance-ticker__chip--entity {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
+}
+.compliance-ticker__chip--status { margin-left: auto; }
+.compliance-ticker__chip--ok      { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+.compliance-ticker__chip--warn    { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
+.compliance-ticker__chip--danger  { background: var(--red-bg);   border-color: var(--red);   color: var(--red); }
+.compliance-ticker__value { color: var(--primary); }
+.compliance-ticker__muted { color: var(--text-muted); font-weight: 400; }
+
+/* Client selector in the top bar — the desk's active portfolio. */
+.topbar-portfolio { display: flex; align-items: center; gap: 8px; }
+.topbar-portfolio__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.topbar-portfolio__select { min-width: 200px; max-width: 260px; }

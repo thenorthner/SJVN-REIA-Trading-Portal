@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../api/client.js';
 import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from '../roles.js';
+import { PortfolioSelect } from '../context/PortfolioContext.jsx';
 
 const NAV_INTERNAL = [
   {
@@ -252,6 +253,22 @@ export default function Layout() {
             </div>
           </div>
           <div className="topbar-actions">
+            {/* Client selector, as the PTC portal carries it: one switcher in
+                the chrome that every trading screen and the compliance ticker
+                read from. Internal desk only — counterparties are already
+                scoped to their own entity. */}
+            {!isCounterparty && (
+              <label className="topbar-portfolio">
+                <span className="topbar-portfolio__label">Portfolio</span>
+                <PortfolioSelect
+                  scope="global"
+                  includeAll
+                  allLabel="All portfolios"
+                  className="input topbar-portfolio__select"
+                  aria-label="Active portfolio"
+                />
+              </label>
+            )}
             <div className="notif-wrap">
               <button className="icon-btn" onClick={() => setShowNotif((s) => !s)} aria-label="Notifications">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

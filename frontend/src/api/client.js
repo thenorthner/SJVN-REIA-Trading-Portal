@@ -579,6 +579,7 @@ export const api = {
   },
   alerts: {
     board: () => g('/alerts/board'),
+    complianceTicker: (portfolio_id) => g('/alerts/compliance-ticker', portfolio_id ? { portfolio_id } : undefined),
     broadcasts: (params) => g('/alerts/broadcasts', params),
     createBroadcast: (body) => p('/alerts/broadcasts', body),
     deleteBroadcast: (id) => del(`/alerts/broadcasts/${id}`),

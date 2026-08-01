@@ -2,6 +2,9 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit } from '../util.js';
+import { getParam } from '../mastersService.js';
+import { getClearance, clearancesNeedingAttention } from '../services/standingClearance.js';
+import { tradingSessions } from '../services/recLedger.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -219,6 +222,59 @@ function activeBroadcasts(audiences) {
 }
 
 // GET /alerts/board — combined broadcasts + live alerts + summary counts
+/**
+ * Compliance ticker — what the trading desk needs to see at a glance.
+ *
+ * Standing clearance state for the portfolio in context (or the worst state on
+ * the desk when none is selected), plus the next certificate trading windows.
+ *
+ * Every figure here is derived. The bar this feeds used to be static JSX that
+ * read "Remaining 20 Days for REC bid" and "NOC Expired" forever, regardless of
+ * any record, so a renewed clearance still showed as expired and a closed
+ * auction window still showed twenty days.
+ */
+const SEVERITY_ORDER = { EXPIRED: 0, RENEWAL_DUE: 1, NOT_ON_RECORD: 2, ACTIVE: 3 };
+
+router.get('/compliance-ticker', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const daysFrom = (iso) => Math.round(
+    (new Date(`${iso}T00:00:00Z`) - new Date(`${today}T00:00:00Z`)) / 86400000
+  );
+
+  // ── Standing clearance ────────────────────────────────────────────────
+  let clearance = null;
+  if (req.query.portfolio_id) {
+    clearance = getClearance(req.query.portfolio_id);
+  } else {
+    const groups = clearancesNeedingAttention();
+    const all = [...groups.expired, ...groups.renewal_due, ...groups.not_on_record, ...groups.active];
+    // Surface the most pressing one so the bar cannot read green while a
+    // clearance elsewhere on the desk has lapsed.
+    clearance = all.sort((a, b) => SEVERITY_ORDER[a.state] - SEVERITY_ORDER[b.state])[0] || null;
+  }
+
+  // ── REC sessions: 2nd and last Wednesday, per the CERC order ──────────
+  const recNext = tradingSessions(today, 1)[0] || null;
+
+  // ── ESCert sessions: no calendar rule, so only what has been entered ───
+  let escertNext = null;
+  const configured = getParam('escert_session_dates', []);
+  if (Array.isArray(configured)) {
+    escertNext = configured
+      .filter((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= today)
+      .sort()[0] || null;
+  }
+
+  res.json({
+    as_of: today,
+    clearance,
+    rec_session: recNext ? { date: recNext, days_away: daysFrom(recNext) } : null,
+    escert_session: escertNext
+      ? { date: escertNext, days_away: daysFrom(escertNext) }
+      : null,
+  });
+});
+
 router.get('/board', requireRole(...BOARD_READ), (req, res) => {
   const scope = scopeFor(req.user);
   const alerts = computeAlerts(scope);
