@@ -3,6 +3,7 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct } from '../util.js';
 import { payableNow, lpsBaseAmount, accruedLps, tieredRebatePct, daysBetween } from '../disputesConstants.js';
+import { payerStateForInvoice } from '../services/workingCalendar.js';
 import { getParamNumber, getParam } from '../mastersService.js';
 import { resolveBetaRow } from '../services/betaFactor.js';
 import { sendSms } from '../services/smsService.js';
@@ -75,6 +76,7 @@ function withContract(inv) {
         monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0.5),
         stepCapPct: getParamNumber('lps_step_cap_pct', 3),
         asOf: new Date(), paid,
+        state: payerStateForInvoice(inv),
       });
   return {
     ...inv,
@@ -1173,6 +1175,7 @@ function applyInvoicePayment(inv, { amount, payment_date, mode, reference, deduc
       monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0.5),
       stepCapPct: getParamNumber('lps_step_cap_pct', 3),
       asOf: payDate, paid: paidBefore,
+      state: payerStateForInvoice(inv),
     });
     if (accrued.lps > 0) newLps = accrued.lps;
   }
@@ -1207,6 +1210,7 @@ function buyerOutstanding(buyerId) {
       monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0.5),
       stepCapPct: getParamNumber('lps_step_cap_pct', 3),
       asOf: new Date(), paid,
+      state: payerStateForInvoice(inv),
     }).lps;
     const principal = Math.max(0, (inv.total_amount || 0) - (inv.disputed_amount || 0) - paid);
     return { inv, lps: Math.round(lps), principal: Math.round(principal) };

@@ -1,3 +1,5 @@
+import { surchargeDays } from './services/workingCalendar.js';
+
 /** Dispute Management constants & helpers */
 
 export const REASON_CODES = [
@@ -109,10 +111,13 @@ export function daysBetween(a, b) {
  * Accrued Late Payment Surcharge as of `asOf` on the OUTSTANDING undisputed amount.
  * Works before any payment is recorded (proactive display) and at payment time.
  */
-export function accruedLps(inv, { annualPct = 15, asOf = new Date(), paid = 0, graceDays = 0, monthlyStepPct = 0, stepCapPct = 0 } = {}) {
+export function accruedLps(inv, { annualPct = 15, asOf = new Date(), paid = 0, graceDays = 0, monthlyStepPct = 0, stepCapPct = 0, state = null } = {}) {
   const empty = { days_overdue: 0, lps: 0, base: 0, annual_pct: annualPct };
   if (!inv || !inv.due_date) return empty;
-  const daysOverdue = daysBetween(new Date(inv.due_date), new Date(asOf));
+  // Days the payer is actually charged for. With lps_day_count_mode set to
+  // WORKING_DAYS these exclude that party's weekly offs and state holidays, so
+  // a beneficiary is not surcharged for days its office was shut.
+  const daysOverdue = surchargeDays(inv.due_date, asOf, state);
   // No surcharge until the grace window past the due date has elapsed.
   if (daysOverdue <= (graceDays || 0)) return empty;
   const undisputed = Math.max(0, (inv.total_amount || 0) - (inv.disputed_amount || 0));

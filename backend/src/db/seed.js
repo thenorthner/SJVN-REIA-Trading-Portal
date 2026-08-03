@@ -596,7 +596,8 @@ db.prepare(`
 `).run(newId('ALC'), ppa.id, psa.id, 80, '2024-04-01');
 
 // ── NJHPS Hydro PPA (CERC capacity + β demo) ──
-const njhpsSeller = {
+const existingNjhpsSeller = db.prepare(`SELECT id FROM entities WHERE pan_no = 'AABCS1234D' OR name LIKE '%Nathpa Jhakri%'`).get();
+const njhpsSeller = existingNjhpsSeller || {
   id: newId('SEL'), parent_entity_id: null, entity_type: 'SELLER', category: 'RE Generator',
   name: 'SJVN Nathpa Jhakri HEP', pan_no: 'AABCS1234D', gst_no: '02AABCS1234D1Z5', cin: 'L40101HP1988GOI008409',
   credit_rating: 'AAA', is_blacklisted: 0, capacity_mw: 1500, technology: 'Hydro', contracted_capacity_mw: 1500,
@@ -605,9 +606,12 @@ const njhpsSeller = {
   is_penny_drop_verified: 1, status: 'APPROVED', address: 'Jhakri, Himachal Pradesh',
   corporate_email: 'billing@sjvn.nic.in', corporate_phone: '0177-2660089',
 };
-insertEntity.run(njhpsSeller);
+if (!existingNjhpsSeller) {
+  insertEntity.run(njhpsSeller);
+}
 
-const njhpsPpa = {
+const existingNjhpsPpa = db.prepare(`SELECT id FROM contracts WHERE contract_no = 'PPA/SJVN/NJHPS/001'`).get();
+const njhpsPpa = existingNjhpsPpa || {
   id: newId('CON'),
   contract_no: 'PPA/SJVN/NJHPS/001',
   contract_type: 'PPA',
@@ -632,7 +636,9 @@ const njhpsPpa = {
   termination_date: null,
   status: 'ACTIVE',
 };
-insertContract.run(njhpsPpa);
+if (!existingNjhpsPpa) {
+  insertContract.run(njhpsPpa);
+}
 
 db.prepare(`
   UPDATE contracts SET normative_aux = ?, free_energy_home_state = ?, capacity_charges_total = ?,
@@ -640,13 +646,16 @@ db.prepare(`
   WHERE id = ?
 `).run(1.2, 12, Math.round(14615741000 / 12), 14615741000, 6612000, 87, njhpsPpa.id);
 
-db.prepare(`
-  INSERT INTO station_beta (
-    id, contract_id, period_month, beta_value, station_code, station_name,
-    source, certified_on, notes, created_by
-  ) VALUES (?, ?, '2026-05', 1.00, 'NJHPS', 'NATHPA JHAKRI', 'NRPC', '2026-06-19',
-    'NRPC Average Monthly Frequency Response Performance – May 2026', ?)
-`).run(newId('BETA'), njhpsPpa.id, 'Rahul (REIA Ops)');
+const existingBeta = db.prepare(`SELECT id FROM station_beta WHERE contract_id = ? AND period_month = '2026-05'`).get(njhpsPpa.id);
+if (!existingBeta) {
+  db.prepare(`
+    INSERT INTO station_beta (
+      id, contract_id, period_month, beta_value, station_code, station_name,
+      source, certified_on, notes, created_by
+    ) VALUES (?, ?, '2026-05', 1.00, 'NJHPS', 'NATHPA JHAKRI', 'NRPC', '2026-06-19',
+      'NRPC Average Monthly Frequency Response Performance – May 2026', ?)
+  `).run(newId('BETA'), njhpsPpa.id, 'Rahul (REIA Ops)');
+}
 
 // ── One clear billing story for May 2026 (BFR demo) ──
 const period = '2026-05';

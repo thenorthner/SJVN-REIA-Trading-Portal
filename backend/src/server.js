@@ -40,6 +40,7 @@ import dorRoutes from './routes/dor.js';
 import lossesRoutes from './routes/losses.js';
 import documentsRoutes from './routes/documents.js';
 import usersRoutes from './routes/users.js';
+import holidaysRoutes from './routes/holidays.js';
 import mastersRoutes from './routes/masters.js';
 import reportsRoutes from './routes/reports.js';
 import verifyRoutes from './routes/verify.js';
@@ -49,6 +50,7 @@ import recRoutes from './routes/rec.js';
 import noarRoutes from './routes/noar.js';
 import formIvRoutes from './routes/formIv.js';
 import notesRoutes from './routes/notes.js';
+import tradingNotesRoutes from './routes/tradingNotes.js';
 import powerDiversionRoutes from './routes/powerDiversion.js';
 import { ensureMasterDefaults } from './mastersService.js';
 import { repairAuditChainIfBroken } from './auditEngine.js';
@@ -120,6 +122,7 @@ app.use('/api/bilateral', bilateralRoutes);
 app.use('/api/billing-settlement', billingSettlementRoutes);
 app.use('/api/generator-billing', generatorBillingRoutes);
 app.use('/api/market-analytics', marketAnalyticsRoutes);
+app.use('/api/trading-notes', requireAuth, tradingNotesRoutes);
 app.use('/api/pre-trade', requireAuth, preTradeRoutes);
 app.use('/api/communications', requireAuth, communicationsRoutes);
 app.use('/api/trading/bank-transactions', requireAuth, requireRole(...TRADING_READ), bankTransactionsRoutes);
@@ -129,6 +132,7 @@ app.use('/api/trading/dor', requireAuth, requireRole(...TRADING_READ), dorRoutes
 
 // Cross-cutting Services
 app.use('/api/documents', documentsRoutes);
+app.use('/api/masters/holidays', requireAuth, holidaysRoutes);
 app.use('/api/masters/losses', requireAuth, lossesRoutes);
 app.use('/api/masters', requireAuth, mastersRoutes);
 app.use('/api/reports', requireAuth, reportsRoutes);

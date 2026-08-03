@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
 import db from './db/index.js';
+import { computeDueDateWorking } from './services/workingCalendar.js';
 
 export const newId = (prefix) => `${prefix}-${uuidv4().slice(0, 8)}`;
 
@@ -102,9 +103,23 @@ export function addDays(baseDate, days) {
   return d.toISOString().split('T')[0];
 }
 
-/** Due date = bill date + payment terms. */
-export function computeDueDate(billDate, contract, fallback = 30) {
-  return addDays(billDate, resolvePaymentTermsDays(contract, fallback));
+/**
+ * Due date = bill date + payment terms, on the payer's working calendar.
+ *
+ * `state` is the paying party's state; without it only weekly offs and national
+ * holidays apply. Which counting convention is used comes from the
+ * due_date_counting_mode parameter — see services/workingCalendar.js.
+ *
+ * Returns just the date, so existing callers are unaffected. Use
+ * computeDueDateDetailed when the invoice needs to explain the date it shows.
+ */
+export function computeDueDate(billDate, contract, fallback = 30, state = null) {
+  return computeDueDateDetailed(billDate, contract, fallback, state).due_date;
+}
+
+export function computeDueDateDetailed(billDate, contract, fallback = 30, state = null) {
+  const terms = resolvePaymentTermsDays(contract, fallback);
+  return computeDueDateWorking(billDate, terms, state);
 }
 
 /**

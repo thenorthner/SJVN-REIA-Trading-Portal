@@ -1297,4 +1297,176 @@ try {
   console.error('Standing clearance migration failed:', e.message);
 }
 
+/**
+ * Working-day calendar: weekly offs plus national and state holidays.
+ *
+ * Payment due dates and late-payment surcharge both have to respect the paying
+ * party's non-working days — a bill cannot fall due on a day the counterparty's
+ * office is shut, and surcharge should not accrue for it either. Each state
+ * keeps its own list, so holidays carry a scope.
+ *
+ * SJVN publishes these to beneficiaries, so the table is the source for both
+ * the calculation and the notice that goes out.
+ */
+function migrateWorkingCalendarSchema() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+
+  const addColumn = (table, name, ddl) => {
+    if (!tables.includes(table)) return;
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (!cols.includes(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${ddl};`);
+  };
+
+  // Which state's calendar applies to this counterparty. Null means the
+  // national list only — no state holidays are assumed for an entity whose
+  // state was never captured.
+  addColumn('entities', 'state', 'TEXT');
+  addColumn('trading_clients', 'state', 'TEXT');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS holidays (
+      id TEXT PRIMARY KEY,
+      holiday_date TEXT NOT NULL,
+      name TEXT NOT NULL,
+      -- NATIONAL applies to everyone; STATE only to the named state.
+      scope TEXT NOT NULL DEFAULT 'NATIONAL' CHECK (scope IN ('NATIONAL','STATE')),
+      state TEXT,
+      holiday_type TEXT NOT NULL DEFAULT 'PUBLIC'
+        CHECK (holiday_type IN ('PUBLIC','RESTRICTED','BANK','LOCAL')),
+      remarks TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- One entry per date per scope. A national and a state holiday can share a
+    -- date; two identical state entries cannot.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_holidays_date_scope
+      ON holidays (holiday_date, scope, COALESCE(state, ''));
+
+    CREATE INDEX IF NOT EXISTS idx_holidays_lookup
+      ON holidays (holiday_date, is_active);
+  `);
+}
+
+try {
+  migrateWorkingCalendarSchema();
+} catch (e) {
+  console.error('Working calendar migration failed:', e.message);
+}
+
+/**
+ * Trading-side debit and credit notes.
+ *
+ * When a promised schedule cannot be met from own generation, the shortfall is
+ * bought on the exchange and the broker raises a manual invoice for it. That
+ * amount shows on the obligation report but not on the weekly payment report,
+ * so the two never reconcile on their own — the note is what carries the
+ * difference into settlement.
+ *
+ * Sign convention follows the REIA notes already in the platform: the amount is
+ * always positive and note_type carries the direction. A shortfall bought dear
+ * is a DEBIT (more payable); power returned or delivered short later is a
+ * CREDIT (less payable).
+ *
+ * trading_invoice_id is optional on purpose. The broker's invoice is raised
+ * outside this platform, so a note often exists before — or without — any
+ * matching row of ours.
+ */
+function migrateTradingNotesSchema() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS trading_debit_credit_notes (
+      id TEXT PRIMARY KEY,
+      note_no TEXT UNIQUE NOT NULL,
+      note_type TEXT NOT NULL CHECK (note_type IN ('DEBIT','CREDIT')),
+      client_id TEXT NOT NULL REFERENCES trading_clients(id),
+      trading_invoice_id TEXT REFERENCES trading_invoices(id),
+      billing_period TEXT NOT NULL,
+      delivery_date TEXT,
+      reason_code TEXT NOT NULL DEFAULT 'SCHEDULE_SHORTFALL_PURCHASE' CHECK (reason_code IN (
+        'SCHEDULE_SHORTFALL_PURCHASE',
+        'SCHEDULE_EXCESS_RETURN',
+        'BROKER_MANUAL_INVOICE',
+        'OBLIGATION_PAYMENT_MISMATCH',
+        'RATE_REVISION',
+        'EXCHANGE_FEE_ADJUSTMENT',
+        'DSM_ADJUSTMENT',
+        'OTHER'
+      )),
+      quantum_mwh REAL,
+      rate_per_unit REAL,
+      amount REAL NOT NULL,
+      broker_reference TEXT,
+      reason TEXT,
+      status TEXT NOT NULL DEFAULT 'ISSUED' CHECK (status IN ('ISSUED','SETTLED','CANCELLED')),
+      issued_date TEXT,
+      settled_date TEXT,
+      cancelled_reason TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_trading_notes_client
+      ON trading_debit_credit_notes (client_id, billing_period);
+  `);
+}
+
+try {
+  migrateTradingNotesSchema();
+} catch (e) {
+  console.error('Trading notes migration failed:', e.message);
+}
+
+/**
+ * The REIA notes predate market-shortfall settlement, so their reason codes had
+ * no way to describe one. SQLite cannot alter a CHECK constraint, so the table
+ * is rebuilt with the wider list; existing rows carry over untouched.
+ */
+function migrateReiaNoteReasonCodes() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (!tables.includes('debit_credit_notes')) return;
+
+  const ddl = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='debit_credit_notes'"
+  ).get()?.sql || '';
+  if (ddl.includes('SCHEDULE_SHORTFALL_PURCHASE')) return;
+
+  db.exec('PRAGMA foreign_keys=OFF');
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE debit_credit_notes_new (
+        id TEXT PRIMARY KEY,
+        note_no TEXT UNIQUE NOT NULL,
+        note_type TEXT NOT NULL CHECK (note_type IN ('DEBIT','CREDIT')),
+        invoice_id TEXT NOT NULL REFERENCES invoices(id),
+        contract_id TEXT REFERENCES contracts(id),
+        period_month TEXT,
+        reason_code TEXT NOT NULL DEFAULT 'REVISED_REA' CHECK (reason_code IN
+          ('REVISED_REA','CHANGE_IN_LAW','TRANSMISSION_CHARGES','LPS','COMPENSATION_EVENT',
+           'LIQUIDATED_DAMAGES','SCHEDULE_SHORTFALL_PURCHASE','SCHEDULE_EXCESS_RETURN','OTHER')),
+        amount REAL NOT NULL,
+        reason TEXT,
+        status TEXT NOT NULL DEFAULT 'ISSUED' CHECK (status IN ('ISSUED','SETTLED','CANCELLED')),
+        issued_date TEXT,
+        settled_date TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      INSERT INTO debit_credit_notes_new SELECT * FROM debit_credit_notes;
+      DROP TABLE debit_credit_notes;
+      ALTER TABLE debit_credit_notes_new RENAME TO debit_credit_notes;
+    `);
+  })();
+  db.exec('PRAGMA foreign_keys=ON');
+  console.log('[MIGRATE] debit_credit_notes: added market-shortfall reason codes');
+}
+
+try {
+  migrateReiaNoteReasonCodes();
+} catch (e) {
+  console.error('REIA note reason-code migration failed:', e.message);
+}
+
 export default db;
