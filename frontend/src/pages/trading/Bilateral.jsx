@@ -223,13 +223,20 @@ export default function Bilateral() {
 
   async function handleDownloadLoi(tx) {
     try {
-      const res = await api.client.get(`/trading/bilateral/${tx.id}/loi`, { responseType: 'blob' });
-      const url = URL.createObjectURL(new Blob([res.data]));
+      const blob = await api.bilateral.downloadLoi(tx.id);
+      const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
       const a = document.createElement('a');
       a.href = url;
-      a.download = `SJVN_LoI_${tx.id}.pdf`;
+      const cleanRef = (tx.loi_contract_ref || tx.id).replace(/[/\\?%*:|"<>]/g, '_');
+      a.download = `SJVN_LoI_${cleanRef}.pdf`;
+      document.body.appendChild(a);
       a.click();
-    } catch (err) { alert('Failed to download LoI'); }
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download LoI:', err);
+      alert('Failed to download LoI');
+    }
   }
 
   async function handleNodeApproval(schedId, nodeType, status) {

@@ -10,6 +10,7 @@ const TABS = [
   { id: 'contracts', label: 'Contracts' },
   { id: 'projects', label: 'Projects' },
   { id: 'banks', label: 'Banks' },
+  { id: 'holidays', label: '🗓️ Holidays & Working Calendar' },
   // Hidden for solar-focused scope (β is a hydro/PSP frequency-response input).
   // Uncomment to restore for hydro.
   // { id: 'beta', label: 'Frequency β' },
@@ -34,6 +35,17 @@ const EMPTY_PROJECT = {
 const EMPTY_LOOKUP = { id: null, category: 'PROJECT_TYPE', code: '', label: '', sort_order: 0, is_active: 1 };
 const EMPTY_DOC = { id: null, module_name: 'STAKEHOLDERS', code: '', label: '', category: 'VERIFY', reason: '', is_mandatory: false, sort_order: 0, is_active: 1 };
 const EMPTY_PARAM = { param_key: '', param_value: '', data_type: 'NUMBER', unit: '', description: '' };
+const EMPTY_HOLIDAY = { holiday_date: '', name: '', scope: 'NATIONAL', state: '', holiday_type: 'PUBLIC', remarks: '' };
+
+function formatDayName(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(`${dateStr}T00:00:00Z`);
+    return d.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+  } catch {
+    return '';
+  }
+}
 
 export default function MastersHub() {
   const { user } = useAuth();
@@ -57,6 +69,28 @@ export default function MastersHub() {
   const [lossData, setLossData] = useState(null);
   const [loadingLosses, setLoadingLosses] = useState(false);
 
+  // Holiday & Working Calendar state
+  const [holidays, setHolidays] = useState([]);
+  const [holidayStates, setHolidayStates] = useState([]);
+  const [holidaySettings, setHolidaySettings] = useState(null);
+  const [holidayYear, setHolidayYear] = useState('2026');
+  const [holidayStateFilter, setHolidayStateFilter] = useState('');
+  const [holidayScopeFilter, setHolidayScopeFilter] = useState('');
+  const [includeInactiveHolidays, setIncludeInactiveHolidays] = useState(false);
+  const [showAddHoliday, setShowAddHoliday] = useState(false);
+  const [showBulkHoliday, setShowBulkHoliday] = useState(false);
+  const [holidayForm, setHolidayForm] = useState(EMPTY_HOLIDAY);
+  const [bulkHolidayText, setBulkHolidayText] = useState('');
+  const [deactivateHolidayObj, setDeactivateHolidayObj] = useState(null);
+  const [deactivateReason, setDeactivateReason] = useState('');
+
+  // Live Due Date Simulator state
+  const [simBillDate, setSimBillDate] = useState('2026-05-05');
+  const [simTermsDays, setSimTermsDays] = useState(45);
+  const [simState, setSimState] = useState('');
+  const [simResult, setSimResult] = useState(null);
+  const [simLoading, setSimLoading] = useState(false);
+
   const [bankForm, setBankForm] = useState(EMPTY_BANK);
   const [showBank, setShowBank] = useState(false);
   const [editBank, setEditBank] = useState(null);
@@ -78,6 +112,17 @@ export default function MastersHub() {
     api.masters.summary().then(setSummary).catch(() => {});
   }
 
+  function loadHolidaysData() {
+    api.holidays.list({
+      year: holidayYear || undefined,
+      state: holidayStateFilter || undefined,
+      scope: holidayScopeFilter || undefined,
+      include_inactive: includeInactiveHolidays ? 1 : undefined,
+    }).then(setHolidays).catch((e) => setError(e.response?.data?.error || 'Failed to load holidays'));
+    api.holidays.states().then(setHolidayStates).catch(() => {});
+    api.holidays.settings().then(setHolidaySettings).catch(() => {});
+  }
+
   function loadTab(t = tab) {
     setError('');
     if (t === 'entities') api.entities.list().then(setEntities).catch((e) => setError(e.response?.data?.error || 'Failed'));
@@ -87,6 +132,7 @@ export default function MastersHub() {
       api.entities.list().then((all) => setParents(all.filter((e) => !e.parent_entity_id))).catch(() => {});
     }
     if (t === 'banks') api.masters.banks({ active: '0' }).then(setBanks).catch((e) => setError(e.response?.data?.error || 'Failed'));
+    if (t === 'holidays') loadHolidaysData();
     if (t === 'beta') {
       api.stationBeta.list().then(setBetas).catch((e) => setError(e.response?.data?.error || 'Failed'));
       api.contracts.list().then(setContracts).catch(() => {});
@@ -99,7 +145,92 @@ export default function MastersHub() {
   }
 
   useEffect(() => { loadSummary(); }, []);
-  useEffect(() => { loadTab(tab); }, [tab]);
+  useEffect(() => { loadTab(tab); }, [tab, holidayYear, holidayStateFilter, holidayScopeFilter, includeInactiveHolidays]);
+
+  useEffect(() => {
+    if (tab === 'holidays' && simBillDate) {
+      setSimLoading(true);
+      api.holidays.previewDueDate({
+        bill_date: simBillDate,
+        terms_days: simTermsDays,
+        state: simState || undefined,
+      }).then(setSimResult).catch(() => {}).finally(() => setSimLoading(false));
+    }
+  }, [tab, simBillDate, simTermsDays, simState]);
+
+  async function saveHoliday(e) {
+    e.preventDefault();
+    try {
+      await api.holidays.add({
+        ...holidayForm,
+        state: holidayForm.scope === 'STATE' ? holidayForm.state : null,
+      });
+      setShowAddHoliday(false);
+      setHolidayForm(EMPTY_HOLIDAY);
+      loadHolidaysData();
+      loadSummary();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to add holiday');
+    }
+  }
+
+  async function saveBulkHolidays(e) {
+    e.preventDefault();
+    try {
+      const lines = bulkHolidayText.split('\n').map((l) => l.trim()).filter(Boolean);
+      const items = [];
+      for (const line of lines) {
+        const parts = line.split(/[,\t]/).map((p) => p.trim());
+        if (parts.length >= 2) {
+          const [holiday_date, name, scope = 'NATIONAL', state = '', holiday_type = 'PUBLIC', remarks = ''] = parts;
+          items.push({
+            holiday_date,
+            name,
+            scope: scope.toUpperCase() === 'STATE' ? 'STATE' : 'NATIONAL',
+            state: scope.toUpperCase() === 'STATE' ? (state || null) : null,
+            holiday_type: ['PUBLIC', 'RESTRICTED', 'BANK', 'LOCAL'].includes(holiday_type.toUpperCase()) ? holiday_type.toUpperCase() : 'PUBLIC',
+            remarks: remarks || null,
+          });
+        }
+      }
+      if (items.length === 0) {
+        alert('No valid rows found. Format: YYYY-MM-DD, Holiday Name, NATIONAL/STATE, State, Type');
+        return;
+      }
+      const res = await api.holidays.bulkAdd({ holidays: items });
+      alert(`Bulk Import Complete: ${res.inserted || items.length} holiday(s) saved.`);
+      setShowBulkHoliday(false);
+      setBulkHolidayText('');
+      loadHolidaysData();
+      loadSummary();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Bulk import failed');
+    }
+  }
+
+  async function handleDeactivateHoliday(e) {
+    e.preventDefault();
+    if (!deactivateHolidayObj) return;
+    try {
+      await api.holidays.deactivate(deactivateHolidayObj.id, { reason: deactivateReason });
+      setDeactivateHolidayObj(null);
+      setDeactivateReason('');
+      loadHolidaysData();
+      loadSummary();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to deactivate holiday');
+    }
+  }
+
+  async function handleReactivateHoliday(id) {
+    try {
+      await api.holidays.reactivate(id);
+      loadHolidaysData();
+      loadSummary();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to reactivate holiday');
+    }
+  }
 
   async function saveBank(e) {
     e.preventDefault();
@@ -606,7 +737,256 @@ export default function MastersHub() {
         </Card>
       )}
 
+      {tab === 'holidays' && (
+        <Card
+          title="Holiday & Working-Day Calendar Master"
+          actions={canWrite && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-outline btn-sm" onClick={() => setShowBulkHoliday(true)}>📥 Bulk Import</button>
+              <button className="btn btn-primary btn-sm" onClick={() => { setHolidayForm(EMPTY_HOLIDAY); setShowAddHoliday(true); }}>+ Add Holiday</button>
+            </div>
+          )}
+        >
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
+              <div>
+                <h4 style={{ margin: '0 0 4px 0', fontSize: 14, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span>⚡</span> Live Due-Date & Working-Days Simulator
+                </h4>
+                <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
+                  Verify how state-specific public holidays and weekly offs affect payment deadlines & late-payment surcharge (LPS).
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <span className="badge" style={{ background: '#e0f2fe', color: '#0369a1', fontSize: 11 }}>
+                  Weekly Offs: {holidaySettings?.weekly_off_names?.join(', ') || 'Saturday, Sunday'}
+                </span>
+                <span className="badge" style={{ background: '#fef3c7', color: '#92400e', fontSize: 11 }}>
+                  Counting Mode: {holidaySettings?.due_date_counting_mode || 'CALENDAR_ROLL_FORWARD'}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, alignItems: 'end' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Bill Presentation Date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={simBillDate}
+                  onChange={(e) => setSimBillDate(e.target.value)}
+                  style={{ width: '100%', fontSize: 13 }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Credit Terms (Days)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="120"
+                  className="input"
+                  value={simTermsDays}
+                  onChange={(e) => setSimTermsDays(Number(e.target.value))}
+                  style={{ width: '100%', fontSize: 13 }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Beneficiary / Buyer State</label>
+                <select
+                  className="input"
+                  value={simState}
+                  onChange={(e) => setSimState(e.target.value)}
+                  style={{ width: '100%', fontSize: 13 }}
+                >
+                  <option value="">National Only (No State Override)</option>
+                  {holidayStates.map((st) => <option key={st} value={st}>{st}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {simResult && (
+              <div style={{ marginTop: 14, padding: 12, background: '#ffffff', borderRadius: 6, border: '1px solid #cbd5e1', display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Calculated Due Date</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#0f172a' }}>
+                    {simResult.due_date} <span style={{ fontSize: 13, fontWeight: 500, color: '#64748b' }}>({formatDayName(simResult.due_date)})</span>
+                  </div>
+                </div>
+                <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16 }}>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Elapsed Days</div>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>
+                    <strong>{simResult.calendar_days}</strong> Cal Days · <strong>{simResult.working_days}</strong> Working Days
+                  </div>
+                </div>
+                <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16 }}>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Non-Working Days Excluded</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#dc2626' }}>
+                    {simResult.excluded_days?.length || 0} days (Weekends & Holidays)
+                  </div>
+                </div>
+                <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16, flex: 1, minWidth: 200 }}>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>LPS Accrual Rule</div>
+                  <div style={{ fontSize: 12, color: '#334155' }}>
+                    {simState ? `${simState} gazetted holidays` : 'National holidays'} are protected. Surcharge does not accrue on non-working days.
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16, background: '#f1f5f9', padding: '10px 14px', borderRadius: 6 }}>
+            <div>
+              <span style={{ fontSize: 12, fontWeight: 700, marginRight: 6 }}>Year:</span>
+              <select value={holidayYear} onChange={(e) => setHolidayYear(e.target.value)} style={{ fontSize: 12, padding: '4px 8px' }}>
+                <option value="">All Years</option>
+                <option value="2025">2025</option>
+                <option value="2026">2026</option>
+                <option value="2027">2027</option>
+              </select>
+            </div>
+            <div>
+              <span style={{ fontSize: 12, fontWeight: 700, marginRight: 6 }}>Scope:</span>
+              <select value={holidayScopeFilter} onChange={(e) => setHolidayScopeFilter(e.target.value)} style={{ fontSize: 12, padding: '4px 8px' }}>
+                <option value="">All Scopes</option>
+                <option value="NATIONAL">NATIONAL</option>
+                <option value="STATE">STATE</option>
+              </select>
+            </div>
+            <div>
+              <span style={{ fontSize: 12, fontWeight: 700, marginRight: 6 }}>State:</span>
+              <select value={holidayStateFilter} onChange={(e) => setHolidayStateFilter(e.target.value)} style={{ fontSize: 12, padding: '4px 8px' }}>
+                <option value="">All States</option>
+                {holidayStates.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', marginLeft: 'auto' }}>
+              <input type="checkbox" checked={includeInactiveHolidays} onChange={(e) => setIncludeInactiveHolidays(e.target.checked)} />
+              Include Withdrawn / Inactive
+            </label>
+          </div>
+
+          <Table
+            columns={[
+              { key: 'holiday_date', header: 'Date', render: (r) => <strong style={{ fontSize: 13 }}>{r.holiday_date}</strong> },
+              { key: 'day', header: 'Day', render: (r) => <span style={{ color: '#64748b', fontSize: 12 }}>{formatDayName(r.holiday_date)}</span> },
+              { key: 'name', header: 'Holiday Name', render: (r) => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+              { key: 'scope', header: 'Scope', render: (r) => <Badge status={r.scope === 'NATIONAL' ? 'ACTIVE' : 'PENDING'} label={r.scope} /> },
+              { key: 'state', header: 'State / Region', render: (r) => r.state ? <span style={{ color: '#0284c7', fontWeight: 600 }}>{r.state}</span> : <span style={{ color: '#64748b' }}>All India (National)</span> },
+              { key: 'holiday_type', header: 'Type', render: (r) => <Badge status="DRAFT" label={r.holiday_type} /> },
+              { key: 'remarks', header: 'Remarks / Gazette Ref', render: (r) => r.remarks || '—' },
+              { key: 'is_active', header: 'Status', render: (r) => r.is_active ? <Badge status="ACTIVE" label="Active" /> : <Badge status="REJECTED" label="Withdrawn" /> },
+              ...(canWrite ? [{
+                key: 'actions', header: '', render: (r) => (
+                  <div>
+                    {r.is_active ? (
+                      <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => { setDeactivateHolidayObj(r); setDeactivateReason(''); }}>
+                        Withdraw
+                      </button>
+                    ) : (
+                      <button className="btn btn-sm btn-success" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => handleReactivateHoliday(r.id)}>
+                        Reactivate
+                      </button>
+                    )}
+                  </div>
+                ),
+              }] : []),
+            ]}
+            rows={holidays}
+            emptyMessage="No holidays configured for the selected criteria."
+          />
+        </Card>
+      )}
+
       {/* Modals */}
+      <Modal open={showAddHoliday} onClose={() => setShowAddHoliday(false)} title="Add Holiday">
+        <form onSubmit={saveHoliday}>
+          <div className="form-grid">
+            <Field label="Holiday Date">
+              <input required type="date" value={holidayForm.holiday_date} onChange={(e) => setHolidayForm({ ...holidayForm, holiday_date: e.target.value })} />
+            </Field>
+            <Field label="Scope">
+              <select value={holidayForm.scope} onChange={(e) => setHolidayForm({ ...holidayForm, scope: e.target.value })}>
+                <option value="NATIONAL">NATIONAL (Applies to all entities)</option>
+                <option value="STATE">STATE (Applies to specific state)</option>
+              </select>
+            </Field>
+          </div>
+
+          <Field label="Holiday Name">
+            <input required placeholder="e.g. Statehood Day / Baisakhi / Diwali" value={holidayForm.name} onChange={(e) => setHolidayForm({ ...holidayForm, name: e.target.value })} />
+          </Field>
+
+          <div className="form-grid">
+            {holidayForm.scope === 'STATE' ? (
+              <Field label="State Name">
+                <input required placeholder="e.g. Himachal Pradesh / Punjab / Haryana" value={holidayForm.state} onChange={(e) => setHolidayForm({ ...holidayForm, state: e.target.value })} />
+              </Field>
+            ) : (
+              <Field label="Scope Note">
+                <input disabled value="All India (Central Gazetted)" />
+              </Field>
+            )}
+            <Field label="Holiday Type">
+              <select value={holidayForm.holiday_type} onChange={(e) => setHolidayForm({ ...holidayForm, holiday_type: e.target.value })}>
+                <option value="PUBLIC">PUBLIC (Gazetted public holiday)</option>
+                <option value="BANK">BANK (Negotiable Instruments Act)</option>
+                <option value="RESTRICTED">RESTRICTED (Optional holiday)</option>
+                <option value="LOCAL">LOCAL (Regional / SLDC office closed)</option>
+              </select>
+            </Field>
+          </div>
+
+          <Field label="Remarks / Circular Ref">
+            <input placeholder="e.g. HP Govt Gazetted Circular No. 2026/04" value={holidayForm.remarks} onChange={(e) => setHolidayForm({ ...holidayForm, remarks: e.target.value })} />
+          </Field>
+
+          <div className="form-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setShowAddHoliday(false)}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Save Holiday</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={showBulkHoliday} onClose={() => setShowBulkHoliday(false)} title="Bulk Import Holidays">
+        <form onSubmit={saveBulkHolidays}>
+          <p style={{ fontSize: 12, color: '#64748b', marginTop: 0 }}>
+            Paste comma-separated or tab-separated holiday entries (one per line):<br />
+            <code>YYYY-MM-DD, Holiday Name, Scope (NATIONAL/STATE), State (optional), Type (PUBLIC/BANK)</code>
+          </p>
+          <Field label="Holiday Entries">
+            <textarea
+              required
+              rows={8}
+              className="input"
+              style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }}
+              placeholder={"2026-01-26, Republic Day, NATIONAL, , PUBLIC\n2026-04-15, Himachal Day, STATE, Himachal Pradesh, PUBLIC\n2026-04-13, Baisakhi, STATE, Punjab, PUBLIC"}
+              value={bulkHolidayText}
+              onChange={(e) => setBulkHolidayText(e.target.value)}
+            />
+          </Field>
+          <div className="form-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setShowBulkHoliday(false)}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Import Holidays</button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={!!deactivateHolidayObj} onClose={() => setDeactivateHolidayObj(null)} title="Withdraw Holiday">
+        {deactivateHolidayObj && (
+          <form onSubmit={handleDeactivateHoliday}>
+            <p style={{ fontSize: 13, color: '#334155', marginTop: 0 }}>
+              Are you sure you want to withdraw <strong>{deactivateHolidayObj.name}</strong> on <strong>{deactivateHolidayObj.holiday_date}</strong>?
+            </p>
+            <Field label="Reason / Justification for withdrawal">
+              <input required placeholder="e.g. State govt cancelled gazetted off" value={deactivateReason} onChange={(e) => setDeactivateReason(e.target.value)} />
+            </Field>
+            <div className="form-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setDeactivateHolidayObj(null)}>Cancel</button>
+              <button type="submit" className="btn btn-danger">Confirm Withdrawal</button>
+            </div>
+          </form>
+        )}
+      </Modal>
       <Modal open={showBank} onClose={() => setShowBank(false)} title={editBank ? 'Edit Bank' : 'Add Bank'}>
         <form onSubmit={saveBank}>
           <Field label="Bank Name"><input required value={bankForm.bank_name} onChange={(e) => setBankForm({ ...bankForm, bank_name: e.target.value })} /></Field>

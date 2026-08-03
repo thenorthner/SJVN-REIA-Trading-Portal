@@ -444,11 +444,18 @@ router.get('/:id/format-d', (req, res) => {
 
 // Generate LoI (Letter of Intent) PDF
 router.get('/:id/loi', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
-  const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(req.params.id);
+  const tx = db.prepare(`
+    SELECT bt.*, tc.name AS client_name, tc.standing_clearance_no, tc.noar_id AS client_noar_id,
+           e.pan_no AS pan_number, e.gst_no AS gstin, e.address, e.signatory_name
+    FROM bilateral_transactions bt
+    LEFT JOIN trading_clients tc ON bt.client_id = tc.id
+    LEFT JOIN entities e ON tc.entity_id = e.id
+    WHERE bt.id = ?
+  `).get(req.params.id);
   if (!tx) return res.status(404).json({ error: 'Not found' });
 
   secureLogAudit(req, { action: 'EXPORT_LOI', module: 'TRADING', entityType: 'bilateral_transaction', entityId: tx.id });
-  generateLoiPdf(tx, { generatedBy: req.user.name }, res);
+  generateLoiPdf(tx, { generatedBy: req.user?.name || 'Trading Officer' }, res);
 });
 
 // Bulk NOAR step for a selected set of transactions.

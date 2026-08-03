@@ -493,6 +493,7 @@ export const api = {
     downloadNoarReportPdf: () => client.get('/bilateral/noar-approval-report.pdf', { responseType: 'blob' }).then((r) => r.data),
     formatDUrl: (id) => `/api/bilateral/${id}/format-d`,
     downloadFormatD: (id) => client.get(`/bilateral/${id}/format-d`, { responseType: 'blob' }).then((r) => r.data),
+    downloadLoi: (id) => client.get(`/bilateral/${id}/loi`, { responseType: 'blob' }).then((r) => r.data),
   },
   billingSettlement: {
     listInvoices: (params) => g('/billing-settlement/invoices', params),
@@ -608,6 +609,26 @@ export const api = {
     broadcast: (formData) => client
       .post('/communications/broadcast', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
       .then((r) => r.data),
+  },
+  holidays: {
+    list: (params) => g('/masters/holidays', params),
+    states: () => g('/masters/holidays/states'),
+    settings: () => g('/masters/holidays/settings'),
+    check: (params) => g('/masters/holidays/check', params),
+    previewDueDate: (params) => g('/masters/holidays/due-date-preview', params),
+    add: (body) => p('/masters/holidays', body),
+    bulkAdd: (body) => p('/masters/holidays/bulk', body),
+    deactivate: (id, body) => p(`/masters/holidays/${id}/deactivate`, body),
+    reactivate: (id) => p(`/masters/holidays/${id}/reactivate`),
+  },
+  tradingNotes: {
+    list: (params) => g('/trading-notes', params),
+    reference: () => g('/trading-notes/reference'),
+    summary: (params) => g('/trading-notes/summary', params),
+    get: (id) => g(`/trading-notes/${id}`),
+    create: (body) => p('/trading-notes', body),
+    settle: (id, body) => p(`/trading-notes/${id}/settle`, body),
+    cancel: (id, body) => p(`/trading-notes/${id}/cancel`, body),
   },
   auditLogs: {
     list: (params) => g('/audit-logs', params),

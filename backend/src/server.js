@@ -119,6 +119,7 @@ app.use('/api/notes', requireAuth, notesRoutes);
 app.use('/api/power-diversion', requireAuth, powerDiversionRoutes);
 app.use('/api/bids', bidsRoutes);
 app.use('/api/bilateral', bilateralRoutes);
+app.use('/api/trading/bilateral', bilateralRoutes);
 app.use('/api/billing-settlement', billingSettlementRoutes);
 app.use('/api/generator-billing', generatorBillingRoutes);
 app.use('/api/market-analytics', marketAnalyticsRoutes);

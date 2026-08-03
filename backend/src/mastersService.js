@@ -170,6 +170,47 @@ const DEFAULT_DOC_TYPES = [
   ['COMPLIANCE', 'IT_COMPLIANCE', 'MeitY/CERT-In Compliance Certificates', 'RECORD', 'Infra compliance', 0, 3],
 ];
 
+const DEFAULT_HOLIDAYS = [
+  // 2026 National Gazetted Holidays
+  { holiday_date: '2026-01-26', name: 'Republic Day', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Holiday' },
+  { holiday_date: '2026-03-04', name: 'Holi', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Gazetted' },
+  { holiday_date: '2026-03-21', name: 'Id-ul-Fitr', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Gazetted' },
+  { holiday_date: '2026-04-03', name: 'Good Friday', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Gazetted' },
+  { holiday_date: '2026-04-14', name: 'Dr. B.R. Ambedkar Jayanti', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Gazetted' },
+  { holiday_date: '2026-04-21', name: 'Mahavir Jayanti', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Gazetted' },
+  { holiday_date: '2026-05-01', name: 'Buddha Purnima / May Day', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Gazetted' },
+  { holiday_date: '2026-05-28', name: 'Id-ul-Zuha (Bakrid)', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Gazetted' },
+  { holiday_date: '2026-06-27', name: 'Muharram', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Gazetted' },
+  { holiday_date: '2026-08-15', name: 'Independence Day', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Holiday' },
+  { holiday_date: '2026-08-27', name: 'Milad-un-Nabi', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Gazetted' },
+  { holiday_date: '2026-10-02', name: 'Mahatma Gandhi Jayanti', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Holiday' },
+  { holiday_date: '2026-10-20', name: 'Dussehra (Vijaya Dashami)', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Gazetted' },
+  { holiday_date: '2026-11-08', name: 'Diwali (Deepavali)', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Gazetted' },
+  { holiday_date: '2026-11-24', name: 'Guru Nanak Jayanti', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Gazetted' },
+  { holiday_date: '2026-12-25', name: 'Christmas Day', scope: 'NATIONAL', state: null, holiday_type: 'PUBLIC', remarks: 'National Gazetted' },
+
+  // State-specific Holidays (Himachal Pradesh, Punjab, Haryana, etc.)
+  { holiday_date: '2026-01-25', name: 'Statehood Day', scope: 'STATE', state: 'Himachal Pradesh', holiday_type: 'PUBLIC', remarks: 'HP Statehood Day' },
+  { holiday_date: '2026-03-05', name: 'Holi (State Extension)', scope: 'STATE', state: 'Himachal Pradesh', holiday_type: 'PUBLIC', remarks: 'HP State Gazetted' },
+  { holiday_date: '2026-04-15', name: 'Himachal Day', scope: 'STATE', state: 'Himachal Pradesh', holiday_type: 'PUBLIC', remarks: 'HP State Day' },
+
+  { holiday_date: '2026-03-23', name: 'Shaheedi Diwas (Bhagat Singh)', scope: 'STATE', state: 'Punjab', holiday_type: 'PUBLIC', remarks: 'Punjab State Holiday' },
+  { holiday_date: '2026-04-13', name: 'Baisakhi', scope: 'STATE', state: 'Punjab', holiday_type: 'PUBLIC', remarks: 'Punjab State Gazetted' },
+  { holiday_date: '2026-11-01', name: 'Punjab Day', scope: 'STATE', state: 'Punjab', holiday_type: 'PUBLIC', remarks: 'Punjab State Day' },
+
+  { holiday_date: '2026-09-23', name: "Haryana Heroes' Martyrdom Day", scope: 'STATE', state: 'Haryana', holiday_type: 'PUBLIC', remarks: 'Haryana State Holiday' },
+  { holiday_date: '2026-11-01', name: 'Haryana Day', scope: 'STATE', state: 'Haryana', holiday_type: 'PUBLIC', remarks: 'Haryana State Day' },
+
+  { holiday_date: '2026-01-14', name: 'Makar Sankranti / Uttarayan', scope: 'STATE', state: 'Gujarat', holiday_type: 'PUBLIC', remarks: 'Gujarat State Gazetted' },
+  { holiday_date: '2026-05-01', name: 'Gujarat Day', scope: 'STATE', state: 'Gujarat', holiday_type: 'PUBLIC', remarks: 'Gujarat State Day' },
+
+  { holiday_date: '2026-02-19', name: 'Chhatrapati Shivaji Maharaj Jayanti', scope: 'STATE', state: 'Maharashtra', holiday_type: 'PUBLIC', remarks: 'Maharashtra State Gazetted' },
+  { holiday_date: '2026-05-01', name: 'Maharashtra Day', scope: 'STATE', state: 'Maharashtra', holiday_type: 'PUBLIC', remarks: 'Maharashtra State Day' },
+
+  { holiday_date: '2026-03-30', name: 'Rajasthan Day', scope: 'STATE', state: 'Rajasthan', holiday_type: 'PUBLIC', remarks: 'Rajasthan State Day' },
+  { holiday_date: '2026-11-15', name: 'Chhath Puja', scope: 'STATE', state: 'Delhi', holiday_type: 'PUBLIC', remarks: 'Delhi State Gazetted' },
+];
+
 let cache = null;
 let cacheAt = 0;
 const CACHE_MS = 5000;
@@ -259,7 +300,17 @@ export function ensureMasterDefaults() {
     }
   }
 
+  if (tables.includes('holidays')) {
+    const insHol = db.prepare(`
+      INSERT OR IGNORE INTO holidays (id, holiday_date, name, scope, state, holiday_type, remarks, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+    `);
+    for (const h of DEFAULT_HOLIDAYS) {
+      insHol.run(newId('HOL'), h.holiday_date, h.name, h.scope, h.state, h.holiday_type, h.remarks);
+    }
+  }
+
   invalidateParamCache();
 }
 
-export { DEFAULT_PARAMS, DEFAULT_BANKS, DEFAULT_LOOKUPS, DEFAULT_DOC_TYPES };
+export { DEFAULT_PARAMS, DEFAULT_BANKS, DEFAULT_LOOKUPS, DEFAULT_DOC_TYPES, DEFAULT_HOLIDAYS };

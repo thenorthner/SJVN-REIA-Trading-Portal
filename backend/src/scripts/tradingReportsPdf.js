@@ -399,51 +399,130 @@ export function generateTradingDashboardPdf(r, meta, res) {
 // ─── Letter of Intent (LoI) ──────────────────────────────────────────────────
 export function generateLoiPdf(tx, meta, res) {
   const generatedAt = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
-  const title = 'LETTER OF INTENT (LoI)';
-  const subtitle = `Transaction Ref: ${tx.id}`;
-  const ctx = { title, subtitle, generatedAt };
-  const doc = newDoc(res, 'Letter of Intent', `SJVN_LoI_${tx.id}.pdf`);
+  const doc = newDoc(res, 'Letter of Intent (LoI)', `SJVN_LoI_${tx.loi_contract_ref ? tx.loi_contract_ref.replace(/[/\\?%*:|"<>]/g, '_') : tx.id}.pdf`);
 
-  header(doc, title, subtitle, generatedAt);
-  let y = 90;
+  // Formal Header Banner
+  doc.rect(0, 0, PAGE_W, 72).fill(NAVY);
+  if (fs.existsSync(LOGO_PATH)) {
+    try { doc.image(LOGO_PATH, M, 10, { height: 48, fit: [48, 48] }); } catch { /* logo optional */ }
+  }
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(14).text('SJVN LIMITED', M + 56, 12, { lineBreak: false });
+  doc.font('Helvetica').fontSize(8).fillColor('#c5d4ea').text('(A Mini Ratna Schedule \'A\' PSU under Ministry of Power, Govt. of India)', M + 56, 28, { lineBreak: false });
+  doc.fontSize(7.5).fillColor('#94a3b8').text('Corporate Office: Shanan, Shimla, Himachal Pradesh - 171006 | Power Trading Division', M + 56, 40, { lineBreak: false });
   
-  doc.fillColor(INK).font('Helvetica-Bold').fontSize(14).text('LETTER OF INTENT FOR POWER TRADING', M, y, { align: 'center', width: CONTENT_W });
-  y += 30;
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(12).text('LETTER OF INTENT', M, 16, { width: CONTENT_W, align: 'right', lineBreak: false });
+  doc.font('Helvetica-Bold').fontSize(8).fillColor('#38bdf8').text(`REF: ${tx.loi_contract_ref || ('LOI/SJVN/TRD/' + tx.id)}`, M, 32, { width: CONTENT_W, align: 'right', lineBreak: false });
+  doc.font('Helvetica').fontSize(7.5).fillColor('#c5d4ea').text(`Date of Issue: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`, M, 46, { width: CONTENT_W, align: 'right', lineBreak: false });
 
-  doc.font('Helvetica').fontSize(10).text(`Date: ${new Date().toLocaleDateString('en-IN')}`, M, y);
+  let y = 88;
+
+  // Addressed To Box
+  roundedRect(doc, M, y, CONTENT_W, 58, 4, NAVY_SOFT);
+  doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(8.5).text('ISSUED TO (BUYER / COUNTERPARTY):', M + 10, y + 8);
+  doc.fillColor(INK).font('Helvetica-Bold').fontSize(10).text(tx.counterparty || tx.client_name || tx.client_id, M + 10, y + 20);
+  
+  const recipientMeta = [];
+  if (tx.pan_number) recipientMeta.push(`PAN: ${tx.pan_number}`);
+  if (tx.gstin) recipientMeta.push(`GSTIN: ${tx.gstin}`);
+  if (tx.contact_person) recipientMeta.push(`Attn: ${tx.contact_person}`);
+  if (tx.contact_phone) recipientMeta.push(`Ph: ${tx.contact_phone}`);
+  
+  doc.font('Helvetica').fontSize(8).fillColor(MUTED).text(
+    recipientMeta.length > 0 ? recipientMeta.join('  |  ') : 'Registered Electricity Trader / Distribution Licensee / Open Access Consumer',
+    M + 10, y + 36, { width: CONTENT_W - 20 }
+  );
+
+  y += 70;
+
+  // Subject Heading
+  doc.fillColor(INK).font('Helvetica-Bold').fontSize(9.5).text(
+    `SUB: Letter of Intent (LoI) for Bilateral Open Access Power Procurement under ${tx.oa_type || 'STOA'} Arrangement`,
+    M, y, { width: CONTENT_W }
+  );
   y += 20;
 
-  doc.text(`This Letter of Intent ("LoI") is issued by SJVN Limited to formally outline the intent of engaging in a Bilateral Open Access transaction with the following details:`, M, y, { width: CONTENT_W, align: 'justify' });
-  y += 40;
+  doc.font('Helvetica').fontSize(8.5).fillColor(INK).text(
+    `Dear Sir/Madam,\nWith reference to the mutual discussions and commercial consent, SJVN Limited ("Seller / Trading Licensee") is pleased to convey its formal intent to supply power to ${tx.counterparty || 'the Counterparty'} ("Buyer") on bilateral basis, subject to the following key commercial terms and operational modalities:`,
+    M, y, { width: CONTENT_W, align: 'justify', lineGap: 2 }
+  );
+  y += 44;
 
-  const details = [
-    { label: 'Transaction ID', value: tx.id },
-    { label: 'Counterparty / Client', value: tx.counterparty || tx.client_id },
-    { label: 'Open Access Type', value: tx.oa_type },
-    { label: 'Delivery Period Start', value: tx.start_date },
-    { label: 'Delivery Period End', value: tx.end_date },
-    { label: 'Quantum (MW)', value: `${tx.quantum_mw} MW` },
-    { label: 'Tariff', value: `Rs ${tx.tariff_per_unit} / kWh` },
-    { label: 'NOAR Contract Ref', value: tx.noar_contract_no || 'TBD' }
+  // Commercial Mandate Table
+  const tableTop = y;
+  const colW1 = 150;
+  const colW2 = CONTENT_W - colW1;
+  const rowHeight = 18;
+
+  const totalLoss = (Number(tx.loss_injection_state || 0) + Number(tx.loss_inter_state || 0) + Number(tx.loss_drawee_state || 0)).toFixed(2);
+
+  const rows = [
+    ['Transaction Reference ID', tx.id],
+    ['Contract / LoI Reference', tx.loi_contract_ref || `LOI/SJVN/TRD/${tx.id}`],
+    ['Open Access Modality', `${tx.oa_type || 'STOA'} (Short-Term Open Access via NOAR Portal)`],
+    ['Supply Period (Delivery Horizon)', `${tx.start_date}  to  ${tx.end_date}`],
+    ['Contracted Quantum', `${tx.quantum_mw} MW (Round-the-Clock / As per 96-Block Schedule)`],
+    ['Contracted Tariff (Ex-Bus)', `₹ ${Number(tx.tariff_per_unit).toFixed(2)} / kWh (excluding Open Access & Statutory Levies)`],
+    ['Source Generating Asset', tx.client_name || tx.client_id || 'SJVN Hydro/Solar Generation Pool'],
+    ['Delivery Point', 'Regional Periphery / STU-ISTS Interconnection Interface'],
+    ['NOAR Portal Contract Reference', tx.noar_contract_no || 'Under NOAR Registration & Scheduling'],
+    ['Transmission Loss Matrix', `Injection: ${tx.loss_injection_state || 0}% | ISTS: ${tx.loss_inter_state || 0}% | Drawee: ${tx.loss_drawee_state || 0}% (Total: ${totalLoss}%)`],
+    ['Open Access & Wheeling Charges', `Wheeling: ₹ ${Number(tx.wheeling_charges || 0).toFixed(2)}/kWh | Transmission: ₹ ${Number(tx.transmission_charges || 0).toFixed(2)}/kWh`],
   ];
 
-  roundedRect(doc, M, y - 5, CONTENT_W, details.length * 20 + 10, 4, NAVY_SOFT);
-  
-  details.forEach(d => {
-    doc.fillColor(NAVY).font('Helvetica-Bold').text(d.label, M + 10, y, { width: 150 });
-    doc.fillColor(INK).font('Helvetica').text(d.value, M + 160, y);
-    y += 20;
+  roundedRect(doc, M, tableTop, CONTENT_W, rows.length * rowHeight, 3, '#ffffff');
+  doc.rect(M, tableTop, CONTENT_W, rows.length * rowHeight).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+
+  rows.forEach((r, idx) => {
+    const curY = tableTop + idx * rowHeight;
+    const isEven = idx % 2 === 0;
+    if (isEven) {
+      doc.rect(M, curY, CONTENT_W, rowHeight).fill('#f8fafc');
+    }
+    doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(8).text(r[0], M + 8, curY + 5, { width: colW1 - 12, lineBreak: false });
+    doc.fillColor(INK).font('Helvetica').fontSize(8).text(String(r[1]), M + colW1 + 8, curY + 5, { width: colW2 - 12, lineBreak: false });
+    doc.moveTo(M, curY + rowHeight).lineTo(M + CONTENT_W, curY + rowHeight).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
+  });
+  doc.moveTo(M + colW1, tableTop).lineTo(M + colW1, tableTop + rows.length * rowHeight).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
+
+  y = tableTop + rows.length * rowHeight + 14;
+
+  // Regulatory & Operational Guidelines
+  doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(8.5).text('SPECIAL CONDITIONS & REGULATORY COMPLIANCE:', M, y);
+  y += 12;
+
+  const clauses = [
+    '1. Grid Scheduling & Dispatch: 15-minute block-wise scheduling (Format-D) shall be submitted through the NOAR/WBES portal in strict compliance with Grid-India procedures and CERC Open Access Regulations.',
+    '2. Standing Clearance & Approvals: Power supply is subject to the grant of Standing Clearance / Concurrence by concerned SLDCs and approval of NOAR contract.',
+    '3. Payment Security Mechanism (PSM): The Buyer shall establish an irrevocable, revolving Letter of Credit (LC) / Bank Guarantee equivalent to 30 days of estimated billing prior to the commencement of power supply.',
+    '4. Deviation Settlement (DSM): Any deviations from the approved schedule shall be settled in accordance with CERC (Deviation Settlement Mechanism and Related Matters) Regulations.',
+    '5. Validity: This Letter of Intent is valid for formal acceptance within 7 (seven) business days from issuance.'
+  ];
+
+  doc.font('Helvetica').fontSize(7.2).fillColor('#334155');
+  clauses.forEach(c => {
+    doc.text(c, M + 4, y, { width: CONTENT_W - 8, lineGap: 1.5 });
+    y += 15;
   });
 
-  y += 30;
-  doc.text(`This LoI is subject to the standard terms and conditions of SJVN Power Trading and successful clearance from the respective RLDC/SLDC/NLDC via NOAR.`, M, y, { width: CONTENT_W, align: 'justify' });
-  y += 40;
+  y += 10;
 
-  doc.text('For SJVN Limited,', M, y);
-  y += 40;
-  doc.font('Helvetica-Bold').text('Authorized Signatory', M, y);
-  doc.font('Helvetica').fontSize(8).text(`Generated by: ${meta.generatedBy}`, M, y + 15);
+  // Signature Block
+  const sigY = Math.max(y, PAGE_H - M - 90);
+  roundedRect(doc, M, sigY, CONTENT_W / 2 - 6, 75, 4, NAVY_SOFT);
+  roundedRect(doc, M + CONTENT_W / 2 + 6, sigY, CONTENT_W / 2 - 6, 75, 4, NAVY_SOFT);
+
+  // Left Signature: SJVN
+  doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(8).text('For & on behalf of SJVN LIMITED', M + 10, sigY + 8);
+  doc.fillColor(INK).font('Helvetica-Bold').fontSize(8.5).text('Authorized Signatory', M + 10, sigY + 44);
+  doc.font('Helvetica').fontSize(7).fillColor(MUTED).text(`Power Trading Division | Issued by: ${meta.generatedBy || 'Trading Desk'}`, M + 10, sigY + 56);
+
+  // Right Signature: Buyer Acceptance
+  const rightX = M + CONTENT_W / 2 + 6;
+  doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(8).text('ACCEPTED & CONFIRMED (BUYER)', rightX + 10, sigY + 8);
+  doc.fillColor(INK).font('Helvetica-Bold').fontSize(8.5).text('Authorized Signatory & Official Seal', rightX + 10, sigY + 44);
+  doc.font('Helvetica').fontSize(7).fillColor(MUTED).text('Name: ____________________  Date: ____________', rightX + 10, sigY + 56);
 
   pageNumbers(doc);
   doc.end();
 }
+

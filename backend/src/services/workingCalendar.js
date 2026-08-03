@@ -32,6 +32,11 @@ export function weeklyOffDays() {
   return DEFAULT_WEEKLY_OFF;
 }
 
+export function isWeekend(date) {
+  const d = parse(date);
+  return weeklyOffDays().includes(d.getUTCDay());
+}
+
 /** 'CALENDAR_ROLL_FORWARD' | 'WORKING_DAYS' */
 export function dueDateMode() {
   const v = String(getParam('due_date_counting_mode', 'CALENDAR_ROLL_FORWARD')).toUpperCase();
@@ -208,3 +213,20 @@ export function surchargeDays(dueDate, asOf, state) {
   }
   return workingDaysBetween(dueDate, asOf, state);
 }
+
+export default {
+  weeklyOffDays,
+  dueDateMode,
+  lpsCountsWorkingDaysOnly,
+  isWeekend,
+  holidaySet,
+  clearHolidayCache,
+  isWorkingDay,
+  nonWorkingReason,
+  rollForwardToWorkingDay,
+  addWorkingDays,
+  workingDaysBetween,
+  computeDueDateWorking,
+  payerStateForInvoice,
+  surchargeDays,
+};
