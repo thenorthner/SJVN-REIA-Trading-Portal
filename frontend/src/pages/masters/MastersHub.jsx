@@ -805,31 +805,99 @@ export default function MastersHub() {
             </div>
 
             {simResult && (
-              <div style={{ marginTop: 14, padding: 12, background: '#ffffff', borderRadius: 6, border: '1px solid #cbd5e1', display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>Calculated Due Date</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#0f172a' }}>
-                    {simResult.due_date} <span style={{ fontSize: 13, fontWeight: 500, color: '#64748b' }}>({formatDayName(simResult.due_date)})</span>
+              <div style={{ marginTop: 14 }}>
+                <div style={{ padding: 14, background: '#ffffff', borderRadius: 8, border: '1px solid #cbd5e1', display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: 0.5 }}>Calculated Due Date (Target)</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>
+                      {simResult.due_date} <span style={{ fontSize: 13, fontWeight: 600, color: '#0284c7' }}>({formatDayName(simResult.due_date)})</span>
+                    </div>
+                  </div>
+                  <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16 }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Working Days Target</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#16a34a' }}>
+                      {simResult.terms_days} Working Days
+                    </div>
+                  </div>
+                  <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16 }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Total Calendar Days Span</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#334155' }}>
+                      {simResult.calendar_days_taken} Calendar Days
+                    </div>
+                  </div>
+                  <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16 }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Non-Working Days Skipped</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: '#dc2626' }}>
+                      {(simResult.calendar_days_taken || 0) - (simResult.terms_days || 0)} Days (Weekends + Holidays)
+                    </div>
+                  </div>
+                  <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16, flex: 1, minWidth: 200 }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>LPS Protection</div>
+                    <div style={{ fontSize: 12, color: '#334155' }}>
+                      Weekends & {simState ? `${simState} gazetted holidays` : 'gazetted holidays'} skipped from counting. Surcharge starts strictly after due date.
+                    </div>
                   </div>
                 </div>
-                <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16 }}>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>Elapsed Days</div>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>
-                    <strong>{simResult.calendar_days}</strong> Cal Days · <strong>{simResult.working_days}</strong> Working Days
+
+                {/* Day by Day Step Breakdown */}
+                {Array.isArray(simResult.daily_breakdown) && simResult.daily_breakdown.length > 0 && (
+                  <div style={{ marginTop: 12, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>📅 Step-by-Step Counting Progression ({simResult.daily_breakdown.length} days total):</span>
+                      <span style={{ fontSize: 11, fontWeight: 'normal', color: '#64748b' }}>
+                        🟢 Working Day | ⚪ Day 0 | 🔴 Skipped (Sat/Sun/Holiday)
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 180, overflowY: 'auto', padding: 4 }}>
+                      {simResult.daily_breakdown.map((b) => {
+                        let bg = '#e2e8f0';
+                        let color = '#334155';
+                        let border = '1px solid #cbd5e1';
+                        if (b.status === 'DAY_0') {
+                          bg = '#f1f5f9';
+                          color = '#475569';
+                          border = '1px solid #94a3b8';
+                        } else if (b.status === 'DUE_DATE') {
+                          bg = '#16a34a';
+                          color = '#ffffff';
+                          border = '1px solid #15803d';
+                        } else if (b.status === 'COUNTED') {
+                          bg = '#dcfce7';
+                          color = '#15803d';
+                          border = '1px solid #86efac';
+                        } else if (b.status === 'SKIPPED') {
+                          bg = '#fee2e2';
+                          color = '#b91c1c';
+                          border = '1px solid #fca5a5';
+                        }
+                        return (
+                          <div
+                            key={b.date}
+                            title={`${b.date} (${b.day_name}): ${b.label}`}
+                            style={{
+                              padding: '4px 8px',
+                              borderRadius: 6,
+                              fontSize: 11,
+                              background: bg,
+                              color: color,
+                              border: border,
+                              fontWeight: b.status === 'DUE_DATE' ? 700 : 500,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              minWidth: 72,
+                            }}
+                          >
+                            <span style={{ fontSize: 10, opacity: 0.85 }}>{b.date.slice(5)} ({b.day_name})</span>
+                            <span style={{ fontSize: 11, fontWeight: 700 }}>
+                              {b.status === 'DAY_0' ? 'Day 0' : b.status === 'SKIPPED' ? '✕ Skip' : `Day ${b.day_number}`}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-                <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16 }}>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>Non-Working Days Excluded</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: '#dc2626' }}>
-                    {simResult.excluded_days?.length || 0} days (Weekends & Holidays)
-                  </div>
-                </div>
-                <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16, flex: 1, minWidth: 200 }}>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>LPS Accrual Rule</div>
-                  <div style={{ fontSize: 12, color: '#334155' }}>
-                    {simState ? `${simState} gazetted holidays` : 'National holidays'} are protected. Surcharge does not accrue on non-working days.
-                  </div>
-                </div>
+                )}
               </div>
             )}
           </div>

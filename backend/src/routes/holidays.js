@@ -95,6 +95,50 @@ router.get('/due-date-preview', requireRole(...READ), (req, res) => {
   }
   const terms = Number(terms_days) || 45;
   const result = computeDueDateWorking(bill_date, terms, state || null);
+
+  const breakdown = [];
+  let d = new Date(`${bill_date}T00:00:00Z`);
+  const endDate = new Date(`${result.due_date}T00:00:00Z`);
+  let workDayCount = 0;
+
+  breakdown.push({
+    date: bill_date,
+    day_name: new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(d),
+    type: 'BILL_PRESENTATION',
+    day_number: 0,
+    status: 'DAY_0',
+    label: 'Day 0 (Bill Presented)',
+  });
+
+  d = new Date(d.getTime() + 86400000);
+  while (d <= endDate) {
+    const isoDate = d.toISOString().slice(0, 10);
+    const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(d);
+    const isWk = isWorkingDay(isoDate, state || null);
+    if (isWk) {
+      workDayCount += 1;
+      breakdown.push({
+        date: isoDate,
+        day_name: dayName,
+        type: 'WORKING_DAY',
+        day_number: workDayCount,
+        status: workDayCount === terms ? 'DUE_DATE' : 'COUNTED',
+        label: workDayCount === terms ? `Day ${workDayCount} (DUE DATE 🎯)` : `Day ${workDayCount}`,
+      });
+    } else {
+      const reason = nonWorkingReason(isoDate, state || null);
+      breakdown.push({
+        date: isoDate,
+        day_name: dayName,
+        type: weeklyOffDays().includes(d.getUTCDay()) ? 'WEEKEND' : 'HOLIDAY',
+        day_number: null,
+        status: 'SKIPPED',
+        label: `Skipped (${reason})`,
+      });
+    }
+    d = new Date(d.getTime() + 86400000);
+  }
+
   res.json({
     ...result,
     bill_date,
@@ -102,6 +146,7 @@ router.get('/due-date-preview', requireRole(...READ), (req, res) => {
       (new Date(`${result.due_date}T00:00:00Z`) - new Date(`${bill_date}T00:00:00Z`)) / 86400000
     ),
     working_days_taken: workingDaysBetween(bill_date, result.due_date, state || null),
+    daily_breakdown: breakdown,
   });
 });
 

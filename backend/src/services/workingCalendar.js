@@ -39,8 +39,8 @@ export function isWeekend(date) {
 
 /** 'CALENDAR_ROLL_FORWARD' | 'WORKING_DAYS' */
 export function dueDateMode() {
-  const v = String(getParam('due_date_counting_mode', 'CALENDAR_ROLL_FORWARD')).toUpperCase();
-  return v === 'WORKING_DAYS' ? 'WORKING_DAYS' : 'CALENDAR_ROLL_FORWARD';
+  const v = String(getParam('due_date_counting_mode', 'WORKING_DAYS')).toUpperCase();
+  return v === 'CALENDAR_ROLL_FORWARD' ? 'CALENDAR_ROLL_FORWARD' : 'WORKING_DAYS';
 }
 
 /** Whether surcharge skips the payer's non-working days. */
