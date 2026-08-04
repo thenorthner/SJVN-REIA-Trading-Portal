@@ -116,9 +116,19 @@ export default function CERCMarketIntelligence() {
               onChange={e => setSelectedPeriod(e.target.value)}
               style={{ width: 200, padding: '8px 12px' }}
             >
-              {periods.map(p => (
-                <option key={p.period} value={p.period}>{p.period}</option>
-              ))}
+              {periods.map(p => {
+                let label = p.period;
+                try {
+                  const [y, m] = p.period.split('-');
+                  const d = new Date(parseInt(y), parseInt(m) - 1, 1);
+                  label = d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+                } catch (e) {}
+                return (
+                  <option key={p.period} value={p.period}>
+                    {label} ({p.period})
+                  </option>
+                );
+              })}
             </select>
           </div>
           

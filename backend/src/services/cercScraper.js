@@ -66,6 +66,21 @@ function num(val) {
   return isNaN(n) ? null : n;
 }
 
+function findSheet(workbook, patterns) {
+  const sheetNames = workbook.SheetNames || [];
+  for (const pat of patterns) {
+    if (typeof pat === 'string') {
+      const pNorm = pat.replace(/[-\s_]/g, '').toLowerCase();
+      const match = sheetNames.find(s => s.replace(/[-\s_]/g, '').toLowerCase() === pNorm);
+      if (match && workbook.Sheets[match]) return workbook.Sheets[match];
+    } else if (pat instanceof RegExp) {
+      const match = sheetNames.find(s => pat.test(s));
+      if (match && workbook.Sheets[match]) return workbook.Sheets[match];
+    }
+  }
+  return null;
+}
+
 function parseAndSaveExcel(excelPath, period, logId) {
   const workbook = XLSX.readFile(excelPath);
   let records = 0;
@@ -99,17 +114,20 @@ function parseAndSaveExcel(excelPath, period, logId) {
   const marketData = [];
 
   // 1. Sheet "Table-1": Volumes
-  const t1Sheet = workbook.Sheets['Table-1'] || workbook.Sheets['Table 1'];
+  const t1Sheet = findSheet(workbook, ['Table-1', 'Table 1', 'Summary Table-1 (N)', 'Summary Table-1', /^table[- ]*1$/i, /^summary table/i]);
   if (t1Sheet) {
     const rows = XLSX.utils.sheet_to_json(t1Sheet, { header: 1 });
     let currentExchange = null;
     for (const r of rows) {
-      const label = String(r[1] || '').trim();
-      const val = num(r[2]);
+      const col0 = String(r[0] || '').trim();
+      const col1 = String(r[1] || '').trim();
+      const label = `${col0} ${col1}`.trim();
+      const val = num(r[2]) !== null ? num(r[2]) : (num(r[1]) !== null ? num(r[1]) : null);
+
       if (label.toLowerCase().includes('bilateral')) {
         summary.bilateral_volume_mu = val || 0;
         marketData.push({ category: 'VOLUME', product: 'BILATERAL', exchange: 'ALL', metric: 'Volume', val, unit: 'MU' });
-      } else if (label.toLowerCase().includes('total short-term')) {
+      } else if (label.toLowerCase().includes('total short-term') || label.toLowerCase().includes('total short -term')) {
         summary.total_short_term_volume_mu = val || 0;
       } else if (label.toLowerCase().includes('(i) iex') || label.toLowerCase().includes('iex')) {
         currentExchange = 'IEX';
@@ -131,19 +149,24 @@ function parseAndSaveExcel(excelPath, period, logId) {
     }
   }
 
-  // 2. Sheet "Table-3 to 26": Exchange Prices
-  const t3Sheet = workbook.Sheets['Table-3 to 26'];
+  // 2. Sheet "Table-3 to 26" or "Table-3 to 17": Exchange Prices
+  const t3Sheet = findSheet(workbook, ['Table-3 to 26', 'Table-3 to 17', 'Table 3 to 17', 'Table 3 to 26', /^table[- ]*3\s*to/i]);
   if (t3Sheet) {
     const rows = XLSX.utils.sheet_to_json(t3Sheet, { header: 1 });
     let currentTable = '';
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      const title = String(r[0] || '');
+      const title = String(r[0] || '').trim();
       if (title.startsWith('Table-') || title.startsWith('Table ')) {
         currentTable = title;
       }
 
-      if (currentTable.includes('Table-5:') || currentTable.includes('Table 5:')) { // DAM Prices
+      const isDam = (currentTable.includes('Table-5:') || currentTable.includes('Table 5:') || currentTable.includes('DAY AHEAD MARKET')) && !currentTable.includes('GREEN') && !currentTable.includes('HIGH PRICE');
+      const isGdam = currentTable.includes('Table-6:') || currentTable.includes('Table 6:') || currentTable.includes('GREEN DAY AHEAD MARKET');
+      const isHpDam = currentTable.includes('Table-7:') || currentTable.includes('Table 7:') || currentTable.includes('HIGH PRICE');
+      const isRtm = currentTable.includes('REAL TIME MARKET');
+
+      if (isDam) {
         if (r[1] === 'Minimum' || r[1] === 'Maximum' || r[1] === 'Weighted Average') {
           const metric = r[1];
           const iex = num(r[2]), pxil = num(r[3]), hpx = num(r[4]);
@@ -156,7 +179,7 @@ function parseAndSaveExcel(excelPath, period, logId) {
             summary.dam_hpx_avg_price = hpx;
           }
         }
-      } else if (currentTable.includes('Table-6:') || currentTable.includes('Table 6:')) { // GDAM Prices
+      } else if (isGdam) {
         if (r[1] === 'Minimum' || r[1] === 'Maximum' || r[1] === 'Weighted Average') {
           const metric = r[1];
           const iex = num(r[2]), pxil = num(r[3]), hpx = num(r[4]);
@@ -165,7 +188,15 @@ function parseAndSaveExcel(excelPath, period, logId) {
           if (hpx !== null) marketData.push({ category: 'PRICE', product: 'GDAM', exchange: 'HPX', metric, val: hpx, unit: 'Rs/kWh' });
           if (metric === 'Weighted Average') summary.gdam_iex_avg_price = iex;
         }
-      } else if ((currentTable.includes('Table-8:') || currentTable.includes('Table-7:')) && currentTable.includes('REAL TIME MARKET')) { // RTM Prices
+      } else if (isHpDam) {
+        if (r[1] === 'Minimum' || r[1] === 'Maximum' || r[1] === 'Weighted Average') {
+          const metric = r[1];
+          const iex = num(r[2]), pxil = num(r[3]), hpx = num(r[4]);
+          if (iex !== null) marketData.push({ category: 'PRICE', product: 'HP-DAM', exchange: 'IEX', metric, val: iex, unit: 'Rs/kWh' });
+          if (pxil !== null) marketData.push({ category: 'PRICE', product: 'HP-DAM', exchange: 'PXIL', metric, val: pxil, unit: 'Rs/kWh' });
+          if (hpx !== null) marketData.push({ category: 'PRICE', product: 'HP-DAM', exchange: 'HPX', metric, val: hpx, unit: 'Rs/kWh' });
+        }
+      } else if (isRtm) {
         if (r[1] === 'Minimum' || r[1] === 'Maximum' || r[1] === 'Weighted Average') {
           const metric = r[1];
           const iex = num(r[2]), pxil = num(r[3]), hpx = num(r[4]);
@@ -178,8 +209,8 @@ function parseAndSaveExcel(excelPath, period, logId) {
     }
   }
 
-  // 3. Daily trend: Table 40(a) DAM daily
-  const t40a = workbook.Sheets['Table 40(a)'] || workbook.Sheets['Table-40(a)'];
+  // 3. Daily trend: Table 40(a) / Table 31(a) / Table 29(a) / Table 27(a) DAM daily
+  const t40a = findSheet(workbook, ['Table 40(a)', 'Table-40(a)', 'Table 31(a)', 'Table-31(a)', 'Table 29(a)', 'Table-29(a)', 'Table 27(a)', 'Table-27(a)', /.*(?:40|31|29|27)\s*\(a\).*/i]);
   if (t40a) {
     const rows = XLSX.utils.sheet_to_json(t40a, { header: 1 });
     let day = 1;
@@ -194,8 +225,8 @@ function parseAndSaveExcel(excelPath, period, logId) {
     }
   }
 
-  // 4. Daily trend: Table 40(b) GDAM daily
-  const t40b = workbook.Sheets['Table 40(b)'] || workbook.Sheets['Table-40(b)'];
+  // 4. Daily trend: GDAM daily
+  const t40b = findSheet(workbook, ['Table 40(b)', 'Table-40(b)', 'Table 31(b)', 'Table-31(b)', 'Table 29(b)', 'Table-29(b)', 'Table 27(b)', 'Table-27(b)', /.*(?:40|31|29|27)\s*\(b\).*/i]);
   if (t40b) {
     const rows = XLSX.utils.sheet_to_json(t40b, { header: 1 });
     let day = 1;
@@ -210,8 +241,8 @@ function parseAndSaveExcel(excelPath, period, logId) {
     }
   }
 
-  // 5. Daily trend: Table 40(c) RTM daily
-  const t40c = workbook.Sheets['Table 40(c)'] || workbook.Sheets['Table-40(c)'];
+  // 5. Daily trend: RTM daily
+  const t40c = findSheet(workbook, ['Table 40(c)', 'Table-40(c)', 'Table 31(c)', 'Table-31(c)', 'Table 29(c)', 'Table-29(c)', 'Table 27(c)', 'Table-27(c)', /.*(?:40|31|29|27)\s*\(c\).*/i]);
   if (t40c) {
     const rows = XLSX.utils.sheet_to_json(t40c, { header: 1 });
     let day = 1;
@@ -226,8 +257,8 @@ function parseAndSaveExcel(excelPath, period, logId) {
     }
   }
 
-  // 6. Table 42: DSM Day-wise
-  const t42 = workbook.Sheets['Table 42'] || workbook.Sheets['Table-42'];
+  // 6. DSM Day-wise
+  const t42 = findSheet(workbook, ['Table 42', 'Table-42', 'Table 41', 'Table-41', 'Table 32', 'Table-32', 'Table 33', 'Table-33', 'Table 30', 'Table-30', 'Table 28', 'Table-28', /.*(?:42|41|33|32|30|28).*/i]);
   if (t42) {
     const rows = XLSX.utils.sheet_to_json(t42, { header: 1 });
     let dsmAvgSum = 0, dsmCount = 0, minDsm = Infinity, maxDsm = -Infinity;
@@ -258,8 +289,8 @@ function parseAndSaveExcel(excelPath, period, logId) {
     }
   }
 
-  // 7. Table 45: REC
-  const t45 = workbook.Sheets['Table 45'] || workbook.Sheets['Table-45'];
+  // 7. REC
+  const t45 = findSheet(workbook, ['Table 45', 'Table-45', 'Table 36', 'Table-36', 'Table 34', 'Table-34', 'Table 32', 'Table-32', /.*(?:45|36|34|32).*/i]);
   if (t45) {
     const rows = XLSX.utils.sheet_to_json(t45, { header: 1 });
     for (const r of rows) {
@@ -519,20 +550,20 @@ function getCercStatus() {
 
 async function autoSeedLocalReports() {
   try {
-    const count = db.prepare(`SELECT COUNT(*) as cnt FROM cerc_monthly_summary`).get();
-    if (count && count.cnt > 0) return;
-    
     console.log('[CERC Scraper] Checking for local reports to auto-seed...');
     if (fs.existsSync(CERC_DOWNLOAD_DIR)) {
-      const dirs = fs.readdirSync(CERC_DOWNLOAD_DIR);
+      const dirs = fs.readdirSync(CERC_DOWNLOAD_DIR).sort();
       for (const d of dirs) {
         if (/^\d{4}-\d{2}$/.test(d)) {
-          console.log(`[CERC Scraper] Auto-seeding local report for ${d}...`);
-          try {
-            await fetchCercReport(d);
-            console.log(`[CERC Scraper] Auto-seeded local report for ${d}`);
-          } catch (e) {
-            console.warn(`[CERC Scraper] Auto-seed failed for ${d}:`, e.message);
+          const existing = db.prepare(`SELECT id FROM cerc_monthly_summary WHERE report_period = ?`).get(d);
+          if (!existing) {
+            console.log(`[CERC Scraper] Auto-seeding local report for ${d}...`);
+            try {
+              await fetchCercReport(d);
+              console.log(`[CERC Scraper] Auto-seeded local report for ${d}`);
+            } catch (e) {
+              console.warn(`[CERC Scraper] Auto-seed failed for ${d}:`, e.message);
+            }
           }
         }
       }
