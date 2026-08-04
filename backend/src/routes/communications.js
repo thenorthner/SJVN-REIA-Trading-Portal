@@ -172,7 +172,7 @@ router.post('/broadcast', requireAuth, requireRole(...BROADCAST_WRITE), upload.a
         req.user.name || 'System'
       );
 
-      // 2. Insert into notifications table for recipient users for live notification bell 🔔
+      // 2. Insert into notifications table for recipient users for live notification bell 
       const insertNotification = db.prepare(`
         INSERT INTO notifications (id, user_id, role, type, message)
         VALUES (?, ?, ?, ?, ?)

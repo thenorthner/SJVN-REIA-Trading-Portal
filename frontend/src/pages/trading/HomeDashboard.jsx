@@ -53,7 +53,7 @@ export default function HomeDashboard() {
             style={{ display: 'flex', alignItems: 'center', gap: 6 }}
             onClick={handleExportCSV}
           >
-            📊 Export CSV
+            Export CSV
           </button>
         </div>
         

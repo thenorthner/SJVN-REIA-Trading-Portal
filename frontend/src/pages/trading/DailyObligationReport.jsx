@@ -244,7 +244,7 @@ export default function DailyObligationReport() {
                       <strong>₹ {fmtNumber(data.financial_summary.net_payout)}</strong>
                    </div>
                    <div style={{ textAlign: 'right', marginTop: 10 }}>
-                      <Badge type="success">🟢 MATCHED WITH IEX PORTAL</Badge>
+                      <Badge type="success">MATCHED WITH IEX PORTAL</Badge>
                    </div>
                 </div>
               </div>
@@ -328,7 +328,7 @@ export default function DailyObligationReport() {
                      + 'The SAP BAPI export is not built, and the amounts in this preview come from '
                      + 'the report stub rather than settled trades.'
                    )}
-                 >⬇️ Download CSV for SAP BAPI</button>
+                 >Download CSV for SAP BAPI</button>
               </div>
            </div>
         </div>
@@ -378,8 +378,8 @@ export default function DailyObligationReport() {
                  <div style={{ flex: 1, background: '#fff', borderLeft: '1px solid #ccc', padding: 20, overflowY: 'auto' }}>
                     <h3>Verification Status</h3>
                     <div style={{ marginBottom: 20 }}>
-                       <Badge type="success">🟢 PDF Hash Verified</Badge>
-                       <Badge type="success" style={{ marginLeft: 10 }}>🔵 Synced with SAP</Badge>
+                       <Badge type="success">PDF Hash Verified</Badge>
+                       <Badge type="success" style={{ marginLeft: 10 }}>Synced with SAP</Badge>
                     </div>
                     <div style={{ background: '#f5f7f9', padding: 15, borderRadius: 4, border: '1px solid #ddd' }}>
                        <h4 style={{ margin: '0 0 10px 0', color: '#2c3e50' }}>Parsed Database Metrics</h4>

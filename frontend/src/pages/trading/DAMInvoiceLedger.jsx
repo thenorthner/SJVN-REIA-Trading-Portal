@@ -89,7 +89,7 @@ export default function DAMInvoiceLedger() {
         key: 'recDeduction', 
         label: (
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-             <button onClick={() => setDeductionsExpanded(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>➖</button>
+             <button onClick={() => setDeductionsExpanded(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>-</button>
              REC Ded.
           </div>
         ), 
@@ -106,7 +106,7 @@ export default function DAMInvoiceLedger() {
         key: 'totalSegmentDeductions', 
         label: (
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#c0392b', cursor: 'pointer' }} onClick={() => setDeductionsExpanded(true)}>
-            <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }} aria-label="Add">➕</button>
+            <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }} aria-label="Add">+</button>
             Total Segment Deductions
           </div>
         ),
@@ -121,7 +121,7 @@ export default function DAMInvoiceLedger() {
       key: 'view', 
       label: 'View', 
       render: () => (
-        <button className="icon-btn" style={{ color: 'var(--sky)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }} title="View Details" aria-label="View Details">📄</button>
+        <button className="icon-btn" style={{ color: 'var(--sky)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }} title="View Details" aria-label="View Details"></button>
       )
     }
   ];
@@ -167,7 +167,7 @@ export default function DAMInvoiceLedger() {
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
             <button className="btn btn-outline" style={{ color: '#27ae60', borderColor: '#27ae60' }}>[ EXCEL v ] Export</button>
             <button className="btn btn-primary" style={{ background: '#f39c12', borderColor: '#e67e22', display: 'flex', alignItems: 'center', gap: 8 }} disabled={selectedRows.length === 0} onClick={handleExportSap}>
-              <span>⚡</span> Export SAP Journal Entry
+              <span></span> Export SAP Journal Entry
             </button>
           </div>
         </div>

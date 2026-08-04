@@ -60,7 +60,7 @@ export default function ACPTrendWidget() {
             style={{ fontSize: 16, padding: '4px 8px' }}
             onClick={() => setShowExportMenu(!showExportMenu)}
           >
-            ☰
+            
           </button>
           
           {showExportMenu && (
@@ -69,11 +69,11 @@ export default function ACPTrendWidget() {
               background: '#fff', border: '1px solid var(--slate-200)', borderRadius: 6, 
               boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', zIndex: 10 
             }}>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => handleExport('Print')}>🖨️ Print chart</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => handleExport('PNG')}>🖼️ Download PNG image</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => handleExport('JPEG')}>🖼️ Download JPEG image</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => handleExport('PDF')}>📄 Download PDF document</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer' }} onClick={() => handleExport('SVG')}>📐 Download SVG vector image</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => handleExport('Print')}>Print chart</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => handleExport('PNG')}>Download PNG image</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => handleExport('JPEG')}>Download JPEG image</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => handleExport('PDF')}>Download PDF document</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer' }} onClick={() => handleExport('SVG')}>Download SVG vector image</div>
             </div>
           )}
         </div>

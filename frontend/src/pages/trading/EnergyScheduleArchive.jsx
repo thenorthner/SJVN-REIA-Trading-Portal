@@ -53,16 +53,16 @@ export default function EnergyScheduleArchive() {
   };
 
   const renderStatus = (status) => {
-    if (status === 'PARSED') return <Badge type="success">🟢 Parsed & Active</Badge>;
-    if (status === 'PENDING') return <Badge type="warning" style={{ background: '#f39c12', color: '#fff' }}>🟡 Pending Ingestion</Badge>;
-    if (status === 'SUPERSEDED') return <Badge type="danger">🔴 Revision Superseded</Badge>;
+    if (status === 'PARSED') return <Badge type="success">Parsed & Active</Badge>;
+    if (status === 'PENDING') return <Badge type="warning" style={{ background: '#f39c12', color: '#fff' }}>Pending Ingestion</Badge>;
+    if (status === 'SUPERSEDED') return <Badge type="danger">Revision Superseded</Badge>;
     return <Badge type="neutral">{status}</Badge>;
   };
 
   const renderSettlementStatus = (status) => {
-    if (status === 'FULLY_RECONCILED') return <Badge type="success">🟢 Fully Reconciled</Badge>;
-    if (status === 'PENDING_PAYOUT') return <Badge type="warning" style={{ background: '#f39c12', color: '#fff' }}>🟡 Pending Bank Payout</Badge>;
-    if (status === 'DISCREPANCY') return <Badge type="danger">🔴 Discrepancy</Badge>;
+    if (status === 'FULLY_RECONCILED') return <Badge type="success">Fully Reconciled</Badge>;
+    if (status === 'PENDING_PAYOUT') return <Badge type="warning" style={{ background: '#f39c12', color: '#fff' }}>Pending Bank Payout</Badge>;
+    if (status === 'DISCREPANCY') return <Badge type="danger">Discrepancy</Badge>;
     return null;
   };
 
@@ -79,10 +79,10 @@ export default function EnergyScheduleArchive() {
     { key: 'settlement_status', label: 'SETTLEMENT', render: r => renderSettlementStatus(r.settlement_status) },
     { key: 'actions', label: 'ACTIONS', render: r => (
        <div style={{ display: 'flex', gap: 5 }}>
-         <button className="btn btn-sm btn-outline" onClick={() => handlePreview(r)} title="View 96-Block Schedule">📈</button>
-         <button className="btn btn-sm btn-outline" onClick={() => alert('Not available yet — exchange obligation PDFs are not stored by the platform.')} title="Download Official Obligation PDF">📄</button>
-         <button className="btn btn-sm btn-outline" onClick={() => alert('Not available yet — there is no settlement export behind this screen.')} title="Export Raw Settlement Data">📊</button>
-         <button className="btn btn-sm btn-outline" onClick={() => alert('Not available yet — SAP voucher sync is not built.')} title="Sync to SAP Voucher">⚡</button>
+         <button className="btn btn-sm btn-outline" onClick={() => handlePreview(r)} title="View 96-Block Schedule"></button>
+         <button className="btn btn-sm btn-outline" onClick={() => alert('Not available yet — exchange obligation PDFs are not stored by the platform.')} title="Download Official Obligation PDF"></button>
+         <button className="btn btn-sm btn-outline" onClick={() => alert('Not available yet — there is no settlement export behind this screen.')} title="Export Raw Settlement Data"></button>
+         <button className="btn btn-sm btn-outline" onClick={() => alert('Not available yet — SAP voucher sync is not built.')} title="Sync to SAP Voucher"></button>
        </div>
     ) }
   ];

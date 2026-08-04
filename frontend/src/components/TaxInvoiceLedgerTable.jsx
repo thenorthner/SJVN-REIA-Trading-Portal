@@ -22,13 +22,13 @@ export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
     { key: 'netTotal', label: 'Net Payout (₹)', render: r => <span style={{ color: '#27ae60', fontWeight: 'bold', fontSize: 15 }}>{fmtNumber(r.netTotal || r.netAmount)}</span> },
     { key: 'sapStatus', label: 'SAP FI Status', render: r => (
       <span style={{ fontSize: 11, background: r.sapStatus === 'POSTED' ? '#e8f5e9' : '#fff3e0', color: r.sapStatus === 'POSTED' ? '#2e7d32' : '#f57c00', border: `1px solid ${r.sapStatus === 'POSTED' ? '#c8e6c9' : '#ffe0b2'}`, padding: '2px 6px', borderRadius: 12 }}>
-        {r.sapStatus === 'POSTED' ? '🟢 Posted' : '🟡 Pending'}
+        {r.sapStatus === 'POSTED' ? 'Posted' : 'Pending'}
       </span>
     )},
     { key: 'cert', label: 'Voucher', render: () => (
       <div style={{ display: 'flex', gap: 5 }}>
-        <button className="btn btn-sm btn-outline" title="View Tax Invoice PDF" aria-label="View Tax Invoice PDF">💻</button>
-        {isCert && <button className="btn btn-sm btn-outline" title="View Registry Slip" aria-label="View Registry Slip">📜</button>}
+        <button className="btn btn-sm btn-outline" title="View Tax Invoice PDF" aria-label="View Tax Invoice PDF"></button>
+        {isCert && <button className="btn btn-sm btn-outline" title="View Registry Slip" aria-label="View Registry Slip"></button>}
       </div>
     )}
   ];
@@ -51,7 +51,7 @@ export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
           <div style={{ fontSize: 12, color: '#6c757d' }}>{marketSegment} Segment • Standardized Formula: (Gross + Margin + GST) - Deductions - TDS</div>
         </div>
         <button onClick={handleSapPost} className="btn btn-primary" style={{ background: '#f39c12', borderColor: '#e67e22', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 'bold' }}>
-          <span>⚡</span> Generate SAP Journal Entry
+          <span></span> Generate SAP Journal Entry
         </button>
       </div>
       <div style={{ overflowX: 'auto' }}>

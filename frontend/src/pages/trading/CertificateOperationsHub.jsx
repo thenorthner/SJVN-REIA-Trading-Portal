@@ -201,8 +201,8 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
         { key: 'updationDate', label: 'Updation Date' },
         { key: 'modify', label: 'Modify', render: () => (
           <div style={{ display: 'flex', gap: 5 }}>
-            <button className="btn btn-sm btn-outline" title="Edit" aria-label="Edit">✏️</button>
-            <button className="btn btn-sm btn-outline" title="Delete" aria-label="Delete">🗑️</button>
+            <button className="btn btn-sm btn-outline" title="Edit" aria-label="Edit"></button>
+            <button className="btn btn-sm btn-outline" title="Delete" aria-label="Delete"></button>
           </div>
         )}
       ];
@@ -219,10 +219,10 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
         { key: 'totalAmount', label: 'Total (₹)', render: r => <span style={{ color: '#27ae60', fontWeight: 'bold' }}>{fmtNumber(r.totalAmount)}</span> },
         { key: 'fileName', label: 'File Name', render: r => <span style={{ color: '#2980b9', textDecoration: 'underline', cursor: 'pointer' }}>{r.fileName}</span> },
         ...(activeTab === 'REC' ? [
-          { key: 'solar', label: 'Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Solar Details" aria-label="View Solar Details">☀️</button> },
-          { key: 'nonsolar', label: 'Non-Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Non-Solar Details" aria-label="View Non-Solar Details">💨</button> }
+          { key: 'solar', label: 'Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Solar Details" aria-label="View Solar Details"></button> },
+          { key: 'nonsolar', label: 'Non-Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Non-Solar Details" aria-label="View Non-Solar Details"></button> }
         ] : []),
-        { key: 'cert', label: `${activeTab} Certificate`, render: () => <button className="btn btn-sm btn-outline" title="View POSOCO/BEE Transfer Slip" aria-label="View POSOCO/BEE Transfer Slip">📜</button> }
+        { key: 'cert', label: `${activeTab} Certificate`, render: () => <button className="btn btn-sm btn-outline" title="View POSOCO/BEE Transfer Slip" aria-label="View POSOCO/BEE Transfer Slip"></button> }
       ];
     } 
     else if (activeSubView === 'OBLIGATION') {
@@ -241,14 +241,14 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
         { key: 'totalAmount', label: 'Total (₹)', render: r => <span style={{ color: '#333', fontWeight: 'bold' }}>{fmtNumber(r.totalAmount)}</span> },
         { key: 'fileName', label: 'File Name', render: r => <span style={{ color: '#2980b9', textDecoration: 'underline', cursor: 'pointer' }}>{r.fileName}</span> },
         ...(activeTab === 'REC' ? [
-          { key: 'solar', label: 'Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Solar Details" aria-label="View Solar Details">☀️</button> },
-          { key: 'nonsolar', label: 'Non-Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Non-Solar Details" aria-label="View Non-Solar Details">💨</button> }
+          { key: 'solar', label: 'Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Solar Details" aria-label="View Solar Details"></button> },
+          { key: 'nonsolar', label: 'Non-Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Non-Solar Details" aria-label="View Non-Solar Details"></button> }
         ] : []),
         { key: 'actions', label: 'Actions', render: () => (
           <div style={{ display: 'flex', gap: 5 }}>
-            <button className="btn btn-sm btn-outline" title="Exchange PDF" aria-label="Exchange PDF">📄</button>
-            <button className="btn btn-sm btn-outline" title="NLDC Transfer Slip" aria-label="NLDC Transfer Slip">📜</button>
-            <button className="btn btn-sm btn-outline" title="Breakup Details" aria-label="Breakup Details">🔍</button>
+            <button className="btn btn-sm btn-outline" title="Exchange PDF" aria-label="Exchange PDF"></button>
+            <button className="btn btn-sm btn-outline" title="NLDC Transfer Slip" aria-label="NLDC Transfer Slip"></button>
+            <button className="btn btn-sm btn-outline" title="Breakup Details" aria-label="Breakup Details"></button>
           </div>
         )}
       ];
@@ -268,19 +268,19 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
         <button 
           onClick={() => { setActiveTab('REC'); setCreateForm(f => ({...f, certType: 'Non-Solar REC'})); }}
           style={{ padding: '12px 24px', background: 'transparent', border: 'none', borderBottom: activeTab === 'REC' ? '3px solid #2980b9' : '3px solid transparent', color: activeTab === 'REC' ? '#2980b9' : '#666', fontWeight: 'bold', cursor: 'pointer', fontSize: 16 }}>
-          📜 Renewable Energy Certificates (RECs)
+          Renewable Energy Certificates (RECs)
         </button>
         <button 
           onClick={() => { setActiveTab('ESCERT'); setCreateForm(f => ({...f, certType: 'ESCERT'})); }}
           style={{ padding: '12px 24px', background: 'transparent', border: 'none', borderBottom: activeTab === 'ESCERT' ? '3px solid #2980b9' : '3px solid transparent', color: activeTab === 'ESCERT' ? '#2980b9' : '#666', fontWeight: 'bold', cursor: 'pointer', fontSize: 16 }}>
-          ⚡ Energy Saving Certificates (ESCerts)
+          Energy Saving Certificates (ESCerts)
         </button>
       </div>
 
       {activeSubView === 'BIDDING' && (
         <div style={{ background: '#fff3cd', border: '1px solid #ffe69c', padding: '10px 15px', borderRadius: 6, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ color: '#664d03', fontWeight: 600 }}>
-            <span style={{ marginRight: 8 }}>⏳</span>
+            <span style={{ marginRight: 8 }}></span>
             Closing in {currentSummary.nextClosure} for {activeTab} auction (Gate Closure: 15:00 PM)
           </div>
           <div>
@@ -294,22 +294,22 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
         <button 
           onClick={() => setActiveSubView('BIDDING')}
           style={{ padding: '8px 16px', background: activeSubView === 'BIDDING' ? '#2c3e50' : '#ecf0f1', color: activeSubView === 'BIDDING' ? '#fff' : '#333', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: 'bold' }}>
-          📝 Bid Management
+          Bid Management
         </button>
         <button 
           onClick={() => setActiveSubView('REGISTRY')}
           style={{ padding: '8px 16px', background: activeSubView === 'REGISTRY' ? '#2c3e50' : '#ecf0f1', color: activeSubView === 'REGISTRY' ? '#fff' : '#333', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: 'bold' }}>
-          📂 Registry Holdings
+          Registry Holdings
         </button>
         <button 
           onClick={() => setActiveSubView('OBLIGATION')}
           style={{ padding: '8px 16px', background: activeSubView === 'OBLIGATION' ? '#2c3e50' : '#ecf0f1', color: activeSubView === 'OBLIGATION' ? '#fff' : '#333', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: 'bold' }}>
-          💰 Clearing Obligations
+          Clearing Obligations
         </button>
         <button 
           onClick={() => setActiveSubView('INVOICE')}
           style={{ padding: '8px 16px', background: activeSubView === 'INVOICE' ? '#2c3e50' : '#ecf0f1', color: activeSubView === 'INVOICE' ? '#fff' : '#333', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: 'bold' }}>
-          🧾 Commercial Tax Ledger & Invoices
+          Commercial Tax Ledger & Invoices
         </button>
       </div>
 
@@ -317,14 +317,14 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
         {activeTab === 'REC' ? (
           <>
             <div style={{ flex: 1, background: '#fff', border: '1px solid #e0e0e0', padding: 20, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 15, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-              <div style={{ fontSize: 32 }}>☀️</div>
+              <div style={{ fontSize: 32 }}></div>
               <div>
                 <div style={{ fontSize: 12, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Solar RECs Held</div>
                 <div style={{ fontSize: 24, fontWeight: 'bold', color: '#2c3e50' }}>{fmtNumber(currentSummary.solarAvailable)} Units</div>
               </div>
             </div>
             <div style={{ flex: 1, background: '#fff', border: '1px solid #e0e0e0', padding: 20, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 15, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-              <div style={{ fontSize: 32 }}>💨</div>
+              <div style={{ fontSize: 32 }}></div>
               <div>
                 <div style={{ fontSize: 12, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Non-Solar / Hydro RECs Held</div>
                 <div style={{ fontSize: 24, fontWeight: 'bold', color: '#2c3e50' }}>{fmtNumber(currentSummary.nonSolarAvailable)} Units</div>
@@ -333,7 +333,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
           </>
         ) : (
           <div style={{ flex: 1, background: '#fff', border: '1px solid #e0e0e0', padding: 20, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 15, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontSize: 32 }}>📜</div>
+            <div style={{ fontSize: 32 }}></div>
             <div>
               <div style={{ fontSize: 12, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Available {activeTab}s in Registry</div>
               <div style={{ fontSize: 24, fontWeight: 'bold', color: '#2c3e50' }}>{fmtNumber(currentSummary.available)} Units</div>
@@ -341,7 +341,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
           </div>
         )}
         <div style={{ flex: 1, background: '#fff', border: '1px solid #e0e0e0', padding: 20, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 15, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: 32 }}>💰</div>
+          <div style={{ fontSize: 32 }}></div>
           <div>
             <div style={{ fontSize: 12, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Last Traded MCP</div>
             <div style={{ fontSize: 24, fontWeight: 'bold', color: '#27ae60' }}>{currentSummary.price}</div>
@@ -349,7 +349,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
           </div>
         </div>
         <div style={{ flex: 1, background: '#fff', border: '1px solid #e0e0e0', padding: 20, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 15, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: 32 }}>⏳</div>
+          <div style={{ fontSize: 32 }}></div>
           <div>
             <div style={{ fontSize: 12, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Next Auction Gate Closure</div>
             <div style={{ fontSize: 24, fontWeight: 'bold', color: '#e74c3c' }}>{currentSummary.nextClosure}</div>
@@ -375,7 +375,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
                   // fabricated confirmation is worse than no button at all.
                 }}
               >
-                🔄 Sync with REC Registry (not connected)
+                Sync with REC Registry (not connected)
               </button>
             )}
             <button className="btn btn-primary" style={{ background: '#28a745' }}>[ EXCEL v ] Export</button>
@@ -443,14 +443,14 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
                   <option value="AUTO_ROUTE">Auto-Route (Best Depth)</option>
                 </select>
                 {createForm.exchange === 'IEX' && (
-                  <div style={{ marginTop: 5, fontSize: 11, color: '#666' }}>📊 30-Day Liquidity: ~85,000 RECs cleared</div>
+                  <div style={{ marginTop: 5, fontSize: 11, color: '#666' }}>30-Day Liquidity: ~85,000 RECs cleared</div>
                 )}
                 {createForm.exchange === 'PXIL' && (
-                  <div style={{ marginTop: 5, fontSize: 11, color: '#666' }}>📊 30-Day Liquidity: ~12,000 RECs cleared</div>
+                  <div style={{ marginTop: 5, fontSize: 11, color: '#666' }}>30-Day Liquidity: ~12,000 RECs cleared</div>
                 )}
                 {(createForm.exchange === 'SMART_SPLIT' || createForm.exchange === 'AUTO_ROUTE') && (
                   <div style={{ marginTop: 5, fontSize: 11, color: '#2980b9', fontWeight: 'bold' }}>
-                    {createForm.exchange === 'SMART_SPLIT' ? '🧠 Splitting order to hedge execution risk.' : '⚡ Routing to exchange with highest order-book depth.'}
+                    {createForm.exchange === 'SMART_SPLIT' ? ' Splitting order to hedge execution risk.' : ' Routing to exchange with highest order-book depth.'}
                   </div>
                 )}
               </Field>
@@ -486,7 +486,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
                 <Field label={`Per Certificate Price (₹)`} style={{ flex: 1 }}>
                   <input type="number" className="input" value={createForm.price} onChange={e => setCreateForm({...createForm, price: e.target.value})} placeholder="e.g. 1500" />
                   {priceError && (
-                    <div style={{ marginTop: 5, fontSize: 11, color: 'var(--red)', fontWeight: 'bold' }}>⚠️ {priceError}</div>
+                    <div style={{ marginTop: 5, fontSize: 11, color: 'var(--red)', fontWeight: 'bold' }}> {priceError}</div>
                   )}
                   {!priceError && priceNote && (
                     <div style={{ marginTop: 5, fontSize: 11, color: 'var(--text-muted)' }}>{priceNote}</div>
@@ -508,7 +508,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
             
             {formError && (
               <div style={{ background: '#f8d7da', color: '#842029', border: '1px solid #f5c2c7', padding: '10px 15px', borderRadius: 4, marginBottom: 15, display: 'flex', alignItems: 'center', gap: 10 }}>
-                ⚠️ {formError}
+                 {formError}
               </div>
             )}
             
@@ -526,7 +526,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
       {showConfirm && (
         <Modal open={true} onClose={() => setShowConfirm(false)} title="Confirm Order Submission" width={500}>
           <div style={{ textAlign: 'center', padding: '10px 0' }}>
-            <div style={{ fontSize: 48, marginBottom: 10 }}>{createForm.type === 'Buy' ? '📥' : '📤'}</div>
+            <div style={{ fontSize: 48, marginBottom: 10 }}>{createForm.type === 'Buy' ? '' : ''}</div>
             <h3 style={{ margin: '0 0 10px 0' }}>Confirm {createForm.type} Order</h3>
             <p style={{ color: '#666', marginBottom: 20 }}>Please review your order details before submitting to the exchange.</p>
             

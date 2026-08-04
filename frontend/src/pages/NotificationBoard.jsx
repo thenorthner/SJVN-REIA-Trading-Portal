@@ -96,7 +96,7 @@ export default function NotificationBoard() {
             const s = SEV[b.severity] || SEV.INFO;
             return (
               <div key={b.id} className={`nb-broadcast ${s.cls}`}>
-                <span className="nb-pin" aria-hidden="true">📌</span>
+                <span className="nb-pin" aria-hidden="true"></span>
                 <div className="nb-broadcast-body">
                   <div className="nb-broadcast-title">{b.title}</div>
                   <div className="nb-broadcast-msg">{b.message}</div>
@@ -106,7 +106,7 @@ export default function NotificationBoard() {
                   </div>
                 </div>
                 {canPost && (
-                  <button className="nb-broadcast-x" title="Remove" onClick={() => removeBroadcast(b.id)}>✕</button>
+                  <button className="nb-broadcast-x" title="Remove" onClick={() => removeBroadcast(b.id)}></button>
                 )}
               </div>
             );
@@ -119,7 +119,7 @@ export default function NotificationBoard() {
       ) : nothing ? (
         <Card>
           <div style={{ padding: 40, textAlign: 'center' }}>
-            <div style={{ fontSize: 34, marginBottom: 8 }}>✅</div>
+            <div style={{ fontSize: 34, marginBottom: 8 }}></div>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>All clear</div>
             <div style={{ color: 'var(--text-light)', fontSize: 13 }}>No urgent alerts right now. This board refreshes automatically.</div>
           </div>

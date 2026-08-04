@@ -447,11 +447,11 @@ export default function Bilateral() {
                   <div style={{ fontSize: 13, marginBottom: 6 }}>
                     {bulkPreview.dry_run
                       ? `${bulkPreview.will_apply} of ${bulkPreview.requested} can move · ${bulkPreview.skipped} skipped`
-                      : `✓ ${bulkPreview.applied} moved · ${bulkPreview.skipped} skipped`}
+                      : ` ${bulkPreview.applied} moved · ${bulkPreview.skipped} skipped`}
                   </div>
                   {bulkPreview.results.map((r) => (
                     <div key={r.id} style={{ fontSize: 12, color: r.ok ? '#166534' : '#92400e' }}>
-                      {r.ok ? '✓' : '•'} {r.id} ({r.counterparty}) — {r.ok ? `${r.from} → ${r.to}` : r.reason}
+                      {r.ok ? '' : '•'} {r.id} ({r.counterparty}) — {r.ok ? `${r.from} → ${r.to}` : r.reason}
                     </div>
                   ))}
                 </>
@@ -709,8 +709,8 @@ export default function Bilateral() {
                     <Badge type={app.status === 'APPROVED' ? 'success' : app.status === 'REJECTED' ? 'danger' : 'warning'}>{app.status}</Badge>
                     {app.status === 'PENDING' && (
                       <div style={{ marginTop: 10, display: 'flex', gap: 5 }}>
-                        <button style={{ flex: 1, background: '#e0ffe0', border: '1px solid #8f8', borderRadius: 3, cursor: 'pointer' }} onClick={() => handleNodeApproval(sched.id, app.node_type, 'APPROVED')}>✓</button>
-                        <button style={{ flex: 1, background: '#ffe0e0', border: '1px solid #f88', borderRadius: 3, cursor: 'pointer' }} onClick={() => handleNodeApproval(sched.id, app.node_type, 'REJECTED')}>✗</button>
+                        <button style={{ flex: 1, background: '#e0ffe0', border: '1px solid #8f8', borderRadius: 3, cursor: 'pointer' }} onClick={() => handleNodeApproval(sched.id, app.node_type, 'APPROVED')}></button>
+                        <button style={{ flex: 1, background: '#ffe0e0', border: '1px solid #f88', borderRadius: 3, cursor: 'pointer' }} onClick={() => handleNodeApproval(sched.id, app.node_type, 'REJECTED')}></button>
                       </div>
                     )}
                   </div>
@@ -759,7 +759,7 @@ export default function Bilateral() {
               </form>
             ) : (
               <div>
-                <p style={{ color: 'var(--green-strong)', fontWeight: 600, marginBottom: 15 }}>✓ Sync Complete</p>
+                <p style={{ color: 'var(--green-strong)', fontWeight: 600, marginBottom: 15 }}> Sync Complete</p>
                 <ul style={{ marginBottom: 20, lineHeight: 1.6, color: 'var(--slate-700)' }}>
                   <li><strong>Schedules Received:</strong> {syncResult.lines_received}</li>
                   <li><strong>Matched to Contracts:</strong> {syncResult.matched?.length || 0}</li>

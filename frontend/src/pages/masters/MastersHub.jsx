@@ -10,7 +10,7 @@ const TABS = [
   { id: 'contracts', label: 'Contracts' },
   { id: 'projects', label: 'Projects' },
   { id: 'banks', label: 'Banks' },
-  { id: 'holidays', label: '🗓️ Holidays & Working Calendar' },
+  { id: 'holidays', label: 'Holidays & Working Calendar' },
   // Hidden for solar-focused scope (β is a hydro/PSP frequency-response input).
   // Uncomment to restore for hydro.
   // { id: 'beta', label: 'Frequency β' },
@@ -742,7 +742,7 @@ export default function MastersHub() {
           title="Holiday & Working-Day Calendar Master"
           actions={canWrite && (
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-outline btn-sm" onClick={() => setShowBulkHoliday(true)}>📥 Bulk Import</button>
+              <button className="btn btn-outline btn-sm" onClick={() => setShowBulkHoliday(true)}>Bulk Import</button>
               <button className="btn btn-primary btn-sm" onClick={() => { setHolidayForm(EMPTY_HOLIDAY); setShowAddHoliday(true); }}>+ Add Holiday</button>
             </div>
           )}
@@ -751,7 +751,7 @@ export default function MastersHub() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
               <div>
                 <h4 style={{ margin: '0 0 4px 0', fontSize: 14, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span>⚡</span> Live Due-Date & Working-Days Simulator
+                  <span></span> Live Due-Date & Working-Days Simulator
                 </h4>
                 <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
                   Verify how state-specific public holidays and weekly offs affect payment deadlines & late-payment surcharge (LPS).
@@ -843,9 +843,9 @@ export default function MastersHub() {
                 {Array.isArray(simResult.daily_breakdown) && simResult.daily_breakdown.length > 0 && (
                   <div style={{ marginTop: 12, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span>📅 Step-by-Step Counting Progression ({simResult.daily_breakdown.length} days total):</span>
+                      <span>Step-by-Step Counting Progression ({simResult.daily_breakdown.length} days total):</span>
                       <span style={{ fontSize: 11, fontWeight: 'normal', color: '#64748b' }}>
-                        🟢 Working Day | ⚪ Day 0 | 🔴 Skipped (Sat/Sun/Holiday)
+                        Working Day | Day 0 | Skipped (Sat/Sun/Holiday)
                       </span>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 180, overflowY: 'auto', padding: 4 }}>
@@ -890,7 +890,7 @@ export default function MastersHub() {
                           >
                             <span style={{ fontSize: 10, opacity: 0.85 }}>{b.date.slice(5)} ({b.day_name})</span>
                             <span style={{ fontSize: 11, fontWeight: 700 }}>
-                              {b.status === 'DAY_0' ? 'Day 0' : b.status === 'SKIPPED' ? '✕ Skip' : `Day ${b.day_number}`}
+                              {b.status === 'DAY_0' ? 'Day 0' : b.status === 'SKIPPED' ? ' Skip' : `Day ${b.day_number}`}
                             </span>
                           </div>
                         );

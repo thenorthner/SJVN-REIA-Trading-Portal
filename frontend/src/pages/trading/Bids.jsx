@@ -413,15 +413,15 @@ export default function Bids({ product = 'DAM', externalView = null }) {
     { key: 'type', label: 'Bid Type', render: r => r.type || 'Sell' },
     { key: 'revision_no', label: 'Rev No', render: r => r.revision_no || 1 },
     { key: 'internal_status', label: 'Internal Status', render: r => (
-      bidView === 'history' ? <span style={{ color: 'var(--green-strong)', fontWeight: '500', fontSize: 12 }}>🟢 File Prepared</span> : 
+      bidView === 'history' ? <span style={{ color: 'var(--green-strong)', fontWeight: '500', fontSize: 12 }}>File Prepared</span> : 
       <Badge type={r.approval_status === 'APPROVED' ? 'success' : r.approval_status === 'REJECTED' ? 'danger' : 'warning'}>{r.approval_status}</Badge>
     ) },
     { key: 'status', label: 'Exchange Status', render: r => {
       if (tab.short === 'RTM') {
-        if (r.status === 'SUBMITTED') return <span style={{ color: 'var(--green-strong)', fontWeight: 'bold', fontSize: 12 }}>🟢 Submitted to Exchange</span>;
-        if (r.status === 'PENDING') return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 12 }}>🟡 Pending Gateway</span>;
-        if (r.status === 'REJECTED') return <span style={{ color: 'var(--red-strong)', fontWeight: 'bold', fontSize: 12, cursor: 'help' }} title={r.rejection_reason || 'Error Code 402: Bid quantity exceeds standing clearance limit'}>🔴 Rejected by Exchange</span>;
-        return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 12 }}>🟡 Pending Gateway</span>; // Default mock for new RTM bids
+        if (r.status === 'SUBMITTED') return <span style={{ color: 'var(--green-strong)', fontWeight: 'bold', fontSize: 12 }}>Submitted to Exchange</span>;
+        if (r.status === 'PENDING') return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 12 }}>Pending Gateway</span>;
+        if (r.status === 'REJECTED') return <span style={{ color: 'var(--red-strong)', fontWeight: 'bold', fontSize: 12, cursor: 'help' }} title={r.rejection_reason || 'Error Code 402: Bid quantity exceeds standing clearance limit'}>Rejected by Exchange</span>;
+        return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 12 }}>Pending Gateway</span>; // Default mock for new RTM bids
       }
       return <Badge type={r.status === 'CLEARED' ? 'success' : r.status === 'DRAFT' ? 'neutral' : 'primary'}>{r.status}</Badge>;
     } },
@@ -436,7 +436,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
         }}>View</button>
         <button className="btn btn-outline" title="Re-bid using this bid's blocks" onClick={() => handleCloneBid(r)}>Re-bid</button>
         {bidView === 'history' && tab.short === 'RTM' && (
-          <button className="btn btn-outline" title="View Day Timeline" onClick={() => { setTimelineDate(r.delivery_date); setShowTimelineModal(true); }}>🕒</button>
+          <button className="btn btn-outline" title="View Day Timeline" onClick={() => { setTimelineDate(r.delivery_date); setShowTimelineModal(true); }}></button>
         )}
         {bidView === 'history' && (
           <input 
@@ -526,7 +526,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
             background: tone.bg, border: `1px solid ${tone.border}`,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 16 }}>🛡️</span>
+              <span style={{ fontSize: 16 }}></span>
               <div>
                 <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--slate-700)' }}>
                   {clearance.sldc_name || 'SLDC'} Standing Clearance:{' '}
@@ -552,7 +552,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                     Expires in: {clearance.days_left} day(s) — bidding continues
                   </span>
                   <button className="btn btn-sm" style={{ background: 'var(--amber-strong)', color: '#fff', fontSize: 11 }}>
-                    ⚠️ Trigger Renewal Declaration
+                    Trigger Renewal Declaration
                   </button>
                 </>
               )}
@@ -562,7 +562,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                     Lapsed {Math.abs(clearance.days_left)} day(s) ago — new bids refused
                   </span>
                   <button className="btn btn-sm" style={{ background: 'var(--red-strong)', color: '#fff', fontSize: 11 }}>
-                    🚨 Submit Renewal NOW
+                    Submit Renewal NOW
                   </button>
                 </>
               )}
@@ -581,16 +581,16 @@ export default function Bids({ product = 'DAM', externalView = null }) {
         <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '10px 15px', borderRadius: 6, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ color: '#065f46', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }}></span>
-            ⏳ Active Window: RTM Session #29 | Gate Closes In: 08m 42s
+            Active Window: RTM Session #29 | Gate Closes In: 08m 42s
           </div>
           <div style={{ color: '#065f46', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-            🕒 Current Time: <LiveClock /> IST
+            Current Time: <LiveClock /> IST
           </div>
         </div>
       ) : (
         <div style={{ background: '#fff3cd', border: '1px solid #ffe69c', padding: '10px 15px', borderRadius: 6, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ color: '#664d03', fontWeight: 600 }}>
-            <span style={{ marginRight: 8 }}>⏳</span>
+            <span style={{ marginRight: 8 }}></span>
             Closing in 2 Hrs 15 Mins for {tab.short} bid (Gate Closure: 12:00 PM)
           </div>
         </div>
@@ -693,7 +693,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
               disabled={selectedForCompare.length !== 2}
               onClick={() => setShowCompareModal(true)}
             >
-              ⚖️ Compare Revisions ({selectedForCompare.length}/2)
+              Compare Revisions ({selectedForCompare.length}/2)
             </button>
           )}
         </div>
@@ -737,7 +737,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
             onMouseOver={e => { e.currentTarget.style.background = 'var(--slate-100)'; e.currentTarget.style.borderColor = 'var(--slate-400)'; }}
             onMouseOut={e => { e.currentTarget.style.background = 'var(--slate-50)'; e.currentTarget.style.borderColor = 'var(--slate-300)'; }}
           >
-            <div style={{ fontSize: 40, marginBottom: 10 }}>📁</div>
+            <div style={{ fontSize: 40, marginBottom: 10 }}></div>
             <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--slate-700)' }}>Drag & Drop Bid CSV/Excel Here</div>
             <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 5 }}>or click to <strong>Browse Files</strong></div>
             <input
@@ -774,7 +774,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
             <div style={{ marginTop: 15 }}>
               {bulkResult.bids_created > 0 && (
                 <div style={{ color: 'green', marginBottom: 10 }}>
-                  ✓ {bulkResult.bids_created} bid(s) created from {bulkResult.rows_received} row(s).
+                   {bulkResult.bids_created} bid(s) created from {bulkResult.rows_received} row(s).
                 </div>
               )}
               {bulkResult.preview?.length > 0 && (
@@ -942,8 +942,8 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                   <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid Type</span>
                   <div role="group" aria-label="Bid Type" style={{ display: 'flex', gap: 16 }}>
                     {[
-                      { value: 'Buy', emoji: '🟢', color: 'var(--green-strong)', bg: '#f0fdf4' },
-                      { value: 'Sell', emoji: '🔴', color: 'var(--red-strong)', bg: '#fef2f2' },
+                      { value: 'Buy', emoji: '', color: 'var(--green-strong)', bg: '#f0fdf4' },
+                      { value: 'Sell', emoji: '', color: 'var(--red-strong)', bg: '#fef2f2' },
                       { value: 'Both', emoji: '', color: 'var(--slate-600)', bg: 'transparent' },
                     ].map(opt => (
                       <label key={opt.value} style={{
@@ -1049,7 +1049,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                   }
                 }}
               >
-                <div style={{ fontSize: 36, marginBottom: 8 }}>📁</div>
+                <div style={{ fontSize: 36, marginBottom: 8 }}></div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-700)' }}>Drag & Drop .xlsx Bid File Here</div>
                 <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 4 }}>or click to <strong>Browse Files</strong></div>
                 <input
@@ -1060,7 +1060,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                   style={{ display: 'none' }}
                 />
               </label>
-              {bulkFileNote && <div style={{ marginTop: 10, fontSize: 13, color: 'var(--navy)', fontWeight: 500 }}>✓ {bulkFileNote}</div>}
+              {bulkFileNote && <div style={{ marginTop: 10, fontSize: 13, color: 'var(--navy)', fontWeight: 500 }}> {bulkFileNote}</div>}
               <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
                 <button type="button" className="btn btn-primary" style={{ background: 'var(--navy)' }} disabled={!bulkText} onClick={() => runBulk(true)}>Import File Data</button>
               </div>
@@ -1070,7 +1070,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
             {bulkResult && (
               <div style={{ marginBottom: 20 }}>
                 {bulkResult.bids_created > 0 && (
-                  <div style={{ color: 'green', marginBottom: 10 }}>✓ {bulkResult.bids_created} bid(s) created from {bulkResult.rows_received} row(s).</div>
+                  <div style={{ color: 'green', marginBottom: 10 }}> {bulkResult.bids_created} bid(s) created from {bulkResult.rows_received} row(s).</div>
                 )}
                 {bulkResult.preview?.length > 0 && (
                   <>
@@ -1138,7 +1138,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                   {/* Quantum Limit Guardrail */}
                   <div style={{ padding: 12, borderRadius: 8, background: 'var(--slate-50)', border: '1px solid var(--slate-300)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--slate-700)' }}>⚡ Approved NOAR Cap: {clearance.tgna_approved_mw} MW</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--slate-700)' }}>Approved NOAR Cap: {clearance.tgna_approved_mw} MW</span>
                       <span style={{ fontSize: 12, fontWeight: 700, color: utilPercent > 100 ? 'var(--red-strong)' : '#0ea5e9' }}>{utilPercent.toFixed(1)}% Utilized</span>
                     </div>
                     <div style={{ height: 6, background: 'var(--slate-200)', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
@@ -1390,7 +1390,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
       )}
 
       {showCompareModal && selectedForCompare.length === 2 && (
-        <Modal open={true} onClose={() => setShowCompareModal(false)} title="⚖️ Compare Bid Revisions" width={900}>
+        <Modal open={true} onClose={() => setShowCompareModal(false)} title="Compare Bid Revisions" width={900}>
           <div style={{ display: 'flex', gap: 20 }}>
             {selectedForCompare.map((id, index) => {
               const bid = rows.find(r => r.id === id);
@@ -1423,7 +1423,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
       )}
 
       {showTimelineModal && (
-        <Modal open={true} onClose={() => setShowTimelineModal(false)} title={`🕒 Revision Timeline: ${timelineDate}`} width={600}>
+        <Modal open={true} onClose={() => setShowTimelineModal(false)} title={`Revision Timeline: ${timelineDate}`} width={600}>
           <div style={{ padding: 10 }}>
             {tabBids.filter(b => isHistoryBid(b) && b.delivery_date === timelineDate)
               .sort((a, b) => (b.revision_no || 1) - (a.revision_no || 1))
@@ -1439,11 +1439,11 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                     <strong>Submitted:</strong> {bid.id} | <strong>Type:</strong> {bid.type}
                   </div>
                   <div style={{ fontSize: 13, marginTop: 4, display: 'flex', gap: 10 }}>
-                    <span style={{ color: 'var(--green-strong)' }}>🟢 File Prepared</span>
+                    <span style={{ color: 'var(--green-strong)' }}>File Prepared</span>
                     <span>|</span>
                     {bid.status === 'REJECTED' ? 
-                      <span style={{ color: 'var(--red-strong)' }}>🔴 Exchange Error 402</span> : 
-                      <span style={{ color: 'var(--green-strong)' }}>🟢 Exchange Cleared</span>
+                      <span style={{ color: 'var(--red-strong)' }}>Exchange Error 402</span> : 
+                      <span style={{ color: 'var(--green-strong)' }}>Exchange Cleared</span>
                     }
                   </div>
                 </div>
@@ -1494,7 +1494,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
         <Modal open={true} onClose={() => setShowOutageModal(false)} title="Compliance Check: Clause 23">
           <div style={{ padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 20 }}>
-              <div style={{ fontSize: 32 }}>⚠️</div>
+              <div style={{ fontSize: 32 }}></div>
               <div>
                 <h4 style={{ margin: '0 0 8px 0', color: 'var(--red-strong)', fontSize: 16 }}>Regulatory Constraint Violation Risk</h4>
                 <p style={{ margin: 0, fontSize: 13, color: 'var(--slate-700)', lineHeight: 1.5 }}>

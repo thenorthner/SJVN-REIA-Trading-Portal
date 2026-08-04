@@ -242,7 +242,7 @@ export default function EnergyData() {
                     loadReaStatus(); load();
                   } catch (err) { setReaMsg(err.response?.data?.error || 'Scan failed'); }
                   finally { setScanning(false); }
-                }}>{scanning ? 'Scanning...' : '🔄 Scan All RPCs Now'}</button>
+                }}>{scanning ? 'Scanning...' : 'Scan All RPCs Now'}</button>
               </div>
             )}
           </div>
@@ -262,8 +262,8 @@ export default function EnergyData() {
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text-light)' }}>{rpc.name}</div>
                       <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 13 }}>
-                        <div>✅ Processed: <strong>{rpc.total_processed}</strong></div>
-                        <div>❌ Failed: <strong>{rpc.total_failed}</strong></div>
+                        <div>Processed: <strong>{rpc.total_processed}</strong></div>
+                        <div>Failed: <strong>{rpc.total_failed}</strong></div>
                       </div>
                       {rpc.latest_fetch && (
                         <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 6 }}>
@@ -299,7 +299,7 @@ export default function EnergyData() {
                     loadReaStatus(); load();
                   } catch (err) { setReaMsg(err.response?.data?.error || 'Trigger failed'); }
                   finally { setTriggering(false); }
-                }}>{triggering ? 'Fetching...' : '⚡ Trigger Fetch'}</button>
+                }}>{triggering ? 'Fetching...' : 'Trigger Fetch'}</button>
               </div>
 
               {/* Fetch Log Table */}

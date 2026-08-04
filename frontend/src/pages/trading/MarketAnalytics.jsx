@@ -117,7 +117,7 @@ export default function MarketAnalytics() {
         borderRadius: 8, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' 
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 20 }}>💡</span>
+          <span style={{ fontSize: 20 }}></span>
           <div>
             <div style={{ fontWeight: 600, color: 'var(--amber-strong)' }}>Automated Dispatch Suggestion</div>
             <div style={{ color: '#92400e', fontSize: 14 }}>{suggestedAction}</div>
@@ -125,7 +125,7 @@ export default function MarketAnalytics() {
         </div>
         {highPremiumBlocks.length > 10 && (
           <button className="btn btn-sm btn-primary" style={{ background: '#d97706', borderColor: '#d97706' }}>
-            ⚡ Auto-Route to GDAM
+            Auto-Route to GDAM
           </button>
         )}
       </div>

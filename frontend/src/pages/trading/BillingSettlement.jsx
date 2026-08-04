@@ -217,13 +217,13 @@ export default function BillingSettlement() {
     { key: 'status', label: 'Status', render: r => {
         let type = 'neutral';
         let label = r.status;
-        if (r.status === 'PAID') { type = 'success'; label = '🟢 Paid'; }
-        else if (r.status === 'OVERDUE') { type = 'danger'; label = '🔴 Overdue'; }
-        else if (r.status === 'PARTIALLY_PAID') { type = 'warning'; label = '🟡 Partially Paid'; }
-        else if (r.status === 'DRAFT') { type = 'primary'; label = '🔵 Draft / Unbilled'; }
+        if (r.status === 'PAID') { type = 'success'; label = 'Paid'; }
+        else if (r.status === 'OVERDUE') { type = 'danger'; label = 'Overdue'; }
+        else if (r.status === 'PARTIALLY_PAID') { type = 'warning'; label = 'Partially Paid'; }
+        else if (r.status === 'DRAFT') { type = 'primary'; label = 'Draft / Unbilled'; }
         return <Badge type={type}>{label}</Badge>;
     }},
-    { key: 'actions', label: 'Action', render: () => <button className="btn btn-sm" title="Download PDF" style={{padding: '2px 6px'}}>📄 PDF</button> }
+    { key: 'actions', label: 'Action', render: () => <button className="btn btn-sm" title="Download PDF" style={{padding: '2px 6px'}}>PDF</button> }
   ];
 
   const ledgerColumns = [
@@ -252,7 +252,7 @@ export default function BillingSettlement() {
       label: 'Type',
       render: (r) => (
         <Badge type={r.note_type === 'DEBIT' ? 'danger' : 'success'}>
-          {r.note_type === 'DEBIT' ? '🔴 DEBIT (+ve)' : '🟢 CREDIT (-ve)'}
+          {r.note_type === 'DEBIT' ? 'DEBIT (+ve)' : 'CREDIT (-ve)'}
         </Badge>
       ),
     },
@@ -321,7 +321,7 @@ export default function BillingSettlement() {
                 onClick={() => handleSettleNote(r.id)}
                 title="Mark as Settled / Reconciled in Payment Report"
               >
-                ✓ Settle
+                 Settle
               </button>
               <button
                 className="btn btn-sm btn-danger"
@@ -329,7 +329,7 @@ export default function BillingSettlement() {
                 onClick={() => { setCancelNoteObj(r); setCancelReason(''); }}
                 title="Cancel Note"
               >
-                ✕ Cancel
+                 Cancel
               </button>
             </>
           )}
@@ -358,9 +358,9 @@ export default function BillingSettlement() {
 
       <div style={{ marginBottom: 20, borderBottom: '1px solid #ddd', display: 'flex', gap: 20 }}>
         {[
-          { id: 'INVOICES', label: '📑 Invoices & Tax Statements' },
-          { id: 'NOTES', label: '📝 Debit & Credit Notes (Reconciliation)' },
-          { id: 'LEDGER', label: '💳 Bank & Pool Ledger' },
+          { id: 'INVOICES', label: 'Invoices & Tax Statements' },
+          { id: 'NOTES', label: 'Debit & Credit Notes (Reconciliation)' },
+          { id: 'LEDGER', label: 'Bank & Pool Ledger' },
         ].map(t => (
           <button 
             key={t.id}
@@ -486,8 +486,8 @@ export default function BillingSettlement() {
                   onChange={(e) => setNoteFilter({ ...noteFilter, note_type: e.target.value })}
                 >
                   <option value="">All Types</option>
-                  <option value="DEBIT">🔴 DEBIT (+ve)</option>
-                  <option value="CREDIT">🟢 CREDIT (-ve)</option>
+                  <option value="DEBIT">DEBIT (+ve)</option>
+                  <option value="CREDIT">CREDIT (-ve)</option>
                 </select>
               </div>
 
@@ -649,7 +649,7 @@ export default function BillingSettlement() {
           <form onSubmit={handleCreateNote}>
             <div style={{ background: '#f8fafc', padding: 12, borderRadius: 6, marginBottom: 16, border: '1px solid #e2e8f0' }}>
               <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.5 }}>
-                💡 <strong>Settlement Reconciler:</strong> Use this note to reconcile market borrowing differentials (e.g., shortfall replacement energy purchased via PTC / power exchange where broker raised a manual invoice in obligation report that was omitted in weekly payment report).
+                <strong>Settlement Reconciler:</strong> Use this note to reconcile market borrowing differentials (e.g., shortfall replacement energy purchased via PTC / power exchange where broker raised a manual invoice in obligation report that was omitted in weekly payment report).
               </div>
             </div>
 
@@ -673,8 +673,8 @@ export default function BillingSettlement() {
                   value={noteForm.note_type}
                   onChange={(e) => setNoteForm({ ...noteForm, note_type: e.target.value })}
                 >
-                  <option value="DEBIT">🔴 DEBIT NOTE (+ve Payable / Dearer Borrowing)</option>
-                  <option value="CREDIT">🟢 CREDIT NOTE (-ve Rebate / Cheaper Borrowing)</option>
+                  <option value="DEBIT">DEBIT NOTE (+ve Payable / Dearer Borrowing)</option>
+                  <option value="CREDIT">CREDIT NOTE (-ve Rebate / Cheaper Borrowing)</option>
                 </select>
               </Field>
             </div>

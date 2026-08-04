@@ -50,12 +50,12 @@ function StatusStepper({ status }) {
 
         return (
           <div key={step} className={cls}>
-            <div className="step-dot">{isDone ? '✓' : idx + 1}</div>
+            <div className="step-dot">{isDone ? '' : idx + 1}</div>
             <div className="step-label">{STATUS_LABELS[step]}</div>
           </div>
         );
       })}
-      {isRejected && <div className="step step-danger"><div className="step-dot">✗</div><div className="step-label">Rejected</div></div>}
+      {isRejected && <div className="step step-danger"><div className="step-dot"></div><div className="step-label">Rejected</div></div>}
       {isDisputed && <div className="step step-danger"><div className="step-dot">!</div><div className="step-label">Disputed</div></div>}
     </div>
   );

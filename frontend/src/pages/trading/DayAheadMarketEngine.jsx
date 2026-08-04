@@ -17,13 +17,13 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
   const themeColor = isGreen ? '#27ae60' : '#2980b9'; // Green vs Blue
 
   const tabs = [
-    { id: 'CREATE', label: '📝 Create Bid' },
-    { id: 'MANAGE', label: '⚙️ Manage Bids' },
-    { id: 'HISTORY', label: '📜 Bid History' },
-    { id: 'SCHEDULE', label: '📊 Energy Schedule' },
-    { id: 'OBLIGATION', label: '💰 Obligation' },
-    { id: 'INVOICE', label: '📄 Invoice Record' },
-    { id: 'MCP', label: '📈 Market MCP' }
+    { id: 'CREATE', label: 'Create Bid' },
+    { id: 'MANAGE', label: 'Manage Bids' },
+    { id: 'HISTORY', label: 'Bid History' },
+    { id: 'SCHEDULE', label: 'Energy Schedule' },
+    { id: 'OBLIGATION', label: 'Obligation' },
+    { id: 'INVOICE', label: 'Invoice Record' },
+    { id: 'MCP', label: 'Market MCP' }
   ];
 
   // Generate mock invoice data for DAM/GDAM
@@ -99,7 +99,7 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
       }}>
         <div>
           <h2 style={{ margin: 0, color: themeColor }}>
-            {isGreen ? '🌿 Green Day-Ahead Market (GDAM)' : '⚡ Conventional Day-Ahead Market (DAM)'}
+            {isGreen ? 'Green Day-Ahead Market (GDAM)' : 'Conventional Day-Ahead Market (DAM)'}
           </h2>
           <p style={{ margin: '5px 0 0 0', color: '#555', fontSize: 13 }}>
             Unified Workflow Engine: Manage the entire {productLabel} lifecycle from bidding to tax invoices.

@@ -123,7 +123,7 @@ router.get('/due-date-preview', requireRole(...READ), (req, res) => {
         type: 'WORKING_DAY',
         day_number: workDayCount,
         status: workDayCount === terms ? 'DUE_DATE' : 'COUNTED',
-        label: workDayCount === terms ? `Day ${workDayCount} (DUE DATE 🎯)` : `Day ${workDayCount}`,
+        label: workDayCount === terms ? `Day ${workDayCount} (DUE DATE )` : `Day ${workDayCount}`,
       });
     } else {
       const reason = nonWorkingReason(isoDate, state || null);

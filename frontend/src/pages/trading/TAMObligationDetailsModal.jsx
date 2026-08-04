@@ -126,7 +126,7 @@ export default function TAMObligationDetailsModal({ record, onClose }) {
           {/* Corridor Route Visual Badge */}
           <div style={{ marginBottom: 20, display: 'inline-flex', alignItems: 'center', background: '#fff3e0', border: '1px solid #ffe0b2', padding: '6px 12px', borderRadius: 4, fontSize: 13, color: '#e65100', fontWeight: 'bold' }}>
             <span style={{ marginRight: 8 }}>Grid Transmission Corridor:</span>
-            <span style={{ fontFamily: 'monospace', letterSpacing: 0.5 }}>[ NR (Gen) ⚡ ──&gt; ER ──&gt; SR (Buyer) ]</span>
+            <span style={{ fontFamily: 'monospace', letterSpacing: 0.5 }}>[ NR (Gen)  ──&gt; ER ──&gt; SR (Buyer) ]</span>
           </div>
 
           {/* Metadata Grid */}
@@ -198,7 +198,7 @@ export default function TAMObligationDetailsModal({ record, onClose }) {
           </div>
           
           <div style={{ background: '#e3f2fd', padding: 15, borderRadius: 6, fontSize: 13, color: '#0d47a1', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-            <span style={{ fontSize: 18 }}>ℹ️</span>
+            <span style={{ fontSize: 18 }}></span>
             <div>
               <strong>Time-Block Aggregation Notice:</strong> Unlike DAM/RTM which mandates a strict 96-block continuous table, this TAM contract groups identical continuous delivery hours into defined time blocks. 
               Notice the peaking/non-delivery gap between 07:45 and 16:00 where Scheduled Qty is 0.00 MW.

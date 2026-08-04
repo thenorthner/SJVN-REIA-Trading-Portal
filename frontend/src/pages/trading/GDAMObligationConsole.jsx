@@ -57,10 +57,10 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
 
   const renderStatus = (status) => {
     switch(status) {
-      case 'GENERATED': return <Badge type="neutral">📄 Generated</Badge>;
-      case 'APPROVED': return <Badge type="success">🟢 Approved</Badge>;
-      case 'REJECTED': return <Badge type="danger">🔴 Rejected</Badge>;
-      case 'DISPUTED': return <Badge type="danger">🟠 Disputed</Badge>;
+      case 'GENERATED': return <Badge type="neutral">Generated</Badge>;
+      case 'APPROVED': return <Badge type="success">Approved</Badge>;
+      case 'REJECTED': return <Badge type="danger">Rejected</Badge>;
+      case 'DISPUTED': return <Badge type="danger">Disputed</Badge>;
       default: return <Badge type="neutral">{status}</Badge>;
     }
   };
@@ -74,7 +74,7 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
     { key: 'portfolioId', label: 'Portfolio Id' },
     { key: 'deliveryDate', label: 'Delivery Date' },
     { key: 'updatedOn', label: 'Updated On' },
-    { key: 'sentMail', label: 'Sent Mail', render: r => r.sentMail ? '✅ Yes' : '❌ No' },
+    { key: 'sentMail', label: 'Sent Mail', render: r => r.sentMail ? 'Yes' : 'No' },
     { key: 'fileStatus', label: 'File Status', render: r => renderStatus(r.fileStatus) },
     { 
       key: 'view', 
@@ -86,7 +86,7 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
           style={{ color: 'var(--sky)', background: 'none', border: 'none', cursor: 'pointer' }}
           title="View Clearing Statement PDF"
         >
-          📄 View
+          View
         </button>
       )
     }
@@ -124,10 +124,10 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
 
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
             <button className="btn btn-primary" style={{ background: '#10b981' }} disabled={selectedRows.length === 0}>
-              🟢 Approve & Send to Invoicing
+              Approve & Send to Invoicing
             </button>
             <button className="btn btn-primary" style={{ background: '#ef4444' }} disabled={selectedRows.length === 0}>
-              🔴 Reject & Raise Dispute
+              Reject & Raise Dispute
             </button>
           </div>
         </div>

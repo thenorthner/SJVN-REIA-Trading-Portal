@@ -337,7 +337,7 @@ async function runFullCycle(rpcKey) {
       pushNotification({
         role: 'REIA_USER',
         type: 'REA_SCRAPER',
-        message: `✅ REA Scraper: ${results.records} new energy record(s) imported from ${rpcKey} for ${newMonths.map(m => m.period).join(', ')}`,
+        message: ` REA Scraper: ${results.records} new energy record(s) imported from ${rpcKey} for ${newMonths.map(m => m.period).join(', ')}`,
       });
     }
 
@@ -349,7 +349,7 @@ async function runFullCycle(rpcKey) {
     pushNotification({
       role: 'SJVN_ADMIN',
       type: 'REA_SCRAPER',
-      message: `⚠️ REA Scraper FAILED for ${rpcKey}: ${err.message}. Please check manually or use manual upload.`,
+      message: ` REA Scraper FAILED for ${rpcKey}: ${err.message}. Please check manually or use manual upload.`,
     });
   }
 
@@ -414,7 +414,7 @@ async function triggerManual(rpcKey, periodMonth, dataType = 'PROVISIONAL') {
   pushNotification({
     role: 'REIA_USER',
     type: 'REA_SCRAPER',
-    message: `✅ Manual REA import: ${count} record(s) from ${rpcKey} for ${periodMonth}`,
+    message: ` Manual REA import: ${count} record(s) from ${rpcKey} for ${periodMonth}`,
   });
 
   return { logId: download.logId, records: count, parsedStations: parsedData.length };

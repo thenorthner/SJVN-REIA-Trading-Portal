@@ -297,7 +297,7 @@ export default function Reconciliation() {
               <div className="detail-item"><span className="detail-label">Basis</span><span className="detail-value">{detail.data_basis}</span></div>
               <div className="detail-item"><span className="detail-label">Auto-match</span><span className="detail-value">{detail.auto_match_pct}%</span></div>
               <div className="detail-item"><span className="detail-label">Exposure</span><span className="detail-value">{fmtCurrency(detail.unreconciled_amount)}</span></div>
-              <div className="detail-item"><span className="detail-label">Energy / Pay / Perf</span><span className="detail-value">{detail.energy_match ? '✓' : '✗'} / {detail.payment_match ? '✓' : '✗'} / {detail.performance_match ? '✓' : '✗'}</span></div>
+              <div className="detail-item"><span className="detail-label">Energy / Pay / Perf</span><span className="detail-value">{detail.energy_match ? '' : ''} / {detail.payment_match ? '' : ''} / {detail.performance_match ? '' : ''}</span></div>
               <div className="detail-item"><span className="detail-label">Sign-off</span><span className="detail-value">SJVN: {detail.sjvn_ack_by || '—'} | CP: {detail.counterparty_ack_by || '—'}</span></div>
             </div>
 

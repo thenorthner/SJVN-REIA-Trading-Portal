@@ -201,10 +201,10 @@ export default function BulkCommunications() {
 
       let msg = 'Broadcast Dispatched Successfully!\n\n';
       if (channels.inApp) {
-        msg += `🔔 In-App: Posted to Broadcast Board & ${notifCount} user notification alerts.\n`;
+        msg += `In-App: Posted to Broadcast Board & ${notifCount} user notification alerts.\n`;
       }
       if (channels.email) {
-        msg += `📧 Email: Dispatched to ${emailCount} recipient(s) via ${emailMode}.\n`;
+        msg += `Email: Dispatched to ${emailCount} recipient(s) via ${emailMode}.\n`;
       }
 
       alert(msg);

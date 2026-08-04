@@ -431,7 +431,7 @@ export default function Entities() {
                       <div style={{fontSize: 11, color: '#666'}}>IFSC: {selected.ifsc_code || '-'} | Branch: {selected.branch_address || '-'}</div>
                       <div style={{ marginTop: 6 }}>
                         <button className="btn btn-sm btn-outline" onClick={handlePennyDrop} disabled={selected.is_penny_drop_verified}>
-                          {selected.is_penny_drop_verified ? 'Verified ✓' : 'Verify Penny Drop (₹1)'}
+                          {selected.is_penny_drop_verified ? 'Verified ' : 'Verify Penny Drop (₹1)'}
                         </button>
                       </div>
                     </td>
@@ -515,15 +515,15 @@ export default function Entities() {
                         {proof ? (
                           <>
                             <span style={{ fontSize: 12, fontWeight: 600, color: vs === 'VERIFIED' ? '#15803d' : vs === 'REJECTED' ? '#b91c1c' : '#b45309' }}>
-                              📎 {vs === 'VERIFIED' ? 'Proof verified' : vs === 'REJECTED' ? 'Proof rejected' : 'Proof uploaded — pending review'}
+                               {vs === 'VERIFIED' ? 'Proof verified' : vs === 'REJECTED' ? 'Proof rejected' : 'Proof uploaded — pending review'}
                             </span>
                             <button type="button" className="link-btn" style={{ fontSize: 12 }} onClick={() => setDocPreview({ versionId: proof.latest_version_id, fileName: proof.file_name })}>
-                              👁 View proof
+                               View proof
                             </button>
                           </>
                         ) : (
                           <span style={{ fontSize: 12, color: 'var(--text-subtle)' }}>
-                            📎 No proof uploaded
+                            No proof uploaded
                             {canUpload ? (
                               <button type="button" className="link-btn" style={{ fontSize: 12, marginLeft: 6 }} onClick={() => setUploadFor({ code: item.approval_code, label: item.label })}>
                                 Upload

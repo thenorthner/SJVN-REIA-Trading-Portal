@@ -40,9 +40,9 @@ export default function BankTransactionsList() {
 
   const getReconBadge = (status) => {
     switch (status) {
-      case 'MATCHED': return <Badge variant="success">🟢 Matched & Applied</Badge>;
-      case 'PENDING': return <Badge variant="warning">🟡 Pending Verification</Badge>;
-      case 'UNRECONCILED': return <Badge variant="danger">🔴 Unreconciled / Amount Mismatch</Badge>;
+      case 'MATCHED': return <Badge variant="success">Matched & Applied</Badge>;
+      case 'PENDING': return <Badge variant="warning">Pending Verification</Badge>;
+      case 'UNRECONCILED': return <Badge variant="danger">Unreconciled / Amount Mismatch</Badge>;
       default: return <Badge>{status}</Badge>;
     }
   };

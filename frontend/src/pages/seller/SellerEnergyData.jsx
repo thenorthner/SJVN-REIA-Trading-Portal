@@ -39,7 +39,7 @@ export default function SellerEnergyData() {
 
       <Card>
         <div style={{ padding: '12px 16px', background: 'var(--bg-card)', borderRadius: 8, marginBottom: 16, border: '1px solid var(--border)', fontSize: 13, color: 'var(--text-secondary)' }}>
-          ℹ️ Energy data is recorded by SJVN from SLDC/REA/JMR sources. Once status is <strong>LOCKED</strong>, it is used for invoice generation.
+           Energy data is recorded by SJVN from SLDC/REA/JMR sources. Once status is <strong>LOCKED</strong>, it is used for invoice generation.
           If you disagree with any data, please raise a dispute through the <strong>Disputes</strong> module.
         </div>
       </Card>

@@ -261,7 +261,7 @@ export default function TAMManagement({ marketType = 'TAM' }) {
                         {record.deliveryDate}
                         {marketType === 'GTAM' && (
                           <Badge type="success" style={{ display: 'block', marginTop: 4, background: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9', fontSize: 10 }}>
-                            🌿 Green Power (GTAM)
+                            Green Power (GTAM)
                           </Badge>
                         )}
                       </td>
@@ -271,10 +271,10 @@ export default function TAMManagement({ marketType = 'TAM' }) {
                       <td style={{ padding: 10, color: '#27ae60', fontWeight: 'bold' }}>{fmtNumber(record.netAmount)}</td>
                       <td style={{ padding: 10 }}>
                         <div style={{ display: 'flex', gap: 5 }}>
-                          <button className="btn btn-sm btn-outline" title="View Details" onClick={() => setSelectedTamRecord(record)}>📄</button>
-                          <button className="btn btn-sm btn-outline" title="View PDFs (IEX Voucher)" aria-label="View PDFs (IEX Voucher)">💻</button>
-                          <button className="btn btn-sm btn-outline" title="View Certificate (Standing Clearance)" aria-label="View Certificate (Standing Clearance)">📜</button>
-                          <button className="btn btn-sm btn-outline" style={{ color: '#e74c3c' }} title="Cancel/Archive" aria-label="Cancel/Archive">❌</button>
+                          <button className="btn btn-sm btn-outline" title="View Details" onClick={() => setSelectedTamRecord(record)}></button>
+                          <button className="btn btn-sm btn-outline" title="View PDFs (IEX Voucher)" aria-label="View PDFs (IEX Voucher)"></button>
+                          <button className="btn btn-sm btn-outline" title="View Certificate (Standing Clearance)" aria-label="View Certificate (Standing Clearance)"></button>
+                          <button className="btn btn-sm btn-outline" style={{ color: '#e74c3c' }} title="Cancel/Archive" aria-label="Cancel/Archive"></button>
                         </div>
                       </td>
                     </tr>
@@ -294,8 +294,8 @@ export default function TAMManagement({ marketType = 'TAM' }) {
                         <td style={{ padding: 10, color: '#444' }}>{fmtNumber(child.netAmount)}</td>
                         <td style={{ padding: 10 }}>
                            <div style={{ display: 'flex', gap: 5 }}>
-                             <button className="btn btn-sm btn-outline" title="View Details" onClick={() => setSelectedTamRecord(child)}>📄</button>
-                             <button className="btn btn-sm btn-outline" title="View PDFs (IEX Voucher)" aria-label="View PDFs (IEX Voucher)">💻</button>
+                             <button className="btn btn-sm btn-outline" title="View Details" onClick={() => setSelectedTamRecord(child)}></button>
+                             <button className="btn btn-sm btn-outline" title="View PDFs (IEX Voucher)" aria-label="View PDFs (IEX Voucher)"></button>
                            </div>
                         </td>
                       </tr>
@@ -316,8 +316,8 @@ export default function TAMManagement({ marketType = 'TAM' }) {
           boxShadow: '0 10px 25px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', gap: 20, zIndex: 900
         }}>
           <div style={{ fontWeight: 'bold' }}>{selectedRows.length} Records Selected</div>
-          <button className="btn btn-sm" style={{ background: '#2980b9', color: '#fff', border: 'none' }}>⬇️ Download Checked PDFs (.zip)</button>
-          <button className="btn btn-sm" style={{ background: '#27ae60', color: '#fff', border: 'none' }}>📤 Export SAP Settlement Data</button>
+          <button className="btn btn-sm" style={{ background: '#2980b9', color: '#fff', border: 'none' }}>Download Checked PDFs (.zip)</button>
+          <button className="btn btn-sm" style={{ background: '#27ae60', color: '#fff', border: 'none' }}>Export SAP Settlement Data</button>
         </div>
       )}
 

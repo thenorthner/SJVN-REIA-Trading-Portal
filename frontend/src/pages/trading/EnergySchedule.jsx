@@ -64,9 +64,9 @@ export default function EnergySchedule() {
     if (mw === 0 || mw === '0.00' || !mw) {
       return <Badge type="neutral" style={{ opacity: 0.5 }}>0.00</Badge>;
     }
-    if (mw < 0) return <Badge type="success">🟢 {Math.abs(mw).toFixed(2)} MW</Badge>;
-    if (mw > 0 && isDrawal) return <Badge type="danger">🔴 {mw.toFixed(2)} MW</Badge>;
-    if (mw > 0) return <Badge type="danger">🔴 {mw.toFixed(2)} MW</Badge>;
+    if (mw < 0) return <Badge type="success"> {Math.abs(mw).toFixed(2)} MW</Badge>;
+    if (mw > 0 && isDrawal) return <Badge type="danger"> {mw.toFixed(2)} MW</Badge>;
+    if (mw > 0) return <Badge type="danger"> {mw.toFixed(2)} MW</Badge>;
     return '0.00';
   };
 
@@ -75,7 +75,7 @@ export default function EnergySchedule() {
     const absDev = Math.abs(dev);
     // If deviation is greater than 1MW for this example
     if (absDev > 1) {
-      return <Badge type="danger">🔴 {dev.toFixed(2)} (Alert)</Badge>;
+      return <Badge type="danger"> {dev.toFixed(2)} (Alert)</Badge>;
     }
     return <Badge type="neutral">{dev.toFixed(2)}</Badge>;
   };
@@ -118,7 +118,7 @@ export default function EnergySchedule() {
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="btn btn-outline">Format-D (RLDC)</button>
             <button className="btn btn-primary" style={{ background: '#28a745' }}>[ EXCEL v ] Export</button>
-            <button className="btn btn-primary" style={{ background: 'var(--sky)' }}>⚡ Sync to RLDC / SLDC Portal</button>
+            <button className="btn btn-primary" style={{ background: 'var(--sky)' }}>Sync to RLDC / SLDC Portal</button>
           </div>
         }
       />
@@ -185,9 +185,9 @@ export default function EnergySchedule() {
           <div>
             <strong>Issued At:</strong> {new Date(new Date(date).getTime() - 86400000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-')} 12:44 PM<br/>
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <Badge type="success">🟢 RLDC Acknowledged</Badge>
-              <Badge type="neutral">📧 Email Sent to Operator</Badge>
-              <Badge type="neutral">📄 CSV Exported</Badge>
+              <Badge type="success">RLDC Acknowledged</Badge>
+              <Badge type="neutral">Email Sent to Operator</Badge>
+              <Badge type="neutral">CSV Exported</Badge>
             </div>
           </div>
         </div>
@@ -265,7 +265,7 @@ export default function EnergySchedule() {
                         
                         <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 10 }}>
                            [Regional Delivery (ISTS): {regionalDeliveryMw.toFixed(4)} MWh] 
-                           <Badge type="success">🟢 CLEARED</Badge>
+                           <Badge type="success">CLEARED</Badge>
                         </div>
                       </div>
                     );

@@ -22,7 +22,7 @@ export default function DevStageStepper({ stages = [], current }) {
         else if (idx === currentIdx) cls += ' step-active';
         return (
           <div key={s} className={cls}>
-            <div className="step-dot">{idx < currentIdx ? '✓' : idx + 1}</div>
+            <div className="step-dot">{idx < currentIdx ? '' : idx + 1}</div>
             <div className="step-label">{LABELS[s] || s}</div>
           </div>
         );

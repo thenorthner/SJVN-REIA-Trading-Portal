@@ -214,7 +214,7 @@ export default function InboxMailList() {
                         <td onClick={() => setExpandedRow(isExpanded ? null : msg.id)}>{msg.sender_name || msg.sender_id}</td>
                         <td onClick={() => setExpandedRow(isExpanded ? null : msg.id)}>{msg.sent_at.substring(0, 10)}</td>
                         <td style={{ textAlign: 'center' }} onClick={() => setExpandedRow(isExpanded ? null : msg.id)}>
-                          {attachments.length > 0 ? '📎' : ''}
+                          {attachments.length > 0 ? '' : ''}
                         </td>
                       </tr>
                       {isExpanded && (

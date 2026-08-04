@@ -62,7 +62,7 @@ export default function PortfolioRegistry() {
         {MOCK_ASSETS.map((asset, i) => (
           <Card key={i} style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ background: 'var(--slate-50)', padding: '16px 24px', borderBottom: '1px solid var(--slate-200)', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: 24 }}>🏢</span>
+              <span style={{ fontSize: 24 }}></span>
               <div>
                 <h3 style={{ margin: 0, color: 'var(--slate-900)', fontSize: 18 }}>{asset.company}</h3>
                 <span style={{ color: 'var(--slate-500)', fontSize: 13 }}>{asset.plantName}</span>
@@ -74,7 +74,7 @@ export default function PortfolioRegistry() {
                 <div key={p.id} style={{ padding: '20px 24px', borderBottom: j < asset.portfolios.length - 1 ? '1px solid var(--slate-200)' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--slate-50)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                   
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-                    <div style={{ fontSize: 24, marginTop: 2 }}>{p.type === 'Regional' ? '🌐' : '⚡'}</div>
+                    <div style={{ fontSize: 24, marginTop: 2 }}>{p.type === 'Regional' ? '' : ''}</div>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                         <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)' }}>{p.id}</span>
@@ -88,10 +88,10 @@ export default function PortfolioRegistry() {
 
                   {/* ── Direct Quick-Action Toolbar ── */}
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button className="btn btn-sm btn-outline" style={{ background: '#fff' }} onClick={() => setViewProfile({...p, company: asset.company, plantName: asset.plantName})} title="View Profile">📄 Profile</button>
-                    <button className="btn btn-sm btn-outline" style={{ background: '#fff' }} onClick={() => window.location.href = '/trading/noar-registry'} title="NOC Registry">🛡️ NOC</button>
-                    <button className="btn btn-sm btn-outline" style={{ background: '#fff' }} onClick={() => window.alert('Not available yet — trading agreements are not linked to this registry.')} title="Agreements">📝 Agreements</button>
-                    <button className="btn btn-sm btn-outline" style={{ background: '#fff' }} onClick={() => window.alert('Not available yet — configure losses under Master Data \u2192 Transmission Losses.')} title="Loss Factors">📊 Losses</button>
+                    <button className="btn btn-sm btn-outline" style={{ background: '#fff' }} onClick={() => setViewProfile({...p, company: asset.company, plantName: asset.plantName})} title="View Profile">Profile</button>
+                    <button className="btn btn-sm btn-outline" style={{ background: '#fff' }} onClick={() => window.location.href = '/trading/noar-registry'} title="NOC Registry">NOC</button>
+                    <button className="btn btn-sm btn-outline" style={{ background: '#fff' }} onClick={() => window.alert('Not available yet — trading agreements are not linked to this registry.')} title="Agreements">Agreements</button>
+                    <button className="btn btn-sm btn-outline" style={{ background: '#fff' }} onClick={() => window.alert('Not available yet — configure losses under Master Data \u2192 Transmission Losses.')} title="Loss Factors">Losses</button>
                   </div>
                 </div>
               ))}

@@ -157,7 +157,7 @@ export function PreviewModal({ open, versionId, fileName, onClose }) {
         <div className="form-actions" style={{ marginTop: 16 }}>
           <button type="button" className="btn btn-ghost" onClick={onClose}>Close</button>
           {state.url && (
-            <button type="button" className="btn btn-primary" onClick={handleDownload}>⬇️ Download</button>
+            <button type="button" className="btn btn-primary" onClick={handleDownload}>Download</button>
           )}
         </div>
       )}
@@ -191,7 +191,7 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
       <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 style={{ margin: 0 }}>{title}</h3>
         <button className="btn btn-primary btn-sm" onClick={() => setUploadOpen(true)}>
-          ⬆️ Upload Document
+          Upload Document
         </button>
       </div>
       <div className="card-body" style={{ padding: 0 }}>
@@ -235,7 +235,7 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
                         title="View document"
                         onClick={() => setPreviewDoc({ versionId: doc.latest_version_id, fileName: doc.file_name })}
                       >
-                        👁️
+                        
                       </button>
                       {isAdmin && doc.category === 'VERIFY' && doc.verification_status === 'PENDING' && (
                         <button className="btn btn-secondary btn-sm" onClick={() => setReviewOpen(doc)}>
@@ -461,7 +461,7 @@ function ReviewModal({ open, doc, onClose, onSuccess }) {
             className="btn btn-secondary btn-sm"
             onClick={() => setPreviewOpen(true)}
           >
-            👁️ View / Download File
+            View / Download File
           </button>
         </div>
       </div>
@@ -477,10 +477,10 @@ function ReviewModal({ open, doc, onClose, onSuccess }) {
 
       <div className="form-actions" style={{ marginTop: 24 }}>
         <button type="button" className="btn btn-danger" onClick={() => handleAction('REJECT')} disabled={submitting}>
-          ❌ Reject
+          Reject
         </button>
         <button type="button" className="btn btn-success" onClick={() => handleAction('VERIFY')} disabled={submitting}>
-          ✅ Verify & Approve
+          Verify & Approve
         </button>
       </div>
 

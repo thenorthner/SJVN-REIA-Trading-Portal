@@ -100,7 +100,7 @@ export default function BidVsClearedAnalytics() {
                 style={{ background: 'none', border: 'none', borderLeft: '1px solid var(--slate-300)', padding: '0 8px', cursor: 'pointer', color: '#ef4444' }}
                 title="Clear"
               >
-                ✖
+                
               </button>
             </div>
             <button className="btn btn-sm btn-outline" style={{ background: '#fff', marginLeft: 4 }}>Display</button>
@@ -129,7 +129,7 @@ export default function BidVsClearedAnalytics() {
                 if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
               }}
             >
-              ☰
+              
             </button>
             <div 
               id="bid-vs-cleared-export-menu"
@@ -139,11 +139,11 @@ export default function BidVsClearedAnalytics() {
                 boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', zIndex: 10 
               }}
             >
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Print')}>🖨️ Print chart</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Download PNG')}>🖼️ Download PNG image</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Download JPEG')}>🖼️ Download JPEG image</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Download PDF')}>📄 Download PDF document</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer' }} onClick={() => alert('Download SVG')}>📐 Download SVG vector image</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Print')}>Print chart</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Download PNG')}>Download PNG image</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Download JPEG')}>Download JPEG image</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Download PDF')}>Download PDF document</div>
+              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer' }} onClick={() => alert('Download SVG')}>Download SVG vector image</div>
             </div>
           </div>
         </div>

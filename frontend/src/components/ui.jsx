@@ -165,7 +165,7 @@ export function Modal({ open, onClose, title, children, width = 560 }) {
       >
         <div className="modal-header">
           <h3 id={titleId}>{title}</h3>
-          <button className="icon-btn" onClick={onClose} aria-label="Close dialog">✕</button>
+          <button className="icon-btn" onClick={onClose} aria-label="Close dialog"></button>
         </div>
         <div className="modal-body">{children}</div>
       </div>
@@ -227,7 +227,7 @@ export function StatementViewer({ statement }) {
       </div>
 
       <div style={{ backgroundColor: isHealthy ? '#f0fdf4' : '#fef2f2', padding: 12, borderRadius: 6, marginBottom: 16, fontSize: 13, border: `1px solid ${isHealthy ? '#bbf7d0' : '#fecaca'}` }}>
-        <strong style={{ color: isHealthy ? '#166534' : '#991b1b' }}>{isHealthy ? '✅ Data is fully reconciled and ready for sign-off.' : '⚠️ Exceptions detected. Review required before sign-off.'}</strong>
+        <strong style={{ color: isHealthy ? '#166534' : '#991b1b' }}>{isHealthy ? 'Data is fully reconciled and ready for sign-off.' : 'Exceptions detected. Review required before sign-off.'}</strong>
       </div>
 
       <div style={{ border: '1px solid var(--slate-200)', borderRadius: 8, overflow: 'hidden' }}>
@@ -262,11 +262,11 @@ export function StatementViewer({ statement }) {
       <div style={{ display: 'flex', gap: 24, marginTop: 16, borderTop: '1px solid var(--slate-200)', paddingTop: 16 }}>
         <div>
           <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase' }}>SJVN Sign-off</div>
-          <div style={{ fontWeight: 500 }}>{statement.sign_off?.sjvn ? `✅ ${statement.sign_off.sjvn.by}` : 'Pending'}</div>
+          <div style={{ fontWeight: 500 }}>{statement.sign_off?.sjvn ? `${statement.sign_off.sjvn.by}` : 'Pending'}</div>
         </div>
         <div>
           <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase' }}>Counterparty Sign-off</div>
-          <div style={{ fontWeight: 500 }}>{statement.sign_off?.counterparty ? `✅ ${statement.sign_off.counterparty.by}` : 'Pending'}</div>
+          <div style={{ fontWeight: 500 }}>{statement.sign_off?.counterparty ? `${statement.sign_off.counterparty.by}` : 'Pending'}</div>
         </div>
       </div>
     </div>
@@ -385,7 +385,7 @@ export function Tab({ active, onClick, children }) {
 export function SampleDataNotice({ detail }) {
   return (
     <div className="sample-data-notice" role="note">
-      <span aria-hidden="true">⚠️</span>
+      <span aria-hidden="true"></span>
       <div>
         <strong>SAMPLE DATA — NOT CONNECTED</strong>
         {detail && <div className="sample-data-notice__detail">{detail}</div>}

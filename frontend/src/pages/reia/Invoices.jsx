@@ -408,7 +408,7 @@ export default function Invoices() {
               }}
               style={{ fontSize: 10, padding: '2px 6px' }}
             >
-              ⚡ True-Up
+              True-Up
             </button>
           )}
         </span>

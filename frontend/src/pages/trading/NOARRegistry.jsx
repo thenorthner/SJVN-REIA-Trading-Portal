@@ -49,8 +49,8 @@ export default function NOARRegistry() {
       header: 'Actions', 
       render: r => (
         <div style={{ display: 'flex', gap: 12 }}>
-          <button className="btn btn-xs btn-ghost" title="Download Attachment" onClick={() => setViewingNoc(r)}>💻 Attachment</button>
-          <button className="btn btn-xs btn-outline" title="View Parsed Detail" onClick={() => setViewingNoc(r)}>💻 View</button>
+          <button className="btn btn-xs btn-ghost" title="Download Attachment" onClick={() => setViewingNoc(r)}>Attachment</button>
+          <button className="btn btn-xs btn-outline" title="View Parsed Detail" onClick={() => setViewingNoc(r)}>View</button>
         </div>
       ) 
     },
@@ -69,7 +69,7 @@ export default function NOARRegistry() {
       {showRenewalAlert && activeNoc && (
         <div style={{ background: daysToExpiry <= 7 ? '#fef2f2' : '#fffbeb', border: `1px solid ${daysToExpiry <= 7 ? '#f87171' : '#fcd34d'}`, padding: '16px 20px', borderRadius: 8, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 24 }}>{daysToExpiry <= 7 ? '🚨' : '⚠️'}</span>
+            <span style={{ fontSize: 24 }}>{daysToExpiry <= 7 ? '' : ''}</span>
             <div>
               <h4 style={{ margin: '0 0 4px 0', color: daysToExpiry <= 7 ? 'var(--red-deep)' : 'var(--amber-strong)', fontSize: 15 }}>
                 Action Required: SLDC Clearance Renewal

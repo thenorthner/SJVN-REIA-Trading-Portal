@@ -48,7 +48,7 @@ export default function MyDocuments() {
 
       <Card>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <span style={{ fontSize: 20 }}>📎</span>
+          <span style={{ fontSize: 20 }}></span>
           <div>
             <strong style={{ fontSize: 14 }}>How this works</strong>
             <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'var(--slate-600)', lineHeight: 1.55 }}>

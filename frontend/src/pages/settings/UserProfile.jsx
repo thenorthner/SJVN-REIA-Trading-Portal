@@ -29,7 +29,7 @@ export default function UserProfile() {
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
         {/* ── Left Column: User Info ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <Card title="👤 User Info">
+          <Card title="User Info">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px 40px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 600 }}>Company Name:</span>
@@ -72,7 +72,7 @@ export default function UserProfile() {
 
         {/* ── Right Column: Roles & Portfolios ── */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <Card title="🛡️ Role & Rights" style={{ background: 'var(--slate-50)' }}>
+          <Card title="Role & Rights" style={{ background: 'var(--slate-50)' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 14, color: 'var(--slate-600)', fontWeight: 500 }}>System Role</span>
@@ -89,7 +89,7 @@ export default function UserProfile() {
             </div>
           </Card>
 
-          <Card title="🔑 Portfolios on the desk">
+          <Card title="Portfolios on the desk">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* Two fixed portfolio ids used to be printed here for every user.
                   There is no per-user portfolio assignment in the platform yet,
@@ -101,7 +101,7 @@ export default function UserProfile() {
               {portfolios.map((pf) => (
                 <div key={pf.id} style={{ padding: 12, border: '1px solid var(--slate-200)', borderRadius: 6, background: '#fff' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span>⚡</span>
+                    <span></span>
                     <span style={{ fontWeight: 600, color: 'var(--navy)' }}>{pf.name}</span>
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--slate-500)', marginLeft: 26 }}>{pf.id} · {pf.client_type}</div>

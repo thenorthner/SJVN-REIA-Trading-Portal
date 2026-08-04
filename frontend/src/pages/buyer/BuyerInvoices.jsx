@@ -32,7 +32,7 @@ function StatusStepper({ status }) {
 
         return (
           <div key={s} className={`step ${stateClass}`}>
-            <div className="step-dot">{i < currentIdx || status === 'PAID' ? '✓' : i + 1}</div>
+            <div className="step-dot">{i < currentIdx || status === 'PAID' ? '' : i + 1}</div>
             <div className="step-label">{s.replace('_', ' ')}</div>
           </div>
         );
