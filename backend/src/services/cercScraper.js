@@ -515,6 +515,8 @@ function getCercStatus() {
     total_processed: totalProcessed?.cnt || 0,
     total_failed: totalFailed?.cnt || 0,
   };
+}
+
 async function autoSeedLocalReports() {
   try {
     const count = db.prepare(`SELECT COUNT(*) as cnt FROM cerc_monthly_summary`).get();
