@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  ComposedChart, LineChart, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   BarChart, Cell, LabelList
 } from 'recharts';
 import { Card, StatCard, Table, Badge, PageHeader, fmtCurrency, fmtNumber } from '../../components/ui';
@@ -32,15 +32,15 @@ export default function CERCMarketIntelligence() {
   const fetchPeriods = async () => {
     try {
       const p = await api.cercMarket.getPeriods();
-      setPeriods(p);
-      if (p.length > 0 && !selectedPeriod) {
-        setSelectedPeriod(p[0].period); // Assume sorted latest first
+      const normalized = Array.isArray(p) ? p.map(item => typeof item === 'string' ? { period: item } : item) : [];
+      setPeriods(normalized);
+      if (normalized.length > 0) {
+        setSelectedPeriod(prev => prev || normalized[0].period);
       }
     } catch (e) {
       console.error(e);
-      // fallback mock periods
-      setPeriods([{ period: '2023-10' }, { period: '2023-09' }]);
-      if (!selectedPeriod) setSelectedPeriod('2023-10');
+      setPeriods([{ period: '2026-01' }]);
+      setSelectedPeriod(prev => prev || '2026-01');
     }
   };
 
@@ -58,39 +58,44 @@ export default function CERCMarketIntelligence() {
       setSummary(sum);
       
       const px = await api.cercMarket.getPrices({ period: selectedPeriod });
-      setPrices(px);
+      setPrices(Array.isArray(px) ? px : []);
       
       const trend = await api.cercMarket.getDailyTrend({ period: selectedPeriod });
-      setDailyTrend(trend);
+      setDailyTrend(Array.isArray(trend) ? trend : []);
       
       const vol = await api.cercMarket.getVolumes({ period: selectedPeriod });
-      setVolumes(vol);
+      setVolumes(Array.isArray(vol) ? vol : []);
       
       const dsmData = await api.cercMarket.getDsm({ period: selectedPeriod });
-      setDsm(dsmData);
+      setDsm(dsmData || null);
       
       const recData = await api.cercMarket.getRec({ period: selectedPeriod });
-      setRec(recData);
+      setRec(Array.isArray(recData) ? recData : []);
       
     } catch (err) {
       console.error(err);
-      setError('Failed to fetch market data. Ensure the backend services are running.');
+      setError('Failed to fetch market data.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    if (selectedPeriod) {
+      fetchData();
+    }
   }, [selectedPeriod]);
 
   const handleTriggerFetch = async () => {
     try {
       setLoading(true);
-      await api.cercMarket.triggerFetch(selectedPeriod);
+      setError('');
+      await api.cercMarket.triggerFetch(selectedPeriod || '2026-01');
+      await fetchPeriods();
       await fetchData();
     } catch (err) {
-      setError('Failed to trigger fetch.');
+      console.error(err);
+      setError(err?.response?.data?.error || err.message || 'Failed to trigger fetch.');
       setLoading(false);
     }
   };
