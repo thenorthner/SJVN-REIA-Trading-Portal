@@ -100,28 +100,6 @@ export default function CERCMarketIntelligence() {
     }
   };
 
-  if (loading && !summary) {
-    return <div style={{ padding: 40, textAlign: 'center' }}>Loading CERC Market Intelligence...</div>;
-  }
-
-  if (error && !summary) {
-    return (
-      <div style={{ padding: 40, textAlign: 'center', color: 'var(--red)' }}>
-        <p>{error}</p>
-        <button className="btn btn-primary" onClick={fetchData}>Retry</button>
-      </div>
-    );
-  }
-
-  if (!summary && !loading) {
-    return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <p>No market data available for {selectedPeriod || 'the selected period'}.</p>
-        <button className="btn btn-primary" onClick={handleTriggerFetch}>Fetch Report from CERC</button>
-      </div>
-    );
-  }
-  
   // Format period for display
   const periodLabel = selectedPeriod ? new Date(selectedPeriod + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }) : '';
 
@@ -152,22 +130,54 @@ export default function CERCMarketIntelligence() {
           
           <div style={{ marginTop: 22 }}>
             <button className="btn btn-primary" onClick={handleTriggerFetch} disabled={loading}>
-              Fetch Latest CERC MMC Report
+              {loading ? 'Fetching CERC Report...' : 'Fetch Latest CERC MMC Report'}
             </button>
           </div>
           
           <div style={{ marginLeft: 'auto', textAlign: 'right', marginTop: 22 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-800)' }}>
-              CERC MMC Report: {periodLabel}
+              Period: {periodLabel || selectedPeriod}
             </div>
             <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>
-              Source: Central Electricity Regulatory Commission
+              Source: CERC Monthly Market Monitoring
             </div>
           </div>
         </div>
       </Card>
 
-      {/* 2. KPI CARDS ROW */}
+      {/* 2. ERROR & EMPTY STATES */}
+      {error && (
+        <div style={{ padding: '14px 20px', marginBottom: 20, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#dc2626', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div><strong>Notice: </strong> {error}</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="btn btn-outline" onClick={fetchData} style={{ fontSize: 12, padding: '4px 10px' }}>Retry</button>
+            <button className="btn btn-primary" onClick={handleTriggerFetch} style={{ fontSize: 12, padding: '4px 10px' }}>Fetch CERC Report</button>
+          </div>
+        </div>
+      )}
+
+      {loading && !summary && (
+        <Card style={{ padding: 60, textAlign: 'center', color: 'var(--slate-600)' }}>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>Loading CERC Market Intelligence Data...</div>
+          <div style={{ fontSize: 13, color: 'var(--slate-400)', marginTop: 8 }}>Fetching records for {selectedPeriod}...</div>
+        </Card>
+      )}
+
+      {!loading && !summary && (
+        <Card style={{ padding: 60, textAlign: 'center' }}>
+          <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--slate-800)', marginBottom: 8 }}>
+            No CERC Market Data Found for {selectedPeriod || 'Selected Period'}
+          </div>
+          <p style={{ color: 'var(--slate-500)', maxWidth: 500, margin: '0 auto 20px auto', fontSize: 14 }}>
+            The CERC Monthly Market Monitoring report has not been imported for this period yet. Click the button below to download and parse the official report.
+          </p>
+          <button className="btn btn-primary" onClick={handleTriggerFetch} disabled={loading} style={{ padding: '10px 24px', fontSize: 14 }}>
+            Fetch & Parse CERC MMC Report ({selectedPeriod})
+          </button>
+        </Card>
+      )}
+
+      {/* 3. KPI CARDS ROW */}
       {summary && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 15, marginBottom: 20 }}>
           <StatCard 

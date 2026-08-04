@@ -300,4 +300,9 @@ app.listen(PORT, HOST, () => {
     }
   });
   console.log('[CERC Scraper] Cron job registered (15th & 25th of each month at 07:00 IST)');
+
+  // Auto-seed CERC reports from local disk if table is empty
+  cercScraper.autoSeedLocalReports().catch(err => {
+    console.warn('[CERC Scraper] Auto-seed initial run error:', err.message);
+  });
 });

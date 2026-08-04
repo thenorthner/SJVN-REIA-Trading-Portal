@@ -36,14 +36,28 @@ function buildCercUrls(year, month) {
 }
 
 async function downloadFile(url, destPath) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    if (response.status === 404) return false;
-    throw new Error(`Download failed: HTTP ${response.status} for ${url}`);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      if (response.status === 404) {
+        if (fs.existsSync(destPath) && fs.statSync(destPath).size > 1000) {
+          console.log(`[CERC Scraper] Remote returned 404, but found cached local file: ${destPath}`);
+          return fs.statSync(destPath).size;
+        }
+        return false;
+      }
+      throw new Error(`Download failed: HTTP ${response.status} for ${url}`);
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    fs.writeFileSync(destPath, buffer);
+    return buffer.length;
+  } catch (err) {
+    if (fs.existsSync(destPath) && fs.statSync(destPath).size > 1000) {
+      console.log(`[CERC Scraper] Network fetch failed (${err.message}), using cached local file: ${destPath}`);
+      return fs.statSync(destPath).size;
+    }
+    throw err;
   }
-  const buffer = Buffer.from(await response.arrayBuffer());
-  fs.writeFileSync(destPath, buffer);
-  return buffer.length;
 }
 
 function num(val) {
@@ -501,6 +515,29 @@ function getCercStatus() {
     total_processed: totalProcessed?.cnt || 0,
     total_failed: totalFailed?.cnt || 0,
   };
+async function autoSeedLocalReports() {
+  try {
+    const count = db.prepare(`SELECT COUNT(*) as cnt FROM cerc_monthly_summary`).get();
+    if (count && count.cnt > 0) return;
+    
+    console.log('[CERC Scraper] Checking for local reports to auto-seed...');
+    if (fs.existsSync(CERC_DOWNLOAD_DIR)) {
+      const dirs = fs.readdirSync(CERC_DOWNLOAD_DIR);
+      for (const d of dirs) {
+        if (/^\d{4}-\d{2}$/.test(d)) {
+          console.log(`[CERC Scraper] Auto-seeding local report for ${d}...`);
+          try {
+            await fetchCercReport(d);
+            console.log(`[CERC Scraper] Auto-seeded local report for ${d}`);
+          } catch (e) {
+            console.warn(`[CERC Scraper] Auto-seed failed for ${d}:`, e.message);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[CERC Scraper] autoSeedLocalReports error:`, err.message);
+  }
 }
 
 export const cercScraper = {
@@ -509,4 +546,5 @@ export const cercScraper = {
   scanForNewReports,
   getCercFetchLog,
   getCercStatus,
+  autoSeedLocalReports,
 };
