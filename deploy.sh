@@ -50,7 +50,7 @@ grep -q '^PORT=' "$ENV_FILE"     || printf 'PORT=4000\n'            >> "$ENV_FIL
 
 # ── Install ──────────────────────────────────────────────────────────────
 say "Installing backend dependencies"
-( cd backend && ( npm ci --omit=dev 2>/dev/null || npm install --omit=dev 2>/dev/null || ( npm install --ignore-scripts && cd node_modules/better-sqlite3 && mkdir -p build/Release/.deps/Release/obj.target/sqlite3/gen/sqlite3/ build/Release/.deps/Release/obj.target/better_sqlite3/src/ && npx node-gyp rebuild ) ) )
+( cd backend && ( npm ci --omit=dev 2>/dev/null || npm install --omit=dev 2>/dev/null || ( npm install --ignore-scripts && cd node_modules/better-sqlite3 && mkdir -p build/Release/.deps/Release/obj.target/sqlite3/gen/sqlite3/ build/Release/.deps/Release/obj.target/better_sqlite3/src/ && npx -y node-gyp rebuild ) ) )
 
 say "Installing frontend dependencies"
 ( cd frontend && npm ci 2>/dev/null || npm install )
