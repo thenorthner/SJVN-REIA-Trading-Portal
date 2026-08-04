@@ -33,7 +33,6 @@ router.get('/summary', (req, res) => {
 router.get('/summary/:period', (req, res) => {
   const { period } = req.params;
   const row = db.prepare(`SELECT * FROM cerc_monthly_summary WHERE report_period = ?`).get(period);
-  if (!row) return res.status(404).json({ error: 'Not found' });
   res.json(formatSummary(row));
 });
 
