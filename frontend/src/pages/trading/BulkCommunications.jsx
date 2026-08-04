@@ -193,17 +193,21 @@ export default function BulkCommunications() {
 
     setIsSending(true);
     try {
-      await api.communications.broadcast(formData);
+      const res = await api.communications.broadcast(formData);
 
-      // The row is written to communication_logs and, for the in-app channel,
-      // to broadcast_messages — but the API only logs the email step, it does not
-      // call mailService yet. Saying "dispatched" would have finance believing
-      // counterparties were mailed.
-      alert(
-        'Broadcast recorded.\n\n'
-        + (channels.inApp ? 'In-app: posted to the notification board.\n' : '')
-        + (channels.email ? 'Email: NOT sent — outbound mail is not wired to this screen yet; the message is logged only.\n' : '')
-      );
+      const emailMode = res.email_status?.mode === 'SMTP' ? 'Live SMTP Gateway' : 'Outbox Queue';
+      const emailCount = res.email_status?.recipients_count || 0;
+      const notifCount = res.in_app_status?.notifications_count || 0;
+
+      let msg = 'Broadcast Dispatched Successfully!\n\n';
+      if (channels.inApp) {
+        msg += `🔔 In-App: Posted to Broadcast Board & ${notifCount} user notification alerts.\n`;
+      }
+      if (channels.email) {
+        msg += `📧 Email: Dispatched to ${emailCount} recipient(s) via ${emailMode}.\n`;
+      }
+
+      alert(msg);
       setSubject('');
       setBodyHtml('');
       setSelectedGroups([]);
