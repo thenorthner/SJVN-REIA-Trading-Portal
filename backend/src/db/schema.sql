@@ -1326,3 +1326,72 @@ CREATE TABLE IF NOT EXISTS lookup_master (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(category, code)
 );
+
+-- ---------------------------------------------------------------
+-- CERC Market Monitoring Committee (MMC) Reports
+-- ---------------------------------------------------------------
+
+-- Download and processing log for CERC MMC reports
+CREATE TABLE IF NOT EXISTS cerc_fetch_log (
+  id TEXT PRIMARY KEY,
+  report_period TEXT NOT NULL,
+  report_year INTEGER NOT NULL,
+  report_month INTEGER NOT NULL,
+  excel_url TEXT,
+  pdf_url TEXT,
+  local_excel_path TEXT,
+  local_pdf_path TEXT,
+  status TEXT NOT NULL DEFAULT 'PENDING'
+    CHECK (status IN ('PENDING','DOWNLOADED','PARSED','PROCESSED','FAILED')),
+  records_created INTEGER DEFAULT 0,
+  error_message TEXT,
+  document_id TEXT,
+  fetched_at TEXT,
+  processed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Parsed market data from CERC MMC Excel reports
+CREATE TABLE IF NOT EXISTS cerc_market_data (
+  id TEXT PRIMARY KEY,
+  report_period TEXT NOT NULL,
+  data_category TEXT NOT NULL
+    CHECK (data_category IN ('PRICE','VOLUME','DSM','REC')),
+  product TEXT NOT NULL,
+  exchange TEXT,
+  metric_name TEXT NOT NULL,
+  metric_value REAL,
+  metric_unit TEXT,
+  day_of_month INTEGER,
+  source_table TEXT,
+  fetch_log_id TEXT REFERENCES cerc_fetch_log(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_cerc_market_data_lookup
+  ON cerc_market_data(report_period, data_category, product, exchange);
+
+-- Monthly summary snapshot for dashboard KPIs
+CREATE TABLE IF NOT EXISTS cerc_monthly_summary (
+  id TEXT PRIMARY KEY,
+  report_period TEXT NOT NULL UNIQUE,
+  total_short_term_volume_mu REAL,
+  dam_iex_avg_price REAL,
+  dam_pxil_avg_price REAL,
+  dam_hpx_avg_price REAL,
+  gdam_iex_avg_price REAL,
+  rtm_iex_avg_price REAL,
+  dsm_avg_charge REAL,
+  dsm_min_charge REAL,
+  dsm_max_charge REAL,
+  rec_iex_volume INTEGER,
+  rec_iex_avg_price REAL,
+  rec_pxil_volume INTEGER,
+  rec_pxil_avg_price REAL,
+  rec_hpx_volume INTEGER,
+  rec_hpx_avg_price REAL,
+  bilateral_volume_mu REAL,
+  trading_margin_avg REAL,
+  fetch_log_id TEXT REFERENCES cerc_fetch_log(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

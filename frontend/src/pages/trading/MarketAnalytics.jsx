@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { SampleDataNotice, Card, PageHeader } from '../../components/ui';
 import ACPTrendWidget from '../../components/analytics/ACPTrendWidget.jsx';
+import CERCMarketIntelligence from './CERCMarketIntelligence.jsx';
 
 // Mock Data Generator for 96 blocks (15-min intervals)
 const generateMockData = () => {
@@ -51,6 +52,7 @@ export default function MarketAnalytics() {
     from: new Date().toISOString().split('T')[0], 
     to: new Date().toISOString().split('T')[0] 
   });
+  const [activeTab, setActiveTab] = useState('intraday');
   
   const data = useMemo(() => generateMockData(), [dateRange]);
 
@@ -67,14 +69,51 @@ export default function MarketAnalytics() {
 
   return (
     <div style={{ padding: 20 }}>
-      <SampleDataNotice detail="Every price and volume on this page is generated locally and changes on each reload. The live IEX market-price feed is not wired to this screen." />
-
       <PageHeader 
         title="Market Analytics Dashboard" 
         subtitle="GDAM, DAM & RTM Exchange Analytics (MCP & MCV)" 
       />
 
-      {/* Control Bar */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '2px solid #e2e8f0' }}>
+        <button
+          onClick={() => setActiveTab('intraday')}
+          style={{
+            padding: '10px 24px',
+            fontWeight: 600,
+            fontSize: 14,
+            border: 'none',
+            borderBottom: activeTab === 'intraday' ? '2px solid #3b82f6' : '2px solid transparent',
+            color: activeTab === 'intraday' ? '#3b82f6' : '#64748b',
+            background: 'transparent',
+            cursor: 'pointer',
+            marginBottom: -2,
+          }}
+        >
+          Intraday Analytics
+        </button>
+        <button
+          onClick={() => setActiveTab('cerc')}
+          style={{
+            padding: '10px 24px',
+            fontWeight: 600,
+            fontSize: 14,
+            border: 'none',
+            borderBottom: activeTab === 'cerc' ? '2px solid #3b82f6' : '2px solid transparent',
+            color: activeTab === 'cerc' ? '#3b82f6' : '#64748b',
+            background: 'transparent',
+            cursor: 'pointer',
+            marginBottom: -2,
+          }}
+        >
+          CERC Monthly Intelligence
+        </button>
+      </div>
+
+      {activeTab === 'intraday' && (
+        <>
+          <SampleDataNotice detail="Every price and volume on this page is generated locally and changes on each reload. The live IEX market-price feed is not wired to this screen." />
+
+          {/* Control Bar */}
       <Card>
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', marginBottom: 20 }}>
           <div style={{ flex: 1, maxWidth: 200 }}>
@@ -175,6 +214,10 @@ export default function MarketAnalytics() {
           </ResponsiveContainer>
         </div>
       </Card>
+      </>
+      )}
+      
+      {activeTab === 'cerc' && <CERCMarketIntelligence />}
 
     </div>
   );

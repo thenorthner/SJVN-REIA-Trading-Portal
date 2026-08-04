@@ -7,6 +7,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 import { reaScraper } from './services/reaScraper.js';
+import { cercScraper } from './services/cercScraper.js';
 
 import authRoutes from './routes/auth.js';
 import entitiesRoutes from './routes/entities.js';
@@ -24,6 +25,7 @@ import bilateralRoutes, { runNoarSlaAlerts, sendNoarWeeklyDigest } from './route
 import billingSettlementRoutes from './routes/billingSettlement.js';
 import generatorBillingRoutes from './routes/generatorBilling.js';
 import marketAnalyticsRoutes from './routes/marketAnalytics.js';
+import cercMarketDataRoutes from './routes/cercMarketData.js';
 import dashboardRoutes from './routes/dashboard.js';
 import sellerDashboardRoutes from './routes/sellerDashboard.js';
 import buyerDashboardRoutes from './routes/buyerDashboard.js';
@@ -123,6 +125,7 @@ app.use('/api/trading/bilateral', bilateralRoutes);
 app.use('/api/billing-settlement', billingSettlementRoutes);
 app.use('/api/generator-billing', generatorBillingRoutes);
 app.use('/api/market-analytics', marketAnalyticsRoutes);
+app.use('/api/cerc-market', requireAuth, cercMarketDataRoutes);
 app.use('/api/trading-notes', requireAuth, tradingNotesRoutes);
 app.use('/api/pre-trade', requireAuth, preTradeRoutes);
 app.use('/api/communications', requireAuth, communicationsRoutes);
@@ -285,4 +288,16 @@ app.listen(PORT, HOST, () => {
     }
   });
   console.log('[REA Scraper] Cron jobs registered (daily 1st-10th, every 3 days mid-month)');
+
+  // CERC Market Monitoring Report scan — 15th and 25th of each month at 07:00 AM IST (01:30 UTC)
+  cron.schedule('30 1 15,25 * *', async () => {
+    console.log('[CERC Scraper] Scheduled scan for new MMC reports');
+    try {
+      const result = await cercScraper.scanForNewReports();
+      if (result.fetched > 0) console.log(`[CERC Scraper] Fetched ${result.fetched} new report(s)`);
+    } catch (err) {
+      console.error('[CERC Scraper] Scheduled scan failed:', err.message);
+    }
+  });
+  console.log('[CERC Scraper] Cron job registered (15th & 25th of each month at 07:00 IST)');
 });

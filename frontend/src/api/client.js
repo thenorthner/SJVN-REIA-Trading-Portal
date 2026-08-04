@@ -637,6 +637,18 @@ export const api = {
     violationsSod: () => g('/audit-logs/violations/sod'),
     logExport: (body) => p('/audit-logs/log-export', body),
   },
+  cercMarket: {
+    getSummary: (period) => g(period ? `/cerc-market/summary/${period}` : '/cerc-market/summary'),
+    getPrices: (params) => g('/cerc-market/prices', { params }),
+    getVolumes: (params) => g('/cerc-market/volumes', { params }),
+    getDailyTrend: (params) => g('/cerc-market/daily-trend', { params }),
+    getDsm: (params) => g('/cerc-market/dsm', { params }),
+    getRec: (params) => g('/cerc-market/rec', { params }),
+    getPeriods: () => g('/cerc-market/periods'),
+    getFetchLog: () => g('/cerc-market/fetch-log'),
+    triggerFetch: (period) => p('/cerc-market/trigger', { period }),
+    triggerScan: () => p('/cerc-market/scan'),
+  },
 };
 
 export default api;
