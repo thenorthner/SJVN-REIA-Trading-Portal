@@ -81,6 +81,25 @@ function findSheet(workbook, patterns) {
   return null;
 }
 
+// CERC renumbers its tables every year (the DSM day-wise table is Table-29 in
+// 2024-03, Table-33 in 2024-08, Table-42 in 2026-02), but the table TITLE in
+// the first cell stays constant. Matching by title avoids parsing the wrong
+// table — the earlier number-based matcher silently read REC/region tables as
+// DSM and seeded garbage rates for pre-2025 reports.
+function findSheetByTitle(workbook, titleRegex) {
+  for (const name of workbook.SheetNames || []) {
+    const sheet = workbook.Sheets[name];
+    if (!sheet) continue;
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    // The title lives in the first cell of the first non-empty row.
+    for (const r of rows.slice(0, 3)) {
+      const cell = String((r && r[0]) || '');
+      if (cell && titleRegex.test(cell)) return sheet;
+    }
+  }
+  return null;
+}
+
 function parseAndSaveExcel(excelPath, period, logId) {
   const workbook = XLSX.readFile(excelPath);
   let records = 0;
@@ -257,8 +276,8 @@ function parseAndSaveExcel(excelPath, period, logId) {
     }
   }
 
-  // 6. DSM Day-wise
-  const t42 = findSheet(workbook, ['Table 42', 'Table-42', 'Table 41', 'Table-41', 'Table 32', 'Table-32', 'Table 33', 'Table-33', 'Table 30', 'Table-30', 'Table 28', 'Table-28', /.*(?:42|41|33|32|30|28).*/i]);
+  // 6. DSM Day-wise (title is constant across years; table number is not)
+  const t42 = findSheetByTitle(workbook, /VOLUME AND CHARGES UNDER DSM/i);
   if (t42) {
     const rows = XLSX.utils.sheet_to_json(t42, { header: 1 });
     let dsmAvgSum = 0, dsmCount = 0, minDsm = Infinity, maxDsm = -Infinity;
@@ -289,8 +308,8 @@ function parseAndSaveExcel(excelPath, period, logId) {
     }
   }
 
-  // 7. REC
-  const t45 = findSheet(workbook, ['Table 45', 'Table-45', 'Table 36', 'Table-36', 'Table 34', 'Table-34', 'Table 32', 'Table-32', /.*(?:45|36|34|32).*/i]);
+  // 7. REC (title is constant across years; table number is not)
+  const t45 = findSheetByTitle(workbook, /RENEWABLE ENERGY CERTIFICATES/i);
   if (t45) {
     const rows = XLSX.utils.sheet_to_json(t45, { header: 1 });
     for (const r of rows) {
@@ -576,6 +595,7 @@ async function autoSeedLocalReports() {
 export const cercScraper = {
   buildCercUrls,
   fetchCercReport,
+  parseAndSaveExcel,
   scanForNewReports,
   getCercFetchLog,
   getCercStatus,

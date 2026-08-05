@@ -1,46 +1,46 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { api } from '../api/client.js';
+import { useAuth } from './AuthContext.jsx';
 
 /**
  * The trading portfolios (clients/assets) the desk works across, and which one
  * is currently in context.
- *
- * Screens used to hard-code the portfolio list — 'N1HP0PTC0850', 'SJVN_SOLAR_001'
- * and friends were literal <option> tags in a dozen files, so adding a plant
- * meant editing every one of them, and the two spellings of the Naitwar Mori id
- * had already drifted apart between screens. The list comes from
- * trading_clients now, and the selection survives navigation the way the PTC
- * portal's own client selector does.
- *
- * The active portfolio is remembered per browser so a trader returning to the
- * desk lands on the asset they were working, not on whichever happens to sort
- * first.
  */
 const PortfolioContext = createContext(null);
 
 const STORAGE_KEY = 'sjvn_active_portfolio';
 
 export function PortfolioProvider({ children }) {
+  const { user } = useAuth();
   const [portfolios, setPortfolios] = useState([]);
   const [activeId, setActiveIdState] = useState(() => localStorage.getItem(STORAGE_KEY) || '');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    let cancelled = false;
-    api.tradingClients.list({ status: 'ACTIVE' })
-      .then((rows) => {
-        if (cancelled) return;
-        const list = Array.isArray(rows) ? rows : [];
-        setPortfolios(list);
-        // Drop a remembered id that no longer exists rather than leaving every
-        // screen filtering on a portfolio the desk can't see.
-        setActiveIdState((current) => (list.some((c) => c.id === current) ? current : ''));
-      })
-      .catch(() => { if (!cancelled) setError('Could not load the portfolio list.'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+  const fetchPortfolios = useCallback(async () => {
+    if (!localStorage.getItem('sjvn_token')) {
+      setPortfolios([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const rows = await api.tradingClients.list({ status: 'ACTIVE' });
+      const list = Array.isArray(rows) ? rows : [];
+      setPortfolios(list);
+      setActiveIdState((current) => (list.some((c) => c.id === current) ? current : ''));
+      setError('');
+    } catch (err) {
+      console.error('[PortfolioContext] Failed to load trading clients:', err);
+      setError('Could not load the portfolio list.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchPortfolios();
+  }, [user, fetchPortfolios]);
 
   function setActiveId(id) {
     setActiveIdState(id || '');
@@ -54,8 +54,9 @@ export function PortfolioProvider({ children }) {
     error,
     activeId,
     setActiveId,
+    refreshPortfolios: fetchPortfolios,
     active: portfolios.find((c) => c.id === activeId) || null,
-  }), [portfolios, loading, error, activeId]);
+  }), [portfolios, loading, error, activeId, fetchPortfolios]);
 
   return <PortfolioContext.Provider value={value}>{children}</PortfolioContext.Provider>;
 }
@@ -76,7 +77,7 @@ export function PortfolioSelect({
   value, onChange, scope, includeAll = false, allLabel = '-- All Portfolios --',
   className = 'input', id, ...rest
 }) {
-  const { portfolios, activeId, setActiveId, loading } = usePortfolios();
+  const { portfolios, activeId, setActiveId, refreshPortfolios, loading } = usePortfolios();
   const isGlobal = scope === 'global';
   const selected = isGlobal ? activeId : (value ?? '');
 
@@ -86,8 +87,22 @@ export function PortfolioSelect({
     onChange?.(next);
   };
 
+  const handleFocus = () => {
+    if (portfolios.length === 0 && !loading) {
+      refreshPortfolios();
+    }
+  };
+
   return (
-    <select id={id} className={className} value={selected} onChange={handle} disabled={loading} {...rest}>
+    <select 
+      id={id} 
+      className={className} 
+      value={selected} 
+      onChange={handle} 
+      onFocus={handleFocus}
+      disabled={loading} 
+      {...rest}
+    >
       {(includeAll || !selected) && <option value="">{loading ? 'Loading portfolios…' : allLabel}</option>}
       {portfolios.map((c) => (
         <option key={c.id} value={c.id}>{c.name}</option>
