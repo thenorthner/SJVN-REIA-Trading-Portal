@@ -1305,6 +1305,38 @@ try {
 }
 
 /**
+ * Make trading_invoices a union of the two invoice shapes it actually stores:
+ * the bilateral energy bill and the trading-desk settlement bill (EXCHANGE /
+ * BILATERAL, with fee legs). The settlement endpoint inserted trade_date,
+ * exchange_fee, etc. and an 'EXCHANGE' kind that the original CHECK and column
+ * set rejected, so it failed on every call. SQLite can't ALTER a CHECK, so the
+ * table is rebuilt from schema.sql (which now carries the wider CHECK, the fee
+ * columns, and a nullable rate_per_unit).
+ */
+function migrateTradingInvoiceSettlementModel() {
+  const ti = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='trading_invoices'").get();
+  const needsWiden = ti && !ti.sql.includes("'EXCHANGE'");
+  const broken = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND sql LIKE '%trading_invoices_old%'").all();
+  if (!needsWiden && broken.length === 0) return; // already migrated / fresh DB
+
+  db.exec('PRAGMA foreign_keys=OFF');
+  db.exec('PRAGMA legacy_alter_table=ON'); // keep RENAME from rewriting other tables' FKs (e.g. trading_payments)
+  try {
+    if (needsWiden) rebuildTableFromSchema('trading_invoices');
+    for (const t of broken) rebuildTableFromSchema(t.name); // repair any FK left pointing at _old
+  } finally {
+    db.exec('PRAGMA legacy_alter_table=OFF');
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
+try {
+  migrateTradingInvoiceSettlementModel();
+} catch (e) {
+  console.error('Trading invoice settlement-model migration failed:', e.message);
+}
+
+/**
  * SLDC Standing Clearance (Open Access NOC) parameters, per trading client.
  *
  * These drive the bid compliance checks for clauses 21-24 and 26 of the HP SLDC

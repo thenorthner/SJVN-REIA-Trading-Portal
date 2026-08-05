@@ -1050,11 +1050,26 @@ CREATE TABLE IF NOT EXISTS trading_invoices (
   id TEXT PRIMARY KEY,
   invoice_no TEXT UNIQUE NOT NULL,
   client_id TEXT NOT NULL REFERENCES trading_clients(id),
-  invoice_kind TEXT NOT NULL CHECK (invoice_kind IN ('TRADING_MARGIN_ONLY','POWER_SUPPLY_ONLY','COMBINED')),
+  -- Two invoice shapes share this table: the bilateral energy bill
+  -- (rate_per_unit / trading_margin) and the trading-desk settlement bill
+  -- (EXCHANGE / BILATERAL, with exchange/clearing/transmission fee legs below).
+  invoice_kind TEXT NOT NULL CHECK (invoice_kind IN ('TRADING_MARGIN_ONLY','POWER_SUPPLY_ONLY','COMBINED','EXCHANGE','BILATERAL')),
   billing_period TEXT NOT NULL,
   quantum_mwh REAL NOT NULL,
-  rate_per_unit REAL NOT NULL,
+  -- Nullable: a fee-based settlement invoice has no single per-unit rate.
+  rate_per_unit REAL,
   trading_margin REAL NOT NULL DEFAULT 0,
+  -- Settlement-invoice legs (billing settlement / trading desk). Null/zero for a
+  -- plain bilateral energy bill.
+  trade_date TEXT,
+  settlement_date TEXT,
+  trade_type TEXT,
+  exchange_fee REAL NOT NULL DEFAULT 0,
+  clearing_charges REAL NOT NULL DEFAULT 0,
+  regulatory_levy REAL NOT NULL DEFAULT 0,
+  sjvn_margin REAL NOT NULL DEFAULT 0,
+  transmission_charges REAL NOT NULL DEFAULT 0,
+  dsm_charges REAL NOT NULL DEFAULT 0,
   gst_applicable INTEGER NOT NULL DEFAULT 1,
   gst_amount REAL NOT NULL DEFAULT 0,
   total_amount REAL NOT NULL,
@@ -1462,3 +1477,33 @@ CREATE TABLE IF NOT EXISTS invoice_counters (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_counters_series ON invoice_counters(series_type, client_code);
+
+-- Running client account ledger for the trading desk: every invoice, payment and
+-- netting set-off posts a credit/debit line here with the carried balance. Backs
+-- the billing-settlement ledger and netting views.
+CREATE TABLE IF NOT EXISTS client_ledgers (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL REFERENCES trading_clients(id),
+  transaction_type TEXT NOT NULL,       -- INVOICE / PAYMENT / SET_OFF
+  reference_id TEXT,                     -- invoice id, netting ref, etc.
+  credit REAL NOT NULL DEFAULT 0,
+  debit REAL NOT NULL DEFAULT 0,
+  running_balance REAL NOT NULL DEFAULT 0,
+  description TEXT,
+  timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_client_ledgers_client ON client_ledgers(client_id, timestamp);
+
+-- Period Statement of Account per trading client (opening/closing balance,
+-- invoiced vs paid). Backs the billing-settlement SOA view.
+CREATE TABLE IF NOT EXISTS settlement_statements (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL REFERENCES trading_clients(id),
+  period TEXT NOT NULL,
+  opening_balance REAL NOT NULL DEFAULT 0,
+  total_invoiced REAL NOT NULL DEFAULT 0,
+  total_paid REAL NOT NULL DEFAULT 0,
+  closing_balance REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'DRAFT',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

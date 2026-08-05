@@ -74,22 +74,26 @@ router.post('/invoices/generate', (req, res) => {
     const clientName = db.prepare('SELECT name FROM trading_clients WHERE id = ?').get(client_id)?.name;
     const invoiceNo = genSjvnInvoiceNo('ENERGY', clientName, billing_period);
 
-    const stmt = db.prepare(`
+    const insertInvoice = db.prepare(`
       INSERT INTO trading_invoices (id, invoice_no, client_id, trade_date, settlement_date, invoice_kind, trade_type, billing_period, quantum_mwh,
-        exchange_fee, clearing_charges, regulatory_levy, sjvn_margin, transmission_charges, dsm_charges, tds_amount, gst_applicable, gst_amount, total_amount, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT')
+        exchange_fee, clearing_charges, regulatory_levy, sjvn_margin, transmission_charges, dsm_charges, tds_amount, net_payable, gst_applicable, gst_amount, total_amount, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT')
     `);
-
-    stmt.run(tinId, invoiceNo, client_id, trade_date, settlement_date, invoice_kind, trade_type, billing_period, quantum_mwh,
-      exchange_fee || 0, clearing_charges || 0, regulatory_levy || 0, margin, transmission_charges || 0, dsm_charges || 0, tds, gst_applicable ? 1 : 0, gst, finalTotal);
-
-    // Add Ledger Entry for DRAFT -> It's just provisional, maybe wait till 'SENT'? For demo, add immediately.
-    db.prepare(`
+    // COALESCE wraps the whole subquery: with no prior ledger row it returns no
+    // rows (not a NULL row), so the balance must default to 0 for the first entry.
+    const insertLedger = db.prepare(`
       INSERT INTO client_ledgers (id, client_id, transaction_type, reference_id, credit, debit, running_balance, description, timestamp)
-      VALUES (?, ?, 'INVOICE', ?, 0, ?, (SELECT COALESCE(running_balance,0) FROM client_ledgers WHERE client_id = ? ORDER BY timestamp DESC LIMIT 1) + ?, ?, ?)
-    `).run(newId('CLG'), client_id, tinId, finalTotal, client_id, finalTotal, `Invoice Generated: ${invoiceNo}`, `${trade_date} 10:00:00`);
+      VALUES (?, ?, 'INVOICE', ?, 0, ?, COALESCE((SELECT running_balance FROM client_ledgers WHERE client_id = ? ORDER BY timestamp DESC LIMIT 1), 0) + ?, ?, ?)
+    `);
+    // The invoice and its ledger posting are one unit: without a transaction a
+    // failure on the second insert would leave an invoice with no ledger entry.
+    db.transaction(() => {
+      insertInvoice.run(tinId, invoiceNo, client_id, trade_date, settlement_date, invoice_kind, trade_type, billing_period, quantum_mwh,
+        exchange_fee || 0, clearing_charges || 0, regulatory_levy || 0, margin, transmission_charges || 0, dsm_charges || 0, tds, finalTotal, gst_applicable ? 1 : 0, gst, finalTotal);
+      insertLedger.run(newId('CLG'), client_id, tinId, finalTotal, client_id, finalTotal, `Invoice Generated: ${invoiceNo}`, `${trade_date} 10:00:00`);
+    })();
 
-    secureLogAudit(req, 'INVOICE_GENERATED', 'trading_invoices', tinId, { total_amount: finalTotal, invoice_kind });
+    secureLogAudit(req, { action: 'INVOICE_GENERATED', module: 'TRADING', entityType: 'trading_invoices', entityId: tinId, details: { total_amount: finalTotal, invoice_kind } });
 
     res.json({ id: tinId, invoice_no: invoiceNo });
   } catch (err) {
@@ -129,8 +133,8 @@ router.post('/netting', (req, res) => {
 
   db.prepare(`
     INSERT INTO client_ledgers (id, client_id, transaction_type, reference_id, credit, debit, running_balance, description, timestamp)
-    VALUES (?, ?, 'SET_OFF', ?, ?, ?, 
-      (SELECT COALESCE(running_balance,0) FROM client_ledgers WHERE client_id = ? ORDER BY timestamp DESC LIMIT 1) + ?, 
+    VALUES (?, ?, 'SET_OFF', ?, ?, ?,
+      COALESCE((SELECT running_balance FROM client_ledgers WHERE client_id = ? ORDER BY timestamp DESC LIMIT 1), 0) + ?,
       ?, datetime('now'))
   `).run(
     newId('CLG'), client_id, `NET-${period}`, 
@@ -141,7 +145,7 @@ router.post('/netting', (req, res) => {
     `Netting for ${period}`
   );
 
-  secureLogAudit(req, 'NETTING_APPLIED', 'client_ledgers', client_id, { netAmount, type });
+  secureLogAudit(req, { action: 'NETTING_APPLIED', module: 'TRADING', entityType: 'client_ledgers', entityId: client_id, details: { netAmount, type } });
   res.json({ success: true, netAmount, type });
 });
 
