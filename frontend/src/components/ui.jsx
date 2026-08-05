@@ -139,16 +139,24 @@ let modalSeq = 0;
 export function Modal({ open, onClose, title, children, width = 560 }) {
   const titleId = React.useMemo(() => `modal-title-${++modalSeq}`, []);
   const panelRef = React.useRef(null);
+  const wasOpenRef = React.useRef(false);
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
 
-  // Escape closes, and focus moves into the dialog when it opens — otherwise a
-  // keyboard user stays parked behind it on the page they just left.
+  // Focus modal only once when opening; Escape key listener with stable onClose ref
   React.useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
+    if (!open) {
+      wasOpenRef.current = false;
+      return undefined;
+    }
+    if (!wasOpenRef.current) {
+      wasOpenRef.current = true;
+      panelRef.current?.focus();
+    }
+    const onKey = (e) => { if (e.key === 'Escape') onCloseRef.current?.(); };
     document.addEventListener('keydown', onKey);
-    panelRef.current?.focus();
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return (
@@ -165,7 +173,9 @@ export function Modal({ open, onClose, title, children, width = 560 }) {
       >
         <div className="modal-header">
           <h3 id={titleId}>{title}</h3>
-          <button className="icon-btn" onClick={onClose} aria-label="Close dialog"></button>
+          <button className="icon-btn" onClick={onClose} aria-label="Close dialog">
+            <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1, fontWeight: 'bold' }}>✕</span>
+          </button>
         </div>
         <div className="modal-body">{children}</div>
       </div>

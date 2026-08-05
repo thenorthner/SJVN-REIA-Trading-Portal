@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Badge, Modal, Field } from './ui.jsx';
@@ -24,14 +25,6 @@ function extOf(name = '') {
 
 /**
  * Detect the REAL file type by reading its magic bytes (file signature).
- *
- * Neither the filename nor the stored mime_type can be trusted: a file can be
- * saved as "invoice.pdf" while actually containing a PNG, and legacy uploads
- * have wrong/missing mime types in the DB. The bytes never lie, so we sniff
- * them first and only fall back to the filename/header if the signature is
- * unrecognised.
- *
- * Returns 'application/pdf', an 'image/*' type, or null when inconclusive.
  */
 async function sniffType(blob) {
   try {
@@ -43,7 +36,6 @@ async function sniffType(blob) {
     if (startsWith(0xff, 0xd8, 0xff)) return 'image/jpeg';
     if (startsWith(0x47, 0x49, 0x46, 0x38)) return 'image/gif';                 // GIF8
     if (startsWith(0x42, 0x4d)) return 'image/bmp';                             // BM
-    // RIFF....WEBP
     if (startsWith(0x52, 0x49, 0x46, 0x46) && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) {
       return 'image/webp';
     }
@@ -53,11 +45,19 @@ async function sniffType(blob) {
   }
 }
 
-// Decide how to preview a file: 'image', 'pdf', or 'other' (no inline
-// preview possible — offer a download instead).
-function kindOfType(type = '') {
-  if (type === 'application/pdf') return 'pdf';
-  if (/^image\//.test(type)) return 'image';
+// Decide how to preview a file: 'image', 'pdf', 'excel', or 'other'
+function kindOfType(type = '', fileName = '') {
+  const ext = extOf(fileName);
+  if (type === 'application/pdf' || ext === 'pdf') return 'pdf';
+  if (/^image\//.test(type) || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(ext)) return 'image';
+  if (
+    ['xlsx', 'xls', 'csv'].includes(ext) ||
+    type.includes('spreadsheet') ||
+    type.includes('excel') ||
+    type.includes('csv')
+  ) {
+    return 'excel';
+  }
   return 'other';
 }
 
@@ -76,35 +76,298 @@ async function parseErrorBlob(err, fallback) {
   return message;
 }
 
+function ExcelViewer({ blob, fileName }) {
+  const [sheets, setSheets] = useState([]);
+  const [activeSheet, setActiveSheet] = useState('');
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [parseError, setParseError] = useState(null);
+  const [search, setSearch] = useState('');
+  const [displayLimit, setDisplayLimit] = useState(250);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setParseError(null);
+
+    (async () => {
+      try {
+        const buffer = await blob.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array', cellDates: true, dense: false });
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error('Workbook contains no sheets.');
+        }
+        if (!cancelled) {
+          setSheets(workbook.SheetNames);
+          const initialSheet = workbook.SheetNames[0];
+          setActiveSheet(initialSheet);
+          const ws = workbook.Sheets[initialSheet];
+          const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+          setData(rawRows);
+          setLoading(false);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setParseError(e.message || 'Failed to read spreadsheet data');
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [blob]);
+
+  function handleSheetChange(sheetName) {
+    setActiveSheet(sheetName);
+    setSearch('');
+    setDisplayLimit(250);
+    try {
+      blob.arrayBuffer().then((buf) => {
+        const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
+        const ws = workbook.Sheets[sheetName];
+        const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+        setData(rawRows);
+      });
+    } catch (_) {}
+  }
+
+  // Filter rows by search term
+  const filteredData = useMemo(() => {
+    if (!search.trim()) return data;
+    const term = search.toLowerCase();
+    return data.filter((row, idx) => {
+      if (idx === 0) return true; // keep header row
+      return row.some((cell) => String(cell ?? '').toLowerCase().includes(term));
+    });
+  }, [data, search]);
+
+  if (loading) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center', color: 'var(--slate-500)' }}>
+        <div style={{ fontSize: 18, marginBottom: 8 }}>📊 Loading spreadsheet...</div>
+        <div style={{ fontSize: 12 }}>Parsing workbook sheets and formulas</div>
+      </div>
+    );
+  }
+
+  if (parseError) {
+    return (
+      <div style={{ padding: 24, color: 'var(--red-deep)', background: 'var(--red-bg, #fef2f2)', borderRadius: 8 }}>
+        <strong>Spreadsheet Preview Error:</strong> {parseError}
+      </div>
+    );
+  }
+
+  if (data.length === 0) {
+    return (
+      <div style={{ padding: 30, textAlign: 'center', color: 'var(--slate-500)' }}>
+        This sheet appears to be empty.
+      </div>
+    );
+  }
+
+  // Find max columns across all rows to format table columns properly
+  const maxCols = Math.max(...data.map(r => r.length), 0);
+  const rowsToShow = filteredData.slice(0, displayLimit);
+  const hasMore = filteredData.length > displayLimit;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
+      {/* Sheets switcher & Search toolbar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, background: 'var(--bg, #f8fafc)', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border, #e2e8f0)' }}>
+        {/* Sheet Tabs */}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-light, #64748b)', marginRight: 4 }}>
+            Sheets ({sheets.length}):
+          </span>
+          {sheets.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => handleSheetChange(s)}
+              style={{
+                padding: '4px 10px',
+                fontSize: 12,
+                fontWeight: 600,
+                borderRadius: 6,
+                border: activeSheet === s ? '1px solid var(--primary, #0284c7)' : '1px solid var(--border, #cbd5e1)',
+                background: activeSheet === s ? 'var(--primary, #0284c7)' : 'var(--surface, #ffffff)',
+                color: activeSheet === s ? '#ffffff' : 'var(--text, #1e293b)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              📄 {s}
+            </button>
+          ))}
+        </div>
+
+        {/* Quick Search inside sheet */}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            type="text"
+            placeholder="Search within sheet..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              padding: '5px 10px',
+              fontSize: 12,
+              borderRadius: 6,
+              border: '1px solid var(--border, #cbd5e1)',
+              background: 'var(--surface, #ffffff)',
+              color: 'var(--text, #1e293b)',
+              width: 190
+            }}
+          />
+          <span style={{ fontSize: 11, color: 'var(--text-light, #64748b)', whiteSpace: 'nowrap' }}>
+            {filteredData.length} rows • {maxCols} cols
+          </span>
+        </div>
+      </div>
+
+      {/* Spreadsheet Grid Table */}
+      <div style={{
+        maxHeight: '62vh',
+        overflow: 'auto',
+        border: '1px solid var(--border, #cbd5e1)',
+        borderRadius: 8,
+        background: 'var(--surface, #ffffff)',
+        boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.04)'
+      }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'inherit' }}>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg, #f1f5f9)' }}>
+            <tr>
+              <th style={{
+                width: 44,
+                padding: '6px 8px',
+                borderRight: '1px solid var(--border, #cbd5e1)',
+                borderBottom: '2px solid var(--border, #cbd5e1)',
+                background: 'var(--bg, #e2e8f0)',
+                color: 'var(--text-light, #64748b)',
+                fontSize: 11,
+                textAlign: 'center',
+                fontWeight: 700,
+                position: 'sticky',
+                left: 0,
+                zIndex: 11
+              }}>
+                #
+              </th>
+              {Array.from({ length: maxCols }).map((_, colIdx) => (
+                <th key={colIdx} style={{
+                  padding: '7px 12px',
+                  borderRight: '1px solid var(--border, #e2e8f0)',
+                  borderBottom: '2px solid var(--border, #cbd5e1)',
+                  background: 'var(--bg, #f1f5f9)',
+                  color: 'var(--text, #1e293b)',
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  textAlign: 'left',
+                  whiteSpace: 'nowrap'
+                }}>
+                  {data[0]?.[colIdx] !== undefined && data[0]?.[colIdx] !== '' 
+                    ? String(data[0][colIdx]) 
+                    : String.fromCharCode(65 + (colIdx % 26))}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rowsToShow.map((row, rowIdx) => {
+              // Skip repeating the header if row 0 was already displayed as the header
+              if (rowIdx === 0 && data.length > 1) return null;
+              return (
+                <tr
+                  key={rowIdx}
+                  style={{
+                    background: rowIdx % 2 === 0 ? 'var(--surface, #ffffff)' : 'var(--bg-subtle, #f8fafc)',
+                    transition: 'background 0.1s'
+                  }}
+                >
+                  <td style={{
+                    padding: '5px 8px',
+                    borderRight: '1px solid var(--border, #cbd5e1)',
+                    borderBottom: '1px solid var(--border, #e2e8f0)',
+                    background: 'var(--bg, #f1f5f9)',
+                    color: 'var(--text-light, #64748b)',
+                    fontSize: 11,
+                    textAlign: 'center',
+                    fontWeight: 600,
+                    position: 'sticky',
+                    left: 0,
+                    zIndex: 5
+                  }}>
+                    {rowIdx + 1}
+                  </td>
+                  {Array.from({ length: maxCols }).map((_, colIdx) => {
+                    const cellVal = row[colIdx];
+                    const isNum = typeof cellVal === 'number' || (!isNaN(cellVal) && cellVal !== '' && cellVal !== null && typeof cellVal === 'string' && !isNaN(Number(cellVal.replace(/[,₹$%]/g, ''))));
+                    return (
+                      <td
+                        key={colIdx}
+                        style={{
+                          padding: '6px 12px',
+                          borderRight: '1px solid var(--border, #e2e8f0)',
+                          borderBottom: '1px solid var(--border, #e2e8f0)',
+                          color: 'var(--text, #1e293b)',
+                          textAlign: isNum ? 'right' : 'left',
+                          whiteSpace: 'nowrap',
+                          fontVariantNumeric: isNum ? 'tabular-nums' : 'normal'
+                        }}
+                      >
+                        {cellVal !== undefined && cellVal !== null ? String(cellVal) : ''}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {hasMore && (
+        <div style={{ textAlign: 'center', padding: '6px 0' }}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => setDisplayLimit((prev) => prev + 250)}
+          >
+            Load more rows (Showing {rowsToShow.length} of {filteredData.length})
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PreviewModal({ open, versionId, fileName, onClose }) {
-  const [state, setState] = useState({ loading: true, error: null, url: null, kind: 'other', name: fileName });
+  const [state, setState] = useState({ loading: true, error: null, url: null, blob: null, kind: 'other', name: fileName });
 
   useEffect(() => {
     if (!open || !versionId) return;
     let objectUrl = null;
     let cancelled = false;
-    setState({ loading: true, error: null, url: null, kind: 'other', name: fileName });
+    setState({ loading: true, error: null, url: null, blob: null, kind: 'other', name: fileName });
 
     (async () => {
       try {
         const { blob, fileName: downloadedName, contentType } = await api.documents.download(versionId);
         const name = downloadedName || fileName;
 
-        // Actual bytes win over the filename and the server header, which are
-        // both frequently wrong (e.g. a PNG saved as "test-inv.pdf").
+        // Actual bytes win over the filename and the server header
         const sniffed = await sniffType(blob);
         const resolvedType = sniffed || EXT_MIME[extOf(name)] || contentType || blob.type || '';
-        const kind = kindOfType(resolvedType);
+        const kind = kindOfType(resolvedType, name);
 
-        // Re-type the blob to match what we're actually rendering, so the
-        // browser doesn't try to open an image in its PDF viewer.
+        // Re-type the blob to match what we're actually rendering
         const typed = blob.type === resolvedType ? blob : new Blob([blob], { type: resolvedType });
         const url = URL.createObjectURL(typed);
         objectUrl = url;
-        if (!cancelled) setState({ loading: false, error: null, url, kind, name });
+        if (!cancelled) setState({ loading: false, error: null, url, blob, kind, name });
       } catch (err) {
         const message = await parseErrorBlob(err, 'Failed to load document');
-        if (!cancelled) setState({ loading: false, error: message, url: null, kind: 'other', name: fileName });
+        if (!cancelled) setState({ loading: false, error: message, url: null, blob: null, kind: 'other', name: fileName });
       }
     })();
 
@@ -126,10 +389,14 @@ export function PreviewModal({ open, versionId, fileName, onClose }) {
 
   if (!open) return null;
 
+  const modalWidth = state.kind === 'excel' ? 1150 : state.kind === 'other' ? 480 : 920;
+
   return (
-    <Modal open={open} onClose={onClose} title={state.name || 'Document Preview'} width={state.kind === 'other' ? 480 : 880}>
+    <Modal open={open} onClose={onClose} title={state.name ? `Preview — ${state.name}` : 'Document Preview'} width={modalWidth}>
       {state.loading && (
-        <div style={{ padding: 40, textAlign: 'center', color: 'var(--slate-500)' }}>Loading preview...</div>
+        <div style={{ padding: 40, textAlign: 'center', color: 'var(--slate-500)' }}>
+          <div style={{ fontSize: 16, marginBottom: 8 }}>Loading preview...</div>
+        </div>
       )}
       {!state.loading && state.error && (
         <div style={{ padding: 20, color: 'var(--red-deep)' }}>{state.error}</div>
@@ -148,17 +415,42 @@ export function PreviewModal({ open, versionId, fileName, onClose }) {
           style={{ width: '100%', height: '70vh', border: '1px solid var(--slate-200)', borderRadius: 6 }}
         />
       )}
+      {!state.loading && !state.error && state.kind === 'excel' && state.blob && (
+        <ExcelViewer blob={state.blob} fileName={state.name} />
+      )}
       {!state.loading && !state.error && state.kind === 'other' && (
-        <div style={{ padding: 20, textAlign: 'center', color: 'var(--slate-500)' }}>
-          Preview isn't available for this file type. Use the button below to download it instead.
+        <div style={{ padding: 24, textAlign: 'center', color: 'var(--slate-500)' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>📁</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>
+            Preview isn't available for this file type
+          </div>
+          <div style={{ fontSize: 13 }}>
+            Use the button below to download and view the file locally.
+          </div>
         </div>
       )}
       {!state.loading && (
-        <div className="form-actions" style={{ marginTop: 16 }}>
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Close</button>
-          {state.url && (
-            <button type="button" className="btn btn-primary" onClick={handleDownload}>Download</button>
-          )}
+        <div className="form-actions" style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            {state.name && (
+              <span style={{ fontSize: 12, color: 'var(--text-light, #64748b)' }}>
+                {state.name}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Close</button>
+            {state.url && (
+              <button type="button" className="btn btn-primary" onClick={handleDownload} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>Download</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
     </Modal>
@@ -228,14 +520,19 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
                   <td>v{doc.version_number}</td>
                   <td>{fmtDate(doc.created_at)}</td>
                   <td>
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <button
                         type="button"
-                        className="btn btn-ghost btn-sm"
+                        className="btn btn-secondary btn-sm"
                         title="View document"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px' }}
                         onClick={() => setPreviewDoc({ versionId: doc.latest_version_id, fileName: doc.file_name })}
                       >
-                        
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        <span>View</span>
                       </button>
                       {isAdmin && doc.category === 'VERIFY' && doc.verification_status === 'PENDING' && (
                         <button className="btn btn-secondary btn-sm" onClick={() => setReviewOpen(doc)}>
