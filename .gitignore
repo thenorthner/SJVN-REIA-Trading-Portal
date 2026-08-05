@@ -27,6 +27,12 @@ backend/rea_downloads/
 backend/temp/
 backend/test*.pdf
 
+# CERC market-monitoring cache. The .xlsx files ARE tracked (small, ~3MB total)
+# so autoSeedLocalReports can seed the market-intelligence dashboard offline on a
+# fresh deploy. The .pdf copies (~14MB) are download-only reference — nothing
+# parses or serves them — so they are ignored to keep the repo lean.
+backend/cerc_downloads/**/*.pdf
+
 # Local reference/data files dropped into the project root
 /*.pdf
 /*.PDF

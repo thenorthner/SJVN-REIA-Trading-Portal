@@ -1049,6 +1049,16 @@ CREATE TABLE IF NOT EXISTS trading_invoices (
   gst_applicable INTEGER NOT NULL DEFAULT 1,
   gst_amount REAL NOT NULL DEFAULT 0,
   total_amount REAL NOT NULL,
+  -- TDS withheld on the buyer's payment. Energy sales attract Section 194Q at
+  -- 0.1% of the gross (taxable) value; open-access / transmission charges attract
+  -- 194C at 10%. NONE when no withholding applies (e.g. pure trading margin).
+  -- tds_rate is stored as a fraction (0.001 = 0.1%, 0.10 = 10%), tds_amount is the
+  -- rupee value withheld, and net_payable = total_amount - tds_amount is what the
+  -- buyer actually remits. Matches the ISET ledger's "Invoice after TDS Deduction".
+  tds_section TEXT NOT NULL DEFAULT 'NONE' CHECK (tds_section IN ('194Q','194C','NONE')),
+  tds_rate REAL NOT NULL DEFAULT 0,
+  tds_amount REAL NOT NULL DEFAULT 0,
+  net_payable REAL,
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','SENT','PARTIALLY_PAID','PAID','OVERDUE')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
