@@ -54,6 +54,74 @@ export function genInvoiceNo(prefix = 'INV') {
   return `${prefix}/${year}/${rand}`;
 }
 
+// Short uppercase code for a client, used inside the SJVN invoice number. Takes
+// the first meaningful word so "Kreate Energy India Pvt Ltd" -> "KREATE" and
+// "ABC Trading Client" -> "ABC". Legal-form words are skipped.
+export function deriveClientCode(clientName) {
+  const SKIP = new Set(['MS', 'THE']);
+  const words = String(clientName || 'CLIENT')
+    .replace(/^\s*m\/s\.?\s*/i, ' ')          // drop a leading "M/s" honorific first
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]+/g, ' ')
+    // Keep only real words: skip legal honorifics and stray single letters left
+    // behind by punctuation (e.g. the "S" from "M/s").
+    .split(/\s+/)
+    .filter(w => w.length > 1 && !SKIP.has(w));
+  return (words[0] || 'CLIENT').slice(0, 12);
+}
+
+// Normalise a billing period to YYYYMM: accepts "2026-05", "202605", a Date, or
+// an ISO date string.
+function toYyyyMm(period) {
+  if (!period) return new Date().toISOString().slice(0, 7).replace('-', '');
+  const s = String(period);
+  const m = s.match(/(\d{4})[-/]?(\d{2})/);
+  if (m) return `${m[1]}${m[2]}`;
+  return new Date().toISOString().slice(0, 7).replace('-', '');
+}
+
+// Atomically take the next number in a per-series, per-client register. The read
+// and increment run in one transaction so concurrent invoice generation can never
+// hand out the same sequence twice.
+function nextInvoiceSeq(seriesType, clientCode) {
+  const tx = db.transaction(() => {
+    const row = db.prepare('SELECT id, next_seq FROM invoice_counters WHERE series_type = ? AND client_code = ?').get(seriesType, clientCode);
+    if (!row) {
+      db.prepare('INSERT INTO invoice_counters (id, series_type, client_code, next_seq) VALUES (?, ?, ?, ?)').run(newId('ICN'), seriesType, clientCode, 2);
+      return 1;
+    }
+    db.prepare('UPDATE invoice_counters SET next_seq = next_seq + 1 WHERE id = ?').run(row.id);
+    return row.next_seq;
+  });
+  return tx();
+}
+
+// Continue the ISET ledger's real registers: the last issued Kreate numbers were
+// ENERGY 145 and OA 265, so the next generated invoices pick up at 146 / 266.
+// Idempotent — only seeds a counter that does not exist yet.
+export function seedInvoiceCounters() {
+  const seeds = [
+    { series_type: 'ENERGY', client_code: 'KREATE', next_seq: 146 },
+    { series_type: 'OA', client_code: 'KREATE', next_seq: 266 },
+  ];
+  const has = db.prepare('SELECT 1 FROM invoice_counters WHERE series_type = ? AND client_code = ?');
+  const ins = db.prepare('INSERT INTO invoice_counters (id, series_type, client_code, next_seq) VALUES (?, ?, ?, ?)');
+  for (const s of seeds) {
+    if (!has.get(s.series_type, s.client_code)) ins.run(newId('ICN'), s.series_type, s.client_code, s.next_seq);
+  }
+}
+
+// The official SJVN invoice number: SJVN/{ENERGY|OA|MARGIN}/{CLIENT}/{YYYYMM}/{SEQ}
+// e.g. SJVN/ENERGY/KREATE/202605/144. seriesType selects the register; each
+// series keeps its own running sequence per client (see invoice_counters).
+export function genSjvnInvoiceNo(seriesType, clientName, billingPeriod) {
+  const series = String(seriesType || 'ENERGY').toUpperCase();
+  const clientCode = deriveClientCode(clientName);
+  const period = toYyyyMm(billingPeriod);
+  const seq = nextInvoiceSeq(series, clientCode);
+  return `SJVN/${series}/${clientCode}/${period}/${seq}`;
+}
+
 /** Sanitize contract_no for use inside Billing Family Reference paths. */
 export function sanitizeContractNo(contractNo) {
   return String(contractNo || 'UNKNOWN')

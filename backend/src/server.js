@@ -23,6 +23,7 @@ import tradingClientsRoutes from './routes/tradingClients.js';
 import bidsRoutes from './routes/bids.js';
 import bilateralRoutes, { runNoarSlaAlerts, sendNoarWeeklyDigest } from './routes/bilateral.js';
 import billingSettlementRoutes from './routes/billingSettlement.js';
+import tradingInvoicesRoutes from './routes/tradingInvoices.js';
 import generatorBillingRoutes from './routes/generatorBilling.js';
 import marketAnalyticsRoutes from './routes/marketAnalytics.js';
 import cercMarketDataRoutes from './routes/cercMarketData.js';
@@ -54,6 +55,7 @@ import formIvRoutes from './routes/formIv.js';
 import notesRoutes from './routes/notes.js';
 import tradingNotesRoutes from './routes/tradingNotes.js';
 import powerDiversionRoutes from './routes/powerDiversion.js';
+import rateMasterRoutes from './routes/rateMaster.js';
 import { ensureMasterDefaults } from './mastersService.js';
 import { repairAuditChainIfBroken } from './auditEngine.js';
 
@@ -123,6 +125,7 @@ app.use('/api/bids', bidsRoutes);
 app.use('/api/bilateral', bilateralRoutes);
 app.use('/api/trading/bilateral', bilateralRoutes);
 app.use('/api/billing-settlement', billingSettlementRoutes);
+app.use('/api/trading-invoices', tradingInvoicesRoutes);
 app.use('/api/generator-billing', generatorBillingRoutes);
 app.use('/api/market-analytics', marketAnalyticsRoutes);
 app.use('/api/cerc-market', requireAuth, cercMarketDataRoutes);
@@ -138,6 +141,7 @@ app.use('/api/trading/dor', requireAuth, requireRole(...TRADING_READ), dorRoutes
 app.use('/api/documents', documentsRoutes);
 app.use('/api/masters/holidays', requireAuth, holidaysRoutes);
 app.use('/api/masters/losses', requireAuth, lossesRoutes);
+app.use('/api/masters/rates', requireAuth, rateMasterRoutes);
 app.use('/api/masters', requireAuth, mastersRoutes);
 app.use('/api/reports', requireAuth, reportsRoutes);
 

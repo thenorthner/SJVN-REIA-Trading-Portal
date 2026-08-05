@@ -7,7 +7,7 @@ import { ScheduleGridModal } from './ScheduleGridModal.jsx';
 
 const EMPTY_FORM = {
   client_id: '', counterparty: '', loi_contract_ref: '', oa_type: 'STOA', is_standing_clearance: false,
-  quantum_mw: '', tariff_per_unit: '', wheeling_charges: '', transmission_charges: '',
+  quantum_mw: '', purchase_rate_per_unit: '', trading_margin_per_unit: '0.03', wheeling_charges: '', transmission_charges: '',
   loss_injection_state: '', loss_inter_state: '', loss_drawee_state: '', start_date: '', end_date: '',
 };
 
@@ -111,7 +111,11 @@ export default function Bilateral() {
       await api.bilateral.create({
         ...form,
         quantum_mw: Number(form.quantum_mw),
-        tariff_per_unit: Number(form.tariff_per_unit),
+        // SJVN enters the purchase rate and its margin; the backend derives and
+        // validates the sale rate (sale = purchase + margin) and mirrors it to
+        // the legacy tariff_per_unit field.
+        purchase_rate_per_unit: Number(form.purchase_rate_per_unit),
+        trading_margin_per_unit: Number(form.trading_margin_per_unit),
         wheeling_charges: Number(form.wheeling_charges) || 0,
         transmission_charges: Number(form.transmission_charges) || 0,
         loss_injection_state: Number(form.loss_injection_state) || 0,
@@ -307,7 +311,20 @@ export default function Bilateral() {
     { key: 'counterparty', label: 'Counterparty' },
     { key: 'oa_type', label: 'OA Type', render: r => <Badge type="primary">{r.oa_type}</Badge> },
     { key: 'quantum_mw', label: 'Quantum (MW)' },
-    { key: 'tariff_per_unit', label: 'Tariff (₹)' },
+    { key: 'sale_rate_per_unit', label: 'Sale Rate (₹)', render: r => {
+      const sale = r.sale_rate_per_unit ?? r.tariff_per_unit;
+      const margin = r.trading_margin_per_unit;
+      return (
+        <span>
+          {sale != null ? Number(sale).toFixed(3) : '—'}
+          {margin != null && (
+            <span style={{ fontSize: 11, color: 'var(--slate-500)', marginLeft: 6 }}>
+              (buy {r.purchase_rate_per_unit != null ? Number(r.purchase_rate_per_unit).toFixed(3) : '—'} + {Number(margin).toFixed(3)})
+            </span>
+          )}
+        </span>
+      );
+    } },
     { key: 'status', label: 'Status', render: r => <Badge type={r.status === 'ACTIVE' ? 'success' : 'neutral'}>{r.status}</Badge> },
     { key: 'noar_sla', label: 'OA Approval SLA', render: r => <SlaChip sla={r.noar_sla} /> },
     { key: 'actions', label: 'Actions', render: r => <button className="btn btn-outline" onClick={() => setSelectedTx(r)}>Manage Schedules</button> }
@@ -494,8 +511,27 @@ export default function Bilateral() {
               <Field label="Quantum (MW)" required>
                 <input type="number" step="0.1" className="input" value={form.quantum_mw} onChange={e => setForm({...form, quantum_mw: e.target.value})} required />
               </Field>
-              <Field label="Tariff (₹/unit)" required>
-                <input type="number" step="0.01" className="input" value={form.tariff_per_unit} onChange={e => setForm({...form, tariff_per_unit: e.target.value})} required />
+            </div>
+
+            <h4 style={{ marginBottom: 10 }}>Pricing (₹/unit)</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 15, marginBottom: 20 }}>
+              <Field label="Purchase Rate" required>
+                <input type="number" step="0.001" className="input" value={form.purchase_rate_per_unit} onChange={e => setForm({...form, purchase_rate_per_unit: e.target.value})} required />
+              </Field>
+              <Field label="Trading Margin">
+                <input type="number" step="0.001" className="input" value={form.trading_margin_per_unit} onChange={e => setForm({...form, trading_margin_per_unit: e.target.value})} />
+              </Field>
+              <Field label="Sale Rate (derived)">
+                <input
+                  type="text"
+                  className="input"
+                  readOnly
+                  tabIndex={-1}
+                  style={{ background: 'var(--slate-50)', color: 'var(--slate-600)' }}
+                  value={(form.purchase_rate_per_unit !== '' && form.trading_margin_per_unit !== '')
+                    ? (Number(form.purchase_rate_per_unit) + Number(form.trading_margin_per_unit)).toFixed(3)
+                    : ''}
+                />
               </Field>
             </div>
 

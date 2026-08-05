@@ -966,7 +966,16 @@ CREATE TABLE IF NOT EXISTS bilateral_transactions (
   counterparty TEXT NOT NULL,
   loi_contract_ref TEXT,
   quantum_mw REAL NOT NULL,
+  -- Legacy single rate: retained as a mirror of sale_rate_per_unit so existing
+  -- readers (invoice verification, Form-IV, CUF penalty) keep working unchanged.
   tariff_per_unit REAL NOT NULL,
+  -- SJVN buys from the seller at purchase_rate and sells to the buyer at
+  -- sale_rate; the difference is the trading margin. In the ISET ledger this is
+  -- a fixed ₹0.030/kWh on every settlement, so it is stored explicitly and the
+  -- invariant sale - purchase = margin is validated on write.
+  purchase_rate_per_unit REAL,
+  sale_rate_per_unit REAL,
+  trading_margin_per_unit REAL NOT NULL DEFAULT 0.03,
   open_access_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (open_access_status IN ('PENDING','APPROVED','REJECTED','PARTIAL')),
   schedule_status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (schedule_status IN ('DRAFT','SUBMITTED','APPROVED','REVISED','CANCELLED')),
   wheeling_charges REAL NOT NULL DEFAULT 0,
@@ -1405,3 +1414,51 @@ CREATE TABLE IF NOT EXISTS cerc_monthly_summary (
   fetch_log_id TEXT REFERENCES cerc_fetch_log(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Effective-dated open-access charge rates. The ISET ledger shows these are not
+-- constant — ISTS tariffs are revised periodically and STU charges differ by
+-- state — so a rate is looked up by charge_name for a given date rather than
+-- hard-coded. A row is valid from effective_from until effective_to (NULL = still
+-- current); a revision is a new row with the old one's effective_to closed off.
+CREATE TABLE IF NOT EXISTS rate_master (
+  id TEXT PRIMARY KEY,
+  rate_category TEXT NOT NULL,      -- ISTS / STU / RLDC / SLDC / NOAR_FEE / OPERATING
+  charge_name TEXT NOT NULL,        -- lookup key, e.g. 'West Bengal STU', 'ISTS', 'NOAR Application Fee'
+  region TEXT,                      -- state / RLDC qualifier where relevant
+  rate_value REAL NOT NULL,
+  unit TEXT NOT NULL,               -- Rs/MWh, Rs/day, Rs/application
+  effective_from TEXT NOT NULL,     -- YYYY-MM-DD inclusive
+  effective_to TEXT,                -- YYYY-MM-DD inclusive; NULL = open-ended
+  note TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rate_master_lookup ON rate_master(charge_name, effective_from);
+
+-- Alias table so the many spellings of one counterparty resolve to a single
+-- canonical entity. The ISET ledger alone carries four spellings of GACL; without
+-- this an import would create four "customers" and split their exposure. Match is
+-- on normalized_name (lowercased, punctuation/suffix-stripped), which is unique.
+CREATE TABLE IF NOT EXISTS entity_aliases (
+  id TEXT PRIMARY KEY,
+  entity_id TEXT NOT NULL REFERENCES entities(id),
+  alias_name TEXT NOT NULL,         -- the spelling as it appears in a source document
+  normalized_name TEXT NOT NULL,    -- canonical match key
+  source TEXT,                      -- LEDGER / MANUAL / IMPORT
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_entity_aliases_norm ON entity_aliases(normalized_name);
+
+-- Persistent per-series invoice counters backing the SJVN invoice number format
+-- SJVN/{ENERGY|OA|MARGIN}/{CLIENT}/{YYYYMM}/{SEQ}. In the ISET ledger the SEQ is a
+-- running register line per series per client (ENERGY 144,145… ; OA 263,264,265…),
+-- continuous across months, so the counter is keyed by series_type + client_code.
+CREATE TABLE IF NOT EXISTS invoice_counters (
+  id TEXT PRIMARY KEY,
+  series_type TEXT NOT NULL,        -- ENERGY / OA / MARGIN
+  client_code TEXT NOT NULL,        -- short code, e.g. KREATE, GACL
+  next_seq INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_counters_series ON invoice_counters(series_type, client_code);

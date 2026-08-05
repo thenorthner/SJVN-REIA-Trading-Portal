@@ -7,6 +7,7 @@ import {
   summarizeApprovals,
   APPROVAL_STATUSES,
 } from '../regulatoryApprovals.js';
+import { seedEntityAliases, resolveEntityByName, addAlias } from '../services/entityResolver.js';
 import multer from 'multer';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -23,6 +24,10 @@ const upload = multer({ storage });
 
 const router = Router();
 router.use(requireAuth);
+
+// Seed the ledger's known counterparty aliases (GACL's four spellings, NTPCREL)
+// so name resolution works out of the box.
+seedEntityAliases();
 
 function seedRegulatoryChecklist(entityId, entityType) {
   const catalog = catalogForEntityType(entityType);
@@ -90,6 +95,17 @@ router.get('/regulatory-catalog', (req, res) => {
     items: catalogForEntityType(type),
     statuses: APPROVAL_STATUSES,
   });
+});
+
+// Resolve any spelling to its canonical entity: /api/entities/resolve?name=...
+// Declared before '/:id' so the literal path is not swallowed as an id.
+router.get('/resolve', (req, res) => {
+  const { name } = req.query;
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  const entityId = resolveEntityByName(name);
+  if (!entityId) return res.json({ resolved: false, entity: null });
+  const entity = db.prepare('SELECT id, name, entity_type, pan_no FROM entities WHERE id = ?').get(entityId);
+  res.json({ resolved: true, entity });
 });
 
 router.get('/', (req, res) => {
@@ -374,6 +390,25 @@ router.post('/:id/signature', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', '
   db.prepare(`UPDATE entities SET signature_url = ?, updated_at = datetime('now') WHERE id = ?`).run(signatureUrl, entity.id);
 
   res.json({ success: true, signature_url: signatureUrl });
+});
+
+// ── Entity aliases (name unification) ──────────────────────────────
+// All spellings registered for one entity.
+router.get('/:id/aliases', (req, res) => {
+  const entity = db.prepare('SELECT id FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  res.json(db.prepare('SELECT * FROM entity_aliases WHERE entity_id = ? ORDER BY created_at').all(req.params.id));
+});
+
+// Register a new spelling for an entity.
+router.post('/:id/aliases', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const entity = db.prepare('SELECT id FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  const { alias_name } = req.body;
+  if (!String(alias_name || '').trim()) return res.status(400).json({ error: 'alias_name is required' });
+  const id = addAlias(req.params.id, alias_name, 'MANUAL');
+  logAudit({ req, user: req.user, action: 'ADD_ALIAS', module: 'MASTERS', entityType: 'entity_alias', entityId: id, details: { entity_id: req.params.id, alias_name } });
+  res.status(201).json(db.prepare('SELECT * FROM entity_aliases WHERE id = ?').get(id));
 });
 
 export default router;

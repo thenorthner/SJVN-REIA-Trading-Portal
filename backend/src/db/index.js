@@ -216,6 +216,34 @@ function migrateBilateralNoar() {
 }
 migrateBilateralNoar();
 
+// Split the single tariff into purchase rate, sale rate and trading margin.
+// The legacy tariff_per_unit was the rate billed to the buyer (the sale rate),
+// so back-fill sale_rate = tariff, apply the standard ₹0.03/kWh ISET margin, and
+// derive purchase_rate = sale - margin. Existing readers still use tariff_per_unit.
+function migrateBilateralMargin() {
+  // Added column-by-column so a partial upgrade (e.g. an earlier run that only
+  // got the first ALTER in) still completes on the next boot rather than failing
+  // on a duplicate-column error.
+  const addColumn = (name, ddl) => {
+    const cols = db.prepare('PRAGMA table_info(bilateral_transactions)').all().map((c) => c.name);
+    if (!cols.includes(name)) db.exec(`ALTER TABLE bilateral_transactions ADD COLUMN ${name} ${ddl};`);
+  };
+  addColumn('purchase_rate_per_unit', 'REAL');
+  addColumn('sale_rate_per_unit', 'REAL');
+  addColumn('trading_margin_per_unit', 'REAL NOT NULL DEFAULT 0.03');
+  db.exec(`
+    UPDATE bilateral_transactions
+       SET sale_rate_per_unit = tariff_per_unit,
+           purchase_rate_per_unit = ROUND(tariff_per_unit - 0.03, 4)
+     WHERE sale_rate_per_unit IS NULL;
+  `);
+}
+try {
+  migrateBilateralMargin();
+} catch (e) {
+  console.error('Bilateral margin migration failed:', e.message);
+}
+
 // Bring the bids table up to what the exchange-bid workflow actually writes:
 // gate closure / approval / no-bid fields, and the OCF carry-forward leg columns.
 // bid_blocks and bid_events were referenced by the routes but never existed.
@@ -1245,6 +1273,35 @@ try {
   migrateGeneratorBillingSchema();
 } catch (e) {
   console.error('Generator billing migration failed:', e.message);
+}
+
+/**
+ * TDS withholding on trading invoices. Energy sales attract Section 194Q (0.1%
+ * of gross value); open-access / transmission charges attract 194C (10%). These
+ * columns let the desk record the deduction on the invoice itself so the buyer's
+ * net remittance and the desk's TDS liability both reconcile against the ISET
+ * ledger. Added column-by-column so a partial upgrade still completes.
+ */
+function migrateTradingInvoiceTds() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (!tables.includes('trading_invoices')) return;
+  const addColumn = (name, ddl) => {
+    const cols = db.prepare(`PRAGMA table_info(trading_invoices)`).all().map((c) => c.name);
+    if (!cols.includes(name)) db.exec(`ALTER TABLE trading_invoices ADD COLUMN ${name} ${ddl};`);
+  };
+  addColumn('tds_section', `TEXT NOT NULL DEFAULT 'NONE'`);
+  addColumn('tds_rate', `REAL NOT NULL DEFAULT 0`);
+  addColumn('tds_amount', `REAL NOT NULL DEFAULT 0`);
+  addColumn('net_payable', `REAL`);
+  // Back-fill net_payable for rows that predate the column: with no TDS recorded,
+  // the buyer remits the full invoice, so net_payable = total_amount.
+  db.exec(`UPDATE trading_invoices SET net_payable = total_amount WHERE net_payable IS NULL;`);
+}
+
+try {
+  migrateTradingInvoiceTds();
+} catch (e) {
+  console.error('Trading invoice TDS migration failed:', e.message);
 }
 
 /**

@@ -292,8 +292,36 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   if (!OA_TYPES.includes(oaType)) errors.push(`oa_type must be one of: ${OA_TYPES.join(', ')}`);
   const qty = Number(b.quantum_mw);
   if (!Number.isFinite(qty) || qty <= 0) errors.push('quantum_mw must be a positive number');
-  const tariff = Number(b.tariff_per_unit);
-  if (!Number.isFinite(tariff) || tariff < 0) errors.push('tariff_per_unit must be a non-negative number');
+
+  // Resolve the purchase / sale / margin triangle. Callers may send any two and
+  // let the third be derived; a legacy caller sends only tariff_per_unit, which
+  // is treated as the sale rate (the rate billed to the buyer). The default
+  // margin is the standard ISET ₹0.030/kWh.
+  const DEFAULT_MARGIN = 0.03;
+  let saleRate = b.sale_rate_per_unit != null ? Number(b.sale_rate_per_unit) : Number(b.tariff_per_unit);
+  let purchaseRate = b.purchase_rate_per_unit != null ? Number(b.purchase_rate_per_unit) : null;
+  let margin = b.trading_margin_per_unit != null ? Number(b.trading_margin_per_unit) : null;
+  // If purchase and sale are both known, the margin follows from them.
+  if (purchaseRate != null && margin == null && Number.isFinite(saleRate)) {
+    margin = Number((saleRate - purchaseRate).toFixed(4));
+  }
+  if (margin == null) margin = DEFAULT_MARGIN;
+  // Derive whichever leg is still missing from the other two.
+  if (purchaseRate == null && Number.isFinite(saleRate)) {
+    purchaseRate = Number((saleRate - margin).toFixed(4));
+  }
+  if ((saleRate == null || !Number.isFinite(saleRate)) && purchaseRate != null) {
+    saleRate = Number((purchaseRate + margin).toFixed(4));
+  }
+
+  if (!Number.isFinite(saleRate) || saleRate < 0) errors.push('sale_rate_per_unit (or tariff_per_unit) must be a non-negative number');
+  if (!Number.isFinite(purchaseRate) || purchaseRate < 0) errors.push('purchase_rate_per_unit must be a non-negative number');
+  if (!Number.isFinite(margin) || margin < 0) errors.push('trading_margin_per_unit must be a non-negative number');
+  // The core invariant: sale - purchase must equal the stated margin.
+  if (Number.isFinite(saleRate) && Number.isFinite(purchaseRate) && Number.isFinite(margin)
+      && Math.abs(saleRate - purchaseRate - margin) > 0.001) {
+    errors.push(`sale_rate (${saleRate}) - purchase_rate (${purchaseRate}) must equal trading_margin (${margin})`);
+  }
   if (!b.start_date) errors.push('start_date is required');
   if (!b.end_date) errors.push('end_date is required');
   if (b.start_date && b.end_date && b.end_date < b.start_date) errors.push('end_date cannot be before start_date');
@@ -305,19 +333,25 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
 
   db.prepare(`
     INSERT INTO bilateral_transactions (
-      id, client_id, counterparty, loi_contract_ref, oa_type, is_standing_clearance, 
-      quantum_mw, tariff_per_unit, open_access_status, 
-      wheeling_charges, transmission_charges, loss_injection_state, loss_inter_state, loss_drawee_state, 
+      id, client_id, counterparty, loi_contract_ref, oa_type, is_standing_clearance,
+      quantum_mw, tariff_per_unit, purchase_rate_per_unit, sale_rate_per_unit, trading_margin_per_unit, open_access_status,
+      wheeling_charges, transmission_charges, loss_injection_state, loss_inter_state, loss_drawee_state,
       start_date, end_date, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
   `).run(
     id, b.client_id, String(b.counterparty).trim(), b.loi_contract_ref || null, oaType, b.is_standing_clearance ? 1 : 0,
-    qty, tariff, Number(b.wheeling_charges) || 0, Number(b.transmission_charges) || 0,
+    qty, saleRate, purchaseRate, saleRate, margin, Number(b.wheeling_charges) || 0, Number(b.transmission_charges) || 0,
     Number(b.loss_injection_state) || 0, Number(b.loss_inter_state) || 0, Number(b.loss_drawee_state) || 0,
     b.start_date, b.end_date
   );
 
-  secureLogAudit(req, { action: 'CREATE_BILATERAL', module: 'TRADING', entityType: 'bilateral_tx', entityId: id, details: b });
+  // A margin other than the standard ISET ₹0.03/kWh is a deliberate commercial
+  // decision worth surfacing in the audit trail, not a silent field change.
+  const marginOverride = Math.abs(margin - DEFAULT_MARGIN) > 0.0001;
+  secureLogAudit(req, {
+    action: 'CREATE_BILATERAL', module: 'TRADING', entityType: 'bilateral_tx', entityId: id,
+    details: { ...b, purchase_rate_per_unit: purchaseRate, sale_rate_per_unit: saleRate, trading_margin_per_unit: margin, margin_override: marginOverride },
+  });
   res.status(201).json(withDetails(db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(id)));
 });
 

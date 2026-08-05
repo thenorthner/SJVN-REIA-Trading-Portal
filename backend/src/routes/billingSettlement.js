@@ -3,6 +3,9 @@ import { db } from '../db/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { v4 as uuidv4 } from 'uuid';
 import { secureLogAudit } from '../auditEngine.js';
+import { genSjvnInvoiceNo, seedInvoiceCounters } from '../util.js';
+
+seedInvoiceCounters();
 
 const router = express.Router();
 
@@ -67,7 +70,9 @@ router.post('/invoices/generate', (req, res) => {
     const finalTotal = preTdsTotal + gst;
 
     const tinId = newId('TIN');
-    const invoiceNo = `TRD/${new Date().getFullYear()}/${Math.floor(Math.random()*10000)}`;
+    // Official SJVN invoice number. Exchange/energy trades use the ENERGY register.
+    const clientName = db.prepare('SELECT name FROM trading_clients WHERE id = ?').get(client_id)?.name;
+    const invoiceNo = genSjvnInvoiceNo('ENERGY', clientName, billing_period);
 
     const stmt = db.prepare(`
       INSERT INTO trading_invoices (id, invoice_no, client_id, trade_date, settlement_date, invoice_kind, trade_type, billing_period, quantum_mwh,
