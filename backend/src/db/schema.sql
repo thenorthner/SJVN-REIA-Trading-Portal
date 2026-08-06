@@ -1579,3 +1579,24 @@ CREATE TABLE IF NOT EXISTS tds_ledger (
 );
 CREATE INDEX IF NOT EXISTS idx_tds_ledger_vendor ON tds_ledger(vendor_name, period);
 CREATE INDEX IF NOT EXISTS idx_tds_ledger_status ON tds_ledger(status);
+
+-- Snapshot of an open-access charge estimate. The itemised legs are computed from
+-- the effective-dated rate_master and stored as JSON so an estimate stays exactly
+-- as it was priced even if a rate is later revised. Optionally linked to the
+-- bilateral transaction it was computed for.
+CREATE TABLE IF NOT EXISTS oa_charge_estimates (
+  id TEXT PRIMARY KEY,
+  bilateral_id TEXT REFERENCES bilateral_transactions(id),
+  quantum_mwh REAL NOT NULL DEFAULT 0,
+  days INTEGER NOT NULL DEFAULT 1,
+  on_date TEXT,
+  injection_state TEXT,
+  drawal_state TEXT,
+  total REAL NOT NULL DEFAULT 0,
+  seller_total REAL NOT NULL DEFAULT 0,
+  buyer_total REAL NOT NULL DEFAULT 0,
+  breakdown_json TEXT,             -- full line_items array as returned by the calculator
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_oa_estimates_bilateral ON oa_charge_estimates(bilateral_id, created_at);
