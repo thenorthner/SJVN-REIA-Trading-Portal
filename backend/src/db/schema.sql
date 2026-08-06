@@ -1533,3 +1533,49 @@ CREATE TABLE IF NOT EXISTS settlement_statements (
   status TEXT NOT NULL DEFAULT 'DRAFT',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Vendor/agency master for TDS. These are the grid and government agencies SJVN
+-- withholds tax against on open-access charges (CTUIL for ISTS, GRID-INDIA for
+-- RLDC, the state STUs/SLDCs). PANs are the real ones from the ISET ledger. The
+-- default section/rate is what applies to their charges: open-access and
+-- transmission charges attract Section 194C at 10%.
+CREATE TABLE IF NOT EXISTS tds_vendors (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  pan TEXT,
+  category TEXT,                    -- CTU / RLDC / STU / SLDC / OTHER
+  default_section TEXT NOT NULL DEFAULT '194C' CHECK (default_section IN ('194Q','194C','194J','NONE')),
+  default_rate REAL NOT NULL DEFAULT 0.10,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tds_vendors_name ON tds_vendors(name);
+
+-- TDS deduction register: every tax SJVN withholds from a vendor payment, plus
+-- the challan detail that proves it was deposited with the government. A row is
+-- DEDUCTED until a challan is recorded, then DEPOSITED. Backs the vendor-wise
+-- liability view and Form-26Q preparation. vendor_name/pan are denormalised so a
+-- row stands on its own even if the vendor master changes later.
+CREATE TABLE IF NOT EXISTS tds_ledger (
+  id TEXT PRIMARY KEY,
+  vendor_id TEXT REFERENCES tds_vendors(id),
+  vendor_name TEXT NOT NULL,
+  vendor_pan TEXT,
+  section TEXT NOT NULL DEFAULT '194C',
+  rate REAL NOT NULL DEFAULT 0,         -- fraction (0.10 = 10%, 0.001 = 0.1%)
+  taxable_amount REAL NOT NULL DEFAULT 0,
+  tds_amount REAL NOT NULL DEFAULT 0,
+  reference_type TEXT,                  -- OA_APPLICATION / ENERGY_INVOICE / MANUAL
+  reference_no TEXT,                    -- application no, invoice no
+  period TEXT,                          -- YYYY-MM the deduction belongs to
+  deducted_date TEXT,
+  challan_no TEXT,                      -- NULL until deposited with the government
+  challan_date TEXT,
+  paid_to_govt_date TEXT,
+  status TEXT NOT NULL DEFAULT 'DEDUCTED' CHECK (status IN ('DEDUCTED','DEPOSITED')),
+  note TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_tds_ledger_vendor ON tds_ledger(vendor_name, period);
+CREATE INDEX IF NOT EXISTS idx_tds_ledger_status ON tds_ledger(status);
