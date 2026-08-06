@@ -37,6 +37,11 @@ if (!fs.existsSync(REA_DOWNLOAD_DIR)) {
   fs.mkdirSync(REA_DOWNLOAD_DIR, { recursive: true });
 }
 
+const FETCH_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8',
+};
+
 // ──────────────────────────────────────────────
 // Step 1: Discover available months from listing page
 // ──────────────────────────────────────────────
@@ -46,7 +51,7 @@ async function discoverAvailableMonths(rpcKey) {
 
   console.log(`[REA Scraper] Fetching listing page for ${rpcKey}: ${config.listing_url}`);
   
-  const response = await fetch(config.listing_url);
+  const response = await fetch(config.listing_url, { headers: FETCH_HEADERS });
   if (!response.ok) {
     throw new Error(`Failed to fetch ${config.listing_url}: HTTP ${response.status}`);
   }
@@ -106,7 +111,7 @@ async function downloadPdf(rpcKey, period, dataType = 'PROVISIONAL') {
 
   console.log(`[REA Scraper] Downloading ${pdfUrl} → ${filePath}`);
 
-  const response = await fetch(pdfUrl);
+  const response = await fetch(pdfUrl, { headers: FETCH_HEADERS });
   if (!response.ok) {
     if (response.status === 404) {
       console.log(`[REA Scraper] ${pdfUrl} not found (404) — month not yet published`);
@@ -132,13 +137,13 @@ async function downloadPdf(rpcKey, period, dataType = 'PROVISIONAL') {
     const docId = uuidv4();
     db.prepare(`
       INSERT INTO documents (id, contract_id, document_type, category, title, created_by)
-      VALUES (?, NULL, 'REA_SOURCE', 'RECORD', ?, 'SYSTEM')
+      VALUES (?, NULL, 'REA_SOURCE', 'RECORD', ?, NULL)
     `).run(docId, `REA ${rpcKey} ${period} ${dataType}`);
 
     const versionId = uuidv4();
     db.prepare(`
       INSERT INTO document_versions (id, document_id, version_number, file_path, file_name, file_size_bytes, mime_type, verification_status, created_by)
-      VALUES (?, ?, 1, ?, ?, ?, 'application/pdf', 'NOT_REQUIRED', 'SYSTEM')
+      VALUES (?, ?, 1, ?, ?, ?, 'application/pdf', 'NOT_REQUIRED', NULL)
     `).run(versionId, docId, filePath, fileName, buffer.length);
 
     // Link document to fetch log
@@ -187,19 +192,28 @@ function processAndSave(logId, parsedData, rpcKey, period, dataType) {
   let recordsCreated = 0;
 
   for (const station of parsedData) {
-    // Try to find matching contract by station name hint
-    // Look for a contract whose seller entity name matches the station hint
+    // Try to find matching contract by station name or station ID or keywords
+    const stKeywords = (station.station_name || '').split(/\s+/).filter(w => w.length > 3 && !['STATION','POWER','HYDRO','PROJECT'].includes(w.toUpperCase()));
+    const keywordClauses = stKeywords.map(() => 'OR e.name LIKE ? OR c.contract_no LIKE ?').join(' ');
+    const keywordParams = stKeywords.flatMap(k => [`%${k}%`, `%${k}%`]);
+
     const contract = db.prepare(`
       SELECT c.* FROM contracts c
       JOIN entities e ON e.id = c.seller_id
-      WHERE (e.name LIKE ? OR e.name LIKE ?)
+      WHERE (
+        e.name LIKE ? OR e.name LIKE ? OR c.contract_no LIKE ? OR c.contract_no LIKE ?
+        ${keywordClauses}
+      )
       AND c.status IN ('ACTIVE','SIGNED')
       AND c.tenure_start <= ? AND c.tenure_end >= ?
       ORDER BY c.tenure_start DESC
       LIMIT 1
     `).get(
       `%${station.station_name}%`,
-      `%${station.station_id?.replace('_', ' ')}%`,
+      `%${station.station_id?.replace(/_/g, ' ')}%`,
+      `%${station.station_name}%`,
+      `%${station.station_id?.replace(/_/g, '')}%`,
+      ...keywordParams,
       period + '-01',
       period + '-01'
     );

@@ -47,7 +47,11 @@ export default function Contracts() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [statusError, setStatusError] = useState('');
+  const [amendError, setAmendError] = useState('');
   const [selected, setSelected] = useState(null);
   const [allocations, setAllocations] = useState([]);
   const [amendForm, setAmendForm] = useState(null);
@@ -92,13 +96,15 @@ export default function Contracts() {
     api.contracts.get(row.id).then(setSelected);
     api.paymentSecurity.requirements(row.id).then(setRequirements).catch(() => setRequirements([]));
     if (row.contract_type === 'PPA') {
-      api.client.get(`/contracts/${row.id}/allocations`).then(r => setAllocations(r.data)).catch(() => setAllocations([]));
+      api.contracts.allocations(row.id).then(setAllocations).catch(() => setAllocations([]));
     } else {
       setAllocations([]);
     }
     setAmendForm(null);
     setStatusForm(null);
     setSyncMsg('');
+    setStatusError('');
+    setAmendError('');
   }
 
   async function syncSecurity() {
@@ -115,8 +121,9 @@ export default function Contracts() {
   async function handleCreate(e) {
     e.preventDefault();
     setError('');
+    setSubmitting(true);
     try {
-      await api.contracts.create({
+      const created = await api.contracts.create({
         ...form,
         seller_id: form.contract_type === 'PPA' ? form.seller_id : null,
         buyer_id: form.contract_type === 'PSA' ? form.buyer_id : null,
@@ -125,36 +132,70 @@ export default function Contracts() {
         emd_amount: form.emd_amount ? Number(form.emd_amount) : null,
         pbg_amount: form.pbg_amount ? Number(form.pbg_amount) : null,
       });
+
+      if (uploadFile && created?.id) {
+        try {
+          const fd = new FormData();
+          fd.append('file', uploadFile);
+          fd.append('contract_id', created.id);
+          fd.append('document_type', 'CONTRACT');
+          fd.append('category', 'RECORD');
+          fd.append('title', `${form.contract_no} Agreement`);
+          await api.documents.upload(fd);
+        } catch (uploadErr) {
+          console.warn('Document upload warning:', uploadErr);
+        }
+      }
+
       setShowCreate(false);
       setForm(EMPTY_FORM);
+      setUploadFile(null);
       load();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to create contract.');
+    } finally {
+      setSubmitting(false);
     }
   }
 
   async function handleAmend(e) {
     e.preventDefault();
-    const updated = await api.client.post(`/contracts/${selected.id}/amend`, amendForm).then(r=>r.data);
-    setSelected(updated);
-    setAmendForm(null);
-    load();
+    setAmendError('');
+    setSubmitting(true);
+    try {
+      const updated = await api.contracts.amend(selected.id, amendForm);
+      setSelected(updated);
+      setAmendForm(null);
+      load();
+    } catch (err) {
+      setAmendError(err.response?.data?.error || 'Failed to amend contract.');
+    } finally {
+      setSubmitting(false);
+    }
   }
   
   async function handleStatusChange(e) {
     e.preventDefault();
-    const updated = await api.client.post(`/contracts/${selected.id}/status`, statusForm).then(r=>r.data);
-    setSelected(updated);
-    setStatusForm(null);
-    load();
+    setStatusError('');
+    setSubmitting(true);
+    try {
+      const updated = await api.contracts.updateStatus(selected.id, statusForm);
+      setSelected(updated);
+      setStatusForm(null);
+      load();
+    } catch (err) {
+      setStatusError(err.response?.data?.error || 'Failed to update contract status.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handleAddAllocation(e) {
     e.preventDefault();
     try {
-      await api.client.post(`/contracts/${selected.id}/allocations`, allocationForm);
+      await api.contracts.addAllocation(selected.id, allocationForm);
       setAllocationForm(null);
-      api.client.get(`/contracts/${selected.id}/allocations`).then(r => setAllocations(r.data));
+      api.contracts.allocations(selected.id).then(setAllocations);
     } catch(err) {
       alert(err.response?.data?.error || 'Failed to map allocation');
     }
@@ -534,8 +575,13 @@ export default function Contracts() {
 
       {/* Lifecycle Modal */}
       {statusForm && (
-        <Modal open={true} onClose={() => setStatusForm(null)} title="Update Contract Lifecycle Stage">
+        <Modal open={true} onClose={() => { setStatusForm(null); setStatusError(''); }} title="Update Contract Lifecycle Stage">
           <form onSubmit={handleStatusChange}>
+            {statusError && (
+              <div className="alert alert-danger" style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 6, background: '#fef2f2', border: '1px solid #f87171', color: '#b91c1c', fontSize: 13 }}>
+                {statusError}
+              </div>
+            )}
             <Field label="New Status">
               <select value={statusForm.status} onChange={e => setStatusForm({...statusForm, status: e.target.value})}>
                 {['DRAFT', 'UNDER_NEGOTIATION', 'SIGNED', 'PENDING_REGULATORY_APPROVAL', 'ACTIVE', 'NEARING_EXPIRY', 'EXPIRED', 'RENEWED', 'TERMINATED', 'CLOSED'].map(s => <option key={s} value={s}>{s}</option>)}
@@ -548,11 +594,13 @@ export default function Contracts() {
               </div>
             )}
             <Field label="Remarks">
-              <input value={statusForm.remarks} onChange={e => setStatusForm({...statusForm, remarks: e.target.value})} />
+              <input value={statusForm.remarks || ''} onChange={e => setStatusForm({...statusForm, remarks: e.target.value})} placeholder="e.g. Approved by board / commissioning phase" />
             </Field>
             <div className="form-actions" style={{marginTop: 20}}>
-              <button type="button" className="btn btn-ghost" onClick={() => setStatusForm(null)}>Cancel</button>
-              <button type="submit" className="btn btn-primary">Update Status</button>
+              <button type="button" className="btn btn-ghost" onClick={() => { setStatusForm(null); setStatusError(''); }}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={submitting}>
+                {submitting ? 'Updating...' : 'Update Status'}
+              </button>
             </div>
           </form>
         </Modal>
@@ -560,8 +608,13 @@ export default function Contracts() {
 
       {/* Amendment Modal */}
       {amendForm && (
-        <Modal open={true} onClose={() => setAmendForm(null)} title="Amend Contract">
+        <Modal open={true} onClose={() => { setAmendForm(null); setAmendError(''); }} title={`Amend Contract: ${amendForm.contract_no}`}>
           <form onSubmit={handleAmend}>
+            {amendError && (
+              <div className="alert alert-danger" style={{ marginBottom: 16, padding: '10px 14px', borderRadius: 6, background: '#fef2f2', border: '1px solid #f87171', color: '#b91c1c', fontSize: 13 }}>
+                {amendError}
+              </div>
+            )}
             <div className="form-grid">
               <Field label="Capacity (MW)"><input type="number" step="0.01" value={amendForm.capacity_mw} onChange={(e) => setAmendForm({ ...amendForm, capacity_mw: e.target.value })} /></Field>
               <Field label="Commissioned (MW)"><input type="number" step="0.01" value={amendForm.commissioned_capacity_mw} onChange={(e) => setAmendForm({ ...amendForm, commissioned_capacity_mw: e.target.value })} /></Field>
@@ -576,9 +629,11 @@ export default function Contracts() {
             <Field label="Amendment Reason">
               <input required value={amendForm.amendment_reason || ''} onChange={(e) => setAmendForm({ ...amendForm, amendment_reason: e.target.value })} placeholder="Why is this being amended?" />
             </Field>
-            <div className="form-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setAmendForm(null)}>Cancel</button>
-              <button type="submit" className="btn btn-primary">Submit Amendment (Creates v{amendForm.version + 1})</button>
+            <div className="form-actions" style={{ marginTop: 20 }}>
+              <button type="button" className="btn btn-ghost" onClick={() => { setAmendForm(null); setAmendError(''); }}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={submitting}>
+                {submitting ? 'Submitting...' : `Submit Amendment (Creates v${(amendForm.version || 1) + 1})`}
+              </button>
             </div>
           </form>
         </Modal>

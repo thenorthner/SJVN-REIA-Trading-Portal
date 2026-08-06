@@ -236,7 +236,7 @@ CREATE TABLE IF NOT EXISTS entity_audit (
 -- Contract Management (PPA / PSA)
 CREATE TABLE IF NOT EXISTS contracts (
   id TEXT PRIMARY KEY,
-  contract_no TEXT UNIQUE NOT NULL,
+  contract_no TEXT NOT NULL,
   contract_type TEXT NOT NULL CHECK (contract_type IN ('PPA','PSA')),
   seller_id TEXT REFERENCES entities(id),
   buyer_id TEXT REFERENCES entities(id),
@@ -281,11 +281,12 @@ CREATE TABLE IF NOT EXISTS contracts (
   termination_date TEXT,
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN (
     'DRAFT','UNDER_NEGOTIATION','SIGNED','PENDING_REGULATORY_APPROVAL',
-    'ACTIVE','NEARING_EXPIRY','EXPIRED','RENEWED','TERMINATED','CLOSED'
+    'ACTIVE','NEARING_EXPIRY','EXPIRED','RENEWED','TERMINATED','CLOSED','AMENDED'
   )),
   remarks TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(contract_no, version)
 );
 
 CREATE TABLE IF NOT EXISTS contract_projects (
@@ -1360,6 +1361,31 @@ CREATE TABLE IF NOT EXISTS lookup_master (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(category, code)
 );
+
+-- ---------------------------------------------------------------
+-- Regional Energy Account (REA) Scraper Fetch Log
+-- ---------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS rea_fetch_log (
+  id TEXT PRIMARY KEY,
+  rpc_source TEXT NOT NULL,
+  period_month TEXT NOT NULL,
+  data_type TEXT NOT NULL DEFAULT 'PROVISIONAL'
+    CHECK (data_type IN ('PROVISIONAL','FINAL')),
+  pdf_url TEXT,
+  local_file_path TEXT,
+  status TEXT NOT NULL DEFAULT 'PENDING'
+    CHECK (status IN ('PENDING','DOWNLOADED','PARSED','PROCESSED','FAILED')),
+  records_created INTEGER DEFAULT 0,
+  error_message TEXT,
+  document_id TEXT REFERENCES documents(id),
+  fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+  processed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_rea_fetch_log_source
+  ON rea_fetch_log(rpc_source, period_month, data_type);
 
 -- ---------------------------------------------------------------
 -- CERC Market Monitoring Committee (MMC) Reports

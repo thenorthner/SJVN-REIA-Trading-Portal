@@ -100,11 +100,13 @@ export default function EnergyData() {
       const data = await api.energyData.parseREA(fd);
       setParsedData(data.map(d => {
         let cid = '';
-        if (d.station_id === 'NATHPA_JHAKRI') {
-          const c = contracts.find(c => c.contract_no.includes('NJHEP'));
+        const stName = (d.station_name || '').toUpperCase();
+        const stId = (d.station_id || '').toUpperCase();
+        if (stId.includes('NATHPA') || stName.includes('NATHPA') || stName.includes('JHAKRI')) {
+          const c = contracts.find(c => c.contract_no.includes('NJHPS') || c.contract_no.includes('NJHEP') || c.contract_no.includes('NJH'));
           if (c) cid = c.id;
-        } else if (d.station_id === 'RAMPUR') {
-          const c = contracts.find(c => c.contract_no.includes('RHEP'));
+        } else if (stId.includes('RAMPUR') || stName.includes('RAMPUR')) {
+          const c = contracts.find(c => c.contract_no.includes('RHPS') || c.contract_no.includes('RHEP') || c.contract_no.includes('RAMPUR'));
           if (c) cid = c.id;
         }
         return { ...d, contract_id: cid };

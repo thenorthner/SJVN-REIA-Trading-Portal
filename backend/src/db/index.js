@@ -145,6 +145,27 @@ function migrateInvoiceArrearType() {
 }
 migrateInvoiceArrearType();
 
+/**
+ * Update contracts schema to support multi-version amendments:
+ * - contract_no uniqueness becomes UNIQUE(contract_no, version)
+ * - status CHECK includes 'AMENDED'
+ */
+function migrateContractVersionSchema() {
+  const c = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='contracts'").get();
+  const needsFix = c && (c.sql.includes('contract_no TEXT UNIQUE') || !c.sql.includes('UNIQUE(contract_no, version)') || !c.sql.includes("'AMENDED'"));
+  if (!needsFix) return;
+
+  db.exec('PRAGMA foreign_keys=OFF');
+  db.exec('PRAGMA legacy_alter_table=ON');
+  try {
+    rebuildTableFromSchema('contracts');
+  } finally {
+    db.exec('PRAGMA legacy_alter_table=OFF');
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+migrateContractVersionSchema();
+
 // Add release_source to payments (generator pay-out source) on existing DBs.
 function migratePaymentReleaseSource() {
   const cols = db.prepare('PRAGMA table_info(payments)').all().map((c) => c.name);
@@ -787,24 +808,6 @@ function migrateStationBetaSchema() {
   `);
 
   // Soft-seed NJHPS hydro + May 2026 β=1.00 on existing DBs (idempotent).
-  const hasNjhps = db.prepare(`SELECT id FROM contracts WHERE contract_no = 'PPA/SJVN/NJHPS/001'`).get();
-  if (hasNjhps) {
-    const hasBeta = db.prepare(`
-      SELECT id FROM station_beta WHERE contract_id = ? AND period_month = '2026-05'
-    `).get(hasNjhps.id);
-    if (!hasBeta) {
-      db.prepare(`
-        INSERT INTO station_beta (
-          id, contract_id, period_month, beta_value, station_code, station_name,
-          source, certified_on, notes, created_by
-        ) VALUES (?, ?, '2026-05', 1.00, 'NJHPS', 'NATHPA JHAKRI', 'NRPC', '2026-06-19',
-          'NRPC Average Monthly Frequency Response Performance – May 2026', 'SYSTEM')
-      `).run('BETA-NJHPS-2026-05', hasNjhps.id);
-    }
-    return;
-  }
-
-  // Create demo seller + hydro PPA if entities table is usable
   try {
     const sellerId = 'SEL-NJHPS';
     const existingSeller = db.prepare(`SELECT id FROM entities WHERE id = ?`).get(sellerId)
@@ -838,7 +841,6 @@ function migrateStationBetaSchema() {
       )
     `).run(cid, sid);
 
-    // If INSERT OR IGNORE skipped due to different id, resolve by contract_no
     const con = db.prepare(`SELECT id FROM contracts WHERE contract_no = 'PPA/SJVN/NJHPS/001'`).get();
     if (con) {
       db.prepare(`
@@ -861,8 +863,41 @@ function migrateStationBetaSchema() {
         `).run('BETA-NJHPS-2026-05', con.id);
       }
     }
+
+    // Seed Rampur HEP (412 MW) entity + PPA for NRPC REA & CERC multi-station billing
+    const rhpsSellerId = 'SEL-RHPS';
+    const existingRhpsSeller = db.prepare(`SELECT id FROM entities WHERE id = ?`).get(rhpsSellerId)
+      || db.prepare(`SELECT id FROM entities WHERE name LIKE '%Rampur%'`).get();
+    let rhpsSid = existingRhpsSeller?.id;
+    if (!rhpsSid) {
+      rhpsSid = rhpsSellerId;
+      db.prepare(`
+        INSERT INTO entities (
+          id, entity_type, category, name, pan_no, gst_no, capacity_mw, technology,
+          contracted_capacity_mw, bank_name, account_no, ifsc_code, branch_address,
+          is_penny_drop_verified, status, address, corporate_email
+        ) VALUES (
+          ?, 'SELLER', 'RE Generator', 'SJVN Rampur HEP', 'AABCS1234E', '02AABCS1234D1Z6',
+          412, 'Hydro', 412, 'SBI', '112233445577', 'SBIN0001234', 'Shimla',
+          1, 'APPROVED', 'Rampur Bushahr, Himachal Pradesh', 'rampur.billing@sjvn.nic.in'
+        )
+      `).run(rhpsSid);
+    }
+
+    const rhpsCid = 'CON-RHPS-001';
+    db.prepare(`
+      INSERT OR IGNORE INTO contracts (
+        id, contract_no, contract_type, seller_id, project_type, capacity_mw, commissioned_capacity_mw,
+        cod_date, tariff_type, tariff_per_unit, tenure_start, tenure_end, billing_cycle, payment_terms, status,
+        normative_aux, free_energy_home_state, capacity_charges_total, annual_afc, annual_design_energy_mwh, napaf_percent
+      ) VALUES (
+        ?, 'PPA/SJVN/RHPS/001', 'PPA', ?, 'Hydro', 412, 412,
+        '2014-05-13', 'TWO_PART', 1.85, '2014-05-13', '2049-05-12', 'MONTHLY', 'Net 45 days', 'ACTIVE',
+        1.2, 12, 36000000, 4320000000, 1878000, 85
+      )
+    `).run(rhpsCid, rhpsSid);
   } catch (e) {
-    console.warn('NJHPS beta demo seed skipped:', e.message);
+    console.warn('NJHPS/RHPS beta demo seed skipped:', e.message);
   }
 }
 
@@ -1558,4 +1593,39 @@ try {
   console.error('REIA note reason-code migration failed:', e.message);
 }
 
+/**
+ * REA Scraper fetch log table.
+ */
+function migrateReaFetchLogSchema() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rea_fetch_log (
+      id TEXT PRIMARY KEY,
+      rpc_source TEXT NOT NULL,
+      period_month TEXT NOT NULL,
+      data_type TEXT NOT NULL DEFAULT 'PROVISIONAL'
+        CHECK (data_type IN ('PROVISIONAL','FINAL')),
+      pdf_url TEXT,
+      local_file_path TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING'
+        CHECK (status IN ('PENDING','DOWNLOADED','PARSED','PROCESSED','FAILED')),
+      records_created INTEGER DEFAULT 0,
+      error_message TEXT,
+      document_id TEXT REFERENCES documents(id),
+      fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+      processed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_rea_fetch_log_source
+      ON rea_fetch_log(rpc_source, period_month, data_type);
+  `);
+}
+
+try {
+  migrateReaFetchLogSchema();
+} catch (e) {
+  console.error('REA fetch log migration failed:', e.message);
+}
+
 export default db;
+

@@ -80,6 +80,9 @@ export const api = {
     get: (id) => g(`/contracts/${id}`),
     create: (body) => p('/contracts', body),
     amend: (id, body) => p(`/contracts/${id}/amend`, body),
+    updateStatus: (id, body) => p(`/contracts/${id}/status`, body),
+    allocations: (id) => g(`/contracts/${id}/allocations`),
+    addAllocation: (id, body) => p(`/contracts/${id}/allocations`, body),
     bulkUpload: (rows) => p('/contracts/bulk-upload', { rows }),
   },
   energyData: {
