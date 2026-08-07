@@ -977,6 +977,10 @@ CREATE TABLE IF NOT EXISTS bilateral_transactions (
   purchase_rate_per_unit REAL,
   sale_rate_per_unit REAL,
   trading_margin_per_unit REAL NOT NULL DEFAULT 0.03,
+  -- Total approved energy across this buyer's open-access applications. The
+  -- day-wise schedule is kept at contract level, so this is the per-buyer volume
+  -- basis for contribution reporting.
+  contracted_mwh REAL,
   open_access_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (open_access_status IN ('PENDING','APPROVED','REJECTED','PARTIAL')),
   schedule_status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (schedule_status IN ('DRAFT','SUBMITTED','APPROVED','REVISED','CANCELLED')),
   wheeling_charges REAL NOT NULL DEFAULT 0,
@@ -1610,6 +1614,8 @@ CREATE TABLE IF NOT EXISTS schedule_deviations (
   id TEXT PRIMARY KEY,
   bilateral_id TEXT REFERENCES bilateral_transactions(id),
   contract_ref TEXT,                    -- LOA / contract label when no bilateral row
+  counterparty TEXT,                    -- seller on the contract, held here because
+                                        -- the schedule is contract-wide, not per buyer
   schedule_date TEXT NOT NULL,
   availability_mwh REAL NOT NULL DEFAULT 0,
   requested_mwh REAL NOT NULL DEFAULT 0,

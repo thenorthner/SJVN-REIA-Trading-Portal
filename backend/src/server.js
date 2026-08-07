@@ -61,6 +61,7 @@ import oaChargesRoutes from './routes/oaCharges.js';
 import importsRoutes from './routes/imports.js';
 import deviationRegisterRoutes from './routes/deviationRegister.js';
 import paymentCycleRoutes from './routes/paymentCycle.js';
+import contractPnlRoutes from './routes/contractPnl.js';
 import { ensureMasterDefaults } from './mastersService.js';
 import { repairAuditChainIfBroken } from './auditEngine.js';
 
@@ -136,6 +137,7 @@ app.use('/api/oa-charges', oaChargesRoutes);
 app.use('/api/import', importsRoutes);
 app.use('/api/deviations', deviationRegisterRoutes);
 app.use('/api/payment-cycle', paymentCycleRoutes);
+app.use('/api/pnl', contractPnlRoutes);
 app.use('/api/generator-billing', generatorBillingRoutes);
 app.use('/api/market-analytics', marketAnalyticsRoutes);
 app.use('/api/cerc-market', requireAuth, cercMarketDataRoutes);

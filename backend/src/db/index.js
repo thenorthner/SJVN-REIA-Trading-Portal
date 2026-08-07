@@ -252,6 +252,7 @@ function migrateBilateralMargin() {
   addColumn('purchase_rate_per_unit', 'REAL');
   addColumn('sale_rate_per_unit', 'REAL');
   addColumn('trading_margin_per_unit', 'REAL NOT NULL DEFAULT 0.03');
+  addColumn('contracted_mwh', 'REAL');
   db.exec(`
     UPDATE bilateral_transactions
        SET sale_rate_per_unit = tariff_per_unit,
@@ -1369,6 +1370,24 @@ try {
   migrateTradingInvoiceSettlementModel();
 } catch (e) {
   console.error('Trading invoice settlement-model migration failed:', e.message);
+}
+
+/**
+ * The day-wise schedule is contract-wide rather than per buyer, so the seller is
+ * recorded on the row itself instead of being reached through a bilateral link.
+ * Adds that column to databases created before it existed.
+ */
+function migrateScheduleDeviationCounterparty() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (!tables.includes('schedule_deviations')) return;
+  const cols = db.prepare(`PRAGMA table_info(schedule_deviations)`).all().map((c) => c.name);
+  if (!cols.includes('counterparty')) db.exec('ALTER TABLE schedule_deviations ADD COLUMN counterparty TEXT;');
+}
+
+try {
+  migrateScheduleDeviationCounterparty();
+} catch (e) {
+  console.error('Schedule deviation counterparty migration failed:', e.message);
 }
 
 /**

@@ -138,13 +138,17 @@ function importApplications(workbook, report) {
     const dates = apps.map(r => applicationDate(r[2], r[6])).filter(Boolean).sort();
     const start = dates[0], end = dates[dates.length - 1];
 
+    // Per-buyer approved energy — the volume basis for contribution reporting,
+    // since the day-wise schedule is kept at contract level.
+    const contractedMwh = Number(mwh.reduce((a, b) => a + b, 0).toFixed(3));
+
     db.prepare(`
       INSERT INTO bilateral_transactions (
-        id, client_id, counterparty, loi_contract_ref, oa_type, quantum_mw,
+        id, client_id, counterparty, loi_contract_ref, oa_type, quantum_mw, contracted_mwh,
         tariff_per_unit, purchase_rate_per_unit, sale_rate_per_unit, trading_margin_per_unit,
         open_access_status, start_date, end_date, status, noar_status, noar_contract_no
-      ) VALUES (?, ?, ?, ?, 'STOA', ?, ?, ?, ?, 0.03, 'APPROVED', ?, ?, 'ACTIVE', 'APPROVED', ?)
-    `).run(newId('BIL'), clientId, seller, loi, peakMw, sale, purchase, sale, start, end, apps[apps.length - 1]?.[3] || null);
+      ) VALUES (?, ?, ?, ?, 'STOA', ?, ?, ?, ?, ?, 0.03, 'APPROVED', ?, ?, 'ACTIVE', 'APPROVED', ?)
+    `).run(newId('BIL'), clientId, seller, loi, peakMw, contractedMwh, sale, purchase, sale, start, end, apps[apps.length - 1]?.[3] || null);
     report.bilaterals_created++;
     report.applications_covered += apps.length;
   }
@@ -239,17 +243,20 @@ function importIstsRates(workbook, report) {
 function importDailySchedule(workbook, report) {
   const ds = rows(workbook, 'Daily Schedule');
   const contractRef = String(ds[0]?.[1] || 'NVVN_Kreate_200MW').trim();
-  // The deal these days belong to is the largest imported one under this LOA.
-  const bilateral = db.prepare(`
-    SELECT id FROM bilateral_transactions WHERE loi_contract_ref LIKE 'NVVN%'
-    ORDER BY quantum_mw DESC LIMIT 1
-  `).get();
+  // The schedule covers the whole LOA, not one buyer, so it is deliberately not
+  // attached to a single bilateral — doing so would credit one buyer with the
+  // entire contract's energy. The seller is recorded on the row instead.
+  const counterparty = db.prepare(`
+    SELECT counterparty FROM bilateral_transactions
+    WHERE loi_contract_ref LIKE 'NVVN%' LIMIT 1
+  `).get()?.counterparty || null;
 
   const upsert = db.prepare(`
-    INSERT INTO schedule_deviations (id, bilateral_id, contract_ref, schedule_date, availability_mwh,
+    INSERT INTO schedule_deviations (id, bilateral_id, contract_ref, counterparty, schedule_date, availability_mwh,
       requested_mwh, scheduled_mwh, buyer_default_mwh, seller_default_mwh, remark, source)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LEDGER_IMPORT')
+    VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LEDGER_IMPORT')
     ON CONFLICT(contract_ref, schedule_date) DO UPDATE SET
+      counterparty = excluded.counterparty,
       availability_mwh = excluded.availability_mwh,
       requested_mwh = excluded.requested_mwh,
       scheduled_mwh = excluded.scheduled_mwh,
@@ -287,7 +294,7 @@ function importDailySchedule(workbook, report) {
     const requested = Number(r[2]) || 0;
     const scheduled = Number(r[3]) || 0;
     if (!requested && !scheduled) continue;
-    upsert.run(newId('SDV'), bilateral?.id || null, contractRef, date,
+    upsert.run(newId('SDV'), contractRef, counterparty, date,
       Number(r[1]) || 0, requested, scheduled, Number(r[4]) || 0, Number(r[5]) || 0,
       r[6] ? String(r[6]) : null);
     report.schedule_days_imported++;

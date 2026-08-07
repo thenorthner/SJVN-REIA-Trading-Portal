@@ -60,7 +60,7 @@ export function scorecard(filters = {}) {
   const rows = db.prepare(`
     SELECT
       sd.contract_ref,
-      COALESCE(bt.counterparty, 'Unknown')  AS counterparty,
+      COALESCE(sd.counterparty, bt.counterparty, 'Unknown') AS counterparty,
       COUNT(*)                              AS days,
       ROUND(SUM(sd.requested_mwh), 3)       AS requested_mwh,
       ROUND(SUM(sd.scheduled_mwh), 3)       AS scheduled_mwh,
@@ -71,7 +71,7 @@ export function scorecard(filters = {}) {
     FROM schedule_deviations sd
     LEFT JOIN bilateral_transactions bt ON bt.id = sd.bilateral_id
     WHERE ${where}
-    GROUP BY sd.contract_ref, bt.counterparty
+    GROUP BY sd.contract_ref, COALESCE(sd.counterparty, bt.counterparty, 'Unknown')
     ORDER BY seller_default_mwh DESC
   `).all(...params);
 
@@ -87,7 +87,7 @@ export function scorecard(filters = {}) {
 export function incidents(filters = {}) {
   const { where, params } = filterSql(filters);
   return db.prepare(`
-    SELECT sd.*, COALESCE(bt.counterparty, 'Unknown') AS counterparty,
+    SELECT sd.*, COALESCE(sd.counterparty, bt.counterparty, 'Unknown') AS counterparty,
            ROUND(CASE WHEN sd.requested_mwh > 0
                       THEN (sd.seller_default_mwh / sd.requested_mwh) * 100 ELSE 0 END, 2) AS shortfall_pct
     FROM schedule_deviations sd
