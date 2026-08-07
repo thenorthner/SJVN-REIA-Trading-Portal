@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
 import { REASON_LABELS, OPEN_STATUSES } from '../disputesConstants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const LOGO_PATH = path.join(__dirname, '../assets/sjvn_logo.png');
+const LOGO_PATH = path.join(__dirname, '../assets/sjvn_logo.jpg');
 
 const PAGE_W = 841.89;
 const PAGE_H = 595.28;

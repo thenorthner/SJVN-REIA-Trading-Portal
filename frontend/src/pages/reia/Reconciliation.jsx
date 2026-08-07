@@ -128,13 +128,25 @@ export default function Reconciliation() {
   }
 
   async function handleSignoffRequest() {
-    await api.reconciliation.requestSignoff(detail.id);
-    await refreshDetail();
+    try {
+      await api.reconciliation.requestSignoff(detail.id);
+      await refreshDetail();
+      load();
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message || 'Failed to request sign-off';
+      alert(msg);
+    }
   }
 
   async function handleAck(decision) {
-    await api.reconciliation.acknowledge(detail.id, decision, decision === 'DISAGREE' ? 'Disagreed from REIA desk' : undefined);
-    await refreshDetail();
+    try {
+      await api.reconciliation.acknowledge(detail.id, decision, decision === 'DISAGREE' ? 'Disagreed from REIA desk' : undefined);
+      await refreshDetail();
+      load();
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message || 'Failed to process acknowledgement';
+      alert(msg);
+    }
   }
 
   async function handleReopenRequest() {

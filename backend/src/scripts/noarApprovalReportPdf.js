@@ -8,7 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const LOGO_PATH = path.join(__dirname, '../assets/sjvn_logo.png');
+const LOGO_PATH = path.join(__dirname, '../assets/sjvn_logo.jpg');
 
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
