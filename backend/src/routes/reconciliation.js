@@ -596,32 +596,34 @@ router.post('/:id/request-signoff', requireRole(...REIA_WRITE), (req, res) => {
     message: `${recon.recon_no} awaiting your acknowledgment`,
   });
   res.json(db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(recon.id));
-});
-
-// ---- acknowledge / disagree ----
+}// ---- acknowledge / disagree ----
 router.post('/:id/acknowledge', (req, res) => {
-  const { decision, note } = req.body; // AGREE | DISAGREE
+  const { decision, note, remarks } = req.body; // AGREE | DISAGREE
   const recon = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(req.params.id);
   if (!recon) return res.status(404).json({ error: 'Not found' });
   if (!canAccessRecon(req.user, recon)) return res.status(403).json({ error: 'Not authorized' });
-  if (!['PENDING_SIGN_OFF', 'AUTO_MATCHED', 'AGREED'].includes(recon.status) && recon.status !== 'PENDING_SIGN_OFF') {
-    if (!['PENDING_SIGN_OFF', 'AUTO_MATCHED'].includes(recon.status)) {
+  if (!['PENDING_SIGN_OFF', 'AUTO_MATCHED', 'AGREED', 'NEEDS_REVIEW'].includes(recon.status) && recon.status !== 'PENDING_SIGN_OFF') {
+    if (!['PENDING_SIGN_OFF', 'AUTO_MATCHED', 'NEEDS_REVIEW'].includes(recon.status)) {
       return res.status(400).json({ error: `Cannot acknowledge in status ${recon.status}` });
     }
   }
 
+  const finalNote = note || remarks || (decision === 'DISAGREE' ? 'Disagreed during joint reconciliation review' : 'Digitally acknowledged and verified');
+
   if (decision === 'DISAGREE') {
     db.prepare(`UPDATE reconciliations SET status = 'DISPUTED', discrepancy_notes = ?, updated_at = datetime('now') WHERE id = ?`)
-      .run(note || 'Counterparty disagreed with reconciliation statement', recon.id);
-    recordEvent(recon.id, req.user, 'DISAGREE', { note });
-    pushNotification({ role: 'REIA_USER', type: 'RECON_DISPUTED', message: `${recon.recon_no} disputed by ${req.user.name}` });
-    return res.json(db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(recon.id));
+      .run(finalNote, recon.id);
+    recordEvent(recon.id, req.user, 'DISAGREE', { note: finalNote, user_role: req.user.role, user_name: req.user.name });
+    logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'RECON_DISAGREE', module: 'REIA', entityType: 'reconciliation', entityId: recon.id, details: { recon_no: recon.recon_no, note: finalNote } });
+    pushNotification({ role: 'REIA_USER', type: 'RECON_DISPUTED', message: `${recon.recon_no} disputed by ${req.user.name}: ${finalNote}` });
+    const updated = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(recon.id);
+    return res.json({ success: true, decision: 'DISAGREE', message: `Disagreement recorded for ${recon.recon_no}`, reconciliation: updated });
   }
 
   const isSjvn = isReia(req.user);
   if (isSjvn) {
-    db.prepare(`UPDATE reconciliations SET sjvn_ack_at = datetime('now'), sjvn_ack_by = ?, updated_at = datetime('now') WHERE id = ?`)
-      .run(req.user.name, recon.id);
+    db.prepare(`UPDATE reconciliations SET sjvn_ack_at = datetime('now'), sjvn_ack_by = ?, discrepancy_notes = COALESCE(?, discrepancy_notes), updated_at = datetime('now') WHERE id = ?`)
+      .run(req.user.name, remarks ? `SJVN Note: ${remarks}` : null, recon.id);
   } else {
     const okRole =
       (req.user.role === recon.counterparty_role) ||
@@ -629,27 +631,38 @@ router.post('/:id/acknowledge', (req, res) => {
     if (!okRole && req.user.role !== 'SJVN_ADMIN') {
       return res.status(403).json({ error: 'Only counterparty can acknowledge on this side' });
     }
-    db.prepare(`UPDATE reconciliations SET counterparty_ack_at = datetime('now'), counterparty_ack_by = ?, updated_at = datetime('now') WHERE id = ?`)
-      .run(req.user.name, recon.id);
+    db.prepare(`UPDATE reconciliations SET counterparty_ack_at = datetime('now'), counterparty_ack_by = ?, discrepancy_notes = COALESCE(?, discrepancy_notes), updated_at = datetime('now') WHERE id = ?`)
+      .run(req.user.name, remarks ? `Counterparty Note: ${remarks}` : null, recon.id);
   }
 
-  recordEvent(recon.id, req.user, 'ACKNOWLEDGE', { side: isSjvn ? 'SJVN' : 'COUNTERPARTY' });
+  recordEvent(recon.id, req.user, 'ACKNOWLEDGE', { side: isSjvn ? 'SJVN' : 'COUNTERPARTY', actor: req.user.name, role: req.user.role, remarks });
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'RECON_ACKNOWLEDGE', module: 'REIA', entityType: 'reconciliation', entityId: recon.id, details: { recon_no: recon.recon_no, side: isSjvn ? 'SJVN' : 'COUNTERPARTY', remarks } });
 
-  const fresh = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(recon.id);
+  let fresh = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(recon.id);
+  let dualSigned = false;
   if (fresh.sjvn_ack_at && fresh.counterparty_ack_at) {
-    db.prepare(`UPDATE reconciliations SET status = 'AGREED', closed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`)
+    db.prepare(`UPDATE reconciliations SET status = 'CLOSED', closed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`)
       .run(recon.id);
-    // Auto-close shortly after agree
-    db.prepare(`UPDATE reconciliations SET status = 'CLOSED' WHERE id = ?`).run(recon.id);
     recordEvent(recon.id, req.user, 'CLOSED', { via: 'dual_ack' });
+    dualSigned = true;
   } else if (fresh.status === 'AUTO_MATCHED' || fresh.status === 'PENDING_SIGN_OFF') {
     db.prepare(`UPDATE reconciliations SET status = 'PENDING_SIGN_OFF', updated_at = datetime('now') WHERE id = ?`).run(recon.id);
   }
 
   const items = db.prepare('SELECT * FROM recon_items WHERE reconciliation_id = ?').all(recon.id);
   const updated = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(recon.id);
-  saveStatement(updated, items, req.user);
-  res.json(updated);
+  const statement = saveStatement(updated, items, req.user);
+  res.json({
+    success: true,
+    decision: 'AGREE',
+    side: isSjvn ? 'SJVN' : 'COUNTERPARTY',
+    dual_signed: dualSigned,
+    message: dualSigned 
+      ? `Reconciliation ${recon.recon_no} is now Dual Signed-Off & CLOSED!`
+      : `Acknowledged by ${isSjvn ? 'SJVN Desk' : 'Counterparty'}. Awaiting other party sign-off.`,
+    reconciliation: updated,
+    statement
+  });
 });
 
 // ---- reopen request ----
@@ -674,16 +687,91 @@ router.post('/:id/reopen-request', (req, res) => {
 });
 
 // ---- regenerate statement ----
-router.post('/:id/regenerate-statement', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/:id/regenerate-statement', requireRole(...REIA_WRITE, 'TRADING_USER', 'MANAGEMENT'), (req, res) => {
   const recon = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(req.params.id);
   if (!recon) return res.status(404).json({ error: 'Not found' });
-  const nextVer = recon.version + 1;
-  db.prepare(`UPDATE reconciliations SET version = ?, updated_at = datetime('now') WHERE id = ?`).run(nextVer, recon.id);
-  const fresh = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(recon.id);
+
+  try {
+    let built;
+    if (recon.scope === 'TRADING_CLIENT') {
+      built = buildTradingReconItems({ tradingClientId: recon.trading_client_id, period: recon.period });
+    } else {
+      let sapOverride = null;
+      try {
+        if (recon.sap_override) sapOverride = typeof recon.sap_override === 'string' ? JSON.parse(recon.sap_override) : recon.sap_override;
+      } catch (_) {}
+      built = buildContractReconItems({ 
+        contractId: recon.contract_id, 
+        period: recon.period, 
+        periodType: recon.period_type, 
+        sapOverride 
+      });
+    }
+
+    if (built && Array.isArray(built.items) && built.items.length > 0) {
+      // Find items that were manually overridden or linked to active disputes
+      const preservedItems = db.prepare(`
+        SELECT * FROM recon_items 
+        WHERE reconciliation_id = ? AND (match_status = 'OVERRIDDEN' OR dispute_id IS NOT NULL)
+      `).all(recon.id);
+      const preservedLabels = new Set(preservedItems.map(i => i.label));
+
+      // Remove old non-preserved items
+      db.prepare(`
+        DELETE FROM recon_items 
+        WHERE reconciliation_id = ? AND match_status != 'OVERRIDDEN' AND dispute_id IS NULL
+      `).run(recon.id);
+
+      // Insert new calculated items that aren't already overridden
+      const itemsToInsert = built.items.filter(i => !preservedLabels.has(i.label));
+      insertItems(recon.id, itemsToInsert);
+    }
+  } catch (recalcErr) {
+    console.warn('[Recon] Recalculate items on regenerate:', recalcErr.message);
+  }
+
   const items = db.prepare('SELECT * FROM recon_items WHERE reconciliation_id = ?').all(recon.id);
+  const exceptions = items.filter((i) => ['EXCEPTION', 'CARRIED'].includes(i.match_status)).length;
+  const matched = items.filter((i) => ['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN'].includes(i.match_status)).length;
+  const unrecon = items.filter((i) => ['EXCEPTION', 'CARRIED'].includes(i.match_status))
+    .reduce((s, i) => s + Math.abs(i.variance || 0), 0);
+  const autoMatchPct = items.length > 0 ? Number(((matched / items.length) * 100).toFixed(2)) : 0;
+  const nextVer = (Number(recon.version) || 1) + 1;
+  const newStatus = exceptions > 0 ? 'NEEDS_REVIEW' : (['AGREED', 'CLOSED'].includes(recon.status) ? recon.status : 'PENDING_SIGN_OFF');
+
+  db.prepare(`
+    UPDATE reconciliations 
+    SET version = ?, items_count = ?, items_auto_matched = ?, items_exception = ?,
+        auto_match_pct = ?, unreconciled_amount = ?, status = ?, updated_at = datetime('now') 
+    WHERE id = ?
+  `).run(nextVer, items.length, matched, exceptions, autoMatchPct, unrecon, newStatus, recon.id);
+
+  const fresh = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(recon.id);
   const statement = saveStatement(fresh, items, req.user);
-  recordEvent(recon.id, req.user, 'STATEMENT_REGENERATED', { version: nextVer });
-  res.json(statement);
+  recordEvent(recon.id, req.user, 'STATEMENT_REGENERATED', { 
+    version: nextVer, 
+    auto_match_pct: autoMatchPct,
+    items_count: items.length,
+    items_exception: exceptions 
+  });
+  logAudit({ 
+    req: typeof req !== "undefined" ? req : null, 
+    user: req.user, 
+    action: 'RECON_STATEMENT_REGENERATED', 
+    module: 'REIA', 
+    entityType: 'reconciliation', 
+    entityId: recon.id, 
+    details: { recon_no: recon.recon_no, version: nextVer, auto_match_pct: autoMatchPct } 
+  });
+
+  res.json({
+    success: true,
+    version: nextVer,
+    message: `Statement regenerated successfully to Version v${nextVer}`,
+    reconciliation: { ...fresh, items, statement },
+    statement
+  });
+});
 });
 
 // Backward-compat resolve

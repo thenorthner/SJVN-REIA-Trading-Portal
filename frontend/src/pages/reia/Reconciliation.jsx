@@ -5,7 +5,7 @@ import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, StatementVie
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { fmtDateTime } from '../../datetime.js';
 
-const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
+const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER', 'MANAGEMENT'];
 const CAN_APPROVE_REOPEN = ['SJVN_ADMIN', 'FINANCE_USER', 'REIA_USER'];
 
 const RUN_FORM = {
@@ -40,6 +40,23 @@ export default function Reconciliation() {
   const [showRun, setShowRun] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
 
+  const [runForm, setRunForm] = useState(RUN_FORM);
+  const [error, setError] = useState('');
+  const [detail, setDetail] = useState(null);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [reopenReason, setReopenReason] = useState('');
+
+  // Acknowledgement & Regeneration States
+  const [ackModal, setAckModal] = useState({
+    open: false,
+    decision: 'AGREE', // 'AGREE' | 'DISAGREE'
+    remarks: '',
+    confirmed: false,
+  });
+  const [ackLoading, setAckLoading] = useState(false);
+  const [ackFeedback, setAckFeedback] = useState(null);
+  const [regenerateLoading, setRegenerateLoading] = useState(false);
+
   async function downloadReconPdf() {
     setPdfLoading(true);
     try {
@@ -52,11 +69,6 @@ export default function Reconciliation() {
       setPdfLoading(false);
     }
   }
-  const [runForm, setRunForm] = useState(RUN_FORM);
-  const [error, setError] = useState('');
-  const [detail, setDetail] = useState(null);
-  const [overrideReason, setOverrideReason] = useState('');
-  const [reopenReason, setReopenReason] = useState('');
 
   function load() {
     setLoading(true);
@@ -83,12 +95,15 @@ export default function Reconciliation() {
     setDetail(await api.reconciliation.get(row.id));
     setOverrideReason('');
     setReopenReason('');
+    setAckFeedback(null);
   }
 
   async function refreshDetail() {
     if (!detail) return;
-    setDetail(await api.reconciliation.get(detail.id));
+    const fresh = await api.reconciliation.get(detail.id);
+    setDetail(fresh);
     load();
+    return fresh;
   }
 
   async function handleRun(e) {
@@ -113,47 +128,137 @@ export default function Reconciliation() {
 
   async function handleOverride(itemId) {
     if (!overrideReason.trim()) return alert('Override reason required');
-    await api.reconciliation.override(detail.id, itemId, overrideReason);
-    setOverrideReason('');
-    await refreshDetail();
+    try {
+      await api.reconciliation.override(detail.id, itemId, overrideReason);
+      setOverrideReason('');
+      setAckFeedback({
+        type: 'info',
+        title: 'Item Variance Overridden',
+        message: 'Line variance successfully overridden. Updated metrics calculated.',
+      });
+      await refreshDetail();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to override');
+    }
   }
 
   async function handleRaiseDispute(itemId) {
-    await api.reconciliation.raiseDispute(detail.id, {
-      item_id: itemId,
-      reason_code: 'ENERGY_DATA_MISMATCH',
-      issue_description: `From reconciliation ${detail.recon_no}`,
-    });
-    await refreshDetail();
+    try {
+      await api.reconciliation.raiseDispute(detail.id, {
+        item_id: itemId,
+        reason_code: 'ENERGY_DATA_MISMATCH',
+        issue_description: `From reconciliation ${detail.recon_no}`,
+      });
+      setAckFeedback({
+        type: 'warning',
+        title: 'Dispute Case Raised',
+        message: 'Dispute linked to this reconciliation item and forwarded to dispute resolution desk.',
+      });
+      await refreshDetail();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to raise dispute');
+    }
   }
 
   async function handleSignoffRequest() {
     try {
       await api.reconciliation.requestSignoff(detail.id);
+      setAckFeedback({
+        type: 'success',
+        title: 'Sign-off Requested',
+        message: 'Reconciliation is now marked PENDING SIGN-OFF. Notification sent to counterparty.',
+      });
       await refreshDetail();
-      load();
     } catch (err) {
       const msg = err.response?.data?.error || err.message || 'Failed to request sign-off';
       alert(msg);
     }
   }
 
-  async function handleAck(decision) {
+  // Open Acknowledgement Modal
+  function triggerAckModal(decision) {
+    setAckModal({
+      open: true,
+      decision,
+      remarks: decision === 'AGREE' ? 'Verified against REA & billing ledger.' : '',
+      confirmed: false,
+    });
+  }
+
+  // Submit Acknowledgement
+  async function submitAcknowledgement() {
+    if (ackModal.decision === 'DISAGREE' && !ackModal.remarks.trim()) {
+      alert('Please provide the reason / discrepancy notes for disagreement.');
+      return;
+    }
+    if (ackModal.decision === 'AGREE' && !ackModal.confirmed) {
+      alert('Please check the confirmation box before signing off.');
+      return;
+    }
+
+    setAckLoading(true);
     try {
-      await api.reconciliation.acknowledge(detail.id, decision, decision === 'DISAGREE' ? 'Disagreed from REIA desk' : undefined);
+      const res = await api.reconciliation.acknowledge(
+        detail.id,
+        ackModal.decision,
+        ackModal.decision === 'DISAGREE' ? ackModal.remarks : undefined,
+        ackModal.remarks
+      );
+
+      const isAgree = ackModal.decision === 'AGREE';
+      setAckFeedback({
+        type: isAgree ? 'success' : 'danger',
+        title: isAgree ? '✅ Sign-off Acknowledged Successfully' : '⚠️ Disagreement Recorded & Disputed',
+        message: res.message || (isAgree ? 'SJVN Digital Sign-off successfully logged with timestamp and audit entry.' : 'Disagreement recorded.'),
+      });
+
+      setAckModal({ open: false, decision: 'AGREE', remarks: '', confirmed: false });
       await refreshDetail();
-      load();
     } catch (err) {
       const msg = err.response?.data?.error || err.message || 'Failed to process acknowledgement';
       alert(msg);
+    } finally {
+      setAckLoading(false);
+    }
+  }
+
+  // Handle Regenerate Statement
+  async function handleRegenerate() {
+    setRegenerateLoading(true);
+    setAckFeedback(null);
+    try {
+      const res = await api.reconciliation.regenerateStatement(detail.id);
+      await refreshDetail();
+      setAckFeedback({
+        type: 'success',
+        title: '🔄 Statement Successfully Regenerated!',
+        message: res.message || `Recalculated fresh energy/billing lines and created Version v${res.version || (detail.version + 1)}.`,
+      });
+    } catch (err) {
+      setAckFeedback({
+        type: 'danger',
+        title: 'Regeneration Failed',
+        message: err.response?.data?.error || err.message || 'Failed to regenerate statement.',
+      });
+    } finally {
+      setRegenerateLoading(false);
     }
   }
 
   async function handleReopenRequest() {
     if (!reopenReason.trim()) return alert('Reason required');
-    await api.reconciliation.reopenRequest(detail.id, reopenReason);
-    setReopenReason('');
-    await refreshDetail();
+    try {
+      await api.reconciliation.reopenRequest(detail.id, reopenReason);
+      setReopenReason('');
+      setAckFeedback({
+        type: 'info',
+        title: 'Reopen Request Submitted',
+        message: 'Reopen request has been submitted for finance and management approval.',
+      });
+      await refreshDetail();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to submit reopen request');
+    }
   }
 
   async function actReopen(id, decision) {
@@ -176,7 +281,7 @@ export default function Reconciliation() {
     <div>
       <PageHeader
         title="Reconciliation"
-        subtitle="Three-way trust: Metered ↔ Billed ↔ Paid — with joint sign-off and dispute linkage"
+        subtitle="Three-way trust: Metered ↔ Billed ↔ Paid — with joint digital sign-off and dispute linkage"
         actions={
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-primary" disabled={pdfLoading} onClick={downloadReconPdf}>
@@ -260,6 +365,7 @@ export default function Reconciliation() {
         <Table columns={columns} rows={loading ? [] : rows} onRowClick={openDetail} emptyMessage={loading ? 'Loading...' : 'No reconciliations.'} />
       </Card>
 
+      {/* Modal: Run Reconciliation */}
       <Modal open={showRun} onClose={() => setShowRun(false)} title="Run Reconciliation" width={560}>
         {error && <div className="form-error">{error}</div>}
         <form onSubmit={handleRun}>
@@ -301,19 +407,116 @@ export default function Reconciliation() {
         </form>
       </Modal>
 
-      <Modal open={!!detail} onClose={() => setDetail(null)} title={`${detail?.recon_no || ''} — ${detail?.period || ''}`} width={780}>
+      {/* Modal: Reconciliation Statement Details & Actions */}
+      <Modal open={!!detail} onClose={() => setDetail(null)} title={`${detail?.recon_no || ''} — ${detail?.period || ''}`} width={860}>
         {detail && (
           <div>
+            {/* Feedback Alert Banner */}
+            {ackFeedback && (
+              <div style={{
+                padding: '12px 16px',
+                borderRadius: 8,
+                marginBottom: 16,
+                background: ackFeedback.type === 'success' ? '#ecfdf5' : ackFeedback.type === 'danger' ? '#fef2f2' : '#eff6ff',
+                border: `1px solid ${ackFeedback.type === 'success' ? '#10b981' : ackFeedback.type === 'danger' ? '#ef4444' : '#3b82f6'}`,
+                color: ackFeedback.type === 'success' ? '#065f46' : ackFeedback.type === 'danger' ? '#991b1b' : '#1e40af',
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{ackFeedback.title}</div>
+                <div>{ackFeedback.message}</div>
+              </div>
+            )}
+
+            {/* Quick Metrics Grid */}
             <div className="detail-grid">
               <div className="detail-item"><span className="detail-label">Status</span><span className="detail-value"><Badge status={detail.status} /></span></div>
               <div className="detail-item"><span className="detail-label">Basis</span><span className="detail-value">{detail.data_basis}</span></div>
               <div className="detail-item"><span className="detail-label">Auto-match</span><span className="detail-value">{detail.auto_match_pct}%</span></div>
               <div className="detail-item"><span className="detail-label">Exposure</span><span className="detail-value">{fmtCurrency(detail.unreconciled_amount)}</span></div>
-              <div className="detail-item"><span className="detail-label">Energy / Pay / Perf</span><span className="detail-value">{detail.energy_match ? '' : ''} / {detail.payment_match ? '' : ''} / {detail.performance_match ? '' : ''}</span></div>
-              <div className="detail-item"><span className="detail-label">Sign-off</span><span className="detail-value">SJVN: {detail.sjvn_ack_by || '—'} | CP: {detail.counterparty_ack_by || '—'}</span></div>
+              <div className="detail-item"><span className="detail-label">Statement Version</span><span className="detail-value">v{detail.version || 1}</span></div>
+              <div className="detail-item"><span className="detail-label">Contract / Client</span><span className="detail-value">{detail.contract_no || detail.trading_client_name || '—'}</span></div>
             </div>
 
-            <div className="section-title" style={{ marginTop: 14 }}>Three-way / check items</div>
+            {/* Dual Joint Sign-off Status Card */}
+            <div style={{
+              marginTop: 16,
+              padding: 16,
+              background: 'var(--surface-hover, #f8fafc)',
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+            }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>🤝 Dual Digital Sign-off & Acknowledgment Status</span>
+                {detail.sjvn_ack_at && detail.counterparty_ack_at ? (
+                  <span style={{ fontSize: 12, background: '#10b981', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
+                    ✓ 2/2 Complete (Closed & Legally Agreed)
+                  </span>
+                ) : (detail.sjvn_ack_at || detail.counterparty_ack_at) ? (
+                  <span style={{ fontSize: 12, background: '#f59e0b', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
+                    ⏳ 1/2 Acknowledged (Awaiting Dual Signature)
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 12, background: 'var(--text-muted)', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
+                    0/2 Signed Off
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+                {/* SJVN Desk Card */}
+                <div style={{
+                  padding: 12,
+                  background: detail.sjvn_ack_at ? '#ecfdf5' : '#ffffff',
+                  border: `1px solid ${detail.sjvn_ack_at ? '#a7f3d0' : 'var(--border)'}`,
+                  borderRadius: 6,
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: detail.sjvn_ack_at ? '#065f46' : 'var(--text-muted)' }}>
+                    🏛️ SJVN REIA Desk Sign-Off
+                  </div>
+                  {detail.sjvn_ack_at ? (
+                    <div style={{ marginTop: 4, fontSize: 13, color: '#065f46' }}>
+                      <div style={{ fontWeight: 600 }}>✅ Acknowledged by {detail.sjvn_ack_by}</div>
+                      <div style={{ fontSize: 11, opacity: 0.8 }}>on {fmtDateTime(detail.sjvn_ack_at)}</div>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>
+                      ⏳ Pending SJVN verification & sign-off
+                    </div>
+                  )}
+                </div>
+
+                {/* Counterparty Card */}
+                <div style={{
+                  padding: 12,
+                  background: detail.counterparty_ack_at ? '#ecfdf5' : '#ffffff',
+                  border: `1px solid ${detail.counterparty_ack_at ? '#a7f3d0' : 'var(--border)'}`,
+                  borderRadius: 6,
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: detail.counterparty_ack_at ? '#065f46' : 'var(--text-muted)' }}>
+                    🏢 Counterparty (Buyer/Seller) Sign-Off
+                  </div>
+                  {detail.counterparty_ack_at ? (
+                    <div style={{ marginTop: 4, fontSize: 13, color: '#065f46' }}>
+                      <div style={{ fontWeight: 600 }}>✅ Acknowledged by {detail.counterparty_ack_by}</div>
+                      <div style={{ fontSize: 11, opacity: 0.8 }}>on {fmtDateTime(detail.counterparty_ack_at)}</div>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>
+                      ⏳ Pending Discom / Generator digital sign-off
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {detail.discrepancy_notes && (
+                <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', background: '#ffffff', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--border)' }}>
+                  <strong>Notes / Remarks:</strong> {detail.discrepancy_notes}
+                </div>
+              )}
+            </div>
+
+            <div className="section-title" style={{ marginTop: 16 }}>Three-way / check items</div>
             <table className="data-table" style={{ width: '100%', fontSize: 13 }}>
               <thead>
                 <tr>
@@ -340,7 +543,7 @@ export default function Reconciliation() {
                           <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRaiseDispute(it.id)}>→ Dispute</button>
                         </div>
                       )}
-                      {it.dispute_id && <div style={{ fontSize: 11 }}>Linked dispute</div>}
+                      {it.dispute_id && <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>Linked dispute</div>}
                     </td>
                   </tr>
                 ))}
@@ -360,24 +563,43 @@ export default function Reconciliation() {
 
             <div className="section-title" style={{ marginTop: 16 }}>Reconciliation statement</div>
             <StatementViewer statement={detail.statement} />
-            <div className="form-actions" style={{ flexWrap: 'wrap' }}>
+
+            {/* Action Bar */}
+            <div className="form-actions" style={{ flexWrap: 'wrap', gap: 10, marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
               {CAN_WRITE.includes(user?.role) && detail.items_exception === 0 && detail.status === 'NEEDS_REVIEW' && (
-                <button type="button" className="btn btn-secondary" onClick={handleSignoffRequest}>Request Sign-off</button>
+                <button type="button" className="btn btn-secondary" onClick={handleSignoffRequest}>
+                  Request Sign-off
+                </button>
               )}
-              {CAN_WRITE.includes(user?.role) && ['PENDING_SIGN_OFF', 'AUTO_MATCHED'].includes(detail.status) && (
+
+              {CAN_WRITE.includes(user?.role) && ['PENDING_SIGN_OFF', 'AUTO_MATCHED', 'NEEDS_REVIEW'].includes(detail.status) && (
                 <>
-                  <button type="button" className="btn btn-success" onClick={() => handleAck('AGREE')}>SJVN Agree</button>
-                  <button type="button" className="btn btn-danger" onClick={() => handleAck('DISAGREE')}>Disagree</button>
+                  <button type="button" className="btn btn-success" onClick={() => triggerAckModal('AGREE')}>
+                    ✓ SJVN Agree & Sign-Off
+                  </button>
+                  <button type="button" className="btn btn-danger" onClick={() => triggerAckModal('DISAGREE')}>
+                    ✗ Disagree & Flag Dispute
+                  </button>
                 </>
               )}
+
               {CAN_WRITE.includes(user?.role) && (
-                <button type="button" className="btn btn-ghost" onClick={() => api.reconciliation.regenerateStatement(detail.id).then(refreshDetail)}>Regenerate statement</button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={regenerateLoading}
+                  onClick={handleRegenerate}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  {regenerateLoading ? '⏳ Recalculating & Regenerating…' : '🔄 Regenerate statement (Re-sync)'}
+                </button>
               )}
+
               {['CLOSED', 'AGREED'].includes(detail.status) && (
-                <>
-                  <input placeholder="Reopen reason..." value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+                <div style={{ display: 'flex', gap: 8, flex: 1, minWidth: 280 }}>
+                  <input placeholder="Reopen reason..." value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} style={{ flex: 1 }} />
                   <button type="button" className="btn btn-secondary" onClick={handleReopenRequest}>Request Reopen</button>
-                </>
+                </div>
               )}
             </div>
 
@@ -396,6 +618,129 @@ export default function Reconciliation() {
             </ul>
           </div>
         )}
+      </Modal>
+
+      {/* Modal: Interactive Digital Sign-off & Acknowledgment / Disagreement */}
+      <Modal
+        open={ackModal.open}
+        onClose={() => !ackLoading && setAckModal({ ...ackModal, open: false })}
+        title={ackModal.decision === 'AGREE' ? '✍️ Digital Sign-off & Acknowledgment' : '⚠️ Record Disagreement & Dispute Notice'}
+        width={560}
+      >
+        <div>
+          {ackModal.decision === 'AGREE' ? (
+            <div>
+              <div style={{
+                background: '#ecfdf5',
+                border: '1px solid #a7f3d0',
+                borderRadius: 8,
+                padding: 14,
+                marginBottom: 16,
+                color: '#065f46',
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                  Reconciliation Statement Confirmation
+                </div>
+                <div><strong>Recon #:</strong> {detail?.recon_no}</div>
+                <div><strong>Period:</strong> {detail?.period} ({detail?.data_basis})</div>
+                <div><strong>Entity:</strong> {detail?.contract_no || detail?.trading_client_name}</div>
+                <div><strong>Auto-Match Accuracy:</strong> {detail?.auto_match_pct}%</div>
+                <div><strong>Signatory:</strong> {user?.name} ({user?.role})</div>
+              </div>
+
+              <Field label="Sign-off Remarks / Notes (optional)">
+                <input
+                  value={ackModal.remarks}
+                  onChange={(e) => setAckModal({ ...ackModal, remarks: e.target.value })}
+                  placeholder="e.g. Verified against REA and billing schedules"
+                />
+              </Field>
+
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 14, fontSize: 13, cursor: 'pointer', background: 'var(--surface)', padding: 10, borderRadius: 6, border: '1px solid var(--border)' }}>
+                <input
+                  type="checkbox"
+                  checked={ackModal.confirmed}
+                  onChange={(e) => setAckModal({ ...ackModal, confirmed: e.target.checked })}
+                  style={{ marginTop: 2 }}
+                />
+                <span>
+                  <strong>I confirm digital sign-off</strong>: I have reviewed the energy metered volumes, billing lines, and payment records for period <strong>{detail?.period}</strong> and formally agree with this reconciliation statement.
+                </span>
+              </label>
+
+              <div className="form-actions" style={{ marginTop: 18 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={ackLoading}
+                  onClick={() => setAckModal({ ...ackModal, open: false })}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-success"
+                  disabled={!ackModal.confirmed || ackLoading}
+                  onClick={submitAcknowledgement}
+                >
+                  {ackLoading ? 'Recording Sign-off…' : '✓ Confirm & Digitally Sign Off'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: 8,
+                padding: 14,
+                marginBottom: 16,
+                color: '#991b1b',
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                  Disagreement & Dispute Escalation
+                </div>
+                <div>
+                  Disagreeing will mark this reconciliation as <strong>DISPUTED</strong> and flag the discrepancy to all parties for formal dispute resolution.
+                </div>
+              </div>
+
+              <Field label="Discrepancy / Disagreement Reason *">
+                <textarea
+                  rows={3}
+                  required
+                  value={ackModal.remarks}
+                  onChange={(e) => setAckModal({ ...ackModal, remarks: e.target.value })}
+                  placeholder="Describe the discrepancy in meter units, tariff rate, or billing amount..."
+                  style={{ width: '100%' }}
+                />
+              </Field>
+
+              <div className="form-actions" style={{ marginTop: 18 }}>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={ackLoading}
+                  onClick={() => setAckModal({ ...ackModal, open: false })}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  disabled={!ackModal.remarks.trim() || ackLoading}
+                  onClick={submitAcknowledgement}
+                >
+                  {ackLoading ? 'Submitting Disagreement…' : '⚠️ Submit Disagreement & Flag Dispute'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );
