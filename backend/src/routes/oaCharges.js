@@ -3,6 +3,7 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit } from '../util.js';
 import { computeOaCharges } from '../services/oaCharges.js';
+import { reconcileOaCharges, actualsByMonth } from '../services/oaReconciliation.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -14,7 +15,7 @@ function paramsFromBody(b) {
   return {
     quantum_mwh: b.quantum_mwh, days: b.days, on_date: b.on_date,
     ists_rate: b.ists_rate, injection_state: b.injection_state, drawal_state: b.drawal_state,
-    include_ists: b.include_ists !== false, bearer_overrides: b.bearer_overrides || {},
+    include_ists: b.include_ists !== false, region: b.region, bearer_overrides: b.bearer_overrides || {},
   };
 }
 
@@ -49,6 +50,16 @@ router.post('/estimate/save', requireRole(...OA_WRITE), (req, res) => {
 router.get('/estimate/:bilateralId', requireRole(...OA_READ), (req, res) => {
   const rows = db.prepare('SELECT * FROM oa_charge_estimates WHERE bilateral_id = ? ORDER BY created_at DESC').all(req.params.bilateralId);
   res.json(rows.map(r => ({ ...r, line_items: JSON.parse(r.breakdown_json || '[]') })));
+});
+
+// Estimate against what each application was actually charged.
+router.get('/reconcile', requireRole(...OA_READ), (req, res) => {
+  res.json(reconcileOaCharges({ from: req.query.from, to: req.query.to }));
+});
+
+// Actual open-access cost rolled up by month.
+router.get('/actuals-by-month', requireRole(...OA_READ), (req, res) => {
+  res.json(actualsByMonth({ from: req.query.from, to: req.query.to }));
 });
 
 export default router;

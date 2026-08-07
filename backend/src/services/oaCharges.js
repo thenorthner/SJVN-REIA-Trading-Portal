@@ -16,6 +16,7 @@ export function computeOaCharges({
   injection_state,           // e.g. 'West Bengal' -> 'West Bengal STU/SLDC'
   drawal_state,              // e.g. 'Delhi'       -> 'Delhi STU/SLDC'
   include_ists = true,
+  region,                    // transmission corridor (WR/NR/ER) — ISTS is priced per corridor
   bearer_overrides = {},     // { ISTS: 'SELLER', ... }
 } = {}) {
   const qty = Number(quantum_mwh) || 0;
@@ -39,11 +40,11 @@ export function computeOaCharges({
     });
   };
 
-  const rateVal = (name) => getEffectiveRate(name, date)?.rate_value ?? null;
+  const rateVal = (name, reg) => getEffectiveRate(name, date, reg)?.rate_value ?? null;
 
   // ISTS (buyer): explicit override wins, else the effective CTUIL tariff.
   if (include_ists) {
-    const r = ists_rate != null ? Number(ists_rate) : rateVal('ISTS');
+    const r = ists_rate != null ? Number(ists_rate) : rateVal('ISTS', region);
     addLine('ISTS', 'ISTS', r, 'Rs/MWh', bearerFor('ISTS', 'BUYER'), ists_rate != null ? 'OVERRIDE' : 'RATE_MASTER');
   }
 
@@ -70,7 +71,7 @@ export function computeOaCharges({
   }, {});
 
   return {
-    quantum_mwh: qty, days: nDays, on_date: date,
+    quantum_mwh: qty, days: nDays, on_date: date, region: region || null,
     line_items: items,
     total,
     by_bearer: { SELLER: by_bearer.SELLER || 0, BUYER: by_bearer.BUYER || 0 },

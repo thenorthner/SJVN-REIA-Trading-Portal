@@ -179,58 +179,66 @@ function importIstsRates(workbook, report) {
   // derived ratio wobbles in the second decimal and finer grouping would split
   // one tariff into many windows. The window's stored rate is then refined to the
   // median of its full-precision ratios, which prices back to the rupee.
-  const perDate = {};
+  // ISTS is billed per transmission corridor, so the series is derived per region
+  // (taken from the application number) rather than as one national rate.
+  const perRegion = {};
   for (const r of data) {
     const mwh = Number(r[9]);
     const ists = Number(r[14]);
     const d = applicationDate(r[2], r[6]);
     if (!(mwh > 0) || !Number.isFinite(ists) || !(ists > 0) || !d) continue;
+    const region = (String(r[2]).match(/SJVN\d{6}([A-Z]{2})/) || [])[1] || 'WR';
     const exact = ists / mwh;
     const key = Number(exact.toFixed(1));
+    perRegion[region] = perRegion[region] || {};
+    const perDate = perRegion[region];
     perDate[d] = perDate[d] || {};
     perDate[d][key] = perDate[d][key] || { n: 0, exact: [] };
     perDate[d][key].n++;
     perDate[d][key].exact.push(exact);
   }
 
-  const dominant = {};
-  for (const [d, buckets] of Object.entries(perDate)) {
-    const [key, bucket] = Object.entries(buckets).sort((a, b) => b[1].n - a[1].n)[0];
-    dominant[d] = { key: Number(key), exact: bucket.exact };
-  }
-
   const windows = [];
-  for (const d of Object.keys(dominant).sort()) {
-    const last = windows[windows.length - 1];
-    if (last && last.key === dominant[d].key) {
-      last.to = d;
-      last.exact.push(...dominant[d].exact);
-    } else {
-      windows.push({ key: dominant[d].key, from: d, to: d, exact: [...dominant[d].exact] });
+  for (const [region, perDate] of Object.entries(perRegion)) {
+    const dominant = {};
+    for (const [d, buckets] of Object.entries(perDate)) {
+      const [key, bucket] = Object.entries(buckets).sort((a, b) => b[1].n - a[1].n)[0];
+      dominant[d] = { key: Number(key), exact: bucket.exact };
     }
+    const regionWindows = [];
+    for (const d of Object.keys(dominant).sort()) {
+      const last = regionWindows[regionWindows.length - 1];
+      if (last && last.key === dominant[d].key) {
+        last.to = d;
+        last.exact.push(...dominant[d].exact);
+      } else {
+        regionWindows.push({ region, key: dominant[d].key, from: d, to: d, exact: [...dominant[d].exact] });
+      }
+    }
+    // Refine each window's rate to the median of the ratios observed in it.
+    for (const w of regionWindows) {
+      const sorted = w.exact.slice().sort((a, b) => a - b);
+      w.rate = Number(sorted[Math.floor(sorted.length / 2)].toFixed(2));
+    }
+    // The last window of each region stays open-ended.
+    regionWindows.forEach((w, i) => { w.open = i === regionWindows.length - 1; });
+    windows.push(...regionWindows);
   }
   if (!windows.length) return;
 
-  // Refine each window's rate to the median of the ratios observed in it.
-  for (const w of windows) {
-    const sorted = w.exact.slice().sort((a, b) => a - b);
-    w.rate = Number(sorted[Math.floor(sorted.length / 2)].toFixed(2));
-  }
-
   const insert = db.prepare(`
     INSERT INTO rate_master (id, rate_category, charge_name, region, rate_value, unit, effective_from, effective_to, note, is_active, created_by)
-    VALUES (?, 'ISTS', 'ISTS', 'ALL', ?, 'Rs/MWh', ?, ?, ?, 1, 'LEDGER_IMPORT')
+    VALUES (?, 'ISTS', 'ISTS', ?, ?, 'Rs/MWh', ?, ?, ?, 1, 'LEDGER_IMPORT')
   `);
-  windows.forEach((w, i) => {
-    // The final window stays open-ended so today's lookups resolve to it.
-    const to = i === windows.length - 1 ? null : w.to;
-    insert.run(newId('RATE'), w.rate, w.from, to, 'Derived from ISET ledger applications');
+  for (const w of windows) {
+    insert.run(newId('RATE'), w.region, w.rate, w.from, w.open ? null : w.to,
+      `Derived from ISET ledger applications (${w.region} corridor)`);
     report.ists_rates_created++;
-  });
+  }
 
   // Close the seeded baseline the day before the ledger history starts, so the
   // two series do not overlap.
-  const firstFrom = windows[0].from;
+  const firstFrom = windows.map((w) => w.from).sort()[0];
   const prevDay = new Date(new Date(firstFrom).getTime() - 86400000).toISOString().slice(0, 10);
   db.prepare(`
     UPDATE rate_master SET effective_to = ?
@@ -301,6 +309,40 @@ function importDailySchedule(workbook, report) {
       Number(r[1]) || 0, requested, scheduled, Number(r[4]) || 0, Number(r[5]) || 0,
       r[6] ? String(r[6]) : null);
     report.schedule_days_imported++;
+  }
+}
+
+// --- Application_Ledger -> actual open-access charges ----------------------
+
+// What each application was actually charged, so an estimate can be reconciled
+// against it. The OA Bills sheet would be the natural source but holds a single
+// clean row — the rest carry #REF! formula errors — whereas the Application
+// Ledger prices all 428 of them.
+function importOaActuals(workbook, report) {
+  const al = rows(workbook, 'Application_Ledger');
+  const data = al.slice(2).filter(r => r[2] && String(r[2]).startsWith('SJVN'));
+
+  const upsert = db.prepare(`
+    INSERT INTO oa_application_charges (id, application_no, approval_no, buyer, application_date,
+      approved_mwh, ists_actual, application_fee_actual, rldc_fee_actual, total_actual, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LEDGER_IMPORT')
+    ON CONFLICT(application_no) DO UPDATE SET
+      approval_no = excluded.approval_no, buyer = excluded.buyer,
+      application_date = excluded.application_date, approved_mwh = excluded.approved_mwh,
+      ists_actual = excluded.ists_actual, application_fee_actual = excluded.application_fee_actual,
+      rldc_fee_actual = excluded.rldc_fee_actual, total_actual = excluded.total_actual
+  `);
+
+  for (const r of data) {
+    const appNo = String(r[2]).trim();
+    const ists = Number(r[14]) || 0;
+    const appFee = Number(r[15]) || 0;
+    const rldc = Number(r[16]) || 0;
+    if (!(ists > 0)) continue;   // a handful of rows carry no charge detail
+    upsert.run(newId('OAC'), appNo, r[3] ? String(r[3]).trim() : null,
+      r[5] ? String(r[5]).trim() : null, applicationDate(r[2], r[6]),
+      Number(r[9]) || 0, ists, appFee, rldc, ists + appFee + rldc);
+    report.oa_actuals_imported++;
   }
 }
 
@@ -454,13 +496,14 @@ export function importTradingLedger(filePath) {
     bilaterals_created: 0, bilaterals_skipped: 0, applications_covered: 0,
     ists_rates_created: 0, ists_rates_skipped: 0,
     schedule_days_imported: 0, date_repairs: [],
-    cashflow_inflows: 0, cashflow_outflows: 0, energy_settlements_imported: 0,
+    cashflow_inflows: 0, cashflow_outflows: 0, energy_settlements_imported: 0, oa_actuals_imported: 0,
     tds_created: 0, tds_skipped: 0,
   };
   const run = db.transaction(() => {
     importApplications(workbook, report);
     importIstsRates(workbook, report);
     importDailySchedule(workbook, report);
+    importOaActuals(workbook, report);
     importEnergySettlements(workbook, report);
     importCashflow(workbook, report);
     importTds(workbook, report);

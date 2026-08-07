@@ -38,16 +38,26 @@ export function seedRateMaster() {
 
 // The rate in force for a charge on a given date. Picks the row whose validity
 // window contains the date, most recent effective_from winning when two overlap.
-export function getEffectiveRate(chargeName, onDate) {
+//
+// ISTS is priced per transmission corridor — the ledger shows the same day billed
+// at 390.12/MWh in the Western Region, 508.92 in the Northern and 419.01 in the
+// Eastern — so a region may be given. A rate held for that region wins; otherwise
+// the lookup falls back to a region-agnostic ('ALL') row.
+export function getEffectiveRate(chargeName, onDate, region) {
   const d = onDate || new Date().toISOString().slice(0, 10);
-  return db.prepare(`
+  const rows = db.prepare(`
     SELECT * FROM rate_master
     WHERE charge_name = ? AND is_active = 1
       AND effective_from <= ?
       AND (effective_to IS NULL OR effective_to >= ?)
     ORDER BY effective_from DESC
-    LIMIT 1
-  `).get(chargeName, d, d) || null;
+  `).all(chargeName, d, d);
+  if (!rows.length) return null;
+  if (region) {
+    const exact = rows.find((r) => r.region === region);
+    if (exact) return exact;
+  }
+  return rows.find((r) => r.region === 'ALL' || r.region == null) || rows[0];
 }
 
 // Insert a revision: closes the current open row's window the day before the new

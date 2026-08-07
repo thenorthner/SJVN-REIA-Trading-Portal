@@ -1662,6 +1662,26 @@ CREATE TABLE IF NOT EXISTS energy_settlements (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_energy_settle_day ON energy_settlements(contract_ref, settlement_date);
 
+-- Actual open-access charges as billed per application, so an estimate can be
+-- reconciled against what was really charged. The Application Ledger prices every
+-- application's legs; the OA Bills sheet holds only a single clean historical row
+-- (the rest carry #REF! formula errors), so the applications are the usable source.
+CREATE TABLE IF NOT EXISTS oa_application_charges (
+  id TEXT PRIMARY KEY,
+  application_no TEXT NOT NULL,
+  approval_no TEXT,
+  buyer TEXT,
+  application_date TEXT,
+  approved_mwh REAL NOT NULL DEFAULT 0,
+  ists_actual REAL NOT NULL DEFAULT 0,
+  application_fee_actual REAL NOT NULL DEFAULT 0,
+  rldc_fee_actual REAL NOT NULL DEFAULT 0,
+  total_actual REAL NOT NULL DEFAULT 0,
+  source TEXT NOT NULL DEFAULT 'LEDGER_IMPORT',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_oa_app_charges_no ON oa_application_charges(application_no);
+
 -- Both legs of the trading desk's cash cycle in one register: money owed to SJVN
 -- by the buyer (INFLOW) and money SJVN owes the seller (OUTFLOW). The ledger keeps
 -- these on separate sheets, so a net cash position could not be seen; holding both
