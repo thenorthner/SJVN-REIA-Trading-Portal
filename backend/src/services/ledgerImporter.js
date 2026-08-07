@@ -128,6 +128,87 @@ function importApplications(workbook, report) {
   }
 }
 
+// --- Application_Ledger -> effective-dated ISTS rates ----------------------
+
+// The ledger prices every application's ISTS leg, and CTUIL revises that tariff
+// on a monthly (27th-to-26th) cycle — so the applications themselves record the
+// rate history. Derive rate = ISTS amount / approved MWh per application, take
+// the dominant rate per date (a few applications run over other corridors at a
+// different tariff and would otherwise fragment the series), then compress runs
+// of equal rates into effective-dated windows.
+function importIstsRates(workbook, report) {
+  // Already imported once — the seed is idempotent, not a re-derivation.
+  if (db.prepare(`SELECT 1 FROM rate_master WHERE charge_name = 'ISTS' AND created_by = 'LEDGER_IMPORT' LIMIT 1`).get()) {
+    report.ists_rates_skipped++;
+    return;
+  }
+
+  const al = rows(workbook, 'Application_Ledger');
+  const data = al.slice(2).filter(r => r[2] && String(r[2]).startsWith('SJVN'));
+
+  // Group at 1 decimal — the ledger stores ISTS amounts as whole rupees, so the
+  // derived ratio wobbles in the second decimal and finer grouping would split
+  // one tariff into many windows. The window's stored rate is then refined to the
+  // median of its full-precision ratios, which prices back to the rupee.
+  const perDate = {};
+  for (const r of data) {
+    const mwh = Number(r[9]);
+    const ists = Number(r[14]);
+    const d = applicationDate(r[2], r[6]);
+    if (!(mwh > 0) || !Number.isFinite(ists) || !(ists > 0) || !d) continue;
+    const exact = ists / mwh;
+    const key = Number(exact.toFixed(1));
+    perDate[d] = perDate[d] || {};
+    perDate[d][key] = perDate[d][key] || { n: 0, exact: [] };
+    perDate[d][key].n++;
+    perDate[d][key].exact.push(exact);
+  }
+
+  const dominant = {};
+  for (const [d, buckets] of Object.entries(perDate)) {
+    const [key, bucket] = Object.entries(buckets).sort((a, b) => b[1].n - a[1].n)[0];
+    dominant[d] = { key: Number(key), exact: bucket.exact };
+  }
+
+  const windows = [];
+  for (const d of Object.keys(dominant).sort()) {
+    const last = windows[windows.length - 1];
+    if (last && last.key === dominant[d].key) {
+      last.to = d;
+      last.exact.push(...dominant[d].exact);
+    } else {
+      windows.push({ key: dominant[d].key, from: d, to: d, exact: [...dominant[d].exact] });
+    }
+  }
+  if (!windows.length) return;
+
+  // Refine each window's rate to the median of the ratios observed in it.
+  for (const w of windows) {
+    const sorted = w.exact.slice().sort((a, b) => a - b);
+    w.rate = Number(sorted[Math.floor(sorted.length / 2)].toFixed(2));
+  }
+
+  const insert = db.prepare(`
+    INSERT INTO rate_master (id, rate_category, charge_name, region, rate_value, unit, effective_from, effective_to, note, is_active, created_by)
+    VALUES (?, 'ISTS', 'ISTS', 'ALL', ?, 'Rs/MWh', ?, ?, ?, 1, 'LEDGER_IMPORT')
+  `);
+  windows.forEach((w, i) => {
+    // The final window stays open-ended so today's lookups resolve to it.
+    const to = i === windows.length - 1 ? null : w.to;
+    insert.run(newId('RATE'), w.rate, w.from, to, 'Derived from ISET ledger applications');
+    report.ists_rates_created++;
+  });
+
+  // Close the seeded baseline the day before the ledger history starts, so the
+  // two series do not overlap.
+  const firstFrom = windows[0].from;
+  const prevDay = new Date(new Date(firstFrom).getTime() - 86400000).toISOString().slice(0, 10);
+  db.prepare(`
+    UPDATE rate_master SET effective_to = ?
+    WHERE charge_name = 'ISTS' AND created_by = 'SYSTEM_SEED' AND effective_to IS NULL
+  `).run(prevDay);
+}
+
 // --- April/May TDS sheets -> tds_ledger ------------------------------------
 
 function importTds(workbook, report) {
@@ -161,10 +242,12 @@ export function importTradingLedger(filePath) {
   const report = {
     entities_created: 0, clients_created: 0,
     bilaterals_created: 0, bilaterals_skipped: 0, applications_covered: 0,
+    ists_rates_created: 0, ists_rates_skipped: 0,
     tds_created: 0, tds_skipped: 0,
   };
   const run = db.transaction(() => {
     importApplications(workbook, report);
+    importIstsRates(workbook, report);
     importTds(workbook, report);
   });
   run();
