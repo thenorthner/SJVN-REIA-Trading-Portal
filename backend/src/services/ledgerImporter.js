@@ -6,11 +6,26 @@ import { recordTds } from './tdsLedger.js';
 
 // --- helpers --------------------------------------------------------------
 
-// The ledger writes dates either as an Excel serial number or as DD/MM/YYYY.
+// The ledger writes dates either as an Excel serial number or as DD/MM/YYYY text.
+//
+// Every numeric cell in this workbook is day/month swapped: the dates were typed
+// as DD/MM/YYYY into a workbook reading MM/DD/YYYY, so "01/04/2026" (1 April) was
+// stored as the serial for 4 January. That mis-read only succeeds silently when
+// the day is <= 12 — - anything above that Excel could not parse as a month and
+// kept as text, which is exactly the split seen here (every numeric cell decodes
+// to a day <= 12, every text cell has a day > 12). So a numeric cell is decoded
+// and then swapped back; text cells are already correct DD/MM/YYYY.
 function parseLedgerDate(v) {
   if (v == null || v === '') return null;
   if (typeof v === 'number') {
     const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000);
+    const year = d.getUTCFullYear();
+    const month = d.getUTCMonth() + 1;   // holds the true day
+    const day = d.getUTCDate();          // holds the true month
+    // Only swap when the decoded day is a valid month, i.e. the mis-read case.
+    if (day <= 12) {
+      return `${year}-${String(day).padStart(2, '0')}-${String(month).padStart(2, '0')}`;
+    }
     return d.toISOString().slice(0, 10);
   }
   const s = String(v).trim();
@@ -20,9 +35,8 @@ function parseLedgerDate(v) {
 }
 
 // The authoritative application date is encoded in the application number as
-// SJVN<DD><MM><YY>. Some FROM DATE cells hold a wrong Excel serial (they decode
-// to January though the application is clearly April+), so the number wins and
-// the cell is only a fallback.
+// SJVN<DD><MM><YY>. The FROM DATE cell agrees once the day/month swap above is
+// undone, but the number needs no repair so it stays the primary source.
 function applicationDate(appNo, fallbackCell) {
   const m = String(appNo || '').match(/SJVN(\d{2})(\d{2})(\d{2})/);
   if (m) return `20${m[3]}-${m[2]}-${m[1]}`;
@@ -209,6 +223,69 @@ function importIstsRates(workbook, report) {
   `).run(prevDay);
 }
 
+// --- Daily Schedule -> schedule_deviations ---------------------------------
+
+// Day-wise availability vs requested vs actually scheduled, with the shortfall
+// attributed to whichever side defaulted. Monthly subtotal rows are interleaved
+// with the daily rows and are skipped.
+function importDailySchedule(workbook, report) {
+  const ds = rows(workbook, 'Daily Schedule');
+  const contractRef = String(ds[0]?.[1] || 'NVVN_Kreate_200MW').trim();
+  // The deal these days belong to is the largest imported one under this LOA.
+  const bilateral = db.prepare(`
+    SELECT id FROM bilateral_transactions WHERE loi_contract_ref LIKE 'NVVN%'
+    ORDER BY quantum_mw DESC LIMIT 1
+  `).get();
+
+  const upsert = db.prepare(`
+    INSERT INTO schedule_deviations (id, bilateral_id, contract_ref, schedule_date, availability_mwh,
+      requested_mwh, scheduled_mwh, buyer_default_mwh, seller_default_mwh, remark, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LEDGER_IMPORT')
+    ON CONFLICT(contract_ref, schedule_date) DO UPDATE SET
+      availability_mwh = excluded.availability_mwh,
+      requested_mwh = excluded.requested_mwh,
+      scheduled_mwh = excluded.scheduled_mwh,
+      buyer_default_mwh = excluded.buyer_default_mwh,
+      seller_default_mwh = excluded.seller_default_mwh,
+      remark = excluded.remark
+  `);
+
+  // The sheet is in date order, which lets a mistyped year be caught: the ledger
+  // has a "14/07/2027" sitting between 13/07/2026 and 15/07/2026. If a date jumps
+  // implausibly far from the previous row but lands adjacent once given the
+  // previous row's year, it is a typo — correct it and record the repair.
+  const DAY = 86400000;
+  let prev = null;
+  for (const r of ds.slice(2)) {
+    const label = r[0];
+    if (label == null || label === '') continue;
+    if (typeof label === 'string' && /total/i.test(label)) continue;   // monthly subtotal
+    let date = parseLedgerDate(label);
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+
+    if (prev) {
+      const gap = (new Date(date) - new Date(prev)) / DAY;
+      if (gap > 60 || gap < 0) {
+        const retry = `${prev.slice(0, 4)}${date.slice(4)}`;
+        const retryGap = (new Date(retry) - new Date(prev)) / DAY;
+        if (retryGap >= 0 && retryGap <= 60) {
+          report.date_repairs.push({ sheet: 'Daily Schedule', found: date, used: retry });
+          date = retry;
+        }
+      }
+    }
+    prev = date;
+
+    const requested = Number(r[2]) || 0;
+    const scheduled = Number(r[3]) || 0;
+    if (!requested && !scheduled) continue;
+    upsert.run(newId('SDV'), bilateral?.id || null, contractRef, date,
+      Number(r[1]) || 0, requested, scheduled, Number(r[4]) || 0, Number(r[5]) || 0,
+      r[6] ? String(r[6]) : null);
+    report.schedule_days_imported++;
+  }
+}
+
 // --- April/May TDS sheets -> tds_ledger ------------------------------------
 
 function importTds(workbook, report) {
@@ -243,11 +320,13 @@ export function importTradingLedger(filePath) {
     entities_created: 0, clients_created: 0,
     bilaterals_created: 0, bilaterals_skipped: 0, applications_covered: 0,
     ists_rates_created: 0, ists_rates_skipped: 0,
+    schedule_days_imported: 0, date_repairs: [],
     tds_created: 0, tds_skipped: 0,
   };
   const run = db.transaction(() => {
     importApplications(workbook, report);
     importIstsRates(workbook, report);
+    importDailySchedule(workbook, report);
     importTds(workbook, report);
   });
   run();

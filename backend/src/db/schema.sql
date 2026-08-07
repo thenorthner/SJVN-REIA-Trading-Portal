@@ -1600,3 +1600,25 @@ CREATE TABLE IF NOT EXISTS oa_charge_estimates (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_oa_estimates_bilateral ON oa_charge_estimates(bilateral_id, created_at);
+
+-- Day-wise schedule performance: what the seller had available, what the buyer
+-- requested, what was actually scheduled, and which side fell short. The ISET
+-- ledger tracks this daily (not per 15-min block, which is what
+-- bilateral_schedules holds), and it is the basis for counterparty reliability
+-- scoring. One row per contract-day, so a re-import updates rather than doubles.
+CREATE TABLE IF NOT EXISTS schedule_deviations (
+  id TEXT PRIMARY KEY,
+  bilateral_id TEXT REFERENCES bilateral_transactions(id),
+  contract_ref TEXT,                    -- LOA / contract label when no bilateral row
+  schedule_date TEXT NOT NULL,
+  availability_mwh REAL NOT NULL DEFAULT 0,
+  requested_mwh REAL NOT NULL DEFAULT 0,
+  scheduled_mwh REAL NOT NULL DEFAULT 0,
+  buyer_default_mwh REAL NOT NULL DEFAULT 0,   -- buyer failed to take
+  seller_default_mwh REAL NOT NULL DEFAULT 0,  -- seller failed to deliver
+  remark TEXT,
+  source TEXT NOT NULL DEFAULT 'LEDGER_IMPORT',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sched_dev_day ON schedule_deviations(contract_ref, schedule_date);
+CREATE INDEX IF NOT EXISTS idx_sched_dev_bilateral ON schedule_deviations(bilateral_id, schedule_date);

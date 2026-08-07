@@ -59,6 +59,7 @@ import rateMasterRoutes from './routes/rateMaster.js';
 import tdsLedgerRoutes from './routes/tdsLedger.js';
 import oaChargesRoutes from './routes/oaCharges.js';
 import importsRoutes from './routes/imports.js';
+import deviationRegisterRoutes from './routes/deviationRegister.js';
 import { ensureMasterDefaults } from './mastersService.js';
 import { repairAuditChainIfBroken } from './auditEngine.js';
 
@@ -132,6 +133,7 @@ app.use('/api/trading-invoices', tradingInvoicesRoutes);
 app.use('/api/tds', tdsLedgerRoutes);
 app.use('/api/oa-charges', oaChargesRoutes);
 app.use('/api/import', importsRoutes);
+app.use('/api/deviations', deviationRegisterRoutes);
 app.use('/api/generator-billing', generatorBillingRoutes);
 app.use('/api/market-analytics', marketAnalyticsRoutes);
 app.use('/api/cerc-market', requireAuth, cercMarketDataRoutes);
