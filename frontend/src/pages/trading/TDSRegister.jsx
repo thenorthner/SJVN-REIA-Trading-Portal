@@ -11,6 +11,7 @@ export default function TDSRegister() {
   const [vendors, setVendors] = useState([]);
   const [pending, setPending] = useState(null);
   const [summary, setSummary] = useState([]);
+  const [panGaps, setPanGaps] = useState(null);
   const [filters, setFilters] = useState({ status: '', vendor: '', period: '' });
   const [loading, setLoading] = useState(true);
 
@@ -26,13 +27,14 @@ export default function TDSRegister() {
       if (filters.status) params.status = filters.status;
       if (filters.vendor) params.vendor = filters.vendor;
       if (filters.period) params.period = filters.period;
-      const [list, v, p, s] = await Promise.all([
+      const [list, v, p, s, pan] = await Promise.all([
         api.tds.list(params),
         api.tds.vendors(),
         api.tds.pending(),
         api.tds.summary(filters.period || undefined),
+        api.tds.panCompliance(),
       ]);
-      setEntries(list); setVendors(v); setPending(p); setSummary(s);
+      setEntries(list); setVendors(v); setPending(p); setSummary(s); setPanGaps(pan);
     } catch (err) {
       alert(err.response?.data?.error || err.message || 'Failed to load TDS register');
     } finally {
@@ -119,6 +121,12 @@ export default function TDSRegister() {
         <StatCard label="Vendors with dues" value={pending?.vendors?.length || 0} />
         <StatCard label="Entries in view" value={entries.length} />
         <StatCard label="Vendor master" value={vendors.length} hint="Agencies with PAN on file" />
+        <StatCard
+          label="Buyers without PAN"
+          value={panGaps ? panGaps.missing_pan : '—'}
+          tone={panGaps && panGaps.trading_without_pan > 0 ? 'danger' : 'default'}
+          hint={panGaps ? `${panGaps.trading_without_pan} of them are trading` : undefined}
+        />
       </div>
 
       <Card
@@ -144,6 +152,35 @@ export default function TDSRegister() {
       <Card title="Vendor-wise summary (Form 26Q basis)">
         <Table columns={summaryColumns} rows={summary} loading={loading} emptyMessage="Nothing to summarise yet." />
       </Card>
+
+      {panGaps && (
+        <Card title={`Section 194Q PAN compliance — ${panGaps.with_pan} of ${panGaps.buyers} buyer(s) on file`}>
+          <p style={{ fontSize: 13, color: 'var(--slate-600)', marginBottom: 12 }}>
+            194Q applies to the energy SJVN sells. Without the buyer's PAN the deduction falls under 206AA at 5%
+            instead of 0.1% — a fifty-fold difference, so this is worth closing before the next bill is raised.
+          </p>
+          <Table
+            columns={[
+              { key: 'name', label: 'Buyer' },
+              { key: 'deals', label: 'Deals' },
+              { key: 'pan', label: 'PAN', render: r => (r.pan ? r.pan : <span style={{ color: 'var(--danger, #b91c1c)' }}>Not on file</span>) },
+              { key: 'gst', label: 'GST', render: r => r.gst || '—' },
+              {
+                key: 'tds_rate_applicable',
+                label: 'Rate that would apply',
+                render: r => (
+                  <Badge type={r.has_pan ? 'success' : 'danger'}>
+                    {(r.tds_rate_applicable * 100).toFixed(1)}% {r.has_pan ? '(194Q)' : '(206AA)'}
+                  </Badge>
+                ),
+              },
+            ]}
+            rows={panGaps.items}
+            loading={loading}
+            emptyMessage="No buyers on the platform."
+          />
+        </Card>
+      )}
 
       <Modal open={showRecord} onClose={() => setShowRecord(false)} title="Record a TDS deduction">
         <form onSubmit={submitEntry}>

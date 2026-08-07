@@ -52,6 +52,8 @@ import DeviationRegister from './pages/trading/DeviationRegister.jsx';
 import PaymentCycle from './pages/trading/PaymentCycle.jsx';
 import ContractPnl from './pages/trading/ContractPnl.jsx';
 import LedgerImport from './pages/trading/LedgerImport.jsx';
+import MarginAssurance from './pages/trading/MarginAssurance.jsx';
+import OAReconciliation from './pages/trading/OAReconciliation.jsx';
 
 import SellerDashboard from './pages/seller/SellerDashboard.jsx';
 import SellerContracts from './pages/seller/SellerContracts.jsx';
@@ -192,6 +194,8 @@ export default function App() {
         <Route path="trading/market-analytics" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><MarketAnalytics /></ProtectedRoute>} />
         
         {/* Internal only */}
+        <Route path="trading/margin-assurance" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><MarginAssurance /></ProtectedRoute>} />
+        <Route path="trading/oa-reconciliation" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><OAReconciliation /></ProtectedRoute>} />
         <Route path="trading/deviations" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><DeviationRegister /></ProtectedRoute>} />
         <Route path="trading/payment-cycle" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PaymentCycle /></ProtectedRoute>} />
         <Route path="trading/pnl" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ContractPnl /></ProtectedRoute>} />

@@ -475,11 +475,19 @@ export const api = {
     summary: (period) => g('/tds/summary', period ? { period } : undefined),
     record: (body) => p('/tds', body),
     challan: (id, body) => p(`/tds/${id}/challan`, body),
+    panCompliance: () => g('/tds/pan-compliance'),
   },
   oaCharges: {
     estimate: (body) => p('/oa-charges/estimate', body),
     save: (body) => p('/oa-charges/estimate/save', body),
     forBilateral: (id) => g(`/oa-charges/estimate/${id}`),
+    reconcile: (params) => g('/oa-charges/reconcile', params),
+    actualsByMonth: (params) => g('/oa-charges/actuals-by-month', params),
+  },
+  margin: {
+    check: (params) => g('/margin/check', params),
+    rateTrend: (params) => g('/margin/rate-trend', params),
+    receiptExceptions: (params) => g('/margin/receipt-exceptions', params),
   },
   deviations: {
     list: (params) => g('/deviations', params),
