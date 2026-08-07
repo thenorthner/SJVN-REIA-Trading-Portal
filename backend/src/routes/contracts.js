@@ -165,10 +165,39 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   res.status(201).json(fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(id)));
 });
 
+// The contract lifecycle, and what each state may move to. A contract has to be
+// signed and cleared by the regulator before it can go live, so jumping straight
+// from DRAFT to ACTIVE is not a shortcut — it skips the approvals that make the
+// contract billable. Termination and closure are reachable from anywhere live.
+const CONTRACT_TRANSITIONS = {
+  DRAFT: ['UNDER_NEGOTIATION', 'SIGNED', 'TERMINATED'],
+  UNDER_NEGOTIATION: ['SIGNED', 'DRAFT', 'TERMINATED'],
+  SIGNED: ['PENDING_REGULATORY_APPROVAL', 'ACTIVE', 'TERMINATED'],
+  PENDING_REGULATORY_APPROVAL: ['ACTIVE', 'SIGNED', 'TERMINATED'],
+  ACTIVE: ['AMENDED', 'NEARING_EXPIRY', 'EXPIRED', 'RENEWED', 'TERMINATED', 'CLOSED'],
+  AMENDED: ['ACTIVE', 'NEARING_EXPIRY', 'EXPIRED', 'TERMINATED', 'CLOSED'],
+  NEARING_EXPIRY: ['EXPIRED', 'RENEWED', 'TERMINATED', 'CLOSED'],
+  EXPIRED: ['RENEWED', 'CLOSED'],
+  RENEWED: ['ACTIVE', 'NEARING_EXPIRY', 'EXPIRED', 'CLOSED'],
+  TERMINATED: ['CLOSED'],
+  CLOSED: [],
+};
+
 router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
   const { status, remarks, termination_reason, termination_date } = req.body;
+
+  const allowed = CONTRACT_TRANSITIONS[contract.status];
+  if (!allowed) {
+    return res.status(400).json({ error: `Unknown current status ${contract.status}` });
+  }
+  if (status !== contract.status && !allowed.includes(status)) {
+    return res.status(400).json({
+      error: `Cannot move a contract from ${contract.status} to ${status}.`,
+      allowed_transitions: allowed,
+    });
+  }
   
   db.prepare(`UPDATE contracts SET status = ?, remarks = ?, termination_reason = ?, termination_date = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(status, remarks ?? contract.remarks, termination_reason ?? null, termination_date ?? null, contract.id);
@@ -254,11 +283,35 @@ router.post('/:id/allocations', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, re
   if (!ppa) return res.status(404).json({ error: 'PPA not found' });
   
   const { psa_id, allocation_percent, effective_from, effective_to } = req.body;
-  
+
+  const percent = Number(allocation_percent);
+  if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
+    return res.status(400).json({ error: 'allocation_percent must be between 0 and 100' });
+  }
+
+  // A PPA cannot be allocated beyond itself. Only the allocations whose validity
+  // overlaps this one count towards the limit — a share released when one PSA
+  // ends is available to re-allocate from that date on.
+  const from = effective_from || contract?.tenure_start || '0000-01-01';
+  const to = effective_to || '9999-12-31';
+  const overlapping = db.prepare(`
+    SELECT COALESCE(SUM(allocation_percent), 0) AS total FROM contract_allocations
+    WHERE ppa_id = ?
+      AND COALESCE(effective_from, '0000-01-01') <= ?
+      AND COALESCE(effective_to, '9999-12-31') >= ?
+  `).get(ppa.id, to, from).total;
+
+  if (overlapping + percent > 100) {
+    return res.status(400).json({
+      error: `Allocating ${percent}% would take this PPA to ${overlapping + percent}% over ${from} to ${to === '9999-12-31' ? 'open' : to}.`,
+      already_allocated_percent: overlapping,
+    });
+  }
+
   db.prepare(`
     INSERT INTO contract_allocations (id, ppa_id, psa_id, allocation_percent, effective_from, effective_to)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(newId('CAL'), ppa.id, psa_id, allocation_percent, effective_from, effective_to ?? null);
+  `).run(newId('CAL'), ppa.id, psa_id, percent, effective_from, effective_to ?? null);
   
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CREATE_ALLOCATION', module: 'REIA', entityType: 'contract', entityId: ppa.id, details: { psa_id, allocation_percent } });
   res.status(201).json({ success: true });

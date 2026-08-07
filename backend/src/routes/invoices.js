@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { resolveTariff } from '../services/tariffStructure.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct } from '../util.js';
@@ -213,6 +214,27 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
 
+  // A contract is only billable once it is live. Billing one still in
+  // negotiation or awaiting regulatory approval raises a demand the counterparty
+  // has no obligation to meet.
+  const BILLABLE_STATUSES = ['ACTIVE', 'NEARING_EXPIRY', 'EXPIRED', 'RENEWED', 'AMENDED'];
+  if (!BILLABLE_STATUSES.includes(contract.status)) {
+    return res.status(400).json({
+      error: `Cannot bill a contract in status ${contract.status} — it must be ACTIVE first.`,
+    });
+  }
+
+  // Nothing is billable before commercial operation, whatever energy was
+  // recorded during testing and commissioning.
+  if (contract.cod_date && period_month) {
+    const periodEnd = `${period_month}-31`;
+    if (String(contract.cod_date) > periodEnd) {
+      return res.status(400).json({
+        error: `Cannot bill ${period_month}: it ends before the commercial operation date (${contract.cod_date}).`,
+      });
+    }
+  }
+
   // If PSA, resolve parent PPA via allocations
   let ppa_id = contract_id;
   let alloc_percent = 100;
@@ -325,9 +347,20 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
 
   } else {
     // ──── Simple RE Billing (Solar/Wind/Hybrid) ────
-    energyCharges = Math.round(allocated_units_kwh * contract.tariff_per_unit);
+    // The rate comes from the contract's tariff structure, so an escalating or
+    // two-part contract is billed on its actual terms rather than its base rate.
+    const tariff = resolveTariff(contract, period_month);
+    appliedTariff = tariff.rate;
+    energyCharges = Math.round(allocated_units_kwh * tariff.rate);
     breakdown.push({ code: 'E1', label: 'Total Energy (MWh)', value: allocated_energy_mwh });
-    breakdown.push({ code: 'EE1', label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${contract.tariff_per_unit}/unit)`, value: energyCharges });
+    if (tariff.type !== 'FLAT') breakdown.push({ code: 'TS', label: tariff.label, value: tariff.rate, format: 'ecr' });
+    breakdown.push({ code: 'EE1', label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${tariff.rate}/unit)`, value: energyCharges });
+    if (tariff.fixed_charge > 0) {
+      // The fixed leg of a two-part tariff is a capacity charge, shown separately
+      // from the energy it is billed alongside.
+      capacityCharges = tariff.fixed_charge;
+      breakdown.push({ code: 'C1', label: `Fixed / Capacity Charge (${tariff.label})`, value: capacityCharges });
+    }
   }
 
   // Transmission / wheeling: contract override → master default (₹/MWh)
@@ -918,6 +951,16 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
     return res.status(400).json({ error: 'Cannot act on approvals for a cancelled invoice' });
   }
   const { decision, comments } = req.body; // APPROVED | REJECTED
+
+  // Maker-checker: whoever raised the invoice cannot also clear it. Without this
+  // one person can move money end to end, which is the control every audit of a
+  // billing system looks for first.
+  if (inv.created_by && req.user?.id && inv.created_by === req.user.id) {
+    return res.status(403).json({
+      error: 'Segregation of duties: the person who created an invoice cannot approve it. It needs a different approver.',
+    });
+  }
+
   const approval = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? AND level = ?').get(req.params.id, req.params.level);
   if (!approval) return res.status(404).json({ error: 'Approval step not found' });
   db.prepare(`UPDATE invoice_approvals SET status = ?, approver_name = ?, comments = ?, acted_at = datetime('now') WHERE id = ?`)
