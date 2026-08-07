@@ -6,7 +6,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { catalogForEntityType, summarizeApprovals } from '../regulatoryApprovals.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, 'platform.db');
+// SJVN_DB_PATH lets the test suite point at a throwaway database. Without it the
+// tests would run against — and mutate — the real platform.db.
+const dbPath = process.env.SJVN_DB_PATH || path.join(__dirname, 'platform.db');
 
 export const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');

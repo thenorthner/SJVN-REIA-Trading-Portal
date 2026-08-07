@@ -15,7 +15,7 @@ import { recordTds } from './tdsLedger.js';
 // kept as text, which is exactly the split seen here (every numeric cell decodes
 // to a day <= 12, every text cell has a day > 12). So a numeric cell is decoded
 // and then swapped back; text cells are already correct DD/MM/YYYY.
-function parseLedgerDate(v) {
+export function parseLedgerDate(v) {
   if (v == null || v === '') return null;
   if (typeof v === 'number') {
     const d = new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 86400000);
@@ -46,7 +46,7 @@ function isoDateOrNull(v) {
 // The authoritative application date is encoded in the application number as
 // SJVN<DD><MM><YY>. The FROM DATE cell agrees once the day/month swap above is
 // undone, but the number needs no repair so it stays the primary source.
-function applicationDate(appNo, fallbackCell) {
+export function applicationDate(appNo, fallbackCell) {
   const m = String(appNo || '').match(/SJVN(\d{2})(\d{2})(\d{2})/);
   if (m) return `20${m[3]}-${m[2]}-${m[1]}`;
   return parseLedgerDate(fallbackCell);
