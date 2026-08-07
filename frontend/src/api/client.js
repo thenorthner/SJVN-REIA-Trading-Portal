@@ -462,6 +462,45 @@ export const api = {
     addExchange: (id, body) => p(`/trading-clients/${id}/exchanges`, body),
     removeExchange: (id, excId) => client.delete(`/trading-clients/${id}/exchanges/${excId}`).then(r => r.data),
   },
+  rateMaster: {
+    list: (params) => g('/masters/rates', params),
+    effective: (charge, date) => g('/masters/rates/effective', { charge, date }),
+    create: (body) => p('/masters/rates', body),
+    revise: (body) => p('/masters/rates/revise', body),
+  },
+  tds: {
+    vendors: () => g('/tds/vendors'),
+    list: (params) => g('/tds', params),
+    pending: () => g('/tds/pending'),
+    summary: (period) => g('/tds/summary', period ? { period } : undefined),
+    record: (body) => p('/tds', body),
+    challan: (id, body) => p(`/tds/${id}/challan`, body),
+  },
+  oaCharges: {
+    estimate: (body) => p('/oa-charges/estimate', body),
+    save: (body) => p('/oa-charges/estimate/save', body),
+    forBilateral: (id) => g(`/oa-charges/estimate/${id}`),
+  },
+  deviations: {
+    list: (params) => g('/deviations', params),
+    summary: (params) => g('/deviations/summary', params),
+    scorecard: (params) => g('/deviations/scorecard', params),
+    incidents: (params) => g('/deviations/incidents', params),
+  },
+  paymentCycle: {
+    position: (params) => g('/payment-cycle/position', params),
+    timeline: (params) => g('/payment-cycle/timeline', params),
+    ageing: (params) => g('/payment-cycle/ageing', params),
+    settlementSpeed: (params) => g('/payment-cycle/settlement-speed', params),
+    entries: (params) => g('/payment-cycle/entries', params),
+  },
+  pnl: {
+    contracts: (params) => g('/pnl/contracts', params),
+    realised: (params) => g('/pnl/realised', params),
+  },
+  ledgerImport: {
+    run: () => p('/import/trading-ledger'),
+  },
   bids: {
     list: (params) => g('/bids', params),
     get: (id) => g(`/bids/${id}`),

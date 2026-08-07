@@ -45,6 +45,9 @@ import BankTransactionsList from './pages/trading/BankTransactionsList.jsx';
 import EnergySchedule from './pages/trading/EnergySchedule.jsx';
 import EnergyScheduleArchive from './pages/trading/EnergyScheduleArchive.jsx';
 import DailyObligationReport from './pages/trading/DailyObligationReport.jsx';
+import RateMaster from './pages/trading/RateMaster.jsx';
+import TDSRegister from './pages/trading/TDSRegister.jsx';
+import OAChargeCalculator from './pages/trading/OAChargeCalculator.jsx';
 
 import SellerDashboard from './pages/seller/SellerDashboard.jsx';
 import SellerContracts from './pages/seller/SellerContracts.jsx';
@@ -185,6 +188,9 @@ export default function App() {
         <Route path="trading/market-analytics" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><MarketAnalytics /></ProtectedRoute>} />
         
         {/* Internal only */}
+        <Route path="trading/rate-master" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RateMaster /></ProtectedRoute>} />
+        <Route path="trading/tds-register" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TDSRegister /></ProtectedRoute>} />
+        <Route path="trading/oa-calculator" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><OAChargeCalculator /></ProtectedRoute>} />
         <Route path="trading/rec" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CertificateOperationsHub defaultTab="REC" /></ProtectedRoute>} />
         <Route path="trading/noar" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARWallet /></ProtectedRoute>} />
         <Route path="trading/noar-registry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARRegistry /></ProtectedRoute>} />
