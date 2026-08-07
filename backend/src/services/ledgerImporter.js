@@ -29,9 +29,17 @@ function parseLedgerDate(v) {
     return d.toISOString().slice(0, 10);
   }
   const s = String(v).trim();
-  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  // DD/MM/YYYY on the schedule sheets, DD.MM.YYYY on the billing sheets.
+  const m = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
   if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
   return s;
+}
+
+// A well-formed ISO date, or null — used where a cell may hold free text such as
+// "Payment Recevied on next day of scheduling of power" instead of a date.
+function isoDateOrNull(v) {
+  const d = parseLedgerDate(v);
+  return d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null;
 }
 
 // The authoritative application date is encoded in the application number as
@@ -286,6 +294,60 @@ function importDailySchedule(workbook, report) {
   }
 }
 
+// --- Bills issued / received -> cashflow_entries ---------------------------
+
+// Both legs of the cash cycle. The buyer's side is what SJVN collects, the
+// seller's side is what SJVN pays out; holding them in one register is what
+// allows a net position to be shown.
+function importCashflow(workbook, report) {
+  const upsert = db.prepare(`
+    INSERT INTO cashflow_entries (id, direction, invoice_no, invoice_type, party, invoice_date, due_date,
+      gross_amount, tds_amount, net_amount, paid_amount, payment_date, payment_note, status, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LEDGER_IMPORT')
+    ON CONFLICT(direction, invoice_no) DO UPDATE SET
+      gross_amount = excluded.gross_amount, tds_amount = excluded.tds_amount,
+      net_amount = excluded.net_amount, paid_amount = excluded.paid_amount,
+      payment_date = excluded.payment_date, payment_note = excluded.payment_note,
+      due_date = excluded.due_date, status = excluded.status
+  `);
+
+  const settle = (paid, net) => {
+    if (paid <= 0) return 'OPEN';
+    // Treat a rupee of rounding as settled rather than leaving it perpetually open.
+    return paid + 1 >= net ? 'SETTLED' : 'PARTIAL';
+  };
+
+  // Outward bills raised on the buyer.
+  for (const r of rows(workbook, 'Bills issued by SJVN').slice(1)) {
+    const invoiceNo = r[1] ? String(r[1]).trim() : null;
+    if (!invoiceNo) continue;
+    const gross = Number(r[5]) || 0;
+    const tds = Number(r[11]) || 0;
+    const paid = Number(r[8]) || 0;
+    const net = gross - tds;
+    upsert.run(newId('CFE'), 'INFLOW', invoiceNo, r[2] ? String(r[2]).trim() : null,
+      r[6] ? String(r[6]).trim() : null, isoDateOrNull(r[0]), isoDateOrNull(r[7]),
+      gross, tds, net, paid, isoDateOrNull(r[9]),
+      isoDateOrNull(r[9]) ? null : (r[9] ? String(r[9]).trim() : null), settle(paid, net));
+    report.cashflow_inflows++;
+  }
+
+  // Inward bills received from the seller.
+  for (const r of rows(workbook, 'Bills received').slice(1)) {
+    const invoiceNo = r[1] != null ? String(r[1]).trim() : null;
+    if (!invoiceNo) continue;
+    const gross = Number(r[6]) || 0;
+    const tds = Number(r[13]) || 0;
+    const paid = Number(r[9]) || 0;
+    const net = gross - tds;
+    upsert.run(newId('CFE'), 'OUTFLOW', invoiceNo, 'Vendor Bill',
+      r[7] ? String(r[7]).trim() : null, isoDateOrNull(r[0]), isoDateOrNull(r[8]),
+      gross, tds, net, paid, isoDateOrNull(r[10]),
+      isoDateOrNull(r[10]) ? null : (r[10] ? String(r[10]).trim() : null), settle(paid, net));
+    report.cashflow_outflows++;
+  }
+}
+
 // --- April/May TDS sheets -> tds_ledger ------------------------------------
 
 function importTds(workbook, report) {
@@ -321,12 +383,14 @@ export function importTradingLedger(filePath) {
     bilaterals_created: 0, bilaterals_skipped: 0, applications_covered: 0,
     ists_rates_created: 0, ists_rates_skipped: 0,
     schedule_days_imported: 0, date_repairs: [],
+    cashflow_inflows: 0, cashflow_outflows: 0,
     tds_created: 0, tds_skipped: 0,
   };
   const run = db.transaction(() => {
     importApplications(workbook, report);
     importIstsRates(workbook, report);
     importDailySchedule(workbook, report);
+    importCashflow(workbook, report);
     importTds(workbook, report);
   });
   run();

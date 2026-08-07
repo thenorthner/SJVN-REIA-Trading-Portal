@@ -1622,3 +1622,29 @@ CREATE TABLE IF NOT EXISTS schedule_deviations (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sched_dev_day ON schedule_deviations(contract_ref, schedule_date);
 CREATE INDEX IF NOT EXISTS idx_sched_dev_bilateral ON schedule_deviations(bilateral_id, schedule_date);
+
+-- Both legs of the trading desk's cash cycle in one register: money owed to SJVN
+-- by the buyer (INFLOW) and money SJVN owes the seller (OUTFLOW). The ledger keeps
+-- these on separate sheets, so a net cash position could not be seen; holding both
+-- here is what makes the payment-cycle view possible. Amounts are gross, with the
+-- TDS withheld and the net actually settled recorded alongside.
+CREATE TABLE IF NOT EXISTS cashflow_entries (
+  id TEXT PRIMARY KEY,
+  direction TEXT NOT NULL CHECK (direction IN ('INFLOW','OUTFLOW')),
+  invoice_no TEXT NOT NULL,
+  invoice_type TEXT,                    -- Energy Bill / OA Bill / vendor bill
+  party TEXT,
+  invoice_date TEXT,
+  due_date TEXT,
+  gross_amount REAL NOT NULL DEFAULT 0,
+  tds_amount REAL NOT NULL DEFAULT 0,
+  net_amount REAL NOT NULL DEFAULT 0,   -- gross less TDS: what should actually move
+  paid_amount REAL NOT NULL DEFAULT 0,
+  payment_date TEXT,                    -- NULL when unsettled
+  payment_note TEXT,                    -- the ledger sometimes records terms instead of a date
+  status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','PARTIAL','SETTLED')),
+  source TEXT NOT NULL DEFAULT 'LEDGER_IMPORT',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cashflow_invoice ON cashflow_entries(direction, invoice_no);
+CREATE INDEX IF NOT EXISTS idx_cashflow_due ON cashflow_entries(due_date, direction);
