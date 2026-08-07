@@ -3,7 +3,8 @@ import { db } from '../db/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { v4 as uuidv4 } from 'uuid';
 import { secureLogAudit } from '../auditEngine.js';
-import { genSjvnInvoiceNo, seedInvoiceCounters } from '../util.js';
+import { seedInvoiceCounters } from '../util.js';
+import { createTradingInvoice } from '../services/tradingInvoice.js';
 
 seedInvoiceCounters();
 
@@ -49,53 +50,16 @@ router.get('/invoices', (req, res) => {
 
 router.post('/invoices/generate', (req, res) => {
   if (req.user.role === 'TRADING_CLIENT') return res.status(403).json({ error: 'Clients cannot generate invoices' });
-
-  const { client_id, trade_date, settlement_date, invoice_kind, trade_type, billing_period, quantum_mwh,
-    exchange_fee, clearing_charges, regulatory_levy, sjvn_margin, transmission_charges, dsm_charges, gst_applicable } = req.body;
-
   try {
-    const margin = Number(sjvn_margin) || 0;
-    const tds = margin * 0.10; // Simple 10% TDS rule for demo
-    
-    // Base Calculation
-    let baseAmount = 0;
-    if (invoice_kind === 'EXCHANGE') {
-      baseAmount = (Number(exchange_fee) || 0) + (Number(clearing_charges) || 0) + (Number(regulatory_levy) || 0) + margin;
-    } else {
-      baseAmount = (Number(transmission_charges) || 0) + (Number(dsm_charges) || 0) + margin;
-    }
-
-    const preTdsTotal = baseAmount - tds;
-    const gst = gst_applicable ? preTdsTotal * 0.18 : 0;
-    const finalTotal = preTdsTotal + gst;
-
-    const tinId = newId('TIN');
-    // Official SJVN invoice number. Exchange/energy trades use the ENERGY register.
-    const clientName = db.prepare('SELECT name FROM trading_clients WHERE id = ?').get(client_id)?.name;
-    const invoiceNo = genSjvnInvoiceNo('ENERGY', clientName, billing_period);
-
-    const insertInvoice = db.prepare(`
-      INSERT INTO trading_invoices (id, invoice_no, client_id, trade_date, settlement_date, invoice_kind, trade_type, billing_period, quantum_mwh,
-        exchange_fee, clearing_charges, regulatory_levy, sjvn_margin, transmission_charges, dsm_charges, tds_amount, net_payable, gst_applicable, gst_amount, total_amount, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'DRAFT')
-    `);
-    // COALESCE wraps the whole subquery: with no prior ledger row it returns no
-    // rows (not a NULL row), so the balance must default to 0 for the first entry.
-    const insertLedger = db.prepare(`
-      INSERT INTO client_ledgers (id, client_id, transaction_type, reference_id, credit, debit, running_balance, description, timestamp)
-      VALUES (?, ?, 'INVOICE', ?, 0, ?, COALESCE((SELECT running_balance FROM client_ledgers WHERE client_id = ? ORDER BY timestamp DESC LIMIT 1), 0) + ?, ?, ?)
-    `);
-    // The invoice and its ledger posting are one unit: without a transaction a
-    // failure on the second insert would leave an invoice with no ledger entry.
-    db.transaction(() => {
-      insertInvoice.run(tinId, invoiceNo, client_id, trade_date, settlement_date, invoice_kind, trade_type, billing_period, quantum_mwh,
-        exchange_fee || 0, clearing_charges || 0, regulatory_levy || 0, margin, transmission_charges || 0, dsm_charges || 0, tds, finalTotal, gst_applicable ? 1 : 0, gst, finalTotal);
-      insertLedger.run(newId('CLG'), client_id, tinId, finalTotal, client_id, finalTotal, `Invoice Generated: ${invoiceNo}`, `${trade_date} 10:00:00`);
-    })();
-
-    secureLogAudit(req, { action: 'INVOICE_GENERATED', module: 'TRADING', entityType: 'trading_invoices', entityId: tinId, details: { total_amount: finalTotal, invoice_kind } });
-
-    res.json({ id: tinId, invoice_no: invoiceNo });
+    // Priced and written by the shared service, so a settlement bill and an
+    // energy bill are accounted for the same way. Settlement bills also post to
+    // the client ledger.
+    const inv = createTradingInvoice(req.body, { postLedger: true });
+    secureLogAudit(req, {
+      action: 'INVOICE_GENERATED', module: 'TRADING', entityType: 'trading_invoices', entityId: inv.id,
+      details: { total_amount: inv.total_amount, net_payable: inv.net_payable, invoice_kind: inv.invoice_kind },
+    });
+    res.json({ id: inv.id, invoice_no: inv.invoice_no, total_amount: inv.total_amount, net_payable: inv.net_payable });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

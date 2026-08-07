@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { newId, logAudit, genSjvnInvoiceNo, seedInvoiceCounters } from '../util.js';
+import { newId, logAudit, seedInvoiceCounters } from '../util.js';
+import { createTradingInvoice } from '../services/tradingInvoice.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -35,58 +36,14 @@ router.get('/:id', (req, res) => {
 
 // Configurable bill generation: trading margin only / power supply only / combined, with or without GST
 router.post('/generate', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
-  const { client_id, invoice_kind, billing_period, quantum_mwh, rate_per_unit, margin_rate, gst_applicable, tds_section: tdsSectionIn, tds_rate: tdsRateIn } = req.body;
-  const client = db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(client_id);
-  if (!client) return res.status(404).json({ error: 'Client not found' });
-
-  const powerSupplyValue = invoice_kind === 'TRADING_MARGIN_ONLY' ? 0 : quantum_mwh * rate_per_unit;
-  const tradingMargin = invoice_kind === 'POWER_SUPPLY_ONLY' ? 0 : Math.round(quantum_mwh * (margin_rate ?? 0.05));
-  const subtotal = powerSupplyValue + tradingMargin;
-  const gst = gst_applicable ? Math.round(subtotal * 0.18) : 0;
-  const total = subtotal + gst;
-
-  // TDS withholding. An invoice that carries energy value attracts Section 194Q
-  // at 0.1% of the gross (pre-GST) taxable amount by default — the caller can
-  // override the section/rate (e.g. 194C @ 10% for a transmission-charge bill,
-  // or NONE). Withheld on the taxable value, not on GST, matching the ISET ledger.
-  const DEFAULT_RATES = { '194Q': 0.001, '194C': 0.10, NONE: 0 };
-  const hasEnergyValue = invoice_kind !== 'TRADING_MARGIN_ONLY';
-  const tdsSection = ['194Q', '194C', 'NONE'].includes(tdsSectionIn)
-    ? tdsSectionIn
-    : (hasEnergyValue ? '194Q' : 'NONE');
-  const tdsRate = tdsRateIn != null ? Number(tdsRateIn) : DEFAULT_RATES[tdsSection];
-  const tdsAmount = tdsSection === 'NONE' ? 0 : Math.round(subtotal * tdsRate);
-  const netPayable = total - tdsAmount;
-
-  // Energy/combined bills use the ENERGY register; a pure margin bill uses MARGIN.
-  const series = invoice_kind === 'TRADING_MARGIN_ONLY' ? 'MARGIN' : 'ENERGY';
-  const id = newId('TIN');
-  db.prepare(`
-    INSERT INTO trading_invoices (id, invoice_no, client_id, invoice_kind, billing_period, quantum_mwh,
-      rate_per_unit, trading_margin, gst_applicable, gst_amount, total_amount,
-      tds_section, tds_rate, tds_amount, net_payable, status)
-    VALUES (@id, @invoice_no, @client_id, @invoice_kind, @billing_period, @quantum_mwh,
-      @rate_per_unit, @trading_margin, @gst_applicable, @gst_amount, @total_amount,
-      @tds_section, @tds_rate, @tds_amount, @net_payable, 'DRAFT')
-  `).run({
-    id,
-    invoice_no: genSjvnInvoiceNo(series, client.name, billing_period),
-    client_id,
-    invoice_kind,
-    billing_period,
-    quantum_mwh,
-    rate_per_unit,
-    trading_margin: tradingMargin,
-    gst_applicable: gst_applicable ? 1 : 0,
-    gst_amount: gst,
-    total_amount: total,
-    tds_section: tdsSection,
-    tds_rate: tdsRate,
-    tds_amount: tdsAmount,
-    net_payable: netPayable,
-  });
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'GENERATE', module: 'TRADING', entityType: 'trading_invoice', entityId: id, details: req.body });
-  res.status(201).json(withClient(db.prepare('SELECT * FROM trading_invoices WHERE id = ?').get(id)));
+  try {
+    const inv = createTradingInvoice(req.body);
+    logAudit({ req, user: req.user, action: 'GENERATE', module: 'TRADING', entityType: 'trading_invoice', entityId: inv.id, details: req.body });
+    res.status(201).json(withClient(inv));
+  } catch (err) {
+    const notFound = /Client not found/.test(err.message);
+    res.status(notFound ? 404 : 400).json({ error: err.message });
+  }
 });
 
 router.post('/:id/send', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
