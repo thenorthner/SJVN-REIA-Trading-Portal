@@ -29,8 +29,8 @@ export default function EnergyData() {
   // REA Automation state
   const [reaStatus, setReaStatus] = useState(null);
   const [reaLog, setReaLog] = useState([]);
-  const [showReaPanel, setShowReaPanel] = useState(false);
-  const [triggerForm, setTriggerForm] = useState({ rpc: 'NRPC', period_month: '', data_type: 'PROVISIONAL' });
+  const [showReaPanel, setShowReaPanel] = useState(true);
+  const [triggerForm, setTriggerForm] = useState({ rpc: 'NRPC', period_month: '2026-06', data_type: 'PROVISIONAL' });
   const [triggering, setTriggering] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [reaMsg, setReaMsg] = useState('');
@@ -320,6 +320,86 @@ export default function EnergyData() {
 
               <Card>
                 {reaMsg && <div style={{ padding: '8px 16px', background: '#f0f9ff', color: '#0369a1', fontSize: 13, borderBottom: '1px solid #e0f2fe' }}>{reaMsg}</div>}
+
+                {/* Embedded Visual Interactive Pipeline Banner */}
+                <div style={{ padding: '16px', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 16 }}>⚡</span> Regional REA Automated Ingestion Pipeline
+                      </div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                        Fully automated 6-stage ingestion engine: Discovery → Retrieval → Extraction → Validation → Settlement Commit
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        style={{ background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', display: 'inline-flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 4px rgba(37,99,235,0.2)' }}
+                        onClick={() => {
+                          setPipelineMode('DEMO');
+                          setPipelineResult(null);
+                          setPipelineError(null);
+                          setShowPipelineMonitor(true);
+                          setPipelineRunning(true);
+                        }}
+                      >
+                        <span>▶</span> Watch Live Step-by-Step Animation
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        style={{ background: '#ffffff' }}
+                        onClick={() => setShowPipelineMonitor(!showPipelineMonitor)}
+                      >
+                        {showPipelineMonitor ? 'Hide Pipeline Monitor ▲' : 'Open Pipeline Monitor ▼'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 6 Stage Interactive Pills */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginTop: 10 }}>
+                    {[
+                      { num: '1', title: 'TLS Handshake', sub: 'nrpc.gov.in', icon: '🌐' },
+                      { num: '2', title: 'Bulletin Scan', sub: 'REA Gazette', icon: '🔍' },
+                      { num: '3', title: 'PDF Ingest', sub: 'Audit Vault', icon: '📥' },
+                      { num: '4', title: 'OCR & Parser', sub: 'Scheduled MWh', icon: '⚙️' },
+                      { num: '5', title: 'BFR Match', sub: 'PPA Contracts', icon: '⚖️' },
+                      { num: '6', title: 'Ledger Commit', sub: 'Immutable Sync', icon: '💾' },
+                    ].map((st) => (
+                      <div
+                        key={st.num}
+                        onClick={() => {
+                          setPipelineMode('DEMO');
+                          setPipelineResult(null);
+                          setPipelineError(null);
+                          setShowPipelineMonitor(true);
+                          setPipelineRunning(true);
+                        }}
+                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: 6,
+                          padding: '8px 10px',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                        }}
+                        title="Click to view full animated pipeline"
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span style={{ fontSize: 14 }}>{st.icon}</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, background: '#e0f2fe', color: '#0284c7', padding: '1px 5px', borderRadius: 10 }}>Step {st.num}</span>
+                        </div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b' }}>{st.title}</div>
+                        <div style={{ fontSize: 10, color: '#64748b' }}>{st.sub}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
                 {/* RPC Status Cards */}
                 {reaStatus && (
