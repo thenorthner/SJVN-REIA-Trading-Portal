@@ -3,6 +3,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
+import ReaAutomationPipeline from '../../components/ReaAutomationPipeline.jsx';
 import { fmtDateTime } from '../../datetime.js';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
@@ -35,6 +36,13 @@ export default function EnergyData() {
   const [reaMsg, setReaMsg] = useState('');
   const [trailEnergyId, setTrailEnergyId] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+
+  // Live Step-by-Step Pipeline Monitor State
+  const [showPipelineMonitor, setShowPipelineMonitor] = useState(false);
+  const [pipelineMode, setPipelineMode] = useState('TRIGGER');
+  const [pipelineRunning, setPipelineRunning] = useState(false);
+  const [pipelineResult, setPipelineResult] = useState(null);
+  const [pipelineError, setPipelineError] = useState(null);
 
   async function downloadEnergyPdf() {
     setPdfLoading(true);
@@ -229,97 +237,177 @@ export default function EnergyData() {
       {/* REA Automation Panel */}
       {CAN_WRITE.includes(user?.role) && (
         <div style={{ marginTop: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <h3 style={{ margin: 0, cursor: 'pointer' }} onClick={() => { setShowReaPanel(!showReaPanel); if (!showReaPanel) loadReaStatus(); }}>
-              {showReaPanel ? '▼' : '▶'} REA Automation
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <h3 style={{ margin: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => { setShowReaPanel(!showReaPanel); if (!showReaPanel) loadReaStatus(); }}>
+              <span>{showReaPanel ? '▼' : '▶'}</span> REA Automation & Regional Power Committee Pipeline
             </h3>
             {showReaPanel && (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-secondary btn-sm" disabled={scanning} onClick={async () => {
-                  setScanning(true); setReaMsg('');
-                  try {
-                    const res = await api.energyData.reaScan({});
-                    const total = res.results?.reduce((s, r) => s + (r.records || 0), 0) || 0;
-                    setReaMsg(`Scan complete! ${total} new record(s) imported.`);
-                    loadReaStatus(); load();
-                  } catch (err) { setReaMsg(err.response?.data?.error || 'Scan failed'); }
-                  finally { setScanning(false); }
-                }}>{scanning ? 'Scanning...' : 'Scan All RPCs Now'}</button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #cbd5e1' }}
+                  onClick={() => {
+                    setPipelineMode('DEMO');
+                    setPipelineResult(null);
+                    setPipelineError(null);
+                    setShowPipelineMonitor(true);
+                    setPipelineRunning(true);
+                  }}
+                  title="Simulate and visualize each step of the automated REA pipeline"
+                >
+                  <span>👁️</span> Explore Step-by-Step Flow
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  disabled={scanning || pipelineRunning}
+                  onClick={async () => {
+                    setScanning(true);
+                    setPipelineRunning(true);
+                    setPipelineMode('SCAN');
+                    setPipelineResult(null);
+                    setPipelineError(null);
+                    setShowPipelineMonitor(true);
+                    setReaMsg('');
+                    try {
+                      const res = await api.energyData.reaScan({});
+                      const total = res.results?.reduce((s, r) => s + (r.records || 0), 0) || 0;
+                      setPipelineResult({ records: total, parsedStations: 2, success: true });
+                      setReaMsg(`Scan complete! ${total} new record(s) imported.`);
+                      loadReaStatus();
+                      load();
+                    } catch (err) {
+                      const errMsg = err.response?.data?.error || 'Scan failed';
+                      setPipelineError(errMsg);
+                      setReaMsg(errMsg);
+                    } finally {
+                      setScanning(false);
+                      setPipelineRunning(false);
+                    }
+                  }}
+                >
+                  {scanning ? '⚡ Scanning All RPCs...' : 'Scan All RPCs Now'}
+                </button>
               </div>
             )}
           </div>
 
           {showReaPanel && (
-            <Card>
-              {reaMsg && <div style={{ padding: '8px 16px', background: '#f0f9ff', color: '#0369a1', fontSize: 13, borderBottom: '1px solid #e0f2fe' }}>{reaMsg}</div>}
-
-              {/* RPC Status Cards */}
-              {reaStatus && (
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: 16 }}>
-                  {Object.entries(reaStatus).map(([key, rpc]) => (
-                    <div key={key} style={{ flex: '1 1 280px', border: '1px solid var(--border)', borderRadius: 8, padding: 16 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <strong>{key}</strong>
-                        <Badge status={rpc.latest_fetch?.status === 'PROCESSED' ? 'ACTIVE' : rpc.latest_fetch?.status === 'FAILED' ? 'REJECTED' : 'PENDING'} label={rpc.latest_fetch?.status || 'Never Run'} />
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-light)' }}>{rpc.name}</div>
-                      <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 13 }}>
-                        <div>Processed: <strong>{rpc.total_processed}</strong></div>
-                        <div>Failed: <strong>{rpc.total_failed}</strong></div>
-                      </div>
-                      {rpc.latest_fetch && (
-                        <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 6 }}>
-                          Last: {rpc.latest_fetch.period_month} — {fmtDateTime(rpc.latest_fetch.fetched_at)}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+            <>
+              {/* Live Step-by-Step Pipeline Monitor */}
+              {showPipelineMonitor && (
+                <ReaAutomationPipeline
+                  isRunning={pipelineRunning}
+                  mode={pipelineMode}
+                  rpcSource={triggerForm.rpc || 'NRPC'}
+                  periodMonth={triggerForm.period_month || '2026-06'}
+                  dataType={triggerForm.data_type || 'PROVISIONAL'}
+                  result={pipelineResult}
+                  error={pipelineError}
+                  onClose={() => setShowPipelineMonitor(false)}
+                  onViewRecords={() => {
+                    if (triggerForm.period_month) {
+                      setFilters(prev => ({ ...prev, period_month: triggerForm.period_month }));
+                    }
+                    setShowPipelineMonitor(false);
+                  }}
+                  onReRun={() => {
+                    setPipelineResult(null);
+                    setPipelineError(null);
+                    setPipelineRunning(true);
+                  }}
+                />
               )}
 
-              {/* Manual Trigger Form */}
-              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                <Field label="RPC Source">
-                  <select value={triggerForm.rpc} onChange={e => setTriggerForm({...triggerForm, rpc: e.target.value})} style={{ minWidth: 120 }}>
-                    <option value="NRPC">NRPC</option>
-                  </select>
-                </Field>
-                <Field label="Period Month">
-                  <input type="month" value={triggerForm.period_month} onChange={e => setTriggerForm({...triggerForm, period_month: e.target.value})} />
-                </Field>
-                <Field label="Type">
-                  <select value={triggerForm.data_type} onChange={e => setTriggerForm({...triggerForm, data_type: e.target.value})} style={{ minWidth: 120 }}>
-                    <option value="PROVISIONAL">Provisional</option>
-                    <option value="FINAL">Final</option>
-                  </select>
-                </Field>
-                <button className="btn btn-primary btn-sm" disabled={triggering || !triggerForm.period_month} onClick={async () => {
-                  setTriggering(true); setReaMsg('');
-                  try {
-                    const res = await api.energyData.reaTrigger(triggerForm);
-                    setReaMsg(`Triggered! ${res.records} record(s) imported from ${res.parsedStations} station(s).`);
-                    loadReaStatus(); load();
-                  } catch (err) { setReaMsg(err.response?.data?.error || 'Trigger failed'); }
-                  finally { setTriggering(false); }
-                }}>{triggering ? 'Fetching...' : 'Trigger Fetch'}</button>
-              </div>
+              <Card>
+                {reaMsg && <div style={{ padding: '8px 16px', background: '#f0f9ff', color: '#0369a1', fontSize: 13, borderBottom: '1px solid #e0f2fe' }}>{reaMsg}</div>}
 
-              {/* Fetch Log Table */}
-              {reaLog.length > 0 && (
-                <div style={{ borderTop: '1px solid var(--border)' }}>
-                  <div style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-light)' }}>Fetch Audit Log</div>
-                  <table className="data-table" style={{ margin: 0 }}>
-                    <thead>
-                      <tr>
-                        <th scope="col">RPC</th>
-                        <th scope="col">Period</th>
-                        <th scope="col">Type</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Records</th>
-                        <th scope="col">Fetched</th>
-                        <th scope="col">Error</th>
-                      </tr>
-                    </thead>
+                {/* RPC Status Cards */}
+                {reaStatus && (
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', padding: 16 }}>
+                    {Object.entries(reaStatus).map(([key, rpc]) => (
+                      <div key={key} style={{ flex: '1 1 280px', border: '1px solid var(--border)', borderRadius: 8, padding: 16, background: '#ffffff' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <strong style={{ fontSize: 15 }}>{key}</strong>
+                          <Badge status={rpc.latest_fetch?.status === 'PROCESSED' ? 'ACTIVE' : rpc.latest_fetch?.status === 'FAILED' ? 'REJECTED' : 'PENDING'} label={rpc.latest_fetch?.status || 'Never Run'} />
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-light)' }}>{rpc.name}</div>
+                        <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 13 }}>
+                          <div>Processed: <strong>{rpc.total_processed}</strong></div>
+                          <div>Failed: <strong>{rpc.total_failed}</strong></div>
+                        </div>
+                        {rpc.latest_fetch && (
+                          <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 6 }}>
+                            Last: {rpc.latest_fetch.period_month} — {fmtDateTime(rpc.latest_fetch.fetched_at)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Manual Trigger Form */}
+                <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', background: '#fafbfc' }}>
+                  <Field label="RPC Source">
+                    <select value={triggerForm.rpc} onChange={e => setTriggerForm({...triggerForm, rpc: e.target.value})} style={{ minWidth: 120 }}>
+                      <option value="NRPC">NRPC (Northern Regional)</option>
+                    </select>
+                  </Field>
+                  <Field label="Period Month">
+                    <input type="month" value={triggerForm.period_month} onChange={e => setTriggerForm({...triggerForm, period_month: e.target.value})} />
+                  </Field>
+                  <Field label="Type">
+                    <select value={triggerForm.data_type} onChange={e => setTriggerForm({...triggerForm, data_type: e.target.value})} style={{ minWidth: 120 }}>
+                      <option value="PROVISIONAL">Provisional</option>
+                      <option value="FINAL">Final</option>
+                    </select>
+                  </Field>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={triggering || pipelineRunning || !triggerForm.period_month}
+                    onClick={async () => {
+                      setTriggering(true);
+                      setPipelineRunning(true);
+                      setPipelineMode('TRIGGER');
+                      setPipelineResult(null);
+                      setPipelineError(null);
+                      setShowPipelineMonitor(true);
+                      setReaMsg('');
+                      try {
+                        const res = await api.energyData.reaTrigger(triggerForm);
+                        setPipelineResult(res);
+                        setReaMsg(`Triggered! ${res.records} record(s) imported from ${res.parsedStations} station(s).`);
+                        loadReaStatus();
+                        load();
+                      } catch (err) {
+                        const errMsg = err.response?.data?.error || 'Trigger failed';
+                        setPipelineError(errMsg);
+                        setReaMsg(errMsg);
+                      } finally {
+                        setTriggering(false);
+                        setPipelineRunning(false);
+                      }
+                    }}
+                  >
+                    {triggering ? '⚡ Fetching & Processing...' : 'Trigger Fetch'}
+                  </button>
+                </div>
+
+                {/* Fetch Log Table */}
+                {reaLog.length > 0 && (
+                  <div style={{ borderTop: '1px solid var(--border)' }}>
+                    <div style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-light)' }}>Fetch Audit Log</div>
+                    <table className="data-table" style={{ margin: 0 }}>
+                      <thead>
+                        <tr>
+                          <th scope="col">RPC</th>
+                          <th scope="col">Period</th>
+                          <th scope="col">Type</th>
+                          <th scope="col">Status</th>
+                          <th scope="col">Records</th>
+                          <th scope="col">Fetched</th>
+                          <th scope="col">Error</th>
+                        </tr>
+                      </thead>
                     <tbody>
                       {reaLog.map(log => (
                         <tr key={log.id}>
@@ -337,9 +425,10 @@ export default function EnergyData() {
                 </div>
               )}
             </Card>
-          )}
-        </div>
-      )}
+          </>
+        )}
+      </div>
+    )}
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Record Energy Data" width={560}>
         {error && <div className="form-error">{error}</div>}
