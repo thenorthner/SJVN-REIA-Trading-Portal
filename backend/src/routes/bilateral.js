@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { newId, pushNotification } from '../util.js';
+import { newId, pushNotification, genApplicationNo, seedApplicationCounters } from '../util.js';
 import { dispatch } from '../services/notificationService.js';
 import { syncSchedulesForDate, getWbesConfig } from '../services/wbesService.js';
 import { secureLogAudit } from '../auditEngine.js';
@@ -11,6 +11,9 @@ import { generateNoarApprovalReportPdf } from '../scripts/noarApprovalReportPdf.
 import { sendMail } from '../services/mailService.js';
 
 const router = Router();
+
+// Continue the ledger's NOAR application register (last filed was WR2850).
+seedApplicationCounters();
 router.use(requireAuth);
 
 // NOAR open-access lifecycle, in the order the PT workflow walks it.
@@ -331,16 +334,23 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   }
   if (errors.length) return res.status(400).json({ error: errors[0], errors });
 
+  // File under a NOAR application number derived from the start date, unless the
+  // caller supplied one (e.g. an application already filed on the portal).
+  const region = String(b.noar_region || 'WR').toUpperCase();
+  const applicationNo = b.noar_application_no || genApplicationNo(b.start_date, region);
+
   db.prepare(`
     INSERT INTO bilateral_transactions (
       id, client_id, counterparty, loi_contract_ref, oa_type, is_standing_clearance,
       quantum_mw, tariff_per_unit, purchase_rate_per_unit, sale_rate_per_unit, trading_margin_per_unit, open_access_status,
+      noar_application_no, noar_region,
       wheeling_charges, transmission_charges, loss_injection_state, loss_inter_state, loss_drawee_state,
       start_date, end_date, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
   `).run(
     id, b.client_id, String(b.counterparty).trim(), b.loi_contract_ref || null, oaType, b.is_standing_clearance ? 1 : 0,
-    qty, saleRate, purchaseRate, saleRate, margin, Number(b.wheeling_charges) || 0, Number(b.transmission_charges) || 0,
+    qty, saleRate, purchaseRate, saleRate, margin, applicationNo, region,
+    Number(b.wheeling_charges) || 0, Number(b.transmission_charges) || 0,
     Number(b.loss_injection_state) || 0, Number(b.loss_inter_state) || 0, Number(b.loss_drawee_state) || 0,
     b.start_date, b.end_date
   );

@@ -146,9 +146,11 @@ function importApplications(workbook, report) {
       INSERT INTO bilateral_transactions (
         id, client_id, counterparty, loi_contract_ref, oa_type, quantum_mw, contracted_mwh,
         tariff_per_unit, purchase_rate_per_unit, sale_rate_per_unit, trading_margin_per_unit,
-        open_access_status, start_date, end_date, status, noar_status, noar_contract_no
-      ) VALUES (?, ?, ?, ?, 'STOA', ?, ?, ?, ?, ?, 0.03, 'APPROVED', ?, ?, 'ACTIVE', 'APPROVED', ?)
-    `).run(newId('BIL'), clientId, seller, loi, peakMw, contractedMwh, sale, purchase, sale, start, end, apps[apps.length - 1]?.[3] || null);
+        open_access_status, start_date, end_date, status, noar_status,
+        noar_application_no, noar_region, noar_contract_no
+      ) VALUES (?, ?, ?, ?, 'STOA', ?, ?, ?, ?, ?, 0.03, 'APPROVED', ?, ?, 'ACTIVE', 'APPROVED', ?, 'WR', ?)
+    `).run(newId('BIL'), clientId, seller, loi, peakMw, contractedMwh, sale, purchase, sale, start, end,
+      apps[apps.length - 1]?.[2] || null, apps[apps.length - 1]?.[3] || null);
     report.bilaterals_created++;
     report.applications_covered += apps.length;
   }

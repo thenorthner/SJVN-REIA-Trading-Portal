@@ -253,6 +253,8 @@ function migrateBilateralMargin() {
   addColumn('sale_rate_per_unit', 'REAL');
   addColumn('trading_margin_per_unit', 'REAL NOT NULL DEFAULT 0.03');
   addColumn('contracted_mwh', 'REAL');
+  addColumn('noar_application_no', 'TEXT');
+  addColumn('noar_region', "TEXT DEFAULT 'WR'");
   db.exec(`
     UPDATE bilateral_transactions
        SET sale_rate_per_unit = tariff_per_unit,

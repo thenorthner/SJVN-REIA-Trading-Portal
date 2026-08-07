@@ -111,6 +111,34 @@ export function seedInvoiceCounters() {
   }
 }
 
+// NOAR open-access application number: SJVN<DDMMYY><REGION><SEQ>, e.g.
+// SJVN010426WR2354 — 1 April 2026, Western Region, running serial 2354. The
+// serial is a single register per region that runs on across dates (the ledger
+// goes 2354 to 2850 over four months), so it is counted the same way invoice
+// numbers are. The ledger's last issued number was WR2850, so a fresh register
+// picks up at 2851.
+const NOAR_SERIES = 'NOAR_APP';
+const NOAR_SEED = { WR: 2851 };
+
+export function seedApplicationCounters() {
+  const has = db.prepare('SELECT 1 FROM invoice_counters WHERE series_type = ? AND client_code = ?');
+  const ins = db.prepare('INSERT INTO invoice_counters (id, series_type, client_code, next_seq) VALUES (?, ?, ?, ?)');
+  for (const [region, seq] of Object.entries(NOAR_SEED)) {
+    if (!has.get(NOAR_SERIES, region)) ins.run(newId('ICN'), NOAR_SERIES, region, seq);
+  }
+}
+
+export function genApplicationNo(applicationDate, region = 'WR') {
+  const d = applicationDate ? new Date(applicationDate) : new Date();
+  if (Number.isNaN(d.getTime())) throw new Error(`Invalid application date: ${applicationDate}`);
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const yy = String(d.getUTCFullYear()).slice(-2);
+  const reg = String(region || 'WR').toUpperCase();
+  const seq = nextInvoiceSeq(NOAR_SERIES, reg);
+  return `SJVN${dd}${mm}${yy}${reg}${seq}`;
+}
+
 // The official SJVN invoice number: SJVN/{ENERGY|OA|MARGIN}/{CLIENT}/{YYYYMM}/{SEQ}
 // e.g. SJVN/ENERGY/KREATE/202605/144. seriesType selects the register; each
 // series keeps its own running sequence per client (see invoice_counters).

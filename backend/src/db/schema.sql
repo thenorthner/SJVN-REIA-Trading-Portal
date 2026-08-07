@@ -1000,6 +1000,10 @@ CREATE TABLE IF NOT EXISTS bilateral_transactions (
   status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','COMPLETED','CANCELLED')),
   is_standing_clearance INTEGER NOT NULL DEFAULT 0,
   -- NOAR portal contract lifecycle (bilateral open-access, per PT workflow doc).
+  -- application_no is the number SJVN files under (SJVN<DDMMYY><REGION><SEQ>);
+  -- noar_contract_no is the approval Grid India returns against it.
+  noar_application_no TEXT,
+  noar_region TEXT DEFAULT 'WR',
   noar_contract_no TEXT,
   noar_status TEXT NOT NULL DEFAULT 'NOT_INITIATED' CHECK (noar_status IN ('NOT_INITIATED','FORMAT_D_PREPARED','CONTRACT_CREATED','SUBMITTED','APPROVED','REJECTED')),
   -- Last SLA state alerted on, so the sweep notifies on change instead of repeating.
