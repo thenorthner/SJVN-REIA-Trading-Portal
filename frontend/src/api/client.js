@@ -499,7 +499,13 @@ export const api = {
     realised: (params) => g('/pnl/realised', params),
   },
   ledgerImport: {
+    // No file: the server falls back to the workbook shipped in docs/.
     run: () => p('/import/trading-ledger'),
+    upload: (file) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return client.post('/import/trading-ledger', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
+    },
   },
   bids: {
     list: (params) => g('/bids', params),

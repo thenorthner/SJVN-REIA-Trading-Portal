@@ -48,6 +48,10 @@ import DailyObligationReport from './pages/trading/DailyObligationReport.jsx';
 import RateMaster from './pages/trading/RateMaster.jsx';
 import TDSRegister from './pages/trading/TDSRegister.jsx';
 import OAChargeCalculator from './pages/trading/OAChargeCalculator.jsx';
+import DeviationRegister from './pages/trading/DeviationRegister.jsx';
+import PaymentCycle from './pages/trading/PaymentCycle.jsx';
+import ContractPnl from './pages/trading/ContractPnl.jsx';
+import LedgerImport from './pages/trading/LedgerImport.jsx';
 
 import SellerDashboard from './pages/seller/SellerDashboard.jsx';
 import SellerContracts from './pages/seller/SellerContracts.jsx';
@@ -188,6 +192,10 @@ export default function App() {
         <Route path="trading/market-analytics" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><MarketAnalytics /></ProtectedRoute>} />
         
         {/* Internal only */}
+        <Route path="trading/deviations" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><DeviationRegister /></ProtectedRoute>} />
+        <Route path="trading/payment-cycle" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PaymentCycle /></ProtectedRoute>} />
+        <Route path="trading/pnl" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ContractPnl /></ProtectedRoute>} />
+        <Route path="trading/ledger-import" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><LedgerImport /></ProtectedRoute>} />
         <Route path="trading/rate-master" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RateMaster /></ProtectedRoute>} />
         <Route path="trading/tds-register" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TDSRegister /></ProtectedRoute>} />
         <Route path="trading/oa-calculator" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><OAChargeCalculator /></ProtectedRoute>} />
