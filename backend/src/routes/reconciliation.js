@@ -596,7 +596,9 @@ router.post('/:id/request-signoff', requireRole(...REIA_WRITE), (req, res) => {
     message: `${recon.recon_no} awaiting your acknowledgment`,
   });
   res.json(db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(recon.id));
-}// ---- acknowledge / disagree ----
+});
+
+// ---- acknowledge / disagree ----
 router.post('/:id/acknowledge', (req, res) => {
   const { decision, note, remarks } = req.body; // AGREE | DISAGREE
   const recon = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(req.params.id);
@@ -771,7 +773,6 @@ router.post('/:id/regenerate-statement', requireRole(...REIA_WRITE, 'TRADING_USE
     reconciliation: { ...fresh, items, statement },
     statement
   });
-});
 });
 
 // Backward-compat resolve
