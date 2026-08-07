@@ -461,6 +461,38 @@ function importCashflow(workbook, report) {
   }
 }
 
+// --- TDS to be paid -> historical liability register -----------------------
+
+// The 2023-24 open-access applications and the tax withheld against each. These
+// predate the monthly TDS sheets and carry no challan detail — the challan
+// columns in the workbook are empty throughout — so they import as outstanding
+// liability, which is precisely the gap the register is meant to close.
+function importHistoricalTds(workbook, report) {
+  for (const r of rows(workbook, 'TDS to be paid').slice(1)) {
+    const party = r[3] ? String(r[3]).trim() : null;
+    const taxable = Number(r[6]);
+    const appNo = r[1] ? String(r[1]).trim() : null;
+    if (!party || !Number.isFinite(taxable) || taxable <= 0) continue;
+    // "INTEREST" is a penalty line rather than a vendor payment; it carries no PAN
+    // and is not a TDS deduction, so it is left out of the register.
+    if (/^interest$/i.test(party)) { report.tds_skipped++; continue; }
+
+    const dup = db.prepare(
+      'SELECT 1 FROM tds_ledger WHERE reference_no IS ? AND vendor_name = ? AND taxable_amount = ?'
+    ).get(appNo, party, taxable);
+    if (dup) { report.tds_skipped++; continue; }
+
+    recordTds({
+      vendorName: party,
+      taxableAmount: taxable,
+      referenceType: 'OA_APPLICATION',
+      referenceNo: appNo,
+      note: 'Imported from ledger TDS to be paid (2023-24)',
+    });
+    report.tds_created++;
+  }
+}
+
 // --- April/May TDS sheets -> tds_ledger ------------------------------------
 
 function importTds(workbook, report) {
@@ -506,6 +538,7 @@ export function importTradingLedger(filePath) {
     importOaActuals(workbook, report);
     importEnergySettlements(workbook, report);
     importCashflow(workbook, report);
+    importHistoricalTds(workbook, report);
     importTds(workbook, report);
   });
   run();

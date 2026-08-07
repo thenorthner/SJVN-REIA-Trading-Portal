@@ -2,7 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { logAudit } from '../util.js';
-import { seedTdsVendors, listVendors, recordTds, recordChallan, pendingByVendor, summary } from '../services/tdsLedger.js';
+import { seedTdsVendors, listVendors, recordTds, recordChallan, pendingByVendor, summary, panComplianceGaps } from '../services/tdsLedger.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -67,6 +67,11 @@ router.post('/:id/challan', requireRole(...TDS_WRITE), (req, res) => {
   if (!row) return res.status(404).json({ error: 'TDS entry not found' });
   logAudit({ req, user: req.user, action: 'RECORD_CHALLAN', module: 'TRADING', entityType: 'tds_ledger', entityId: row.id, details: req.body });
   res.json(row);
+});
+
+// Which buyers still need a PAN on file for 194Q.
+router.get('/pan-compliance', requireRole(...TDS_READ), (req, res) => {
+  res.json(panComplianceGaps());
 });
 
 export default router;

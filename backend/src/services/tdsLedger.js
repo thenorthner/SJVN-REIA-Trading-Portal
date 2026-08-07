@@ -99,3 +99,37 @@ export function summary(period) {
     ORDER BY tds_total DESC
   `).all(...params);
 }
+
+// Section 194Q applies to the energy SJVN sells, and deducting it correctly needs
+// the buyer's PAN on file — without one the deduction is at the higher
+// non-PAN rate under 206AA. The ISET ledger carries PANs only for the grid
+// agencies SJVN pays, never for the buyers it bills, so this reports which
+// counterparties still need one rather than inventing it.
+export function panComplianceGaps() {
+  const rows = db.prepare(`
+    SELECT e.id, e.name, e.entity_type, e.pan_no, e.gst_no,
+           (SELECT COUNT(*) FROM bilateral_transactions b
+             JOIN trading_clients tc ON tc.id = b.client_id
+            WHERE tc.entity_id = e.id) AS deals
+    FROM entities e
+    WHERE e.entity_type = 'BUYER'
+    ORDER BY deals DESC, e.name
+  `).all();
+
+  const missing = rows.filter((r) => !r.pan_no);
+  return {
+    buyers: rows.length,
+    with_pan: rows.length - missing.length,
+    missing_pan: missing.length,
+    compliance_pct: rows.length ? Number((((rows.length - missing.length) / rows.length) * 100).toFixed(1)) : 100,
+    // Buyers actually trading are the ones that matter for 194Q.
+    trading_without_pan: missing.filter((r) => r.deals > 0).length,
+    items: rows.map((r) => ({
+      entity_id: r.id, name: r.name, deals: r.deals,
+      pan: r.pan_no || null, gst: r.gst_no || null,
+      has_pan: !!r.pan_no,
+      tds_rate_applicable: r.pan_no ? 0.001 : 0.05,   // 194Q 0.1%, or 206AA 5% without a PAN
+      note: r.pan_no ? null : 'No PAN on file — 194Q deduction would fall under 206AA at the higher rate',
+    })),
+  };
+}
