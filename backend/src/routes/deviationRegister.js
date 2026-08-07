@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { listDeviations, summary, scorecard, incidents } from '../services/deviationRegister.js';
+import { listDeviations, summary, scorecard, incidents, runDeviationAlerts } from '../services/deviationRegister.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -32,6 +32,11 @@ router.get('/scorecard', requireRole(...DEV_READ), (req, res) => {
 // Individual shortfall events, worst first.
 router.get('/incidents', requireRole(...DEV_READ), (req, res) => {
   res.json(incidents(filters(req.query)));
+});
+
+// Run the shortfall alert sweep now rather than waiting for the daily schedule.
+router.post('/run-alerts', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+  res.json(runDeviationAlerts());
 });
 
 export default router;

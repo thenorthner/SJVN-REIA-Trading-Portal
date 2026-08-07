@@ -1628,6 +1628,9 @@ CREATE TABLE IF NOT EXISTS schedule_deviations (
   seller_default_mwh REAL NOT NULL DEFAULT 0,  -- seller failed to deliver
   remark TEXT,
   source TEXT NOT NULL DEFAULT 'LEDGER_IMPORT',
+  -- Set when a shortfall on this day has been notified, so the sweep alerts once
+  -- per incident rather than on every run.
+  alerted_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sched_dev_day ON schedule_deviations(contract_ref, schedule_date);

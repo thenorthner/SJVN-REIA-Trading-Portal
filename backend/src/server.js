@@ -60,6 +60,7 @@ import tdsLedgerRoutes from './routes/tdsLedger.js';
 import oaChargesRoutes from './routes/oaCharges.js';
 import importsRoutes from './routes/imports.js';
 import deviationRegisterRoutes from './routes/deviationRegister.js';
+import { runDeviationAlerts } from './services/deviationRegister.js';
 import paymentCycleRoutes from './routes/paymentCycle.js';
 import contractPnlRoutes from './routes/contractPnl.js';
 import { ensureMasterDefaults } from './mastersService.js';
@@ -251,6 +252,17 @@ app.listen(PORT, HOST, () => {
       console.error('[NOTIFY] retry sweep failed', err.message);
     }
   }, 15 * 60 * 1000);
+  // Schedule shortfall alerts — daily 07:00 IST (01:30 UTC), after the previous
+  // day's schedules have settled.
+  cron.schedule('30 1 * * *', () => {
+    try {
+      const r = runDeviationAlerts();
+      if (r.alerted) console.log(`[DEVIATION] Raised ${r.alerted} shortfall alert(s) above ${r.threshold_pct}%`);
+    } catch (err) {
+      console.error('[DEVIATION] alert sweep failed', err.message);
+    }
+  });
+
   // Weekly NOAR approval digest — Monday 09:00 IST (03:30 UTC)
   cron.schedule('30 3 * * 1', async () => {
     try {

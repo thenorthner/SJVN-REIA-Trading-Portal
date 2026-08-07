@@ -1,4 +1,6 @@
 import db from '../db/index.js';
+import { pushNotification } from '../util.js';
+import { getParamNumber } from '../mastersService.js';
 
 function filterSql({ bilateral_id, contract_ref, from, to }) {
   const where = ['1=1'];
@@ -81,6 +83,45 @@ export function scorecard(filters = {}) {
     const grade = rel >= 99.5 ? 'A' : rel >= 98 ? 'B' : rel >= 95 ? 'C' : 'D';
     return { ...r, seller_reliability_pct: rel, grade };
   });
+}
+
+// Notify on material shortfalls. A day is material when the side that defaulted
+// missed more than the configured share of what was requested (default 5%).
+// alerted_at is stamped so each incident is raised once rather than on every
+// sweep, matching how the NOAR SLA alerts behave.
+export function runDeviationAlerts() {
+  const threshold = getParamNumber('deviation_alert_pct', 5);
+  const rows = db.prepare(`
+    SELECT * FROM schedule_deviations
+    WHERE alerted_at IS NULL
+      AND requested_mwh > 0
+      AND (seller_default_mwh > 0 OR buyer_default_mwh > 0)
+    ORDER BY schedule_date
+  `).all();
+
+  const stamp = db.prepare(`UPDATE schedule_deviations SET alerted_at = datetime('now') WHERE id = ?`);
+  let sent = 0;
+  for (const r of rows) {
+    const sellerPct = (r.seller_default_mwh / r.requested_mwh) * 100;
+    const buyerPct = (r.buyer_default_mwh / r.requested_mwh) * 100;
+    const worstPct = Math.max(sellerPct, buyerPct);
+    if (worstPct < threshold) {
+      // Below the bar is still resolved, so it is not looked at again.
+      stamp.run(r.id);
+      continue;
+    }
+    const sellerSide = sellerPct >= buyerPct;
+    const who = sellerSide ? (r.counterparty || 'Seller') : 'Buyer';
+    const shortMwh = sellerSide ? r.seller_default_mwh : r.buyer_default_mwh;
+    pushNotification({
+      role: 'TRADING_USER',
+      type: 'SCHEDULE_DEVIATION',
+      message: `${who} short ${shortMwh.toFixed(3)} MWh on ${r.schedule_date} — ${worstPct.toFixed(1)}% of the ${r.requested_mwh.toFixed(3)} MWh requested`,
+    });
+    stamp.run(r.id);
+    sent++;
+  }
+  return { checked: rows.length, alerted: sent, threshold_pct: threshold };
 }
 
 // The individual shortfall events, worst first — what an ops review looks at.

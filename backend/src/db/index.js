@@ -1384,6 +1384,7 @@ function migrateScheduleDeviationCounterparty() {
   if (!tables.includes('schedule_deviations')) return;
   const cols = db.prepare(`PRAGMA table_info(schedule_deviations)`).all().map((c) => c.name);
   if (!cols.includes('counterparty')) db.exec('ALTER TABLE schedule_deviations ADD COLUMN counterparty TEXT;');
+  if (!cols.includes('alerted_at')) db.exec('ALTER TABLE schedule_deviations ADD COLUMN alerted_at TEXT;');
 }
 
 try {
