@@ -195,10 +195,18 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
+// Exported so tests can drive the routes without binding a port. Listening and
+// the background sweeps are started below, and only when this file is the entry
+// point — importing it must not take over port 4000 or start timers.
+export { app };
+
 const PORT = process.env.PORT || 4000;
 // 0.0.0.0 so the server answers on the machine's LAN address, not only on
 // loopback — otherwise nobody else on the network can reach it.
 const HOST = process.env.HOST || '0.0.0.0';
+
+const isEntryPoint = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isEntryPoint) {
 app.listen(PORT, HOST, () => {
   console.log(`SJVN Energy Platform listening on http://${HOST}:${PORT}`);
   // SLA escalation sweep every 15 minutes
@@ -336,3 +344,4 @@ app.listen(PORT, HOST, () => {
     console.warn('[CERC Scraper] Auto-seed initial run error:', err.message);
   });
 });
+}
