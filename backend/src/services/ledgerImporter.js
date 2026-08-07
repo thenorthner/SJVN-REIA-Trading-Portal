@@ -29,8 +29,9 @@ function parseLedgerDate(v) {
     return d.toISOString().slice(0, 10);
   }
   const s = String(v).trim();
-  // DD/MM/YYYY on the schedule sheets, DD.MM.YYYY on the billing sheets.
-  const m = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+  // DD/MM/YYYY on the schedule sheets, DD.MM.YYYY on the billing sheets,
+  // DD-MM-YYYY on the energy payment sheet.
+  const m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
   if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
   return s;
 }
@@ -303,6 +304,67 @@ function importDailySchedule(workbook, report) {
   }
 }
 
+// --- ENERGY PAYMENT -> energy_settlements ----------------------------------
+
+// Both sides of the same day's energy on one row: what was paid to the seller and
+// what was billed to the buyer. Importing it is what makes the trading margin
+// checkable per day instead of only as an average.
+function importEnergySettlements(workbook, report) {
+  const ep = rows(workbook, 'ENERGY PAYMENT ');
+  const contractRef = db.prepare(`
+    SELECT loi_contract_ref FROM bilateral_transactions WHERE loi_contract_ref LIKE 'NVVN%' LIMIT 1
+  `).get()?.loi_contract_ref || 'NVVN_Kreate_200MW';
+
+  const upsert = db.prepare(`
+    INSERT INTO energy_settlements (id, contract_ref, settlement_date, energy_kwh,
+      purchase_rate, purchase_amount, purchase_tds, sale_rate, sale_amount, sale_tds,
+      margin_rate, margin_amount, net_receivable, actual_receipt, receipt_difference, receipt_date, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LEDGER_IMPORT')
+    ON CONFLICT(contract_ref, settlement_date) DO UPDATE SET
+      energy_kwh = excluded.energy_kwh,
+      purchase_rate = excluded.purchase_rate, purchase_amount = excluded.purchase_amount,
+      purchase_tds = excluded.purchase_tds,
+      sale_rate = excluded.sale_rate, sale_amount = excluded.sale_amount, sale_tds = excluded.sale_tds,
+      margin_rate = excluded.margin_rate, margin_amount = excluded.margin_amount,
+      net_receivable = excluded.net_receivable, actual_receipt = excluded.actual_receipt,
+      receipt_difference = excluded.receipt_difference, receipt_date = excluded.receipt_date
+  `);
+
+  // Same date-ordered year-typo repair as the schedule sheet: this one carries a
+  // "27-04-2027" among the April 2026 rows.
+  const DAY = 86400000;
+  let prev = null;
+  for (const r of ep.slice(2)) {
+    const purchaseRate = Number(r[3]);
+    const saleRate = Number(r[13]);
+    if (!Number.isFinite(purchaseRate) || !Number.isFinite(saleRate)) continue;
+    let date = parseLedgerDate(r[1]);
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+
+    if (prev) {
+      const gap = (new Date(date) - new Date(prev)) / DAY;
+      if (gap > 60 || gap < 0) {
+        const retry = `${prev.slice(0, 4)}${date.slice(4)}`;
+        const retryGap = (new Date(retry) - new Date(prev)) / DAY;
+        if (retryGap >= 0 && retryGap <= 60) {
+          report.date_repairs.push({ sheet: 'ENERGY PAYMENT', found: date, used: retry });
+          date = retry;
+        }
+      }
+    }
+    prev = date;
+
+    const kwh = Number(r[2]) || 0;
+    const marginRate = Number((saleRate - purchaseRate).toFixed(4));
+    upsert.run(newId('ESL'), contractRef, date, kwh,
+      purchaseRate, Number(r[4]) || 0, Number(r[5]) || 0,
+      saleRate, Number(r[14]) || 0, Number(r[15]) || 0,
+      marginRate, Number((kwh * marginRate).toFixed(2)),
+      Number(r[17]) || 0, Number(r[18]) || 0, Number(r[19]) || 0, isoDateOrNull(r[20]));
+    report.energy_settlements_imported++;
+  }
+}
+
 // --- Bills issued / received -> cashflow_entries ---------------------------
 
 // Both legs of the cash cycle. The buyer's side is what SJVN collects, the
@@ -392,13 +454,14 @@ export function importTradingLedger(filePath) {
     bilaterals_created: 0, bilaterals_skipped: 0, applications_covered: 0,
     ists_rates_created: 0, ists_rates_skipped: 0,
     schedule_days_imported: 0, date_repairs: [],
-    cashflow_inflows: 0, cashflow_outflows: 0,
+    cashflow_inflows: 0, cashflow_outflows: 0, energy_settlements_imported: 0,
     tds_created: 0, tds_skipped: 0,
   };
   const run = db.transaction(() => {
     importApplications(workbook, report);
     importIstsRates(workbook, report);
     importDailySchedule(workbook, report);
+    importEnergySettlements(workbook, report);
     importCashflow(workbook, report);
     importTds(workbook, report);
   });

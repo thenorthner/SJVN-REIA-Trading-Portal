@@ -1636,6 +1636,32 @@ CREATE TABLE IF NOT EXISTS schedule_deviations (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sched_dev_day ON schedule_deviations(contract_ref, schedule_date);
 CREATE INDEX IF NOT EXISTS idx_sched_dev_bilateral ON schedule_deviations(bilateral_id, schedule_date);
 
+-- Day-wise energy settlement: what SJVN paid the seller and billed the buyer for
+-- the same energy on the same day. The ledger keeps both sides on one row, which
+-- is what makes the trading margin checkable per day rather than only in
+-- aggregate — margin_rate should equal the contract's margin on every single day.
+CREATE TABLE IF NOT EXISTS energy_settlements (
+  id TEXT PRIMARY KEY,
+  contract_ref TEXT,
+  settlement_date TEXT NOT NULL,
+  energy_kwh REAL NOT NULL DEFAULT 0,
+  purchase_rate REAL,                   -- Rs/kWh paid to the seller
+  purchase_amount REAL NOT NULL DEFAULT 0,
+  purchase_tds REAL NOT NULL DEFAULT 0,
+  sale_rate REAL,                       -- Rs/kWh billed to the buyer
+  sale_amount REAL NOT NULL DEFAULT 0,
+  sale_tds REAL NOT NULL DEFAULT 0,
+  margin_rate REAL,                     -- sale_rate - purchase_rate
+  margin_amount REAL NOT NULL DEFAULT 0,
+  net_receivable REAL NOT NULL DEFAULT 0,
+  actual_receipt REAL NOT NULL DEFAULT 0,
+  receipt_difference REAL NOT NULL DEFAULT 0,
+  receipt_date TEXT,
+  source TEXT NOT NULL DEFAULT 'LEDGER_IMPORT',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_energy_settle_day ON energy_settlements(contract_ref, settlement_date);
+
 -- Both legs of the trading desk's cash cycle in one register: money owed to SJVN
 -- by the buyer (INFLOW) and money SJVN owes the seller (OUTFLOW). The ledger keeps
 -- these on separate sheets, so a net cash position could not be seen; holding both
