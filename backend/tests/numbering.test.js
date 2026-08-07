@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import db from '../src/db/index.js';
-import { deriveClientCode, genSjvnInvoiceNo, seedInvoiceCounters, genApplicationNo, seedApplicationCounters } from '../src/util.js';
+import { deriveClientCode, genSjvnInvoiceNo, seedInvoiceCounters, genApplicationNo, seedApplicationCounters, clientCodeFor } from '../src/util.js';
 
 beforeEach(() => {
   db.prepare('DELETE FROM invoice_counters').run();
@@ -80,5 +80,31 @@ describe('genApplicationNo', () => {
 
   it('rejects an unusable date instead of producing a wrong number', () => {
     expect(() => genApplicationNo('not-a-date')).toThrow(/Invalid application date/);
+  });
+});
+
+describe('clientCodeFor', () => {
+  beforeEach(() => {
+    db.prepare(`INSERT OR IGNORE INTO entities (id, entity_type, category, name, short_code, status)
+                VALUES ('E-GACL', 'BUYER', 'C&I', 'Gujarat Alkalies and Chemicals Limited', 'GACL', 'APPROVED')`).run();
+    db.prepare(`INSERT OR IGNORE INTO entities (id, entity_type, category, name, status)
+                VALUES ('E-PLAIN', 'BUYER', 'C&I', 'Teesta Urja Ltd', 'APPROVED')`).run();
+    db.prepare(`INSERT OR IGNORE INTO trading_clients (id, entity_id, name, client_type, status)
+                VALUES ('TCL-GACL', 'E-GACL', 'Gujarat Alkalies and Chemicals Limited', 'C&I', 'ACTIVE')`).run();
+    db.prepare(`INSERT OR IGNORE INTO trading_clients (id, entity_id, name, client_type, status)
+                VALUES ('TCL-PLAIN', 'E-PLAIN', 'Teesta Urja Ltd', 'GENERATOR', 'ACTIVE')`).run();
+  });
+
+  it('bills under the short code the desk actually uses', () => {
+    // Without this the number would read GUJARAT, which is not what anyone calls them.
+    expect(clientCodeFor('TCL-GACL')).toBe('GACL');
+  });
+
+  it('derives a code when no short code is set', () => {
+    expect(clientCodeFor('TCL-PLAIN')).toBe('TEESTA');
+  });
+
+  it('returns null for a client that does not exist', () => {
+    expect(clientCodeFor('nope')).toBeNull();
   });
 });

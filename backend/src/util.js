@@ -139,6 +139,22 @@ export function genApplicationNo(applicationDate, region = 'WR') {
   return `SJVN${dd}${mm}${yy}${reg}${seq}`;
 }
 
+// The code a trading client bills under. An explicit short_code on the linked
+// entity wins — the desk calls Gujarat Alkalies "GACL", not "GUJARAT", and the
+// first word of a legal name is often not the trading name. Falls back to
+// deriving one from the name.
+export function clientCodeFor(clientId) {
+  const row = db.prepare(`
+    SELECT tc.name AS client_name, e.short_code
+    FROM trading_clients tc
+    LEFT JOIN entities e ON e.id = tc.entity_id
+    WHERE tc.id = ?
+  `).get(clientId);
+  if (!row) return null;
+  const code = row.short_code && String(row.short_code).trim();
+  return code ? code.toUpperCase().slice(0, 12) : deriveClientCode(row.client_name);
+}
+
 // The official SJVN invoice number: SJVN/{ENERGY|OA|MARGIN}/{CLIENT}/{YYYYMM}/{SEQ}
 // e.g. SJVN/ENERGY/KREATE/202605/144. seriesType selects the register; each
 // series keeps its own running sequence per client (see invoice_counters).

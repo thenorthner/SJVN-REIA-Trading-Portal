@@ -25,6 +25,27 @@ Script ye sab karti hai:
 5. Database na ho to seed karti hai — hai to chhod deti hai aur sirf migrations lagti hain
 6. Aakhir me batati hai ki kaunse link par khulega
 
+## Baad ke updates
+
+Ek baar server set ho jaane ke baad, har naye release ke liye sirf ye chalao:
+
+```bash
+cd sjvn-energy-platform && ./update.sh
+```
+
+Ye script poora cycle khud sambhaalti hai:
+
+1. `git fetch` — kuch naya nahi hai to wahin ruk jaati hai
+2. Fast-forward pull (agar server ki history diverge ho gayi ho to rukti hai, chupchaap overwrite nahi karti)
+3. `deploy.sh` — dependencies + frontend build
+4. **Test suite chalati hai — service restart karne se PEHLE**, taaki toota hua release live na pahunche
+5. `systemctl restart` + health check
+6. Kuch bhi fail ho to **apne aap pichhle commit pe rollback** karke rebuild kar deti hai
+
+Service ka naam alag ho to `SJVN_SERVICE=my-service ./update.sh`.
+
+---
+
 Phir service chalu karo:
 
 ```bash

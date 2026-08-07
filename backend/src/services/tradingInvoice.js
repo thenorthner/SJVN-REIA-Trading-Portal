@@ -1,5 +1,5 @@
 import db from '../db/index.js';
-import { newId, genSjvnInvoiceNo } from '../util.js';
+import { newId, genSjvnInvoiceNo, clientCodeFor } from '../util.js';
 
 // One place where a trading invoice is priced and written.
 //
@@ -94,7 +94,9 @@ export function createTradingInvoice(body, { postLedger = false } = {}) {
   const priced = priceTradingInvoice(body);
   // A pure margin bill has its own register; everything else bills as energy.
   const series = body.invoice_kind === 'TRADING_MARGIN_ONLY' ? 'MARGIN' : 'ENERGY';
-  const invoiceNo = genSjvnInvoiceNo(series, client.name, body.billing_period);
+  // Bill under the client's own short code where one is set, so the number reads
+  // the way the desk refers to the counterparty.
+  const invoiceNo = genSjvnInvoiceNo(series, clientCodeFor(body.client_id) || client.name, body.billing_period);
   const id = newId('TIN');
 
   const insertInvoice = db.prepare(`

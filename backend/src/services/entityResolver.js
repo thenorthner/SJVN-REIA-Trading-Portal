@@ -50,7 +50,7 @@ export function addAlias(entityId, aliasName, source = 'MANUAL') {
 // canonical entity for each if absent, then registers every spelling as an alias.
 const ALIAS_SEED = [
   {
-    canonical: { name: 'Gujarat Alkalies and Chemicals Limited', entity_type: 'BUYER', category: 'C&I', pan_no: null },
+    canonical: { name: 'Gujarat Alkalies and Chemicals Limited', short_code: 'GACL', entity_type: 'BUYER', category: 'C&I', pan_no: null },
     spellings: [
       'M/s. GUJARAT ALKALIES ANDCHEMICALS LIMITED -13032',
       'M/s Gujarat Alkalies & Chemicals Limited',
@@ -59,7 +59,7 @@ const ALIAS_SEED = [
     ],
   },
   {
-    canonical: { name: 'NTPC Renewable Energy Limited', entity_type: 'SELLER', category: 'RE Generator', pan_no: null },
+    canonical: { name: 'NTPC Renewable Energy Limited', short_code: 'NTPCREL', entity_type: 'SELLER', category: 'RE Generator', pan_no: null },
     spellings: [
       'NTPC Renewable Energy Limited_KPS3',
       'NTPCREL_PSS1_KPS3_S',
@@ -69,9 +69,10 @@ const ALIAS_SEED = [
 
 export function seedEntityAliases() {
   const insertEntity = db.prepare(`
-    INSERT INTO entities (id, entity_type, category, name, pan_no, status)
-    VALUES (?, ?, ?, ?, ?, 'APPROVED')
+    INSERT INTO entities (id, entity_type, category, name, short_code, pan_no, status)
+    VALUES (?, ?, ?, ?, ?, ?, 'APPROVED')
   `);
+  const setShortCode = db.prepare('UPDATE entities SET short_code = ? WHERE id = ? AND short_code IS NULL');
   const tx = db.transaction(() => {
     for (const group of ALIAS_SEED) {
       const canonNorm = normalizeName(group.canonical.name);
@@ -82,7 +83,11 @@ export function seedEntityAliases() {
       }
       if (!entityId) {
         entityId = newId(group.canonical.entity_type === 'SELLER' ? 'SELL' : 'BUY');
-        insertEntity.run(entityId, group.canonical.entity_type, group.canonical.category, group.canonical.name, group.canonical.pan_no);
+        insertEntity.run(entityId, group.canonical.entity_type, group.canonical.category, group.canonical.name,
+          group.canonical.short_code || null, group.canonical.pan_no);
+      } else if (group.canonical.short_code) {
+        // An entity created before short codes existed still needs one.
+        setShortCode.run(group.canonical.short_code, entityId);
       }
       addAlias(entityId, group.canonical.name, 'LEDGER');
       for (const sp of group.spellings) addAlias(entityId, sp, 'LEDGER');

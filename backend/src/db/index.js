@@ -1381,6 +1381,19 @@ try {
  * recorded on the row itself instead of being reached through a bilateral link.
  * Adds that column to databases created before it existed.
  */
+function migrateEntityShortCode() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (!tables.includes('entities')) return;
+  const cols = db.prepare(`PRAGMA table_info(entities)`).all().map((c) => c.name);
+  if (!cols.includes('short_code')) db.exec('ALTER TABLE entities ADD COLUMN short_code TEXT;');
+}
+
+try {
+  migrateEntityShortCode();
+} catch (e) {
+  console.error('Entity short-code migration failed:', e.message);
+}
+
 function migrateScheduleDeviationCounterparty() {
   const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
   if (!tables.includes('schedule_deviations')) return;

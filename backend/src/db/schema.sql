@@ -170,6 +170,10 @@ CREATE TABLE IF NOT EXISTS entities (
   entity_type TEXT NOT NULL CHECK (entity_type IN ('SELLER','BUYER')),
   category TEXT NOT NULL, -- RE Generator / DISCOM / C&I / Other
   name TEXT NOT NULL,
+  -- Short trading code used inside invoice numbers (GACL rather than GUJARAT).
+  -- Derived from the name when absent, so it only needs setting where the
+  -- obvious first word is not what the desk calls the counterparty.
+  short_code TEXT,
   pan_no TEXT,
   gst_no TEXT,
   cin TEXT,

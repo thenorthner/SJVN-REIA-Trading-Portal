@@ -567,26 +567,62 @@ function getCercStatus() {
   };
 }
 
+// A period that keeps failing to produce a summary would otherwise be retried on
+// every boot, and each retry reaches for the network first. After this many
+// attempts it is left alone until the cooldown passes — some CERC months simply
+// do not carry the tables this parser needs, and hammering them on every restart
+// buys nothing.
+const AUTOSEED_MAX_ATTEMPTS = 3;
+const AUTOSEED_COOLDOWN_HOURS = 24 * 7;
+
+// Whether to try this period now, and why not when the answer is no.
+function autoSeedDecision(period) {
+  if (db.prepare(`SELECT id FROM cerc_monthly_summary WHERE report_period = ?`).get(period)) {
+    return { seed: false, reason: 'already seeded' };
+  }
+  const row = db.prepare(`
+    SELECT COUNT(*) AS attempts,
+           MAX(COALESCE(fetched_at, created_at)) AS last_attempt
+    FROM cerc_fetch_log WHERE report_period = ?
+  `).get(period);
+  if (!row || row.attempts < AUTOSEED_MAX_ATTEMPTS) return { seed: true };
+
+  const last = row.last_attempt ? new Date(`${String(row.last_attempt).replace(' ', 'T')}Z`) : null;
+  const hoursSince = last ? (Date.now() - last.getTime()) / 36e5 : Infinity;
+  if (hoursSince < AUTOSEED_COOLDOWN_HOURS) {
+    return {
+      seed: false,
+      reason: `${row.attempts} failed attempt(s), next retry in ${Math.ceil(AUTOSEED_COOLDOWN_HOURS - hoursSince)}h`,
+    };
+  }
+  return { seed: true };
+}
+
 async function autoSeedLocalReports() {
   try {
     console.log('[CERC Scraper] Checking for local reports to auto-seed...');
-    if (fs.existsSync(CERC_DOWNLOAD_DIR)) {
-      const dirs = fs.readdirSync(CERC_DOWNLOAD_DIR).sort();
-      for (const d of dirs) {
-        if (/^\d{4}-\d{2}$/.test(d)) {
-          const existing = db.prepare(`SELECT id FROM cerc_monthly_summary WHERE report_period = ?`).get(d);
-          if (!existing) {
-            console.log(`[CERC Scraper] Auto-seeding local report for ${d}...`);
-            try {
-              await fetchCercReport(d);
-              console.log(`[CERC Scraper] Auto-seeded local report for ${d}`);
-            } catch (e) {
-              console.warn(`[CERC Scraper] Auto-seed failed for ${d}:`, e.message);
-            }
-          }
+    if (!fs.existsSync(CERC_DOWNLOAD_DIR)) return;
+    const dirs = fs.readdirSync(CERC_DOWNLOAD_DIR).sort();
+    let skipped = 0;
+    for (const d of dirs) {
+      if (!/^\d{4}-\d{2}$/.test(d)) continue;
+      const decision = autoSeedDecision(d);
+      if (!decision.seed) {
+        if (decision.reason !== 'already seeded') {
+          console.log(`[CERC Scraper] Skipping ${d} — ${decision.reason}`);
+          skipped++;
         }
+        continue;
+      }
+      console.log(`[CERC Scraper] Auto-seeding local report for ${d}...`);
+      try {
+        await fetchCercReport(d);
+        console.log(`[CERC Scraper] Auto-seeded local report for ${d}`);
+      } catch (e) {
+        console.warn(`[CERC Scraper] Auto-seed failed for ${d}:`, e.message);
       }
     }
+    if (skipped) console.log(`[CERC Scraper] ${skipped} period(s) in retry cooldown`);
   } catch (err) {
     console.warn(`[CERC Scraper] autoSeedLocalReports error:`, err.message);
   }
@@ -594,6 +630,7 @@ async function autoSeedLocalReports() {
 
 export const cercScraper = {
   buildCercUrls,
+  autoSeedDecision,
   fetchCercReport,
   parseAndSaveExcel,
   scanForNewReports,

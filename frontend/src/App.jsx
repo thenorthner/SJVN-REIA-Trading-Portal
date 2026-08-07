@@ -1,83 +1,82 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from './roles.js';
 import { useAuth } from './context/AuthContext.jsx';
 
-import Login from './pages/Login.jsx';
-import ConsolidatedDashboard from './pages/ConsolidatedDashboard.jsx';
+const Login = lazy(() => import('./pages/Login.jsx'));
+const ConsolidatedDashboard = lazy(() => import('./pages/ConsolidatedDashboard.jsx'));
 
-import ReiaDashboard from './pages/reia/ReiaDashboard.jsx';
-import HomeDashboard from './pages/trading/HomeDashboard.jsx';
-import Entities from './pages/reia/Entities.jsx';
-import Contracts from './pages/reia/Contracts.jsx';
-import EnergyData from './pages/reia/EnergyData.jsx';
-import Invoices from './pages/reia/Invoices.jsx';
-import Team from './pages/shared/Team.jsx';
-import MyDocuments from './pages/shared/MyDocuments.jsx';
-import Disputes from './pages/reia/Disputes.jsx';
-import PaymentSecurity from './pages/reia/PaymentSecurity.jsx';
-import Reconciliation from './pages/reia/Reconciliation.jsx';
-import Reports from './pages/reia/Reports.jsx';
-import DeviationSettlements from './pages/reia/DeviationSettlements.jsx';
-import PowerDiversion from './pages/reia/PowerDiversion.jsx';
+const ReiaDashboard = lazy(() => import('./pages/reia/ReiaDashboard.jsx'));
+const HomeDashboard = lazy(() => import('./pages/trading/HomeDashboard.jsx'));
+const Entities = lazy(() => import('./pages/reia/Entities.jsx'));
+const Contracts = lazy(() => import('./pages/reia/Contracts.jsx'));
+const EnergyData = lazy(() => import('./pages/reia/EnergyData.jsx'));
+const Invoices = lazy(() => import('./pages/reia/Invoices.jsx'));
+const Team = lazy(() => import('./pages/shared/Team.jsx'));
+const MyDocuments = lazy(() => import('./pages/shared/MyDocuments.jsx'));
+const Disputes = lazy(() => import('./pages/reia/Disputes.jsx'));
+const PaymentSecurity = lazy(() => import('./pages/reia/PaymentSecurity.jsx'));
+const Reconciliation = lazy(() => import('./pages/reia/Reconciliation.jsx'));
+const Reports = lazy(() => import('./pages/reia/Reports.jsx'));
+const DeviationSettlements = lazy(() => import('./pages/reia/DeviationSettlements.jsx'));
+const PowerDiversion = lazy(() => import('./pages/reia/PowerDiversion.jsx'));
 
-import TradingDashboard from './pages/trading/TradingDashboard.jsx';
-import TradingClients from './pages/trading/TradingClients.jsx';
-import TradingClientProfile from './pages/trading/TradingClientProfile.jsx';
-import Bids from './pages/trading/Bids.jsx';
-import DayAheadMarketEngine from './pages/trading/DayAheadMarketEngine.jsx';
-import PreTradeBoard from './pages/trading/PreTradeBoard.jsx';
-import Bilateral from './pages/trading/Bilateral.jsx';
-import BillingSettlement from './pages/trading/BillingSettlement.jsx';
-import GeneratorBilling from './pages/trading/GeneratorBilling.jsx';
-import MarketAnalytics from './pages/trading/MarketAnalytics.jsx';
-import RECManagement from './pages/trading/RECManagement.jsx';
-import NOARWallet from './pages/trading/NOARWallet.jsx';
-import NOARRegistry from './pages/trading/NOARRegistry.jsx';
-import CERCFormIV from './pages/trading/CERCFormIV.jsx';
-import BulkCommunications from './pages/trading/BulkCommunications.jsx';
-import InboxMailList from './pages/trading/InboxMailList.jsx';
-import CertificateOperationsHub from './pages/trading/CertificateOperationsHub.jsx';
-import TAMManagement from './pages/trading/TAMManagement.jsx';
-import BankTransactionsList from './pages/trading/BankTransactionsList.jsx';
-import EnergySchedule from './pages/trading/EnergySchedule.jsx';
-import EnergyScheduleArchive from './pages/trading/EnergyScheduleArchive.jsx';
-import DailyObligationReport from './pages/trading/DailyObligationReport.jsx';
-import RateMaster from './pages/trading/RateMaster.jsx';
-import TDSRegister from './pages/trading/TDSRegister.jsx';
-import OAChargeCalculator from './pages/trading/OAChargeCalculator.jsx';
-import DeviationRegister from './pages/trading/DeviationRegister.jsx';
-import PaymentCycle from './pages/trading/PaymentCycle.jsx';
-import ContractPnl from './pages/trading/ContractPnl.jsx';
-import LedgerImport from './pages/trading/LedgerImport.jsx';
-import MarginAssurance from './pages/trading/MarginAssurance.jsx';
-import OAReconciliation from './pages/trading/OAReconciliation.jsx';
+const TradingDashboard = lazy(() => import('./pages/trading/TradingDashboard.jsx'));
+const TradingClients = lazy(() => import('./pages/trading/TradingClients.jsx'));
+const TradingClientProfile = lazy(() => import('./pages/trading/TradingClientProfile.jsx'));
+const Bids = lazy(() => import('./pages/trading/Bids.jsx'));
+const DayAheadMarketEngine = lazy(() => import('./pages/trading/DayAheadMarketEngine.jsx'));
+const PreTradeBoard = lazy(() => import('./pages/trading/PreTradeBoard.jsx'));
+const Bilateral = lazy(() => import('./pages/trading/Bilateral.jsx'));
+const BillingSettlement = lazy(() => import('./pages/trading/BillingSettlement.jsx'));
+const GeneratorBilling = lazy(() => import('./pages/trading/GeneratorBilling.jsx'));
+const MarketAnalytics = lazy(() => import('./pages/trading/MarketAnalytics.jsx'));
+const NOARWallet = lazy(() => import('./pages/trading/NOARWallet.jsx'));
+const NOARRegistry = lazy(() => import('./pages/trading/NOARRegistry.jsx'));
+const CERCFormIV = lazy(() => import('./pages/trading/CERCFormIV.jsx'));
+const BulkCommunications = lazy(() => import('./pages/trading/BulkCommunications.jsx'));
+const InboxMailList = lazy(() => import('./pages/trading/InboxMailList.jsx'));
+const CertificateOperationsHub = lazy(() => import('./pages/trading/CertificateOperationsHub.jsx'));
+const TAMManagement = lazy(() => import('./pages/trading/TAMManagement.jsx'));
+const BankTransactionsList = lazy(() => import('./pages/trading/BankTransactionsList.jsx'));
+const EnergySchedule = lazy(() => import('./pages/trading/EnergySchedule.jsx'));
+const EnergyScheduleArchive = lazy(() => import('./pages/trading/EnergyScheduleArchive.jsx'));
+const DailyObligationReport = lazy(() => import('./pages/trading/DailyObligationReport.jsx'));
+const RateMaster = lazy(() => import('./pages/trading/RateMaster.jsx'));
+const TDSRegister = lazy(() => import('./pages/trading/TDSRegister.jsx'));
+const OAChargeCalculator = lazy(() => import('./pages/trading/OAChargeCalculator.jsx'));
+const DeviationRegister = lazy(() => import('./pages/trading/DeviationRegister.jsx'));
+const PaymentCycle = lazy(() => import('./pages/trading/PaymentCycle.jsx'));
+const ContractPnl = lazy(() => import('./pages/trading/ContractPnl.jsx'));
+const LedgerImport = lazy(() => import('./pages/trading/LedgerImport.jsx'));
+const MarginAssurance = lazy(() => import('./pages/trading/MarginAssurance.jsx'));
+const OAReconciliation = lazy(() => import('./pages/trading/OAReconciliation.jsx'));
 
-import SellerDashboard from './pages/seller/SellerDashboard.jsx';
-import SellerContracts from './pages/seller/SellerContracts.jsx';
-import SellerEnergyData from './pages/seller/SellerEnergyData.jsx';
-import SellerInvoices from './pages/seller/SellerInvoices.jsx';
-import SellerPayments from './pages/seller/SellerPayments.jsx';
-import SellerDisputes from './pages/seller/SellerDisputes.jsx';
-import SellerReconciliation from './pages/seller/SellerReconciliation.jsx';
-import SellerPaymentSecurity from './pages/seller/SellerPaymentSecurity.jsx';
+const SellerDashboard = lazy(() => import('./pages/seller/SellerDashboard.jsx'));
+const SellerContracts = lazy(() => import('./pages/seller/SellerContracts.jsx'));
+const SellerEnergyData = lazy(() => import('./pages/seller/SellerEnergyData.jsx'));
+const SellerInvoices = lazy(() => import('./pages/seller/SellerInvoices.jsx'));
+const SellerPayments = lazy(() => import('./pages/seller/SellerPayments.jsx'));
+const SellerDisputes = lazy(() => import('./pages/seller/SellerDisputes.jsx'));
+const SellerReconciliation = lazy(() => import('./pages/seller/SellerReconciliation.jsx'));
+const SellerPaymentSecurity = lazy(() => import('./pages/seller/SellerPaymentSecurity.jsx'));
 
-import BuyerDashboard from './pages/buyer/BuyerDashboard.jsx';
-import BuyerContracts from './pages/buyer/BuyerContracts.jsx';
-import BuyerEnergyData from './pages/buyer/BuyerEnergyData.jsx';
-import BuyerInvoices from './pages/buyer/BuyerInvoices.jsx';
-import BuyerPayments from './pages/buyer/BuyerPayments.jsx';
-import BuyerDisputes from './pages/buyer/BuyerDisputes.jsx';
-import BuyerReconciliation from './pages/buyer/BuyerReconciliation.jsx';
-import BuyerPaymentSecurity from './pages/buyer/BuyerPaymentSecurity.jsx';
+const BuyerDashboard = lazy(() => import('./pages/buyer/BuyerDashboard.jsx'));
+const BuyerContracts = lazy(() => import('./pages/buyer/BuyerContracts.jsx'));
+const BuyerEnergyData = lazy(() => import('./pages/buyer/BuyerEnergyData.jsx'));
+const BuyerInvoices = lazy(() => import('./pages/buyer/BuyerInvoices.jsx'));
+const BuyerPayments = lazy(() => import('./pages/buyer/BuyerPayments.jsx'));
+const BuyerDisputes = lazy(() => import('./pages/buyer/BuyerDisputes.jsx'));
+const BuyerReconciliation = lazy(() => import('./pages/buyer/BuyerReconciliation.jsx'));
+const BuyerPaymentSecurity = lazy(() => import('./pages/buyer/BuyerPaymentSecurity.jsx'));
 
-import AuditLogs from './pages/AuditLogs.jsx';
-import MastersHub from './pages/masters/MastersHub.jsx';
-import NotificationBoard from './pages/NotificationBoard.jsx';
-import PortfolioRegistry from './pages/masters/PortfolioRegistry.jsx';
-import UserProfile from './pages/settings/UserProfile.jsx';
+const AuditLogs = lazy(() => import('./pages/AuditLogs.jsx'));
+const MastersHub = lazy(() => import('./pages/masters/MastersHub.jsx'));
+const NotificationBoard = lazy(() => import('./pages/NotificationBoard.jsx'));
+const PortfolioRegistry = lazy(() => import('./pages/masters/PortfolioRegistry.jsx'));
+const UserProfile = lazy(() => import('./pages/settings/UserProfile.jsx'));
 
 // Internal SJVN REIA desk only — counterparties use their own portals below,
 // which scope every query to their own entity.
@@ -121,8 +120,19 @@ function HomeRoute() {
   );
 }
 
+// Shown while a route's code is being fetched. Routes are code-split, so the
+// first visit to a screen downloads only that screen.
+function RouteFallback() {
+  return (
+    <div style={{ padding: 40, color: 'var(--slate-500)', fontSize: 14 }} role="status" aria-live="polite">
+      Loading…
+    </div>
+  );
+}
+
 export default function App() {
   return (
+    <Suspense fallback={<RouteFallback />}>
     <Routes>
       <Route path="/login" element={<Login />} />
 
@@ -225,5 +235,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+    </Suspense>
   );
 }
