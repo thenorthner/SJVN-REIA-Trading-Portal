@@ -1649,5 +1649,11 @@ try {
   console.error('REA fetch log migration failed:', e.message);
 }
 
+try {
+  db.prepare(`UPDATE contracts SET tariff_structure_json = NULL WHERE tariff_structure_json = '{}' OR tariff_structure_json = '"{}"' OR TRIM(tariff_structure_json) = ''`).run();
+} catch (e) {
+  // Non-fatal
+}
+
 export default db;
 

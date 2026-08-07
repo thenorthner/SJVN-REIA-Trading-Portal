@@ -58,8 +58,19 @@ function fetchContractRelations(contract) {
 
   if (contract.tariff_structure_json) {
     try {
-      contract.tariff_structure = JSON.parse(contract.tariff_structure_json);
-    } catch(e) {}
+      const parsed = JSON.parse(contract.tariff_structure_json);
+      if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+        contract.tariff_structure = parsed;
+      } else {
+        contract.tariff_structure = null;
+        contract.tariff_structure_json = null;
+      }
+    } catch(e) {
+      contract.tariff_structure = null;
+      contract.tariff_structure_json = null;
+    }
+  } else {
+    contract.tariff_structure = null;
   }
   return contract;
 }
@@ -121,7 +132,9 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
       cod_date: b.cod_date ?? null,
       tariff_type: b.tariff_type || 'FLAT',
       tariff_per_unit: b.tariff_per_unit,
-      tariff_structure_json: b.tariff_structure ? JSON.stringify(b.tariff_structure) : null,
+      tariff_structure_json: (b.tariff_structure && typeof b.tariff_structure === 'object' && Object.keys(b.tariff_structure).length > 0)
+        ? JSON.stringify(b.tariff_structure)
+        : (typeof b.tariff_structure_json === 'string' && b.tariff_structure_json.trim() && b.tariff_structure_json.trim() !== '{}' ? b.tariff_structure_json : null),
       tenure_start: b.tenure_start,
       tenure_end: b.tenure_end,
       billing_cycle: b.billing_cycle || 'MONTHLY',
@@ -197,7 +210,9 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
     `).run({
       ...updated,
       id: newVersionId,
-      tariff_structure_json: updated.tariff_structure ? JSON.stringify(updated.tariff_structure) : original.tariff_structure_json,
+      tariff_structure_json: (updated.tariff_structure && typeof updated.tariff_structure === 'object' && Object.keys(updated.tariff_structure).length > 0)
+        ? JSON.stringify(updated.tariff_structure)
+        : (original.tariff_structure_json && original.tariff_structure_json !== '{}' ? original.tariff_structure_json : null),
       trading_margin_per_mwh: (updated.trading_margin_per_mwh === '' || updated.trading_margin_per_mwh == null) ? null : Number(updated.trading_margin_per_mwh),
       version: original.version + 1,
       parent_contract_id: original.parent_contract_id || original.id,

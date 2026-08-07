@@ -7,7 +7,7 @@ const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
 
 const EMPTY_FORM = {
   contract_no: '', contract_type: 'PPA', seller_id: '', buyer_id: '', project_type: 'Solar', capacity_mw: '',
-  tariff_type: 'FLAT', tariff_per_unit: '', tariff_structure: {}, 
+  tariff_type: 'FLAT', tariff_per_unit: '', tariff_structure: null, 
   tenure_start: '', tenure_end: '', billing_cycle: 'MONTHLY',
   emd_amount: '', pbg_amount: '', pbg_type: '', pbg_expiry: '', trading_margin_per_mwh: '',
   // Structured billing rules (drive due dates, rebate & LPS calculations)
@@ -16,6 +16,30 @@ const EMPTY_FORM = {
   min_cuf_percent: '',
   projects: []
 };
+
+function renderTariffStructure(selected) {
+  if (!selected) return null;
+  let ts = selected.tariff_structure;
+  if (!ts && selected.tariff_structure_json) {
+    try {
+      ts = typeof selected.tariff_structure_json === 'string' ? JSON.parse(selected.tariff_structure_json) : selected.tariff_structure_json;
+    } catch (e) {
+      ts = null;
+    }
+  }
+  if (!ts || typeof ts !== 'object' || Object.keys(ts).length === 0) return null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2 }}>
+      {Object.entries(ts).map(([k, v]) => (
+        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--slate-100, #f1f5f9)', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>
+          <span style={{ color: 'var(--slate-600, #475569)', textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}:</span>
+          <span style={{ fontWeight: 600 }}>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const SECURITY_TYPES = [
   { value: 'LETTER_OF_CREDIT', label: 'Letter of Credit (LC)' },
@@ -498,7 +522,9 @@ export default function Contracts() {
                       ? `₹${selected.trading_margin_per_mwh}/MWh (contract-specific)`
                       : 'Global default (₹70/MWh)'}</td></tr>
                   )}
-                  {selected.tariff_structure_json && <tr><td>Structure JSON</td><td><pre style={{fontSize: 10}}>{selected.tariff_structure_json}</pre></td></tr>}
+                  {renderTariffStructure(selected) && (
+                    <tr><td>Tariff Structure</td><td>{renderTariffStructure(selected)}</td></tr>
+                  )}
                   <tr><td>Tenure</td><td>{selected.tenure_start} to {selected.tenure_end}</td></tr>
                   <tr><td>PBG / EMD</td><td>{fmtCurrency(selected.pbg_amount)} {selected.pbg_type && `(${selected.pbg_type})`}</td></tr>
                   <tr><td>Payment Terms</td><td>{selected.payment_terms_days != null ? `Net ${selected.payment_terms_days} days from bill date` : (selected.payment_terms || '-')}</td></tr>
