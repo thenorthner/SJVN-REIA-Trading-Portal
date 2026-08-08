@@ -119,7 +119,9 @@ describe('S8 Counterparty read scoping', () => {
 
   beforeEach(() => {
     ourContract = makeContract({ status: 'ACTIVE' });
-    ourInvoice = makeInvoice({ contract_id: ourContract.id });
+    // A bill the counterparty has actually been issued — a draft is not theirs
+    // to read, which the presentation tests below cover separately.
+    ourInvoice = makeInvoice({ contract_id: ourContract.id, status: 'SENT' });
     buyerToken = tokenFor('BUYER', { linked_entity_id: ourContract.buyer_id });
     outsider = makeEntity('BUYER');
     outsiderToken = tokenFor('BUYER', { linked_entity_id: outsider.id });
@@ -159,5 +161,83 @@ describe('S8 Counterparty read scoping', () => {
   it('leaves internal SJVN roles unrestricted', async () => {
     const r = await request(app).get(`/api/invoices/${ourInvoice.id}`).set(auth(reia));
     expect(r.status).toBe(200);
+  });
+});
+
+describe('S8 A bill is not the counterparty’s until it is issued', () => {
+  // The send route has always refused to distribute a bill short of APPROVED,
+  // but the counterparty could read it directly and raise a dispute on it —
+  // against a draft SJVN had not finished, and which had never been sent.
+  let contractRow, draft, sent, buyerToken;
+
+  beforeEach(() => {
+    contractRow = makeContract({ status: 'ACTIVE' });
+    draft = makeInvoice({ contract_id: contractRow.id, status: 'DRAFT' });
+    sent = makeInvoice({ contract_id: contractRow.id, status: 'SENT' });
+    buyerToken = tokenFor('BUYER', { linked_entity_id: contractRow.buyer_id });
+  });
+
+  it('hides a draft bill from the counterparty it is addressed to', async () => {
+    const r = await request(app).get(`/api/invoices/${draft.id}`).set(auth(buyerToken));
+    expect(r.status, 'a buyer read a bill SJVN had not finished approving').toBe(404);
+  });
+
+  it('keeps drafts out of the counterparty invoice list', async () => {
+    const r = await request(app).get('/api/invoices').set(auth(buyerToken));
+    expect(r.status).toBe(200);
+    expect(r.body.map((i) => i.id)).not.toContain(draft.id);
+    expect(r.body.map((i) => i.id), 'an issued bill went missing from the list').toContain(sent.id);
+  });
+
+  it('refuses a dispute raised against an unissued bill', async () => {
+    const r = await request(app).post('/api/disputes').set(auth(buyerToken)).send({
+      invoice_id: draft.id, reason_code: 'ENERGY_DATA_MISMATCH',
+      charge_line: 'energy_charges', disputed_amount: 1000,
+    });
+    expect(r.status, 'a buyer disputed a bill that was never issued').toBe(404);
+    expect(db.prepare('SELECT COUNT(*) c FROM disputes WHERE invoice_id = ?').get(draft.id).c).toBe(0);
+  });
+
+  it('still lets the counterparty dispute a bill it was issued', async () => {
+    const r = await request(app).post('/api/disputes').set(auth(buyerToken)).send({
+      invoice_id: sent.id, reason_code: 'ENERGY_DATA_MISMATCH',
+      charge_line: 'energy_charges', disputed_amount: 1000,
+    });
+    expect(r.status, 'the presentation gate blocked a legitimate dispute').toBe(201);
+  });
+
+  it('refuses a dispute on a cancelled bill', async () => {
+    const cancelled = makeInvoice({ contract_id: contractRow.id, status: 'CANCELLED' });
+    const r = await request(app).post('/api/disputes').set(auth(buyerToken)).send({
+      invoice_id: cancelled.id, reason_code: 'ENERGY_DATA_MISMATCH',
+      charge_line: 'energy_charges', disputed_amount: 1000,
+    });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/cancelled/i);
+  });
+
+  it('runs the dispute window from issue, not from when the row was created', async () => {
+    // A bill created three weeks ago but only issued today. Measured from
+    // creation the window is long gone before the buyer has seen the bill.
+    const old = makeInvoice({ contract_id: contractRow.id, status: 'SENT' });
+    db.prepare(`UPDATE invoices SET created_at = datetime('now','-21 days'), issued_at = datetime('now') WHERE id = ?`).run(old.id);
+
+    const r = await request(app).post('/api/disputes').set(auth(buyerToken)).send({
+      invoice_id: old.id, reason_code: 'ENERGY_DATA_MISMATCH',
+      charge_line: 'energy_charges', disputed_amount: 1000,
+    });
+    expect(r.status, 'the window was spent while the bill sat in draft').toBe(201);
+  });
+
+  it('still closes the window 15 days after the bill was issued', async () => {
+    const stale = makeInvoice({ contract_id: contractRow.id, status: 'SENT' });
+    db.prepare(`UPDATE invoices SET created_at = datetime('now','-40 days'), issued_at = datetime('now','-30 days') WHERE id = ?`).run(stale.id);
+
+    const r = await request(app).post('/api/disputes').set(auth(buyerToken)).send({
+      invoice_id: stale.id, reason_code: 'ENERGY_DATA_MISMATCH',
+      charge_line: 'energy_charges', disputed_amount: 1000,
+    });
+    expect(r.status, 'a bill issued 30 days ago was still disputable').toBe(400);
+    expect(r.body.error).toMatch(/conclusive/i);
   });
 });

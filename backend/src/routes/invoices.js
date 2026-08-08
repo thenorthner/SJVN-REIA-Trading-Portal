@@ -10,7 +10,8 @@ import { resolveBetaRow } from '../services/betaFactor.js';
 import { sendSms } from '../services/smsService.js';
 import { channelsFor, dispatch } from '../services/notificationService.js';
 import { allocationsInForce } from '../services/allocations.js';
-import { contractVisibleTo } from '../services/counterpartyScope.js';
+import { contractVisibleTo, invoicePresentedTo, PRESENTED_STATUSES } from '../services/counterpartyScope.js';
+import { asOfFrom, isProjection } from '../services/clock.js';
 import { computeCercHydroBill } from '../services/cercHydroBilling.js';
 import { computeCufPenalty } from '../services/cufPenalty.js';
 import {
@@ -66,7 +67,7 @@ function otherChargesSum(inv) {
   return parseOtherCharges(inv).reduce((a, c) => a + (Number(c.amount) || 0), 0);
 }
 
-function withContract(inv) {
+function withContract(inv, asOf = new Date()) {
   if (!inv) return inv;
   const contract = db.prepare('SELECT contract_no, contract_type, project_type, lps_annual_pct, lps_grace_days FROM contracts WHERE id = ?').get(inv.contract_id);
   const paid = paidTotalFor(inv.id);
@@ -78,7 +79,7 @@ function withContract(inv) {
         graceDays: contract?.lps_grace_days ?? 0,
         monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0.5),
         stepCapPct: getParamNumber('lps_step_cap_pct', 3),
-        asOf: new Date(), paid,
+        asOf, paid,
         state: payerStateForInvoice(inv),
       });
   return {
@@ -100,12 +101,15 @@ router.get('/', (req, res) => {
   const { status, contract_id, direction, billing_period } = req.query;
   let sql, params = [];
   
+  // Counterparties see only bills that have actually been issued to them, on
+  // the same bar the send route uses for distribution.
+  const presented = ` AND i.status IN (${PRESENTED_STATUSES.map(() => '?').join(',')})`;
   if (req.user.role.startsWith('SELLER')) {
-    sql = 'SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.seller_id = ?';
-    params.push(req.user.linked_entity_id);
+    sql = 'SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.seller_id = ?' + presented;
+    params.push(req.user.linked_entity_id, ...PRESENTED_STATUSES);
   } else if (req.user.role.startsWith('BUYER')) {
-    sql = 'SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.buyer_id = ?';
-    params.push(req.user.linked_entity_id);
+    sql = 'SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.buyer_id = ?' + presented;
+    params.push(req.user.linked_entity_id, ...PRESENTED_STATUSES);
   } else {
     sql = 'SELECT i.* FROM invoices i WHERE 1=1';
   }
@@ -196,6 +200,8 @@ router.get('/:id', (req, res) => {
   // payload carries the totals, payments and open disputes with it.
   const contract = db.prepare('SELECT seller_id, buyer_id FROM contracts WHERE id = ?').get(inv.contract_id);
   if (!contractVisibleTo(req.user, contract)) return res.status(404).json({ error: 'Invoice not found' });
+  // A bill SJVN has not finished approving is not yet the counterparty's to read.
+  if (!invoicePresentedTo(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
 
   const approvals = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? ORDER BY level').all(req.params.id);
   const payments = db.prepare('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date').all(req.params.id);
@@ -211,7 +217,16 @@ router.get('/:id', (req, res) => {
     ).get(inv.id).s;
     generator_realization = { linked_psa, realized, released_from_realization: Math.round(fromRealization), available: Math.max(0, realized - Math.round(fromRealization)) };
   }
-  res.json({ ...withContract(inv), approvals, payments, disputes, generator_realization });
+  // ?as_of=YYYY-MM-DD projects the surcharge position forward without touching
+  // anything — what this bill costs the payer if it is still unpaid on that day.
+  let asOf;
+  try { asOf = asOfFrom(req); } catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
+
+  res.json({
+    ...withContract(inv, asOf),
+    approvals, payments, disputes, generator_realization,
+    ...(isProjection(req) ? { projected_as_of: asOf.toISOString().slice(0, 10) } : {}),
+  });
 });
 
 // Automated invoice generation based on contract + locked energy data
@@ -1236,7 +1251,7 @@ router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res
       );
     }
 
-    db.prepare(`UPDATE invoices SET status = 'SENT', due_date = ?, updated_at = datetime('now') WHERE id = ?`)
+    db.prepare(`UPDATE invoices SET status = 'SENT', due_date = ?, issued_at = COALESCE(issued_at, datetime('now')), updated_at = datetime('now') WHERE id = ?`)
       .run(dueDate, inv.id);
 
     logAudit({

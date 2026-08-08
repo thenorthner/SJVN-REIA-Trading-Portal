@@ -30,6 +30,31 @@ export function contractVisibleTo(user, contract) {
   return false;
 }
 
+// Statuses at which a bill has actually been put in front of its counterparty.
+// The send route has always used APPROVED as the bar for distribution; anything
+// short of it is SJVN still working on the bill. CANCELLED stays visible because
+// a withdrawn bill is one the counterparty did receive and should be able to see
+// — it just cannot be disputed any more.
+export const PRESENTED_STATUSES = ['APPROVED', 'SENT', 'DISPUTED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'];
+
+/** Whether a counterparty is entitled to see this invoice at all yet. */
+export function invoicePresentedTo(user, invoice) {
+  if (!invoice) return false;
+  if (counterpartySide(user) === null) return true;   // SJVN sees its own drafts
+  return PRESENTED_STATUSES.includes(invoice.status);
+}
+
+/**
+ * The date a bill's dispute window runs from.
+ *
+ * PSA Art. 6.7.1 measures the window from presentation. Nothing recorded
+ * presentation, so it was measured from row creation — a bill that sat in draft
+ * for three weeks reached its counterparty already conclusive.
+ */
+export function billPresentedOn(invoice) {
+  return invoice?.issued_at || invoice?.created_at || null;
+}
+
 /**
  * Whether a counterparty may see this entity record.
  *

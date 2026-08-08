@@ -1444,6 +1444,42 @@ try {
   console.error('Energy lock override migration failed:', e.message);
 }
 
+/**
+ * When a bill was actually put in front of the counterparty.
+ *
+ * The dispute window runs from presentation, but nothing recorded presentation,
+ * so it was measured from row creation — an invoice that sat in draft spent its
+ * counterparty's window before they had ever seen it. Backfilled from the first
+ * delivery where one exists, so history keeps whatever truth it has.
+ */
+function migrateInvoiceIssuedAt() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (!tables.includes('invoices')) return;
+  const cols = db.prepare('PRAGMA table_info(invoices)').all().map((c) => c.name);
+  if (cols.includes('issued_at')) return;
+
+  db.exec(`ALTER TABLE invoices ADD COLUMN issued_at TEXT`);
+  if (tables.includes('invoice_deliveries')) {
+    db.exec(`
+      UPDATE invoices SET issued_at = (
+        SELECT MIN(d.created_at) FROM invoice_deliveries d WHERE d.invoice_id = invoices.id
+      ) WHERE issued_at IS NULL
+    `);
+  }
+  // An invoice already past approval was presented at some point; the best
+  // remaining evidence is when it was last touched.
+  db.exec(`
+    UPDATE invoices SET issued_at = COALESCE(updated_at, created_at)
+    WHERE issued_at IS NULL AND status IN ('SENT','DISPUTED','PARTIALLY_PAID','PAID')
+  `);
+}
+
+try {
+  migrateInvoiceIssuedAt();
+} catch (e) {
+  console.error('Invoice issued_at migration failed:', e.message);
+}
+
 try {
   migrateWaterfallPriority();
 } catch (e) {

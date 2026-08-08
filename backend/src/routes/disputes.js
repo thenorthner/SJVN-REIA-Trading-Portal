@@ -22,6 +22,8 @@ import {
   daysBetween,
 } from '../disputesConstants.js';
 import { getParamNumber } from '../mastersService.js';
+import { invoicePresentedTo, billPresentedOn } from '../services/counterpartyScope.js';
+import { asOfFrom } from '../services/clock.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.join(__dirname, '../../uploads/disputes');
@@ -333,7 +335,27 @@ router.get('/', (req, res) => {
 });
 
 // ---------- SLA check (must be before /:id) ----------
-router.post('/sla/check', requireRole(...REIA_WRITE, 'MANAGEMENT'), (_req, res) => {
+// With an as_of in the future this answers "what breaches by then" without
+// escalating anything — a projection must never be able to age a live dispute
+// into escalation just by being asked about.
+router.post('/sla/check', requireRole(...REIA_WRITE, 'MANAGEMENT'), (req, res) => {
+  let asOf;
+  try { asOf = asOfFrom(req); } catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
+
+  if (asOf > new Date()) {
+    const at = asOf.toISOString().slice(0, 19).replace('T', ' ');
+    const due = db.prepare(`
+      SELECT id, dispute_no, status, sla_ack_due, sla_resolve_due FROM disputes
+      WHERE status IN (${OPEN_STATUSES.map(() => '?').join(',')})
+        AND sla_breached_at IS NULL
+        AND (
+          (status = 'RAISED' AND sla_ack_due IS NOT NULL AND sla_ack_due < ?)
+          OR (sla_resolve_due IS NOT NULL AND sla_resolve_due < ?)
+        )
+    `).all(...OPEN_STATUSES, at, at);
+    return res.json({ projection: true, as_of: at, would_escalate: due.length, disputes: due });
+  }
+
   res.json(runSlaEscalations());
 });
 
@@ -418,14 +440,28 @@ router.post('/', requireRole('SELLER', 'BUYER', ...REIA_WRITE), (req, res) => {
   `).get(invoice_id);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-  // PSA Art. 6.7.1: a bill not disputed within 15 days of presentation becomes
-  // conclusive and binding. Measured from the bill date; internal REIA users may
-  // still raise late (on the counterparty's behalf) but counterparties cannot.
-  const windowDays = getParamNumber('dispute_window_days', 15);
-  const daysSinceBill = daysBetween(new Date(invoice.created_at), new Date());
   const raisedByCounterparty = ['SELLER', 'BUYER'].includes(req.user.role);
+
+  // You cannot dispute a bill you were never given. SJVN's own drafts and bills
+  // still in approval were open to being disputed by the counterparty, which
+  // also started the clock below on a bill that had not been presented.
+  if (raisedByCounterparty && !invoicePresentedTo(req.user, invoice)) {
+    return res.status(404).json({ error: 'Invoice not found' });
+  }
+  if (invoice.status === 'CANCELLED') {
+    return res.status(400).json({ error: 'This bill has been cancelled — there is nothing left to dispute.' });
+  }
+
+  // PSA Art. 6.7.1: a bill not disputed within 15 days of presentation becomes
+  // conclusive and binding. Measured from presentation — measuring from row
+  // creation spent the counterparty's window while the bill sat in draft, and a
+  // bill held three weeks internally arrived already conclusive. Internal REIA
+  // users may still raise late on the counterparty's behalf.
+  const windowDays = getParamNumber('dispute_window_days', 15);
+  const presentedOn = billPresentedOn(invoice);
+  const daysSinceBill = daysBetween(new Date(presentedOn), new Date());
   if (raisedByCounterparty && daysSinceBill > windowDays) {
-    return res.status(400).json({ error: `This bill is now conclusive — the ${windowDays}-day dispute window (from ${invoice.created_at?.split('T')[0]}) has passed.` });
+    return res.status(400).json({ error: `This bill is now conclusive — the ${windowDays}-day dispute window (from ${String(presentedOn).split('T')[0]}) has passed.` });
   }
 
   const userSide = counterpartySide(req.user);
