@@ -9,6 +9,7 @@ import { getParamNumber, getParam } from '../mastersService.js';
 import { resolveBetaRow } from '../services/betaFactor.js';
 import { sendSms } from '../services/smsService.js';
 import { channelsFor, dispatch } from '../services/notificationService.js';
+import { allocationsInForce } from '../services/allocations.js';
 import { computeCercHydroBill } from '../services/cercHydroBilling.js';
 import { computeCufPenalty } from '../services/cufPenalty.js';
 import {
@@ -209,17 +210,28 @@ router.get('/:id', (req, res) => {
 // Supports two billing modes:
 //   1. CERC Hydro (Capacity + Energy + Incentive - Free Power + NRLDC)
 //   2. Simple RE (Energy * Tariff) for Solar/Wind/Hybrid
-router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
-  const { contract_id, period_month, invoice_type, seller_invoice_ids } = req.body;
+// A refusal that carries the status the route should answer with.
+function refuse(status, payload) {
+  const err = new Error(payload.error || 'Request refused');
+  err.status = status;
+  err.payload = payload;
+  return err;
+}
+
+// Build and persist one invoice for a contract and period. Extracted from the
+// route so a PPA can fan out into one invoice per PSA without duplicating any
+// of the pricing. Refusals throw with a status the caller turns into a response.
+function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_invoice_ids }, req) {
+
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
-  if (!contract) return res.status(404).json({ error: 'Contract not found' });
+  if (!contract) throw refuse(404, { error: 'Contract not found' });
 
   // A contract is only billable once it is live. Billing one still in
   // negotiation or awaiting regulatory approval raises a demand the counterparty
   // has no obligation to meet.
   const BILLABLE_STATUSES = ['ACTIVE', 'NEARING_EXPIRY', 'EXPIRED', 'RENEWED', 'AMENDED'];
   if (!BILLABLE_STATUSES.includes(contract.status)) {
-    return res.status(400).json({
+    throw refuse(400, {
       error: `Cannot bill a contract in status ${contract.status} — it must be ACTIVE first.`,
     });
   }
@@ -229,7 +241,7 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   if (contract.cod_date && period_month) {
     const periodEnd = `${period_month}-31`;
     if (String(contract.cod_date) > periodEnd) {
-      return res.status(400).json({
+      throw refuse(400, {
         error: `Cannot bill ${period_month}: it ends before the commercial operation date (${contract.cod_date}).`,
       });
     }
@@ -255,15 +267,15 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     LIMIT 1
   `).get(ppa_id, period_month, invoice_type || 'PROVISIONAL');
   
-  if (!energy) return res.status(400).json({ error: 'No energy data found for this contract (or parent PPA)/period. Upload energy data first.' });
+  if (!energy) throw refuse(400, { error: 'No energy data found for this contract (or parent PPA)/period. Upload energy data first.' });
 
   const resolvedType = invoice_type || (energy.data_type === 'FINAL' ? 'FINAL' : 'PROVISIONAL');
 
   if (resolvedType === 'FINAL' && energy.status !== 'LOCKED') {
-    return res.status(400).json({ error: 'Cannot generate FINAL invoice because energy data is not LOCKED.' });
+    throw refuse(400, { error: 'Cannot generate FINAL invoice because energy data is not LOCKED.' });
   }
   if (resolvedType === 'FINAL' && energy.data_type !== 'FINAL') {
-    return res.status(400).json({ error: 'Cannot generate FINAL invoice: no FINAL energy row for this period (provisional must remain separate).' });
+    throw refuse(400, { error: 'Cannot generate FINAL invoice: no FINAL energy row for this period (provisional must remain separate).' });
   }
 
   // ──── Billing Calculation Engine ────
@@ -512,11 +524,58 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     entityId: id,
     details: { ...invoice, already_paid: alreadyPaid },
   });
-  res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(id));
-});
+  return db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
+}
 
 // Arrear bill — a manual recovery bill for a past period (charges missed / under-billed
 // earlier, e.g. retrospective tariff order, delayed adjustment). Mirrors SAP bill type 'A'.
+
+router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const { contract_id, period_month, split_by_allocation } = req.body;
+
+  try {
+    // A PPA can be billed out to each PSA it feeds rather than as one invoice.
+    // Every invoice raised this way carries the same billing family reference, so
+    // the set is traceable back to the one PPA period it came from.
+    if (split_by_allocation) {
+      const ppa = db.prepare(`SELECT * FROM contracts WHERE id = ? AND contract_type = 'PPA'`).get(contract_id);
+      if (!ppa) return res.status(404).json({ error: 'PPA not found — split_by_allocation applies to a PPA' });
+
+      const allocations = allocationsInForce(ppa.id, period_month);
+      if (!allocations.length) {
+        return res.status(400).json({ error: `No PSA allocation is in force for ${period_month}.` });
+      }
+
+      const familyRef = buildBillingFamilyRef(ppa.contract_no, period_month, 'SJVN_TO_BUYER');
+      const raised = [];
+      const failed = [];
+      db.transaction(() => {
+        for (const alloc of allocations) {
+          try {
+            const inv = generateInvoiceFor({ ...req.body, contract_id: alloc.psa_id }, req);
+            // Tie every invoice in the set to the source PPA period.
+            db.prepare('UPDATE invoices SET billing_family_ref = ? WHERE id = ?').run(familyRef, inv.id);
+            raised.push({ ...inv, billing_family_ref: familyRef, allocation_percent: alloc.allocation_percent });
+          } catch (err) {
+            if (!err.status) throw err;
+            failed.push({ psa_id: alloc.psa_id, error: err.payload?.error || err.message });
+          }
+        }
+        // All or nothing: a partial fan-out would bill some buyers for a period
+        // and silently leave others unbilled.
+        if (failed.length) throw refuse(400, { error: 'Could not bill every PSA for this period', failed });
+      })();
+
+      return res.status(201).json({ billing_family_ref: familyRef, invoices: raised, count: raised.length });
+    }
+
+    res.status(201).json(generateInvoiceFor(req.body, req));
+  } catch (err) {
+    if (err.status) return res.status(err.status).json(err.payload);
+    throw err;
+  }
+});
+
 router.post('/arrear', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const { contract_id, arrear_period, amount, taxes, reason } = req.body;
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);

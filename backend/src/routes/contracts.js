@@ -3,6 +3,7 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
 import { newId, logAudit, humanizePaymentTerms, humanizeRebateRule, humanizeLpsRule } from '../util.js';
 import { syncRequirementsFromContract, createInstrumentsFromRequirements } from '../paymentSecurityEngine.js';
+import { allocationsInForce } from '../services/allocations.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -276,6 +277,66 @@ router.get('/:id/allocations', (req, res) => {
     ORDER BY a.created_at DESC
   `).all(req.params.id);
   res.json(allocations);
+});
+
+// Split a period's PPA energy across the PSAs it is allocated to. The
+// allocations were recorded but nothing consumed them, so the split that every
+// downstream bill depends on had to be done by hand.
+router.post('/:id/allocate-energy', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const ppa = db.prepare(`SELECT * FROM contracts WHERE id = ? AND contract_type = 'PPA'`).get(req.params.id);
+  if (!ppa) return res.status(404).json({ error: 'PPA not found' });
+
+  const { period_month } = req.body;
+  if (!period_month) return res.status(400).json({ error: 'period_month is required' });
+
+  // Take the energy given, or the period's own recorded energy when it is not.
+  let energyMwh = Number(req.body.energy_mwh);
+  let sourceEnergyId = null;
+  if (!Number.isFinite(energyMwh)) {
+    const row = db.prepare(`
+      SELECT id, energy_mwh FROM energy_data WHERE contract_id = ? AND period_month = ?
+      ORDER BY (data_type = 'FINAL') DESC, created_at DESC LIMIT 1
+    `).get(ppa.id, period_month);
+    if (!row) return res.status(400).json({ error: `No energy recorded for ${period_month}; pass energy_mwh or upload it first.` });
+    energyMwh = row.energy_mwh;
+    sourceEnergyId = row.id;
+  }
+
+  const allocations = allocationsInForce(ppa.id, period_month);
+  if (!allocations.length) {
+    return res.status(400).json({ error: `No PSA allocation is in force for ${period_month}.` });
+  }
+
+  const totalPercent = allocations.reduce((sum, a) => sum + a.allocation_percent, 0);
+  const split = allocations.map((a) => ({
+    psa_id: a.psa_id,
+    psa_contract_no: a.psa_contract_no,
+    allocation_percent: a.allocation_percent,
+    energy_mwh: Number(((energyMwh * a.allocation_percent) / 100).toFixed(3)),
+  }));
+
+  // Rounding each share independently can lose or gain a little against the
+  // source; the largest share carries the difference so the parts still sum to
+  // the whole.
+  const allocated = split.reduce((sum, x) => sum + x.energy_mwh, 0);
+  const drift = Number((energyMwh * (totalPercent / 100) - allocated).toFixed(3));
+  if (drift !== 0 && split.length) split[0].energy_mwh = Number((split[0].energy_mwh + drift).toFixed(3));
+
+  logAudit({
+    req, user: req.user, action: 'ALLOCATE_ENERGY', module: 'REIA',
+    entityType: 'contract', entityId: ppa.id,
+    details: { period_month, energy_mwh: energyMwh, allocations: split.length },
+  });
+
+  res.json({
+    ppa_id: ppa.id,
+    period_month,
+    source_energy_mwh: energyMwh,
+    source_energy_data_id: sourceEnergyId,
+    allocated_percent: totalPercent,
+    unallocated_percent: Number((100 - totalPercent).toFixed(3)),
+    allocations: split,
+  });
 });
 
 router.post('/:id/allocations', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {

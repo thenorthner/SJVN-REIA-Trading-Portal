@@ -64,12 +64,34 @@ describe('S3 PPA to PSA allocation', () => {
 
   it('raises one invoice per PSA, each traceable to the same PPA', async () => {
     for (const p of psas) await allocate(p.contract.id, p.pct);
+    db.prepare(`INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, status)
+                VALUES ('ENG-FAN', ?, '2026-04', 'FINAL', 'SEA', 1000, 'LOCKED')`).run(ppa.id);
+
     const r = await request(app).post('/api/invoices/generate').set(auth(reia))
-      .send({ contract_id: ppa.id, billing_period: '2026-04', energy_mwh: 1000, split_by_allocation: true });
+      .send({ contract_id: ppa.id, period_month: '2026-04', split_by_allocation: true });
+    expect(r.status).toBe(201);
+    expect(r.body.count).toBe(3);
+
     const raised = db.prepare('SELECT * FROM invoices WHERE billing_period = ?').all('2026-04');
     expect(raised.length, 'one invoice per PSA was not raised from the PPA').toBe(3);
     const refs = new Set(raised.map(i => i.billing_family_ref).filter(Boolean));
     expect(refs.size, 'invoices do not share a reference back to the source PPA').toBe(1);
+    // Each PSA is billed its own share of the PPA's energy.
+    expect(raised.map(i => i.energy_mwh).sort((a, b) => a - b)).toEqual([200, 300, 500]);
+  });
+
+  it('bills no PSA at all if any one of them cannot be billed', async () => {
+    for (const p of psas) await allocate(p.contract.id, p.pct);
+    db.prepare(`INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, status)
+                VALUES ('ENG-PART', ?, '2026-04', 'FINAL', 'SEA', 1000, 'LOCKED')`).run(ppa.id);
+    // One PSA is not billable, so the whole period must be refused rather than
+    // billing two buyers and silently leaving the third out.
+    db.prepare(`UPDATE contracts SET status = 'DRAFT' WHERE id = ?`).run(psas[2].contract.id);
+
+    const r = await request(app).post('/api/invoices/generate').set(auth(reia))
+      .send({ contract_id: ppa.id, period_month: '2026-04', split_by_allocation: true });
+    expect(r.status).toBe(400);
+    expect(db.prepare('SELECT COUNT(*) c FROM invoices').get().c).toBe(0);
   });
 
   it('bills the old split before the change and the new split after it', async () => {
