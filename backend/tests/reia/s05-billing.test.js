@@ -42,16 +42,24 @@ describe('S5 Billing engine', () => {
   });
 
   it('applies the rebate when payment lands inside the window', async () => {
-    const inv = makeInvoice({ contract_id: contract.id, status: 'SENT', total_amount: 1000000, due_date: '2026-05-31' });
+    const inv = makeInvoice({ contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'SENT', total_amount: 1000000, due_date: '2026-05-31' });
+    db.prepare("UPDATE invoices SET created_at = '2026-05-01' WHERE id = ?").run(inv.id);
     const r = await request(app).post(`/api/invoices/${inv.id}/payments`).set(auth(finance))
       .send({ amount: 1000000, payment_date: '2026-05-03', bill_date: '2026-05-01' });
     expect(r.status).toBeLessThan(400);
     const after = db.prepare('SELECT rebate FROM invoices WHERE id = ?').get(inv.id);
     expect(after.rebate, 'no rebate applied for an early payment').toBeGreaterThan(0);
+    // A buyer-facing PSA bill deliberately carries no early-payment rebate.
+    const psa = makeInvoice({ contract_id: contract.id, direction: 'SJVN_TO_BUYER', status: 'SENT', total_amount: 1000000, due_date: '2026-05-31' });
+    await request(app).post(`/api/invoices/${psa.id}/payments`).set(auth(finance))
+      .send({ amount: 1000000, payment_date: '2026-05-03' });
+    expect(db.prepare('SELECT rebate FROM invoices WHERE id = ?').get(psa.id).rebate || 0).toBe(0);
   });
 
   it('applies no rebate once the window has passed', async () => {
-    const inv = makeInvoice({ contract_id: contract.id, status: 'SENT', total_amount: 1000000, due_date: '2026-05-31' });
+    const inv = makeInvoice({ contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'SENT', total_amount: 1000000, due_date: '2026-05-31' });
+    // The rebate window runs from the bill date, so it has to be a real one.
+    db.prepare("UPDATE invoices SET created_at = '2026-05-01' WHERE id = ?").run(inv.id);
     await request(app).post(`/api/invoices/${inv.id}/payments`).set(auth(finance))
       .send({ amount: 1000000, payment_date: '2026-05-25', bill_date: '2026-05-01' });
     expect(db.prepare('SELECT rebate FROM invoices WHERE id = ?').get(inv.id).rebate || 0).toBe(0);

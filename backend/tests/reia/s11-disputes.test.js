@@ -31,9 +31,11 @@ describe('S11 Dispute management', () => {
   it('walks the dispute lifecycle', async () => {
     const r = await raise();
     const id = r.body.id || latestDisputeId();
-    const ack = await request(app).post(`/api/disputes/${id}/transition`).set(auth(reia)).send({ status: 'ACKNOWLEDGED' });
-    expect(ack.status).toBeLessThan(400);
+    // Raising a dispute records it as acknowledged; review is the next step.
     expect(db.prepare('SELECT status FROM disputes WHERE id = ?').get(id).status).toBe('ACKNOWLEDGED');
+    const rev = await request(app).post(`/api/disputes/${id}/transition`).set(auth(reia)).send({ status: 'UNDER_REVIEW' });
+    expect(rev.status).toBeLessThan(400);
+    expect(db.prepare('SELECT status FROM disputes WHERE id = ?').get(id).status).toBe('UNDER_REVIEW');
   });
 
   it('blocks an illegal jump straight from raised to closed', async () => {
@@ -58,7 +60,6 @@ describe('S11 Dispute management', () => {
 
   it('raises a supplementary invoice when resolution changes the amount', async () => {
     const r = await raise();
-    await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/transition`).set(auth(reia)).send({ status: 'ACKNOWLEDGED' });
     await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/transition`).set(auth(reia)).send({ status: 'UNDER_REVIEW' });
     const res = await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/resolve`).set(auth(reia))
       .send({ decision: 'RESOLVED_ACCEPTED', approved_amount: 30000, remarks: 'partly upheld' });

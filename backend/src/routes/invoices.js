@@ -8,7 +8,7 @@ import { payerStateForInvoice } from '../services/workingCalendar.js';
 import { getParamNumber, getParam } from '../mastersService.js';
 import { resolveBetaRow } from '../services/betaFactor.js';
 import { sendSms } from '../services/smsService.js';
-import { channelsFor } from '../services/notificationService.js';
+import { channelsFor, dispatch } from '../services/notificationService.js';
 import { computeCercHydroBill } from '../services/cercHydroBilling.js';
 import { computeCufPenalty } from '../services/cufPenalty.js';
 import {
