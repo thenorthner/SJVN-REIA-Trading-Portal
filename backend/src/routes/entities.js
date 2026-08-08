@@ -137,6 +137,21 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req
     return res.status(400).json({ error: 'entity_type, name and category are required' });
   }
 
+  // A PAN or GST identifies one legal entity. Onboarding the same one twice
+  // splits its contracts, exposure and payment history across two records that
+  // nothing later reconciles, so it is refused rather than quietly created.
+  for (const [field, label] of [['pan_no', 'PAN'], ['gst_no', 'GST']]) {
+    const value = body[field] && String(body[field]).trim().toUpperCase();
+    if (!value) continue;
+    const clash = db.prepare(`SELECT id, name FROM entities WHERE UPPER(TRIM(${field})) = ?`).get(value);
+    if (clash) {
+      return res.status(409).json({
+        error: `${label} ${value} is already onboarded as "${clash.name}".`,
+        duplicate_of: { id: clash.id, name: clash.name, field },
+      });
+    }
+  }
+
   db.transaction(() => {
     db.prepare(`
       INSERT INTO entities (

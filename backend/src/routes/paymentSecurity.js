@@ -370,6 +370,29 @@ router.post('/releases/:id/act', requireRole(...REIA_WRITE, 'FINANCE_USER'), (re
   if (!rel.checklist_no_dues || !rel.checklist_no_disputes) {
     return res.status(400).json({ error: 'Checklist incomplete: no dues and no disputes required' });
   }
+
+  // The checklist is a declaration; this is the check. Releasing security while
+  // money is still owed or a dispute is open removes the only cover for it, so
+  // the ticked box is verified against the actual position before release.
+  const outstanding = db.prepare(`
+    SELECT COUNT(*) AS n, COALESCE(SUM(total_amount), 0) AS amount FROM invoices
+    WHERE contract_id = ? AND status NOT IN ('PAID', 'CANCELLED', 'REJECTED')
+  `).get(rel.contract_id);
+  const openDisputes = db.prepare(`
+    SELECT COUNT(*) AS n FROM disputes d
+    LEFT JOIN invoices i ON i.id = d.invoice_id
+    WHERE d.status NOT IN ('CLOSED', 'RESOLVED_ACCEPTED', 'RESOLVED_REJECTED')
+      AND (i.contract_id = ? OR d.invoice_id IS NULL)
+  `).get(rel.contract_id);
+
+  if (outstanding.n > 0 || openDisputes.n > 0) {
+    return res.status(400).json({
+      error: 'Cannot release: the contract still has unsettled invoices or open disputes.',
+      outstanding_invoices: outstanding.n,
+      outstanding_amount: outstanding.amount,
+      open_disputes: openDisputes.n,
+    });
+  }
   db.prepare(`UPDATE security_releases SET status = 'RELEASED', acted_by = ?, acted_at = datetime('now') WHERE id = ?`)
     .run(req.user.name, rel.id);
   db.prepare(`UPDATE payment_security SET status = 'RELEASED', updated_at = datetime('now') WHERE id = ?`)
