@@ -1404,6 +1404,25 @@ function migrateWaterfallPriority() {
   for (const [type, oldValue] of Object.entries(OLD)) stmt.run(NEW[type], type, oldValue);
 }
 
+/** Deemed generation: recorded on the period and billed as its own leg. */
+function migrateDeemedGeneration() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  const add = (table, col, ddl) => {
+    if (!tables.includes(table)) return;
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (!cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${ddl};`);
+  };
+  add('energy_data', 'deemed_generation_mwh', 'REAL NOT NULL DEFAULT 0');
+  add('invoices', 'deemed_energy_mwh', 'REAL NOT NULL DEFAULT 0');
+  add('invoices', 'deemed_charges', 'REAL NOT NULL DEFAULT 0');
+}
+
+try {
+  migrateDeemedGeneration();
+} catch (e) {
+  console.error('Deemed generation migration failed:', e.message);
+}
+
 try {
   migrateWaterfallPriority();
 } catch (e) {

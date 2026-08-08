@@ -64,6 +64,8 @@ import { runDeviationAlerts } from './services/deviationRegister.js';
 import paymentCycleRoutes from './routes/paymentCycle.js';
 import contractPnlRoutes from './routes/contractPnl.js';
 import marginAssuranceRoutes from './routes/marginAssurance.js';
+import energyBankingRoutes from './routes/energyBanking.js';
+import { settleExpiredBanking } from './services/energyBanking.js';
 import { ensureMasterDefaults } from './mastersService.js';
 import { repairAuditChainIfBroken } from './auditEngine.js';
 
@@ -141,6 +143,7 @@ app.use('/api/deviations', deviationRegisterRoutes);
 app.use('/api/payment-cycle', paymentCycleRoutes);
 app.use('/api/pnl', contractPnlRoutes);
 app.use('/api/margin', marginAssuranceRoutes);
+app.use('/api/energy-banking', requireAuth, energyBankingRoutes);
 app.use('/api/generator-billing', generatorBillingRoutes);
 app.use('/api/market-analytics', marketAnalyticsRoutes);
 app.use('/api/cerc-market', requireAuth, cercMarketDataRoutes);
@@ -262,6 +265,18 @@ app.listen(PORT, HOST, () => {
       console.error('[NOTIFY] retry sweep failed', err.message);
     }
   }, 15 * 60 * 1000);
+  // Banking cycles that have closed with energy unused settle themselves — daily
+  // 02:00 IST (20:30 UTC). A cycle ending with unused energy has to settle
+  // whether or not anyone remembers to ask for it.
+  cron.schedule('30 20 * * *', () => {
+    try {
+      const r = settleExpiredBanking();
+      if (r.settled) console.log(`[BANKING] Settled ${r.settled} expired banking cycle(s)`);
+    } catch (err) {
+      console.error('[BANKING] settlement sweep failed', err.message);
+    }
+  });
+
   // Schedule shortfall alerts — daily 07:00 IST (01:30 UTC), after the previous
   // day's schedules have settled.
   cron.schedule('30 1 * * *', () => {

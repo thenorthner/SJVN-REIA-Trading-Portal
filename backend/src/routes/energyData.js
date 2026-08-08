@@ -92,8 +92,8 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
 
   const id = newId('ENG');
   db.prepare(`
-    INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, cuf_percent, availability_percent, status, billing_family_ref, supersedes_energy_id)
-    VALUES (@id, @contract_id, @period_month, @data_type, @source, @energy_mwh, @cuf_percent, @availability_percent, 'DRAFT', @billing_family_ref, @supersedes_energy_id)
+    INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, deemed_generation_mwh, cuf_percent, availability_percent, status, billing_family_ref, supersedes_energy_id)
+    VALUES (@id, @contract_id, @period_month, @data_type, @source, @energy_mwh, @deemed_generation_mwh, @cuf_percent, @availability_percent, 'DRAFT', @billing_family_ref, @supersedes_energy_id)
   `).run({
     id,
     contract_id: b.contract_id,
@@ -101,6 +101,8 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     data_type: dataType,
     source: b.source || 'MANUAL',
     energy_mwh: b.energy_mwh,
+
+    deemed_generation_mwh: Number(b.deemed_generation_mwh) || 0,
     cuf_percent: b.cuf_percent ?? null,
     availability_percent: b.availability_percent ?? null,
     billing_family_ref: resolved.bfr,

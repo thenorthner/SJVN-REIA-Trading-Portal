@@ -299,6 +299,8 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   const isHydro = ['Hydro', 'PSP'].includes(contract.project_type);
   let appliedTariff = contract.tariff_per_unit;
   let transmissionCharges = 0;
+  let deemedEnergyMwh = 0;
+  let deemedCharges = 0;
 
   if (isHydro && (contract.annual_afc || contract.capacity_charges_total || contract.annual_design_energy_mwh)) {
     // ──── CERC Hydro Billing (NJHPS-style) ────
@@ -367,6 +369,19 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     breakdown.push({ code: 'E1', label: 'Total Energy (MWh)', value: allocated_energy_mwh });
     if (tariff.type !== 'FLAT') breakdown.push({ code: 'TS', label: tariff.label, value: tariff.rate, format: 'ecr' });
     breakdown.push({ code: 'EE1', label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${tariff.rate}/unit)`, value: energyCharges });
+    // Deemed generation: energy the seller stood ready to deliver but the buyer
+    // or grid could not take. It is paid for at the same rate, on its own line,
+    // so it is never mistaken for energy that actually flowed.
+    const deemedMwh = Number(energy.deemed_generation_mwh) || 0;
+    if (deemedMwh > 0) {
+      deemedEnergyMwh = Number(((deemedMwh * alloc_percent) / 100).toFixed(3));
+      deemedCharges = Math.round(deemedEnergyMwh * UNITS_PER_MWH * tariff.rate);
+      breakdown.push({
+        code: 'DG',
+        label: `Deemed Generation (${deemedEnergyMwh} MWh × ₹${tariff.rate}/unit) — not delivered, payable under PPA`,
+        value: deemedCharges,
+      });
+    }
     if (tariff.fixed_charge > 0) {
       // The fixed leg of a two-part tariff is a capacity charge, shown separately
       // from the energy it is billed alongside.
@@ -423,7 +438,7 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     });
   }
 
-  const grossTotal = capacityCharges + energyCharges + incentiveCharges + tradingMargin + nrldcFees + transmissionCharges + gstAmount - freePowerDeduction - penalty;
+  const grossTotal = capacityCharges + energyCharges + deemedCharges + incentiveCharges + tradingMargin + nrldcFees + transmissionCharges + gstAmount - freePowerDeduction - penalty;
   breakdown.push({ code: 'GROSS', label: 'Gross Amount (before provisional true-up)', value: grossTotal });
 
   const direction = directionForContract(contract);
@@ -477,6 +492,8 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     free_power_deduction: freePowerDeduction,
     nrldc_fees: nrldcFees,
     transmission_charges: transmissionCharges,
+    deemed_energy_mwh: deemedEnergyMwh,
+    deemed_charges: deemedCharges,
     lps: 0,
     penalty,
     trading_margin: tradingMargin,
@@ -497,12 +514,12 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   db.prepare(`
     INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh,
       tariff_per_unit, energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees,
-      transmission_charges, lps, penalty, trading_margin, taxes,
+      transmission_charges, deemed_energy_mwh, deemed_charges, lps, penalty, trading_margin, taxes,
       other_adjustments, total_amount, invoice_breakdown_json, disputed_amount, due_date, status,
       parent_invoice_id, billing_family_ref, energy_data_id, created_by)
     VALUES (@id, @invoice_no, @contract_id, @invoice_type, @direction, @billing_period, @energy_mwh,
       @tariff_per_unit, @energy_charges, @capacity_charges, @incentive_charges, @free_power_deduction, @nrldc_fees,
-      @transmission_charges, @lps, @penalty, @trading_margin, @taxes,
+      @transmission_charges, @deemed_energy_mwh, @deemed_charges, @lps, @penalty, @trading_margin, @taxes,
       @other_adjustments, @total_amount, @invoice_breakdown_json, @disputed_amount, @due_date, @status,
       @parent_invoice_id, @billing_family_ref, @energy_data_id, @created_by)
   `).run({ ...invoice, created_by: req.user.name });

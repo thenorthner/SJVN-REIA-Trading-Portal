@@ -37,8 +37,12 @@ describe('S5 Billing engine', () => {
   it('raises a supplementary invoice for a later adjustment', async () => {
     const inv = makeInvoice({ contract_id: contract.id, status: 'PAID' });
     const r = await request(app).post('/api/invoices/supplementary').set(auth(reia))
-      .send({ parent_invoice_id: inv.id, contract_id: contract.id, amount: 50000, reason: 'Tariff revision' });
+      .send({ parent_invoice_id: inv.id, contract_id: contract.id, billing_period: '2026-04',
+              amount: 50000, reason_code: 'TARIFF_REVISION', reason: 'CERC order' });
     expect(r.status).toBeLessThan(400);
+    const supp = db.prepare(`SELECT * FROM invoices WHERE invoice_type = 'SUPPLEMENTARY'`).get();
+    expect(supp).toBeTruthy();
+    expect(supp.parent_invoice_id).toBe(inv.id);
   });
 
   it('applies the rebate when payment lands inside the window', async () => {
@@ -84,9 +88,65 @@ describe('S5 Billing engine', () => {
     expect(hasDeemed, 'deemed generation is not recorded distinguishably from delivered energy').toBe(true);
   });
 
-  it('settles expired banked energy at 75% of tariff', () => {
-    const banked = hasTable('energy_banking') || columnsOf('contracts').some(c => /bank/i.test(c));
-    expect(banked, 'no banking model exists to settle unused banked energy at 75%').toBe(true);
+  it('settles expired banked energy at 75% of tariff, not full tariff', async () => {
+    // 100 MWh banked at 3/kWh, cycle already closed and nothing drawn back.
+    await request(app).post('/api/energy-banking').set(auth(reia)).send({
+      contract_id: contract.id, cycle: 'FY2026-27', period_month: '2026-04',
+      banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
+    });
+    const r = await request(app).post('/api/energy-banking/settle').set(auth(reia)).send({ as_of: '2027-04-01' });
+    expect(r.status).toBe(200);
+    expect(r.body.settled).toBe(1);
+
+    const row = db.prepare(`SELECT * FROM energy_banking WHERE contract_id = ?`).get(contract.id);
+    expect(row.status).toBe('SETTLED');
+    expect(row.settled_mwh).toBe(100);
+    // 100 MWh = 100,000 kWh at 75% of 3/kWh = 2.25 -> 225,000, not 300,000.
+    expect(row.settlement_amount).toBe(225000);
+    expect(row.settlement_amount).not.toBe(300000);
+  });
+
+  it('settles only what was left unused at cycle end', async () => {
+    await request(app).post('/api/energy-banking').set(auth(reia)).send({
+      contract_id: contract.id, cycle: 'FY2026-27', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
+    });
+    await request(app).post('/api/energy-banking/draw').set(auth(reia))
+      .send({ contract_id: contract.id, cycle: 'FY2026-27', draw_mwh: 60 });
+    await request(app).post('/api/energy-banking/settle').set(auth(reia)).send({ as_of: '2027-04-01' });
+    const row = db.prepare(`SELECT * FROM energy_banking WHERE contract_id = ?`).get(contract.id);
+    expect(row.settled_mwh).toBe(40);
+    expect(row.settlement_amount).toBe(90000);   // 40,000 kWh x 2.25
+  });
+
+  it('leaves an open cycle alone until it closes', async () => {
+    await request(app).post('/api/energy-banking').set(auth(reia)).send({
+      contract_id: contract.id, cycle: 'FY2026-27', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
+    });
+    const r = await request(app).post('/api/energy-banking/settle').set(auth(reia)).send({ as_of: '2026-12-31' });
+    expect(r.body.settled).toBe(0);
+    expect(db.prepare(`SELECT status FROM energy_banking WHERE contract_id = ?`).get(contract.id).status).toBe('OPEN');
+  });
+
+  it('refuses to draw more than was banked', async () => {
+    await request(app).post('/api/energy-banking').set(auth(reia)).send({
+      contract_id: contract.id, cycle: 'FY2026-27', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
+    });
+    const r = await request(app).post('/api/energy-banking/draw').set(auth(reia))
+      .send({ contract_id: contract.id, cycle: 'FY2026-27', draw_mwh: 150 });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/Only 100 MWh is banked/);
+  });
+
+  it('pays nothing out on a cycle that was fully drawn back', async () => {
+    await request(app).post('/api/energy-banking').set(auth(reia)).send({
+      contract_id: contract.id, cycle: 'FY2026-27', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
+    });
+    await request(app).post('/api/energy-banking/draw').set(auth(reia))
+      .send({ contract_id: contract.id, cycle: 'FY2026-27', draw_mwh: 100 });
+    await request(app).post('/api/energy-banking/settle').set(auth(reia)).send({ as_of: '2027-04-01' });
+    const row = db.prepare(`SELECT * FROM energy_banking WHERE contract_id = ?`).get(contract.id);
+    expect(row.status).toBe('EXPIRED');
+    expect(row.settlement_amount).toBe(0);
   });
 
   it('adds a DSM charge for a scheduled-versus-actual deviation', () => {
@@ -104,11 +164,36 @@ describe('S5 Billing engine', () => {
   });
 
   it('flags a seller-uploaded value that disagrees with the system calculation', async () => {
-    const inv = makeInvoice({ contract_id: contract.id, total_amount: 3000000 });
-    const r = await request(app).post(`/api/invoices/${inv.id}/validate`).set(auth(reia))
-      .send({ seller_claimed_amount: 3500000 });
-    const row = db.prepare('SELECT validation_status, validation_json FROM invoices WHERE id = ?').get(inv.id);
-    expect(row.validation_status, 'seller-claimed value was neither validated nor flagged').toBeTruthy();
+    // Validation compares the seller's own bill against SJVN's calculation for the
+    // same contract and period, so both sides have to exist.
+    db.prepare(`INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period,
+                energy_mwh, tariff_per_unit, energy_charges, total_amount, status)
+                VALUES ('INV-SYS', 'INV-SYS', ?, 'FINAL', 'SJVN_TO_BUYER', '2026-04', 1000, 3, 3000000, 3000000, 'APPROVED')`)
+      .run(contract.id);
+    const sellerBill = makeInvoice({
+      contract_id: contract.id, direction: 'SELLER_TO_SJVN', billing_period: '2026-04',
+      energy_mwh: 1000, tariff_per_unit: 3, total_amount: 3500000, status: 'SUBMITTED',
+    });
+
+    const r = await request(app).post(`/api/invoices/${sellerBill.id}/validate`).set(auth(reia)).send({});
     expect(r.status).toBeLessThan(500);
+    const row = db.prepare('SELECT validation_status, validation_json FROM invoices WHERE id = ?').get(sellerBill.id);
+    expect(row.validation_status, 'a 5 lakh disagreement was neither matched nor flagged').toBeTruthy();
+    expect(row.validation_status).not.toBe('MATCHED');
+    expect(row.validation_json).toMatch(/3500000|500000|mismatch|variance/i);
+  });
+
+  it('matches a seller bill that agrees with the system calculation', async () => {
+    db.prepare(`INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period,
+                energy_mwh, tariff_per_unit, energy_charges, total_amount, status)
+                VALUES ('INV-SYS2', 'INV-SYS2', ?, 'FINAL', 'SJVN_TO_BUYER', '2026-04', 1000, 3, 3000000, 3000000, 'APPROVED')`)
+      .run(contract.id);
+    const sellerBill = makeInvoice({
+      contract_id: contract.id, direction: 'SELLER_TO_SJVN', billing_period: '2026-04',
+      energy_mwh: 1000, tariff_per_unit: 3, total_amount: 3000000, status: 'SUBMITTED',
+    });
+    await request(app).post(`/api/invoices/${sellerBill.id}/validate`).set(auth(reia)).send({});
+    expect(db.prepare('SELECT validation_status FROM invoices WHERE id = ?').get(sellerBill.id).validation_status)
+      .toBe('MATCHED');
   });
 });

@@ -329,6 +329,10 @@ CREATE TABLE IF NOT EXISTS station_beta (
 );
 
 -- Energy Data Accounting & Validation
+-- deemed_generation_mwh: energy the seller was ready to deliver but the buyer or
+-- the grid could not take. Under most PPAs the seller is paid for it as though it
+-- had flowed, so it is recorded and billed separately from energy that actually
+-- did — a bill that merges the two cannot be told apart afterwards.
 CREATE TABLE IF NOT EXISTS energy_data (
   id TEXT PRIMARY KEY,
   contract_id TEXT NOT NULL REFERENCES contracts(id),
@@ -388,6 +392,10 @@ CREATE TABLE IF NOT EXISTS invoices (
   free_power_deduction REAL DEFAULT 0,
   nrldc_fees REAL DEFAULT 0,
   transmission_charges REAL NOT NULL DEFAULT 0,
+  -- Deemed generation billed on this invoice, kept apart from delivered energy
+  -- so the two are never indistinguishable on the bill or in a later audit.
+  deemed_energy_mwh REAL NOT NULL DEFAULT 0,
+  deemed_charges REAL NOT NULL DEFAULT 0,
   -- Pass-through "other charges" (transmission / RLDC-SLDC / CTU-STU / open access
   -- / scheduling) as an array of {code,label,amount}. Rebate is NOT allowed on these.
   other_charges_json TEXT,
@@ -1685,6 +1693,32 @@ CREATE TABLE IF NOT EXISTS oa_application_charges (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_oa_app_charges_no ON oa_application_charges(application_no);
+
+-- Energy banked under a PPA. Generation the buyer could not take is credited to
+-- the seller and may be drawn back within the banking cycle; whatever is still
+-- unused when the cycle closes is settled in cash, but at a discount to tariff
+-- (75% by regulation) rather than at full rate — banking is a carry-forward
+-- facility, not a guaranteed sale.
+CREATE TABLE IF NOT EXISTS energy_banking (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  cycle TEXT NOT NULL,                  -- the banking cycle, e.g. a financial year
+  period_month TEXT,                    -- the month the energy was banked in
+  banked_mwh REAL NOT NULL DEFAULT 0,
+  drawn_mwh REAL NOT NULL DEFAULT 0,    -- taken back out within the cycle
+  tariff_per_unit REAL NOT NULL DEFAULT 0,
+  cycle_ends_on TEXT NOT NULL,
+  settlement_pct REAL NOT NULL DEFAULT 75,
+  settled_mwh REAL NOT NULL DEFAULT 0,
+  settlement_amount REAL NOT NULL DEFAULT 0,
+  settled_on TEXT,
+  settlement_invoice_id TEXT REFERENCES invoices(id),
+  status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','DRAWN','SETTLED','EXPIRED')),
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_energy_banking_contract ON energy_banking(contract_id, cycle);
+CREATE INDEX IF NOT EXISTS idx_energy_banking_open ON energy_banking(status, cycle_ends_on);
 
 -- Both legs of the trading desk's cash cycle in one register: money owed to SJVN
 -- by the buyer (INFLOW) and money SJVN owes the seller (OUTFLOW). The ledger keeps
