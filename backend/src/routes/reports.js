@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { receivablesOutstanding, payablesOutstanding, overdueCount } from '../services/outstanding.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { generateBillingReportPdf } from '../scripts/billingReportPdf.js';
@@ -617,14 +618,8 @@ export function buildReiaDashboardSummary() {
   const pendingDisputes = db.prepare(`SELECT COUNT(*) c FROM disputes WHERE status IN (${OPEN_STATUSES.map(() => '?').join(',')})`).get(...OPEN_STATUSES).c;
   const reconciliationExceptions = db.prepare(`SELECT COUNT(*) c FROM reconciliations WHERE status IN ('NEEDS_REVIEW','DISPUTED','REOPENED')`).get().c;
   const totalInvoices = db.prepare(`SELECT COUNT(*) c, COALESCE(SUM(total_amount),0) s FROM invoices`).get();
-  const receivables = db.prepare(`
-    SELECT COALESCE(SUM(total_amount),0) s FROM invoices
-    WHERE direction = 'SJVN_TO_BUYER' AND status NOT IN ('PAID','CANCELLED')
-  `).get().s;
-  const payables = db.prepare(`
-    SELECT COALESCE(SUM(total_amount),0) s FROM invoices
-    WHERE direction = 'SELLER_TO_SJVN' AND status NOT IN ('PAID','CANCELLED')
-  `).get().s;
+  const receivables = receivablesOutstanding();
+  const payables = payablesOutstanding();
   const paymentsReceived = db.prepare(`
     SELECT COALESCE(SUM(p.amount),0) s FROM payments p
     JOIN invoices i ON i.id = p.invoice_id WHERE i.direction = 'SJVN_TO_BUYER'
@@ -633,9 +628,7 @@ export function buildReiaDashboardSummary() {
     SELECT COALESCE(SUM(p.amount),0) s FROM payments p
     JOIN invoices i ON i.id = p.invoice_id WHERE i.direction = 'SELLER_TO_SJVN'
   `).get().s;
-  const overdue = db.prepare(`
-    SELECT COUNT(*) c FROM invoices WHERE status NOT IN ('PAID','CANCELLED') AND due_date IS NOT NULL AND due_date < date('now')
-  `).get().c;
+  const overdue = overdueCount();
   const byStatus = db.prepare(`SELECT status, COUNT(*) c FROM invoices GROUP BY status`).all();
   const byProjectType = db.prepare(`
     SELECT c.project_type, COUNT(*) contracts, COALESCE(SUM(c.capacity_mw),0) capacity

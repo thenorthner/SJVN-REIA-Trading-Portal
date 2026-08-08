@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import db from '../db/index.js';
+import { receivablesOutstanding, payablesOutstanding, overdueReceivable, overdueCount } from '../services/outstanding.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { OPEN_STATUSES } from '../disputesConstants.js';
 import { buildTradingProfitabilitySummary } from './reports.js';
@@ -24,14 +25,8 @@ router.get('/reia', (req, res) => {
   const reconciliationExceptions = db.prepare(`SELECT COUNT(*) c FROM reconciliations WHERE status IN ('NEEDS_REVIEW','DISPUTED','REOPENED')`).get().c;
 
   const totalInvoices = db.prepare(`SELECT COUNT(*) c, COALESCE(SUM(total_amount),0) s FROM invoices`).get();
-  const receivables = db.prepare(`
-    SELECT COALESCE(SUM(total_amount),0) s FROM invoices
-    WHERE direction = 'SJVN_TO_BUYER' AND status NOT IN ('PAID','CANCELLED')
-  `).get().s;
-  const payables = db.prepare(`
-    SELECT COALESCE(SUM(total_amount),0) s FROM invoices
-    WHERE direction = 'SELLER_TO_SJVN' AND status NOT IN ('PAID','CANCELLED')
-  `).get().s;
+  const receivables = receivablesOutstanding();
+  const payables = payablesOutstanding();
   const paymentsReceived = db.prepare(`
     SELECT COALESCE(SUM(p.amount),0) s FROM payments p
     JOIN invoices i ON i.id = p.invoice_id WHERE i.direction = 'SJVN_TO_BUYER'
@@ -40,9 +35,7 @@ router.get('/reia', (req, res) => {
     SELECT COALESCE(SUM(p.amount),0) s FROM payments p
     JOIN invoices i ON i.id = p.invoice_id WHERE i.direction = 'SELLER_TO_SJVN'
   `).get().s;
-  const overdue = db.prepare(`
-    SELECT COUNT(*) c FROM invoices WHERE status NOT IN ('PAID','CANCELLED') AND due_date IS NOT NULL AND due_date < date('now')
-  `).get().c;
+  const overdue = overdueCount();
 
   const byStatus = db.prepare(`SELECT status, COUNT(*) c FROM invoices GROUP BY status`).all();
   const byProjectType = db.prepare(`
@@ -206,9 +199,9 @@ router.get('/trading/periodic', (_req, res) => res.json(buildTradingPeriodic()))
 // Internal MIS report so both quote identical figures.
 export function buildConsolidatedPortfolio() {
   // 1. Single Source of Truth Aggregations
-  const reiaReceivables = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE direction = 'SJVN_TO_BUYER' AND status NOT IN ('PAID','CANCELLED')`).get().s;
-  const reiaPayables = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE direction = 'SELLER_TO_SJVN' AND status NOT IN ('PAID','CANCELLED')`).get().s;
-  const reiaOverdue = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices WHERE direction = 'SJVN_TO_BUYER' AND status NOT IN ('PAID','CANCELLED') AND due_date < date('now')`).get().s;
+  const reiaReceivables = receivablesOutstanding();
+  const reiaPayables = payablesOutstanding();
+  const reiaOverdue = overdueReceivable();
   
   const reiaContractedCapacity = db.prepare(`SELECT COALESCE(SUM(capacity_mw),0) s FROM contracts WHERE status = 'ACTIVE'`).get().s;
   const reiaBilledValue = db.prepare(`SELECT COALESCE(SUM(total_amount),0) s FROM invoices`).get().s;
