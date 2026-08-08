@@ -169,6 +169,28 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   if (!row) return res.status(404).json({ error: 'Energy data not found' });
   if (row.status === 'LOCKED') return res.status(400).json({ error: 'Already locked' });
 
+  // Locking is what makes a period billable, so it is the last point at which a
+  // validation result can still mean anything. Until now it meant nothing: a
+  // period could be locked and billed whether it had been validated or not, and
+  // a period validation had actively flagged locked as readily as a clean one.
+  const override = (req.body?.override_reason || '').trim();
+
+  if (row.status === 'DRAFT') {
+    return res.status(400).json({
+      error: 'Validate this period before locking it — locking is what makes it billable.',
+      energy_status: row.status,
+    });
+  }
+
+  if (row.status === 'DISPUTED' && !override) {
+    return res.status(400).json({
+      error: 'This period failed validation and cannot be locked without a recorded reason.',
+      energy_status: row.status,
+      validation_note: row.deviation_notes,
+      hint: 'Correct the figure and re-validate, or pass override_reason to lock it as it stands.',
+    });
+  }
+
   // Ensure BFR / supersedes links exist
   if (!row.billing_family_ref || (row.data_type === 'FINAL' && !row.supersedes_energy_id)) {
     const resolved = resolveEnergyBfr(row.contract_id, row.period_month, row.data_type);
@@ -183,8 +205,30 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     }
   }
 
-  db.prepare(`UPDATE energy_data SET status = 'LOCKED', updated_at = datetime('now') WHERE id = ?`).run(row.id);
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'LOCK', module: 'REIA', entityType: 'energy_data', entityId: row.id, details: { data_type: row.data_type } });
+  const overrodeFlag = row.status === 'DISPUTED' && !!override;
+  db.prepare(`
+    UPDATE energy_data
+    SET status = 'LOCKED', locked_at = datetime('now'),
+        lock_override_reason = ?, lock_override_by = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(overrodeFlag ? override : null, overrodeFlag ? (req.user?.name || req.user?.id || null) : null, row.id);
+
+  logAudit({
+    req: typeof req !== "undefined" ? req : null, user: req.user,
+    action: overrodeFlag ? 'LOCK_OVERRIDE' : 'LOCK',
+    module: 'REIA', entityType: 'energy_data', entityId: row.id,
+    reason: overrodeFlag ? override : undefined,
+    details: { data_type: row.data_type, prior_status: row.status, validation_note: row.deviation_notes },
+  });
+
+  // A period billed over its own validation flag is worth someone else seeing.
+  if (overrodeFlag) {
+    pushNotification({
+      role: 'REIA_USER',
+      type: 'ENERGY_LOCK_OVERRIDE',
+      message: `${row.period_month} locked despite failing validation: ${override}`,
+    });
+  }
 
   // FINAL lock → re-run reconciliation from provisional basis if one exists
   if (row.data_type === 'FINAL') {

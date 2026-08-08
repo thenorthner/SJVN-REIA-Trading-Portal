@@ -279,6 +279,23 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
 
   const resolvedType = invoice_type || (energy.data_type === 'FINAL' ? 'FINAL' : 'PROVISIONAL');
 
+  // A provisional bill may run on provisional energy — that is what makes it
+  // provisional. It may not run on energy validation actively flagged. Only a
+  // FINAL bill used to check anything here, so a flagged period was billed
+  // provisionally and the validation result changed nothing. Locking it over the
+  // flag is still open to whoever owns that call; it just has to be an owned one.
+  //
+  // Checked before the not-LOCKED refusal below: both would refuse a flagged
+  // FINAL period, but "failed validation, here is what" is the answer worth
+  // giving over "not locked", which leaves the reader to go and find out why.
+  if (energy.status === 'DISPUTED') {
+    throw refuse(400, {
+      error: 'This period failed energy validation — correct and re-validate it, or lock it with a recorded reason before billing.',
+      energy_status: energy.status,
+      validation_note: energy.deviation_notes,
+    });
+  }
+
   if (resolvedType === 'FINAL' && energy.status !== 'LOCKED') {
     throw refuse(400, { error: 'Cannot generate FINAL invoice because energy data is not LOCKED.' });
   }
@@ -483,6 +500,18 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
 
   const total = grossTotal + otherAdjustments;
   breakdown.push({ code: 'TOTAL', label: 'Net Payable Amount', value: total });
+
+  // A bill raised on energy that was locked over a validation flag says so. The
+  // counterparty is being asked to pay against a figure the system itself
+  // questioned, and the dispute window is short — they should not have to find
+  // that out from the audit log.
+  if (energy.lock_override_reason) {
+    breakdown.push({
+      code: 'NOTE',
+      label: `Energy for this period was locked over a validation flag — ${energy.lock_override_reason}`,
+      value: 0,
+    });
+  }
 
   const id = newId('INV');
   const invoice = {

@@ -1423,6 +1423,27 @@ try {
   console.error('Deemed generation migration failed:', e.message);
 }
 
+/**
+ * Why a flagged energy period was locked anyway.
+ *
+ * Locking is what makes a period billable, so a lock over a validation flag is a
+ * decision someone has to own. These record who overrode it and on what grounds.
+ */
+function migrateEnergyLockOverride() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (!tables.includes('energy_data')) return;
+  const cols = db.prepare('PRAGMA table_info(energy_data)').all().map((c) => c.name);
+  if (!cols.includes('lock_override_reason')) db.exec(`ALTER TABLE energy_data ADD COLUMN lock_override_reason TEXT`);
+  if (!cols.includes('lock_override_by')) db.exec(`ALTER TABLE energy_data ADD COLUMN lock_override_by TEXT`);
+  if (!cols.includes('locked_at')) db.exec(`ALTER TABLE energy_data ADD COLUMN locked_at TEXT`);
+}
+
+try {
+  migrateEnergyLockOverride();
+} catch (e) {
+  console.error('Energy lock override migration failed:', e.message);
+}
+
 try {
   migrateWaterfallPriority();
 } catch (e) {
