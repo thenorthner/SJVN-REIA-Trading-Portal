@@ -46,12 +46,63 @@ describe('S7 Invoice approval and distribution', () => {
     expect(columnsOf('invoice_deliveries')).toEqual(expect.arrayContaining(['invoice_id', 'channel', 'status']));
   });
 
+  // These pin the shape the application actually writes. The original fixture
+  // put the maker's id in created_by and passed, while every real invoice was
+  // storing a display name there — so the test agreed with the check's own wrong
+  // assumption, and both were wrong together. An end-to-end run against the live
+  // server was what caught it: the creator approved their own bill, HTTP 200.
+  const pending = (invId, apId = 'AP-4') =>
+    db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, 'PENDING')`).run(apId, invId);
+
   it('stops the same user both creating and approving an invoice', async () => {
     const maker = makeUser('REIA_USER', { name: 'Maker' });
-    const token = signToken(maker);
-    const inv = makeInvoice({ contract_id: contract.id, status: 'SUBMITTED', created_by: maker.id });
-    db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES ('AP-4', ?, 1, 'PENDING')`).run(inv.id);
-    const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(auth(token)).send({ decision: 'APPROVED' });
-    expect(r.status, 'the invoice creator was allowed to approve their own invoice').toBeGreaterThanOrEqual(400);
+    const inv = makeInvoice({
+      contract_id: contract.id, status: 'SUBMITTED',
+      created_by: maker.name, created_by_id: maker.id,   // what generate() writes
+    });
+    pending(inv.id);
+    const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`)
+      .set(auth(signToken(maker))).send({ decision: 'APPROVED' });
+    expect(r.status, 'the invoice creator was allowed to approve their own invoice').toBe(403);
+    expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('SUBMITTED');
+  });
+
+  it('still lets a different person approve it', async () => {
+    const maker = makeUser('REIA_USER', { name: 'Maker Two' });
+    const checker = makeUser('REIA_USER', { name: 'Checker Two' });
+    const inv = makeInvoice({
+      contract_id: contract.id, status: 'SUBMITTED',
+      created_by: maker.name, created_by_id: maker.id,
+    });
+    pending(inv.id, 'AP-5');
+    const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`)
+      .set(auth(signToken(checker))).send({ decision: 'APPROVED' });
+    expect(r.status, 'segregation of duties blocked a legitimate second approver').toBeLessThan(400);
+  });
+
+  it('still stops a maker on a bill raised before created_by_id existed', async () => {
+    // Backfill resolves most of these, but a name that matched no user leaves
+    // the column null. The bill is still someone's to not approve.
+    const maker = makeUser('REIA_USER', { name: 'Legacy Maker' });
+    const inv = makeInvoice({ contract_id: contract.id, status: 'SUBMITTED', created_by: maker.name });
+    db.prepare('UPDATE invoices SET created_by_id = NULL WHERE id = ?').run(inv.id);
+    pending(inv.id, 'AP-6');
+    const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`)
+      .set(auth(signToken(maker))).send({ decision: 'APPROVED' });
+    expect(r.status, 'a legacy row let its maker approve it').toBe(403);
+  });
+
+  it('stops the maker on the L2 route too', async () => {
+    // approve-l2 clears an invoice as surely as the levelled route does, and
+    // carried no separation check at all — a second way through for the maker.
+    const maker = makeUser('REIA_USER', { name: 'Maker L2' });
+    const inv = makeInvoice({
+      contract_id: contract.id, status: 'PENDING_L2',
+      created_by: maker.name, created_by_id: maker.id,
+    });
+    const r = await request(app).post(`/api/invoices/${inv.id}/approve-l2`)
+      .set(auth(signToken(maker))).send({ comments: 'self-clear attempt' });
+    expect(r.status, 'the maker cleared their own invoice through the L2 route').toBe(403);
+    expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('PENDING_L2');
   });
 });

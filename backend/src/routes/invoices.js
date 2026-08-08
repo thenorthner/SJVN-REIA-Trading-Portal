@@ -60,6 +60,41 @@ const OTHER_CHARGE_TYPES = {
   SCHEDULING: 'Scheduling & system operation charges',
   OTHER: 'Other pass-through charges',
 };
+const SEGREGATION_REFUSAL =
+  'Segregation of duties: the person who raised this invoice cannot approve it. It needs a different approver.';
+
+/**
+ * Whether this user raising and clearing the same bill would be one person
+ * moving money end to end — the control every audit of a billing system looks
+ * for first, and the one that matters most here because approval is what makes
+ * a bill payable.
+ *
+ * Returns the refusal to give, or null when the two are genuinely different
+ * people. It used to compare created_by — a display name — against the user's
+ * id, which are never equal, so it never refused anyone: the creator of an
+ * invoice could approve their own to APPROVED without objection.
+ *
+ * Identity comes from created_by_id. Bills raised before that column existed
+ * were backfilled from the user register, and for anything still without one we
+ * fall back to the recorded name. The fallback can in principle catch two
+ * different people who share a name, and that is the direction to err in: being
+ * asked for a second approver costs someone a message, while letting the maker
+ * clear their own bill is the failure the control exists to prevent.
+ */
+function makerCheckerConflict(inv, user) {
+  if (!inv || !user) return null;
+  if (inv.created_by_id && user.id) {
+    return inv.created_by_id === user.id ? SEGREGATION_REFUSAL : null;
+  }
+  // No id recorded: fall back to created_by, which is matched against both the
+  // name and the id because rows predating created_by_id were written by
+  // whichever path raised them and are not consistent about which they hold.
+  if (inv.created_by && (inv.created_by === user.name || inv.created_by === user.id)) {
+    return SEGREGATION_REFUSAL;
+  }
+  return null;
+}
+
 function parseOtherCharges(inv) {
   try { return JSON.parse(inv.other_charges_json || '[]'); } catch { return []; }
 }
@@ -568,13 +603,13 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
       tariff_per_unit, energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees,
       transmission_charges, deemed_energy_mwh, deemed_charges, lps, penalty, trading_margin, taxes,
       other_adjustments, total_amount, invoice_breakdown_json, disputed_amount, due_date, status,
-      parent_invoice_id, billing_family_ref, energy_data_id, created_by)
+      parent_invoice_id, billing_family_ref, energy_data_id, created_by, created_by_id)
     VALUES (@id, @invoice_no, @contract_id, @invoice_type, @direction, @billing_period, @energy_mwh,
       @tariff_per_unit, @energy_charges, @capacity_charges, @incentive_charges, @free_power_deduction, @nrldc_fees,
       @transmission_charges, @deemed_energy_mwh, @deemed_charges, @lps, @penalty, @trading_margin, @taxes,
       @other_adjustments, @total_amount, @invoice_breakdown_json, @disputed_amount, @due_date, @status,
-      @parent_invoice_id, @billing_family_ref, @energy_data_id, @created_by)
-  `).run({ ...invoice, created_by: req.user.name });
+      @parent_invoice_id, @billing_family_ref, @energy_data_id, @created_by, @created_by_id)
+  `).run({ ...invoice, created_by: req.user.name, created_by_id: req.user?.id ?? null });
 
   // Map to seller invoices (Many-to-Many)
   if (seller_invoice_ids && Array.isArray(seller_invoice_ids)) {
@@ -670,12 +705,12 @@ router.post('/arrear', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
       tariff_per_unit, energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees,
       transmission_charges, lps, penalty, trading_margin, taxes,
       other_adjustments, total_amount, invoice_breakdown_json, disputed_amount, due_date, status,
-      parent_invoice_id, billing_family_ref, energy_data_id, created_by)
+      parent_invoice_id, billing_family_ref, energy_data_id, created_by, created_by_id)
     VALUES (@id, @invoice_no, @contract_id, 'ARREAR', @direction, @billing_period, 0,
       0, @energy_charges, 0, 0, 0, 0,
       0, 0, 0, 0, @taxes,
       0, @total_amount, @invoice_breakdown_json, 0, @due_date, 'DRAFT',
-      NULL, @billing_family_ref, NULL, @created_by)
+      NULL, @billing_family_ref, NULL, @created_by, @created_by_id)
   `).run({
     id,
     invoice_no: genInvoiceNo(contract.contract_type === 'PPA' ? 'ARR-PPA' : 'ARR-PSA'),
@@ -689,6 +724,7 @@ router.post('/arrear', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     due_date: computeDueDate(new Date(), contract, getParamNumber('default_payment_terms_days', 30)),
     billing_family_ref: billingFamilyRef,
     created_by: req.user.name,
+    created_by_id: req.user?.id ?? null,
   });
   db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)').run(newId('APR'), id, 'PENDING');
   logAudit({ req, user: req.user, action: 'GENERATE_ARREAR', module: 'REIA', entityType: 'invoice', entityId: id, details: { contract_id, arrear_period, amount: amt, taxes: taxAmt, reason } });
@@ -785,12 +821,12 @@ router.post('/supplementary', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res)
       tariff_per_unit, energy_charges, capacity_charges, incentive_charges, free_power_deduction, nrldc_fees,
       transmission_charges, lps, penalty, trading_margin, taxes,
       other_adjustments, total_amount, invoice_breakdown_json, disputed_amount, due_date, status,
-      parent_invoice_id, billing_family_ref, energy_data_id, created_by)
+      parent_invoice_id, billing_family_ref, energy_data_id, created_by, created_by_id)
     VALUES (@id, @invoice_no, @contract_id, 'SUPPLEMENTARY', @direction, @billing_period, 0,
       0, @energy_charges, 0, 0, 0, 0,
       @transmission_charges, 0, 0, 0, @taxes,
       0, @total_amount, @invoice_breakdown_json, 0, @due_date, 'DRAFT',
-      @parent_invoice_id, @billing_family_ref, NULL, @created_by)
+      @parent_invoice_id, @billing_family_ref, NULL, @created_by, @created_by_id)
   `).run({
     id,
     invoice_no: genInvoiceNo(contract.contract_type === 'PPA' ? 'SUPP-PPA' : 'SUPP-PSA'),
@@ -806,6 +842,7 @@ router.post('/supplementary', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res)
     parent_invoice_id: parentId,
     billing_family_ref: billingFamilyRef,
     created_by: req.user.name,
+    created_by_id: req.user?.id ?? null,
   });
   db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)').run(newId('APR'), id, 'PENDING');
   logAudit({
@@ -837,10 +874,10 @@ router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) =>
   db.prepare(`
     INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh,
       tariff_per_unit, energy_charges, transmission_charges, rebate, lps, penalty, trading_margin, taxes,
-      other_adjustments, total_amount, due_date, status, billing_family_ref, energy_data_id, parent_invoice_id, created_by)
+      other_adjustments, total_amount, due_date, status, billing_family_ref, energy_data_id, parent_invoice_id, created_by, created_by_id)
     VALUES (@id, @invoice_no, @contract_id, @invoice_type, @direction, @billing_period, @energy_mwh,
       @tariff_per_unit, @energy_charges, @transmission_charges, @rebate, @lps, @penalty, @trading_margin, @taxes,
-      @other_adjustments, @total_amount, @due_date, 'SUBMITTED', @billing_family_ref, @energy_data_id, @parent_invoice_id, @created_by)
+      @other_adjustments, @total_amount, @due_date, 'SUBMITTED', @billing_family_ref, @energy_data_id, @parent_invoice_id, @created_by, @created_by_id)
   `).run({
     id,
     invoice_no: b.invoice_no || genInvoiceNo('SELLER-INV'),
@@ -864,6 +901,7 @@ router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     energy_data_id: b.energy_data_id || null,
     parent_invoice_id: b.parent_invoice_id || null,
     created_by: req.user.name,
+    created_by_id: req.user?.id ?? null,
   });
   db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)').run(newId('APR'), id, 'PENDING');
 
@@ -1080,14 +1118,8 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
   }
   const { decision, comments } = req.body; // APPROVED | REJECTED
 
-  // Maker-checker: whoever raised the invoice cannot also clear it. Without this
-  // one person can move money end to end, which is the control every audit of a
-  // billing system looks for first.
-  if (inv.created_by && req.user?.id && inv.created_by === req.user.id) {
-    return res.status(403).json({
-      error: 'Segregation of duties: the person who created an invoice cannot approve it. It needs a different approver.',
-    });
-  }
+  const conflict = makerCheckerConflict(inv, req.user);
+  if (conflict) return res.status(403).json({ error: conflict });
 
   const approval = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? AND level = ?').get(req.params.id, req.params.level);
   if (!approval) return res.status(404).json({ error: 'Approval step not found' });
@@ -1121,9 +1153,15 @@ router.post('/:id/submit-l2', requireRole('SELLER_L1', 'BUYER_L1', ...ROLE_GROUP
 // Approve invoice from L2 to SJVN (Checker)
 router.post('/:id/approve-l2', requireRole('SELLER_L2', 'SELLER_L3', 'BUYER_L2', 'BUYER_L3', ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const { comments } = req.body;
-  const inv = db.prepare('SELECT status FROM invoices WHERE id = ?').get(req.params.id);
+  const inv = db.prepare('SELECT status, created_by, created_by_id FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status !== 'PENDING_L2') return res.status(400).json({ error: 'Only PENDING_L2 invoices can be approved by L2' });
+
+  // This route clears an invoice too, so it needs the same separation the
+  // levelled approvals have. It had no check at all, which left the maker a
+  // second way through even once the levelled one was refusing them.
+  const conflict = makerCheckerConflict(inv, req.user);
+  if (conflict) return res.status(403).json({ error: conflict });
 
   db.prepare("UPDATE invoices SET status = 'SUBMITTED', updated_at = datetime('now') WHERE id = ?").run(req.params.id);
   logAudit(req.traceId, 'APPROVE_L2', 'INVOICES', req.params.id, 'PENDING_L2', 'SUBMITTED', req.user);

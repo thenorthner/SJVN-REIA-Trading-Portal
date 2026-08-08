@@ -1480,6 +1480,43 @@ try {
   console.error('Invoice issued_at migration failed:', e.message);
 }
 
+/**
+ * Who raised an invoice, as an id rather than a display name.
+ *
+ * Segregation of duties asks whether the person approving is the person who
+ * raised it, and the only thing recorded was created_by — a display name, which
+ * the check then compared against a user id. A name is never equal to an id, so
+ * the control never fired once. created_by stays as it is because screens print
+ * it; the identity the check needs goes in its own column.
+ *
+ * Backfilled by matching the stored name against the user register, so the
+ * control covers bills raised before this existed rather than only new ones.
+ */
+function migrateInvoiceCreatedById() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (!tables.includes('invoices')) return;
+  const cols = db.prepare('PRAGMA table_info(invoices)').all().map((c) => c.name);
+  if (!cols.includes('created_by_id')) db.exec(`ALTER TABLE invoices ADD COLUMN created_by_id TEXT`);
+
+  if (!tables.includes('users')) return;
+  // Only where the name resolves to exactly one user — an ambiguous name must
+  // not be turned into a confident identity claim on an audit control.
+  db.exec(`
+    UPDATE invoices SET created_by_id = (
+      SELECT u.id FROM users u
+      WHERE u.name = invoices.created_by
+        AND (SELECT COUNT(*) FROM users u2 WHERE u2.name = invoices.created_by) = 1
+    )
+    WHERE created_by_id IS NULL AND created_by IS NOT NULL
+  `);
+}
+
+try {
+  migrateInvoiceCreatedById();
+} catch (e) {
+  console.error('Invoice created_by_id migration failed:', e.message);
+}
+
 try {
   migrateWaterfallPriority();
 } catch (e) {
