@@ -222,6 +222,71 @@ function resolveParties(invoice, contract, seller, buyer) {
   return { issuer: issuer || {}, recipient: recipient || {} };
 }
 
+/**
+ * The money on a bill, as the two parts it is printed in.
+ *
+ * Pure arithmetic over the invoice columns, exported so the renderer and its
+ * tests cannot drift: the rows drawn on the page are these lists, and the
+ * subtotals are the sums of these same lists.
+ *
+ * The reconciliation it guarantees is
+ *
+ *     subTotalA + partB === total_amount - rebate + lps
+ *
+ * which is the invariant that was broken. Part A carried only energy charges, so
+ * a fixed capacity charge or deemed generation sat in total_amount without
+ * appearing on the bill; Part B summed an expression rather than its own printed
+ * lines, so pass-through charges were listed and then left out of the subtotal;
+ * and the grand total printed total_amount under a label reading "(A+B)", which
+ * omits the rebate and the surcharge. A bill could therefore show a rebate line
+ * and still demand the un-rebated amount directly beneath it.
+ */
+export function billParts(invoice = {}, { gstLines } = {}) {
+  // How the tax is split across lines is presentation — CGST+SGST and a single
+  // IGST come to the same money — so the caller supplies it and the totals here
+  // are unaffected either way.
+  const splitGst = gstLines || ((t) => (Number(t) ? [['GST', Number(t)]] : []));
+  const num = (v) => Number(v) || 0;
+  const energy = num(invoice.energy_charges);
+  const adj = num(invoice.other_adjustments);
+  const capacity = num(invoice.capacity_charges);
+  const deemed = num(invoice.deemed_charges);
+  const incentive = num(invoice.incentive_charges);
+  const freePower = num(invoice.free_power_deduction);
+  const penalty = num(invoice.penalty);
+  const tax = num(invoice.taxes);
+  const transmission = num(invoice.transmission_charges);
+  const margin = num(invoice.trading_margin);
+  const nrldc = num(invoice.nrldc_fees);
+  const lps = num(invoice.lps);
+  const rebate = num(invoice.rebate);
+
+  let other = [];
+  try { other = JSON.parse(invoice.other_charges_json || '[]'); } catch { other = []; }
+
+  const partAExtras = [
+    ['Fixed / Capacity Charge', capacity],
+    [`Deemed Generation${invoice.deemed_energy_mwh ? ` (${invoice.deemed_energy_mwh} MWh, not delivered)` : ''}`, deemed],
+    ['Incentive', incentive],
+    ['Less: Free Power to Home State', freePower ? -freePower : 0],
+  ].filter(([, v]) => v !== 0);
+
+  const partBItems = [
+    ['Trading Margin', margin],
+    ['NRLDC / SLDC Fees', nrldc],
+    ['Transmission / Wheeling Charges', transmission],
+    ...other.map((c) => [c.label || c.code, num(c.amount)]),
+    ...splitGst(tax),
+    ['Less: CUF Shortfall Penalty', penalty ? -penalty : 0],
+    ['Late Payment Surcharge (LPS)', lps],
+    ['Early-Payment Rebate', rebate ? -rebate : 0],
+  ].filter(([, v]) => v !== 0);
+
+  const subTotalA = energy + adj + capacity + deemed + incentive - freePower;
+  const subTotalB = partBItems.reduce((a, [, v]) => a + v, 0);
+  return { partAExtras, partBItems, subTotalA, subTotalB, grand: subTotalA + subTotalB };
+}
+
 export async function generateInvoicePdf(invoice, contract, seller, buyer, res, beneficiaries = []) {
   const { issuer, recipient } = resolveParties(invoice, contract, seller, buyer);
   const isDraft = !invoice.status || invoice.status === 'DRAFT';
@@ -588,37 +653,26 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res, 
   drawBillingRow(y, 28, ['2.2', 'Provisional amount, based on units as per Injection Schedule Report in preceding months.', '', '', '', '']);
   y += 28;
 
-  const subTotalA = (Number(energyAmt) || 0) + adj;
+  // Every figure below comes from billParts, so what is drawn and what is
+  // totalled are the same list.
+  const parts = billParts(invoice, { gstLines });
+  const { partAExtras, partBItems, subTotalA, subTotalB } = parts;
+
+  let aSr = 2;
+  for (const [label, amount] of partAExtras) {
+    aSr += 1;
+    drawBillingRow(y, 18, [`${aSr}`, label, '', '', '', fmtMoney(amount)]);
+    y += 18;
+  }
+
   drawSpanRow(y, 18, 'I. Sub-Total (A)', fmtMoney(subTotalA), { bold: true });
   y += 18;
 
   drawSpanRow(y, 16, 'Part-B  Other charges, taxes, duties, levies, GST etc', null, { bold: true, center: true, band: true });
   y += 16;
 
-  const taxAmt = Number(invoice.taxes) || 0;
-  const txCharges = Number(invoice.transmission_charges) || 0;
-  const tradingMargin = Number(invoice.trading_margin) || 0;
-  const nrldcFees = Number(invoice.nrldc_fees) || 0;
-  const lps = Number(invoice.lps) || 0;
-  const rebate = Number(invoice.rebate) || 0;
-
-  // Itemise Part-B so the bill shows exactly what each rupee is — instead of a
-  // single lumped figure. Only non-zero charges are printed. Rebate (early-payment
-  // discount) shows as a negative line.
-  // Pass-through "other charges" (transmission / RLDC-SLDC / CTU-STU / open access).
-  let otherCharges = [];
-  try { otherCharges = JSON.parse(invoice.other_charges_json || '[]'); } catch { otherCharges = []; }
-
-  const partBItems = [
-    ['Trading Margin', tradingMargin],
-    ['NRLDC / SLDC Fees', nrldcFees],
-    ['Transmission / Wheeling Charges', txCharges],
-    ...otherCharges.map((c) => [c.label || c.code, Number(c.amount) || 0]),
-    ...gstLines(taxAmt),
-    ['Late Payment Surcharge (LPS)', lps],
-    ['Early-Payment Rebate', rebate ? -rebate : 0],
-  ].filter(([, v]) => Number(v) !== 0);
-
+  // Itemised so the bill shows exactly what each rupee is, rather than a single
+  // lumped figure. Only non-zero lines print; deductions show as negatives.
   let bSr = 0;
   for (const [label, amount] of partBItems) {
     bSr += 1;
@@ -630,11 +684,16 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res, 
     y += 18;
   }
 
-  const partB = taxAmt + txCharges + tradingMargin + nrldcFees + lps - rebate;
-  drawSpanRow(y, 18, `II. Sub-Total (B)`, fmtMoney(partB), { bold: true });
+  drawSpanRow(y, 18, `II. Sub-Total (B)`, fmtMoney(subTotalB), { bold: true });
   y += 18;
 
-  const grand = invoice.total_amount != null ? Number(invoice.total_amount) : subTotalA + partB;
+  // The row says A+B, so it adds A and B. It used to print total_amount instead,
+  // which carries neither the rebate nor the surcharge — a bill showing a
+  // -2,625 rebate line still demanded the full amount above it, and the payer had
+  // no way to tell which of the two numbers on the page was the one to pay.
+  // total_amount remains the reference for everything else, and the assertion
+  // below is that A+B rebuilds it once the rebate and LPS are put back.
+  const grand = parts.grand;
   drawSpanRow(y, 20, `Total amount to be paid (${CUR}) (A+B)`, fmtMoney(grand), { bold: true });
   y += 20;
 
