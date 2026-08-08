@@ -10,7 +10,7 @@ import { resolveBetaRow } from '../services/betaFactor.js';
 import { sendSms } from '../services/smsService.js';
 import { channelsFor, dispatch } from '../services/notificationService.js';
 import { allocationsInForce } from '../services/allocations.js';
-import { contractVisibleTo, invoicePresentedTo, PRESENTED_STATUSES } from '../services/counterpartyScope.js';
+import { contractVisibleTo, invoicePresentedTo, billPresentedOn, PRESENTED_STATUSES } from '../services/counterpartyScope.js';
 import { asOfFrom, isProjection } from '../services/clock.js';
 import { computeCercHydroBill } from '../services/cercHydroBilling.js';
 import { computeCufPenalty } from '../services/cufPenalty.js';
@@ -81,6 +81,67 @@ const SEGREGATION_REFUSAL =
  * asked for a second approver costs someone a message, while letting the maker
  * clear their own bill is the failure the control exists to prevent.
  */
+/**
+ * How many approvals a bill of this size needs.
+ *
+ * Every invoice took exactly two levels, inserted unconditionally, so a 3,500
+ * bill and a 1.75 crore bill were routed identically — the levels existed but
+ * carried no information about how much was at stake.
+ *
+ * The bands come from the invoice_approval_levels master so the amounts are
+ * SJVN's to set rather than mine to invent. Each entry is { above, levels },
+ * read as "a bill above this amount needs this many": the highest band whose
+ * threshold the bill clears wins, and anything below the lowest takes
+ * min_levels. The default keeps two levels for everything except small bills,
+ * so nothing already in flight is loosened by this change — the only bills that
+ * move are the ones under the first threshold, which drop to one.
+ */
+const DEFAULT_APPROVAL_BANDS = [{ above: 1000000, levels: 3 }, { above: 100000, levels: 2 }];
+
+function approvalLevelsFor(inv) {
+  const amount = Math.abs(Number(inv?.total_amount) || 0);
+  const minLevels = Math.max(1, Number(getParamNumber('invoice_approval_min_levels', 1)) || 1);
+
+  let bands = getParam('invoice_approval_levels', null);
+  if (typeof bands === 'string') { try { bands = JSON.parse(bands); } catch { bands = null; } }
+  if (!Array.isArray(bands) || !bands.length) bands = DEFAULT_APPROVAL_BANDS;
+
+  const sorted = bands
+    .filter((b) => Number.isFinite(Number(b?.above)) && Number.isFinite(Number(b?.levels)))
+    .sort((a, b) => Number(b.above) - Number(a.above));
+
+  for (const b of sorted) {
+    if (amount > Number(b.above)) return Math.max(minLevels, Math.round(Number(b.levels)));
+  }
+  return minLevels;
+}
+
+// Validation outcomes that mean the seller's bill and the system's own figure
+// do not agree, or that there was nothing to check it against.
+const UNRESOLVED_VALIDATION = ['PARTIAL', 'MISMATCH', 'NO_COUNTERPART'];
+
+/**
+ * Whether a found validation problem is still outstanding on this invoice.
+ *
+ * Comparing a seller's bill against the system's own figure produced a result,
+ * recorded it, and then let the invoice through approval regardless — a bill
+ * claiming 1,80,000 against a computed 1,75,000 was flagged PARTIAL and approved
+ * with the flag still on it. Approval is what makes a bill payable, so it is the
+ * point where the comparison has to mean something.
+ *
+ * Only invoices that were actually validated are gated. A null status is a bill
+ * validation never ran on — every system-generated PPA invoice — and inventing a
+ * requirement to validate those is a different decision from honouring a result
+ * that already exists. Waiving stays available and still demands a reason.
+ */
+function unresolvedValidation(inv) {
+  if (!inv?.validation_status) return null;
+  if (!UNRESOLVED_VALIDATION.includes(inv.validation_status)) return null;
+  return inv.validation_status === 'NO_COUNTERPART'
+    ? 'This seller invoice has no system counterpart to check it against. Generate the system invoice for the period, or waive the validation with a reason, before approving.'
+    : `This seller invoice does not agree with the system's own figure (${inv.validation_status}). Correct it and re-validate, or waive the validation with a recorded reason, before approving.`;
+}
+
 function makerCheckerConflict(inv, user) {
   if (!inv || !user) return null;
   if (inv.created_by_id && user.id) {
@@ -1128,15 +1189,20 @@ router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, '
     });
   }
   db.prepare(`UPDATE invoices SET status = 'UNDER_APPROVAL', updated_at = datetime('now') WHERE id = ?`).run(inv.id);
+  const levels = approvalLevelsFor(inv);
   const existingLevels = db.prepare('SELECT COUNT(*) c FROM invoice_approvals WHERE invoice_id = ?').get(inv.id).c;
   if (existingLevels === 0) {
-    db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)').run(newId('APR'), inv.id, 'PENDING');
-    db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 2, ?)').run(newId('APR'), inv.id, 'PENDING');
+    const ins = db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, ?, ?)');
+    for (let lvl = 1; lvl <= levels; lvl += 1) ins.run(newId('APR'), inv.id, lvl, 'PENDING');
   } else {
     // Reset existing approvals back to PENDING for resubmission
     db.prepare(`UPDATE invoice_approvals SET status = 'PENDING', comments = NULL, acted_at = NULL, approver_name = NULL WHERE invoice_id = ?`).run(inv.id);
   }
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SUBMIT_FOR_APPROVAL', module: 'REIA', entityType: 'invoice', entityId: inv.id });
+  logAudit({
+    req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SUBMIT_FOR_APPROVAL',
+    module: 'REIA', entityType: 'invoice', entityId: inv.id,
+    details: { total_amount: inv.total_amount, approval_levels: existingLevels === 0 ? levels : existingLevels },
+  });
   res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
 });
 
@@ -1150,6 +1216,13 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
 
   const conflict = makerCheckerConflict(inv, req.user);
   if (conflict) return res.status(403).json({ error: conflict });
+
+  // A rejection is how an unresolved mismatch gets sent back, so only clearing
+  // it is gated.
+  if (req.body?.decision !== 'REJECTED') {
+    const unresolved = unresolvedValidation(inv);
+    if (unresolved) return res.status(400).json({ error: unresolved, validation_status: inv.validation_status });
+  }
 
   const approval = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? AND level = ?').get(req.params.id, req.params.level);
   if (!approval) return res.status(404).json({ error: 'Approval step not found' });
@@ -1183,7 +1256,7 @@ router.post('/:id/submit-l2', requireRole('SELLER_L1', 'BUYER_L1', ...ROLE_GROUP
 // Approve invoice from L2 to SJVN (Checker)
 router.post('/:id/approve-l2', requireRole('SELLER_L2', 'SELLER_L3', 'BUYER_L2', 'BUYER_L3', ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const { comments } = req.body;
-  const inv = db.prepare('SELECT status, created_by, created_by_id FROM invoices WHERE id = ?').get(req.params.id);
+  const inv = db.prepare('SELECT status, created_by, created_by_id, validation_status FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status !== 'PENDING_L2') return res.status(400).json({ error: 'Only PENDING_L2 invoices can be approved by L2' });
 
@@ -1192,6 +1265,9 @@ router.post('/:id/approve-l2', requireRole('SELLER_L2', 'SELLER_L3', 'BUYER_L2',
   // second way through even once the levelled one was refusing them.
   const conflict = makerCheckerConflict(inv, req.user);
   if (conflict) return res.status(403).json({ error: conflict });
+
+  const unresolved = unresolvedValidation(inv);
+  if (unresolved) return res.status(400).json({ error: unresolved, validation_status: inv.validation_status });
 
   db.prepare("UPDATE invoices SET status = 'SUBMITTED', updated_at = datetime('now') WHERE id = ?").run(req.params.id);
   logAudit(req.traceId, 'APPROVE_L2', 'INVOICES', req.params.id, 'PENDING_L2', 'SUBMITTED', req.user);
@@ -1387,10 +1463,16 @@ function applyInvoicePayment(inv, { amount, payment_date, mode, reference, deduc
   if (inv.direction === 'SELLER_TO_SJVN' && (inv.rebate || 0) === 0) {
     // 1st priority: the contract's own structured rebate rule (what the user set).
     const contract = db.prepare('SELECT rebate_pct, rebate_days, rebate_basis FROM contracts WHERE id = ?').get(inv.contract_id);
-    let pct = contractRebatePct(contract, { billDate: inv.created_at, dueDate: inv.due_date, payDate });
+    // Measured from presentation, not from when the row was created. The rebate
+    // is for paying promptly once the bill arrives, and a bill held three weeks
+    // in draft reached the seller with its five-day window already spent — the
+    // same basis error the dispute window had, and for the same reason: nothing
+    // recorded presentation until issued_at existed.
+    const billDate = billPresentedOn(inv);
+    let pct = contractRebatePct(contract, { billDate, dueDate: inv.due_date, payDate });
     // 2nd: global tiered rebate. 3rd: flat % if paid on/before due date.
     if (pct === null) {
-      pct = tieredRebatePct(Math.max(0, daysBetween(new Date(inv.created_at), payDate)), getParam('early_payment_rebate_tiers', null));
+      pct = tieredRebatePct(Math.max(0, daysBetween(new Date(billDate), payDate)), getParam('early_payment_rebate_tiers', null));
     }
     if (pct === null) {
       pct = (inv.due_date && payDate <= new Date(inv.due_date)) ? getParamNumber('early_payment_rebate_pct', 2) : 0;
@@ -1495,6 +1577,17 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req,
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status === 'CANCELLED') {
     return res.status(400).json({ error: 'Cannot record payment against a cancelled invoice' });
+  }
+  // A bill still being drafted or approved has not been asked for, so a payment
+  // against it is a mistyped invoice id far more often than it is a real
+  // receipt. It also charged surcharge on a draft, which the invoice itself
+  // reported as zero because a DRAFT reads as settled — the record disagreed
+  // with itself the moment money touched it.
+  if (['DRAFT', 'PENDING_L2', 'SUBMITTED', 'UNDER_APPROVAL', 'REJECTED'].includes(inv.status)) {
+    return res.status(400).json({
+      error: `This invoice has not been issued yet (${inv.status}), so there is nothing to pay against it. Approve and send it first.`,
+      invoice_status: inv.status,
+    });
   }
   const updated = applyInvoicePayment(inv, req.body, req);
   logAudit({ req, user: req.user, action: 'PAYMENT_RECORDED', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: req.body });

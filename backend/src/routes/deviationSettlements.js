@@ -33,6 +33,29 @@ function computeNet(scheduled, actual, rate) {
 }
 
 /**
+ * Catch a DSM rate entered in the wrong unit.
+ *
+ * deviation_rate is ₹/MWh, while every tariff field on a contract is ₹/kWh. The
+ * two differ by a thousand and nothing on the way in said which was wanted, so
+ * entering 2.00 for a ₹2/kWh rate produced a ₹6 charge where ₹6,000 was meant —
+ * small enough to be paid without anyone querying it. NRPC DSM rates run in the
+ * hundreds to thousands of ₹/MWh, so a non-zero rate below the floor is a unit
+ * slip rather than a real price.
+ */
+function implausibleRate(rate) {
+  const r = Number(rate);
+  if (!Number.isFinite(r) || r === 0) return null;
+  const floor = getParamNumber('dsm_rate_min_per_mwh', 50);
+  if (Math.abs(r) >= floor) return null;
+  return {
+    error: `deviation_rate is ₹/MWh, not ₹/kWh — ${r} would be well below any real DSM rate. Did you mean ${r * 1000}?`,
+    given_rate_per_mwh: r,
+    likely_intended_per_mwh: r * 1000,
+    minimum_plausible_per_mwh: floor,
+  };
+}
+
+/**
  * Create a SUPPLEMENTARY invoice for a DSM row and link it back.
  * Caller must validate eligibility; runs inside its own transaction.
  */
@@ -144,6 +167,9 @@ router.post('/', requireRole(...WRITE), (req, res) => {
     .get(b.contract_id, b.period_month, Number(b.week_no), entry_type);
   if (dup) return res.status(409).json({ error: `A ${entry_type} entry for week ${b.week_no} already exists this period. Edit it or use REVISED.` });
 
+  const badRate = implausibleRate(b.deviation_rate);
+  if (badRate) return res.status(400).json(badRate);
+
   const { deviation_mwh, deviation_amount } = computeNet(b.scheduled_mwh, b.actual_mwh, b.deviation_rate);
   const id = newId('DSM');
   db.prepare(`
@@ -181,6 +207,10 @@ router.put('/:id', requireRole(...WRITE), (req, res) => {
   if (!row) return res.status(404).json({ error: 'Deviation record not found' });
   if (row.status === 'DISPATCHED') return res.status(400).json({ error: 'Dispatched deviation bills cannot be edited' });
   const b = req.body;
+  if (b.deviation_rate !== undefined) {
+    const badRate = implausibleRate(b.deviation_rate);
+    if (badRate) return res.status(400).json(badRate);
+  }
   const { deviation_mwh, deviation_amount } = computeNet(
     b.scheduled_mwh ?? row.scheduled_mwh, b.actual_mwh ?? row.actual_mwh, b.deviation_rate ?? row.deviation_rate);
   db.prepare(`

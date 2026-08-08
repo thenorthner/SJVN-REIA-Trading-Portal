@@ -6,6 +6,9 @@ import { newId } from './util.js';
 
 const DEFAULT_PARAMS = [
   { category: 'BILLING', param_key: 'trading_margin_per_mwh', param_value: '70', data_type: 'NUMBER', unit: 'INR/MWh', description: 'PSA trading margin (7 paise/unit = ₹70/MWh)' },
+  { category: 'BILLING', param_key: 'dsm_rate_min_per_mwh', param_value: '50', data_type: 'NUMBER', unit: 'INR/MWh', description: 'Lowest plausible DSM rate. deviation_rate is ₹/MWh while contract tariffs are ₹/kWh, so a value below this is treated as a unit slip and refused.' },
+  { category: 'BILLING', param_key: 'invoice_approval_levels', param_value: JSON.stringify([{ above: 1000000, levels: 3 }, { above: 100000, levels: 2 }]), data_type: 'JSON', unit: '', description: 'How many approvals an invoice needs by value: [{ above, levels }], highest band the amount clears wins. Bills at or below the lowest threshold take invoice_approval_min_levels.' },
+  { category: 'BILLING', param_key: 'invoice_approval_min_levels', param_value: '1', data_type: 'NUMBER', unit: 'levels', description: 'Approvals required on the smallest invoices — those at or below the lowest band in invoice_approval_levels.' },
   { category: 'BILLING', param_key: 'early_payment_rebate_pct', param_value: '1.5', data_type: 'PERCENT', unit: '%', description: 'Flat early-payment rebate (fallback when tiers empty). PSA Art. 6.4: 1.5% within 5 days.' },
   { category: 'BILLING', param_key: 'early_payment_rebate_tiers', param_value: JSON.stringify([{ within_days: 5, pct: 1.5 }, { within_days: 30, pct: 1 }]), data_type: 'JSON', unit: '', description: 'Tiered early-payment rebate per PSA Art. 6.4: 1.5% within 5 days, 1% within 30 days, nil thereafter (on energy charges; not on taxes/CiL/LPS/transmission).' },
   { category: 'BILLING', param_key: 'lps_annual_pct', param_value: '15', data_type: 'PERCENT', unit: '% p.a.', description: 'LPS BASE rate (first month of default) = SBI 1yr MCLR as on 1 Apr + 5% (MoP LPS Rules 2022). Update each FY.' },
