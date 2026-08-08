@@ -1,3 +1,4 @@
+import { secureLogAudit } from '../auditEngine.js';
 import jwt from 'jsonwebtoken';
 
 const DEV_SECRET = 'sjvn-dev-secret-change-me';
@@ -44,6 +45,19 @@ export function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.user) return res.status(401).json({ error: 'Authentication required' });
     if (!roles.includes(req.user.role)) {
+      // A refused action is recorded as well as a permitted one. A log of
+      // successes alone cannot show someone repeatedly reaching for something
+      // they are not entitled to, which is the pattern worth seeing.
+      try {
+        secureLogAudit(req, {
+          action: 'ACCESS_DENIED',
+          module: 'AUTH',
+          entityType: 'route',
+          entityId: `${req.method} ${req.baseUrl || ''}${req.path || ''}`,
+          reason: `Role ${req.user.role} is not authorized`,
+          details: { required_roles: roles },
+        });
+      } catch { /* refusing the request matters more than recording it */ }
       return res.status(403).json({ error: `Role ${req.user.role} is not authorized for this action` });
     }
     next();

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import db from '../../src/db/index.js';
 import { makeEntity, columnsOf, resetReia } from '../helpers/reia.js';
-import fs from 'fs';
+import fs, { readFileSync } from 'fs';
 import path from 'path';
 
 beforeEach(() => resetReia());
@@ -20,12 +20,22 @@ describe('S6 Seller letterhead handling', () => {
       .not.toBe(db.prepare('SELECT invoice_template_json t FROM entities WHERE id = ?').get(b.id).t);
   });
 
-  it('renders SJVN outgoing bills from one fixed SJVN-branded template', () => {
-    const logo = path.resolve('src/assets/sjvn_logo.jpg');
-    expect(fs.existsSync(logo), 'SJVN brand asset missing').toBe(true);
-    const pdf = fs.readFileSync('src/scripts/invoicePdf.js', 'utf-8');
-    expect(pdf).toMatch(/sjvn_logo/i);
-    // The outgoing template must not be selected from the seller's own record.
-    expect(pdf).not.toMatch(/invoice_template_json/);
+  it('renders SJVN outgoing bills on SJVN letterhead, not the seller\'s', () => {
+    const src = readFileSync('src/scripts/invoicePdf.js', 'utf-8');
+    expect(fs.existsSync(path.resolve('src/assets/sjvn_logo.jpg')), 'SJVN brand asset missing').toBe(true);
+    expect(src).toMatch(/sjvn_logo/i);
+
+    const fn = src.slice(src.indexOf('function resolveParties'), src.indexOf('function resolveParties') + 900);
+    const outgoing = fn.slice(fn.indexOf('SJVN_TO_BUYER'), fn.indexOf('} else {'));
+    expect(outgoing.length, 'could not read the outgoing branch').toBeGreaterThan(0);
+    // The outgoing branch must not take its issuer from the seller record.
+    expect(outgoing, 'an outgoing bill still takes its issuer from the seller').not.toMatch(/issuer = seller/);
+    expect(outgoing).toMatch(/SJVN_FALLBACK/);
+  });
+
+  it('still bills SJVN on the seller\'s own letterhead for an inbound bill', () => {
+    const src = readFileSync('src/scripts/invoicePdf.js', 'utf-8');
+    const inbound = src.slice(src.indexOf('} else {', src.indexOf('resolveParties')));
+    expect(inbound).toMatch(/issuer = seller/);
   });
 });

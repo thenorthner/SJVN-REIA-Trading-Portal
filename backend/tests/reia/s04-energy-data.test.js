@@ -69,14 +69,24 @@ describe('S4 Energy data accounting', () => {
   });
 
   it('reconciles two sources for the same period against each other', async () => {
-    // Seller says 1000, the SEA report says 1400 — a 40% gap between sources.
-    await upload({ data_type: 'PROVISIONAL', source: 'SELLER', energy_mwh: 1000 });
-    const sea = await upload({ data_type: 'PROVISIONAL', source: 'SEA', energy_mwh: 1400 });
-    const v = await request(app).post(`/api/energy-data/${sea.body.id}/validate`).set(auth(reia)).send({});
-    const body = JSON.stringify(v.body);
-    // Validation should say something about the OTHER source, not only about
-    // expected CUF — otherwise nothing is actually cross-checked.
-    expect(body, 'validation never compares the two sources for the period').toMatch(/SELLER|other source|cross|source mismatch/i);
+    // Both figures are plausible for the plant, but they disagree by 40% with
+    // each other — so one of them is wrong and billing either silently hides it.
+    await upload({ data_type: 'PROVISIONAL', source: 'SELLER', energy_mwh: 15840 });
+    const sea = await upload({ data_type: 'PROVISIONAL', source: 'SEA', energy_mwh: 22000 });
+    await request(app).post(`/api/energy-data/${sea.body.id}/validate`).set(auth(reia)).send({});
+    const row = db.prepare('SELECT status, deviation_notes FROM energy_data WHERE id = ?').get(sea.body.id);
+    expect(row.deviation_notes, 'validation never compares the two sources').toMatch(/Source mismatch/);
+    expect(row.deviation_notes).toMatch(/SELLER/);
+    expect(row.status).toBe('DISPUTED');
+  });
+
+  it('passes two sources that agree, and says it checked', async () => {
+    await upload({ data_type: 'PROVISIONAL', source: 'SELLER', energy_mwh: 15840 });
+    const sea = await upload({ data_type: 'PROVISIONAL', source: 'SEA', energy_mwh: 15900 });
+    await request(app).post(`/api/energy-data/${sea.body.id}/validate`).set(auth(reia)).send({});
+    const row = db.prepare('SELECT status, deviation_notes FROM energy_data WHERE id = ?').get(sea.body.id);
+    expect(row.status).toBe('VALIDATED');
+    expect(row.deviation_notes).toMatch(/Cross-checked against 1 other source/);
   });
 
   it('records which energy dataset an invoice was billed from', () => {

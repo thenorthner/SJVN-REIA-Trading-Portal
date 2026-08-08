@@ -62,7 +62,7 @@ describe('S11 Dispute management', () => {
     const r = await raise();
     await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/transition`).set(auth(reia)).send({ status: 'UNDER_REVIEW' });
     const res = await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/resolve`).set(auth(reia))
-      .send({ decision: 'RESOLVED_ACCEPTED', approved_amount: 30000, remarks: 'partly upheld' });
+      .send({ outcome: 'PARTIAL_CREDIT', accepted_amount: 30000, resolution_notes: 'partly upheld' });
     expect(res.status).toBeLessThan(400);
     const supp = db.prepare(`SELECT COUNT(*) c FROM invoices WHERE invoice_type = 'SUPPLEMENTARY'`).get().c;
     expect(supp, 'resolving a dispute did not raise a supplementary invoice').toBeGreaterThan(0);
@@ -70,7 +70,7 @@ describe('S11 Dispute management', () => {
 
   it('keeps the comment thread and event history', async () => {
     const r = await raise();
-    await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/comments`).set(auth(reia)).send({ comment: 'evidence attached' });
+    await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/comments`).set(auth(reia)).send({ body: 'evidence attached' });
     expect(db.prepare('SELECT COUNT(*) c FROM dispute_comments WHERE dispute_id = ?').get(r.body.id || latestDisputeId()).c).toBeGreaterThan(0);
     expect(db.prepare('SELECT COUNT(*) c FROM dispute_events WHERE dispute_id = ?').get(r.body.id || latestDisputeId()).c).toBeGreaterThan(0);
   });

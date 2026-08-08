@@ -19,8 +19,11 @@ const NAVY_TINT = '#f6f8fc';   // subtle zebra / totals fill
 const INK = '#1a1a1a';         // body text
 const SEAL = '#22447e';        // round seal + signature accent
 
+const SJVN_LOGO = '/src/assets/sjvn_logo.jpg';
+
 const SJVN_FALLBACK = {
   name: 'SJVN Limited',
+  logo_url: SJVN_LOGO,
   address: 'Corporate Headquarters, Shakti Sadan, Shanan, Shimla, HP, 171006',
   cin: '',
   gst_no: '',
@@ -201,12 +204,18 @@ function drawRoundSeal(doc, cx, cy, r, name, city) {
 }
 
 function resolveParties(invoice, contract, seller, buyer) {
-  let issuer = seller;
-  let recipient = buyer;
+  let issuer;
+  let recipient;
   if (invoice.direction === 'SJVN_TO_BUYER') {
-    issuer = seller || { ...SJVN_FALLBACK, name: 'SJVN Limited' };
+    // SJVN raises this bill, so it goes out on SJVN's own letterhead whichever
+    // seller's energy is behind it. Taking the issuer from the seller record put
+    // the generator's name, logo, GST and seal on a bill SJVN was raising — the
+    // buyer would receive what looks like the generator's invoice, against a GST
+    // number that is not the one raising it.
+    issuer = { ...SJVN_FALLBACK };
     recipient = buyer;
   } else {
+    // The seller bills SJVN, so this one is on the seller's own letterhead.
     issuer = seller;
     recipient = buyer || SJVN_FALLBACK;
   }

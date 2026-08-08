@@ -100,9 +100,33 @@ describe('S14 Access control', () => {
     expect(src).toMatch(/expiresIn/);
   });
 
-  it('locks an account after repeated failed logins', () => {
-    const src = readFileSync('src/routes/auth.js', 'utf-8');
-    expect(src, 'no lockout after repeated failed logins').toMatch(/lock|attempt|throttl|rate.?limit/i);
+  it('locks an account after repeated failed logins', async () => {
+    const { clearLoginAttempts } = await import('../../src/routes/auth.js');
+    const email = 'lockme@test.in';
+    clearLoginAttempts(email);
+    makeUser('BUYER', { email });
+
+    for (let i = 0; i < 5; i++) {
+      const r = await request(app).post('/api/auth/login').send({ email, password: 'wrong' });
+      expect(r.status).toBe(401);
+    }
+    // The sixth attempt is refused outright, even with the right password.
+    const locked = await request(app).post('/api/auth/login').send({ email, password: 'wrong' });
+    expect(locked.status).toBe(429);
+    expect(locked.body.error).toMatch(/Too many failed sign-in attempts/);
+    expect(locked.body.retry_after_seconds).toBeGreaterThan(0);
+    clearLoginAttempts(email);
+  });
+
+  it('logs a failed sign-in, not only a successful one', async () => {
+    const { clearLoginAttempts } = await import('../../src/routes/auth.js');
+    const email = 'audited@test.in';
+    clearLoginAttempts(email);
+    makeUser('BUYER', { email });
+    const before = db.prepare(`SELECT COUNT(*) c FROM audit_logs WHERE action = 'LOGIN_FAILED'`).get().c;
+    await request(app).post('/api/auth/login').send({ email, password: 'wrong' });
+    expect(db.prepare(`SELECT COUNT(*) c FROM audit_logs WHERE action = 'LOGIN_FAILED'`).get().c).toBeGreaterThan(before);
+    clearLoginAttempts(email);
   });
 
   it('logs an access-control violation, not only successes', async () => {

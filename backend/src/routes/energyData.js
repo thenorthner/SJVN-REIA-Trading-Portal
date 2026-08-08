@@ -128,10 +128,37 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
   const tolerance = contract.project_type === 'Hydro'
     ? getParamNumber('hydro_validate_tolerance_pct', 80)
     : getParamNumber('energy_validate_tolerance_pct', 30);
-  const flagged = deviationPct > tolerance;
-  
+  let flagged = deviationPct > tolerance;
+  let note = `Deviation ${deviationPct.toFixed(1)}% vs expected ${expected.toFixed(0)} MWh (${(baseCuf * 100).toFixed(0)}% CUF) - Tolerance: ${tolerance}%`;
+
+  // Cross-source check. A plausible total can still be wrong: if the seller's
+  // own figure and the SEA/meter figure for the same period disagree, one of
+  // them is, and billing either without saying so hides it. Sources close enough
+  // to each other pass; a wider gap is flagged for someone to look at.
+  const others = db.prepare(`
+    SELECT source, energy_mwh FROM energy_data
+    WHERE contract_id = ? AND period_month = ? AND id != ? AND source IS NOT NULL AND source != ?
+    ORDER BY created_at DESC
+  `).all(row.contract_id, row.period_month, row.id, row.source || '');
+
+  const crossTolerance = getParamNumber('energy_cross_source_tolerance_pct', 2);
+  const disagreeing = [];
+  for (const other of others) {
+    if (!(other.energy_mwh > 0)) continue;
+    const gapPct = Math.abs(row.energy_mwh - other.energy_mwh) / other.energy_mwh * 100;
+    if (gapPct > crossTolerance) {
+      disagreeing.push(`${other.source} ${other.energy_mwh} MWh (${gapPct.toFixed(1)}% apart)`);
+    }
+  }
+  if (disagreeing.length) {
+    flagged = true;
+    note += ` | Source mismatch: this ${row.source} figure of ${row.energy_mwh} MWh disagrees with ${disagreeing.join('; ')} — tolerance ${crossTolerance}%`;
+  } else if (others.length) {
+    note += ` | Cross-checked against ${others.length} other source(s), all within ${crossTolerance}%`;
+  }
+
   db.prepare(`UPDATE energy_data SET status = ?, deviation_notes = ?, updated_at = datetime('now') WHERE id = ?`)
-    .run(flagged ? 'DISPUTED' : 'VALIDATED', `Deviation ${deviationPct.toFixed(1)}% vs expected ${expected.toFixed(0)} MWh (${(baseCuf * 100).toFixed(0)}% CUF) - Tolerance: ${tolerance}%`, row.id);
+    .run(flagged ? 'DISPUTED' : 'VALIDATED', note, row.id);
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'VALIDATE', module: 'REIA', entityType: 'energy_data', entityId: row.id, details: { deviationPct } });
   res.json(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id));
 });

@@ -265,6 +265,13 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
   }
 
   const merged = { ...existing, ...updates };
+  // An approved counterparty is already trading, so a change to it does not go
+  // live on the strength of one person's edit — it drops the record back to
+  // PENDING and is re-approved. A record still pending stays pending.
+  if (existing.status === 'APPROVED' && Object.keys(updates).length) {
+    merged.status = 'PENDING';
+  }
+
   if (isHighRisk && (updates.bank_details || updates.account_no || updates.ifsc_code)) {
     merged.is_penny_drop_verified = 0;
   }
@@ -278,6 +285,7 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
       logo_url=@logo_url, corporate_email=@corporate_email, corporate_phone=@corporate_phone, corporate_website=@corporate_website, tan_no=@tan_no,
       signatory_name=@signatory_name, signatory_designation=@signatory_designation,
       address=@address, bank_name=@bank_name, account_no=@account_no, ifsc_code=@ifsc_code, branch_address=@branch_address,
+      status=@status,
       updated_at=datetime('now')
     WHERE id=@id
   `).run(merged);
