@@ -317,12 +317,16 @@ router.post('/overrides', requireRole(...REIA_WRITE, 'MANAGEMENT', 'SJVN_ADMIN')
 });
 
 router.post('/invocations', requireRole(...REIA_WRITE), (req, res) => {
-  const { contract_id, amount, invoice_ids } = req.body;
+  const { contract_id, amount, invoice_ids, side } = req.body;
   if (!contract_id) return res.status(400).json({ error: 'contract_id required' });
+  const defaultingSide = String(side || 'BUYER').toUpperCase();
+  if (!['BUYER', 'SELLER'].includes(defaultingSide)) {
+    return res.status(400).json({ error: "side must be BUYER or SELLER" });
+  }
   const elig = evaluateInvocationEligibility(contract_id);
   const amt = amount != null ? Number(amount) : elig.amount;
   if (!(amt > 0)) return res.status(400).json({ error: 'No eligible overdue amount to invoke' });
-  const inv = invokeWaterfall(contract_id, amt, invoice_ids || elig.overdue_invoices, req.user);
+  const inv = invokeWaterfall(contract_id, amt, invoice_ids || elig.overdue_invoices, req.user, defaultingSide);
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'INVOKE_WATERFALL', module: 'REIA', entityType: 'security_invocation', entityId: inv.id, details: { amount: amt } });
   res.status(201).json(inv);
 });

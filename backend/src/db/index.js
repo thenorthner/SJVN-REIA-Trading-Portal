@@ -1388,6 +1388,28 @@ function migrateEntityShortCode() {
   if (!cols.includes('short_code')) db.exec('ALTER TABLE entities ADD COLUMN short_code TEXT;');
 }
 
+/**
+ * Correct the security waterfall order. It was seeded with pooled funds ahead of
+ * dedicated instruments, so a buyer's default drew down the shared corpus before
+ * that buyer's own letter of credit — spending cover that protects every other
+ * contract. Rows still on the old defaults are moved to the new ones; anything
+ * deliberately set to something else is left alone.
+ */
+function migrateWaterfallPriority() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (!tables.includes('payment_security')) return;
+  const OLD = { CORPUS_FUND: 10, PAYMENT_SECURITY_FUND: 20, LC: 30, BANK_GUARANTEE: 40 };
+  const NEW = { LC: 10, BANK_GUARANTEE: 20, PAYMENT_SECURITY_FUND: 30, CORPUS_FUND: 40 };
+  const stmt = db.prepare('UPDATE payment_security SET waterfall_priority = ? WHERE mechanism_type = ? AND waterfall_priority = ?');
+  for (const [type, oldValue] of Object.entries(OLD)) stmt.run(NEW[type], type, oldValue);
+}
+
+try {
+  migrateWaterfallPriority();
+} catch (e) {
+  console.error('Waterfall priority migration failed:', e.message);
+}
+
 try {
   migrateEntityShortCode();
 } catch (e) {

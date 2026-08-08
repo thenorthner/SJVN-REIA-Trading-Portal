@@ -9,7 +9,7 @@ beforeEach(() => { resetReia(); reia = tokenFor('REIA_USER'); contract = makeCon
 
 const mkLc = (over = {}) => request(app).post('/api/payment-security').set(auth(reia)).send({
   contract_id: contract.id, mechanism_type: 'LC', limit_amount: 1000000,
-  issuing_bank: 'SBI', valid_from: '2026-04-01', valid_until: '2027-03-31', ...over,
+  issuing_bank: 'SBI', validity_start: '2026-04-01', validity_end: '2027-03-31', ...over,
 });
 
 describe('S8 Payment security', () => {
@@ -30,7 +30,7 @@ describe('S8 Payment security', () => {
   });
 
   it('raises expiry alerts on a threshold cascade', async () => {
-    await mkLc({ valid_until: new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10) });
+    await mkLc({ validity_end: new Date(Date.now() + 10 * 864e5).toISOString().slice(0, 10) });
     const r = await request(app).post('/api/payment-security/alerts/run').set(auth(reia)).send({});
     expect(r.status).toBeLessThan(400);
     expect(db.prepare('SELECT COUNT(*) c FROM security_alerts').get().c, 'no expiry alert raised for an LC 10 days out').toBeGreaterThan(0);
@@ -38,17 +38,44 @@ describe('S8 Payment security', () => {
 
   it('draws the buyer LC before touching a pooled fund', async () => {
     const lc = await mkLc({ limit_amount: 100000 });
-    await request(app).post('/api/payment-security').set(auth(reia)).send({
+    const pool = await request(app).post('/api/payment-security').set(auth(reia)).send({
       contract_id: contract.id, mechanism_type: 'CORPUS_FUND', limit_amount: 5000000,
-      issuing_bank: 'Pool', valid_from: '2026-04-01', valid_until: '2027-03-31',
+      issuing_bank: 'Pool', validity_start: '2026-04-01', validity_end: '2027-03-31',
     });
-    const r = await request(app).post('/api/invoices/waterfall-payment').set(auth(reia))
-      .send({ contract_id: contract.id, default_amount: 300000 });
-    expect(r.status, 'no waterfall endpoint drew security in sequence').toBeLessThan(400);
-    if (r.status < 400) {
-      const lcRow = db.prepare('SELECT utilized_amount FROM payment_security WHERE id = ?').get(lc.body.id);
-      expect(lcRow.utilized_amount, 'the specific LC was not exhausted before the pooled fund').toBe(100000);
-    }
+
+    const r = await request(app).post('/api/payment-security/invocations').set(auth(reia))
+      .send({ contract_id: contract.id, amount: 300000, side: 'BUYER' });
+    expect(r.status).toBe(201);
+
+    // The buyer's own LC is exhausted first; only the excess reaches the pool.
+    const lcRow = db.prepare('SELECT utilized_amount FROM payment_security WHERE id = ?').get(lc.body.id);
+    const poolRow = db.prepare('SELECT utilized_amount FROM payment_security WHERE id = ?').get(pool.body.id);
+    expect(lcRow.utilized_amount, 'the dedicated LC was not exhausted first').toBe(100000);
+    expect(poolRow.utilized_amount, 'the pooled fund did not absorb only the excess').toBe(200000);
+  });
+
+  it('does not reach for a seller guarantee to cover a buyer default', async () => {
+    await request(app).post('/api/payment-security').set(auth(reia)).send({
+      contract_id: contract.id, mechanism_type: 'BANK_GUARANTEE', limit_amount: 5000000,
+      issuing_bank: 'SBI', validity_start: '2026-04-01', validity_end: '2027-03-31',
+    });
+    const bg = db.prepare(`SELECT id FROM payment_security WHERE mechanism_type = 'BANK_GUARANTEE'`).get();
+
+    const r = await request(app).post('/api/payment-security/invocations').set(auth(reia))
+      .send({ contract_id: contract.id, amount: 100000, side: 'BUYER' });
+    expect(r.status).toBeLessThan(500);
+    // A guarantee answers for the seller's performance, not the buyer's payment.
+    expect(db.prepare('SELECT utilized_amount FROM payment_security WHERE id = ?').get(bg.id).utilized_amount)
+      .toBe(0);
+  });
+
+  it('reports the shortfall when security does not cover the default', async () => {
+    await mkLc({ limit_amount: 50000 });
+    const r = await request(app).post('/api/payment-security/invocations').set(auth(reia))
+      .send({ contract_id: contract.id, amount: 200000, side: 'BUYER' });
+    expect(r.status).toBe(201);
+    const letter = JSON.parse(r.body.demand_letter_json || '{}');
+    expect(letter.shortfall_uncovered, 'an uncovered default reported no shortfall').toBe(150000);
   });
 
   it('computes a coverage ratio and flags it below 1', async () => {

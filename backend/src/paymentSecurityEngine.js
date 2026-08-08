@@ -7,6 +7,7 @@ import {
   ALERT_CASCADE_DAYS,
   ACTIVE_STATUSES,
   WATERFALL_DEFAULTS,
+  INSTRUMENTS_BY_SIDE,
   genInstrumentNo,
   genInvocationNo,
   refreshAvailable,
@@ -235,13 +236,17 @@ export function evaluateInvocationEligibility(contractId) {
   };
 }
 
-export function invokeWaterfall(contractId, amount, invoiceIds = [], user = { name: 'system' }) {
+export function invokeWaterfall(contractId, amount, invoiceIds = [], user = { name: 'system' }, side = 'BUYER') {
+  // Only the instruments that answer for this side's default, drawn dedicated
+  // first and pooled last.
+  const eligibleTypes = INSTRUMENTS_BY_SIDE[side] || INSTRUMENTS_BY_SIDE.BUYER;
   const instruments = db.prepare(`
     SELECT * FROM payment_security
     WHERE contract_id = ? AND status IN (${ACTIVE_STATUSES.map(() => '?').join(',')})
       AND available_amount > 0
+      AND mechanism_type IN (${eligibleTypes.map(() => '?').join(',')})
     ORDER BY waterfall_priority ASC, created_at ASC
-  `).all(contractId, ...ACTIVE_STATUSES);
+  `).all(contractId, ...ACTIVE_STATUSES, ...eligibleTypes);
 
   let remaining = amount;
   const used = [];
