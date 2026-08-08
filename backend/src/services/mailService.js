@@ -117,21 +117,21 @@ export async function sendMail(opts) {
 export function formatInvoiceEmail({ invoice, contract, recipientName, portalHint }) {
   const amt = Number(invoice.total_amount || 0).toLocaleString('en-IN');
   const due = invoice.due_date || 'as per payment terms';
-  const subject = `Invoice ${invoice.invoice_no} ? ${contract?.contract_no || ''} ? ?${amt}`;
+  const subject = `Invoice ${invoice.invoice_no} — ${contract?.contract_no || ''} — ₹${amt}`;
   const text = [
     `Dear ${recipientName || 'Sir/Madam'},`,
     '',
     `Please find attached invoice ${invoice.invoice_no} for contract ${contract?.contract_no || 'N/A'}.`,
     `Billing period: ${invoice.billing_period}`,
     `Invoice type: ${invoice.invoice_type}`,
-    `Amount payable: ?${amt}`,
+    `Amount payable: ₹${amt}`,
     `Due date: ${due}`,
     '',
     portalHint || 'You can also view and download this invoice from the SJVN Energy Platform portal.',
     '',
     'This is a system-generated email from the SJVN RE Commercial Billing Platform.',
     'Regards,',
-    'SJVN Limited ? Commercial & Billing',
+    'SJVN Limited — Commercial & Billing',
   ].join('\n');
 
   const html = `
@@ -140,11 +140,11 @@ export function formatInvoiceEmail({ invoice, contract, recipientName, portalHin
     <ul>
       <li>Billing period: <strong>${invoice.billing_period}</strong></li>
       <li>Invoice type: <strong>${invoice.invoice_type}</strong></li>
-      <li>Amount payable: <strong>?${amt}</strong></li>
+      <li>Amount payable: <strong>₹${amt}</strong></li>
       <li>Due date: <strong>${due}</strong></li>
     </ul>
     <p>${portalHint || 'You can also view and download this invoice from the SJVN Energy Platform portal.'}</p>
-    <p style="color:#64748b;font-size:12px">System-generated email ? SJVN RE Commercial Billing Platform.</p>
+    <p style="color:#64748b;font-size:12px">System-generated email — SJVN RE Commercial Billing Platform.</p>
   `;
 
   return { subject, text, html };

@@ -109,3 +109,35 @@ describe('S6 The printed bill adds up to what it asks for', () => {
     expect(partBItems).toHaveLength(0);
   });
 });
+
+describe('S6 The invoice email says what it means', () => {
+  // The template held literal '?' bytes where the rupee sign and em-dashes
+  // belonged — a lossy encoding conversion at some point in its history. Every
+  // invoice mail went out reading "Amount payable: ?2,00,000", which is both
+  // unreadable and, on a demand for money, ambiguous about the currency. The
+  // catcher run found it: the '?' was in the raw message, not an artefact of
+  // decoding it.
+  const src = readFileSync('src/services/mailService.js', 'utf-8');
+
+  it('quotes the amount in rupees', () => {
+    expect(src).toMatch(/Amount payable: ₹\$\{amt\}/);
+    expect(src, 'the plain-text body still has a bare ? where the currency goes').not.toMatch(/Amount payable: \?\$/);
+  });
+
+  it('quotes the amount in rupees in the HTML part too', () => {
+    expect(src).toMatch(/Amount payable: <strong>₹\$\{amt\}/);
+  });
+
+  it('carries the amount and the currency in the subject', () => {
+    const line = src.split('\n').find((l) => l.includes('const subject'));
+    expect(line).toContain('₹${amt}');
+    expect(line, 'the subject still separates its parts with a bare ?').not.toMatch(/\} \? \$\{/);
+  });
+
+  it('has no stray replacement characters left in the templates', () => {
+    // Anything of the form "? " immediately before an interpolation or at a
+    // sentence join is the signature of the same lossy conversion.
+    const suspect = src.split('\n').filter((l) => /(?:^|[^?\w])\?(?=\$\{|\s*(?:SJVN|Commercial))/.test(l));
+    expect(suspect, `still mangled: ${suspect.join(' | ')}`).toHaveLength(0);
+  });
+});
