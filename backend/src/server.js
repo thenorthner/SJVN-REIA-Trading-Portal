@@ -34,6 +34,7 @@ import notificationsRoutes from './routes/notifications.js';
 import { retryFailedDeliveries } from './services/notificationService.js';
 import alertsRoutes from './routes/alerts.js';
 import auditLogsRoutes from './routes/auditLogs.js';
+import sandboxRoutes from './routes/sandbox.js';
 import preTradeRoutes from './routes/preTrade.js';
 import communicationsRoutes from './routes/communications.js';
 import bankTransactionsRoutes from './routes/bankTransactions.js';
@@ -170,6 +171,8 @@ app.use('/api/buyer-dashboard', buyerDashboardRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/alerts', alertsRoutes);
 app.use('/api/audit-logs', auditLogsRoutes);
+// Date-shifting for tests. The router 404s itself unless SJVN_SANDBOX is set.
+app.use('/api/sandbox', sandboxRoutes);
 
 // ── Built front end ───────────────────────────────────────────────────
 // One process serves both the API and the UI, so the platform is reachable on
