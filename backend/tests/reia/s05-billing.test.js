@@ -149,6 +149,26 @@ describe('S5 Billing engine', () => {
     expect(row.settlement_amount).toBe(0);
   });
 
+  it('stops reporting settled energy as available to draw', async () => {
+    // Once a cycle is settled the undrawn energy has been paid out in cash. If the
+    // position still counts it as available, the screen offers a draw that the
+    // engine will always refuse.
+    await request(app).post('/api/energy-banking').set(auth(reia)).send({
+      contract_id: contract.id, cycle: 'FY2026-27', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
+    });
+    await request(app).post('/api/energy-banking/settle').set(auth(reia)).send({ as_of: '2027-04-01' });
+
+    const pos = await request(app).get(`/api/energy-banking/${contract.id}`).set(auth(reia));
+    const cycle = pos.body.find((c) => c.cycle === 'FY2026-27');
+    expect(cycle.available_mwh).toBe(0);
+    expect(cycle.settled_mwh).toBe(100);
+    expect(cycle.banked_mwh).toBe(100);   // still shown as banked, for the history
+
+    const draw = await request(app).post('/api/energy-banking/draw').set(auth(reia))
+      .send({ contract_id: contract.id, cycle: 'FY2026-27', draw_mwh: 10 });
+    expect(draw.status).toBe(400);
+  });
+
   it('adds a DSM charge for a scheduled-versus-actual deviation', () => {
     expect(hasTable('deviation_settlements')).toBe(true);
     expect(columnsOf('deviation_settlements')).toEqual(expect.arrayContaining(['contract_id']));

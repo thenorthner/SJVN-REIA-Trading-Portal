@@ -22,6 +22,7 @@ const Reconciliation = lazy(() => import('./pages/reia/Reconciliation.jsx'));
 const Reports = lazy(() => import('./pages/reia/Reports.jsx'));
 const DeviationSettlements = lazy(() => import('./pages/reia/DeviationSettlements.jsx'));
 const PowerDiversion = lazy(() => import('./pages/reia/PowerDiversion.jsx'));
+const EnergyBanking = lazy(() => import('./pages/reia/EnergyBanking.jsx'));
 
 const TradingDashboard = lazy(() => import('./pages/trading/TradingDashboard.jsx'));
 const TradingClients = lazy(() => import('./pages/trading/TradingClients.jsx'));
@@ -156,6 +157,7 @@ export default function App() {
         <Route path="reia/reconciliation" element={<ProtectedRoute roles={REIA_ROLES}><Reconciliation /></ProtectedRoute>} />
         <Route path="reia/deviation" element={<ProtectedRoute roles={REIA_ROLES}><DeviationSettlements /></ProtectedRoute>} />
         <Route path="reia/power-diversion" element={<ProtectedRoute roles={REIA_ROLES}><PowerDiversion /></ProtectedRoute>} />
+        <Route path="reia/energy-banking" element={<ProtectedRoute roles={REIA_ROLES}><EnergyBanking /></ProtectedRoute>} />
         <Route path="reia/reports" element={<ProtectedRoute roles={REIA_ROLES}><Reports /></ProtectedRoute>} />
 
         {/* Seller Portal */}

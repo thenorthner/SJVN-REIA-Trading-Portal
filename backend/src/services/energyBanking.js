@@ -107,13 +107,20 @@ export function settleExpiredBanking(asOf) {
   return { checked: expired.length, settled: settled.length, as_of: today, items: settled };
 }
 
-/** What is still banked for a contract, by cycle. */
+/**
+ * What is still banked for a contract, by cycle.
+ *
+ * Only energy on an open row is still drawable. Once a cycle has been settled or
+ * expired the undrawn energy has been paid out in cash, and counting it as
+ * available would offer a draw that drawBanked will always refuse.
+ */
 export function bankedPosition(contractId) {
   return db.prepare(`
     SELECT cycle, cycle_ends_on,
            ROUND(SUM(banked_mwh), 3) AS banked_mwh,
            ROUND(SUM(drawn_mwh), 3) AS drawn_mwh,
-           ROUND(SUM(banked_mwh - drawn_mwh), 3) AS available_mwh,
+           ROUND(SUM(CASE WHEN status IN ('OPEN','DRAWN') THEN banked_mwh - drawn_mwh ELSE 0 END), 3) AS available_mwh,
+           ROUND(SUM(settled_mwh), 3) AS settled_mwh,
            ROUND(SUM(settlement_amount), 2) AS settled_amount
     FROM energy_banking WHERE contract_id = ?
     GROUP BY cycle, cycle_ends_on ORDER BY cycle_ends_on

@@ -121,6 +121,12 @@ export const api = {
     buyerOutstanding: (buyer_id) => g('/invoices/buyer-outstanding', { buyer_id }),
     waterfallPayment: (body) => p('/invoices/waterfall-payment', body),
   },
+  energyBanking: {
+    position: (contractId) => g(`/energy-banking/${contractId}`),
+    bank: (body) => p('/energy-banking', body),
+    draw: (body) => p('/energy-banking/draw', body),
+    settle: (body) => p('/energy-banking/settle', body),
+  },
   powerDiversion: {
     list: (params) => g('/power-diversion', params),
     summary: () => g('/power-diversion/summary'),

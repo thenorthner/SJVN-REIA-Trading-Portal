@@ -30,6 +30,7 @@ const NAV_INTERNAL = [
       { to: '/reia/disputes', label: 'Dispute Management' },
       { to: '/reia/payment-security', label: 'Payment Security' },
       { to: '/reia/power-diversion', label: 'Power Diversion' },
+      { to: '/reia/energy-banking', label: 'Energy Banking' },
       // Raising a CERC two-part tariff bill is a REIA job, but the page lives in
       // the Power Trading section — without this entry the only roles allowed to
       // create these bills had no way to reach it. Scoped to the REIA-only roles
