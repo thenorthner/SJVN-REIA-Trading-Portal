@@ -4,6 +4,7 @@ import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../midd
 import { newId, logAudit, humanizePaymentTerms, humanizeRebateRule, humanizeLpsRule } from '../util.js';
 import { syncRequirementsFromContract, createInstrumentsFromRequirements } from '../paymentSecurityEngine.js';
 import { allocationsInForce } from '../services/allocations.js';
+import { contractVisibleTo } from '../services/counterpartyScope.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -103,6 +104,9 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
+  // A counterparty reads only its own contracts — tariff and tenure are the
+  // commercially sensitive part of this payload.
+  if (!contractVisibleTo(req.user, contract)) return res.status(404).json({ error: 'Contract not found' });
   const versions = db.prepare('SELECT id, contract_no, version, status, created_at FROM contracts WHERE id = ? OR parent_contract_id = ? ORDER BY version').all(req.params.id, req.params.id);
   const amendments = db.prepare('SELECT * FROM contract_amendments WHERE contract_id = ? ORDER BY version DESC').all(req.params.id);
   res.json({ ...fetchContractRelations(contract), versions, amendments });

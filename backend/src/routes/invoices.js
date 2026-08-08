@@ -10,6 +10,7 @@ import { resolveBetaRow } from '../services/betaFactor.js';
 import { sendSms } from '../services/smsService.js';
 import { channelsFor, dispatch } from '../services/notificationService.js';
 import { allocationsInForce } from '../services/allocations.js';
+import { contractVisibleTo } from '../services/counterpartyScope.js';
 import { computeCercHydroBill } from '../services/cercHydroBilling.js';
 import { computeCufPenalty } from '../services/cufPenalty.js';
 import {
@@ -189,6 +190,13 @@ router.get('/buyer-outstanding', requireRole(...ROLE_GROUPS.REIA_ALL, ...ROLE_GR
 router.get('/:id', (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+
+  // Same scoping the list has always applied. Without it the id in the URL was
+  // the only thing keeping a counterparty out of someone else's bill — and the
+  // payload carries the totals, payments and open disputes with it.
+  const contract = db.prepare('SELECT seller_id, buyer_id FROM contracts WHERE id = ?').get(inv.contract_id);
+  if (!contractVisibleTo(req.user, contract)) return res.status(404).json({ error: 'Invoice not found' });
+
   const approvals = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? ORDER BY level').all(req.params.id);
   const payments = db.prepare('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date').all(req.params.id);
   const disputes = db.prepare('SELECT * FROM disputes WHERE invoice_id = ? ORDER BY created_at DESC').all(req.params.id);

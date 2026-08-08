@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../../src/server.js';
 import db from '../../src/db/index.js';
-import { tokenFor, auth, makeContract, columnsOf, hasTable, resetReia } from '../helpers/reia.js';
+import { tokenFor, auth, makeContract, makeEntity, makeInvoice, columnsOf, hasTable, resetReia } from '../helpers/reia.js';
 
 let reia, contract;
 beforeEach(() => { resetReia(); reia = tokenFor('REIA_USER'); contract = makeContract({ status: 'ACTIVE' }); });
@@ -107,5 +107,57 @@ describe('S8 Payment security', () => {
     const released = db.prepare('SELECT status FROM security_releases WHERE id = ?').get('REL-1').status;
     expect(r.status, 'security released while an invoice was still unsettled').toBe(400);
     expect(released).toBe('PENDING');
+  });
+});
+
+describe('S8 Counterparty read scoping', () => {
+  // The list endpoints always scoped by the caller's own entity, but the detail
+  // routes did not: an id in the URL was enough for any counterparty login to
+  // read another party's invoice, contract or entity record. These pin the rule
+  // on both sides — an outsider is refused, the actual party is not.
+  let ourContract, ourInvoice, buyerToken, outsiderToken, outsider;
+
+  beforeEach(() => {
+    ourContract = makeContract({ status: 'ACTIVE' });
+    ourInvoice = makeInvoice({ contract_id: ourContract.id });
+    buyerToken = tokenFor('BUYER', { linked_entity_id: ourContract.buyer_id });
+    outsider = makeEntity('BUYER');
+    outsiderToken = tokenFor('BUYER', { linked_entity_id: outsider.id });
+  });
+
+  it('hides an invoice from a buyer who is not party to it', async () => {
+    const r = await request(app).get(`/api/invoices/${ourInvoice.id}`).set(auth(outsiderToken));
+    expect(r.status, "an unrelated buyer read another party's invoice").toBe(404);
+    expect(JSON.stringify(r.body)).not.toMatch(/total_amount/);
+  });
+
+  it('hides a contract from a buyer who is not party to it', async () => {
+    const r = await request(app).get(`/api/contracts/${ourContract.id}`).set(auth(outsiderToken));
+    expect(r.status, "an unrelated buyer read another party's contract and tariff").toBe(404);
+  });
+
+  it("hides another party's entity record, PAN and bank details", async () => {
+    const r = await request(app).get(`/api/entities/${ourContract.seller_id}`).set(auth(outsiderToken));
+    expect(r.status, "an unrelated buyer read another party's entity record").toBe(404);
+  });
+
+  it('returns only its own row from the entity register', async () => {
+    const r = await request(app).get('/api/entities').set(auth(outsiderToken));
+    expect(r.status).toBe(200);
+    expect(r.body.map((e) => e.id), 'entity register leaked other parties').toEqual([outsider.id]);
+  });
+
+  it('still lets the actual party read its own invoice, contract and entity', async () => {
+    const inv = await request(app).get(`/api/invoices/${ourInvoice.id}`).set(auth(buyerToken));
+    const con = await request(app).get(`/api/contracts/${ourContract.id}`).set(auth(buyerToken));
+    const ent = await request(app).get(`/api/entities/${ourContract.buyer_id}`).set(auth(buyerToken));
+    expect(inv.status, 'scoping locked the real counterparty out of its own invoice').toBe(200);
+    expect(con.status).toBe(200);
+    expect(ent.status).toBe(200);
+  });
+
+  it('leaves internal SJVN roles unrestricted', async () => {
+    const r = await request(app).get(`/api/invoices/${ourInvoice.id}`).set(auth(reia));
+    expect(r.status).toBe(200);
   });
 });

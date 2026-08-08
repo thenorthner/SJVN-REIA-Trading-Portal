@@ -11,6 +11,7 @@ import { seedEntityAliases, resolveEntityByName, addAlias } from '../services/en
 import multer from 'multer';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { entityVisibleTo, isCounterparty } from '../services/counterpartyScope.js';
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
@@ -112,6 +113,13 @@ router.get('/', (req, res) => {
   const { entity_type, status, parent_entity_id } = req.query;
   let sql = 'SELECT * FROM entities WHERE 1=1';
   const params = [];
+  // The contract and invoice lists have always scoped to the caller's own
+  // entity; this one did not, so any counterparty login could read the whole
+  // register — every other party's PAN, GST and bank details included.
+  if (isCounterparty(req.user)) {
+    sql += ' AND id = ?';
+    params.push(req.user.linked_entity_id ?? '');
+  }
   if (entity_type) { sql += ' AND entity_type = ?'; params.push(entity_type); }
   if (status) { sql += ' AND status = ?'; params.push(status); }
   if (parent_entity_id !== undefined) {
@@ -126,6 +134,9 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  // A counterparty reads its own record only. This payload carries PAN, GST,
+  // bank details and the regulatory file — none of it another party's business.
+  if (!entityVisibleTo(req.user, entity.id)) return res.status(404).json({ error: 'Entity not found' });
   const history = db.prepare('SELECT * FROM entity_audit WHERE entity_id = ? ORDER BY created_at DESC').all(req.params.id);
   res.json({ ...fetchEntityRelations(entity), history });
 });
