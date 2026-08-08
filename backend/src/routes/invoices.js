@@ -305,14 +305,44 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     }
   }
 
-  // If PSA, resolve parent PPA via allocations
+  // If PSA, resolve parent PPA via the allocation in force for this period.
+  //
+  // This used to select on psa_id alone and take whichever row came back first,
+  // with no date filter and no ordering — so allocations were written with
+  // effective dates the billing never read. A re-split could not change a bill,
+  // and a PSA whose share had ended went on being billed it.
+  //
+  // The allocation in force on the first day of the period governs the whole
+  // period. A change dated mid-month therefore applies from the following
+  // month's bill: monthly billing has one allocation per bill, and pro-rating a
+  // month across two splits is a pricing decision nobody has made.
   let ppa_id = contract_id;
   let alloc_percent = 100;
   if (contract.contract_type === 'PSA') {
-    const alloc = db.prepare('SELECT ppa_id, allocation_percent FROM contract_allocations WHERE psa_id = ?').get(contract_id);
+    const periodStart = `${period_month}-01`;
+    const alloc = db.prepare(`
+      SELECT ppa_id, allocation_percent FROM contract_allocations
+      WHERE psa_id = ?
+        AND COALESCE(effective_from, '0000-01-01') <= ?
+        AND COALESCE(effective_to, '9999-12-31') >= ?
+      ORDER BY COALESCE(effective_from, '0000-01-01') DESC
+      LIMIT 1
+    `).get(contract_id, periodStart, periodStart);
+
     if (alloc) {
       ppa_id = alloc.ppa_id;
       alloc_percent = alloc.allocation_percent;
+    } else {
+      // Allocated at some point but not for this period: the share has ended or
+      // has not started. Refusing beats falling back to the PSA's own contract
+      // id, which produced "no energy data found" and read like missing data.
+      const any = db.prepare('SELECT COUNT(*) c FROM contract_allocations WHERE psa_id = ?').get(contract_id).c;
+      if (any > 0) {
+        throw refuse(400, {
+          error: `This PSA holds no allocation for ${period_month} — its share of the PPA had ended or had not yet started.`,
+          period_month,
+        });
+      }
     }
   }
 

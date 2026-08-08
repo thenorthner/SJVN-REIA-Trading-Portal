@@ -351,13 +351,17 @@ router.post('/:id/allocations', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, re
 
   const percent = Number(allocation_percent);
   if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
-    return res.status(400).json({ error: 'allocation_percent must be between 0 and 100' });
+    // Said "between 0 and 100" while refusing 0, which read as though a PSA
+    // could be ended by allocating it nothing. Ending one is /allocations/revise.
+    return res.status(400).json({
+      error: 'allocation_percent must be greater than 0 and at most 100. To end a PSA’s share, use POST /allocations/revise.',
+    });
   }
 
   // A PPA cannot be allocated beyond itself. Only the allocations whose validity
   // overlaps this one count towards the limit — a share released when one PSA
   // ends is available to re-allocate from that date on.
-  const from = effective_from || contract?.tenure_start || '0000-01-01';
+  const from = effective_from || ppa?.tenure_start || '0000-01-01';
   const to = effective_to || '9999-12-31';
   const overlapping = db.prepare(`
     SELECT COALESCE(SUM(allocation_percent), 0) AS total FROM contract_allocations
@@ -373,13 +377,104 @@ router.post('/:id/allocations', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, re
     });
   }
 
+  // Bound to `from`, not the raw request value: the column is NOT NULL, so
+  // omitting the optional effective_from inserted a null and failed. The
+  // fallback to the PPA's own tenure_start was computed for the overlap check
+  // above and then not used for the row that check was guarding.
   db.prepare(`
     INSERT INTO contract_allocations (id, ppa_id, psa_id, allocation_percent, effective_from, effective_to)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(newId('CAL'), ppa.id, psa_id, percent, effective_from, effective_to ?? null);
+  `).run(newId('CAL'), ppa.id, psa_id, percent, from, effective_to ?? null);
   
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CREATE_ALLOCATION', module: 'REIA', entityType: 'contract', entityId: ppa.id, details: { psa_id, allocation_percent } });
   res.status(201).json({ success: true });
+});
+
+/**
+ * Re-split a PPA from a date: the whole new allocation, at once.
+ *
+ * A buyer leaving mid-term and the others taking up its share is one business
+ * event, and there was no way to record it. Allocations could only be created,
+ * never ended or amended, and the ones already there ran open-ended — so a new
+ * row for the remaining buyers was refused for taking the PPA past 100%, and the
+ * old row could not be closed to make room. A contract that ended in July went
+ * on being billed its 20% indefinitely.
+ *
+ * Taking the complete new split rather than one row at a time is what makes it
+ * safe: closing the old rows and opening the new ones happen together, so the
+ * PPA is never briefly over- or under-allocated, and a PSA left out of the list
+ * is one whose share ends here — which is how a departing buyer is recorded,
+ * rather than by allocating it nothing.
+ */
+router.post('/:id/allocations/revise', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const ppa = db.prepare(`SELECT * FROM contracts WHERE id = ? AND contract_type = 'PPA'`).get(req.params.id);
+  if (!ppa) return res.status(404).json({ error: 'PPA not found' });
+
+  const { effective_from, reason } = req.body || {};
+  const rows = Array.isArray(req.body?.allocations) ? req.body.allocations : null;
+  if (!effective_from || !/^\d{4}-\d{2}-\d{2}$/.test(String(effective_from))) {
+    return res.status(400).json({ error: 'effective_from (YYYY-MM-DD) is required — a re-split has to take effect on a date' });
+  }
+  if (!rows) {
+    return res.status(400).json({ error: 'allocations must be an array of { psa_id, allocation_percent } — the complete split from this date, not just what changed' });
+  }
+
+  let total = 0;
+  for (const r of rows) {
+    const pct = Number(r?.allocation_percent);
+    if (!r?.psa_id) return res.status(400).json({ error: 'each allocation needs a psa_id' });
+    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
+      return res.status(400).json({ error: `allocation_percent for ${r.psa_id} must be greater than 0 and at most 100. Leave a PSA out of the list to end its share.` });
+    }
+    const psa = db.prepare(`SELECT id FROM contracts WHERE id = ? AND contract_type = 'PSA'`).get(r.psa_id);
+    if (!psa) return res.status(404).json({ error: `PSA ${r.psa_id} not found` });
+    total += pct;
+  }
+  if (total > 100) {
+    return res.status(400).json({ error: `The new split comes to ${total}% — a PPA cannot be allocated beyond itself.`, requested_total_percent: total });
+  }
+
+  // Everything that was still running on the day before the change closes there.
+  const closesOn = db.prepare(`SELECT date(?, '-1 day') d`).get(effective_from).d;
+  const open = db.prepare(`
+    SELECT * FROM contract_allocations
+    WHERE ppa_id = ? AND COALESCE(effective_to, '9999-12-31') >= ?
+  `).all(ppa.id, effective_from);
+
+  const before = open.map((a) => ({ psa_id: a.psa_id, allocation_percent: a.allocation_percent, effective_to: a.effective_to }));
+
+  db.transaction(() => {
+    for (const a of open) {
+      if (a.effective_from && a.effective_from >= effective_from) {
+        // Recorded to start on or after the change: superseded outright.
+        db.prepare('DELETE FROM contract_allocations WHERE id = ?').run(a.id);
+      } else {
+        db.prepare('UPDATE contract_allocations SET effective_to = ? WHERE id = ?').run(closesOn, a.id);
+      }
+    }
+    for (const r of rows) {
+      db.prepare(`
+        INSERT INTO contract_allocations (id, ppa_id, psa_id, allocation_percent, effective_from, effective_to)
+        VALUES (?, ?, ?, ?, ?, NULL)
+      `).run(newId('CAL'), ppa.id, r.psa_id, Number(r.allocation_percent), effective_from);
+    }
+  })();
+
+  const ended = before.filter((b) => !rows.some((r) => r.psa_id === b.psa_id)).map((b) => b.psa_id);
+  logAudit({
+    req, user: req.user, action: 'REVISE_ALLOCATION', module: 'REIA', entityType: 'contract', entityId: ppa.id,
+    reason: reason || undefined,
+    details: { effective_from, closed_on: closesOn, before, after: rows, ended_psa_ids: ended, new_total_percent: total },
+  });
+
+  res.json({
+    success: true,
+    effective_from,
+    previous_allocations_closed_on: closesOn,
+    allocations: rows,
+    ended_psa_ids: ended,
+    total_percent: total,
+  });
 });
 
 router.post('/bulk-upload', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
