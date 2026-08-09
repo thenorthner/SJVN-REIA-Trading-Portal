@@ -1390,8 +1390,12 @@ router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res
         INSERT INTO invoice_deliveries (id, invoice_id, channel, recipient, status, mode, detail_json, sent_by)
         VALUES (?, ?, 'SMS', ?, ?, ?, ?, ?)
       `).run(
-        newId('DLV'), inv.id, phone, smsRes.ok ? 'SENT' : 'FAILED', smsRes.mode,
-        JSON.stringify(smsRes), req.user?.name || null,
+        // Same reading as the email line above: a message written to the outbox
+        // because no gateway is configured has not reached anyone, and logging
+        // it as SENT made the two channels disagree about one dispatch.
+        newId('DLV'), inv.id, phone,
+        smsRes.ok ? (smsRes.mode === 'FILE_OUTBOX' ? 'SIMULATED' : 'SENT') : 'FAILED',
+        smsRes.mode, JSON.stringify(smsRes), req.user?.name || null,
       );
     }
 

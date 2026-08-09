@@ -275,11 +275,59 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
     }
   }
 
+  // Contacts could only be set when the entity was first created, so a
+  // counterparty that changed its billing desk could not be updated at all —
+  // and the commercial contact is the address invoices are sent to, which made
+  // it a field the platform could not correct once it was wrong.
+  const contactsGiven = Array.isArray(req.body.contacts);
+  let contactsChanged = false;
+  if (contactsGiven) {
+    const cleaned = [];
+    for (const c of req.body.contacts) {
+      const email = String(c?.email ?? '').trim();
+      // A malformed address does not fail loudly at this point — it fails much
+      // later, as a bill that was never delivered to a counterparty who is then
+      // late paying it.
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: `"${email}" is not a valid email address` });
+      }
+      if (!c?.contact_type) return res.status(400).json({ error: 'each contact needs a contact_type' });
+      // name is NOT NULL on the table, so an unnamed contact is refused here
+      // rather than surfacing as a constraint violation.
+      const name = String(c?.name ?? '').trim();
+      if (!name) return res.status(400).json({ error: `contact ${c.contact_type} needs a name` });
+      cleaned.push({
+        contact_type: c.contact_type, name, email: email || null,
+        phone: c.phone ?? null, is_primary: c.is_primary ? 1 : 0,
+      });
+    }
+    const prior = db.prepare('SELECT contact_type, name, email, phone, is_primary FROM entity_contacts WHERE entity_id = ? ORDER BY contact_type, email').all(existing.id);
+    const key = (list) => JSON.stringify([...list].sort((a, b) => `${a.contact_type}${a.email}`.localeCompare(`${b.contact_type}${b.email}`)));
+    contactsChanged = key(prior) !== key(cleaned);
+
+    if (contactsChanged) {
+      db.prepare(`INSERT INTO entity_audit (id, entity_id, field_changed, old_value, new_value, changed_by) VALUES (?, ?, ?, ?, ?, ?)`)
+        .run(newId('EAU'), existing.id, 'contacts',
+          prior.map((c) => `${c.contact_type}:${c.email ?? ''}`).join(', '),
+          cleaned.map((c) => `${c.contact_type}:${c.email ?? ''}`).join(', '),
+          req.user.name);
+      db.transaction(() => {
+        db.prepare('DELETE FROM entity_contacts WHERE entity_id = ?').run(existing.id);
+        const ins = db.prepare('INSERT INTO entity_contacts (id, entity_id, contact_type, name, email, phone, is_primary) VALUES (?, ?, ?, ?, ?, ?, ?)');
+        for (const c of cleaned) ins.run(newId('CNT'), existing.id, c.contact_type, c.name, c.email, c.phone, c.is_primary);
+      })();
+    }
+  }
+
   const merged = { ...existing, ...updates };
   // An approved counterparty is already trading, so a change to it does not go
   // live on the strength of one person's edit — it drops the record back to
   // PENDING and is re-approved. A record still pending stays pending.
-  if (existing.status === 'APPROVED' && Object.keys(updates).length) {
+  //
+  // Redirecting where invoices are sent counts, which is why a contact change
+  // is treated the same as the fields above rather than slipping through as
+  // incidental detail.
+  if (existing.status === 'APPROVED' && (Object.keys(updates).length || contactsChanged)) {
     merged.status = 'PENDING';
   }
 
@@ -301,7 +349,7 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
     WHERE id=@id
   `).run(merged);
 
-  logAudit({ req, user: req.user, action: 'UPDATE', module: 'REIA', entityType: 'entity', entityId: existing.id, details: { highRisk: isHighRisk } });
+  logAudit({ req, user: req.user, action: 'UPDATE', module: 'REIA', entityType: 'entity', entityId: existing.id, details: { highRisk: isHighRisk, contacts_changed: contactsChanged } });
   if (isHighRisk) {
     pushNotification({ role: 'SJVN_ADMIN', type: 'RISK_UPDATE', message: `High-risk profile update by ${existing.name}. Penny-drop reset.` });
   }

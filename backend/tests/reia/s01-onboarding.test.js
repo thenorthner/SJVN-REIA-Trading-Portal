@@ -109,3 +109,71 @@ describe('S1 Stakeholder onboarding', () => {
       expect.arrayContaining(['entity_id', 'field_changed', 'old_value', 'new_value', 'changed_by']));
   });
 });
+
+describe('S1 A counterparty can change its billing desk', () => {
+  // Contacts could only be set when the entity was first created — no update
+  // path touched them — so a counterparty that moved its billing desk could not
+  // be corrected at all. The commercial contact is the address invoices are
+  // sent to, which made it the one field the platform could not fix once wrong.
+  let reia, ent;
+  beforeEach(() => {
+    reia = tokenFor('REIA_USER');
+    ent = makeEntity('BUYER');
+    // resetReia leaves entity_contacts alone, so the fixture id has to be its own.
+    db.prepare(`INSERT INTO entity_contacts (id, entity_id, contact_type, name, email, phone, is_primary)
+                VALUES (?, ?, 'COMMERCIAL', 'Old Desk', 'old@discom.test', '9999999999', 1)`)
+      .run(`CNT-OLD-${ent.id}`, ent.id);
+  });
+
+  const put = (body) => request(app).put(`/api/entities/${ent.id}`).set(auth(reia)).send(body);
+  const contacts = () => db.prepare('SELECT * FROM entity_contacts WHERE entity_id = ?').all(ent.id);
+
+  it('replaces the contact set', async () => {
+    const r = await put({ contacts: [{ contact_type: 'COMMERCIAL', name: 'New Desk', email: 'new@discom.test', phone: '8888888888', is_primary: 1 }] });
+    expect(r.status).toBeLessThan(400);
+    const c = contacts();
+    expect(c, 'the old contact was left behind alongside the new one').toHaveLength(1);
+    expect(c[0].email).toBe('new@discom.test');
+  });
+
+  it('leaves contacts alone when the payload does not mention them', async () => {
+    await put({ credit_rating: 'AA' });
+    expect(contacts()[0].email, 'an unrelated edit wiped the contacts').toBe('old@discom.test');
+  });
+
+  it('refuses a malformed address', async () => {
+    // It would not fail here otherwise — it would fail later, as a bill that
+    // was never delivered to a counterparty who is then late paying it.
+    const r = await put({ contacts: [{ contact_type: 'COMMERCIAL', name: 'Desk', email: 'not-an-address' }] });
+    expect(r.status).toBe(400);
+    expect(contacts()[0].email, 'a bad address replaced a good one').toBe('old@discom.test');
+  });
+
+  it('refuses a contact with no name', async () => {
+    const r = await put({ contacts: [{ contact_type: 'COMMERCIAL', email: 'new@discom.test' }] });
+    expect(r.status, 'an unnamed contact reached the table and raised a constraint error').toBe(400);
+  });
+
+  it('records what the billing address was and what it became', async () => {
+    await put({ contacts: [{ contact_type: 'COMMERCIAL', name: 'New Desk', email: 'new@discom.test' }] });
+    const a = db.prepare(`SELECT * FROM entity_audit WHERE entity_id = ? AND field_changed = 'contacts'`).get(ent.id);
+    expect(a, 'redirecting where invoices go left no trail').toBeTruthy();
+    expect(a.old_value).toContain('old@discom.test');
+    expect(a.new_value).toContain('new@discom.test');
+  });
+
+  it('sends an approved counterparty back for re-approval', async () => {
+    // Redirecting where invoices are sent is not incidental detail, so it goes
+    // through the same gate as a bank-account change.
+    db.prepare(`UPDATE entities SET status = 'APPROVED' WHERE id = ?`).run(ent.id);
+    await put({ contacts: [{ contact_type: 'COMMERCIAL', name: 'New Desk', email: 'new@discom.test' }] });
+    expect(db.prepare('SELECT status FROM entities WHERE id = ?').get(ent.id).status).toBe('PENDING');
+  });
+
+  it('does not disturb an approved record when the contacts are unchanged', async () => {
+    db.prepare(`UPDATE entities SET status = 'APPROVED' WHERE id = ?`).run(ent.id);
+    await put({ contacts: [{ contact_type: 'COMMERCIAL', name: 'Old Desk', email: 'old@discom.test', phone: '9999999999', is_primary: 1 }] });
+    expect(db.prepare('SELECT status FROM entities WHERE id = ?').get(ent.id).status,
+      're-sending the same contacts knocked the record out of APPROVED').toBe('APPROVED');
+  });
+});
