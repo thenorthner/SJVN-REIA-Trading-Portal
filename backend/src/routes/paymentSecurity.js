@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import db from '../db/index.js';
+import { generateDemandLetterPdf } from '../scripts/demandLetterPdf.js';
 import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, invalidDecision } from '../util.js';
 import {
@@ -79,6 +80,25 @@ router.get('/stats', requireRole(...REIA_ALL), (_req, res) => {
   const active = instruments.filter((i) => ACTIVE_STATUSES.includes(i.status));
   const totalSecurity = active.reduce((s, i) => s + refreshAvailable(i), 0);
 
+  // Broken out by instrument. A single total said how much security existed and
+  // nothing about what kind it was — and a letter of credit answering for a
+  // buyer's payment and a guarantee answering for a seller's performance are not
+  // interchangeable cover, so a portfolio view that adds them into one figure
+  // cannot tell you whether either side is actually covered.
+  const byType = {};
+  for (const i of active) {
+    const k = i.mechanism_type || 'OTHER';
+    byType[k] = byType[k] || { mechanism_type: k, count: 0, limit: 0, utilized: 0, available: 0, verified: 0 };
+    byType[k].count += 1;
+    byType[k].limit += Number(i.limit_amount) || 0;
+    byType[k].utilized += Number(i.utilized_amount) || 0;
+    byType[k].available += refreshAvailable(i);
+    if (i.verified_at) byType[k].verified += 1;
+  }
+  const security_by_type = Object.values(byType)
+    .map((r) => ({ ...r, limit: Math.round(r.limit), utilized: Math.round(r.utilized), available: Math.round(r.available) }))
+    .sort((a, b) => b.available - a.available);
+
   const psas = db.prepare(`SELECT id, contract_no, buyer_id FROM contracts WHERE contract_type = 'PSA' AND status = 'ACTIVE'`).all();
   const byEntity = [];
   let shortfallCount = 0;
@@ -111,6 +131,7 @@ router.get('/stats', requireRole(...REIA_ALL), (_req, res) => {
   `).get();
 
   res.json({
+    security_by_type,
     total_security_value: Math.round(totalSecurity),
     instrument_count: active.length,
     shortfall_count: shortfallCount,
@@ -143,6 +164,27 @@ router.get('/expiring', (req, res) => {
   }
   sql += ' ORDER BY ps.validity_end ASC';
   res.json(db.prepare(sql).all(...params).map(enrich));
+});
+
+// The demand notice as a document. It existed only as demand_letter_json, so a
+// bank being asked to honour a guarantee had nothing that could be sent to it.
+router.get('/invocations/:id/pdf', requireRole(...REIA_ALL), (req, res) => {
+  const invocation = db.prepare('SELECT * FROM security_invocations WHERE id = ?').get(req.params.id);
+  if (!invocation) return res.status(404).json({ error: 'Invocation not found' });
+
+  let letter = {};
+  try { letter = JSON.parse(invocation.demand_letter_json || '{}'); } catch { letter = {}; }
+
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(invocation.contract_id);
+  const entity = contract
+    ? db.prepare('SELECT name FROM entities WHERE id = ?').get(contract.buyer_id || contract.seller_id)
+    : null;
+  const drawnIds = (letter.waterfall || []).map((w) => w.id).filter(Boolean);
+  const instruments = drawnIds.length
+    ? db.prepare(`SELECT * FROM payment_security WHERE id IN (${drawnIds.map(() => '?').join(',')})`).all(...drawnIds)
+    : [];
+
+  generateDemandLetterPdf({ invocation, letter, contract, instruments, entity }, res);
 });
 
 router.get('/adequacy/:contractId', (req, res) => {
@@ -437,7 +479,17 @@ router.post('/:id/utilize', requireRole(...REIA_WRITE), (req, res) => {
   db.prepare(`UPDATE payment_security SET utilized_amount = utilized_amount + ?, updated_at = datetime('now') WHERE id = ?`)
     .run(amount, ps.id);
   const fresh = syncInstrumentAvailable(ps.id);
-  recordSecurityEvent({ instrumentId: ps.id, contractId: ps.contract_id, user: req.user, eventType: 'UTILIZE', details: { amount } });
+  recordSecurityEvent({
+    instrumentId: ps.id, contractId: ps.contract_id, user: req.user, eventType: 'UTILIZE',
+    // The before and after, because "amount: 1000000" alone does not say what
+    // cover was left standing — which is the question anyone reads this event to
+    // answer. Replenishment already recorded its own; this did not.
+    details: {
+      amount, reason: (req.body.reason || '').trim() || undefined,
+      available_before: refreshAvailable(ps), available_after: refreshAvailable(fresh),
+      utilized_before: ps.utilized_amount || 0, utilized_after: fresh.utilized_amount || 0,
+    },
+  });
   if (ps.is_revolving && refreshAvailable(fresh) < fresh.required_amount) {
     pushNotification({
       role: 'BUYER',
@@ -505,14 +557,62 @@ router.post('/:id/renew', requireRole(...REIA_WRITE), (req, res) => {
 });
 
 // Backward-compat invoke → waterfall on contract or single instrument
+/**
+ * Whose default an instrument answers for.
+ *
+ * A letter of credit is the buyer's payment instrument and a bank guarantee is
+ * the seller's performance instrument. Pooled funds back either, so those need
+ * telling which default is being invoked rather than being guessed at.
+ */
+function sideForInstrument(instrument, explicit) {
+  const given = String(explicit || '').toUpperCase();
+  if (given === 'BUYER' || given === 'SELLER') return given;
+  if (instrument.mechanism_type === 'LC') return 'BUYER';
+  if (instrument.mechanism_type === 'BANK_GUARANTEE') return 'SELLER';
+  return null;
+}
+
 router.post('/:id/invoke', requireRole(...REIA_WRITE), (req, res) => {
   const { amount } = req.body;
   const existing = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
+
+  // Which side's default this instrument answers for. The waterfall takes a side
+  // and this route never passed one, so it always ran the buyer's — and invoking
+  // a bank guarantee, which only ever answers for the seller, drew nothing while
+  // still filing a demand notice for the attempt.
+  const side = sideForInstrument(existing, req.body.side);
+  if (!side) {
+    return res.status(400).json({
+      error: `${existing.mechanism_type} answers for either side, so say which default is being invoked — pass side as BUYER or SELLER.`,
+    });
+  }
+
   const elig = evaluateInvocationEligibility(existing.contract_id);
   const amt = amount != null ? Number(amount) : elig.amount || refreshAvailable(existing);
-  const inv = invokeWaterfall(existing.contract_id, amt, elig.overdue_invoices, req.user);
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'INVOKE', module: 'REIA', entityType: 'payment_security', entityId: existing.id, details: { amount: amt } });
+  if (!(amt > 0)) {
+    return res.status(400).json({ error: 'Nothing to invoke: no amount given and no overdue exposure on this contract.' });
+  }
+
+  const inv = invokeWaterfall(existing.contract_id, amt, elig.overdue_invoices, req.user, side);
+  const draws = JSON.parse(inv?.waterfall_used || '[]');
+
+  // A notice that drew nothing is a demand on the file for something that never
+  // happened. Two of them were recorded during testing, both against a guarantee
+  // the buyer-side waterfall could never have touched.
+  if (!draws.length) {
+    db.prepare('DELETE FROM security_invocations WHERE id = ?').run(inv.id);
+    return res.status(400).json({
+      error: `Nothing could be drawn for a ${side} default on this contract — no live ${side === 'SELLER' ? 'guarantee' : 'letter of credit'} or pooled cover with a balance. No demand notice was raised.`,
+      side,
+    });
+  }
+
+  logAudit({
+    req: typeof req !== "undefined" ? req : null, user: req.user, action: 'INVOKE', module: 'REIA',
+    entityType: 'payment_security', entityId: existing.id,
+    details: { amount: amt, side, drew: draws.map((d) => ({ instrument_no: d.instrument_no, amount: d.amount })) },
+  });
   res.json({ instrument: enrich(db.prepare('SELECT * FROM payment_security WHERE id = ?').get(existing.id)), invocation: inv });
 });
 

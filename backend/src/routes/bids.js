@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { checkAdequacy } from '../paymentSecurityEngine.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId } from '../util.js';
@@ -287,6 +288,38 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   if (client.status === 'SUSPENDED') return res.status(403).json({ error: 'Client is suspended. Bidding not allowed.' });
   if (!Array.isArray(b.blocks) || b.blocks.length === 0) {
     return res.status(400).json({ error: 'At least one bid block is required' });
+  }
+
+  // Named up front rather than discovered one crash at a time. These are NOT
+  // NULL on the table, so a payload missing any of them reached the insert and
+  // came back as a 500 naming a column — three separate attempts to learn what a
+  // bid needs.
+  const missing = [
+    ['product', b.product], ['bid_date', b.bid_date], ['delivery_date', b.delivery_date],
+    ['quantum_mw', b.quantum_mw], ['price_per_unit', b.price_per_unit],
+  ].filter(([, v]) => v === undefined || v === null || v === '').map(([k]) => k);
+  const blockMissing = b.blocks.some((blk) => blk?.time_block === undefined || blk?.time_block === null);
+  if (blockMissing) missing.push('blocks[].time_block');
+  if (missing.length) {
+    return res.status(400).json({ error: `A bid needs ${missing.join(', ')}.`, missing_fields: missing });
+  }
+
+  // Payment security on the counterparty this bid creates exposure to. Adequacy
+  // was computed and reported and consulted by nothing, so a bid could be placed
+  // for a buyer whose cover stood at seven per cent of what it already owed —
+  // the module measured the risk and had no way to act on it.
+  if (client.entity_id) {
+    const adequacy = checkAdequacy({ buyerEntityId: client.entity_id });
+    if (!adequacy.adequate) {
+      const override = String(b.security_override_reason || '').trim();
+      if (!override) {
+        const weak = (adequacy.weak || [])[0] || {};
+        return res.status(400).json({
+          error: `${client.name} does not hold adequate payment security — cover is ${weak.coverage_ratio ?? '?'}× its exposure. Replenish the security, or pass security_override_reason to take this exposure on anyway.`,
+          adequacy,
+        });
+      }
+    }
   }
 
   const totalExposure = rollUp(b.blocks, b.product).exposure;
