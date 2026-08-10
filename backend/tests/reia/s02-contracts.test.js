@@ -96,7 +96,7 @@ describe('S2 Contract management', () => {
   it('versions an amendment while preserving the previous version', async () => {
     const c = makeContract({ tariff_per_unit: 3.0 });
     const r = await request(app).post(`/api/contracts/${c.id}/amend`).set(auth(reia))
-      .send({ tariff_per_unit: 3.5, reason: 'CERC revision' });
+      .send({ tariff_per_unit: 3.5, reason: 'CERC revision', effective_from: '2026-10-01' });
     expect(r.status).toBeLessThan(400);
     const amendments = db.prepare('SELECT * FROM contract_amendments WHERE contract_id = ?').all(c.id);
     expect(amendments.length).toBeGreaterThan(0);

@@ -1544,6 +1544,40 @@ try {
   console.error('Entity pending-bank migration failed:', e.message);
 }
 
+/**
+ * The date an amended contract's new terms start applying.
+ *
+ * Amending a contract built the new version and switched to it in the same
+ * breath: the revised tariff was live the instant someone typed it, with no
+ * approval in between and no date attached, so there was nothing to say whether
+ * it applied from the regulator's order or from the afternoon it was entered.
+ * An effective_date passed in was silently dropped — there was nowhere to put it.
+ */
+function migrateAmendmentEffectiveFrom() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (tables.includes('contracts')) {
+    const cols = db.prepare('PRAGMA table_info(contracts)').all().map((c) => c.name);
+    if (!cols.includes('amendment_effective_from')) {
+      db.exec(`ALTER TABLE contracts ADD COLUMN amendment_effective_from TEXT`);
+    }
+  }
+  if (tables.includes('contract_amendments')) {
+    const cols = db.prepare('PRAGMA table_info(contract_amendments)').all().map((c) => c.name);
+    if (!cols.includes('effective_from')) {
+      db.exec(`ALTER TABLE contract_amendments ADD COLUMN effective_from TEXT`);
+    }
+    if (!cols.includes('new_contract_id')) {
+      db.exec(`ALTER TABLE contract_amendments ADD COLUMN new_contract_id TEXT`);
+    }
+  }
+}
+
+try {
+  migrateAmendmentEffectiveFrom();
+} catch (e) {
+  console.error('Amendment effective-date migration failed:', e.message);
+}
+
 try {
   migrateWaterfallPriority();
 } catch (e) {

@@ -48,8 +48,52 @@ export function runStakeholderAlerts() {
   const counts = { documents: 0, nearingExpiry: 0, expired: 0, slaBreaches: 0 };
 
   // 1. Document expiry
-  for (const doc of db.prepare(`SELECT * FROM entity_documents WHERE validity_end IS NOT NULL AND alert_sent = 0`).all()) {
+  //
+  // Read from document_versions, which is where uploads actually land. The sweep
+  // looked at entity_documents — a legacy table written only by an optional
+  // array on entity creation, empty in practice — so the licences and clearances
+  // going through the real upload-and-verify workflow were never watched at all.
+  //
+  // Warned at bands rather than every day inside the window: a licence sixty days
+  // out does not need a notice every morning for two months, but it does need one
+  // that gets more insistent as the date closes.
+  const DOC_BANDS = [60, 30, 15, 7];
+  const latestVersions = db.prepare(`
+    SELECT v.id, v.expiry_date, v.verification_status, d.document_type, d.title, d.entity_id, d.contract_id, e.name AS entity_name
+    FROM document_versions v
+    JOIN documents d ON d.id = v.document_id
+    LEFT JOIN entities e ON e.id = d.entity_id
+    WHERE v.expiry_date IS NOT NULL
+      AND v.version_number = (SELECT MAX(version_number) FROM document_versions WHERE document_id = d.id)
+  `).all();
+
+  for (const doc of latestVersions) {
     guarded(`document ${doc.id}`, () => {
+      const left = days(doc.expiry_date);
+      if (left > DOC_BANDS[0]) return;
+      const owner = doc.entity_name || doc.entity_id || doc.contract_id || 'unattached';
+      const what = `${doc.document_type}${doc.title && doc.title !== doc.document_type ? ` (${doc.title})` : ''} for ${owner}`;
+
+      if (left <= 0) {
+        if (notifyDaily({
+          role: 'REIA_USER', type: 'DOCUMENT_EXPIRED',
+          message: `${what} expired on ${doc.expiry_date} and is no longer valid.`,
+        })) counts.documents += 1;
+        return;
+      }
+      // The tightest band the remaining days fall inside, so the message changes
+      // as it closes and notifyDaily treats each band as its own alert.
+      const band = DOC_BANDS.filter((b) => left <= b).pop();
+      if (notifyDaily({
+        role: 'REIA_USER', type: 'DOCUMENT_EXPIRING',
+        message: `${what} expires on ${doc.expiry_date} — ${left} day(s) left (${band}-day notice). Renew it.`,
+      })) counts.documents += 1;
+    });
+  }
+
+  // The legacy table, still swept so anything recorded there is not dropped.
+  for (const doc of db.prepare(`SELECT * FROM entity_documents WHERE validity_end IS NOT NULL AND alert_sent = 0`).all()) {
+    guarded(`legacy document ${doc.id}`, () => {
       const left = days(doc.validity_end);
       if (left > 60 || left <= 0) return;
       notifyDaily({

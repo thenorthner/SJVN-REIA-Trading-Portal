@@ -116,6 +116,24 @@ router.get('/:id', (req, res) => {
 router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const id = newId('CON');
   const b = req.body;
+
+  // A counterparty still going through onboarding is not one you can contract
+  // with. Approval is the step that checks its licences, its registration and
+  // its bank account, and a contract could be raised against an entity that had
+  // passed none of them — the whole checklist reduced to paperwork nothing
+  // waited on.
+  for (const [role, entityId] of [['seller', b.seller_id], ['buyer', b.buyer_id]]) {
+    if (!entityId) continue;
+    const e = db.prepare('SELECT id, name, status FROM entities WHERE id = ?').get(entityId);
+    if (!e) return res.status(404).json({ error: `${role} ${entityId} not found` });
+    if (e.status !== 'APPROVED') {
+      return res.status(400).json({
+        error: `${e.name} is ${e.status}, not APPROVED — a contract cannot be raised against a counterparty that has not completed onboarding.`,
+        entity_id: e.id,
+        entity_status: e.status,
+      });
+    }
+  }
   db.transaction(() => {
     db.prepare(`
       INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
@@ -233,6 +251,24 @@ router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
   if (status === 'ACTIVE') {
     syncRequirementsFromContract(contract.id);
     createInstrumentsFromRequirements(contract.id, req.user);
+
+    // Activating an amended version is what retires the one it replaces. The
+    // amend route used to do this immediately, which put the revised terms live
+    // before anyone approved them and left both versions billable at once.
+    if (contract.parent_contract_id && contract.version > 1) {
+      const superseded = db.prepare(`
+        SELECT id, status, version FROM contracts
+        WHERE (id = ? OR parent_contract_id = ?) AND version = ? AND status = 'ACTIVE' AND id != ?
+      `).get(contract.parent_contract_id, contract.parent_contract_id, contract.version - 1, contract.id);
+      if (superseded) {
+        db.prepare(`UPDATE contracts SET status = 'AMENDED', updated_at = datetime('now') WHERE id = ?`).run(superseded.id);
+        logAudit({
+          req, user: req.user, action: 'STATUS_AMENDED', module: 'REIA', entityType: 'contract', entityId: superseded.id,
+          beforeValue: 'ACTIVE', afterValue: 'AMENDED',
+          details: { superseded_by: contract.id, version: contract.version, effective_from: contract.amendment_effective_from },
+        });
+      }
+    }
   }
 
   logAudit({
@@ -267,6 +303,25 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
   const original = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
   if (!original) return res.status(404).json({ error: 'Contract not found' });
 
+  // When the revised terms start applying. An amendment is dated by the order or
+  // agreement behind it, and there was nowhere to record that — a date passed in
+  // was silently dropped, so a tariff revision effective from April looked
+  // identical to one effective from the afternoon it was typed.
+  const effectiveFrom = String(req.body.effective_from ?? req.body.amendment_effective_from ?? '').trim();
+  if (!effectiveFrom || !/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
+    return res.status(400).json({ error: 'effective_from (YYYY-MM-DD) is required — an amendment applies from a date' });
+  }
+  if (original.tenure_start && effectiveFrom < String(original.tenure_start)) {
+    return res.status(400).json({
+      error: `effective_from ${effectiveFrom} is before the contract began (${original.tenure_start}) — an amendment cannot reach back past the contract itself.`,
+    });
+  }
+  if (original.tenure_end && effectiveFrom > String(original.tenure_end)) {
+    return res.status(400).json({
+      error: `effective_from ${effectiveFrom} is after the contract ends (${original.tenure_end}) — there would be nothing left for it to apply to.`,
+    });
+  }
+
   const newVersionId = newId('CON');
   const updated = { ...original, ...req.body };
   
@@ -281,12 +336,12 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
         tariff_type, tariff_per_unit, tariff_structure_json, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type,
         pbg_expiry, rebate_rule, lps_rule, payment_security_type, payment_terms_days, rebate_pct, rebate_days, rebate_basis, lps_annual_pct, lps_grace_days,
         trading_margin_per_mwh, normative_aux, free_energy_home_state, capacity_charges_total, annual_afc, annual_design_energy_mwh, napaf_percent,
-        transmission_charge_per_mwh, min_cuf_percent, version, parent_contract_id, status, remarks)
+        transmission_charge_per_mwh, min_cuf_percent, version, parent_contract_id, status, remarks, amendment_effective_from)
       VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
         @tariff_type, @tariff_per_unit, @tariff_structure_json, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type,
         @pbg_expiry, @rebate_rule, @lps_rule, @payment_security_type, @payment_terms_days, @rebate_pct, @rebate_days, @rebate_basis, @lps_annual_pct, @lps_grace_days,
         @trading_margin_per_mwh, @normative_aux, @free_energy_home_state, @capacity_charges_total, @annual_afc, @annual_design_energy_mwh, @napaf_percent,
-        @transmission_charge_per_mwh, @min_cuf_percent, @version, @parent_contract_id, 'ACTIVE', @remarks)
+        @transmission_charge_per_mwh, @min_cuf_percent, @version, @parent_contract_id, 'PENDING_REGULATORY_APPROVAL', @remarks, @amendment_effective_from)
     `).run({
       ...updated,
       id: newVersionId,
@@ -296,6 +351,7 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
       trading_margin_per_mwh: (updated.trading_margin_per_mwh === '' || updated.trading_margin_per_mwh == null) ? null : Number(updated.trading_margin_per_mwh),
       version: original.version + 1,
       parent_contract_id: original.parent_contract_id || original.id,
+      amendment_effective_from: effectiveFrom,
       remarks: req.body.amendment_reason ?? null,
       ...billingRuleFields(updated),
       ...hydroBillingFields(updated),
@@ -306,8 +362,25 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
     const insertProj = db.prepare('INSERT INTO contract_projects (contract_id, project_entity_id, allocated_capacity_mw) VALUES (?, ?, ?)');
     for (const p of projects) insertProj.run(newVersionId, p.project_entity_id, p.allocated_capacity_mw);
 
-    db.prepare(`UPDATE contracts SET status = 'AMENDED', updated_at = datetime('now') WHERE id = ?`).run(original.id);
-    db.prepare(`INSERT INTO contract_amendments (id, contract_id, version, changed_fields_json, approved_by) VALUES (?, ?, ?, ?, ?)`).run(newId('CMA'), original.id, original.version, JSON.stringify(changedFields), req.user.name);
+    // And the PSA allocations, which did not follow. They stayed on the version
+    // being retired, so after a tariff revision every buyer was still drawing
+    // from the superseded PPA and the new one supplied nobody.
+    const allocs = db.prepare('SELECT * FROM contract_allocations WHERE ppa_id = ?').all(original.id);
+    const insertAlloc = db.prepare(`
+      INSERT INTO contract_allocations (id, ppa_id, psa_id, allocation_percent, effective_from, effective_to)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    for (const a of allocs) insertAlloc.run(newId('CAL'), newVersionId, a.psa_id, a.allocation_percent, a.effective_from, a.effective_to);
+
+    // The original is deliberately left ACTIVE. Marking it AMENDED here retired
+    // it the moment the amendment was drafted, so the revised terms took effect
+    // with nobody having approved them — and left both versions billable at
+    // once, since AMENDED bills too. The switch happens when the new version is
+    // activated, in the status route.
+    db.prepare(`
+      INSERT INTO contract_amendments (id, contract_id, version, changed_fields_json, approved_by, effective_from, new_contract_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(newId('CMA'), original.id, original.version, JSON.stringify(changedFields), req.user.name, effectiveFrom, newVersionId);
   })();
 
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'AMEND', module: 'REIA', entityType: 'contract', entityId: original.id, details: { newVersionId, changedFields } });
@@ -531,15 +604,30 @@ router.post('/bulk-upload', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =
     INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
       tariff_type, tariff_per_unit, tenure_start, tenure_end, billing_cycle, emd_amount, pbg_amount, status)
     VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
-      'FLAT', @tariff_per_unit, @tenure_start, @tenure_end, @billing_cycle, @emd_amount, @pbg_amount, 'ACTIVE')
+      'FLAT', @tariff_per_unit, @tenure_start, @tenure_end, @billing_cycle, @emd_amount, @pbg_amount, 'DRAFT')
   `);
+  // Loaded as drafts. These went in ACTIVE, so a spreadsheet put contracts
+  // straight into a billable state without passing through the approvals the
+  // status route exists to enforce — the one route that checks them.
   
   db.transaction(() => {
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       try {
         if (!r.contract_no || !r.capacity_mw || !r.tariff_per_unit) throw new Error('Missing required fields (contract_no, capacity_mw, tariff_per_unit)');
-        insert.run({ id: newId('CON'), billing_cycle: 'MONTHLY', emd_amount: null, pbg_amount: null, commissioned_capacity_mw: r.capacity_mw, cod_date: null, ...r });
+        // A default for every named parameter, because better-sqlite3 throws on
+        // any it is not given and only some had one. A PPA row omitting buyer_id
+        // — the natural shape, a PPA has no buyer — failed every time with
+        // "Missing named parameter buyer_id", which reads like a bug in the file
+        // rather than a column the template was expected to carry.
+        insert.run({
+          id: newId('CON'),
+          seller_id: null, buyer_id: null, project_type: null,
+          tenure_start: null, tenure_end: null, cod_date: null,
+          billing_cycle: 'MONTHLY', emd_amount: null, pbg_amount: null,
+          commissioned_capacity_mw: r.commissioned_capacity_mw ?? r.capacity_mw,
+          ...r,
+        });
         results.successful++;
       } catch (err) {
         results.failed++;
