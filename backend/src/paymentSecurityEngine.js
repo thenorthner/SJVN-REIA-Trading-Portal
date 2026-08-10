@@ -111,10 +111,13 @@ export function syncRequirementsFromContract(contractId) {
     // with no history it came out at zero — an instrument that secured nothing.
     ids.push(upsert('CORPUS_FUND', null, Math.round(required * 0.1), 0, false, WATERFALL_DEFAULTS.CORPUS_FUND));
   }
-  if (c.contract_type === 'PPA') {
-    if (c.emd_amount) ids.push(upsert('BANK_GUARANTEE', 'EMD', c.emd_amount, 0, false, WATERFALL_DEFAULTS.BANK_GUARANTEE));
-    if (c.pbg_amount) ids.push(upsert('BANK_GUARANTEE', 'PBG', c.pbg_amount, 0, false, WATERFALL_DEFAULTS.BANK_GUARANTEE + 5));
-  }
+  // An EMD or a performance guarantee is an amount someone entered on the
+  // contract because it was actually furnished. These were read on a PPA and
+  // ignored on a PSA, so a buyer contract carrying a ten lakh EMD and a fifty
+  // lakh PBG derived no requirement for either and the instruments were never
+  // raised — the figures sat on the contract meaning nothing.
+  if (c.emd_amount) ids.push(upsert('BANK_GUARANTEE', 'EMD', c.emd_amount, 0, false, WATERFALL_DEFAULTS.BANK_GUARANTEE));
+  if (c.pbg_amount) ids.push(upsert('BANK_GUARANTEE', 'PBG', c.pbg_amount, 0, false, WATERFALL_DEFAULTS.BANK_GUARANTEE + 5));
   return db.prepare('SELECT * FROM security_requirements WHERE contract_id = ?').all(contractId);
 }
 

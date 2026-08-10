@@ -196,3 +196,91 @@ describe('S24 Cover is what is standing behind the contract today', () => {
     expect(db.prepare('SELECT utilized_amount FROM payment_security WHERE id = ?').get(live).utilized_amount).toBe(300000);
   });
 });
+
+describe('S24 Restoring cover says what restored it', () => {
+  // is_revolving was recorded on every instrument and read by nothing, so a
+  // corpus fund — which does not come back on its own — replenished as freely
+  // as a revolving letter of credit.
+  let contract;
+  beforeEach(() => { contract = makeContract({ contract_type: 'PSA', status: 'ACTIVE' }); });
+
+  const instrument = ({ type = 'LC', revolving = 1, limit = 1000000, drawn = 400000 } = {}) => {
+    const id = `PSC-${Math.random().toString(36).slice(2, 10)}`;
+    db.prepare(`INSERT INTO payment_security (id, instrument_no, contract_id, mechanism_type, is_revolving,
+                limit_amount, utilized_amount, available_amount, waterfall_priority,
+                validity_start, validity_end, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 10, '2026-01-01', '2030-01-01', 'PARTIALLY_UTILIZED')`)
+      .run(id, `PS/R/${id.slice(-5)}`, contract.id, type, revolving, limit, drawn, limit - drawn);
+    return id;
+  };
+  const replenish = (id, body) => request(app).post(`/api/payment-security/${id}/replenish`).set(auth(reia)).send(body);
+  const drawnOn = (id) => db.prepare('SELECT utilized_amount FROM payment_security WHERE id = ?').get(id).utilized_amount;
+
+  it('replenishes a revolving instrument without ceremony', async () => {
+    const id = instrument({ revolving: 1 });
+    const r = await replenish(id, { amount: 400000 });
+    expect(r.status).toBeLessThan(400);
+    expect(drawnOn(id)).toBe(0);
+  });
+
+  it('asks a non-revolving one what restored it', async () => {
+    const id = instrument({ type: 'CORPUS_FUND', revolving: 0 });
+    const r = await replenish(id, { amount: 400000 });
+    expect(r.status, 'a fund that does not revolve was topped up on nobody’s say-so').toBe(400);
+    expect(r.body.error).toMatch(/not revolving/i);
+    expect(drawnOn(id), 'the draw was reversed anyway').toBe(400000);
+  });
+
+  it('accepts it once there is a reference', async () => {
+    const id = instrument({ type: 'CORPUS_FUND', revolving: 0 });
+    const r = await replenish(id, { amount: 400000, reason: 'NEFT UTR 1234 into the corpus, 12 Aug' });
+    expect(r.status).toBeLessThan(400);
+    expect(drawnOn(id)).toBe(0);
+  });
+
+  it('records what was said, and whether it revolved', async () => {
+    const id = instrument({ type: 'CORPUS_FUND', revolving: 0 });
+    await replenish(id, { amount: 400000, reason: 'NEFT UTR 1234' });
+    const e = db.prepare(`SELECT * FROM security_events WHERE payment_security_id = ? AND event_type = 'REPLENISH'`).get(id);
+    expect(String(e.details)).toMatch(/UTR 1234/);
+    expect(String(e.details)).toMatch(/"is_revolving":0/);
+  });
+
+  it('will not restore more cover than was ever drawn', async () => {
+    const id = instrument({ revolving: 1, limit: 1000000, drawn: 400000 });
+    const r = await replenish(id, { amount: 900000 });
+    expect(r.status, 'replenishing past the draw invents cover out of nothing').toBe(400);
+    expect(drawnOn(id)).toBe(400000);
+  });
+});
+
+describe('S24 An EMD or PBG on a buyer contract is a requirement too', () => {
+  // These were read on a PPA and ignored on a PSA, so amounts entered on a buyer
+  // contract because they had actually been furnished derived no requirement and
+  // the instruments were never raised.
+  it('derives them on a PSA', () => {
+    const c = makeContract({ contract_type: 'PSA', status: 'ACTIVE', capacity_mw: 10, tariff_per_unit: 3,
+      emd_amount: 1000000, pbg_amount: 5000000 });
+    syncRequirementsFromContract(c.id);
+    const rows = db.prepare('SELECT * FROM security_requirements WHERE contract_id = ?').all(c.id);
+    const byKind = Object.fromEntries(rows.map((r) => [`${r.mechanism_type}:${r.bg_subtype ?? ''}`, r.min_amount]));
+    expect(byKind['BANK_GUARANTEE:EMD'], 'the EMD on the contract meant nothing').toBe(1000000);
+    expect(byKind['BANK_GUARANTEE:PBG']).toBe(5000000);
+    expect(byKind['LC:'], 'the LC requirement was lost in the process').toBeGreaterThan(0);
+  });
+
+  it('still derives them on a PPA', () => {
+    const c = makeContract({ contract_type: 'PPA', status: 'ACTIVE', emd_amount: 250000, pbg_amount: 750000 });
+    syncRequirementsFromContract(c.id);
+    const rows = db.prepare('SELECT * FROM security_requirements WHERE contract_id = ?').all(c.id);
+    expect(rows.find((r) => r.bg_subtype === 'EMD').min_amount).toBe(250000);
+    expect(rows.find((r) => r.bg_subtype === 'PBG').min_amount).toBe(750000);
+  });
+
+  it('leaves a contract carrying neither alone', () => {
+    const c = makeContract({ contract_type: 'PPA', status: 'ACTIVE', emd_amount: null, pbg_amount: null });
+    syncRequirementsFromContract(c.id);
+    const rows = db.prepare('SELECT * FROM security_requirements WHERE contract_id = ?').all(c.id);
+    expect(rows.filter((r) => r.mechanism_type === 'BANK_GUARANTEE')).toHaveLength(0);
+  });
+});

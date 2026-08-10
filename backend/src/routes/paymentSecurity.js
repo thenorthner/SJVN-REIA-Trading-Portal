@@ -454,10 +454,36 @@ router.post('/:id/replenish', requireRole(...REIA_WRITE, 'BUYER'), (req, res) =>
   if (!ps) return res.status(404).json({ error: 'Not found' });
   if (!canAccessInstrument(req.user, ps)) return res.status(403).json({ error: 'Not authorized' });
   if (!(amount > 0)) return res.status(400).json({ error: 'amount required' });
-  const newUtil = Math.max(0, (ps.utilized_amount || 0) - amount);
+
+  const drawn = ps.utilized_amount || 0;
+  if (amount > drawn) {
+    return res.status(400).json({
+      error: `Only ${drawn} has been drawn on this instrument — replenishing ${amount} would restore cover that was never used. Raise the limit with /renew instead.`,
+      drawn,
+    });
+  }
+
+  // A revolving instrument reinstates on its own terms after a draw. A
+  // non-revolving one does not: restoring it means someone actually paid back
+  // into the fund or had the guarantee amended, and that is a fact about the
+  // world rather than a number being edited. is_revolving was recorded on every
+  // instrument and read by nothing, so a corpus fund replenished as freely as a
+  // revolving letter of credit.
+  const reason = String(req.body.reason ?? '').trim();
+  if (!ps.is_revolving && !reason) {
+    return res.status(400).json({
+      error: 'This instrument is not revolving, so its cover does not come back on its own. Record what restored it — a reference for the payment into the fund, or the guarantee amendment.',
+      is_revolving: 0,
+    });
+  }
+
+  const newUtil = Math.max(0, drawn - amount);
   db.prepare(`UPDATE payment_security SET utilized_amount = ?, updated_at = datetime('now') WHERE id = ?`).run(newUtil, ps.id);
   const fresh = syncInstrumentAvailable(ps.id);
-  recordSecurityEvent({ instrumentId: ps.id, contractId: ps.contract_id, user: req.user, eventType: 'REPLENISH', details: { amount } });
+  recordSecurityEvent({
+    instrumentId: ps.id, contractId: ps.contract_id, user: req.user, eventType: 'REPLENISH',
+    details: { amount, is_revolving: ps.is_revolving ? 1 : 0, reason: reason || undefined, drawn_before: drawn },
+  });
   res.json(enrich(fresh));
 });
 
