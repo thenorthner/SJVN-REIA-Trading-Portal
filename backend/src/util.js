@@ -237,6 +237,29 @@ export function addDays(baseDate, days) {
  * Falls back to contracted capacity, which is the right answer for the ordinary
  * case where the whole plant is live and the column is simply not set.
  */
+/**
+ * The decision on an approve/reject endpoint, or a refusal.
+ *
+ * Every route taking one branched as `if (decision === 'REJECTED') { reject }
+ * else { approve }`, so anything that was not exactly that string approved:
+ * a lowercase "rejected", a typo, a field left out of the body. On the invoice
+ * approval route that meant a bill going APPROVED while its own approval row
+ * recorded the rejection someone had actually sent — the two disagreeing inside
+ * one request. Approving by default is the wrong default for a control whose
+ * entire job is to be an explicit act.
+ *
+ * Returns null when the value is good, or a message naming what was allowed.
+ */
+export function invalidDecision(decision, allowed = ['APPROVED', 'REJECTED']) {
+  if (decision === undefined || decision === null || String(decision).trim() === '') {
+    return `decision is required and must be one of: ${allowed.join(', ')}`;
+  }
+  if (!allowed.includes(decision)) {
+    return `"${decision}" is not a decision. Use one of: ${allowed.join(', ')}`;
+  }
+  return null;
+}
+
 export function billableCapacityMw(contract) {
   const commissioned = Number(contract?.commissioned_capacity_mw);
   if (Number.isFinite(commissioned) && commissioned > 0) return commissioned;

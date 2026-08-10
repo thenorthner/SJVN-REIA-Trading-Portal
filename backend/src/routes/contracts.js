@@ -439,7 +439,20 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
     `).run(newId('CMA'), original.id, original.version, JSON.stringify(changedFields), req.user.name, effectiveFrom, newVersionId);
   })();
 
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'AMEND', module: 'REIA', entityType: 'contract', entityId: original.id, details: { newVersionId, changedFields } });
+  logAudit({
+    req: typeof req !== "undefined" ? req : null, user: req.user, action: 'AMEND',
+    module: 'REIA', entityType: 'contract', entityId: original.id,
+    details: { newVersionId, changedFields, effective_from: effectiveFrom },
+  });
+  // And against the new version, which otherwise has no history of its own: the
+  // amendment was recorded only against the contract it replaced, so opening the
+  // version actually in force showed an empty audit trail and nothing to say
+  // where it had come from.
+  logAudit({
+    req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CREATED_BY_AMENDMENT',
+    module: 'REIA', entityType: 'contract', entityId: newVersionId,
+    details: { amended_from: original.id, version: original.version + 1, changedFields, effective_from: effectiveFrom },
+  });
   syncRequirementsFromContract(newVersionId);
   createInstrumentsFromRequirements(newVersionId, req.user);
   res.status(201).json(fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(newVersionId)));

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification } from '../util.js';
+import { newId, logAudit, pushNotification, invalidDecision } from '../util.js';
 import {
   buildContractReconItems,
   buildTradingReconItems,
@@ -400,6 +400,8 @@ router.post('/run-scheduled', requireRole(...REIA_WRITE, 'MANAGEMENT'), (_req, r
 // ---- reopen act (before /:id) ----
 router.post('/reopen-requests/:id/act', requireRole('SJVN_ADMIN', 'FINANCE_USER', ...REIA_WRITE), (req, res) => {
   const { decision } = req.body; // APPROVED | REJECTED
+  const badDecision = invalidDecision(decision);
+  if (badDecision) return res.status(400).json({ error: badDecision });
   const rr = db.prepare('SELECT * FROM recon_reopen_requests WHERE id = ?').get(req.params.id);
   if (!rr) return res.status(404).json({ error: 'Request not found' });
   if (rr.status !== 'PENDING') return res.status(400).json({ error: 'Already acted' });
@@ -601,6 +603,8 @@ router.post('/:id/request-signoff', requireRole(...REIA_WRITE), (req, res) => {
 // ---- acknowledge / disagree ----
 router.post('/:id/acknowledge', (req, res) => {
   const { decision, note, remarks } = req.body; // AGREE | DISAGREE
+  const badDecision = invalidDecision(decision, ['AGREE', 'DISAGREE']);
+  if (badDecision) return res.status(400).json({ error: badDecision });
   const recon = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(req.params.id);
   if (!recon) return res.status(404).json({ error: 'Not found' });
   if (!canAccessRecon(req.user, recon)) return res.status(403).json({ error: 'Not authorized' });

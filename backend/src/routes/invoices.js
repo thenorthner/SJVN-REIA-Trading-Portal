@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { resolveTariff } from '../services/tariffStructure.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct, billableCapacityMw } from '../util.js';
+import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct, billableCapacityMw, invalidDecision } from '../util.js';
 import { payableNow, lpsBaseAmount, accruedLps, tieredRebatePct, daysBetween } from '../disputesConstants.js';
 import { payerStateForInvoice } from '../services/workingCalendar.js';
 import { getParamNumber, getParam } from '../mastersService.js';
@@ -1236,6 +1236,8 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
     return res.status(400).json({ error: 'Cannot act on approvals for a cancelled invoice' });
   }
   const { decision, comments } = req.body; // APPROVED | REJECTED
+  const badDecision = invalidDecision(decision);
+  if (badDecision) return res.status(400).json({ error: badDecision });
 
   const conflict = makerCheckerConflict(inv, req.user);
   if (conflict) return res.status(403).json({ error: conflict });

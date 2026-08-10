@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification } from '../util.js';
+import { newId, logAudit, pushNotification, invalidDecision } from '../util.js';
 import {
   catalogForEntityType,
   summarizeApprovals,
@@ -536,6 +536,10 @@ router.post('/:id/penny-drop', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res
 
 router.post('/:id/approve', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const { decision, remarks } = req.body;
+  // Unvalidated, this wrote `status = decision` — an omitted field tripped the
+  // NOT NULL constraint and came back a 500 rather than saying what was wrong.
+  const badDecision = invalidDecision(decision);
+  if (badDecision) return res.status(400).json({ error: badDecision });
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
 

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification } from '../util.js';
+import { newId, logAudit, pushNotification, invalidDecision } from '../util.js';
 import {
   computeCoverage,
   checkAdequacy,
@@ -360,6 +360,8 @@ router.post('/invocations/:id/transition', requireRole(...REIA_WRITE), (req, res
 
 router.post('/releases/:id/act', requireRole(...REIA_WRITE, 'FINANCE_USER'), (req, res) => {
   const { decision } = req.body; // APPROVED | REJECTED
+  const badDecision = invalidDecision(decision);
+  if (badDecision) return res.status(400).json({ error: badDecision });
   const rel = db.prepare('SELECT * FROM security_releases WHERE id = ?').get(req.params.id);
   if (!rel) return res.status(404).json({ error: 'Not found' });
   if (rel.status !== 'PENDING') return res.status(400).json({ error: 'Already acted' });
