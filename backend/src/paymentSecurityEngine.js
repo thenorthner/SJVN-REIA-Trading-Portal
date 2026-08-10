@@ -1,7 +1,7 @@
 import db from './db/index.js';
 import { newId, pushNotification } from './util.js';
 import { payableNow, OPEN_STATUSES as OPEN_DISPUTE_STATUSES } from './disputesConstants.js';
-import { baselineCufFor } from './mastersService.js';
+import { baselineCufFor, getParamNumber } from './mastersService.js';
 import {
   INVOCATION_OVERDUE_DAYS,
   DEFAULT_MONTHS_COVER,
@@ -166,12 +166,67 @@ export function projectedNextBill(contractId) {
   return trailingMonthlyBilledAvg(contractId, 3);
 }
 
-export function availableSecurity(contractId) {
+/**
+ * Whether an instrument is still standing behind this contract today.
+ *
+ * Cover was counted from status alone, so an instrument whose validity had run
+ * out went on counting until some sweep happened to relabel it — the same
+ * mistake as billing a contract on its status rather than its dates. A
+ * guarantee that expired last month is not security this month, whatever the
+ * row still says.
+ */
+function isLiveToday(row, asOf = new Date().toISOString().slice(0, 10)) {
+  if (!ACTIVE_STATUSES.includes(row.status)) return false;
+  if (row.validity_end && String(row.validity_end) < asOf) return false;
+  if (row.validity_start && String(row.validity_start) > asOf) return false;
+  return true;
+}
+
+/**
+ * Security on a contract, split by whether the bank has confirmed it.
+ *
+ * The verify endpoint records a bank confirmation reference and nothing ever
+ * required it, so an instrument someone had simply typed in counted as cover in
+ * full — a five crore letter of credit that no bank had heard of made a contract
+ * look secured.
+ *
+ * Reported separately rather than silently dropped. On this database one
+ * instrument of thirty-seven carries a confirmation, so refusing to count the
+ * rest would show every contract as uncovered overnight and block scheduling on
+ * work that is genuinely secured but not yet recorded as such. What counts
+ * toward adequacy is settled by security_require_bank_confirmation, which starts
+ * off; the split is visible either way, so the position can be seen before the
+ * rule is turned on.
+ */
+export function securityBreakdown(contractId) {
   const rows = db.prepare(`
     SELECT * FROM payment_security
     WHERE contract_id = ? AND status IN (${ACTIVE_STATUSES.map(() => '?').join(',')})
   `).all(contractId, ...ACTIVE_STATUSES);
-  return rows.reduce((s, r) => s + refreshAvailable(r), 0);
+
+  let verified = 0;
+  let unverified = 0;
+  let lapsed = 0;
+  for (const r of rows) {
+    const amount = refreshAvailable(r);
+    if (!isLiveToday(r)) { lapsed += amount; continue; }
+    if (r.verified_at) verified += amount;
+    else unverified += amount;
+  }
+  return {
+    verified: Math.round(verified),
+    unverified: Math.round(unverified),
+    lapsed: Math.round(lapsed),
+    counted: Math.round(requireBankConfirmation() ? verified : verified + unverified),
+  };
+}
+
+function requireBankConfirmation() {
+  return getParamNumber('security_require_bank_confirmation', 0) === 1;
+}
+
+export function availableSecurity(contractId) {
+  return securityBreakdown(contractId).counted;
 }
 
 export function computeCoverage(contractId) {
@@ -181,9 +236,15 @@ export function computeCoverage(contractId) {
   const exposure = outstanding + projected;
   const required = computeRequiredAmount(contractId);
   const ratio = exposure > 0 ? available / exposure : (available > 0 ? 99 : 0);
+  const breakdown = securityBreakdown(contractId);
   return {
     contract_id: contractId,
     available_security: Math.round(available),
+    // What that figure is made of, so an apparently covered contract can be seen
+    // to be resting on instruments nobody has confirmed or that have lapsed.
+    verified_security: breakdown.verified,
+    unverified_security: breakdown.unverified,
+    lapsed_security_excluded: breakdown.lapsed,
     outstanding_dues: Math.round(outstanding),
     projected_next_bill: Math.round(projected),
     exposure: Math.round(exposure),
@@ -276,7 +337,12 @@ export function invokeWaterfall(contractId, amount, invoiceIds = [], user = { na
       AND available_amount > 0
       AND mechanism_type IN (${eligibleTypes.map(() => '?').join(',')})
     ORDER BY waterfall_priority ASC, created_at ASC
-  `).all(contractId, ...ACTIVE_STATUSES, ...eligibleTypes);
+  `).all(contractId, ...ACTIVE_STATUSES, ...eligibleTypes)
+    // A guarantee whose validity has run out cannot be drawn on, whatever the
+    // row still says. The status column only catches up when a sweep relabels
+    // it, and a demand issued against a lapsed instrument is one the bank will
+    // refuse — after the money was already counted as recovered.
+    .filter((r) => isLiveToday(r));
 
   let remaining = amount;
   const used = [];

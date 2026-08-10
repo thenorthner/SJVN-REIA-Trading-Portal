@@ -3,8 +3,8 @@ import request from 'supertest';
 import { app } from '../../src/server.js';
 import db from '../../src/db/index.js';
 import { tokenFor, auth, makeEntity, makeContract, makeInvoice, resetReia } from '../helpers/reia.js';
-import { estimatedMonthlyBill, syncRequirementsFromContract } from '../../src/paymentSecurityEngine.js';
-import { baselineCufFor } from '../../src/mastersService.js';
+import { estimatedMonthlyBill, syncRequirementsFromContract, securityBreakdown, invokeWaterfall } from '../../src/paymentSecurityEngine.js';
+import { baselineCufFor, invalidateParamCache } from '../../src/mastersService.js';
 
 let reia;
 beforeEach(() => { resetReia(); reia = tokenFor('REIA_USER'); });
@@ -107,5 +107,92 @@ describe('S24 One answer for what a plant is expected to generate', () => {
       .send({ contract_id: c.id, period_month: '2026-06', data_type: 'PROVISIONAL', source: 'MANUAL', energy_mwh: 2000 });
     const v = await request(app).post(`/api/energy-data/${e.body.id}/validate`).set(auth(reia)).send({});
     expect(v.body.deviation_notes, 'hydro was held to the tighter non-hydro tolerance').toMatch(/Tolerance: 80%/);
+  });
+});
+
+describe('S24 Cover is what is standing behind the contract today', () => {
+  // Cover was counted from status alone. An instrument nobody had confirmed with
+  // a bank counted in full, and one whose validity had run out went on counting
+  // until some sweep happened to relabel it.
+  let contract;
+  beforeEach(() => {
+    contract = makeContract({ contract_type: 'PSA', status: 'ACTIVE', capacity_mw: 10, tariff_per_unit: 3 });
+  });
+
+  const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  const instrument = ({ amount = 1000000, verified = false, ends = day(365), starts = day(-30) } = {}) => {
+    const id = `PSC-${Math.random().toString(36).slice(2, 10)}`;
+    db.prepare(`INSERT INTO payment_security (id, instrument_no, contract_id, mechanism_type, limit_amount,
+                utilized_amount, available_amount, waterfall_priority, validity_start, validity_end, verified_at, status)
+                VALUES (?, ?, ?, 'LC', ?, 0, ?, 10, ?, ?, ?, 'ACTIVE')`)
+      .run(id, `PS/T/${id.slice(-5)}`, contract.id, amount, amount, starts, ends, verified ? '2026-01-01' : null);
+    return id;
+  };
+  const cover = () => securityBreakdown(contract.id);
+
+  it('leaves a lapsed instrument out of cover', () => {
+    instrument({ amount: 500000, ends: day(-1) });
+    const c = cover();
+    expect(c.counted, 'a guarantee that expired yesterday was still counted as security').toBe(0);
+    expect(c.lapsed).toBe(500000);
+  });
+
+  it('leaves out one whose validity has not started', () => {
+    instrument({ amount: 500000, starts: day(30), ends: day(400) });
+    expect(cover().counted).toBe(0);
+  });
+
+  it('counts one that is live today', () => {
+    instrument({ amount: 500000 });
+    expect(cover().counted).toBe(500000);
+  });
+
+  it('shows how much of the cover nobody has confirmed', () => {
+    instrument({ amount: 400000, verified: true });
+    instrument({ amount: 600000, verified: false });
+    const c = cover();
+    expect(c.verified).toBe(400000);
+    expect(c.unverified, 'an instrument nobody confirmed was indistinguishable from one a bank had').toBe(600000);
+  });
+
+  it('counts both by default, so a live system is not emptied overnight', () => {
+    instrument({ amount: 400000, verified: true });
+    instrument({ amount: 600000, verified: false });
+    expect(cover().counted).toBe(1000000);
+  });
+
+  it('counts only confirmed instruments once that is switched on', () => {
+    instrument({ amount: 400000, verified: true });
+    instrument({ amount: 600000, verified: false });
+    db.prepare(`UPDATE system_parameters SET param_value = '1' WHERE param_key = 'security_require_bank_confirmation'`).run();
+    invalidateParamCache();
+    try {
+      expect(cover().counted, 'the rule was switched on and nothing changed').toBe(400000);
+    } finally {
+      db.prepare(`UPDATE system_parameters SET param_value = '0' WHERE param_key = 'security_require_bank_confirmation'`).run();
+      invalidateParamCache();
+    }
+  });
+
+  it('surfaces the split on the adequacy response', async () => {
+    instrument({ amount: 400000, verified: true });
+    instrument({ amount: 600000, verified: false });
+    instrument({ amount: 900000, ends: day(-5) });
+    const r = await request(app).get(`/api/payment-security/adequacy/${contract.id}`).set(auth(reia));
+    const c = r.body.coverages[0];
+    expect(c.verified_security).toBe(400000);
+    expect(c.unverified_security).toBe(600000);
+    expect(c.lapsed_security_excluded).toBe(900000);
+    expect(c.available_security).toBe(1000000);
+  });
+
+  it('will not draw on a lapsed instrument', () => {
+    instrument({ amount: 500000, ends: day(-1) });
+    const live = instrument({ amount: 300000 });
+    const r = invokeWaterfall(contract.id, 700000, [], { name: 'test' }, 'BUYER');
+    // the invocation row carries the draws as waterfall_used
+    const drawn = JSON.parse(r.waterfall_used || '[]').map((w) => w.id);
+    expect(drawn, 'a demand was issued against a guarantee that had expired').toEqual([live]);
+    expect(db.prepare('SELECT utilized_amount FROM payment_security WHERE id = ?').get(live).utilized_amount).toBe(300000);
   });
 });

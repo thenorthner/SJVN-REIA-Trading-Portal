@@ -6,6 +6,7 @@ import { newId } from './util.js';
 
 const DEFAULT_PARAMS = [
   { category: 'BILLING', param_key: 'trading_margin_per_mwh', param_value: '70', data_type: 'NUMBER', unit: 'INR/MWh', description: 'PSA trading margin (7 paise/unit = ₹70/MWh)' },
+  { category: 'BILLING', param_key: 'security_require_bank_confirmation', param_value: '0', data_type: 'NUMBER', unit: '0/1', description: 'Set to 1 to count only bank-confirmed instruments toward payment-security adequacy. Off by default so existing unconfirmed instruments are not dropped from cover overnight; the split is reported either way.' },
   { category: 'BILLING', param_key: 'dsm_rate_min_per_mwh', param_value: '50', data_type: 'NUMBER', unit: 'INR/MWh', description: 'Lowest plausible DSM rate. deviation_rate is ₹/MWh while contract tariffs are ₹/kWh, so a value below this is treated as a unit slip and refused.' },
   { category: 'BILLING', param_key: 'invoice_approval_levels', param_value: JSON.stringify([{ above: 1000000, levels: 3 }, { above: 100000, levels: 2 }]), data_type: 'JSON', unit: '', description: 'How many approvals an invoice needs by value: [{ above, levels }], highest band the amount clears wins. Bills at or below the lowest threshold take invoice_approval_min_levels.' },
   { category: 'BILLING', param_key: 'invoice_approval_min_levels', param_value: '1', data_type: 'NUMBER', unit: 'levels', description: 'Approvals required on the smallest invoices — those at or below the lowest band in invoice_approval_levels.' },
