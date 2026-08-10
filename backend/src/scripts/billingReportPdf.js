@@ -54,7 +54,7 @@ function periodLabel(ym) {
 function periodRangeLabel(from, to) {
   if (!from && !to) return 'All periods';
   if (from && to && from === to) return periodLabel(from);
-  return `${periodLabel(from || '…')}  →  ${periodLabel(to || '…')}`;
+  return `${periodLabel(from || '…')} to ${periodLabel(to || '…')}`;
 }
 
 function nowStamp() {
@@ -163,7 +163,7 @@ export function generateBillingReportPdf(report, meta, res) {
   const kpis = [
     { label: 'Total Sales Billed', value: fmtMoneyShort(t.sales_billed), sub: `${t.sales_count || 0} buyer invoice(s)`, accent: NAVY },
     { label: 'Total Purchases', value: fmtMoneyShort(t.purchase_billed), sub: `${t.purchase_count || 0} developer invoice(s)`, accent: NAVY },
-    { label: 'Gross Margin', value: fmtMoneyShort(t.gross_margin), sub: 'Sales − Purchases', accent: (t.gross_margin || 0) >= 0 ? GREEN : RED },
+    { label: 'Gross Margin', value: fmtMoneyShort(t.gross_margin), sub: 'Sales - Purchases', accent: (t.gross_margin || 0) >= 0 ? GREEN : RED },
     { label: 'Trading Margin', value: fmtMoneyShort(t.trading_margin), sub: 'SJVN margin on PSAs', accent: GREEN },
     { label: 'Rebate Saved', value: fmtMoneyShort(t.rebate_saved), sub: 'Early-payment rebates', accent: GREEN },
     { label: 'Net Profit', value: fmtMoneyShort(t.net_profit), sub: 'Gross + rebate + LPS net', accent: (t.net_profit || 0) >= 0 ? GREEN : RED },
@@ -277,9 +277,9 @@ export function generateBillingReportPdf(report, meta, res) {
     .text('Notes', M + 12, y + 8, { lineBreak: false });
   doc.fillColor(MUTED).font('Helvetica').fontSize(7.5);
   const notes = [
-    'Sales Billed = SJVN → Buyer (PSA) invoices  ·  Purchases = Developer → SJVN (PPA) invoices',
-    'Gross Margin = Sales − Purchases  ·  Net Profit = Gross Margin + Rebate Saved + LPS Receivable − LPS Payable',
-    'Trading Margin is SJVN\'s contractual margin on PSA energy. Outstanding Receivable = Sales Billed − Collected.',
+    'Sales Billed = SJVN to Buyer (PSA) invoices  ·  Purchases = Developer to SJVN (PPA) invoices',
+    'Gross Margin = Sales - Purchases  ·  Net Profit = Gross Margin + Rebate Saved + LPS Receivable - LPS Payable',
+    'Trading Margin is SJVN\'s contractual margin on PSA energy. Outstanding Receivable = Sales Billed - Collected.',
     'This is a system-generated management report. Figures exclude CANCELLED invoices. Amounts in Indian Rupees.',
   ];
   notes.forEach((n, i) => {

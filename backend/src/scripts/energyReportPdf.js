@@ -53,7 +53,7 @@ function periodLabel(ym) {
 function periodRangeLabel(from, to) {
   if (!from && !to) return 'All periods';
   if (from && to && from === to) return periodLabel(from);
-  return `${periodLabel(from || '…')}  →  ${periodLabel(to || '…')}`;
+  return `${periodLabel(from || '…')} to ${periodLabel(to || '…')}`;
 }
 
 function nowStamp() {
@@ -153,7 +153,7 @@ export function generateEnergyReportPdf(report, meta, res) {
   const kpis = [
     { label: 'Provisional Energy', value: fmtMwhShort(t.provisional_mwh), sub: `${t.provisional_count || 0} record(s)`, accent: NAVY },
     { label: 'Final Energy', value: fmtMwhShort(t.final_mwh), sub: `${t.final_count || 0} record(s)`, accent: NAVY },
-    { label: 'Δ Energy (Final − Prov)', value: fmtMwhShort(t.delta_mwh), sub: 'True-up volume', accent: deltaTone },
+    { label: 'Delta Energy (Final - Prov)', value: fmtMwhShort(t.delta_mwh), sub: 'True-up volume', accent: deltaTone },
     { label: 'Avg CUF', value: t.avg_cuf != null ? fmtPct(t.avg_cuf) : '—', sub: 'Where available', accent: GREEN },
     { label: 'Locked', value: String(t.locked || 0), sub: 'Ready for billing', accent: GREEN },
     { label: 'Validated', value: String(t.validated || 0), sub: 'Awaiting lock', accent: NAVY },
@@ -180,7 +180,7 @@ export function generateEnergyReportPdf(report, meta, res) {
     { key: 'project_type', label: 'Tech', w: 48, align: 'left', fmt: (v) => v || '—' },
     { key: 'provisional_mwh', label: 'Provisional', w: 72, align: 'right', fmt: fmtMwhShort },
     { key: 'final_mwh', label: 'Final', w: 72, align: 'right', fmt: (v) => (v == null ? '—' : fmtMwhShort(v)) },
-    { key: 'delta_mwh', label: 'Δ MWh', w: 62, align: 'right', fmt: (v) => (v == null ? '—' : fmtMwhShort(v)) },
+    { key: 'delta_mwh', label: 'Delta MWh', w: 62, align: 'right', fmt: (v) => (v == null ? '—' : fmtMwhShort(v)) },
     { key: 'cuf_percent', label: 'CUF %', w: 48, align: 'right', fmt: (v) => (v == null ? '—' : Number(v).toFixed(1)) },
     { key: 'availability_percent', label: 'Avail %', w: 48, align: 'right', fmt: (v) => (v == null ? '—' : Number(v).toFixed(1)) },
     { key: 'source', label: 'Source', w: 48, align: 'left', fmt: (v) => v || '—' },
@@ -268,7 +268,7 @@ export function generateEnergyReportPdf(report, meta, res) {
   doc.fillColor(MUTED).font('Helvetica').fontSize(7.5);
   const notes = [
     'Provisional = REA/metered preliminary energy  ·  Final = CERC/REA final for the same contract-period (linked via BFR).',
-    'Δ MWh = Final − Provisional. Positive Δ means upward true-up; negative means downward adjustment.',
+    'Delta MWh = Final - Provisional. Positive Delta means upward true-up; negative means downward adjustment.',
     'Status reflects the latest applicable row (prefer Final when present). Locked records are billing-ready.',
     'Awaiting Final = contract-periods with Provisional only. This is a system-generated management report.',
   ];

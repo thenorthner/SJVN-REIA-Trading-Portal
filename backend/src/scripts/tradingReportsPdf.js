@@ -459,14 +459,14 @@ export function generateLoiPdf(tx, meta, res) {
     ['Transaction Reference ID', tx.id],
     ['Contract / LoI Reference', tx.loi_contract_ref || `LOI/SJVN/TRD/${tx.id}`],
     ['Open Access Modality', `${tx.oa_type || 'STOA'} (Short-Term Open Access via NOAR Portal)`],
-    ['Supply Period (Delivery Horizon)', `${tx.start_date}  to  ${tx.end_date}`],
+    ['Supply Period (Delivery Horizon)', `${tx.start_date} to ${tx.end_date}`],
     ['Contracted Quantum', `${tx.quantum_mw} MW (Round-the-Clock / As per 96-Block Schedule)`],
-    ['Contracted Tariff (Ex-Bus)', `₹ ${Number(tx.tariff_per_unit).toFixed(2)} / kWh (excluding Open Access & Statutory Levies)`],
+    ['Contracted Tariff (Ex-Bus)', `Rs. ${Number(tx.tariff_per_unit).toFixed(2)} / kWh (excluding Open Access & Statutory Levies)`],
     ['Source Generating Asset', tx.client_name || tx.client_id || 'SJVN Hydro/Solar Generation Pool'],
     ['Delivery Point', 'Regional Periphery / STU-ISTS Interconnection Interface'],
     ['NOAR Portal Contract Reference', tx.noar_contract_no || 'Under NOAR Registration & Scheduling'],
     ['Transmission Loss Matrix', `Injection: ${tx.loss_injection_state || 0}% | ISTS: ${tx.loss_inter_state || 0}% | Drawee: ${tx.loss_drawee_state || 0}% (Total: ${totalLoss}%)`],
-    ['Open Access & Wheeling Charges', `Wheeling: ₹ ${Number(tx.wheeling_charges || 0).toFixed(2)}/kWh | Transmission: ₹ ${Number(tx.transmission_charges || 0).toFixed(2)}/kWh`],
+    ['Open Access & Wheeling Charges', `Wheeling: Rs. ${Number(tx.wheeling_charges || 0).toFixed(2)}/kWh | Transmission: Rs. ${Number(tx.transmission_charges || 0).toFixed(2)}/kWh`],
   ];
 
   roundedRect(doc, M, tableTop, CONTENT_W, rows.length * rowHeight, 3, '#ffffff');

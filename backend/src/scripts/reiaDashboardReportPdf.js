@@ -135,8 +135,8 @@ export function generateReiaDashboardPdf(report, meta, res) {
     { label: 'Contracted Capacity', value: `${Number(k.contractedCapacity || 0).toLocaleString('en-IN')} MW`, sub: 'Active MW', accent: NAVY },
     { label: 'Energy Supplied', value: `${Number(k.energySupplied || 0).toLocaleString('en-IN')} MWh`, sub: 'All energy records', accent: NAVY },
     { label: 'Invoice Value', value: fmtMoneyShort(k.totalInvoiceValue), sub: `${k.totalInvoices || 0} invoices`, accent: NAVY },
-    { label: 'Receivables', value: fmtMoneyShort(k.receivables), sub: 'SJVN → Buyer unpaid', accent: AMBER },
-    { label: 'Payables', value: fmtMoneyShort(k.payables), sub: 'Seller → SJVN unpaid', accent: AMBER },
+    { label: 'Receivables', value: fmtMoneyShort(k.receivables), sub: 'SJVN to Buyer unpaid', accent: AMBER },
+    { label: 'Payables', value: fmtMoneyShort(k.payables), sub: 'Seller to SJVN unpaid', accent: AMBER },
     { label: 'Collected / Paid Out', value: `${fmtMoneyShort(k.paymentsReceived)} / ${fmtMoneyShort(k.paymentsDisbursed)}`, sub: 'Cash movement', accent: GREEN },
     { label: 'Exceptions Watch', value: `${k.pendingDisputes || 0} / ${k.reconciliationExceptions || 0} / ${k.overdue || 0}`, sub: 'Disputes · Recon · Overdue', accent: ((k.pendingDisputes || 0) + (k.reconciliationExceptions || 0) + (k.overdue || 0)) > 0 ? RED : GREEN },
   ];

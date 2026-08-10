@@ -52,7 +52,7 @@ function periodLabel(ym) {
 function periodRangeLabel(from, to) {
   if (!from && !to) return 'All periods';
   if (from && to && from === to) return periodLabel(from);
-  return `${periodLabel(from || '…')}  →  ${periodLabel(to || '…')}`;
+  return `${periodLabel(from || '…')} to ${periodLabel(to || '…')}`;
 }
 
 function nowStamp() {
@@ -145,7 +145,7 @@ export function generateReconReportPdf(report, meta, res) {
     { label: 'Needs Review', value: String(t.needs_review || 0), sub: 'Exception queues', accent: (t.needs_review || 0) > 0 ? AMBER : GREEN },
     { label: 'Pending Sign-off', value: String(t.pending_signoff || 0), sub: 'Awaiting joint ack', accent: NAVY },
     { label: 'Disputed Recons', value: String(t.disputed || 0), sub: 'Linked to disputes', accent: (t.disputed || 0) > 0 ? RED : GREEN },
-    { label: 'Unreconciled ₹', value: fmtMoneyShort(t.unreconciled_amount), sub: 'Open exposure', accent: (t.unreconciled_amount || 0) > 0 ? RED : GREEN },
+    { label: 'Unreconciled Rs.', value: fmtMoneyShort(t.unreconciled_amount), sub: 'Open exposure', accent: (t.unreconciled_amount || 0) > 0 ? RED : GREEN },
     { label: 'Exceptions (items)', value: String(t.items_exception || 0), sub: `${t.items_auto_matched || 0} auto-matched`, accent: AMBER },
     { label: 'Agreed / Closed', value: String((t.agreed || 0) + (t.closed || 0)), sub: `${t.agreed || 0} agreed · ${t.closed || 0} closed`, accent: GREEN },
     { label: 'Aging 0–7 / 30+', value: `${t.aging?.['0_7'] || 0} / ${t.aging?.['30_plus'] || 0}`, sub: 'Open recon age', accent: NAVY },
@@ -234,8 +234,8 @@ export function generateReconReportPdf(report, meta, res) {
   doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(8).text('Notes', M + 12, y + 8, { lineBreak: false });
   doc.fillColor(MUTED).font('Helvetica').fontSize(7.5);
   [
-    'Three-way trust: Metered ↔ Billed ↔ Paid. Auto-match % = items within tolerance / total items.',
-    'Unreconciled ₹ = residual variance on open / exception runs. Sign-off = SJVN + counterparty acknowledgment.',
+    'Three-way trust: Metered  <->  Billed  <->  Paid. Auto-match % = items within tolerance / total items.',
+    'Unreconciled Rs. = residual variance on open / exception runs. Sign-off = SJVN + counterparty acknowledgment.',
     'This is a system-generated management report. Amounts in Indian Rupees.',
   ].forEach((n, i) => doc.text(n, M + 12, y + 20 + i * 10, { width: CONTENT_W - 24, lineBreak: false }));
 

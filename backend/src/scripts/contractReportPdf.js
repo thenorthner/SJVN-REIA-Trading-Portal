@@ -224,7 +224,7 @@ export function generateContractReportPdf(report, meta, res) {
   doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(8).text('Notes', M + 12, y + 8, { lineBreak: false });
   doc.fillColor(MUTED).font('Helvetica').fontSize(7.5);
   [
-    'Capacity = contracted MW. COD MW = commissioned capacity. Tariff shown as Rs./unit (₹/kWh).',
+    'Capacity = contracted MW. COD MW = commissioned capacity. Tariff shown as Rs./unit (Rs./kWh).',
     'Pipeline = DRAFT / UNDER_NEGOTIATION / SIGNED / PENDING_REGULATORY_APPROVAL. This is a system-generated management report.',
   ].forEach((n, i) => doc.text(n, M + 12, y + 20 + i * 10, { width: CONTENT_W - 24, lineBreak: false }));
 

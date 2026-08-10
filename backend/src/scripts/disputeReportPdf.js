@@ -53,7 +53,7 @@ function periodLabel(ym) {
 function periodRangeLabel(from, to) {
   if (!from && !to) return 'All periods';
   if (from && to && from === to) return periodLabel(from);
-  return `${periodLabel(from || '…')}  →  ${periodLabel(to || '…')}`;
+  return `${periodLabel(from || '…')} to ${periodLabel(to || '…')}`;
 }
 
 function nowStamp() {
