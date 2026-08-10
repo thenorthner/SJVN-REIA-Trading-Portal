@@ -1620,6 +1620,30 @@ router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...
   if (!['APPROVED', 'SENT', 'PARTIALLY_PAID'].includes(inv.status)) {
     return res.status(400).json({ error: 'Invoice must be APPROVED before releasing payment to the generator' });
   }
+
+  // Whose account this is about to land in. Everything above checks the invoice;
+  // nothing checked the beneficiary, so a release went through against an
+  // account that had just been changed and never verified.
+  const beneficiary = db.prepare(`
+    SELECT e.id, e.name, e.is_penny_drop_verified, e.pending_bank_json, e.account_no
+    FROM contracts c JOIN entities e ON e.id = c.seller_id WHERE c.id = ?
+  `).get(inv.contract_id);
+
+  if (beneficiary) {
+    if (beneficiary.pending_bank_json) {
+      return res.status(400).json({
+        error: `${beneficiary.name} has a change of bank account awaiting penny-drop verification. Clear it before releasing payment, so the money goes to a confirmed account.`,
+        entity_id: beneficiary.id,
+      });
+    }
+    if (!beneficiary.is_penny_drop_verified) {
+      return res.status(400).json({
+        error: `${beneficiary.name}'s bank account has not passed penny-drop verification. Verify it before releasing payment.`,
+        entity_id: beneficiary.id,
+      });
+    }
+  }
+
   const { amount, source, payment_date, reference } = req.body;
   if (!RELEASE_SOURCES.includes(source)) {
     return res.status(400).json({ error: `source must be one of ${RELEASE_SOURCES.join(', ')}` });

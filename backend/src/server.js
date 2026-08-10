@@ -245,7 +245,13 @@ app.listen(PORT, HOST, () => {
   // Stakeholder and contract alerts cascade every hour
   setInterval(() => {
     try {
-      runStakeholderAlerts();
+      const r = runStakeholderAlerts();
+      // Logged when it does something, so a sweep that has quietly stopped
+      // working is distinguishable from one with nothing to do. It threw on
+      // every run for as long as it existed and this read as an hourly no-op.
+      if (r && Object.values(r).some(Boolean)) {
+        console.log(`[STAKEHOLDER] ${r.documents} document(s), ${r.nearingExpiry} nearing expiry, ${r.expired} expired, ${r.slaBreaches} onboarding SLA`);
+      }
     } catch (err) {
       console.error('[STAKEHOLDER] alert cascade failed', err.message);
     }

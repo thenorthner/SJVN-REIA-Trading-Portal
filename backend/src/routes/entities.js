@@ -261,7 +261,13 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
     'bank_name', 'account_no', 'ifsc_code', 'branch_address',
   ];
 
+  // Where the money actually goes. These are held back rather than written, and
+  // the live columns keep paying the account that was verified until a
+  // penny-drop clears the new one.
+  const BANK_FIELDS = ['bank_name', 'account_no', 'ifsc_code', 'branch_address', 'bank_details'];
+
   const updates = {};
+  const stagedBank = {};
   let isHighRisk = false;
 
   for (const f of fields) {
@@ -271,8 +277,17 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
       }
       db.prepare(`INSERT INTO entity_audit (id, entity_id, field_changed, old_value, new_value, changed_by) VALUES (?, ?, ?, ?, ?, ?)`)
         .run(newId('EAU'), existing.id, f, String(existing[f] ?? ''), String(req.body[f] ?? ''), req.user.name);
-      updates[f] = req.body[f];
+      if (BANK_FIELDS.includes(f)) stagedBank[f] = req.body[f];
+      else updates[f] = req.body[f];
     }
+  }
+
+  const bankChangeRequested = Object.keys(stagedBank).length > 0;
+  if (bankChangeRequested) {
+    db.prepare(`
+      UPDATE entities SET pending_bank_json = ?, pending_bank_requested_by = ?, pending_bank_requested_at = datetime('now')
+      WHERE id = ?
+    `).run(JSON.stringify(stagedBank), req.user.name, existing.id);
   }
 
   // Contacts could only be set when the entity was first created, so a
@@ -327,13 +342,14 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
   // Redirecting where invoices are sent counts, which is why a contact change
   // is treated the same as the fields above rather than slipping through as
   // incidental detail.
-  if (existing.status === 'APPROVED' && (Object.keys(updates).length || contactsChanged)) {
+  if (existing.status === 'APPROVED' && (Object.keys(updates).length || contactsChanged || bankChangeRequested)) {
     merged.status = 'PENDING';
   }
 
-  if (isHighRisk && (updates.bank_details || updates.account_no || updates.ifsc_code)) {
-    merged.is_penny_drop_verified = 0;
-  }
+  // Deliberately not clearing is_penny_drop_verified here. The live account is
+  // unchanged and still verified; the unverified one is the proposal sitting in
+  // pending_bank_json, and that is what the penny-drop has to clear before it
+  // can be paid into.
 
   db.prepare(`
     UPDATE entities SET category=@category, name=@name, pan_no=@pan_no, gst_no=@gst_no, cin=@cin, credit_rating=@credit_rating,
@@ -349,7 +365,17 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
     WHERE id=@id
   `).run(merged);
 
-  logAudit({ req, user: req.user, action: 'UPDATE', module: 'REIA', entityType: 'entity', entityId: existing.id, details: { highRisk: isHighRisk, contacts_changed: contactsChanged } });
+  logAudit({
+    req, user: req.user, action: bankChangeRequested ? 'BANK_CHANGE_REQUESTED' : 'UPDATE',
+    module: 'REIA', entityType: 'entity', entityId: existing.id,
+    details: { highRisk: isHighRisk, contacts_changed: contactsChanged, pending_bank: bankChangeRequested ? stagedBank : undefined },
+  });
+  if (bankChangeRequested) {
+    pushNotification({
+      role: 'SJVN_ADMIN', type: 'BANK_CHANGE_REQUESTED',
+      message: `${existing.name} has requested a change of bank account. It is held pending penny-drop verification.`,
+    });
+  }
   if (isHighRisk) {
     pushNotification({ role: 'SJVN_ADMIN', type: 'RISK_UPDATE', message: `High-risk profile update by ${existing.name}. Penny-drop reset.` });
   }
@@ -419,9 +445,46 @@ router.put('/:id/regulatory-approvals/:approvalId', requireRole(...ROLE_GROUPS.R
 router.post('/:id/penny-drop', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
+
+  // A requested change of account is verified by paying into it, so this is the
+  // point where the proposal becomes the live account — not the edit that
+  // requested it. Without this the new details would sit staged forever.
+  let promoted = null;
+  if (entity.pending_bank_json) {
+    let staged = {};
+    try { staged = JSON.parse(entity.pending_bank_json) || {}; } catch { staged = {}; }
+    const allowed = ['bank_name', 'account_no', 'ifsc_code', 'branch_address', 'bank_details'];
+    const sets = [];
+    const params = [];
+    for (const [k, v] of Object.entries(staged)) {
+      if (!allowed.includes(k)) continue;
+      sets.push(`${k} = ?`);
+      params.push(v);
+    }
+    if (sets.length) {
+      promoted = { from: Object.fromEntries(Object.keys(staged).map((k) => [k, entity[k]])), to: staged };
+      db.prepare(`UPDATE entities SET ${sets.join(', ')} WHERE id = ?`).run(...params, entity.id);
+    }
+    db.prepare(`
+      UPDATE entities SET pending_bank_json = NULL, pending_bank_requested_by = NULL, pending_bank_requested_at = NULL
+      WHERE id = ?
+    `).run(entity.id);
+  }
+
   db.prepare(`UPDATE entities SET is_penny_drop_verified = 1 WHERE id = ?`).run(entity.id);
-  logAudit({ req, user: req.user, action: 'PENNY_DROP_VERIFIED', module: 'REIA', entityType: 'entity', entityId: entity.id });
-  res.json({ success: true, message: 'Bank account verified via penny drop' });
+  logAudit({
+    req, user: req.user, action: promoted ? 'BANK_CHANGE_VERIFIED' : 'PENNY_DROP_VERIFIED',
+    module: 'REIA', entityType: 'entity', entityId: entity.id,
+    beforeValue: promoted ? JSON.stringify(promoted.from) : undefined,
+    afterValue: promoted ? JSON.stringify(promoted.to) : undefined,
+  });
+  res.json({
+    success: true,
+    message: promoted
+      ? 'Penny drop cleared. The requested account is now the live one.'
+      : 'Bank account verified via penny drop',
+    ...(promoted ? { applied_bank_change: promoted } : {}),
+  });
 });
 
 router.post('/:id/approve', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {

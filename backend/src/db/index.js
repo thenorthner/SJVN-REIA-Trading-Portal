@@ -1517,6 +1517,33 @@ try {
   console.error('Invoice created_by_id migration failed:', e.message);
 }
 
+/**
+ * A proposed change of bank account, held off the live record until verified.
+ *
+ * Editing a counterparty's bank details wrote them straight onto the entity. The
+ * record dropped to PENDING and the penny-drop flag reset, but the account money
+ * would be paid into had already changed — and nothing on the payout path looked
+ * at either signal, so the next release went to the new, unverified account.
+ * Redirecting a generator's payments took one edit.
+ *
+ * The proposal now waits here while the live columns keep paying the account
+ * that was actually verified.
+ */
+function migrateEntityPendingBank() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (!tables.includes('entities')) return;
+  const cols = db.prepare('PRAGMA table_info(entities)').all().map((c) => c.name);
+  if (!cols.includes('pending_bank_json')) db.exec(`ALTER TABLE entities ADD COLUMN pending_bank_json TEXT`);
+  if (!cols.includes('pending_bank_requested_by')) db.exec(`ALTER TABLE entities ADD COLUMN pending_bank_requested_by TEXT`);
+  if (!cols.includes('pending_bank_requested_at')) db.exec(`ALTER TABLE entities ADD COLUMN pending_bank_requested_at TEXT`);
+}
+
+try {
+  migrateEntityPendingBank();
+} catch (e) {
+  console.error('Entity pending-bank migration failed:', e.message);
+}
+
 try {
   migrateWaterfallPriority();
 } catch (e) {
