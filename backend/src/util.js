@@ -225,6 +225,24 @@ export function addDays(baseDate, days) {
  * Returns just the date, so existing callers are unaffected. Use
  * computeDueDateDetailed when the invoice needs to explain the date it shows.
  */
+/**
+ * The capacity a contract should actually be billed and judged on.
+ *
+ * A plant commissioned in phases has contracted capacity it is not yet
+ * generating from. commissioned_capacity_mw records that, and until now nothing
+ * read it: energy validation benchmarked expected output against the full
+ * contracted MW, so a 10 MW plant filing a month's output for 25 MW passed as
+ * clean, and the bill went out on it.
+ *
+ * Falls back to contracted capacity, which is the right answer for the ordinary
+ * case where the whole plant is live and the column is simply not set.
+ */
+export function billableCapacityMw(contract) {
+  const commissioned = Number(contract?.commissioned_capacity_mw);
+  if (Number.isFinite(commissioned) && commissioned > 0) return commissioned;
+  return Number(contract?.capacity_mw) || 0;
+}
+
 export function computeDueDate(billDate, contract, fallback = 30, state = null) {
   return computeDueDateDetailed(billDate, contract, fallback, state).due_date;
 }

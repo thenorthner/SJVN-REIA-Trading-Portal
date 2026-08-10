@@ -127,13 +127,16 @@ describe('S19 The stakeholder sweep actually runs', () => {
   });
 
   it('carries on past a contract it cannot process', () => {
-    // The whole failure was one bad item killing everything behind it.
+    // The whole failure was one bad item killing everything behind it, so what
+    // matters is that the second contract is reached — asserted on these two
+    // rows rather than on the sweep's total, which counts every contract in the
+    // database and would answer to fixtures this test did not create.
     const a = makeContract({ status: 'ACTIVE', tenure_end: day(30) });
     const b = makeContract({ status: 'ACTIVE', tenure_end: day(60) });
-    const r = runStakeholderAlerts();
-    expect(r.nearingExpiry, 'the sweep stopped after the first contract').toBe(2);
+    runStakeholderAlerts();
     for (const c of [a, b]) {
-      expect(db.prepare('SELECT status FROM contracts WHERE id = ?').get(c.id).status).toBe('NEARING_EXPIRY');
+      expect(db.prepare('SELECT status FROM contracts WHERE id = ?').get(c.id).status,
+        `${c.contract_no} was never reached — the sweep stopped early`).toBe('NEARING_EXPIRY');
     }
   });
 

@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
-import { newId, logAudit, humanizePaymentTerms, humanizeRebateRule, humanizeLpsRule } from '../util.js';
+import { newId, logAudit, pushNotification, humanizePaymentTerms, humanizeRebateRule, humanizeLpsRule } from '../util.js';
 import { syncRequirementsFromContract, createInstrumentsFromRequirements } from '../paymentSecurityEngine.js';
 import { allocationsInForce } from '../services/allocations.js';
 import { contractVisibleTo } from '../services/counterpartyScope.js';
+import { settlementPosition, settlementActions } from '../services/contractSettlement.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -204,6 +205,28 @@ router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     });
   }
   
+  // Ending a contract is where the money question gets asked, so it is asked
+  // here rather than left to whoever remembers. Terminating only wrote a status,
+  // a reason and a date — a contract could be ended with lakhs unbilled against
+  // it and live bank guarantees still open, and nothing said so.
+  const ending = ['TERMINATED', 'EXPIRED', 'CLOSED'].includes(status);
+  const position = ending ? settlementPosition(contract.id) : null;
+
+  // Termination itself is never blocked: the usual reason to terminate is that
+  // the counterparty has stopped paying, and refusing to end the contract until
+  // they pay would be exactly backwards. CLOSED is the one that is gated, since
+  // that is the state that says nothing is left to do.
+  if (status === 'CLOSED' && position && !position.settled) {
+    const override = (req.body?.settlement_override_reason || '').trim();
+    if (!override) {
+      return res.status(400).json({
+        error: 'This contract cannot be closed while its settlement is open. Clear the items below, or pass settlement_override_reason to close it as it stands.',
+        settlement: position,
+        outstanding_actions: settlementActions(position),
+      });
+    }
+  }
+
   db.prepare(`UPDATE contracts SET status = ?, remarks = ?, termination_reason = ?, termination_date = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(status, remarks ?? contract.remarks, termination_reason ?? null, termination_date ?? null, contract.id);
     
@@ -212,8 +235,31 @@ router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     createInstrumentsFromRequirements(contract.id, req.user);
   }
 
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: `STATUS_${status}`, module: 'REIA', entityType: 'contract', entityId: contract.id, details: { remarks, termination_reason } });
-  res.json(fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract.id)));
+  logAudit({
+    req: typeof req !== "undefined" ? req : null, user: req.user, action: `STATUS_${status}`,
+    module: 'REIA', entityType: 'contract', entityId: contract.id,
+    beforeValue: contract.status, afterValue: status,
+    reason: (req.body?.settlement_override_reason || '').trim() || undefined,
+    details: { remarks, termination_reason, settlement: position ?? undefined },
+  });
+
+  // Finance has to act on what is left, so they are told rather than expected to
+  // notice a status change.
+  if (position && !position.settled) {
+    pushNotification({
+      role: 'FINANCE_USER', type: 'CONTRACT_SETTLEMENT_DUE',
+      message: `${contract.contract_no} moved to ${status} with settlement open — `
+        + `₹${position.receivable_from_buyer.toLocaleString('en-IN')} receivable, `
+        + `₹${position.payable_to_generator.toLocaleString('en-IN')} payable, `
+        + `${position.active_security.length} security instrument(s) live.`,
+    });
+  }
+
+  const fresh = fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract.id));
+  res.json({
+    ...fresh,
+    ...(position ? { settlement: position, outstanding_actions: settlementActions(position) } : {}),
+  });
 });
 
 // Amendment -> creates a new version, marks old as AMENDED

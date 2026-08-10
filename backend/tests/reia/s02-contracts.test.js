@@ -62,6 +62,10 @@ describe('S2 Contract management', () => {
   it('applies an escalating tariff for the correct contract year', async () => {
     const c = makeContract({
       status: 'ACTIVE', tariff_type: 'ESCALATING', tariff_per_unit: 3.0,
+      // A five-year tenure, because this bills a year-2 period and the default
+      // fixture runs only to 2027-03-31 — billing past a contract's end is now
+      // refused, which is what made this fixture's own dates matter.
+      tenure_start: '2026-04-01', tenure_end: '2031-03-31',
       tariff_structure_json: JSON.stringify({ type: 'ESCALATING', base: 3.0, escalation_pct: 2, from: '2026-04-01' }),
     });
     db.prepare(`INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, status)

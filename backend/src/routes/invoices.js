@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { resolveTariff } from '../services/tariffStructure.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct } from '../util.js';
+import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct, billableCapacityMw } from '../util.js';
 import { payableNow, lpsBaseAmount, accruedLps, tieredRebatePct, daysBetween } from '../disputesConstants.js';
 import { payerStateForInvoice } from '../services/workingCalendar.js';
 import { getParamNumber, getParam } from '../mastersService.js';
@@ -366,6 +366,25 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     }
   }
 
+  // And nothing is billable after the contract has run out. EXPIRED is a
+  // billable status on purpose — a final or revised bill for a period the
+  // contract did cover often lands after it has ended — but nothing checked the
+  // period itself, so a contract that ended in July 2026 would raise an invoice
+  // for January 2031 as readily as for its last month.
+  //
+  // The bound is on the period, not on today: a period that started before the
+  // contract ended is fair to bill whenever the paperwork catches up. A period
+  // beginning after the end date was never covered by anything.
+  if (contract.tenure_end && period_month) {
+    const periodStart = `${period_month}-01`;
+    if (periodStart > String(contract.tenure_end)) {
+      throw refuse(400, {
+        error: `Cannot bill ${period_month}: the contract ran to ${contract.tenure_end} and did not cover this period.`,
+        tenure_end: contract.tenure_end,
+      });
+    }
+  }
+
   // If PSA, resolve parent PPA via the allocation in force for this period.
   //
   // This used to select on psa_id alone and take whichever row came back first,
@@ -522,7 +541,8 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     });
 
     const nrldcPerMw = getParamNumber('nrldc_fee_per_mw', 100);
-    nrldcFees = Math.round((contract.capacity_mw || 0) * nrldcPerMw);
+    // Per MW of capacity actually in service, not of capacity still being built.
+    nrldcFees = Math.round(billableCapacityMw(contract) * nrldcPerMw);
     if (nrldcFees) breakdown.push({ code: 'NR', label: 'NRLDC/SLDC Fees', value: nrldcFees });
 
   } else {
@@ -589,7 +609,10 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     contract,
     periodMonth: period_month,
     energyMwh: allocated_energy_mwh,
-    capacityMw: contract.capacity_mw,
+    // cufPenalty already prefers commissioned capacity when it is left to work
+    // it out; passing contracted capacity here overrode that and judged the
+    // plant on MW it has not commissioned.
+    capacityMw: billableCapacityMw(contract),
     cufPercent: energy.cuf_percent,
     tariffPerUnit: appliedTariff || contract.tariff_per_unit,
   });

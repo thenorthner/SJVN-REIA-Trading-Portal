@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification, buildBillingFamilyRef, directionForContract } from '../util.js';
+import { newId, logAudit, pushNotification, buildBillingFamilyRef, directionForContract, billableCapacityMw } from '../util.js';
 import { getParamNumber } from '../mastersService.js';
 import { runFinalDataRecon } from './reconciliation.js';
 import multer from 'multer';
@@ -122,14 +122,22 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
   if (contract.project_type === 'Wind') baseCuf = getParamNumber('wind_base_cuf_pct', 30) / 100;
   if (contract.project_type === 'Hydro') baseCuf = getParamNumber('hydro_base_cuf_pct', 65) / 100;
   
-  const expected = contract.capacity_mw * 24 * 30 * baseCuf;
+  // Benchmarked against what is actually commissioned, not what is contracted.
+  // A plant part-way through phased commissioning cannot generate from MW that
+  // are not built yet, and measuring it against the full contracted capacity let
+  // a 10 MW plant file a month's output for 25 MW and be called clean.
+  const ratedMw = billableCapacityMw(contract);
+  const expected = ratedMw * 24 * 30 * baseCuf;
   const deviationPct = Math.abs(row.energy_mwh - expected) / expected * 100;
   
   const tolerance = contract.project_type === 'Hydro'
     ? getParamNumber('hydro_validate_tolerance_pct', 80)
     : getParamNumber('energy_validate_tolerance_pct', 30);
   let flagged = deviationPct > tolerance;
-  let note = `Deviation ${deviationPct.toFixed(1)}% vs expected ${expected.toFixed(0)} MWh (${(baseCuf * 100).toFixed(0)}% CUF) - Tolerance: ${tolerance}%`;
+  const capNote = ratedMw !== Number(contract.capacity_mw)
+    ? ` on ${ratedMw} MW commissioned of ${contract.capacity_mw} MW contracted`
+    : '';
+  let note = `Deviation ${deviationPct.toFixed(1)}% vs expected ${expected.toFixed(0)} MWh (${(baseCuf * 100).toFixed(0)}% CUF${capNote}) - Tolerance: ${tolerance}%`;
 
   // Cross-source check. A plausible total can still be wrong: if the seller's
   // own figure and the SEA/meter figure for the same period disagree, one of
