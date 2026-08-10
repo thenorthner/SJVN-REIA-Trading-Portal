@@ -257,6 +257,24 @@ export function getParamNumber(key, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/**
+ * The capacity factor to assume for a plant of this kind when nothing has been
+ * measured yet — sizing a security requirement before the first bill, or
+ * judging whether a filed generation figure is plausible.
+ *
+ * One definition, because there were three: energy validation read these masters
+ * but matched project_type case-sensitively, so a contract recorded as "WIND"
+ * fell through to the solar figure; and the payment-security engine ignored them
+ * altogether in favour of a hardcoded 0.25.
+ */
+export function baselineCufFor(projectType) {
+  const t = String(projectType || '').trim().toUpperCase();
+  if (t === 'WIND') return getParamNumber('wind_base_cuf_pct', 30) / 100;
+  if (t === 'HYDRO' || t === 'PSP') return getParamNumber('hydro_base_cuf_pct', 65) / 100;
+  if (t === 'HYBRID' || t === 'FDRE') return getParamNumber('hybrid_base_cuf_pct', 25) / 100;
+  return getParamNumber('solar_base_cuf_pct', 22) / 100;
+}
+
 /** Idempotent seed of defaults into master tables (safe on every boot). */
 export function ensureMasterDefaults() {
   const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);

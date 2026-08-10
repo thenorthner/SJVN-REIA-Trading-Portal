@@ -2,7 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, buildBillingFamilyRef, directionForContract, billableCapacityMw } from '../util.js';
-import { getParamNumber } from '../mastersService.js';
+import { getParamNumber, baselineCufFor } from '../mastersService.js';
 import { runFinalDataRecon } from './reconciliation.js';
 import multer from 'multer';
 import { exec } from 'child_process';
@@ -118,9 +118,10 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
   if (!row) return res.status(404).json({ error: 'Energy data not found' });
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(row.contract_id);
   
-  let baseCuf = getParamNumber('solar_base_cuf_pct', 22) / 100;
-  if (contract.project_type === 'Wind') baseCuf = getParamNumber('wind_base_cuf_pct', 30) / 100;
-  if (contract.project_type === 'Hydro') baseCuf = getParamNumber('hydro_base_cuf_pct', 65) / 100;
+  // Shared with the security engine, which sizes a letter of credit off the same
+  // assumption. The matching here was case-sensitive, so a contract recorded as
+  // "WIND" rather than "Wind" was judged against the solar figure.
+  const baseCuf = baselineCufFor(contract.project_type);
   
   // Benchmarked against what is actually commissioned, not what is contracted.
   // A plant part-way through phased commissioning cannot generate from MW that
@@ -130,7 +131,10 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
   const expected = ratedMw * 24 * 30 * baseCuf;
   const deviationPct = Math.abs(row.energy_mwh - expected) / expected * 100;
   
-  const tolerance = contract.project_type === 'Hydro'
+  // Case-insensitive for the same reason as the CUF above: "HYDRO" and "Hydro"
+  // are the same plant, and only one of them was getting hydro's wider tolerance.
+  const isHydro = ['HYDRO', 'PSP'].includes(String(contract.project_type || '').trim().toUpperCase());
+  const tolerance = isHydro
     ? getParamNumber('hydro_validate_tolerance_pct', 80)
     : getParamNumber('energy_validate_tolerance_pct', 30);
   let flagged = deviationPct > tolerance;

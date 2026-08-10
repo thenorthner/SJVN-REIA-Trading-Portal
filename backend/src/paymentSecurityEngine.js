@@ -1,6 +1,7 @@
 import db from './db/index.js';
 import { newId, pushNotification } from './util.js';
 import { payableNow, OPEN_STATUSES as OPEN_DISPUTE_STATUSES } from './disputesConstants.js';
+import { baselineCufFor } from './mastersService.js';
 import {
   INVOCATION_OVERDUE_DAYS,
   DEFAULT_MONTHS_COVER,
@@ -44,6 +45,26 @@ export function syncInstrumentAvailable(id) {
 }
 
 /** Upsert security requirements from contract EMD/PBG/PSA rules */
+/**
+ * One month's billing for a contract that has not billed yet.
+ *
+ * capacity_mw x hours x capacity factor gives MWh; tariff_per_unit is rupees per
+ * kWh. The conversion between them was missing, so the estimate came out a
+ * thousandfold short: a 50 MW PSA at Rs 4.00/kWh was secured for Rs 39,600
+ * against a first bill of Rs 3.66 crore, and a new buyer was effectively
+ * unsecured for as long as it took the first invoice to land.
+ */
+export function estimatedMonthlyBill(contract) {
+  const HOURS_PER_MONTH = 24 * 30;
+  const KWH_PER_MWH = 1000;
+  const capacityMw = Number(contract?.commissioned_capacity_mw) > 0
+    ? Number(contract.commissioned_capacity_mw)
+    : Number(contract?.capacity_mw) || 0;
+  const energyMwh = capacityMw * HOURS_PER_MONTH * baselineCufFor(contract?.project_type);
+  const tariffPerKwh = Number(contract?.tariff_per_unit) || 3;
+  return Math.round(energyMwh * KWH_PER_MWH * tariffPerKwh);
+}
+
 export function syncRequirementsFromContract(contractId) {
   const c = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId);
   if (!c) return [];
@@ -76,9 +97,18 @@ export function syncRequirementsFromContract(contractId) {
 
   const ids = [];
   if (c.contract_type === 'PSA') {
+    // What one month of this contract is worth, and so how much cover it needs.
+    // Measured from billing history once there is any; estimated from the
+    // contract itself before the first bill — which is exactly when the letter
+    // of credit has to be in place, since supply starts before any payment
+    // record exists.
     const avg = trailingMonthlyBilledAvg(contractId);
-    const required = Math.max(avg * DEFAULT_MONTHS_COVER, 0);
-    ids.push(upsert('LC', null, required || Math.round((c.capacity_mw || 0) * 24 * 30 * 0.25 * (c.tariff_per_unit || 3) * 1.1), DEFAULT_MONTHS_COVER, true, WATERFALL_DEFAULTS.LC));
+    const monthlyBill = avg || estimatedMonthlyBill(c);
+    const required = Math.round(Math.max(monthlyBill * DEFAULT_MONTHS_COVER, 0));
+
+    ids.push(upsert('LC', null, required, DEFAULT_MONTHS_COVER, true, WATERFALL_DEFAULTS.LC));
+    // The corpus was sized off the history-based figure alone, so on a contract
+    // with no history it came out at zero — an instrument that secured nothing.
     ids.push(upsert('CORPUS_FUND', null, Math.round(required * 0.1), 0, false, WATERFALL_DEFAULTS.CORPUS_FUND));
   }
   if (c.contract_type === 'PPA') {
