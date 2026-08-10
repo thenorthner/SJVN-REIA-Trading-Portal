@@ -62,6 +62,24 @@ function refreshRegulatorySummary(entityId) {
   return { rows, summary };
 }
 
+// The kinds of contact a counterparty can record. Kept here as well as on the
+// table so an unknown one is refused with a message naming the choices, rather
+// than reaching the CHECK constraint and coming back as a 500 that says only
+// that something failed.
+const CONTACT_TYPES = ['COMMERCIAL', 'TECHNICAL', 'DISPUTE', 'EMERGENCY', 'AUTHORIZED_SIGNATORY', 'FINANCE', 'GRIEVANCE'];
+
+function invalidContact(c) {
+  if (!c?.contact_type) return 'each contact needs a contact_type';
+  if (!CONTACT_TYPES.includes(c.contact_type)) {
+    return `"${c.contact_type}" is not a contact type. Use one of: ${CONTACT_TYPES.join(', ')}`;
+  }
+  const name = String(c?.name ?? '').trim();
+  if (!name) return `contact ${c.contact_type} needs a name`;
+  const email = String(c?.email ?? '').trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return `"${email}" is not a valid email address`;
+  return null;
+}
+
 function fetchEntityRelations(entity) {
   if (!entity) return entity;
   entity.contacts = db.prepare('SELECT * FROM entity_contacts WHERE entity_id = ?').all(entity.id);
@@ -148,6 +166,31 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req
     return res.status(400).json({ error: 'entity_type, name and category are required' });
   }
 
+  // What a counterparty of this kind has to bring. Only name, type and category
+  // were ever required, so a generator could be onboarded with no PAN, no GST
+  // and no stated capacity — and the record it left could not be invoiced,
+  // reconciled against a GST return, or checked for plausible output. The two
+  // sides genuinely differ: a generator is defined by what it can produce, a
+  // DISCOM by what it has contracted to take.
+  const REQUIRED = {
+    common: [['pan_no', 'PAN'], ['gst_no', 'GST number']],
+    SELLER: [['capacity_mw', 'generation capacity (MW)']],
+    BUYER: [['contracted_capacity_mw', 'contracted capacity (MW)']],
+  };
+  const blank = (v) => v === undefined || v === null || String(v).trim() === '';
+  const missing = [...REQUIRED.common, ...(REQUIRED[body.entity_type] ?? [])]
+    .filter(([field]) => blank(body[field]))
+    .map(([field, label]) => ({ field, label }));
+
+  // Reported together. One at a time means submitting, being told about PAN,
+  // fixing it, submitting again and being told about GST.
+  if (missing.length) {
+    return res.status(400).json({
+      error: `A ${body.entity_type} needs ${missing.map((m) => m.label).join(', ')}.`,
+      missing_fields: missing.map((m) => m.field),
+    });
+  }
+
   // A PAN or GST identifies one legal entity. Onboarding the same one twice
   // splits its contracts, exposure and payment history across two records that
   // nothing later reconciles, so it is refused rather than quietly created.
@@ -160,6 +203,15 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req
         error: `${label} ${value} is already onboarded as "${clash.name}".`,
         duplicate_of: { id: clash.id, name: clash.name, field },
       });
+    }
+  }
+
+  // Checked before the transaction opens: throwing inside it escapes to the
+  // default error handler and returns a 500, which is the shape this was in.
+  if (Array.isArray(body.contacts)) {
+    for (const c of body.contacts) {
+      const bad = invalidContact(c);
+      if (bad) return res.status(400).json({ error: bad });
     }
   }
 
@@ -303,14 +355,9 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
       // A malformed address does not fail loudly at this point — it fails much
       // later, as a bill that was never delivered to a counterparty who is then
       // late paying it.
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return res.status(400).json({ error: `"${email}" is not a valid email address` });
-      }
-      if (!c?.contact_type) return res.status(400).json({ error: 'each contact needs a contact_type' });
-      // name is NOT NULL on the table, so an unnamed contact is refused here
-      // rather than surfacing as a constraint violation.
-      const name = String(c?.name ?? '').trim();
-      if (!name) return res.status(400).json({ error: `contact ${c.contact_type} needs a name` });
+      const bad = invalidContact(c);
+      if (bad) return res.status(400).json({ error: bad });
+      const name = String(c.name).trim();
       cleaned.push({
         contact_type: c.contact_type, name, email: email || null,
         phone: c.phone ?? null, is_primary: c.is_primary ? 1 : 0,

@@ -1578,6 +1578,58 @@ try {
   console.error('Amendment effective-date migration failed:', e.message);
 }
 
+/**
+ * Room for the signatory in the contact list.
+ *
+ * contact_type allowed COMMERCIAL, TECHNICAL, DISPUTE and EMERGENCY, so the
+ * authorised signatory — the person who actually binds the counterparty, and the
+ * one onboarding asks for by name — had nowhere to go. The entity carries
+ * signatory_name and signatory_designation as flat fields, which holds a name
+ * but not an email or a phone, so there was no way to reach them.
+ *
+ * SQLite cannot alter a CHECK constraint, so the table is rebuilt. Its rows are
+ * carried across first and the count is compared before the old one is dropped —
+ * losing contacts here would silently break invoice delivery, which resolves its
+ * recipient from exactly this table.
+ */
+function migrateContactTypes() {
+  const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type='table'`).all().map((r) => r.name);
+  if (!tables.includes('entity_contacts')) return;
+
+  const ddl = db.prepare(`SELECT sql FROM sqlite_master WHERE name='entity_contacts'`).get()?.sql || '';
+  if (ddl.includes('AUTHORIZED_SIGNATORY')) return;
+
+  const before = db.prepare('SELECT COUNT(*) c FROM entity_contacts').get().c;
+  db.pragma('foreign_keys = OFF');
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE entity_contacts_new (
+        id TEXT PRIMARY KEY,
+        entity_id TEXT NOT NULL REFERENCES entities(id),
+        contact_type TEXT NOT NULL CHECK (contact_type IN (
+          'COMMERCIAL','TECHNICAL','DISPUTE','EMERGENCY','AUTHORIZED_SIGNATORY','FINANCE','GRIEVANCE'
+        )),
+        name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        phone TEXT,
+        is_primary INTEGER NOT NULL DEFAULT 0
+      );
+      INSERT INTO entity_contacts_new (id, entity_id, contact_type, name, email, phone, is_primary)
+        SELECT id, entity_id, contact_type, name, email, phone, is_primary FROM entity_contacts;
+    `);
+    const after = db.prepare('SELECT COUNT(*) c FROM entity_contacts_new').get().c;
+    if (after !== before) throw new Error(`contact rebuild would lose rows (${before} → ${after})`);
+    db.exec(`DROP TABLE entity_contacts; ALTER TABLE entity_contacts_new RENAME TO entity_contacts;`);
+  })();
+  db.pragma('foreign_keys = ON');
+}
+
+try {
+  migrateContactTypes();
+} catch (e) {
+  console.error('Contact-type migration failed:', e.message);
+}
+
 try {
   migrateWaterfallPriority();
 } catch (e) {

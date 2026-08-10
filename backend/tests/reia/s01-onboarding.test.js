@@ -5,10 +5,17 @@ import db from '../../src/db/index.js';
 import { tokenFor, auth, makeEntity, columnsOf, resetReia } from '../helpers/reia.js';
 
 let reia, seller;
+let seq = 1000;
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
-  seller = { entity_type: 'SELLER', category: 'RE Generator', name: 'Sunrise Solar', capacity_mw: 50 };
+  // Onboarding now requires what a counterparty of this kind actually has to
+  // bring: PAN and GST on both sides, plus generation capacity for a seller.
+  // Unique per test, because resetReia does not clear entities and a repeated
+  // PAN would now be refused as the duplicate it is.
+  const n = String(seq++).padStart(4, '0');
+  seller = { entity_type: 'SELLER', category: 'RE Generator', name: 'Sunrise Solar', capacity_mw: 50,
+             pan_no: `AAACS${n}B`, gst_no: `24AAACS${n}B1ZQ` };
 });
 
 describe('S1 Stakeholder onboarding', () => {
@@ -26,6 +33,7 @@ describe('S1 Stakeholder onboarding', () => {
     const r = await request(app).post('/api/entities').set(auth(reia)).send({
       entity_type: 'BUYER', category: 'DISCOM', name: 'State DISCOM',
       contracted_capacity_mw: 80, psa_tariff: 3.25, supply_criteria: 'RTC',
+      pan_no: 'AAACD3333C', gst_no: '02AAACD3333C1ZR',
     });
     expect(r.status).toBe(201);
     expect(r.body.psa_tariff).toBe(3.25);
@@ -63,8 +71,9 @@ describe('S1 Stakeholder onboarding', () => {
   });
 
   it('flags a duplicate PAN rather than silently creating a second entity', async () => {
-    await request(app).post('/api/entities').set(auth(reia)).send({ ...seller, name: 'First', pan_no: 'AAACS9999A' });
-    const dup = await request(app).post('/api/entities').set(auth(reia)).send({ ...seller, name: 'Second', pan_no: 'AAACS9999A' });
+    await request(app).post('/api/entities').set(auth(reia)).send({ ...seller, name: 'First', pan_no: 'AAACS9999A', gst_no: '24AAACS9999A1ZA' });
+    // A different GST, so it is the PAN clash being tested and not the GST one.
+    const dup = await request(app).post('/api/entities').set(auth(reia)).send({ ...seller, name: 'Second', pan_no: 'AAACS9999A', gst_no: '24AAACS8888B1ZB' });
     // Either refused, or accepted but surfaced as a duplicate — silently creating a twin is the failure.
     const duplicated = db.prepare('SELECT COUNT(*) c FROM entities WHERE pan_no = ?').get('AAACS9999A').c;
     expect(dup.status >= 400 || duplicated === 1).toBe(true);

@@ -54,14 +54,63 @@ router.get('/reia', (req, res) => {
       AND julianday(validity_end) - julianday('now') BETWEEN 0 AND 60
   `).get().c;
 
+  // The stakeholder side of this dashboard, which it did not carry: how many
+  // counterparties are live, how many are stuck waiting for approval, and what
+  // paperwork is about to lapse. A screen about contracts and their parties that
+  // could not say how many parties there were.
+  const entityCounts = db.prepare(`
+    SELECT entity_type, status, COUNT(*) c FROM entities GROUP BY entity_type, status
+  `).all();
+  const countOf = (type, status) => entityCounts
+    .filter((r) => r.entity_type === type && r.status === status)
+    .reduce((a, r) => a + r.c, 0);
+
+  const activeSellers = countOf('SELLER', 'APPROVED');
+  const activeBuyers = countOf('BUYER', 'APPROVED');
+  const pendingEntityApprovals = entityCounts.filter((r) => r.status === 'PENDING').reduce((a, r) => a + r.c, 0);
+
+  // Named for what it counts. `pendingApprovals` is invoices under approval, and
+  // sitting beside contract figures it read as counterparties awaiting sign-off.
+  const pendingInvoiceApprovals = pendingApprovals;
+
+  // Contract statuses. byStatus is invoice statuses, which on a contracts
+  // dashboard was answering a question nobody asked of it.
+  const contractsByStatus = db.prepare(`
+    SELECT status, COUNT(*) c FROM contracts GROUP BY status ORDER BY c DESC
+  `).all();
+
+  const contractsNearingExpiry = db.prepare(`
+    SELECT COUNT(*) c FROM contracts
+    WHERE tenure_end IS NOT NULL
+      AND date(tenure_end) BETWEEN date('now') AND date('now','+30 days')
+      AND status NOT IN ('TERMINATED','CLOSED','EXPIRED')
+  `).get().c;
+
+  // Read from document_versions, where uploads actually land, and only the
+  // current version of each — a superseded licence's expiry is history.
+  const documentsExpiringSoon = db.prepare(`
+    SELECT d.document_type, d.title, v.expiry_date, e.name AS entity_name,
+           CAST(julianday(v.expiry_date) - julianday('now') AS INTEGER) AS days_remaining
+    FROM document_versions v
+    JOIN documents d ON d.id = v.document_id
+    LEFT JOIN entities e ON e.id = d.entity_id
+    WHERE v.expiry_date IS NOT NULL
+      AND v.version_number = (SELECT MAX(version_number) FROM document_versions WHERE document_id = d.id)
+      AND date(v.expiry_date) <= date('now','+60 days')
+    ORDER BY v.expiry_date
+  `).all();
+
   res.json({
     kpis: {
       activeContracts, contractedCapacity, energySupplied, billedEnergy,
-      pendingApprovals, pendingDisputes, reconciliationExceptions, expiringSecurities,
+      pendingApprovals, pendingInvoiceApprovals, pendingDisputes, reconciliationExceptions, expiringSecurities,
+      activeSellers, activeBuyers, pendingEntityApprovals,
+      contractsNearingExpiry, documentsExpiringSoon: documentsExpiringSoon.length,
       totalInvoices: totalInvoices.c, totalInvoiceValue: totalInvoices.s,
       receivables, payables, paymentsReceived, paymentsDisbursed, overdue,
     },
-    byStatus, byProjectType, monthlyBilling,
+    byStatus, contractsByStatus, byProjectType, monthlyBilling,
+    documentsExpiring: documentsExpiringSoon,
   });
 });
 

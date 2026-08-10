@@ -79,25 +79,81 @@ function fetchContractRelations(contract) {
 }
 
 // B. Contract Management - search / filter / list
+// Filters this list understands. Anything else in the query string is a filter
+// the caller believed in and did not get: capacity_min and capacity_max were
+// silently dropped, so a search narrowed to a capacity band came back with every
+// contract in the system and looked like it had worked.
+const CONTRACT_FILTERS = new Set([
+  'contract_type', 'status', 'project_type', 'q',
+  'capacity_min', 'capacity_max', 'expiring_within_days', 'seller_id', 'buyer_id',
+]);
+
 router.get('/', (req, res) => {
-  const { contract_type, status, project_type, q } = req.query;
-  let sql = 'SELECT * FROM contracts WHERE 1=1';
+  const { contract_type, status, project_type, q,
+          capacity_min, capacity_max, expiring_within_days, seller_id, buyer_id } = req.query;
+
+  const unknown = Object.keys(req.query).filter((k) => !CONTRACT_FILTERS.has(k));
+  if (unknown.length) {
+    return res.status(400).json({
+      error: `Unrecognised filter(s): ${unknown.join(', ')}. Returning everything would look like a result.`,
+      supported_filters: [...CONTRACT_FILTERS],
+    });
+  }
+
+  // Joined so a search can name the counterparty. `q` matched contract_no alone,
+  // so searching by seller — the obvious way to look for a generator's contracts
+  // — returned nothing at all.
+  let sql = `
+    SELECT c.* FROM contracts c
+    LEFT JOIN entities es ON es.id = c.seller_id
+    LEFT JOIN entities eb ON eb.id = c.buyer_id
+    WHERE 1=1
+  `;
   const params = [];
-  
+
   const side = counterpartySide(req.user);
   if (side === 'SELLER') {
-    sql += ' AND seller_id = ?';
+    sql += ' AND c.seller_id = ?';
     params.push(req.user.linked_entity_id);
   } else if (side === 'BUYER') {
-    sql += ' AND buyer_id = ?';
+    sql += ' AND c.buyer_id = ?';
     params.push(req.user.linked_entity_id);
   }
 
-  if (contract_type) { sql += ' AND contract_type = ?'; params.push(contract_type); }
-  if (status) { sql += ' AND status = ?'; params.push(status); }
-  if (project_type) { sql += ' AND project_type = ?'; params.push(project_type); }
-  if (q) { sql += ' AND contract_no LIKE ?'; params.push(`%${q}%`); }
-  sql += ' ORDER BY created_at DESC';
+  if (contract_type) { sql += ' AND c.contract_type = ?'; params.push(contract_type); }
+  if (status) { sql += ' AND c.status = ?'; params.push(status); }
+  if (project_type) { sql += ' AND c.project_type = ?'; params.push(project_type); }
+  if (seller_id) { sql += ' AND c.seller_id = ?'; params.push(seller_id); }
+  if (buyer_id) { sql += ' AND c.buyer_id = ?'; params.push(buyer_id); }
+  if (q) {
+    sql += ' AND (c.contract_no LIKE ? OR es.name LIKE ? OR eb.name LIKE ?)';
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+  }
+
+  for (const [value, clause, label] of [
+    [capacity_min, ' AND c.capacity_mw >= ?', 'capacity_min'],
+    [capacity_max, ' AND c.capacity_mw <= ?', 'capacity_max'],
+  ]) {
+    if (value === undefined || value === '') continue;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return res.status(400).json({ error: `${label} must be a number` });
+    sql += clause;
+    params.push(n);
+  }
+
+  // "Show me what runs out in the next 30 days" — asked of the dates rather than
+  // of a status, which only tells you what some sweep has already relabelled.
+  if (expiring_within_days !== undefined && expiring_within_days !== '') {
+    const n = Number(expiring_within_days);
+    if (!Number.isFinite(n)) return res.status(400).json({ error: 'expiring_within_days must be a number' });
+    sql += ` AND c.tenure_end IS NOT NULL
+             AND date(c.tenure_end) >= date('now')
+             AND date(c.tenure_end) <= date('now', '+' || ? || ' days')
+             AND c.status NOT IN ('TERMINATED','CLOSED','EXPIRED')`;
+    params.push(String(Math.round(n)));
+  }
+
+  sql += ' ORDER BY c.created_at DESC';
   const rows = db.prepare(sql).all(...params).map(fetchContractRelations);
   res.json(rows);
 });
