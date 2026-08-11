@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { PageHeader, Card, Table, Badge, StatCard, fmtNumber, fmtCurrency } from '../../components/ui.jsx';
+import NationalCapacityChart from '../../components/analytics/NationalCapacityChart';
 import api from '../../api/client';
 
 // A missing or non-numeric field must never blank the whole dashboard.
@@ -193,6 +194,9 @@ export default function TradingDashboard() {
     if (!data) return null;
     return (
       <div>
+        <div style={{ marginBottom: 24 }}>
+          <NationalCapacityChart />
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           <Card title="Top Clients by Trading Margin (YTD)">
             <Table

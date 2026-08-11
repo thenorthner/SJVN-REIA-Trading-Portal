@@ -6,6 +6,10 @@ import {
 import { SampleDataNotice, Card, PageHeader } from '../../components/ui';
 import ACPTrendWidget from '../../components/analytics/ACPTrendWidget.jsx';
 import CERCMarketIntelligence from './CERCMarketIntelligence.jsx';
+import GTAMAnalyticsWidget from './GTAMAnalyticsWidget.jsx';
+import TAMAnalyticsWidget from './TAMAnalyticsWidget.jsx';
+import CollectiveMarketAnalyticsWidget from './CollectiveMarketAnalyticsWidget.jsx';
+import MacroTradingIntelligenceWidget from './MacroTradingIntelligenceWidget.jsx';
 
 // Mock Data Generator for 96 blocks (15-min intervals)
 const generateMockData = () => {
@@ -106,6 +110,70 @@ export default function MarketAnalytics() {
           }}
         >
           CERC Monthly Intelligence
+        </button>
+        <button
+          onClick={() => setActiveTab('gtam')}
+          style={{
+            padding: '10px 24px',
+            fontWeight: 600,
+            fontSize: 14,
+            border: 'none',
+            borderBottom: activeTab === 'gtam' ? '2px solid #3b82f6' : '2px solid transparent',
+            color: activeTab === 'gtam' ? '#3b82f6' : '#64748b',
+            background: 'transparent',
+            cursor: 'pointer',
+            marginBottom: -2,
+          }}
+        >
+          GTAM Performance Analytics
+        </button>
+        <button
+          onClick={() => setActiveTab('tam')}
+          style={{
+            padding: '10px 24px',
+            fontWeight: 600,
+            fontSize: 14,
+            border: 'none',
+            borderBottom: activeTab === 'tam' ? '2px solid #3b82f6' : '2px solid transparent',
+            color: activeTab === 'tam' ? '#3b82f6' : '#64748b',
+            background: 'transparent',
+            cursor: 'pointer',
+            marginBottom: -2,
+          }}
+        >
+          TAM Performance Analytics
+        </button>
+        <button
+          onClick={() => setActiveTab('collective')}
+          style={{
+            padding: '10px 24px',
+            fontWeight: 600,
+            fontSize: 14,
+            border: 'none',
+            borderBottom: activeTab === 'collective' ? '2px solid #3b82f6' : '2px solid transparent',
+            color: activeTab === 'collective' ? '#3b82f6' : '#64748b',
+            background: 'transparent',
+            cursor: 'pointer',
+            marginBottom: -2,
+          }}
+        >
+          Collective Market Analytics
+        </button>
+        <button
+          onClick={() => setActiveTab('macro')}
+          style={{
+            padding: '10px 24px',
+            fontWeight: 600,
+            fontSize: 14,
+            border: 'none',
+            borderBottom: activeTab === 'macro' ? '2px solid #3b82f6' : '2px solid transparent',
+            color: activeTab === 'macro' ? '#3b82f6' : '#64748b',
+            background: 'transparent',
+            cursor: 'pointer',
+            marginBottom: -2,
+          }}
+        >
+          Macro Intelligence
         </button>
       </div>
 
@@ -218,6 +286,14 @@ export default function MarketAnalytics() {
       )}
       
       {activeTab === 'cerc' && <CERCMarketIntelligence />}
+
+      {activeTab === 'gtam' && <GTAMAnalyticsWidget />}
+
+      {activeTab === 'tam' && <TAMAnalyticsWidget />}
+
+      {activeTab === 'collective' && <CollectiveMarketAnalyticsWidget />}
+
+      {activeTab === 'macro' && <MacroTradingIntelligenceWidget />}
 
     </div>
   );

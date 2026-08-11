@@ -54,7 +54,30 @@ const ContractPnl = lazy(() => import('./pages/trading/ContractPnl.jsx'));
 const LedgerImport = lazy(() => import('./pages/trading/LedgerImport.jsx'));
 const MarginAssurance = lazy(() => import('./pages/trading/MarginAssurance.jsx'));
 const OAReconciliation = lazy(() => import('./pages/trading/OAReconciliation.jsx'));
-
+const CustomerReceivablesTable = lazy(() => import('./pages/trading/CustomerReceivablesTable.jsx'));
+const NOARDetailCard = lazy(() => import('./pages/trading/NOARDetailCard.jsx'));
+const ImplementedScheduleGrid = lazy(() => import('./pages/trading/ImplementedScheduleGrid.jsx'));
+const TDSSummaryLedger = lazy(() => import('./pages/trading/TDSSummaryLedger.jsx'));
+const BillOfSupplyForm = lazy(() => import('./pages/trading/BillOfSupplyForm.jsx'));
+const REAReconciliationGrid = lazy(() => import('./pages/trading/REAReconciliationGrid.jsx'));
+const ERPVendorMasterTable = lazy(() => import('./pages/trading/ERPVendorMasterTable.jsx'));
+const ERPVendorPayableLedger = lazy(() => import('./pages/trading/ERPVendorPayableLedger.jsx'));
+const OpenAccessInvoiceViewer = lazy(() => import('./pages/trading/OpenAccessInvoiceViewer.jsx'));
+const OpenAccessInvoiceDetail = lazy(() => import('./pages/trading/OpenAccessInvoiceDetail.jsx'));
+const TradingMarginInvoiceSummary = lazy(() => import('./pages/trading/TradingMarginInvoiceSummary.jsx'));
+const ViewBills = lazy(() => import('./pages/trading/ViewBills.jsx'));
+const BillGenerationForm = lazy(() => import('./pages/trading/BillGenerationForm.jsx'));
+const UpdatePortfolioID = lazy(() => import('./pages/trading/UpdatePortfolioID.jsx'));
+const ClientDetails = lazy(() => import('./pages/trading/ClientDetails.jsx'));
+const ClientRegistrationApproval = lazy(() => import('./pages/trading/ClientRegistrationApproval.jsx'));
+const Top10GDAMParticipantsChart = lazy(() => import('./pages/trading/Top10GDAMParticipantsChart.jsx'));
+const PortalLevel1Dashboard = lazy(() => import('./pages/trading/PortalLevel1Dashboard.jsx'));
+const PreRegistrationRequests = lazy(() => import('./pages/trading/PreRegistrationRequests.jsx'));
+const MainDashboard = lazy(() => import('./pages/trading/MainDashboard.jsx'));
+const RegistrationRequests = lazy(() => import('./pages/trading/RegistrationRequests.jsx'));
+const MMRDashboard = lazy(() => import('./pages/trading/MMRDashboard.jsx'));
+const CEAReportsDashboard = lazy(() => import('./pages/trading/CEAReportsDashboard.jsx'));
+const PowerMarketDashboard = lazy(() => import('./pages/trading/PowerMarketDashboard.jsx'));
 const SellerDashboard = lazy(() => import('./pages/seller/SellerDashboard.jsx'));
 const SellerContracts = lazy(() => import('./pages/seller/SellerContracts.jsx'));
 const SellerEnergyData = lazy(() => import('./pages/seller/SellerEnergyData.jsx'));
@@ -218,6 +241,30 @@ export default function App() {
         <Route path="trading/rec" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CertificateOperationsHub defaultTab="REC" /></ProtectedRoute>} />
         <Route path="trading/noar" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARWallet /></ProtectedRoute>} />
         <Route path="trading/noar-registry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARRegistry /></ProtectedRoute>} />
+        <Route path="compliance/noar/:id" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARDetailCard /></ProtectedRoute>} />
+        <Route path="erp/receivables" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CustomerReceivablesTable /></ProtectedRoute>} />
+        <Route path="billing/bill-of-supply/new" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BillOfSupplyForm /></ProtectedRoute>} />
+        <Route path="reconciliation/rea-sea" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><REAReconciliationGrid /></ProtectedRoute>} />
+        <Route path="erp/vendors" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ERPVendorMasterTable /></ProtectedRoute>} />
+        <Route path="erp/payables" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ERPVendorPayableLedger /></ProtectedRoute>} />
+        <Route path="invoices/open-access" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><OpenAccessInvoiceViewer /></ProtectedRoute>} />
+        <Route path="invoices/open-access/:id" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><OpenAccessInvoiceDetail /></ProtectedRoute>} />
+        <Route path="invoices/trading-margin" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TradingMarginInvoiceSummary /></ProtectedRoute>} />
+        <Route path="billing/view-bills" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ViewBills /></ProtectedRoute>} />
+        <Route path="billing/generate" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BillGenerationForm /></ProtectedRoute>} />
+        <Route path="portfolio/update" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><UpdatePortfolioID /></ProtectedRoute>} />
+        <Route path="clients/details" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ClientDetails /></ProtectedRoute>} />
+        <Route path="registration/details/:id" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ClientRegistrationApproval /></ProtectedRoute>} />
+        <Route path="market/gdam/participants" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><Top10GDAMParticipantsChart /></ProtectedRoute>} />
+        <Route path="level1/dashboard" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PortalLevel1Dashboard /></ProtectedRoute>} />
+        <Route path="dashboard" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><MainDashboard /></ProtectedRoute>} />
+        <Route path="registration/initial/requests" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PreRegistrationRequests /></ProtectedRoute>} />
+        <Route path="registration/requests" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RegistrationRequests /></ProtectedRoute>} />
+        <Route path="trading/mmr-dashboard" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><MMRDashboard /></ProtectedRoute>} />
+        <Route path="trading/cea-reports" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CEAReportsDashboard /></ProtectedRoute>} />
+        <Route path="trading/power-market" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PowerMarketDashboard /></ProtectedRoute>} />
+        <Route path="reports/dispatch/implemented" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ImplementedScheduleGrid /></ProtectedRoute>} />
+        <Route path="compliance/tax/tds-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TDSSummaryLedger /></ProtectedRoute>} />
         <Route path="trading/form-iv" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CERCFormIV /></ProtectedRoute>} />
         <Route path="trading/bulk-communications" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BulkCommunications /></ProtectedRoute>} />
         <Route path="trading/inbox" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><InboxMailList /></ProtectedRoute>} />
