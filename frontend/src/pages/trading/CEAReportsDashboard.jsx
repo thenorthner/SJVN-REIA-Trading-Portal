@@ -241,29 +241,28 @@ export default function CEAReportsDashboard() {
         </div>
       </div>
 
-      {/* Bottom Row: Dark Mode Installed Capacity Composed Chart */}
-      <div className="card" style={{ background: '#0b0c10', border: '1px solid #1f2833' }}>
-        <div className="card-header" style={{ borderBottom: '1px solid #1f2833', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-           <h3 style={{ color: '#d1d5db', margin: 0 }}>Category Wise Installed Capacity (All India) (MW)</h3>
-           <span style={{ color: '#6b7280', fontSize: '12px' }}>Dark Mode Analytics View</span>
+      {/* Bottom Row: Installed Capacity Composed Chart */}
+      <div className="card">
+        <div className="card-header">
+           <h3>Category Wise Installed Capacity (All India) (MW)</h3>
         </div>
         
         <div className="card-body" style={{ height: '400px' }}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={INSTALLED_CAPACITY_DATA} margin={{ top: 20, right: 20, bottom: 20, left: 10 }}>
-              <CartesianGrid stroke="#1f2833" vertical={false} />
+              <CartesianGrid stroke="#e5e7eb" vertical={false} />
               
               <XAxis 
                 dataKey="month" 
-                tick={{fontSize: 11, fill: '#64748b'}} 
-                axisLine={{ stroke: '#334155' }}
+                tick={{fontSize: 11, fill: '#4b5563'}} 
+                axisLine={{ stroke: '#d1d5db' }}
                 tickLine={false}
                 tickMargin={10}
               />
               
               <YAxis 
                 yAxisId="left" 
-                tick={{fontSize: 11, fill: '#64748b'}} 
+                tick={{fontSize: 11, fill: '#4b5563'}} 
                 axisLine={false} 
                 tickLine={false} 
                 domain={[0, 300000]} 
@@ -274,21 +273,21 @@ export default function CEAReportsDashboard() {
               <YAxis 
                 yAxisId="right" 
                 orientation="right" 
-                tick={{fontSize: 11, fill: '#64748b'}} 
+                tick={{fontSize: 11, fill: '#4b5563'}} 
                 axisLine={false} 
                 tickLine={false} 
                 domain={[8174, 8186]}
-                label={{ value: 'Nuclear', angle: 90, position: 'insideRight', fill: '#64748b', fontSize: 11 }}
+                label={{ value: 'Nuclear', angle: 90, position: 'insideRight', fill: '#4b5563', fontSize: 11 }}
               />
               
-              <Tooltip content={<DarkModeTooltip />} cursor={{fill: 'rgba(255,255,255,0.02)'}} />
-              <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '11px', color: '#64748b', paddingTop: '20px'}}/>
+              <Tooltip content={<CustomBarTooltip />} cursor={{fill: '#f3f4f6'}} />
+              <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '12px', fontWeight: 600, paddingTop: '20px'}}/>
               
-              <Bar yAxisId="left" dataKey="thermal" name="Thermal" fill="#475569" barSize={35} />
-              <Bar yAxisId="left" dataKey="hydro" name="Hydro" fill="#0284c7" barSize={35} />
-              <Bar yAxisId="left" dataKey="res" name="RES" fill="#16a34a" barSize={35} />
+              <Bar yAxisId="left" dataKey="thermal" name="Thermal" fill="#54c2db" barSize={35} />
+              <Bar yAxisId="left" dataKey="hydro" name="Hydro" fill="#a4d142" barSize={35} />
+              <Bar yAxisId="left" dataKey="res" name="RES" fill="#3b82f6" barSize={35} />
               
-              <Line yAxisId="right" type="step" dataKey="nuclear" name="Nuclear" stroke="#ef4444" strokeWidth={2} dot={{r: 4, stroke: '#ef4444', fill: '#0b0c10', strokeWidth: 2}} activeDot={{r: 6}} />
+              <Line yAxisId="right" type="step" dataKey="nuclear" name="Nuclear" stroke="#ef4444" strokeWidth={2} dot={{r: 4, stroke: '#ef4444', fill: '#fff', strokeWidth: 2}} activeDot={{r: 6}} />
               
             </ComposedChart>
           </ResponsiveContainer>
