@@ -1,7 +1,33 @@
 import React, { useState } from 'react';
 import { 
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+  ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell
 } from 'recharts';
+
+const LICENSEE_SHARE_DATA = [
+  { name: 'PTC India', share: 45.2, color: '#3b82f6' },
+  { name: 'NTPC Vidyut', share: 18.5, color: '#10b981' },
+  { name: 'Tata Power', share: 12.3, color: '#f59e0b' },
+  { name: 'Manikaran', share: 8.7, color: '#ef4444' },
+  { name: 'Adani', share: 6.4, color: '#8b5cf6' },
+  { name: 'KEI', share: 5.1, color: '#ec4899' },
+  { name: 'GMR', share: 3.8, color: '#06b6d4' }
+];
+
+const REC_MARKET_DEPTH_DATA = [
+  { session: 'Jan-26', volume: 1245000, price: 1250 },
+  { session: 'Feb-26', volume: 1560000, price: 1300 },
+  { session: 'Mar-26', volume: 1120000, price: 1100 },
+  { session: 'Apr-26', volume: 1890000, price: 1450 },
+  { session: 'May-26', volume: 1750000, price: 1380 },
+  { session: 'Jun-26', volume: 2100000, price: 1500 }
+];
+
+const EXCHANGE_VOLUME_DATA = [
+  { name: 'IEX', value: 85.2, color: '#3b82f6' },
+  { name: 'PXIL', value: 10.4, color: '#f59e0b' },
+  { name: 'HPX', value: 4.4, color: '#10b981' }
+];
 
 // Data Mocks based on the screenshot analysis
 const RTM_DATA = [
@@ -233,7 +259,7 @@ export default function PowerMarketDashboard() {
 
       {/* Data Table View (Only visible for DAM to match Screenshot 1) */}
       {productType === 'DAM' && (
-        <div className="card" style={{ maxWidth: '900px' }}>
+        <div className="card" style={{ maxWidth: '900px', marginBottom: '20px' }}>
           <div className="card-header">
             <h3 style={{ textAlign: 'center', width: '100%' }}>
               Day wise Buy Volume V/s Sell Volume V/s MCP (for dates from: {fromDate} to {toDate})
@@ -265,6 +291,94 @@ export default function PowerMarketDashboard() {
           </div>
         </div>
       )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        {/* Top 7 Licensees */}
+        <div className="card">
+          <div className="card-header">
+            <h3>% Share of Electricity Transacted by Top 7 Trading Licensees</h3>
+          </div>
+          <div className="card-body">
+            <div style={{ width: '100%', height: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={LICENSEE_SHARE_DATA} layout="vertical" margin={{ top: 20, right: 30, left: 40, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e5e7eb" />
+                  <XAxis type="number" axisLine={{ stroke: '#9ca3af' }} tickLine={false} tickFormatter={(val) => `${val}%`} />
+                  <YAxis type="category" dataKey="name" axisLine={{ stroke: '#9ca3af' }} tickLine={false} fontSize={11} />
+                  <Tooltip cursor={{fill: '#f3f4f6'}} formatter={(value) => `${value}%`} />
+                  <Bar dataKey="share" radius={[0, 4, 4, 0]} barSize={20}>
+                    {LICENSEE_SHARE_DATA.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+
+        {/* Exchange Volume Pie Charts */}
+        <div className="card">
+          <div className="card-header">
+            <h3>Exchange-wise Volume (IEX vs PXIL vs HPX)</h3>
+          </div>
+          <div className="card-body" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={EXCHANGE_VOLUME_DATA}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={100}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+                >
+                  {EXCHANGE_VOLUME_DATA.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => `${value}%`} />
+                <Legend verticalAlign="bottom" height={36} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      {/* REC Market Depth */}
+      <div className="card" style={{ marginBottom: '20px' }}>
+        <div className="card-header">
+          <h3>REC Market Depth Analytics (Vol & Price Of RECs)</h3>
+        </div>
+        <div className="card-body">
+          <div style={{ width: '100%', height: '350px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={REC_MARKET_DEPTH_DATA} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                <XAxis dataKey="session" axisLine={{ stroke: '#9ca3af' }} tickLine={false} />
+                <YAxis 
+                  yAxisId="left" 
+                  axisLine={{ stroke: '#9ca3af' }} 
+                  tickLine={false} 
+                  tickFormatter={(val) => `${val/1000}k`}
+                  label={{ value: 'Volume', angle: -90, position: 'insideLeft', offset: -10, fill: '#6b7280', fontSize: 12 }}
+                />
+                <YAxis 
+                  yAxisId="right" 
+                  orientation="right" 
+                  axisLine={{ stroke: '#9ca3af' }} 
+                  tickLine={false} 
+                  label={{ value: 'Price (₹/REC)', angle: 90, position: 'insideRight', offset: 0, fill: '#6b7280', fontSize: 12 }}
+                />
+                <Tooltip cursor={{fill: '#f3f4f6'}} />
+                <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                <Bar yAxisId="left" dataKey="volume" name="Cleared Volume" fill="#10b981" barSize={40} radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="price" name="Clearing Price" stroke="#3b82f6" strokeWidth={3} dot={{r: 5}} activeDot={{r: 7}} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
 
       {/* Intraday 96-Block Deep Dive */}
       <div className="card" style={{ background: '#0f172a', color: '#f1f5f9', border: 'none' }}>

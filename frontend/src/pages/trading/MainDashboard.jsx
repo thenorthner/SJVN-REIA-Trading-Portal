@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { 
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
+  ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell
 } from 'recharts';
 
 export const DashboardKPIs = () => {
@@ -23,6 +24,18 @@ export const DashboardKPIs = () => {
     </div>
   );
 };
+
+const GENERATION_MIX_DATA = [
+  { name: 'Thermal', value: 72.5, color: '#ef4444' },
+  { name: 'Hydro', value: 10.2, color: '#3b82f6' },
+  { name: 'Renewable (RE)', value: 14.8, color: '#10b981' },
+  { name: 'Nuclear', value: 2.5, color: '#f59e0b' }
+];
+
+const SHORT_TERM_VS_DSM_DATA = [
+  { year: '2023', shortTerm: 18520, dsm: 3100 },
+  { year: '2026', shortTerm: 24350, dsm: 1850 }
+];
 
 export default function MainDashboard() {
   const [fromDate, setFromDate] = useState('10-08-2026');
@@ -59,6 +72,65 @@ export default function MainDashboard() {
       
       {/* KPI Cards */}
       <DashboardKPIs />
+
+      {/* Macro Grid Analytics Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px', marginBottom: '20px' }}>
+        {/* Generation Mix Doughnut */}
+        <div className="card">
+          <div className="card-header">
+            <h3>All-India Generation Mix (Thermal/Hydro/Nuclear/RE)</h3>
+          </div>
+          <div className="card-body" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '350px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={GENERATION_MIX_DATA}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={80}
+                  outerRadius={120}
+                  paddingAngle={2}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+                >
+                  {GENERATION_MIX_DATA.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => `${value}%`} />
+                <Legend verticalAlign="bottom" height={36} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Short Term vs DSM Bar Chart */}
+        <div className="card">
+          <div className="card-header">
+            <h3>Volume of Short-Term Transaction vs DSM (MU)</h3>
+          </div>
+          <div className="card-body">
+            <div style={{ width: '100%', height: '350px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={SHORT_TERM_VS_DSM_DATA} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                  <XAxis dataKey="year" axisLine={{ stroke: '#9ca3af' }} tickLine={false} />
+                  <YAxis 
+                    axisLine={{ stroke: '#9ca3af' }} 
+                    tickLine={false} 
+                    tickFormatter={(val) => `${val/1000}k`}
+                    label={{ value: 'Volume (MU)', angle: -90, position: 'insideLeft', offset: -5, fill: '#6b7280', fontSize: 12 }}
+                  />
+                  <Tooltip cursor={{fill: '#f3f4f6'}} />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                  <Bar dataKey="shortTerm" name="Short-Term Transactions" fill="#3b82f6" barSize={50} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="dsm" name="DSM Volume" fill="#f59e0b" barSize={50} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Filter Controls Bar */}
       <div className="filters-bar" style={{ background: 'var(--surface)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '20px' }}>
