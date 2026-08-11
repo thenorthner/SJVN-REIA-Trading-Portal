@@ -46,6 +46,8 @@ const NAV_INTERNAL = [
     section: 'Power Trading',
     roles: ROLE_GROUPS.TRADING_ALL,
     links: [
+      { to: '/dashboard', label: 'Main Dashboard' },
+      { to: '/trading/power-market', label: 'Power Market Dashboard' },
       { to: '/trading', label: 'Trading Dashboard', end: true },
       { to: '/trading/clients', label: 'Clients & Counterparties' },
       { to: '/trading/pre-trade', label: 'Pre-Trade Board' },
