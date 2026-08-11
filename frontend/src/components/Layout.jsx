@@ -48,6 +48,8 @@ const NAV_INTERNAL = [
     links: [
       { to: '/dashboard', label: 'Main Dashboard' },
       { to: '/trading/power-market', label: 'Power Market Dashboard' },
+      { to: '/trading/mmr-dashboard', label: 'MMR Dashboard' },
+      { to: '/trading/cea-reports', label: 'CEA Reports Dashboard' },
       { to: '/trading', label: 'Trading Dashboard', end: true },
       { to: '/trading/clients', label: 'Clients & Counterparties' },
       { to: '/trading/pre-trade', label: 'Pre-Trade Board' },
