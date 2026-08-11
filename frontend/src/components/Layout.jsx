@@ -152,6 +152,46 @@ const NAV_TRADING_CLIENT = [
   },
 ];
 
+const NavGroup = ({ section, user }) => {
+  const links = section.links.filter((l) => !l.roles || l.roles.includes(user?.role));
+  const location = useLocation();
+  const isAnyActive = links.some(l => {
+    if (l.end) return location.pathname === l.to;
+    return location.pathname === l.to || (l.to !== '/' && location.pathname.startsWith(l.to));
+  });
+  const [isOpen, setIsOpen] = useState(isAnyActive || section.section === 'Overview');
+
+  if (links.length === 0) return null;
+
+  return (
+    <div className="nav-section">
+      <div 
+        className="nav-section-title" 
+        onClick={() => setIsOpen(!isOpen)} 
+        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', userSelect: 'none' }}
+        title={isOpen ? "Collapse section" : "Expand section"}
+      >
+        <span>{section.section}</span>
+        <span style={{ fontSize: '10px', opacity: 0.6 }}>{isOpen ? '▼' : '▶'}</span>
+      </div>
+      {isOpen && (
+        <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          {links.map((l) => (
+            <NavLink
+              key={l.to}
+              to={l.to}
+              end={l.end}
+              className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}
+            >
+              {l.label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -233,21 +273,7 @@ export default function Layout() {
         )}
         <nav className="nav">
           {navSections.filter((s) => !s.roles || s.roles.includes(user?.role)).map((section) => (
-            <div className="nav-section" key={section.section}>
-              <div className="nav-section-title">{section.section}</div>
-              {section.links
-                .filter((l) => !l.roles || l.roles.includes(user?.role))
-                .map((l) => (
-                <NavLink
-                  key={l.to}
-                  to={l.to}
-                  end={l.end}
-                  className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}
-                >
-                  {l.label}
-                </NavLink>
-              ))}
-            </div>
+            <NavGroup key={section.section} section={section} user={user} />
           ))}
         </nav>
         {branded && (
