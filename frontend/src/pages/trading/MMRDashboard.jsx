@@ -101,44 +101,50 @@ export default function MMRDashboard() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6 bg-slate-50 min-h-screen">
-      {/* Top Header */}
-      <div className="bg-[#4fb2f8] text-white rounded-full py-2 px-6 text-center font-bold text-lg shadow-sm">
-        MMR DASHBOARD
+    <div>
+      <div className="page-header">
+        <div>
+          <h1>MMR Dashboard</h1>
+          <div className="page-subtitle">Market Monitoring Reports and Exchange analytics</div>
+        </div>
       </div>
 
       {/* Control Filter Bar */}
-      <div className="flex flex-wrap items-center gap-4 bg-white p-4 rounded shadow-sm border border-gray-200">
-        <select 
-          value={selectedYear} 
-          onChange={(e) => setSelectedYear(e.target.value)} 
-          className="bg-white border border-gray-300 p-2 rounded text-sm min-w-[120px] focus:outline-none focus:border-[#4fb2f8]"
-        >
-          <option value="2026">2026</option>
-          <option value="2023">2023</option>
-        </select>
-        
-        <select 
-          value={selectedMonth} 
-          onChange={(e) => setSelectedMonth(e.target.value)} 
-          className="bg-white border border-gray-300 p-2 rounded text-sm min-w-[120px] focus:outline-none focus:border-[#4fb2f8]"
-        >
-          <option value="January">January</option>
-          <option value="February">February</option>
-        </select>
-        
-        <button className="px-6 py-2 bg-[#4fb2f8] hover:bg-blue-400 text-white font-medium rounded shadow-sm transition text-sm">
-          Show Data
-        </button>
+      <div className="card" style={{ marginBottom: '20px' }}>
+        <div className="card-body" style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+          <select 
+            value={selectedYear} 
+            onChange={(e) => setSelectedYear(e.target.value)} 
+            style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minWidth: '120px' }}
+          >
+            <option value="2026">2026</option>
+            <option value="2023">2023</option>
+          </select>
+          
+          <select 
+            value={selectedMonth} 
+            onChange={(e) => setSelectedMonth(e.target.value)} 
+            style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minWidth: '120px' }}
+          >
+            <option value="January">January</option>
+            <option value="February">February</option>
+          </select>
+          
+          <button style={{ padding: '8px 16px', background: '#0b5ed7', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+            Show Data
+          </button>
+        </div>
       </div>
 
       {/* Main Charts Grid (Top Row) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
         
         {/* Short Term & DSM Doughnut */}
-        <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
-          <h3 className="text-center font-bold text-gray-700 mb-6 text-lg">Volume of Short-Term Transaction of Electricity and DSM (MU)</h3>
-          <div className="h-72">
+        <div className="card">
+          <div className="card-header">
+            <h3>Volume of Short-Term Transaction of Electricity and DSM (MU)</h3>
+          </div>
+          <div className="card-body" style={{ height: '350px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie 
@@ -161,9 +167,11 @@ export default function MMRDashboard() {
         </div>
 
         {/* IEX Volume Breakdown Pie */}
-        <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
-          <h3 className="text-center font-bold text-gray-700 mb-6 text-lg">Volume Transactions in IEX (MU)</h3>
-          <div className="h-72">
+        <div className="card">
+          <div className="card-header">
+            <h3>Volume Transactions in IEX (MU)</h3>
+          </div>
+          <div className="card-body" style={{ height: '350px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie 
@@ -187,12 +195,14 @@ export default function MMRDashboard() {
       </div>
 
       {/* Secondary Exchanges Grid (Bottom Row) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
         
         {/* PXIL Volume Pie */}
-        <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
-          <h3 className="text-center font-bold text-gray-700 mb-6 text-lg">Volume Transactions in PXIL (MU)</h3>
-          <div className="h-64">
+        <div className="card">
+          <div className="card-header">
+            <h3>Volume Transactions in PXIL (MU)</h3>
+          </div>
+          <div className="card-body" style={{ height: '350px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie 
@@ -214,9 +224,11 @@ export default function MMRDashboard() {
         </div>
 
         {/* HPX Volume Pie */}
-        <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
-          <h3 className="text-center font-bold text-gray-700 mb-6 text-lg">Volume Transactions in HPX (MU)</h3>
-          <div className="h-64">
+        <div className="card">
+          <div className="card-header">
+            <h3>Volume Transactions in HPX (MU)</h3>
+          </div>
+          <div className="card-body" style={{ height: '350px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie 

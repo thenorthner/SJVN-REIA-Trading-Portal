@@ -109,31 +109,35 @@ export default function CEAReportsDashboard() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-6 bg-slate-50 min-h-screen">
+    <div>
       
       {/* Header & Controls */}
-      <div className="bg-white p-4 rounded shadow-sm border border-gray-200">
-        <h1 className="text-xl font-bold text-[#204a8e] mb-4 border-b border-gray-100 pb-2">CEA Reports & Macro Grid Analytics</h1>
-        
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-col">
-            <label className="text-xs font-semibold text-gray-700 mb-1">From Month<span className="text-red-500">*</span></label>
+      <div className="page-header">
+        <div>
+          <h1>CEA Reports & Macro Grid Analytics</h1>
+        </div>
+      </div>
+      
+      <div className="card" style={{ marginBottom: '20px' }}>
+        <div className="card-body" style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>From Month<span style={{color: 'red'}}>*</span></label>
             <select 
               value={fromMonth} 
               onChange={(e) => setFromMonth(e.target.value)} 
-              className="bg-white border border-gray-300 p-2 rounded text-sm min-w-[140px] focus:outline-none focus:border-blue-500"
+              style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minWidth: '140px' }}
             >
               <option value="APR-2022">APR-2022</option>
               <option value="JAN-2024">JAN-2024</option>
             </select>
           </div>
           
-          <div className="flex flex-col">
-            <label className="text-xs font-semibold text-gray-700 mb-1">To Month<span className="text-red-500">*</span></label>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '4px' }}>To Month<span style={{color: 'red'}}>*</span></label>
             <select 
               value={toMonth} 
               onChange={(e) => setToMonth(e.target.value)} 
-              className="bg-white border border-gray-300 p-2 rounded text-sm min-w-[140px] focus:outline-none focus:border-blue-500"
+              style={{ padding: '8px', border: '1px solid #ccc', borderRadius: '4px', minWidth: '140px' }}
             >
               <option value="SEP-2022">SEP-2022</option>
               <option value="JUN-2024">JUN-2024</option>
@@ -141,17 +145,19 @@ export default function CEAReportsDashboard() {
             </select>
           </div>
           
-          <button className="px-6 py-2 bg-[#488ccb] hover:bg-blue-600 text-white font-medium rounded shadow-sm transition text-sm">
+          <button style={{ padding: '8px 16px', background: '#0b5ed7', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', alignSelf: 'flex-end', height: '36px' }}>
             Show Report
           </button>
         </div>
       </div>
 
       {/* Top Row: Generation Mix Pies */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
-          <h3 className="text-center font-medium text-gray-700 mb-6 text-lg">Power Generation (All India) (BUs) For Month: Apr-2022</h3>
-          <div className="h-64">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        <div className="card">
+          <div className="card-header">
+            <h3>Power Generation (All India) (BUs) For Month: Apr-2022</h3>
+          </div>
+          <div className="card-body" style={{ height: '350px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie 
@@ -170,9 +176,11 @@ export default function CEAReportsDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
-          <h3 className="text-center font-medium text-gray-700 mb-6 text-lg">RE Generation (All India) (MUs) For Month: Apr-2022</h3>
-          <div className="h-64">
+        <div className="card">
+          <div className="card-header">
+            <h3>RE Generation (All India) (MUs) For Month: Apr-2022</h3>
+          </div>
+          <div className="card-body" style={{ height: '350px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie 
@@ -193,10 +201,12 @@ export default function CEAReportsDashboard() {
       </div>
 
       {/* Middle Row: Demand and Requirements Bars */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
-          <h3 className="font-medium text-gray-700 mb-6 text-lg">Peak Demand v/s Peak Met (All India) (MW)</h3>
-          <div className="h-72">
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        <div className="card">
+          <div className="card-header">
+            <h3>Peak Demand v/s Peak Met (All India) (MW)</h3>
+          </div>
+          <div className="card-body" style={{ height: '350px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={PEAK_DEMAND_MET_2024} margin={{ top: 20, right: 0, left: 0, bottom: 20 }} barGap={2}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
@@ -211,9 +221,11 @@ export default function CEAReportsDashboard() {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded shadow-sm border border-gray-200">
-          <h3 className="font-medium text-gray-700 mb-6 text-lg">Energy Requirements v/s Energy Available (All India) (in MW)</h3>
-          <div className="h-72">
+        <div className="card">
+          <div className="card-header">
+            <h3>Energy Requirements v/s Energy Available (All India) (in MW)</h3>
+          </div>
+          <div className="card-body" style={{ height: '350px' }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={ENERGY_REQ_AVAIL_2022} margin={{ top: 20, right: 0, left: 0, bottom: 20 }} barGap={2}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
@@ -230,13 +242,13 @@ export default function CEAReportsDashboard() {
       </div>
 
       {/* Bottom Row: Dark Mode Installed Capacity Composed Chart */}
-      <div className="bg-[#0b0c10] p-6 rounded shadow-md border border-[#1f2833]">
-        <div className="flex justify-between items-center mb-6 border-b border-[#1f2833] pb-3">
-           <h3 className="font-medium text-gray-300 text-lg">Category Wise Installed Capacity (All India) (MW)</h3>
-           <span className="text-gray-500 text-xs">Dark Mode Analytics View</span>
+      <div className="card" style={{ background: '#0b0c10', border: '1px solid #1f2833' }}>
+        <div className="card-header" style={{ borderBottom: '1px solid #1f2833', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+           <h3 style={{ color: '#d1d5db', margin: 0 }}>Category Wise Installed Capacity (All India) (MW)</h3>
+           <span style={{ color: '#6b7280', fontSize: '12px' }}>Dark Mode Analytics View</span>
         </div>
         
-        <div className="h-[400px] w-full">
+        <div className="card-body" style={{ height: '400px' }}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={INSTALLED_CAPACITY_DATA} margin={{ top: 20, right: 20, bottom: 20, left: 10 }}>
               <CartesianGrid stroke="#1f2833" vertical={false} />
