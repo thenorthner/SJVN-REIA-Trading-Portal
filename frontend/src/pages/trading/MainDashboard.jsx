@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
@@ -54,29 +54,62 @@ const SHORT_TERM_VS_DSM_DATA = [
   { year: '2026', shortTerm: 24350, dsm: 1850 }
 ];
 
+// How each product behaves across the day. RTM is the volatile one — it clears
+// against whatever is left after the day-ahead markets have run. GDAM carries the
+// solar belly: heavy midday volume at collapsed prices. DAM sits between them.
+const PRODUCT_SHAPES = {
+  RTM:  { label: 'RTM',  volBase: 4000, volSwing: 4000, priceBase: 1000, priceSwing: 2000, middayVolume: 4000 },
+  GDAM: { label: 'GDAM', volBase: 5200, volSwing: 2200, priceBase: 900,  priceSwing: 900,  middayVolume: 7000, solarBelly: true },
+  DAM:  { label: 'DAM',  volBase: 6500, volSwing: 1800, priceBase: 2600, priceSwing: 1200, middayVolume: 2200 },
+};
+
+// A fixed pseudo-random sequence. The previous version called Math.random() in
+// the component body, so all 96 blocks were redrawn with different numbers on
+// every render — typing in the date field silently rewrote the day's market
+// data. Seeded on the product so each one is stable and reproducible.
+function seeded(seed) {
+  let s = seed;
+  return () => {
+    s = (s * 1103515245 + 12345) % 2147483648;
+    return s / 2147483648;
+  };
+}
+
+function buildIntraday(product) {
+  const shape = PRODUCT_SHAPES[product] || PRODUCT_SHAPES.RTM;
+  const rand = seeded(product.split('').reduce((a, c) => a + c.charCodeAt(0), 7));
+  const rows = [];
+  for (let i = 1; i <= 96; i++) {
+    let mcv = rand() * shape.volSwing + shape.volBase;
+    let mcp = rand() * shape.priceSwing + shape.priceBase;
+
+    // Blocks 41-59 are roughly 10am to 3pm.
+    const midday = i > 40 && i < 60;
+    if (midday) {
+      mcv += shape.middayVolume;
+      // Solar floods the green market at exactly the hours it is worth least.
+      if (shape.solarBelly) mcp *= 0.45;
+    }
+
+    // Anchors taken from the reference screenshots, so the shape stays familiar.
+    if (product === 'RTM') {
+      if (i === 1) { mcv = 3728.25; mcp = 3500.12; }
+      if (i === 27) { mcv = 5436.62; mcp = 4950.24; }
+      if (i === 52) { mcv = 12299.49; mcp = 2305.82; }
+      if (i === 54) { mcv = 12133.83; mcp = 2848.24; }
+    }
+
+    rows.push({ blockNo: String(i), mcv: +mcv.toFixed(2), mcp: +mcp.toFixed(2) });
+  }
+  return rows;
+}
+
 export default function MainDashboard() {
   const [fromDate, setFromDate] = useState('10-08-2026');
   const [productType, setProductType] = useState('RTM');
 
-  // Generating RTM Intraday mock data based on analysis
-  const RTM_INTRADAY_DATA = [];
-  for(let i=1; i<=96; i++) {
-    let mcv = Math.random() * 4000 + 4000;
-    let mcp = Math.random() * 2000 + 1000;
-    
-    // Explicit overrides based on screenshots
-    if (i === 1) { mcv = 3728.25; mcp = 3500.12; }
-    if (i === 27) { mcv = 5436.62; mcp = 4950.24; }
-    if (i === 52) { mcv = 12299.49; mcp = 2305.82; }
-    if (i === 54) { mcv = 12133.83; mcp = 2848.24; }
-    if (i > 40 && i < 60) { mcv += 4000; } // Volatility boost in afternoon
-
-    RTM_INTRADAY_DATA.push({
-      blockNo: i.toString(),
-      mcv: parseFloat(mcv.toFixed(2)),
-      mcp: parseFloat(mcp.toFixed(2))
-    });
-  }
+  // Recomputed only when the product changes, which is what the dropdown is for.
+  const RTM_INTRADAY_DATA = useMemo(() => buildIntraday(productType), [productType]);
 
   return (
     <div>
@@ -180,7 +213,7 @@ export default function MainDashboard() {
       {/* Intraday 96-Block Deep Dive */}
       <div className="card">
         <div className="card-header">
-          <h3>Time Block wise MCP vs MCV ({fromDate.replace(/-/g, '-').replace('08', 'Aug')})</h3>
+          <h3>Time Block wise MCP vs MCV — {productType} ({fromDate.replace(/-/g, '-').replace('08', 'Aug')})</h3>
         </div>
         <div className="card-body">
           <div style={{ width: '100%', height: '450px' }}>
@@ -192,7 +225,7 @@ export default function MainDashboard() {
                   fontSize={10} 
                   tickLine={false}
                   axisLine={{ stroke: '#cbd5e1' }}
-                  label={{ value: 'Months', position: 'insideBottom', offset: -15, fill: '#64748b', fontSize: 10 }}
+                  label={{ value: 'Time Block (15-min)', position: 'insideBottom', offset: -15, fill: '#64748b', fontSize: 10 }}
                 />
                 <YAxis 
                   yAxisId="mcv" 
