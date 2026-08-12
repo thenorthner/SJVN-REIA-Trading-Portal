@@ -11,7 +11,15 @@ const NAV_INTERNAL = [
     // Consolidated Dashboard aggregates financials across every seller, buyer
     // and trading client, so it stays limited to SJVN top management.
     roles: ROLE_GROUPS.EXECUTIVE,
-    links: [{ to: '/', label: 'Consolidated Dashboard', end: true }],
+    links: [
+      { to: '/', label: 'Consolidated Dashboard', end: true },
+      { to: '/dashboard', label: 'Main Dashboard' },
+      { to: '/trading/power-market', label: 'Power Market Dashboard' },
+      { to: '/trading/mmr-dashboard', label: 'MMR Dashboard' },
+      { to: '/trading/cea-reports', label: 'CEA Reports Dashboard' },
+      { to: '/trading', label: 'Trading Dashboard', end: true },
+      { to: '/reia', label: 'REIA Dashboard', end: true },
+    ],
   },
   {
     section: 'Alerts',

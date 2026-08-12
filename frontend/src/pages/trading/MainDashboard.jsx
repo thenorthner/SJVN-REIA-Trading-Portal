@@ -4,18 +4,35 @@ import {
   PieChart, Pie, Cell
 } from 'recharts';
 
+const inLakhCrore = (n) => Number(n).toLocaleString('en-IN');
+
+// REC earnings are held in rupees. The card labelled them "Cr.", which read as
+// Rs 7.5 lakh crore rather than the Rs 7.50 crore they are — 66,167 certificates
+// at about Rs 1,134 each. Converted here so the figure and its unit agree.
+const REC_EARNINGS_RUPEES = 75011149;
+const REC_SOLD = 66167;
+
 export const DashboardKPIs = () => {
   const kpiData = [
     { title: "Total Energy Traded", value: "343.97", unit: "MU", tone: "tone-green" },
     { title: "Energy Traded in FY 2026-27", value: "113.93", unit: "MU", tone: "tone-red" },
-    { title: "No of REC Sold (#till date)", value: "66167", unit: "Nos.", tone: "tone-blue" },
-    { title: "Total Earnings from REC", value: "75011149", unit: "Cr.", tone: "tone-amber" },
+    {
+      title: "No of REC Sold (#till date)",
+      value: inLakhCrore(REC_SOLD),
+      unit: "Nos.", tone: "tone-blue",
+    },
+    {
+      title: "Total Earnings from REC",
+      value: (REC_EARNINGS_RUPEES / 1e7).toFixed(2),
+      unit: "₹ Cr.", tone: "tone-amber",
+      exact: `₹${inLakhCrore(REC_EARNINGS_RUPEES)}`,
+    },
   ];
 
   return (
     <div className="kpi-grid">
       {kpiData.map((kpi, index) => (
-        <div key={index} className={`stat-card ${kpi.tone}`}>
+        <div key={index} className={`stat-card ${kpi.tone}`} title={kpi.exact || undefined}>
           <div className="stat-label">{kpi.title}</div>
           <div className="stat-value">{kpi.value}</div>
           <div className="stat-hint">{kpi.unit}</div>
