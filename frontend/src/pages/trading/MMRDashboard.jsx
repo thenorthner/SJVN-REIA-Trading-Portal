@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import SourceNote from '../../components/SourceNote.jsx';
 
 // A slice of one or two per cent gets a label the same size as a slice of ninety,
 // and on the PXIL and HPX charts — where three of four slices are under 3% — those
@@ -191,6 +192,7 @@ export default function MMRDashboard() {
                 <Legend verticalAlign="bottom" height={36} iconType="square" wrapperStyle={{fontSize: '12px', paddingTop: '20px'}}/>
               </PieChart>
             </ResponsiveContainer>
+            <SourceNote source="CERC Market Monitoring Report" period={period} />
           </div>
         </div>
 
@@ -217,6 +219,7 @@ export default function MMRDashboard() {
                 <Legend verticalAlign="bottom" height={36} iconType="square" wrapperStyle={{fontSize: '12px', paddingTop: '20px'}}/>
               </PieChart>
             </ResponsiveContainer>
+            <SourceNote source="CERC Market Monitoring Report" period={period} />
           </div>
         </div>
 
@@ -248,6 +251,7 @@ export default function MMRDashboard() {
                 <Legend verticalAlign="bottom" height={36} iconType="square" wrapperStyle={{fontSize: '12px', paddingTop: '10px'}}/>
               </PieChart>
             </ResponsiveContainer>
+            <SourceNote source="CERC Market Monitoring Report" period={period} />
           </div>
         </div>
 
@@ -274,6 +278,7 @@ export default function MMRDashboard() {
                 <Legend verticalAlign="bottom" height={36} iconType="square" wrapperStyle={{fontSize: '12px', paddingTop: '10px'}}/>
               </PieChart>
             </ResponsiveContainer>
+            <SourceNote source="CERC Market Monitoring Report" period={period} />
           </div>
         </div>
 

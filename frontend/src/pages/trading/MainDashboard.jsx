@@ -1,43 +1,84 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
+import { api } from '../../api/client.js';
+import SourceNote from '../../components/SourceNote.jsx';
 
 const inLakhCrore = (n) => Number(n).toLocaleString('en-IN');
 
-// REC earnings are held in rupees. The card labelled them "Cr.", which read as
-// Rs 7.5 lakh crore rather than the Rs 7.50 crore they are — 66,167 certificates
-// at about Rs 1,134 each. Converted here so the figure and its unit agree.
-const REC_EARNINGS_RUPEES = 75011149;
-const REC_SOLD = 66167;
-
+// These four cards were typed in. The REC pair in particular claimed 66,167
+// certificates sold for Rs 7.5 crore while the ledger this platform maintains
+// held 32,500 for Rs 1.27 crore — a dashboard reporting a book that was not its
+// own. They now come from /dashboard/trading/analytics, which reads the REC
+// ledger and the locked energy periods directly.
 export const DashboardKPIs = () => {
+  const [figures, setFigures] = useState(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    api.dashboard.trading.analytics()
+      .then((d) => { if (alive) setFigures(d); })
+      .catch((err) => {
+        console.error('[MainDashboard] Could not load trading analytics:', err);
+        if (alive) setFailed(true);
+      });
+    return () => { alive = false; };
+  }, []);
+
+  // Dashes rather than zeros while loading or after a failure. A KPI card
+  // showing 0 is a claim about the business; showing nothing is a claim about
+  // the fetch, and only one of those is true here.
+  const pending = !figures;
+  const show = (v, fmt = (x) => x) => (pending ? (failed ? '—' : '…') : fmt(v));
+
   const kpiData = [
-    { title: "Total Energy Traded", value: "343.97", unit: "MU", tone: "tone-green" },
-    { title: "Energy Traded in FY 2026-27", value: "113.93", unit: "MU", tone: "tone-red" },
+    {
+      title: "Total Energy Traded",
+      value: show(figures?.energy?.delivered_mu, (v) => inLakhCrore(v)),
+      unit: "MU", tone: "tone-green",
+      exact: figures ? `${inLakhCrore(figures.energy.delivered_mwh)} MWh locked` : undefined,
+    },
+    {
+      // An Indian financial year spans two calendar years, so name both.
+      title: figures
+        ? `Energy Traded in FY ${figures.financial_year_from.slice(0, 4)}-${String(Number(figures.financial_year_from.slice(0, 4)) + 1).slice(2)}`
+        : 'Energy Traded this FY',
+      value: show(figures?.energy?.fy_delivered_mu, (v) => inLakhCrore(v)),
+      unit: "MU", tone: "tone-red",
+    },
     {
       title: "No of REC Sold (#till date)",
-      value: inLakhCrore(REC_SOLD),
+      value: show(figures?.rec?.sold, (v) => inLakhCrore(v)),
       unit: "Nos.", tone: "tone-blue",
     },
     {
       title: "Total Earnings from REC",
-      value: (REC_EARNINGS_RUPEES / 1e7).toFixed(2),
+      value: show(figures?.rec?.revenue_crore, (v) => v.toFixed(2)),
       unit: "₹ Cr.", tone: "tone-amber",
-      exact: `₹${inLakhCrore(REC_EARNINGS_RUPEES)}`,
+      exact: figures ? `₹${inLakhCrore(figures.rec.revenue_rupees)}` : undefined,
     },
   ];
 
   return (
-    <div className="kpi-grid">
-      {kpiData.map((kpi, index) => (
-        <div key={index} className={`stat-card ${kpi.tone}`} title={kpi.exact || undefined}>
-          <div className="stat-label">{kpi.title}</div>
-          <div className="stat-value">{kpi.value}</div>
-          <div className="stat-hint">{kpi.unit}</div>
+    <div>
+      {failed && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b',
+                      borderRadius: 6, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>
+          Could not load live figures — the cards below are showing no value rather than a stale one.
         </div>
-      ))}
+      )}
+      <div className="kpi-grid">
+        {kpiData.map((kpi, index) => (
+          <div key={index} className={`stat-card ${kpi.tone}`} title={kpi.exact || undefined}>
+            <div className="stat-label">{kpi.title}</div>
+            <div className="stat-value">{kpi.value}</div>
+            <div className="stat-hint">{kpi.unit}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -152,6 +193,9 @@ export default function MainDashboard() {
               </PieChart>
             </ResponsiveContainer>
           </div>
+          <div style={{ padding: '0 16px 12px' }}>
+            <SourceNote source="Central Electricity Authority" />
+          </div>
         </div>
 
         {/* Short Term vs DSM Bar Chart */}
@@ -178,6 +222,7 @@ export default function MainDashboard() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+            <SourceNote source="CERC Market Monitoring Report" />
           </div>
         </div>
       </div>

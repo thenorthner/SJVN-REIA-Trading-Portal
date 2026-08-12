@@ -587,6 +587,7 @@ export const api = {
       realtime: () => g('/dashboard/trading/realtime'),
       daily: () => g('/dashboard/trading/daily'),
       periodic: () => g('/dashboard/trading/periodic'),
+      analytics: () => g('/dashboard/trading/analytics'),
       health: () => g('/dashboard/trading/health'),
     },
     consolidated: () => g('/dashboard/consolidated'),

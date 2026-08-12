@@ -318,6 +318,92 @@ export function buildConsolidatedPortfolio() {
   };
 }
 
+/**
+ * The figures the trading analytics screens plot, taken from this platform's own
+ * records rather than typed into the page.
+ *
+ * The four analytics dashboards were built against hardcoded arrays, so they
+ * showed the same numbers whatever the ledger said — the REC cards claimed 66,167
+ * certificates sold while the ledger held 32,500.
+ *
+ * What is served here is what SJVN actually transacts: RECs, energy delivered
+ * under contract, and bids placed on the exchanges. The macro series on those
+ * screens — all-India generation mix, peak demand met, installed capacity — are
+ * CEA and CERC publications with no source in this system, and are deliberately
+ * not invented here.
+ */
+router.get('/trading/analytics', (_req, res) => {
+  // Deliberately not wrapped in a catch that returns zeros. A misspelt column
+  // would then read on the page as "nothing sold this year", which is a worse
+  // answer than an error — the first draft of this route did exactly that and
+  // reported the REC book as empty.
+  const one = (sql, ...p) => db.prepare(sql).get(...p) || {};
+  const many = (sql, ...p) => db.prepare(sql).all(...p);
+
+  // RECs, from the ledger the REC module maintains. Revenue is sale_amount;
+  // sold_qty counts certificates against lots that are listed or sold.
+  const rec = one(`
+    SELECT COALESCE(SUM(sold_qty),0) sold,
+           COALESCE(SUM(sale_amount),0) revenue
+    FROM rec_ledger WHERE status != 'CANCELLED'
+  `);
+
+  // Energy actually delivered, and the slice of it billed this financial year.
+  // The Indian FY starts in April, so anything from 04 of the opening year on.
+  const fyStart = (() => {
+    const now = new Date();
+    const y = now.getUTCMonth() + 1 >= 4 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+    return `${y}-04`;
+  })();
+  const energy = one(`SELECT COALESCE(SUM(energy_mwh),0) mwh FROM energy_data WHERE status = 'LOCKED'`);
+  const energyFy = one(`SELECT COALESCE(SUM(energy_mwh),0) mwh FROM energy_data WHERE status = 'LOCKED' AND period_month >= ?`, fyStart);
+
+  // Exchange and product split of what has been bid, with whatever cleared.
+  const byExchange = many(`
+    SELECT exchange,
+           COUNT(*) bids,
+           COALESCE(SUM(quantum_mw),0) offered_mw,
+           COALESCE(SUM(cleared_quantum_mw),0) cleared_mw
+    FROM bids WHERE exchange IS NOT NULL GROUP BY exchange ORDER BY cleared_mw DESC
+  `);
+  const byProduct = many(`
+    SELECT product,
+           COUNT(*) bids,
+           COALESCE(SUM(quantum_mw),0) offered_mw,
+           COALESCE(SUM(cleared_quantum_mw),0) cleared_mw,
+           ROUND(AVG(NULLIF(cleared_price,0)), 2) avg_cleared_price
+    FROM bids WHERE product IS NOT NULL GROUP BY product ORDER BY cleared_mw DESC
+  `);
+
+  // No intraday series is served. bid_blocks holds four rows whose time_block
+  // values are "00:00-00:15", "1.0", "Block-1" and "Block-2" — three different
+  // conventions and no ordering — so there is nothing here a 96-block chart
+  // could honestly be drawn from. Better to omit it than to ship a shape.
+
+  res.json({
+    as_of: new Date().toISOString().slice(0, 10),
+    financial_year_from: fyStart,
+    rec: {
+      sold: Math.round(rec.sold || 0),
+      revenue_rupees: Math.round(rec.revenue || 0),
+      revenue_crore: +((rec.revenue || 0) / 1e7).toFixed(2),
+    },
+    energy: {
+      delivered_mwh: Math.round(energy.mwh || 0),
+      delivered_mu: +((energy.mwh || 0) / 1000).toFixed(2),
+      fy_delivered_mu: +((energyFy.mwh || 0) / 1000).toFixed(2),
+    },
+    exchanges: byExchange,
+    products: byProduct,
+    // Named so the screens can say where a series came from instead of implying
+    // every number on the page is ours.
+    external_series: {
+      note: 'All-India generation mix, peak demand met, energy requirement and installed capacity are CEA/CERC publications. They have no source in this platform and are shown as published reference data.',
+      source: 'Central Electricity Authority / CERC Market Monitoring Reports',
+    },
+  });
+});
+
 router.get('/consolidated', requireRole(...EXECUTIVE_ROLES), (req, res) => {
   res.json({ portfolio: buildConsolidatedPortfolio() });
 });
