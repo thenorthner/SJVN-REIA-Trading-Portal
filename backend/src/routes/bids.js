@@ -283,9 +283,20 @@ router.get('/:id/chain', (req, res) => {
 // Create a new Master Bid (Portfolio/Block Bid)
 router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   const b = req.body;
+
+  // ── Early input validation ────────────────────────────────────────────
+  const VALID_EXCHANGES = ['IEX', 'PXIL', 'HPX'];
+
+  if (!b.client_id) return res.status(400).json({ error: 'client_id is required' });
+
   const client = db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(b.client_id);
-  if (!client) return res.status(404).json({ error: 'Client not found' });
+  if (!client) return res.status(400).json({ error: `Client '${b.client_id}' does not exist` });
   if (client.status === 'SUSPENDED') return res.status(403).json({ error: 'Client is suspended. Bidding not allowed.' });
+
+  if (b.exchange && !VALID_EXCHANGES.includes(b.exchange)) {
+    return res.status(400).json({ error: `exchange must be one of: ${VALID_EXCHANGES.join(', ')}` });
+  }
+
   if (!Array.isArray(b.blocks) || b.blocks.length === 0) {
     return res.status(400).json({ error: 'At least one bid block is required' });
   }
@@ -302,6 +313,26 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   if (blockMissing) missing.push('blocks[].time_block');
   if (missing.length) {
     return res.status(400).json({ error: `A bid needs ${missing.join(', ')}.`, missing_fields: missing });
+  }
+
+  // Numeric floor checks — catch garbage before it reaches exposure arithmetic.
+  const qty = Number(b.quantum_mw);
+  if (!Number.isFinite(qty) || qty <= 0) {
+    return res.status(400).json({ error: 'quantum_mw must be a positive number' });
+  }
+  const price = Number(b.price_per_unit);
+  if (!Number.isFinite(price) || price < 0) {
+    return res.status(400).json({ error: 'price_per_unit must be a non-negative number' });
+  }
+  for (const blk of b.blocks) {
+    const bq = Number(blk.quantum_mw);
+    const bp = Number(blk.price_per_unit);
+    if (!Number.isFinite(bq) || bq <= 0) {
+      return res.status(400).json({ error: `Block ${blk.time_block}: quantum_mw must be a positive number` });
+    }
+    if (!Number.isFinite(bp) || bp < 0) {
+      return res.status(400).json({ error: `Block ${blk.time_block}: price_per_unit must be a non-negative number` });
+    }
   }
 
   // Payment security on the counterparty this bid creates exposure to. Adequacy
