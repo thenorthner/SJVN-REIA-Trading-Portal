@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../api/client.js';
+import { TRADING_MENU } from '../config/tradingMenu.js';
 import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from '../roles.js';
 import { PortfolioSelect } from '../context/PortfolioContext.jsx';
 
@@ -50,45 +51,14 @@ const NAV_INTERNAL = [
       // { to: '/reia/deviation', label: 'Deviation Settlement (DSM)' },
     ],
   },
-  {
+    {
+    // Grouped the way ISET groups it. The flat list of thirty-four worked while
+    // there were thirty-four; the menu it mirrors has close to a hundred, so the
+    // second level comes from src/config/tradingMenu.js — one place that says what
+    // exists, what is planned, and where each screen lives.
     section: 'Power Trading',
     roles: ROLE_GROUPS.TRADING_ALL,
-    links: [
-      { to: '/dashboard', label: 'Main Dashboard' },
-      { to: '/trading/power-market', label: 'Power Market Dashboard' },
-      { to: '/trading/mmr-dashboard', label: 'MMR Dashboard' },
-      { to: '/trading/cea-reports', label: 'CEA Reports Dashboard' },
-      { to: '/trading', label: 'Trading Dashboard', end: true },
-      { to: '/trading/clients', label: 'Clients & Counterparties' },
-      { to: '/trading/pre-trade', label: 'Pre-Trade Board' },
-      { to: '/trading/dam', label: 'DAM Management' },
-      { to: '/trading/gdam', label: 'GDAM Management' },
-      { to: '/trading/rtm', label: 'RTM Management' },
-      { to: '/trading/bilateral', label: 'Bilateral Transactions' },
-      { to: '/trading/billing-settlement', label: 'Trading Billing & Settlement' },
-      { to: '/trading/energy-schedule', label: 'Energy Schedule & DSM Matrix' },
-      { to: '/trading/schedule-archive', label: 'Schedule Archive' },
-      { to: '/trading/daily-obligation-report', label: 'Daily Obligation Report (DOR)' },
-      { to: '/trading/generator-billing', label: 'Generator Billing & Settlement' },
-      { to: '/trading/market-analytics', label: 'Market Rates & Analytics' },
-      { to: '/trading/rec', label: 'REC Management' },
-      { to: '/trading/escert', label: 'ESCERT Management' },
-      { to: '/trading/tam', label: 'TAM Management' },
-      { to: '/trading/gtam', label: 'GTAM Management' },
-      { to: '/trading/noar-registry', label: 'NOAR Registry & Clearances' },
-      { to: '/trading/noar', label: 'NOAR Wallet (Open Access)' },
-      { to: '/trading/margin-assurance', label: 'Margin Assurance' },
-      { to: '/trading/oa-calculator', label: 'OA Charge Calculator' },
-      { to: '/trading/oa-reconciliation', label: 'OA Reconciliation' },
-      { to: '/trading/rate-master', label: 'OA Rate Master' },
-      { to: '/trading/tds-register', label: 'TDS Register' },
-      { to: '/trading/deviations', label: 'Deviation Register' },
-      { to: '/trading/payment-cycle', label: 'Payment Cycle' },
-      { to: '/trading/pnl', label: 'Contract P&L' },
-      { to: '/trading/ledger-import', label: 'Import Ledger' },
-      { to: '/trading/form-iv', label: 'CERC Form-IV' },
-      { to: '/trading/bulk-communications', label: 'Bulk Communications' },
-    ],
+    groups: TRADING_MENU,
   },
   {
     section: 'Platform',
@@ -160,16 +130,70 @@ const NAV_TRADING_CLIENT = [
   },
 ];
 
-const NavGroup = ({ section, user }) => {
-  const links = section.links.filter((l) => !l.roles || l.roles.includes(user?.role));
+/** Does this link own the current URL? */
+const linkIsActive = (l, pathname) => (l.end
+  ? pathname === l.to
+  : pathname === l.to || (l.to !== '/' && pathname.startsWith(l.to)));
+
+/**
+ * A named run of links inside a section — ISET's second level, so "Exchange" can
+ * hold its thirteen screens without the section becoming a wall of forty.
+ * Collapsed unless it contains the page you are on.
+ */
+const NavSubGroup = ({ group, user }) => {
   const location = useLocation();
-  const isAnyActive = links.some(l => {
-    if (l.end) return location.pathname === l.to;
-    return location.pathname === l.to || (l.to !== '/' && location.pathname.startsWith(l.to));
-  });
+  const links = group.items.filter((l) => !l.roles || l.roles.includes(user?.role));
+  const [isOpen, setIsOpen] = useState(links.some((l) => linkIsActive(l, location.pathname)));
+  if (!links.length) return null;
+
+  const pending = links.filter((l) => l.pending).length;
+
+  return (
+    <div style={{ marginBottom: 2 }}>
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="nav-subgroup-title"
+        style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center',
+                 justifyContent: 'space-between', padding: '5px 12px 5px 14px',
+                 fontSize: 11, fontWeight: 600, letterSpacing: '.02em', opacity: 0.75 }}
+        title={pending ? `${pending} of ${links.length} not built yet` : undefined}
+      >
+        <span>{group.group}</span>
+        <span style={{ fontSize: 9, opacity: 0.6 }}>{isOpen ? '▼' : '▶'}</span>
+      </div>
+      {isOpen && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {links.map((l) => (
+            <NavLink
+              key={l.to}
+              to={l.to}
+              end={l.end}
+              className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}
+              style={{ paddingLeft: 26 }}
+            >
+              <span style={{ opacity: l.pending ? 0.55 : 1 }}>{l.label}</span>
+              {/* A screen that is only planned says so in the menu, so nobody
+                  opens it expecting data and files a bug when there is none. */}
+              {l.pending && (
+                <span style={{ marginLeft: 6, fontSize: 9, opacity: 0.5, fontStyle: 'italic' }}>soon</span>
+              )}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const NavGroup = ({ section, user }) => {
+  const links = (section.links || []).filter((l) => !l.roles || l.roles.includes(user?.role));
+  const subGroups = section.groups || [];
+  const location = useLocation();
+  const isAnyActive = links.some((l) => linkIsActive(l, location.pathname))
+    || subGroups.some((g) => g.items.some((l) => linkIsActive(l, location.pathname)));
   const [isOpen, setIsOpen] = useState(isAnyActive || section.section === 'Overview');
 
-  if (links.length === 0) return null;
+  if (links.length === 0 && subGroups.length === 0) return null;
 
   return (
     <div className="nav-section">
@@ -184,6 +208,7 @@ const NavGroup = ({ section, user }) => {
       </div>
       {isOpen && (
         <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          {subGroups.map((g) => <NavSubGroup key={g.group} group={g} user={user} />)}
           {links.map((l) => (
             <NavLink
               key={l.to}

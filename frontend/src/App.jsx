@@ -78,6 +78,7 @@ const RegistrationRequests = lazy(() => import('./pages/trading/RegistrationRequ
 const MMRDashboard = lazy(() => import('./pages/trading/MMRDashboard.jsx'));
 const CEAReportsDashboard = lazy(() => import('./pages/trading/CEAReportsDashboard.jsx'));
 const PowerMarketDashboard = lazy(() => import('./pages/trading/PowerMarketDashboard.jsx'));
+const PendingScreen = lazy(() => import('./pages/trading/PendingScreen.jsx'));
 const SellerDashboard = lazy(() => import('./pages/seller/SellerDashboard.jsx'));
 const SellerContracts = lazy(() => import('./pages/seller/SellerContracts.jsx'));
 const SellerEnergyData = lazy(() => import('./pages/seller/SellerEnergyData.jsx'));
@@ -280,6 +281,89 @@ export default function App() {
         <Route path="master/portfolio-registry" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><PortfolioRegistry /></ProtectedRoute>} />
         <Route path="masters" element={<ProtectedRoute roles={MASTERS_ROLES}><MastersHub /></ProtectedRoute>} />
         <Route path="audit-logs" element={<ProtectedRoute roles={AUDIT_ROLES}><AuditLogs /></ProtectedRoute>} />
+
+        {/* Screens ISET has that we have not written yet. Routed so the menu can
+            carry ISET's full structure, each landing on a placeholder that says it
+            is unbuilt rather than an empty table that reads as broken. Building one
+            means pointing its route at a real page and dropping `pending` from
+            src/config/tradingMenu.js — the URL does not change, so saved links keep
+            working. */}
+        <Route path="trading/mmr-analysis" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/bilateral/create" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/bilateral/bidding" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/bilateral/applications" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/exchange/create" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/exchange/contracts" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/exchange/bidding" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/exchange/bidding-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/exchange/bidding-detail" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/exchange/iex-dam-single" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/exchange/iex-dam-block" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/exchange/iex-rtm-single" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/exchange/iex-rtm-block" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/exchange/applications" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/exchange/update-charges" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/exchange/daily-schedule-entry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/pxil/create" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/pxil/summary" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/rec/order-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/rec/bid-entry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="billing/supply-bill-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="invoices/exchange-energy-settlement" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="invoices/bilateral-energy-settlement" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="invoices/bilateral-sldc-consent" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="invoices/bilateral-open-access" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="uploader/charges" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="uploader/rldc-schedule" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="uploader/refund-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="uploader/refund-report-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="uploader/mmr-excel" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/api-details" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/registration" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/registration-category" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/noar-approvals" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/nrldc-refund" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/nrldc-refund-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/compensation-reconciliation" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/daily-schedule" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/implemented-block-wise" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/outstanding-dues" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/bilateral-contracts" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/market-clearing-price" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/daily-obligation-summary" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/day-wise-transactions" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/trading-margins" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="reports/bilateral-volume-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-a" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-b" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-c-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-c" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-d" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-e" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-f" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-f-margin" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-g" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-h" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-i" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-k" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-l" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-m" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-n" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-o" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-o-margin" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/format-5-3-rec" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cerc/saudamini-trf-4c" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cea/supply-position-energy" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cea/supply-position-peak" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cea/installed-capacity-month" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cea/installed-capacity-state" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="cea/per-capita-consumption" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="erp/weekly-billing" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="erp/tds-format" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="erp/dam-orders" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="erp/rtm-orders" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="erp/noc-updation" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="erp/noc-status" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
