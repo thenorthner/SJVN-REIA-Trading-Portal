@@ -60,3 +60,9 @@ deploy_runner.py
 add_key_to_remote.py
 remote-deploy-exec.sh
 run_tunnel_auto.py
+
+# Live ISET material — screenshots, exports and specs pulled from the real
+# portal. Real counterparty names, tariffs and bank details live here, and this
+# repo has a remote, so the whole folder is ignored except its README.
+reference/**
+!reference/README.md
