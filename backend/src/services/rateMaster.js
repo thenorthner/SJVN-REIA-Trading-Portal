@@ -17,6 +17,18 @@ const SEED_RATES = [
   { rate_category: 'SLDC', charge_name: 'West Bengal SLDC', region: 'WEST_BENGAL', rate_value: 1000, unit: 'Rs/day' },
   { rate_category: 'SLDC', charge_name: 'Delhi SLDC', region: 'DELHI', rate_value: 1000, unit: 'Rs/day' },
   { rate_category: 'NOAR_FEE', charge_name: 'NOAR Application Fee', region: 'ALL', rate_value: 5000, unit: 'Rs/application' },
+  // Charged once per open-access application by the drawal-state SLDC for its
+  // consent; billed on its own invoice in the ISET register.
+  { rate_category: 'SLDC', charge_name: 'SLDC Consent Fee', region: 'ALL', rate_value: 5000, unit: 'Rs/application' },
+  // Power-exchange fees, levied on cleared volume. These are baselines at the
+  // published transaction fee — each exchange revises its own, so they are held
+  // here as effective-dated rows the desk edits rather than constants in code.
+  { rate_category: 'EXCHANGE_FEE', charge_name: 'IEX Transaction Fee', region: 'ALL', rate_value: 20, unit: 'Rs/MWh', note: 'Baseline Rs 0.02/kWh — confirm against the current IEX circular' },
+  { rate_category: 'EXCHANGE_FEE', charge_name: 'PXIL Transaction Fee', region: 'ALL', rate_value: 20, unit: 'Rs/MWh', note: 'Baseline Rs 0.02/kWh — confirm against the current PXIL circular' },
+  { rate_category: 'EXCHANGE_FEE', charge_name: 'HPX Transaction Fee', region: 'ALL', rate_value: 20, unit: 'Rs/MWh', note: 'Baseline Rs 0.02/kWh — confirm against the current HPX circular' },
+  // REC trading fee, charged per certificate traded on the exchange. Held here
+  // rather than in code so the desk can revise it when the circular changes.
+  { rate_category: 'EXCHANGE_FEE', charge_name: 'REC Trading Fee', region: 'ALL', rate_value: 2, unit: 'Rs/REC', note: 'Baseline Rs 2 per certificate — confirm against the current exchange circular' },
 ];
 
 // Seed once. Idempotent: a charge_name that already has any row is left alone so

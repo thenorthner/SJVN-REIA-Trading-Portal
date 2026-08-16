@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
@@ -6,9 +7,15 @@ import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { ScheduleGridModal } from './ScheduleGridModal.jsx';
 
 const EMPTY_FORM = {
-  client_id: '', counterparty: '', loi_contract_ref: '', oa_type: 'STOA', is_standing_clearance: false,
-  quantum_mw: '', purchase_rate_per_unit: '', trading_margin_per_unit: '0.03', wheeling_charges: '', transmission_charges: '',
-  loss_injection_state: '', loss_inter_state: '', loss_drawee_state: '', start_date: '', end_date: '',
+  contract_type: 'Bilateral', transaction_type: '', loa_no: '', ppa_no: '', start_date: '', end_date: '',
+  compensation: '', late_payment_surcharge: '', rebate: '', type_of_contract: 'Purchase Side', product: '',
+  supplier_name: '', supplier_id: '', supplier_sldc: '', supplier_region: '', injecting_point: '',
+  procurer_name: '', procurer_id: '', procurer_sldc: '', procurer_region: '', drawal_point: '',
+  order_details: [{ id: Date.now(), date_from: '', date_to: '', time_from: '', time_to: '', rate_type: '', rate: '', quantum: '', variation: '' }],
+  route: '', alternate_route: '', is_renewable: 'Yes', billing_type: '',
+  ists_charges_bearer: '', state_transmission_charges_bearer: '', distribution_wheeling_bearer: '', rldc_operating_bearer: '', state_operating_bearer: '', dis_operating_bearer: '', noar_application_bearer: '', sldc_consent_bearer: '',
+  client_registration_fee: '', trading_margin: '', application_fee: '',
+  remarks: ''
 };
 
 const NOAR_STEP_LABEL = {
@@ -62,15 +69,41 @@ function fmtDuration(hours) {
   return h ? `${d}d ${h}h` : `${d}d`;
 }
 
-/** SQLite hands back UTC without a zone marker; show it in the user's local time. */
 function fmtStamp(s) {
   if (!s) return '—';
   const d = new Date(`${String(s).replace(' ', 'T')}Z`);
   return Number.isNaN(d.getTime()) ? s : d.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+function FormSection({ title, children }) {
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div className="form-section-header">{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function BearerRadio({ label, field, form, setForm }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
+      <span style={{ color: 'var(--slate-700)' }}>{label}</span>
+      <div style={{ display: 'flex', gap: 10 }}>
+        {['Seller', 'Buyer', 'SJVN', 'Both'].map(opt => (
+          <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <input type="radio" name={field} checked={form[field] === opt} onChange={() => setForm({...form, [field]: opt})} />
+            {opt}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Bilateral() {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -92,6 +125,14 @@ export default function Bilateral() {
   const [syncForm, setSyncForm] = useState({ date: new Date().toISOString().split('T')[0] });
   const [syncBusy, setSyncBusy] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
+  // Settlement & billing: the settled position for a supply period, the bills
+  // already raised against it, and the period the desk is billing for.
+  const [settlement, setSettlement] = useState(null);
+  const [settleBusy, setSettleBusy] = useState(false);
+  const [txInvoices, setTxInvoices] = useState([]);
+  const [billPeriod, setBillPeriod] = useState({ from: '', to: '' });
+  const [billBusy, setBillBusy] = useState('');
+  const [billMsg, setBillMsg] = useState(null);
 
   function load() {
     setLoading(true);
@@ -104,30 +145,52 @@ export default function Bilateral() {
   useEffect(load, []);
   useEffect(() => { api.tradingClients.list({ status: 'ACTIVE' }).then(setClients).catch(() => {}); }, []);
 
+  // Check URL params for action=create / tx= on mount or when location changes
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('action') === 'create') {
+      setShowCreate(true);
+      navigate(location.pathname, { replace: true });
+      return;
+    }
+    const txId = params.get('tx');
+    if (txId) {
+      api.bilateral.get(txId)
+        .then((tx) => setSelectedTx(tx))
+        .catch(() => {});
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location, navigate]);
+
   async function handleCreate(e) {
     e.preventDefault();
     setError('');
     try {
-      await api.bilateral.create({
-        ...form,
-        quantum_mw: Number(form.quantum_mw),
-        // SJVN enters the purchase rate and its margin; the backend derives and
-        // validates the sale rate (sale = purchase + margin) and mirrors it to
-        // the legacy tariff_per_unit field.
-        purchase_rate_per_unit: Number(form.purchase_rate_per_unit),
-        trading_margin_per_unit: Number(form.trading_margin_per_unit),
-        wheeling_charges: Number(form.wheeling_charges) || 0,
-        transmission_charges: Number(form.transmission_charges) || 0,
-        loss_injection_state: Number(form.loss_injection_state) || 0,
-        loss_inter_state: Number(form.loss_inter_state) || 0,
-        loss_drawee_state: Number(form.loss_drawee_state) || 0,
-      });
+      // NOTE: Passing the complex form data. Backend may need updates to support this.
+      await api.bilateral.create(form);
       setShowCreate(false);
       setForm(EMPTY_FORM);
       load();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to create transaction.');
     }
+  }
+
+  function addOrderRow() {
+    setForm({ ...form, order_details: [...form.order_details, { id: Date.now(), date_from: '', date_to: '', time_from: '', time_to: '', rate_type: '', rate: '', quantum: '', variation: '' }] });
+  }
+
+  function removeOrderRow(index) {
+    if (form.order_details.length === 1) return;
+    const updated = [...form.order_details];
+    updated.splice(index, 1);
+    setForm({ ...form, order_details: updated });
+  }
+
+  function updateOrderRow(index, field, value) {
+    const updated = [...form.order_details];
+    updated[index][field] = value;
+    setForm({ ...form, order_details: updated });
   }
 
   async function handleScheduleSubmit(blocks) {
@@ -259,6 +322,8 @@ export default function Bilateral() {
     try {
       const updated = await api.bilateral.recordActuals(schedId, Number(mw));
       setSelectedTx(updated);
+      // Metered actuals move the settled quantum, so the position is restated.
+      refreshSettlement(selectedTx.id, billPeriod);
       load();
     } catch (err) {
       alert("Failed to record actuals");
@@ -286,9 +351,68 @@ export default function Bilateral() {
     try {
       const updated = await api.bilateral.curtail(schedId, Number(mw));
       setSelectedTx(updated);
+      refreshSettlement(selectedTx.id, billPeriod);
       load();
     } catch (err) {
       alert("Failed to curtail");
+    }
+  }
+
+  /* ─────────── Settlement & billing ───────────
+   * The settlement preview writes nothing, so it can be refreshed freely
+   * whenever the blocks underneath it change.
+   */
+
+  function refreshSettlement(txId, period = billPeriod) {
+    if (!txId) return;
+    setSettleBusy(true);
+    const params = {};
+    if (period.from) params.from = period.from;
+    if (period.to) params.to = period.to;
+    api.bilateral.settlement(txId, params)
+      .then(setSettlement)
+      .catch(() => setSettlement(null))
+      .finally(() => setSettleBusy(false));
+    api.bilateral.invoices(txId).then(setTxInvoices).catch(() => setTxInvoices([]));
+  }
+
+  // Reload the settled position whenever a different transaction is opened, and
+  // clear it when the panel closes so the next one never shows stale figures.
+  useEffect(() => {
+    if (!selectedTx) {
+      setSettlement(null);
+      setTxInvoices([]);
+      setBillMsg(null);
+      setBillPeriod({ from: '', to: '' });
+      return;
+    }
+    refreshSettlement(selectedTx.id, { from: '', to: '' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTx?.id]);
+
+  async function handleRaiseBill(billType) {
+    if (!selectedTx) return;
+    setBillBusy(billType);
+    setBillMsg(null);
+    try {
+      const body = { bill_type: billType };
+      if (billPeriod.from) body.from = billPeriod.from;
+      if (billPeriod.to) body.to = billPeriod.to;
+      const inv = await api.bilateral.generateInvoice(selectedTx.id, body);
+      setBillMsg({
+        ok: true,
+        text: `${inv.invoice_no} raised for ₹${fmtNumber(inv.invoice_amount)} (${inv.settlement_basis}).`,
+        warnings: inv.warnings || [],
+      });
+      const updated = await api.bilateral.get(selectedTx.id);
+      setSelectedTx(updated);
+      refreshSettlement(selectedTx.id);
+      load();
+    } catch (err) {
+      const data = err.response?.data || {};
+      setBillMsg({ ok: false, text: data.error || 'Failed to raise the bill.', warnings: data.warnings || [] });
+    } finally {
+      setBillBusy('');
     }
   }
 
@@ -485,82 +609,167 @@ export default function Bilateral() {
       {showCreate && (
         <Modal open={true} onClose={() => setShowCreate(false)} title="Create Bilateral Transaction" width={800}>
           <form onSubmit={handleCreate}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15, marginBottom: 20 }}>
-              <Field label="Client" required>
-                <select className="input" value={form.client_id} onChange={e => setForm({...form, client_id: e.target.value})} required>
-                  <option value="">Select Client</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <FormSection title="Contract Details">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15, marginBottom: 15 }}>
+                <Field label="Contract Types *"><input type="text" className="input" value={form.contract_type} disabled /></Field>
+                <Field label="Transaction Type *">
+                  <select className="input" value={form.transaction_type} onChange={e => setForm({...form, transaction_type: e.target.value})}>
+                    <option value="">Select</option>
+                    <option value="Bilateral">Bilateral</option>
+                  </select>
+                </Field>
+                <Field label="LoA/Contract No *"><input type="text" className="input" value={form.loa_no} onChange={e => setForm({...form, loa_no: e.target.value})} /></Field>
+                <Field label="PPA/No/MOU No *"><input type="text" className="input" value={form.ppa_no} onChange={e => setForm({...form, ppa_no: e.target.value})} /></Field>
+                <Field label="Start Date Of Contract *"><input type="date" className="input" value={form.start_date} onChange={e => setForm({...form, start_date: e.target.value})} /></Field>
+                <Field label="End Date Of Contract *"><input type="date" className="input" value={form.end_date} onChange={e => setForm({...form, end_date: e.target.value})} /></Field>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 15, marginBottom: 15 }}>
+                <Field label="Compensation(%) *"><input type="number" className="input" value={form.compensation} onChange={e => setForm({...form, compensation: e.target.value})} /></Field>
+                <Field label="Late Payment Surcharge(LPS)(%) *"><input type="number" className="input" value={form.late_payment_surcharge} onChange={e => setForm({...form, late_payment_surcharge: e.target.value})} /></Field>
+                <Field label="Rebate(%) *"><input type="number" className="input" value={form.rebate} onChange={e => setForm({...form, rebate: e.target.value})} /></Field>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+                <Field label="Type of Contract *">
+                  <div style={{ display: 'flex', gap: 15, height: '36px', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', gap: 4 }}><input type="radio" name="type_of_contract" checked={form.type_of_contract === 'Purchase Side'} onChange={() => setForm({...form, type_of_contract: 'Purchase Side'})} /> Purchase Side</label>
+                    <label style={{ display: 'flex', gap: 4 }}><input type="radio" name="type_of_contract" checked={form.type_of_contract === 'Sell Side'} onChange={() => setForm({...form, type_of_contract: 'Sell Side'})} /> Sell Side</label>
+                  </div>
+                </Field>
+                <Field label="Product *"><input type="text" className="input" value={form.product} onChange={e => setForm({...form, product: e.target.value})} /></Field>
+              </div>
+            </FormSection>
+
+            <FormSection title="Client Details">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15, marginBottom: 15 }}>
+                <Field label="Supplier Name *"><input type="text" className="input" value={form.supplier_name} onChange={e => setForm({...form, supplier_name: e.target.value})} /></Field>
+                <Field label="Supplier Id *"><input type="text" className="input" value={form.supplier_id} placeholder="client id of seller" disabled style={{ background: '#f8fafc' }} /></Field>
+                <Field label="Concerned SLDC *"><input type="text" className="input" value={form.supplier_sldc} onChange={e => setForm({...form, supplier_sldc: e.target.value})} /></Field>
+                <Field label="Region *"><input type="text" className="input" value={form.supplier_region} onChange={e => setForm({...form, supplier_region: e.target.value})} /></Field>
+              </div>
+              <Field label="Injecting Point *"><input type="text" className="input" value={form.injecting_point} onChange={e => setForm({...form, injecting_point: e.target.value})} /></Field>
+            </FormSection>
+
+            <FormSection title="Procurer Details">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15, marginBottom: 15 }}>
+                <Field label="Procurer Name *"><input type="text" className="input" value={form.procurer_name} onChange={e => setForm({...form, procurer_name: e.target.value})} /></Field>
+                <Field label="Procurer ID *"><input type="text" className="input" value={form.procurer_id} placeholder="client id of buyer" disabled style={{ background: '#f8fafc' }} /></Field>
+                <Field label="Concerned SLDC *"><input type="text" className="input" value={form.procurer_sldc} onChange={e => setForm({...form, procurer_sldc: e.target.value})} /></Field>
+                <Field label="Region *"><input type="text" className="input" value={form.procurer_region} onChange={e => setForm({...form, procurer_region: e.target.value})} /></Field>
+              </div>
+              <Field label="Drawal Point *"><input type="text" className="input" value={form.drawal_point} onChange={e => setForm({...form, drawal_point: e.target.value})} /></Field>
+            </FormSection>
+
+            <FormSection title="Order Details">
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                  <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                    <tr>
+                      <th colSpan="2" style={{ padding: '8px', borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>Date</th>
+                      <th colSpan="2" style={{ padding: '8px', borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>Hours</th>
+                      <th style={{ padding: '8px' }}>Rate Type</th>
+                      <th style={{ padding: '8px' }}>Rate (INR/MW) *</th>
+                      <th style={{ padding: '8px' }}>Quantum (MW) *</th>
+                      <th style={{ padding: '8px' }}>Variation</th>
+                      <th style={{ padding: '8px', width: 60, textAlign: 'center' }}>Action</th>
+                    </tr>
+                    <tr style={{ color: 'var(--slate-500)', fontWeight: 'normal', fontSize: 11 }}>
+                      <th style={{ padding: '4px 8px' }}>From *</th>
+                      <th style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>To *</th>
+                      <th style={{ padding: '4px 8px' }}>From *</th>
+                      <th style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>To *</th>
+                      <th></th><th></th><th></th><th></th>
+                      <th style={{ textAlign: 'center' }}><button type="button" className="btn btn-sm btn-outline" style={{ padding: '2px 6px', fontSize: 14 }} onClick={addOrderRow}>+</button></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {form.order_details.map((row, idx) => (
+                      <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '4px' }}><input type="date" className="input" style={{ width: 130, padding: 4 }} value={row.date_from} onChange={e => updateOrderRow(idx, 'date_from', e.target.value)} /></td>
+                        <td style={{ padding: '4px', borderRight: '1px solid #e2e8f0' }}><input type="date" className="input" style={{ width: 130, padding: 4 }} value={row.date_to} onChange={e => updateOrderRow(idx, 'date_to', e.target.value)} /></td>
+                        <td style={{ padding: '4px' }}><input type="time" className="input" style={{ width: 100, padding: 4 }} value={row.time_from} onChange={e => updateOrderRow(idx, 'time_from', e.target.value)} /></td>
+                        <td style={{ padding: '4px', borderRight: '1px solid #e2e8f0' }}><input type="time" className="input" style={{ width: 100, padding: 4 }} value={row.time_to} onChange={e => updateOrderRow(idx, 'time_to', e.target.value)} /></td>
+                        <td style={{ padding: '4px' }}>
+                          <select className="input" style={{ padding: 4 }} value={row.rate_type} onChange={e => updateOrderRow(idx, 'rate_type', e.target.value)}>
+                            <option value="">Select</option>
+                            <option value="Fixed">Fixed</option>
+                            <option value="Variable">Variable</option>
+                          </select>
+                        </td>
+                        <td style={{ padding: '4px' }}><input type="number" className="input" style={{ padding: 4 }} value={row.rate} onChange={e => updateOrderRow(idx, 'rate', e.target.value)} /></td>
+                        <td style={{ padding: '4px' }}><input type="number" className="input" style={{ padding: 4 }} value={row.quantum} onChange={e => updateOrderRow(idx, 'quantum', e.target.value)} /></td>
+                        <td style={{ padding: '4px' }}><input type="text" className="input" style={{ padding: 4 }} value={row.variation} onChange={e => updateOrderRow(idx, 'variation', e.target.value)} /></td>
+                        <td style={{ padding: '4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          <button type="button" className="btn btn-sm btn-outline" style={{ padding: '2px 6px', fontSize: 14, marginRight: 4 }} onClick={addOrderRow}>+</button>
+                          <button type="button" className="btn btn-sm btn-outline" style={{ padding: '2px 8px', fontSize: 14, color: 'var(--red)' }} onClick={() => removeOrderRow(idx)}>-</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </FormSection>
+
+            <FormSection title="Route Details">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+                <Field label="Route *"><input type="text" className="input" value={form.route} onChange={e => setForm({...form, route: e.target.value})} /></Field>
+                <Field label="Alternate Route *"><input type="text" className="input" value={form.alternate_route} onChange={e => setForm({...form, alternate_route: e.target.value})} /></Field>
+              </div>
+            </FormSection>
+
+            <FormSection title="Renewable Details">
+              <Field label="Is source of energy renewable? *">
+                <div style={{ display: 'flex', gap: 15, height: '36px', alignItems: 'center' }}>
+                  <label style={{ display: 'flex', gap: 4 }}><input type="radio" name="is_renewable" checked={form.is_renewable === 'Yes'} onChange={() => setForm({...form, is_renewable: 'Yes'})} /> Yes</label>
+                  <label style={{ display: 'flex', gap: 4 }}><input type="radio" name="is_renewable" checked={form.is_renewable === 'No'} onChange={() => setForm({...form, is_renewable: 'No'})} /> No</label>
+                </div>
+              </Field>
+            </FormSection>
+
+            <FormSection title="Billing Cycle">
+              <Field label="Billing Type *">
+                <select className="input" value={form.billing_type} onChange={e => setForm({...form, billing_type: e.target.value})}>
+                  <option value="">Select</option>
+                  <option value="Weekly">Weekly</option>
+                  <option value="Monthly">Monthly</option>
                 </select>
               </Field>
-              <Field label="Counterparty" required>
-                <input type="text" className="input" value={form.counterparty} onChange={e => setForm({...form, counterparty: e.target.value})} required />
-              </Field>
-              <Field label="Open Access Type" required>
-                <select className="input" value={form.oa_type} onChange={e => setForm({...form, oa_type: e.target.value})}>
-                  <option value="STOA">STOA (Short Term)</option>
-                  <option value="MTOA">MTOA (Medium Term)</option>
-                  <option value="LTOA">LTOA (Long Term)</option>
-                </select>
-              </Field>
-              <Field label="Standing Clearance?">
-                <select className="input" value={form.is_standing_clearance} onChange={e => setForm({...form, is_standing_clearance: e.target.value === 'true'})}>
-                  <option value="false">No (Daily Approval)</option>
-                  <option value="true">Yes (Pre-approved Window)</option>
-                </select>
-              </Field>
-              <Field label="Quantum (MW)" required>
-                <input type="number" step="0.1" className="input" value={form.quantum_mw} onChange={e => setForm({...form, quantum_mw: e.target.value})} required />
-              </Field>
-            </div>
+            </FormSection>
 
-            <h4 style={{ marginBottom: 10 }}>Pricing (₹/unit)</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 15, marginBottom: 20 }}>
-              <Field label="Purchase Rate" required>
-                <input type="number" step="0.001" className="input" value={form.purchase_rate_per_unit} onChange={e => setForm({...form, purchase_rate_per_unit: e.target.value})} required />
-              </Field>
-              <Field label="Trading Margin">
-                <input type="number" step="0.001" className="input" value={form.trading_margin_per_unit} onChange={e => setForm({...form, trading_margin_per_unit: e.target.value})} />
-              </Field>
-              <Field label="Sale Rate (derived)">
-                <input
-                  type="text"
-                  className="input"
-                  readOnly
-                  tabIndex={-1}
-                  style={{ background: 'var(--slate-50)', color: 'var(--slate-600)' }}
-                  value={(form.purchase_rate_per_unit !== '' && form.trading_margin_per_unit !== '')
-                    ? (Number(form.purchase_rate_per_unit) + Number(form.trading_margin_per_unit)).toFixed(3)
-                    : ''}
-                />
-              </Field>
-            </div>
+            <FormSection title="Fee and Charges">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px', marginBottom: 20 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <BearerRadio label="ISTS Transmission Charges" field="ists_charges_bearer" form={form} setForm={setForm} />
+                  <BearerRadio label="State Operating Charges" field="state_operating_bearer" form={form} setForm={setForm} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <BearerRadio label="State Transmission Charges" field="state_transmission_charges_bearer" form={form} setForm={setForm} />
+                  <BearerRadio label="DIS Operating Charges" field="dis_operating_bearer" form={form} setForm={setForm} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                  <BearerRadio label="Distribution Wheeling Charge" field="distribution_wheeling_bearer" form={form} setForm={setForm} />
+                  <BearerRadio label="NOAR Application Fee" field="noar_application_bearer" form={form} setForm={setForm} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                  <BearerRadio label="RLDC Operating Charges" field="rldc_operating_bearer" form={form} setForm={setForm} />
+                  <BearerRadio label="SLDC Consent Fee" field="sldc_consent_bearer" form={form} setForm={setForm} />
+                </div>
+              </div>
+              <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: 15, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 15 }}>
+                <Field label="Client Registration Fee (Rs.) *"><input type="number" className="input" value={form.client_registration_fee} onChange={e => setForm({...form, client_registration_fee: e.target.value})} /></Field>
+                <Field label="Trading Margin (Rs./KWh) *"><input type="number" className="input" value={form.trading_margin} onChange={e => setForm({...form, trading_margin: e.target.value})} /></Field>
+                <Field label="Application Fee *"><input type="number" className="input" value={form.application_fee} onChange={e => setForm({...form, application_fee: e.target.value})} /></Field>
+              </div>
+            </FormSection>
 
-            <h4 style={{ marginBottom: 10 }}>Transmission Losses (%)</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 15, marginBottom: 20 }}>
-              <Field label="Injection State">
-                <input type="number" step="0.1" className="input" value={form.loss_injection_state} onChange={e => setForm({...form, loss_injection_state: e.target.value})} />
+            <FormSection title="Remarks">
+              <Field label="Remarks *">
+                <textarea className="input" rows="3" placeholder="remarks" value={form.remarks} onChange={e => setForm({...form, remarks: e.target.value})}></textarea>
               </Field>
-              <Field label="Inter-State (CTU)">
-                <input type="number" step="0.1" className="input" value={form.loss_inter_state} onChange={e => setForm({...form, loss_inter_state: e.target.value})} />
-              </Field>
-              <Field label="Drawee State">
-                <input type="number" step="0.1" className="input" value={form.loss_drawee_state} onChange={e => setForm({...form, loss_drawee_state: e.target.value})} />
-              </Field>
-            </div>
+            </FormSection>
 
-            <h4 style={{ marginBottom: 10 }}>Duration</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15, marginBottom: 20 }}>
-              <Field label="Start Date" required>
-                <input type="date" className="input" value={form.start_date} onChange={e => setForm({...form, start_date: e.target.value})} required />
-              </Field>
-              <Field label="End Date" required>
-                <input type="date" className="input" value={form.end_date} onChange={e => setForm({...form, end_date: e.target.value})} required />
-              </Field>
-            </div>
-
-            {error && <div style={{ color: 'red', marginBottom: 15 }}>{error}</div>}
+            {error && <div style={{ color: 'red', marginBottom: 15, background: '#fee2e2', padding: 10, borderRadius: 4 }}>{error}</div>}
             
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, position: 'sticky', bottom: 0, background: '#fff', padding: '15px 0', borderTop: '1px solid #e2e8f0' }}>
               <button type="button" className="btn btn-outline" onClick={() => setShowCreate(false)}>Cancel</button>
               <button type="submit" className="btn btn-primary">Create Transaction</button>
             </div>
@@ -755,10 +964,134 @@ export default function Bilateral() {
             </div>
           ))}
 
+          {/* Settle the delivered energy for a supply period, then raise the three
+              bills off it. The preview and the bills read the same computation,
+              so what is shown here is what gets invoiced. */}
           <div style={{ marginTop: 24 }}>
-            <DocumentManager 
+            <h4 style={{ marginBottom: 10, borderBottom: '1px solid #eee', paddingBottom: 5 }}>
+              Settlement &amp; Billing
+            </h4>
+
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 14 }}>
+              <Field label="Supply from">
+                <input type="date" className="input" value={billPeriod.from}
+                  onChange={(e) => setBillPeriod({ ...billPeriod, from: e.target.value })} />
+              </Field>
+              <Field label="Supply to">
+                <input type="date" className="input" value={billPeriod.to}
+                  onChange={(e) => setBillPeriod({ ...billPeriod, to: e.target.value })} />
+              </Field>
+              <button type="button" className="btn btn-outline" style={{ marginBottom: 4 }}
+                onClick={() => refreshSettlement(selectedTx.id)} disabled={settleBusy}>
+                {settleBusy ? 'Settling…' : 'Recalculate'}
+              </button>
+              {(billPeriod.from || billPeriod.to) && (
+                <button type="button" className="btn btn-outline" style={{ marginBottom: 4 }}
+                  onClick={() => { setBillPeriod({ from: '', to: '' }); refreshSettlement(selectedTx.id, { from: '', to: '' }); }}>
+                  Whole contract
+                </button>
+              )}
+            </div>
+
+            {!settlement ? (
+              <p style={{ color: '#777', fontSize: 13 }}>
+                {settleBusy ? 'Computing the settled position…' : 'No settled position yet — punch schedules first.'}
+              </p>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 14 }}>
+                  {[
+                    ['Delivered', `${fmtNumber(settlement.energy.delivered_mwh)} MWh`, `scheduled ${fmtNumber(settlement.energy.scheduled_mwh)}`],
+                    ['Injected', `${fmtNumber(settlement.losses.injected_mwh)} MWh`, `losses ${fmtNumber(settlement.losses.loss_mwh)} MWh`],
+                    ['Energy value', `₹${fmtNumber(settlement.money.sale_value)}`, `@ ₹${settlement.rates.sale_rate_per_unit}/kWh`],
+                    ['Trading margin', `₹${fmtNumber(settlement.money.trading_margin)}`, `@ ₹${settlement.rates.trading_margin_per_unit}/kWh`],
+                    ['DSM charges', `₹${fmtNumber(settlement.money.dsm_penalty_amount)}`, `deviation ${fmtNumber(settlement.energy.deviation_mwh)} MWh`],
+                  ].map(([label, value, sub]) => (
+                    <div key={label} style={{ padding: '10px 12px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8 }}>
+                      <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+                      <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2 }}>{value}</div>
+                      <div style={{ fontSize: 11, color: 'var(--slate-500)' }}>{sub}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+                  <Badge type={settlement.energy.is_final ? 'success' : 'warning'}>
+                    {settlement.energy.is_final ? 'FINAL' : 'PROVISIONAL'}
+                  </Badge>
+                  <span style={{ fontSize: 12, color: 'var(--slate-600)' }}>
+                    {settlement.energy.metered_blocks} of {settlement.energy.blocks} blocks metered
+                    {settlement.energy.days ? ` · ${settlement.energy.days} day(s)` : ''}
+                    {settlement.energy.period_from ? ` · ${settlement.energy.period_from} to ${settlement.energy.period_to}` : ''}
+                  </span>
+                </div>
+
+                {/* Energy cannot be billed until the portal has granted open access. */}
+                {!['APPROVED', 'PARTIAL'].includes(selectedTx.open_access_status) && (
+                  <div style={{ marginBottom: 12, padding: '8px 12px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, fontSize: 12, color: '#9a3412' }}>
+                    Open access is <strong>{selectedTx.open_access_status}</strong> — the energy bill unlocks once NOAR approves it.
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {[
+                    ['BILATERAL_ENERGY', 'Raise Energy Bill'],
+                    ['BILATERAL_OA', 'Raise Open Access Bill'],
+                    ['BILATERAL_SLDC', 'Raise SLDC Consent Bill'],
+                  ].map(([type, label]) => (
+                    <button key={type} type="button" className="btn btn-primary"
+                      disabled={billBusy === type || (type === 'BILATERAL_ENERGY' && !['APPROVED', 'PARTIAL'].includes(selectedTx.open_access_status))}
+                      onClick={() => handleRaiseBill(type)}>
+                      {billBusy === type ? 'Raising…' : label}
+                    </button>
+                  ))}
+                </div>
+
+                {billMsg && (
+                  <div style={{
+                    marginTop: 12, padding: '10px 12px', borderRadius: 6, fontSize: 13,
+                    background: billMsg.ok ? '#f0fdf4' : '#fef2f2',
+                    border: `1px solid ${billMsg.ok ? '#bbf7d0' : '#fecaca'}`,
+                    color: billMsg.ok ? '#166534' : '#991b1b',
+                  }}>
+                    {billMsg.text}
+                    {billMsg.warnings?.length > 0 && (
+                      <ul style={{ margin: '6px 0 0 18px', fontSize: 12 }}>
+                        {billMsg.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ marginTop: 18 }}>
+                  <strong style={{ fontSize: 13 }}>Bills raised against this contract</strong>
+                  {txInvoices.length === 0 ? (
+                    <p style={{ color: '#777', fontSize: 13, marginTop: 6 }}>None yet.</p>
+                  ) : (
+                    <div style={{ marginTop: 8 }}>
+                      <Table
+                        columns={[
+                          { key: 'invoice_no', label: 'Invoice No' },
+                          { key: 'bill_type', label: 'Type', render: (r) => r.bill_type.replace('BILATERAL_', '') },
+                          { key: 'invoice_amount', label: 'Amount', render: (r) => `₹${fmtNumber(r.invoice_amount)}` },
+                          { key: 'quantum_mwh', label: 'MWh', render: (r) => (r.quantum_mwh == null ? '-' : fmtNumber(r.quantum_mwh)) },
+                          { key: 'supply_from_date', label: 'Supply', render: (r) => (r.supply_from_date ? `${r.supply_from_date} → ${r.supply_to_date}` : '-') },
+                          { key: 'invoice_due_date', label: 'Due' },
+                          { key: 'settlement_basis', label: 'Basis', render: (r) => <Badge type={r.settlement_basis === 'FINAL' ? 'success' : 'warning'}>{r.settlement_basis || 'MANUAL'}</Badge> },
+                        ]}
+                        data={txInvoices}
+                      />
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div style={{ marginTop: 24 }}>
+            <DocumentManager
               moduleName="BILATERAL"
-              title="Bilateral Documents (LOI, Grid Approvals, Notices)" 
+              title="Bilateral Documents (LOI, Grid Approvals, Notices)"
             />
           </div>
 

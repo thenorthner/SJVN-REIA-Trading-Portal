@@ -8,6 +8,20 @@ import { catalogForEntityType, summarizeApprovals } from '../regulatoryApprovals
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // SJVN_DB_PATH lets the test suite point at a throwaway database. Without it the
 // tests would run against — and mutate — the real platform.db.
+//
+// tests/setup.js sets that variable, but it is only loaded when vitest is run
+// from backend/ where its config lives. Run from the repository root, vitest
+// finds no config, skips the setup file, and every DELETE in the suite lands on
+// the real database. That is not a hypothetical — it has happened, and it
+// emptied 56 tables. So refuse to open the real file under a test runner rather
+// than trusting the caller's working directory.
+if (process.env.VITEST && !process.env.SJVN_DB_PATH) {
+  throw new Error(
+    'Refusing to open the real platform.db from a test run: SJVN_DB_PATH is unset, '
+    + 'which means tests/setup.js did not load. Run vitest from the backend/ directory '
+    + '(npm test), or set SJVN_DB_PATH to a throwaway file.',
+  );
+}
 const dbPath = process.env.SJVN_DB_PATH || path.join(__dirname, 'platform.db');
 
 export const db = new Database(dbPath);
@@ -263,6 +277,63 @@ function migrateBilateralMargin() {
            purchase_rate_per_unit = ROUND(tariff_per_unit - 0.03, 4)
      WHERE sale_rate_per_unit IS NULL;
   `);
+}
+try {
+  migrateBilateralMargin();
+} catch (e) {
+  console.error('Bilateral margin migration failed:', e.message);
+}
+
+// Add the 35+ detailed form fields and order details table for the Bilateral UI
+function migrateBilateralDetailedForm() {
+  const cols = db.prepare('PRAGMA table_info(bilateral_transactions)').all().map(c => c.name);
+  if (!cols.includes('contract_type')) {
+    const fields = [
+      "contract_type TEXT DEFAULT 'Bilateral'", "transaction_type TEXT", "loa_no TEXT", "ppa_no TEXT",
+      "type_of_contract TEXT", "product TEXT", "supplier_name TEXT", "supplier_id TEXT", "supplier_sldc TEXT",
+      "supplier_region TEXT", "injecting_point TEXT", "procurer_name TEXT", "procurer_id TEXT", "procurer_sldc TEXT",
+      "procurer_region TEXT", "drawal_point TEXT", "route TEXT", "alternate_route TEXT", "is_renewable TEXT DEFAULT 'Yes'",
+      "billing_type TEXT", "remarks TEXT", "compensation REAL", "late_payment_surcharge REAL", "rebate REAL",
+      'client_registration_fee REAL', 'application_fee REAL', 'ists_charges_bearer TEXT',
+      'state_transmission_charges_bearer TEXT', 'distribution_wheeling_bearer TEXT', 'rldc_operating_bearer TEXT',
+      'state_operating_bearer TEXT', 'dis_operating_bearer TEXT', 'noar_application_bearer TEXT', 'sldc_consent_bearer TEXT'
+    ];
+    for (const f of fields) {
+      db.exec(`ALTER TABLE bilateral_transactions ADD COLUMN ${f}`);
+    }
+    
+    // Also recreate the table to drop the NOT NULL constraint on client_id safely
+    db.exec('PRAGMA foreign_keys=OFF');
+    db.exec('PRAGMA legacy_alter_table=ON');
+    try {
+      rebuildTableFromSchema('bilateral_transactions');
+    } finally {
+      db.exec('PRAGMA legacy_alter_table=OFF');
+      db.exec('PRAGMA foreign_keys=ON');
+    }
+  }
+
+  // Ensure the order details table exists
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bilateral_order_details (
+      id TEXT PRIMARY KEY,
+      transaction_id TEXT NOT NULL REFERENCES bilateral_transactions(id) ON DELETE CASCADE,
+      date_from TEXT,
+      date_to TEXT,
+      time_from TEXT,
+      time_to TEXT,
+      rate_type TEXT,
+      rate REAL,
+      quantum REAL,
+      variation TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+}
+try {
+  migrateBilateralDetailedForm();
+} catch (e) {
+  console.error('Bilateral detailed form migration failed:', e.message);
 }
 try {
   migrateBilateralMargin();
@@ -1910,6 +1981,125 @@ try {
   migrateReaFetchLogSchema();
 } catch (e) {
   console.error('REA fetch log migration failed:', e.message);
+}
+
+/**
+ * Settlement provenance on the View Bills register.
+ *
+ * The bilateral bills were previously all hand-entered, so a row carried no link
+ * back to the transaction it billed. Generated bills need that link, plus the
+ * quantum, rate and itemised breakup they were priced from.
+ */
+function migrateViewBillSettlementColumns() {
+  const cols = db.prepare('PRAGMA table_info(view_bill_invoices)').all().map((c) => c.name);
+  const additions = [
+    ['bilateral_id', 'TEXT'],
+    ['quantum_mwh', 'REAL'],
+    ['rate_per_unit', 'REAL'],
+    ['gst_amount', 'REAL'],
+    ['breakup_json', 'TEXT'],
+    ['settlement_basis', 'TEXT'],
+    ['generated_from', 'TEXT'],
+  ];
+  for (const [name, type] of additions) {
+    if (!cols.includes(name)) {
+      db.exec(`ALTER TABLE view_bill_invoices ADD COLUMN ${name} ${type}`);
+    }
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_view_bill_bilateral ON view_bill_invoices(bilateral_id, bill_type)');
+}
+
+try {
+  migrateViewBillSettlementColumns();
+} catch (e) {
+  console.error('View Bills settlement-column migration failed:', e.message);
+}
+
+/**
+ * Link a format-generation application to the contract it became.
+ *
+ * Bidding, applications and contracts were three unconnected tables, so an
+ * approved application had no way to say which bilateral transaction it turned
+ * into — and the desk had to retype the whole thing.
+ */
+function migrateBilateralApplicationContractLink() {
+  for (const table of ['bilateral_biddings', 'bilateral_applications']) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (!cols.includes('transaction_id')) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN transaction_id TEXT`);
+    }
+  }
+}
+
+try {
+  migrateBilateralApplicationContractLink();
+} catch (e) {
+  console.error('Bilateral application-contract link migration failed:', e.message);
+}
+
+/**
+ * File an exchange bid under the client agreement it was placed for, and let a
+ * generated bill point back at that agreement.
+ *
+ * bids carried a client and a product but no contract, so cleared volume could
+ * not be rolled up to the agreement it settles against. Bids placed before this
+ * column existed are matched by client, product and delivery date instead.
+ */
+function migrateExchangeSettlementLinks() {
+  const bidCols = db.prepare('PRAGMA table_info(bids)').all().map((c) => c.name);
+  if (!bidCols.includes('contract_id')) {
+    db.exec('ALTER TABLE bids ADD COLUMN contract_id TEXT');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_bids_contract ON bids(contract_id, delivery_date)');
+  }
+  const invCols = db.prepare('PRAGMA table_info(view_bill_invoices)').all().map((c) => c.name);
+  if (!invCols.includes('exchange_contract_id')) {
+    db.exec('ALTER TABLE view_bill_invoices ADD COLUMN exchange_contract_id TEXT');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_view_bill_exchange ON view_bill_invoices(exchange_contract_id, bill_type)');
+  }
+}
+
+try {
+  migrateExchangeSettlementLinks();
+} catch (e) {
+  console.error('Exchange settlement-link migration failed:', e.message);
+}
+
+/**
+ * Join a REC exchange bid to the certificates it moved.
+ *
+ * rec_bids recorded what was offered and then stopped — there was nowhere to
+ * record what the session cleared, at what rate, or which ledger lots the
+ * certificates came out of. Without that the bid book and the REC inventory
+ * could disagree indefinitely.
+ */
+function migrateRecTradingLinks() {
+  const add = (table, columns) => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    for (const [name, type] of columns) {
+      if (!cols.includes(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+    }
+  };
+  add('rec_bids', [
+    ['approved_by', 'TEXT'],
+    ['executed_quantity', 'INTEGER'],
+    ['discovered_rate', 'REAL'],
+    ['trade_date', 'TEXT'],
+    ['rec_order_id', 'TEXT'],
+    ['reject_reason', 'TEXT'],
+  ]);
+  add('rec_transactions', [['bid_id', 'TEXT']]);
+  add('rec_orders', [['bid_id', 'TEXT'], ['generated_from', 'TEXT']]);
+  // Rows that predate the column came from the seed or were keyed in by hand;
+  // either way no execution stands behind them.
+  db.prepare("UPDATE rec_orders SET generated_from = 'MANUAL' WHERE generated_from IS NULL AND bid_id IS NULL").run();
+  db.prepare("UPDATE rec_orders SET generated_from = 'SETTLEMENT' WHERE generated_from IS NULL AND bid_id IS NOT NULL").run();
+  db.exec('CREATE INDEX IF NOT EXISTS idx_rec_txn_bid ON rec_transactions(bid_id)');
+}
+
+try {
+  migrateRecTradingLinks();
+} catch (e) {
+  console.error('REC trading-link migration failed:', e.message);
 }
 
 try {

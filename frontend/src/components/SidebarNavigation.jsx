@@ -9,10 +9,10 @@ const registrationRoutes = [
 ];
 
 const bilateralRoutes = [
-  { label: 'Create Bilateral Contract', path: '/bilateral/contracts/create', icon: '📝' },
-  { label: 'Bilateral Contracts Summary', path: '/bilateral/contracts/summary', icon: '📊' },
-  { label: 'Bilateral Bidding', path: '/bilateral/bidding', icon: '📅' },
-  { label: 'Bilateral Applications', path: '/bilateral/applications', icon: '📅' }
+  { label: 'Create Bilateral Contract', path: '/trading/bilateral/desk?action=create', icon: '📝' },
+  { label: 'Bilateral Contracts Summary', path: '/trading/bilateral', icon: '📊' },
+  { label: 'Bilateral Bidding', path: '/trading/bilateral/bidding', icon: '📅' },
+  { label: 'Bilateral Applications', path: '/trading/bilateral/applications', icon: '📅' }
 ];
 
 const exchangeRoutes = [
@@ -38,8 +38,8 @@ const uploaderRoutes = [
 ];
 
 const pxilRoutes = [
-  { label: 'PXIL Order Creation', path: '/exchange/pxil/create', icon: '📝' },
-  { label: 'PXIL Order Summary', path: '/exchange/pxil/summary', icon: '📑' }
+  { label: 'PXIL Order Creation', path: '/trading/pxil/create', icon: '📝' },
+  { label: 'PXIL Order Summary', path: '/trading/pxil/summary', icon: '📑' }
 ];
 
 const viewBillsRoutes = [

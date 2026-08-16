@@ -31,6 +31,9 @@ const Bids = lazy(() => import('./pages/trading/Bids.jsx'));
 const DayAheadMarketEngine = lazy(() => import('./pages/trading/DayAheadMarketEngine.jsx'));
 const PreTradeBoard = lazy(() => import('./pages/trading/PreTradeBoard.jsx'));
 const Bilateral = lazy(() => import('./pages/trading/Bilateral.jsx'));
+const BilateralContractsSummary = lazy(() => import('./pages/trading/BilateralContractsSummary.jsx'));
+const BilateralBidding = lazy(() => import('./pages/trading/BilateralBidding.jsx'));
+const BilateralApplications = lazy(() => import('./pages/trading/BilateralApplications.jsx'));
 const BillingSettlement = lazy(() => import('./pages/trading/BillingSettlement.jsx'));
 const GeneratorBilling = lazy(() => import('./pages/trading/GeneratorBilling.jsx'));
 const MarketAnalytics = lazy(() => import('./pages/trading/MarketAnalytics.jsx'));
@@ -40,6 +43,10 @@ const CERCFormIV = lazy(() => import('./pages/trading/CERCFormIV.jsx'));
 const BulkCommunications = lazy(() => import('./pages/trading/BulkCommunications.jsx'));
 const InboxMailList = lazy(() => import('./pages/trading/InboxMailList.jsx'));
 const CertificateOperationsHub = lazy(() => import('./pages/trading/CertificateOperationsHub.jsx'));
+const EscertBidEntry = lazy(() => import('./pages/trading/EscertBidEntry.jsx'));
+const RecOrder = lazy(() => import('./pages/trading/RecOrder.jsx'));
+const RecOrderReport = lazy(() => import('./pages/trading/RecOrderReport.jsx'));
+const RecBidEntry = lazy(() => import('./pages/trading/RecBidEntry.jsx'));
 const TAMManagement = lazy(() => import('./pages/trading/TAMManagement.jsx'));
 const BankTransactionsList = lazy(() => import('./pages/trading/BankTransactionsList.jsx'));
 const EnergySchedule = lazy(() => import('./pages/trading/EnergySchedule.jsx'));
@@ -65,6 +72,32 @@ const ERPVendorPayableLedger = lazy(() => import('./pages/trading/ERPVendorPayab
 const OpenAccessInvoiceViewer = lazy(() => import('./pages/trading/OpenAccessInvoiceViewer.jsx'));
 const OpenAccessInvoiceDetail = lazy(() => import('./pages/trading/OpenAccessInvoiceDetail.jsx'));
 const TradingMarginInvoiceSummary = lazy(() => import('./pages/trading/TradingMarginInvoiceSummary.jsx'));
+const ExchangeEnergySettlementInvoice = lazy(() => import('./pages/trading/ExchangeEnergySettlementInvoice.jsx'));
+const BilateralEnergySettlementInvoice = lazy(() => import('./pages/trading/BilateralEnergySettlementInvoice.jsx'));
+const ChargesUploader = lazy(() => import('./pages/trading/ChargesUploader.jsx'));
+const RldcScheduleUploader = lazy(() => import('./pages/trading/RldcScheduleUploader.jsx'));
+const RefundReportUploader = lazy(() => import('./pages/trading/RefundReportUploader.jsx'));
+const LatestRefundUploader = lazy(() => import('./pages/trading/LatestRefundUploader.jsx'));
+const MmrExcelUploader = lazy(() => import('./pages/trading/MmrExcelUploader.jsx'));
+const PxilOrderCreation = lazy(() => import('./pages/trading/PxilOrderCreation.jsx'));
+const PxilOrderSummary = lazy(() => import('./pages/trading/PxilOrderSummary.jsx'));
+const ApiDetailsReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.ApiDetailsReport })));
+const RegistrationReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.RegistrationReport })));
+const RegistrationCategoryReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.RegistrationCategoryReport })));
+const NoarApprovalsReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.NoarApprovalsReport })));
+const NrldcRefundReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.NrldcRefundReport })));
+const NrldcLatestRefundReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.NrldcLatestRefundReport })));
+const CompensationReconciliationReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.CompensationReconciliationReport })));
+const TdsFormatReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.TdsFormatReport })));
+const DailyScheduleReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.DailyScheduleReport })));
+const ImplementedScheduleSummaryReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.ImplementedScheduleSummaryReport })));
+const ImplementedBlockWiseReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.ImplementedBlockWiseReport })));
+const OutstandingDuesReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.OutstandingDuesReport })));
+const BilateralContractsReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.BilateralContractsReport })));
+const GenericIsetReport = lazy(() => import('./pages/trading/GenericIsetReport.jsx'));
+const DailyScheduleEntry = lazy(() => import('./pages/trading/DailyScheduleEntry.jsx'));
+const BilateralSldcConsentInvoice = lazy(() => import('./pages/trading/BilateralSldcConsentInvoice.jsx'));
+const BilateralOpenAccessInvoice = lazy(() => import('./pages/trading/BilateralOpenAccessInvoice.jsx'));
 const ViewBills = lazy(() => import('./pages/trading/ViewBills.jsx'));
 const BillGenerationForm = lazy(() => import('./pages/trading/BillGenerationForm.jsx'));
 const UpdatePortfolioID = lazy(() => import('./pages/trading/UpdatePortfolioID.jsx'));
@@ -78,6 +111,15 @@ const RegistrationRequests = lazy(() => import('./pages/trading/RegistrationRequ
 const MMRDashboard = lazy(() => import('./pages/trading/MMRDashboard.jsx'));
 const CEAReportsDashboard = lazy(() => import('./pages/trading/CEAReportsDashboard.jsx'));
 const PowerMarketDashboard = lazy(() => import('./pages/trading/PowerMarketDashboard.jsx'));
+const CreateExchangeContract = lazy(() => import('./pages/trading/CreateExchangeContract.jsx'));
+const ExchangeContractsSummary = lazy(() => import('./pages/trading/ExchangeContractsSummary.jsx'));
+const ExchangeContractDetail = lazy(() => import('./pages/trading/ExchangeContractDetail.jsx'));
+const ExchangeBidding = lazy(() => import('./pages/trading/ExchangeBidding.jsx'));
+const ExchangeBiddingLatest = lazy(() => import('./pages/trading/ExchangeBiddingLatest.jsx'));
+const ExchangeBiddingDetailReport = lazy(() => import('./pages/trading/ExchangeBiddingDetailReport.jsx'));
+const IexBidBookReport = lazy(() => import('./pages/trading/IexBidBookReport.jsx'));
+const ExchangeApplications = lazy(() => import('./pages/trading/ExchangeApplications.jsx'));
+const UpdateCharges = lazy(() => import('./pages/trading/UpdateCharges.jsx'));
 const PendingScreen = lazy(() => import('./pages/trading/PendingScreen.jsx'));
 const SellerDashboard = lazy(() => import('./pages/seller/SellerDashboard.jsx'));
 const SellerContracts = lazy(() => import('./pages/seller/SellerContracts.jsx'));
@@ -222,7 +264,8 @@ export default function App() {
         <Route path="settings/user-profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
 
         {/* Shared routes between Internal and External */}
-        <Route path="trading/bilateral" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><Bilateral /></ProtectedRoute>} />
+        <Route path="trading/bilateral" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><BilateralContractsSummary /></ProtectedRoute>} />
+        <Route path="trading/bilateral/desk" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><Bilateral /></ProtectedRoute>} />
         <Route path="trading/billing-settlement" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><BillingSettlement /></ProtectedRoute>} />
         {/* Generator billing is written by REIA and read by trading — its guard
             spans both, matching the API's own role set for /api/generator-billing. */}
@@ -239,7 +282,10 @@ export default function App() {
         <Route path="trading/rate-master" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RateMaster /></ProtectedRoute>} />
         <Route path="trading/tds-register" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TDSRegister /></ProtectedRoute>} />
         <Route path="trading/oa-calculator" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><OAChargeCalculator /></ProtectedRoute>} />
-        <Route path="trading/rec" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CertificateOperationsHub defaultTab="REC" /></ProtectedRoute>} />
+        <Route path="trading/rec" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RecOrder /></ProtectedRoute>} />
+        <Route path="trading/rec/hub" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CertificateOperationsHub defaultTab="REC" /></ProtectedRoute>} />
+        <Route path="trading/rec/order-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RecOrderReport /></ProtectedRoute>} />
+        <Route path="trading/rec/bid-entry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RecBidEntry /></ProtectedRoute>} />
         <Route path="trading/noar" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARWallet /></ProtectedRoute>} />
         <Route path="trading/noar-registry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARRegistry /></ProtectedRoute>} />
         <Route path="compliance/noar/:id" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARDetailCard /></ProtectedRoute>} />
@@ -269,7 +315,7 @@ export default function App() {
         <Route path="trading/form-iv" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CERCFormIV /></ProtectedRoute>} />
         <Route path="trading/bulk-communications" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BulkCommunications /></ProtectedRoute>} />
         <Route path="trading/inbox" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><InboxMailList /></ProtectedRoute>} />
-        <Route path="trading/escert" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><CertificateOperationsHub defaultTab="ESCERT" /></ProtectedRoute>} />
+        <Route path="trading/escert" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><EscertBidEntry /></ProtectedRoute>} />
         <Route path="trading/tam" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><TAMManagement marketType="TAM" /></ProtectedRoute>} />
         <Route path="trading/gtam" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><TAMManagement marketType="GTAM" /></ProtectedRoute>} />
         <Route path="trading/bank-transactions" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><BankTransactionsList /></ProtectedRoute>} />
@@ -288,82 +334,85 @@ export default function App() {
             means pointing its route at a real page and dropping `pending` from
             src/config/tradingMenu.js — the URL does not change, so saved links keep
             working. */}
-        <Route path="trading/mmr-analysis" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/bilateral/create" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/bilateral/bidding" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/bilateral/applications" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/exchange/create" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/exchange/contracts" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/exchange/bidding" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/exchange/bidding-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/exchange/bidding-detail" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/exchange/iex-dam-single" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/exchange/iex-dam-block" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/exchange/iex-rtm-single" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/exchange/iex-rtm-block" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/exchange/applications" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/exchange/update-charges" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/exchange/daily-schedule-entry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/pxil/create" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/pxil/summary" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/rec/order-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="trading/rec/bid-entry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="billing/supply-bill-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="invoices/exchange-energy-settlement" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="invoices/bilateral-energy-settlement" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="invoices/bilateral-sldc-consent" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="invoices/bilateral-open-access" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="uploader/charges" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="uploader/rldc-schedule" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="uploader/refund-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="uploader/refund-report-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="uploader/mmr-excel" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/api-details" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/registration" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/registration-category" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/noar-approvals" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/nrldc-refund" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/nrldc-refund-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/compensation-reconciliation" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/daily-schedule" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/implemented-block-wise" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/outstanding-dues" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/bilateral-contracts" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/market-clearing-price" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/daily-obligation-summary" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/day-wise-transactions" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/trading-margins" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="reports/bilateral-volume-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-a" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-b" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-c-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-c" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-d" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-e" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-f" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-f-margin" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-g" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-h" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-i" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-k" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-l" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-m" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-n" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-o" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/form-iv-o-margin" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/format-5-3-rec" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cerc/saudamini-trf-4c" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cea/supply-position-energy" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cea/supply-position-peak" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cea/installed-capacity-month" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cea/installed-capacity-state" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="cea/per-capita-consumption" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="erp/weekly-billing" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="erp/tds-format" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="erp/dam-orders" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="erp/rtm-orders" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="erp/noc-updation" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
-        <Route path="erp/noc-status" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PendingScreen /></ProtectedRoute>} />
+        <Route path="trading/mmr-analysis" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="mmr-analysis" /></ProtectedRoute>} />
+        <Route path="trading/bilateral/create" element={<Navigate to="/trading/bilateral/desk?action=create" replace />} />
+        <Route path="trading/bilateral/bidding" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BilateralBidding /></ProtectedRoute>} />
+        <Route path="trading/bilateral/applications" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BilateralApplications /></ProtectedRoute>} />
+        <Route path="trading/exchange/create" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CreateExchangeContract /></ProtectedRoute>} />
+        <Route path="trading/exchange/contracts" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeContractsSummary /></ProtectedRoute>} />
+        <Route path="trading/exchange/contracts/:id" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeContractDetail /></ProtectedRoute>} />
+        <Route path="trading/exchange/bidding" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeBidding /></ProtectedRoute>} />
+        <Route path="trading/exchange/bidding-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeBiddingLatest /></ProtectedRoute>} />
+        <Route path="trading/exchange/bidding-detail" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeBiddingDetailReport /></ProtectedRoute>} />
+        <Route path="trading/exchange/iex-dam-single" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><IexBidBookReport kind="dam-single" /></ProtectedRoute>} />
+        <Route path="trading/exchange/iex-dam-block" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><IexBidBookReport kind="dam-block" /></ProtectedRoute>} />
+        <Route path="trading/exchange/iex-rtm-single" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><IexBidBookReport kind="rtm-single" /></ProtectedRoute>} />
+        <Route path="trading/exchange/iex-rtm-block" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><IexBidBookReport kind="rtm-block" /></ProtectedRoute>} />
+        <Route path="trading/exchange/applications" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeApplications /></ProtectedRoute>} />
+        <Route path="trading/exchange/update-charges" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><UpdateCharges /></ProtectedRoute>} />
+        <Route path="trading/exchange/daily-schedule-entry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><DailyScheduleEntry /></ProtectedRoute>} />
+        <Route path="trading/pxil/create" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PxilOrderCreation /></ProtectedRoute>} />
+        <Route path="trading/pxil/summary" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PxilOrderSummary /></ProtectedRoute>} />
+        <Route path="billing/supply-bill-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="supply-bill-report" /></ProtectedRoute>} />
+        <Route path="invoices/exchange-energy-settlement" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeEnergySettlementInvoice /></ProtectedRoute>} />
+        <Route path="invoices/bilateral-energy-settlement" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BilateralEnergySettlementInvoice /></ProtectedRoute>} />
+        <Route path="invoices/bilateral-sldc-consent" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BilateralSldcConsentInvoice /></ProtectedRoute>} />
+        <Route path="invoices/bilateral-open-access" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BilateralOpenAccessInvoice /></ProtectedRoute>} />
+        <Route path="uploader/charges" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ChargesUploader /></ProtectedRoute>} />
+        <Route path="uploader/rldc-schedule" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RldcScheduleUploader /></ProtectedRoute>} />
+        <Route path="uploader/refund-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RefundReportUploader /></ProtectedRoute>} />
+        <Route path="uploader/refund-report-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><LatestRefundUploader /></ProtectedRoute>} />
+        <Route path="uploader/mmr-excel" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><MmrExcelUploader /></ProtectedRoute>} />
+        <Route path="reports/api-details" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ApiDetailsReport /></ProtectedRoute>} />
+        <Route path="reports/registration" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RegistrationReport /></ProtectedRoute>} />
+        <Route path="reports/registration-category" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RegistrationCategoryReport /></ProtectedRoute>} />
+        <Route path="reports/noar-approvals" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NoarApprovalsReport /></ProtectedRoute>} />
+        <Route path="reports/nrldc-refund" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NrldcRefundReport /></ProtectedRoute>} />
+        <Route path="reports/nrldc-refund-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NrldcLatestRefundReport /></ProtectedRoute>} />
+        <Route path="reports/compensation-reconciliation" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CompensationReconciliationReport /></ProtectedRoute>} />
+        <Route path="reports/tds-format" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TdsFormatReport /></ProtectedRoute>} />
+        <Route path="reports/daily-schedule" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><DailyScheduleReport /></ProtectedRoute>} />
+        <Route path="reports/implemented-schedule" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ImplementedScheduleSummaryReport /></ProtectedRoute>} />
+        <Route path="reports/implemented-block-wise" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ImplementedBlockWiseReport /></ProtectedRoute>} />
+        <Route path="reports/outstanding-dues" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><OutstandingDuesReport /></ProtectedRoute>} />
+        <Route path="reports/bilateral-contracts" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BilateralContractsReport /></ProtectedRoute>} />
+        <Route path="reports/market-clearing-price" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="market-clearing-price" /></ProtectedRoute>} />
+        <Route path="reports/daily-obligation-summary" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="daily-obligation-summary" /></ProtectedRoute>} />
+        <Route path="reports/day-wise-transactions" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="day-wise-transactions" /></ProtectedRoute>} />
+        <Route path="reports/trading-margins" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="trading-margins" /></ProtectedRoute>} />
+        <Route path="reports/mmr-analysis" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="mmr-analysis" /></ProtectedRoute>} />
+        <Route path="reports/supply-bill-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="supply-bill-report" /></ProtectedRoute>} />
+        <Route path="reports/bilateral-volume-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="bilateral-volume-latest" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-a" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-a" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-b" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-b" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-c-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-c-latest" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-c" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-c" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-d" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-d" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-e" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-e" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-f" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-f" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-f-margin" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-f-margin" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-g" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-g" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-h" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-h" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-i" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-i" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-k" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-k" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-l" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-l" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-m" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-m" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-n" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-n" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-o" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-o" /></ProtectedRoute>} />
+        <Route path="cerc/form-iv-o-margin" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-form-iv-o-margin" /></ProtectedRoute>} />
+        <Route path="cerc/format-5-3-rec" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-format-5-3-rec" /></ProtectedRoute>} />
+        <Route path="cerc/saudamini-trf-4c" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cerc-saudamini-trf-4c" /></ProtectedRoute>} />
+        <Route path="cea/supply-position-energy" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cea-supply-position-energy" /></ProtectedRoute>} />
+        <Route path="cea/supply-position-peak" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cea-supply-position-peak" /></ProtectedRoute>} />
+        <Route path="cea/installed-capacity-month" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cea-installed-capacity-month" /></ProtectedRoute>} />
+        <Route path="cea/installed-capacity-state" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cea-installed-capacity-state" /></ProtectedRoute>} />
+        <Route path="cea/per-capita-consumption" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="cea-per-capita-consumption" /></ProtectedRoute>} />
+        <Route path="erp/weekly-billing" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="erp-weekly-billing" /></ProtectedRoute>} />
+        <Route path="erp/tds-format" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TdsFormatReport /></ProtectedRoute>} />
+        <Route path="erp/dam-orders" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="erp-dam-orders" /></ProtectedRoute>} />
+        <Route path="erp/rtm-orders" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="erp-rtm-orders" /></ProtectedRoute>} />
+        <Route path="erp/noc-updation" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="erp-noc-updation" /></ProtectedRoute>} />
+        <Route path="erp/noc-status" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="erp-noc-status" /></ProtectedRoute>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

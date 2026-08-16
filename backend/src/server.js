@@ -21,7 +21,22 @@ import reconciliationRoutes, { runScheduledReconciliations } from './routes/reco
 import { runStakeholderAlerts } from './stakeholderEngine.js';
 import tradingClientsRoutes from './routes/tradingClients.js';
 import bidsRoutes from './routes/bids.js';
-import bilateralRoutes, { runNoarSlaAlerts, sendNoarWeeklyDigest } from './routes/bilateral.js';
+import bilateralRoutes, { runNoarSlaAlerts, sendNoarWeeklyDigest, seedBilateralContractSummary } from './routes/bilateral.js';
+import billingRoutes from './routes/billing.js';
+import exchangeContractsRoutes from './routes/exchangeContracts.js';
+import exchangeBiddingRoutes from './routes/exchangeBidding.js';
+import bilateralBiddingRoutes from './routes/bilateralBidding.js';
+import bilateralApplicationsRoutes, { seedBilateralApplications } from './routes/bilateralApplications.js';
+import viewBillInvoicesRoutes, { seedViewBillInvoices } from './routes/viewBillInvoices.js';
+import csvUploadsRoutes from './routes/csvUploads.js';
+import exchangeBiddingLatestRoutes from './routes/exchangeBiddingLatest.js';
+import iexBidBookRoutes, { seedIexBidBookSamples } from './routes/iexBidBook.js';
+import exchangeApplicationsRoutes, { seedExchangeApplications } from './routes/exchangeApplications.js';
+import exchangeUpdateChargesRoutes from './routes/exchangeUpdateCharges.js';
+import escertOrdersRoutes from './routes/escertOrders.js';
+import pxilOrdersRoutes, { seedPxilOrders } from './routes/pxilOrders.js';
+import isetReportsRoutes, { seedIsetReports } from './routes/isetReports.js';
+import recOrdersRoutes, { seedRecOrders } from './routes/recOrders.js';
 import billingSettlementRoutes from './routes/billingSettlement.js';
 import tradingInvoicesRoutes from './routes/tradingInvoices.js';
 import generatorBillingRoutes from './routes/generatorBilling.js';
@@ -133,8 +148,23 @@ app.use('/api/form-iv', requireAuth, formIvRoutes);
 app.use('/api/notes', requireAuth, notesRoutes);
 app.use('/api/power-diversion', requireAuth, powerDiversionRoutes);
 app.use('/api/bids', bidsRoutes);
+app.use('/api/billing', billingRoutes);
 app.use('/api/bilateral', bilateralRoutes);
 app.use('/api/trading/bilateral', bilateralRoutes);
+app.use('/api/exchange-contracts', exchangeContractsRoutes);
+app.use('/api/exchange-bidding', exchangeBiddingRoutes);
+app.use('/api/bilateral-bidding', bilateralBiddingRoutes);
+app.use('/api/bilateral-applications', bilateralApplicationsRoutes);
+app.use('/api/view-bill-invoices', viewBillInvoicesRoutes);
+app.use('/api/csv-uploads', csvUploadsRoutes);
+app.use('/api/exchange-bidding-latest', exchangeBiddingLatestRoutes);
+app.use('/api/iex-bid-book', iexBidBookRoutes);
+app.use('/api/exchange-applications', exchangeApplicationsRoutes);
+app.use('/api/exchange-update-charges', exchangeUpdateChargesRoutes);
+app.use('/api/escert-orders', escertOrdersRoutes);
+app.use('/api/pxil-orders', pxilOrdersRoutes);
+app.use('/api/iset-reports', isetReportsRoutes);
+app.use('/api/rec-trading', recOrdersRoutes);
 app.use('/api/billing-settlement', billingSettlementRoutes);
 app.use('/api/trading-invoices', tradingInvoicesRoutes);
 app.use('/api/tds', tdsLedgerRoutes);
@@ -215,6 +245,14 @@ const isEntryPoint = process.argv[1] && path.resolve(process.argv[1]) === fileUR
 if (isEntryPoint) {
 app.listen(PORT, HOST, () => {
   console.log(`SJVN Energy Platform listening on http://${HOST}:${PORT}`);
+  try { seedIexBidBookSamples(); } catch (err) { console.warn('[IEX Bid Book] seed failed:', err.message); }
+  try { seedExchangeApplications(); } catch (err) { console.warn('[Exchange Applications] seed failed:', err.message); }
+  try { seedRecOrders(); } catch (err) { console.warn('[REC Orders] seed failed:', err.message); }
+  try { seedPxilOrders(); } catch (err) { console.warn('[PXIL Orders] seed failed:', err.message); }
+  try { seedIsetReports(); } catch (err) { console.warn('[ISET Reports] seed failed:', err.message); }
+  try { seedBilateralContractSummary(); } catch (err) { console.warn('[Bilateral Summary] seed failed:', err.message); }
+  try { seedBilateralApplications(); } catch (err) { console.warn('[Bilateral Applications] seed failed:', err.message); }
+  try { seedViewBillInvoices(); } catch (err) { console.warn('[View Bill Invoices] seed failed:', err.message); }
   // SLA escalation sweep every 15 minutes
   setInterval(() => {
     try {

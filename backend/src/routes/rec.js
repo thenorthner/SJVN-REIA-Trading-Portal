@@ -7,6 +7,7 @@ import {
   withPosition, getTransactions, refreshLot, issuableEnergy, certificatesFor,
   multiplierFor, multiplierTable, issuanceFeePerRec, tradingSessions,
 } from '../services/recLedger.js';
+import { restateBidFromTransactions } from '../services/recTrading.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -271,12 +272,16 @@ router.post('/transactions/:txnId/reverse', requireRole(...WRITE), (req, res) =>
   const id = newId('RECTXN');
   db.prepare(`
     INSERT INTO rec_transactions (id, lot_id, txn_no, txn_type, quantity, rate_per_rec, amount,
-      trade_date, platform, buyer, obligated_entity, reference, notes, created_by, reverses_txn_id)
+      trade_date, platform, buyer, obligated_entity, reference, notes, created_by, reverses_txn_id, bid_id)
     VALUES (@id, @lot_id, @txn_no, @txn_type, @quantity, @rate_per_rec, @amount,
-      @trade_date, @platform, @buyer, @obligated_entity, @reference, @notes, @created_by, @reverses_txn_id)
+      @trade_date, @platform, @buyer, @obligated_entity, @reference, @notes, @created_by, @reverses_txn_id, @bid_id)
   `).run({
     id,
     lot_id: txn.lot_id,
+    // The reversal belongs to the same bid as the tranche it undoes, so the two
+    // net out when the bid is restated. Without it the negative entry is
+    // invisible to the restatement and the bid keeps reporting the full sale.
+    bid_id: txn.bid_id || null,
     txn_no: `${txn.txn_no}-REV`,
     txn_type: txn.txn_type,
     quantity: -Number(txn.quantity || 0),
@@ -292,8 +297,13 @@ router.post('/transactions/:txnId/reverse', requireRole(...WRITE), (req, res) =>
     reverses_txn_id: txn.id,
   });
 
-  logAudit({ req, user: req.user, action: 'REVERSE_TXN', module: 'TRADING', entityType: 'rec_lot', entityId: txn.lot_id, details: { reversal_id: id, reversed: txn.id, reason: req.body?.reason } });
-  res.status(201).json({ ...refreshLot(txn.lot_id), transactions: getTransactions(txn.lot_id) });
+  // A tranche booked by an exchange execution carries the bid it came from, so
+  // reversing it has to restate that bid and the REC order it settled into —
+  // otherwise the revenue register keeps reporting a sale that was undone.
+  const restated = txn.bid_id ? restateBidFromTransactions(txn.bid_id) : null;
+
+  logAudit({ req, user: req.user, action: 'REVERSE_TXN', module: 'TRADING', entityType: 'rec_lot', entityId: txn.lot_id, details: { reversal_id: id, reversed: txn.id, reason: req.body?.reason, restated } });
+  res.status(201).json({ ...refreshLot(txn.lot_id), transactions: getTransactions(txn.lot_id), restated });
 });
 
 router.put('/:id', requireRole(...WRITE), (req, res) => {

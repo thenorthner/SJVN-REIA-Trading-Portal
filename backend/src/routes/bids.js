@@ -7,6 +7,7 @@ import { secureLogAudit } from '../auditEngine.js';
 import { getParam } from '../mastersService.js';
 import { placeOrder, getTradeResult, syncMarketRates, getIexConfig } from '../services/iexService.js';
 import { checkBidCompliance, getClearance, clearancesNeedingAttention } from '../services/standingClearance.js';
+import { refreshExchangeContractStatus } from '../services/exchangeSettlement.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -126,13 +127,14 @@ function insertBid(header, blocks, actorId) {
   db.prepare(`
     INSERT INTO bids (
       id, client_id, exchange, product, bid_date, delivery_date, gate_closure_time,
-      quantum_mw, price_per_unit, bid_on, carry_forward_from, ocf_leg, premium_discount,
+      quantum_mw, price_per_unit, bid_on, contract_id, carry_forward_from, ocf_leg, premium_discount,
       is_no_bid, approval_status, status, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING', 'DRAFT', ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING', 'DRAFT', ?)
   `).run(
     bidId, header.client_id, header.exchange, header.product, header.bid_date, header.delivery_date,
     header.gate_closure_time || null, roll.quantum_mw, roll.price_per_unit,
     header.bid_on === 'PERIPHERY' ? 'PERIPHERY' : 'EX-BUS',
+    header.contract_id || null,
     header.carry_forward_from || null, header.ocf_leg || 0, header.premium_discount || 0, actorId
   );
 
@@ -295,6 +297,22 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
 
   if (b.exchange && !VALID_EXCHANGES.includes(b.exchange)) {
     return res.status(400).json({ error: `exchange must be one of: ${VALID_EXCHANGES.join(', ')}` });
+  }
+
+  // Filing a bid under an exchange agreement is optional, but naming one that
+  // does not exist — or that belongs to another client — would silently break
+  // the settlement roll-up, so it is rejected here instead.
+  if (b.contract_id) {
+    const contract = db.prepare('SELECT * FROM exchange_contracts WHERE id = ?').get(b.contract_id);
+    if (!contract) return res.status(400).json({ error: `Exchange contract '${b.contract_id}' does not exist` });
+    if (contract.client_id && contract.client_id !== b.client_id) {
+      return res.status(400).json({ error: 'contract_id belongs to a different client' });
+    }
+    if (b.delivery_date && (b.delivery_date < contract.start_date || b.delivery_date > contract.end_date)) {
+      return res.status(400).json({
+        error: `delivery_date ${b.delivery_date} falls outside the contract window ${contract.start_date} to ${contract.end_date}`,
+      });
+    }
   }
 
   if (!Array.isArray(b.blocks) || b.blocks.length === 0) {
@@ -541,6 +559,8 @@ router.post('/:id/submit', requireRole(...ROLE_GROUPS.TRADING_WRITE), async (req
 
     db.prepare("UPDATE bids SET status = 'SUBMITTED', exchange_receipt_ref = ? WHERE id = ?").run(receiptRef, bid.id);
     logEvent(bid.id, req.user.id, 'SUBMITTED', { receiptRef });
+    // A live bid on the exchange makes its agreement an active one.
+    if (bid.contract_id) refreshExchangeContractStatus(bid.contract_id);
 
     secureLogAudit(req, { action: 'SUBMIT_BID', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: { receiptRef } });
 
@@ -639,6 +659,7 @@ router.post('/:id/result', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res)
   db.prepare('UPDATE bids SET cleared_quantum_mw = ?, cleared_price = ?, status = ? WHERE id = ?')
     .run(totalCleared, totalCleared > 0 ? clearedValue / totalCleared : null, headerStatus, bid.id);
 
+  if (bid.contract_id) refreshExchangeContractStatus(bid.contract_id);
   logEvent(bid.id, req.user.id, 'RESULT_RECORDED', { totalReq, totalCleared, headerStatus });
   secureLogAudit(req, { action: 'RECORD_BID_RESULT', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: { totalCleared, headerStatus } });
 
@@ -698,6 +719,12 @@ router.post('/:id/carry-forward', requireRole(...ROLE_GROUPS.TRADING_WRITE), (re
     bid_date: req.body.bid_date || source.bid_date,
     delivery_date: req.body.delivery_date || source.delivery_date,
     gate_closure_time: req.body.gate_closure_time || null,
+    // The leg trades under the same client agreement as the bid it came from.
+    // Carrying the link matters because the leg changes product — DAM volume
+    // rolled into RTM — so the settlement's fallback match on client+product
+    // would not find it, and the volume it eventually clears would drop out of
+    // the contract's settlement entirely.
+    contract_id: source.contract_id || null,
     carry_forward_from: source.id,
     ocf_leg: (source.ocf_leg || 0) + 1,
     premium_discount: premium,

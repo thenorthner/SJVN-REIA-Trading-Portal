@@ -1,171 +1,229 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api } from '../../api/client.js';
+import { Card, Field, Badge, fmtNumber } from '../../components/ui.jsx';
+
+/**
+ * Supply Bill Entry — the Bill of Supply register.
+ *
+ * Electricity sits outside GST, so a supply of power is billed on a Bill of
+ * Supply rather than a tax invoice. The screen previously kept nothing: the
+ * form had no submit handler at all.
+ */
+
+const EMPTY = {
+  client_name: '',
+  client_id: '',
+  seller_name: '',
+  buyer_name: '',
+  contract_no: '',
+  invoice_date: new Date().toISOString().slice(0, 10),
+  invoice_due_date: '',
+  supply_from_date: '',
+  supply_to_date: '',
+  description: 'Supply of electrical energy',
+  hsn_code: '27160000',
+  quantity: '',
+  unit: 'MWh',
+  rate: '',
+  rebate_percent: '0',
+  remarks: '',
+};
 
 export default function BillOfSupplyForm() {
-  const [formData, setFormData] = useState({
-    clientName: '',
-    sellerName: '',
-    buyerName: '',
-    contractNo: '',
-    invoiceDate: '',
-    invoiceDueDate: '',
-    supplyPeriodFrom: '',
-    supplyPeriodTo: '',
-    invoiceNo: '',
-    description: '',
-    hsnCode: '',
-    quantity: '',
-    unit: '',
-    rate: '',
-    rebate: '',
-  });
+  const [form, setForm] = useState(EMPTY);
+  const [clients, setClients] = useState([]);
+  const [rows, setRows] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null);
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  function load() {
+    api.billing.listBillOfSupply().then(setRows).catch(() => setRows([]));
+  }
+
+  useEffect(() => {
+    api.billing.clients().then(setClients).catch(() => setClients([]));
+    load();
+  }, []);
+
+  const set = (field, value) => {
+    setForm((f) => ({ ...f, [field]: value }));
+    setMessage(null);
   };
 
-  const amount = (parseFloat(formData.quantity) || 0) * (parseFloat(formData.rate) || 0);
-  const amountAfterRebate = amount * (1 - (parseFloat(formData.rebate) || 0) / 100);
+  // The amount and the rebate are shown as the backend will compute them, so
+  // the operator is never asked to keep two figures in step by hand.
+  const computed = useMemo(() => {
+    const qty = Number(form.quantity) || 0;
+    const rate = Number(form.rate) || 0;
+    const rebate = Number(form.rebate_percent) || 0;
+    const amount = Number((qty * rate).toFixed(2));
+    return { amount, after: Number((amount * (1 - rebate / 100)).toFixed(2)) };
+  }, [form.quantity, form.rate, form.rebate_percent]);
+
+  async function onSubmit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    try {
+      const created = await api.billing.createBillOfSupply({
+        ...form,
+        client_id: form.client_id || undefined,
+        quantity: Number(form.quantity),
+        rate: Number(form.rate),
+        rebate_percent: Number(form.rebate_percent) || 0,
+      });
+      setMessage({ ok: true, text: `${created.bill_no} recorded for ₹${fmtNumber(created.amount_after_rebate, 2)}.` });
+      setForm({ ...EMPTY, invoice_date: form.invoice_date });
+      load();
+    } catch (err) {
+      setMessage({ ok: false, text: err.response?.data?.error || 'Failed to record the bill of supply.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onCancel(row) {
+    if (!window.confirm(`Cancel ${row.bill_no}?`)) return;
+    try {
+      await api.billing.cancelBillOfSupply(row.id);
+      setMessage({ ok: true, text: `${row.bill_no} cancelled.` });
+      load();
+    } catch (err) {
+      setMessage({ ok: false, text: err.response?.data?.error || 'Failed to cancel.' });
+    }
+  }
 
   return (
-    <div className="p-6 bg-[#f8f9fa] min-h-screen font-sans text-[13px]">
-      <div className="bg-white border border-gray-200 shadow-sm max-w-5xl mx-auto">
-        
-        {/* Header */}
-        <div className="bg-[#2b5682] text-white px-4 py-2 font-semibold tracking-wide">
-          Bill Of Supply
-        </div>
-
-        <div className="p-8 pb-12">
-          {/* Party Details Row */}
-          <div className="grid grid-cols-3 gap-6 mb-8">
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Client Name*</label>
-              <select name="clientName" value={formData.clientName} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400">
-                <option value="">Select Client</option>
-                <option value="Arunachal Pradesh Power Corporation Pvt. Ltd.">Arunachal Pradesh Power Corporation Pvt. Ltd.</option>
-                <option value="BALRAMPUR CHINI MILLS LTD">BALRAMPUR CHINI MILLS LTD</option>
-                <option value="Balrampur Chini Mills Ltd. Unit HCM">Balrampur Chini Mills Ltd. Unit HCM</option>
-                <option value="CARBON RESOURCES PVT. LTD.">CARBON RESOURCES PVT. LTD.</option>
-                <option value="Dikchu Hydro Electric Project">Dikchu Hydro Electric Project (Sneha Kinetic Power Projects Pvt. Ltd.)</option>
-                <option value="DOP, Govt. of Arunachal Pradesh">DOP, Govt. of Arunachal Pradesh</option>
-                <option value="ELECTROTHERM (INDIA) LIMITED">ELECTROTHERM (INDIA) LIMITED</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Seller Name*</label>
-              <select name="sellerName" value={formData.sellerName} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400">
-                <option value="">Select Seller</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Buyer Name*</label>
-              <select name="buyerName" value={formData.buyerName} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400">
-                <option value="">Select Buyer</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Contract Info */}
-          <div className="mb-8">
-            <label className="block text-red-600 mb-1 font-medium">Contract No*</label>
-            <select name="contractNo" value={formData.contractNo} onChange={handleChange} className="w-1/2 border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400">
-              <option value="">Select Contract</option>
-              <option value="SJVN/CC/PT&BDE/NDMC/111">SJVN/CC/PT&BDE/NDMC/111 19.05.2023 IPCL-NDMC</option>
-              <option value="SJVNNDMC190523RE25">SJVNNDMC190523RE25</option>
-              <option value="NSLKSL-NDMC">NSLKSL-NDMC 04.01.2024</option>
-              <option value="KEPLSJVN280324RE55">KEPLSJVN280324RE55</option>
-              <option value="SJVNSTPLDAMBLOCK198MW">SJVNSTPLDAMBLOCK198MW</option>
-              <option value="KEPLSJVN190523RE25">KEPLSJVN190523RE25</option>
-              <option value="SJVN/CC/PT&BDE/NDMC/114">SJVN/CC/PT&BDE/NDMC/114 19.07.2023 IOCL-NDMC</option>
-            </select>
-          </div>
-
-          {/* Dates Row */}
-          <div className="grid grid-cols-4 gap-6 mb-8">
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Invoice Date*</label>
-              <input type="date" name="invoiceDate" value={formData.invoiceDate} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Invoice Due Date*</label>
-              <input type="date" name="invoiceDueDate" value={formData.invoiceDueDate} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Supply Period From*</label>
-              <input type="date" name="supplyPeriodFrom" value={formData.supplyPeriodFrom} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Supply Period To*</label>
-              <input type="date" name="supplyPeriodTo" value={formData.supplyPeriodTo} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400" />
-            </div>
-          </div>
-
-          {/* Invoice Line Row */}
-          <div className="grid grid-cols-3 gap-6 mb-8">
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Invoice No*</label>
-              <input type="text" name="invoiceNo" placeholder="Invoice No" value={formData.invoiceNo} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Description*</label>
-              <input type="text" name="description" placeholder="Description" value={formData.description} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">HSN Code*</label>
-              <input type="text" name="hsnCode" placeholder="HSN Code" value={formData.hsnCode} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400" />
-            </div>
-          </div>
-
-          {/* Financials Row */}
-          <div className="grid grid-cols-4 gap-6 mb-8">
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Quantity*</label>
-              <input type="number" name="quantity" placeholder="Quantity" value={formData.quantity} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Unit*</label>
-              <input type="text" name="unit" placeholder="Unit" value={formData.unit} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Rate(INR)*</label>
-              <input type="number" name="rate" placeholder="Rate" value={formData.rate} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Amount(INR)*</label>
-              <input type="text" name="amount" placeholder="Amount" value={amount.toFixed(2)} readOnly className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-500 bg-gray-50 outline-none cursor-not-allowed" />
-            </div>
-          </div>
-
-          {/* Rebate and Upload Row */}
-          <div className="grid grid-cols-3 gap-6 mb-12">
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Rebate(%)*</label>
-              <input type="number" name="rebate" placeholder="Rebate(%)" value={formData.rebate} onChange={handleChange} className="w-full border border-gray-300 rounded-sm px-3 py-2 text-gray-700 outline-none focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-gray-700 mb-1 font-medium">Amount After Rebate*</label>
-              <input type="text" name="amountAfterRebate" placeholder="Amount After Rebate" value={amountAfterRebate.toFixed(2)} readOnly className="w-full border border-blue-400 rounded-sm px-3 py-2 text-blue-600 bg-blue-50 outline-none cursor-not-allowed" />
-            </div>
-            <div>
-              <label className="block text-red-600 mb-1 font-medium">Upload Bill Of Supply Invoice In PDF Format*</label>
-              <div className="flex border border-gray-300 rounded-sm overflow-hidden bg-white">
-                <label className="bg-gray-100 hover:bg-gray-200 px-3 py-2 border-r border-gray-300 cursor-pointer text-gray-700 font-medium whitespace-nowrap">
-                  Choose File
-                  <input type="file" className="hidden" accept=".pdf" />
-                </label>
-                <span className="px-3 py-2 text-gray-500 flex-1 truncate">No file chosen</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex justify-center gap-2">
-            <button className="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-sm font-medium transition-colors">Close</button>
-            <button className="bg-[#3399ff] hover:bg-blue-500 text-white px-6 py-2 rounded-sm font-medium transition-colors">Submit</button>
-          </div>
-
-        </div>
+    <div style={{ padding: 20, maxWidth: 1000, margin: '0 auto' }}>
+      <div className="form-section-header" style={{ marginTop: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Bill of Supply</span>
+        <Link to="/reports/supply-bill-report" className="btn btn-sm btn-primary">Report of Supply Bill →</Link>
       </div>
+
+      <Card>
+        <form onSubmit={onSubmit}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16 }}>
+            <Field label="Client Name" required>
+              <input list="bos-clients" className="input" required value={form.client_name}
+                onChange={(e) => {
+                  const match = clients.find((c) => c.name === e.target.value);
+                  setForm((f) => ({ ...f, client_name: e.target.value, client_id: match?.client_id || '' }));
+                }} />
+              <datalist id="bos-clients">
+                {clients.map((c) => <option key={c.name} value={c.name} />)}
+              </datalist>
+            </Field>
+            <Field label="Seller Name"><input className="input" value={form.seller_name} onChange={(e) => set('seller_name', e.target.value)} /></Field>
+            <Field label="Buyer Name"><input className="input" value={form.buyer_name} onChange={(e) => set('buyer_name', e.target.value)} /></Field>
+
+            <Field label="Contract No"><input className="input" value={form.contract_no} onChange={(e) => set('contract_no', e.target.value)} /></Field>
+            <Field label="Invoice Date" required>
+              <input type="date" className="input" required value={form.invoice_date} onChange={(e) => set('invoice_date', e.target.value)} />
+            </Field>
+            <Field label="Invoice Due Date">
+              <input type="date" className="input" value={form.invoice_due_date} onChange={(e) => set('invoice_due_date', e.target.value)} />
+            </Field>
+
+            <Field label="Supply Period From" required>
+              <input type="date" className="input" required value={form.supply_from_date} onChange={(e) => set('supply_from_date', e.target.value)} />
+            </Field>
+            <Field label="Supply Period To" required>
+              <input type="date" className="input" required value={form.supply_to_date} onChange={(e) => set('supply_to_date', e.target.value)} />
+            </Field>
+            <Field label="HSN Code"><input className="input" value={form.hsn_code} onChange={(e) => set('hsn_code', e.target.value)} /></Field>
+
+            <Field label="Description">
+              <input className="input" value={form.description} onChange={(e) => set('description', e.target.value)} />
+            </Field>
+            <Field label="Quantity" required>
+              <input type="number" step="0.001" min="0.001" className="input" required value={form.quantity} onChange={(e) => set('quantity', e.target.value)} />
+            </Field>
+            <Field label="Unit">
+              <select className="input" value={form.unit} onChange={(e) => set('unit', e.target.value)}>
+                <option value="MWh">MWh</option>
+                <option value="kWh">kWh</option>
+                <option value="MU">MU</option>
+              </select>
+            </Field>
+
+            <Field label="Rate (INR)" required>
+              <input type="number" step="0.01" min="0" className="input" required value={form.rate} onChange={(e) => set('rate', e.target.value)} />
+            </Field>
+            <Field label="Rebate (%)">
+              <input type="number" step="0.01" min="0" max="100" className="input" value={form.rebate_percent} onChange={(e) => set('rebate_percent', e.target.value)} />
+            </Field>
+            <Field label="Remarks"><input className="input" value={form.remarks} onChange={(e) => set('remarks', e.target.value)} /></Field>
+          </div>
+
+          <div style={{ marginTop: 14, padding: '10px 14px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8, display: 'flex', gap: 28, fontSize: 13 }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase' }}>Amount</div>
+              <strong style={{ fontSize: 16 }}>₹{fmtNumber(computed.amount, 2)}</strong>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase' }}>After rebate</div>
+              <strong style={{ fontSize: 16 }}>₹{fmtNumber(computed.after, 2)}</strong>
+            </div>
+            <div style={{ alignSelf: 'center', color: 'var(--slate-500)', fontSize: 12 }}>
+              Quantity × rate, less the rebate — computed, not typed.
+            </div>
+          </div>
+
+          {message && (
+            <div style={{
+              marginTop: 12, padding: '10px 12px', borderRadius: 6, fontSize: 13,
+              background: message.ok ? '#f0fdf4' : '#fef2f2',
+              border: `1px solid ${message.ok ? '#bbf7d0' : '#fecaca'}`,
+              color: message.ok ? '#166534' : '#991b1b',
+            }}>{message.text}</div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+            <button type="button" className="btn btn-outline" onClick={() => setForm(EMPTY)}>Clear</button>
+            <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Submit'}</button>
+          </div>
+        </form>
+      </Card>
+
+      <Card style={{ marginTop: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <strong style={{ fontSize: 14 }}>Recent bills of supply</strong>
+          <button type="button" className="btn btn-sm btn-outline" onClick={load}>Refresh</button>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#f1f5f9' }}>
+                {['Bill No', 'Client', 'Invoice Date', 'Supply Period', 'Qty', 'Rate', 'After Rebate', 'Status', ''].map((h) => (
+                  <th key={h} style={{ padding: '8px 10px', textAlign: 'left' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr><td colSpan={9} style={{ padding: 16, textAlign: 'center', color: '#64748b' }}>No bills of supply yet.</td></tr>
+              ) : rows.slice(0, 20).map((r) => (
+                <tr key={r.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontSize: 12 }}>{r.bill_no}</td>
+                  <td style={{ padding: '8px 10px' }}>{r.client_name}</td>
+                  <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.invoice_date}</td>
+                  <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.supply_from_date} → {r.supply_to_date}</td>
+                  <td style={{ padding: '8px 10px' }}>{fmtNumber(r.quantity, 3)} {r.unit}</td>
+                  <td style={{ padding: '8px 10px' }}>₹{fmtNumber(r.rate, 2)}</td>
+                  <td style={{ padding: '8px 10px' }}>₹{fmtNumber(r.amount_after_rebate, 2)}</td>
+                  <td style={{ padding: '8px 10px' }}><Badge type={r.status === 'ACTIVE' ? 'success' : 'danger'}>{r.status}</Badge></td>
+                  <td style={{ padding: '8px 10px' }}>
+                    {r.status === 'ACTIVE' && (
+                      <button type="button" className="btn btn-sm btn-outline" onClick={() => onCancel(r)}>Cancel</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }

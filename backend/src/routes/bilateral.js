@@ -9,6 +9,28 @@ import { generateLoiPdf } from '../scripts/tradingReportsPdf.js';
 import { getParam, getParamNumber } from '../mastersService.js';
 import { generateNoarApprovalReportPdf } from '../scripts/noarApprovalReportPdf.js';
 import { sendMail } from '../services/mailService.js';
+import { readFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+// Real LOA and PPA numbers off the live portal, so the contract-summary sample
+// rows live in the ignored src/data/live/ rather than inline here.
+const LIVE_DIR = join(dirname(fileURLToPath(import.meta.url)), '../data/live');
+function liveJson(name) {
+  try {
+    const rows = JSON.parse(readFileSync(join(LIVE_DIR, name), 'utf8'));
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+const liveContractSeeds = () => liveJson('bilateralContractSeeds.json');
+import {
+  computeBilateralSettlement,
+  buildBilateralInvoice,
+  BILATERAL_BILL_TYPES,
+} from '../services/bilateralSettlement.js';
+import { raiseInvoice, billingObjection } from '../services/billingRegister.js';
 
 const router = Router();
 
@@ -22,6 +44,46 @@ const OA_TYPES = ['STOA', 'MTOA', 'LTOA'];
 // The linear happy path. REJECTED sits outside it — it is reached from
 // SUBMITTED and leaves by going back to SUBMITTED.
 const NOAR_FLOW_ORDER = ['NOT_INITIATED', 'FORMAT_D_PREPARED', 'CONTRACT_CREATED', 'SUBMITTED', 'APPROVED'];
+
+// The open-access verdict follows the NOAR application it was filed under: the
+// portal's decision is the decision. PARTIAL is reached instead of APPROVED when
+// some of the transaction's schedules came back curtailed.
+const OA_STATUS_FOR_NOAR = {
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+};
+
+/**
+ * Recompute the two lifecycle columns from the rows that actually decide them.
+ *
+ * Both were declared with their full sets of states but nothing ever wrote them,
+ * so a transaction sat at PENDING / DRAFT however far it had really travelled.
+ * Deriving them here means they cannot drift from the schedules and approvals
+ * they describe.
+ */
+function refreshLifecycle(transactionId) {
+  const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(transactionId);
+  if (!tx) return null;
+
+  const scheds = db.prepare('SELECT * FROM bilateral_schedules WHERE transaction_id = ?').all(transactionId);
+  const live = scheds.filter((s) => s.status !== 'CANCELLED');
+
+  let scheduleStatus;
+  if (!scheds.length) scheduleStatus = 'DRAFT';
+  else if (!live.length) scheduleStatus = 'CANCELLED';
+  else if (live.some((s) => s.status === 'CURTAILED')) scheduleStatus = 'REVISED';
+  else if (live.every((s) => s.status === 'APPROVED')) scheduleStatus = 'APPROVED';
+  else scheduleStatus = 'SUBMITTED';
+
+  // Open access is decided by the portal; a curtailed approval is a partial one.
+  let oaStatus = OA_STATUS_FOR_NOAR[tx.noar_status] ?? tx.open_access_status;
+  if (oaStatus === 'APPROVED' && live.some((s) => s.status === 'CURTAILED')) oaStatus = 'PARTIAL';
+
+  db.prepare('UPDATE bilateral_transactions SET schedule_status = ?, open_access_status = ? WHERE id = ?')
+    .run(scheduleStatus, oaStatus, transactionId);
+
+  return { schedule_status: scheduleStatus, open_access_status: oaStatus };
+}
 
 /** SQLite stores UTC as 'YYYY-MM-DD HH:MM:SS'; JS would otherwise read it as local time. */
 const parseUtc = (s) => (s ? new Date(`${String(s).replace(' ', 'T')}Z`) : null);
@@ -155,6 +217,8 @@ const withDetails = (tx) => {
     sched.approvals = db.prepare('SELECT * FROM bilateral_approvals WHERE schedule_id = ?').all(sched.id);
   });
   
+  tx.order_details = db.prepare('SELECT * FROM bilateral_order_details WHERE transaction_id = ? ORDER BY date_from, time_from').all(tx.id);
+
   return tx;
 };
 
@@ -273,6 +337,64 @@ router.get('/noar-approval-report.pdf', (_req, res) => {
   generateNoarApprovalReportPdf(noarSlaSummary(), decidedApplications(), res);
 });
 
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function fmtIsetDate(iso) {
+  if (!iso) return '';
+  const d = new Date(`${String(iso).slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return `${String(d.getDate()).padStart(2, '0')}-${MONTHS_SHORT[d.getMonth()]}-${d.getFullYear()}`;
+}
+
+function parseIsetDate(s) {
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(String(s))) return String(s).slice(0, 10);
+  const m = String(s).trim().match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+  if (!m) return null;
+  const mon = MONTHS_SHORT.findIndex((x) => x.toLowerCase() === m[2].toLowerCase());
+  if (mon < 0) return null;
+  return `${m[3]}-${String(mon + 1).padStart(2, '0')}-${String(Number(m[1])).padStart(2, '0')}`;
+}
+
+/** ISET Bilateral Contract Report columns from bilateral_transactions. */
+function toContractReportRow(tx) {
+  const maxQ = Number(tx.quantum_mw);
+  const rate = tx.tariff_per_unit != null ? Number(tx.tariff_per_unit) : null;
+  return {
+    id: tx.id,
+    loa_no: tx.loa_no || tx.loi_contract_ref || '',
+    seller_name: tx.supplier_name || '',
+    seller_state: tx.supplier_sldc || '',
+    buyer_name: tx.procurer_name || '',
+    buyer_state: tx.procurer_sldc || '',
+    start_date: fmtIsetDate(tx.start_date),
+    end_date: fmtIsetDate(tx.end_date),
+    max_quantum_mw: Number.isFinite(maxQ) && maxQ > 0 ? maxQ : '',
+    rate_kwh: Number.isFinite(rate) && rate > 0 ? rate : '',
+    trading_margin: tx.trading_margin_per_unit != null ? Number(tx.trading_margin_per_unit) : '',
+  };
+}
+
+// Must be registered before /:id so "contract-report" is not treated as an id.
+router.get('/contract-report', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
+  const { q } = req.query;
+  let sql = `
+    SELECT * FROM bilateral_transactions
+    WHERE loa_no IS NOT NULL AND TRIM(loa_no) != ''
+  `;
+  const params = [];
+  if (q) {
+    sql += ` AND (
+      loa_no LIKE ? OR supplier_name LIKE ? OR procurer_name LIKE ?
+      OR supplier_sldc LIKE ? OR procurer_sldc LIKE ? OR counterparty LIKE ?
+    )`;
+    const like = `%${q}%`;
+    params.push(like, like, like, like, like, like);
+  }
+  sql += ' ORDER BY start_date DESC, created_at DESC';
+  res.json(db.prepare(sql).all(...params).map(toContractReportRow));
+});
+
 // Get single transaction
 router.get('/:id', (req, res) => {
   const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(req.params.id);
@@ -285,11 +407,17 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   const b = req.body;
   const id = newId('BIL');
 
+  // Adapt new detailed form to legacy fields
+  if (b.order_details && b.order_details.length > 0) {
+    if (!b.quantum_mw) b.quantum_mw = Math.max(...b.order_details.map(o => Number(o.quantum) || 0));
+    if (!b.tariff_per_unit && !b.sale_rate_per_unit) b.tariff_per_unit = Number(b.order_details[0].rate) || 0;
+    if (!b.counterparty) b.counterparty = b.type_of_contract === 'Sale Side' ? b.procurer_name : b.supplier_name;
+  }
+
   // Validate before touching the DB, so a missing field is a 400 naming the
   // field rather than a 500 carrying a raw SQLite constraint message.
   const errors = [];
-  if (!b.client_id) errors.push('client_id is required');
-  else if (!db.prepare('SELECT 1 FROM trading_clients WHERE id = ?').get(b.client_id)) errors.push('client_id does not exist');
+  if (b.client_id && !db.prepare('SELECT 1 FROM trading_clients WHERE id = ?').get(b.client_id)) errors.push('client_id does not exist');
   if (!String(b.counterparty || '').trim()) errors.push('counterparty is required');
   const oaType = b.oa_type || 'STOA';
   if (!OA_TYPES.includes(oaType)) errors.push(`oa_type must be one of: ${OA_TYPES.join(', ')}`);
@@ -339,21 +467,67 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   const region = String(b.noar_region || 'WR').toUpperCase();
   const applicationNo = b.noar_application_no || genApplicationNo(b.start_date, region);
 
-  db.prepare(`
+  const insertTx = db.prepare(`
     INSERT INTO bilateral_transactions (
       id, client_id, counterparty, loi_contract_ref, oa_type, is_standing_clearance,
       quantum_mw, tariff_per_unit, purchase_rate_per_unit, sale_rate_per_unit, trading_margin_per_unit, open_access_status,
       noar_application_no, noar_region,
       wheeling_charges, transmission_charges, loss_injection_state, loss_inter_state, loss_drawee_state,
-      start_date, end_date, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
-  `).run(
-    id, b.client_id, String(b.counterparty).trim(), b.loi_contract_ref || null, oaType, b.is_standing_clearance ? 1 : 0,
-    qty, saleRate, purchaseRate, saleRate, margin, applicationNo, region,
-    Number(b.wheeling_charges) || 0, Number(b.transmission_charges) || 0,
-    Number(b.loss_injection_state) || 0, Number(b.loss_inter_state) || 0, Number(b.loss_drawee_state) || 0,
-    b.start_date, b.end_date
-  );
+      start_date, end_date, status,
+      contract_type, transaction_type, loa_no, ppa_no, type_of_contract, product,
+      supplier_name, supplier_id, supplier_sldc, supplier_region, injecting_point,
+      procurer_name, procurer_id, procurer_sldc, procurer_region, drawal_point,
+      route, alternate_route, is_renewable, billing_type, remarks,
+      compensation, late_payment_surcharge, rebate, client_registration_fee, application_fee,
+      ists_charges_bearer, state_transmission_charges_bearer, distribution_wheeling_bearer,
+      rldc_operating_bearer, state_operating_bearer, dis_operating_bearer, noar_application_bearer, sldc_consent_bearer
+    ) VALUES (
+      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, 'PENDING',
+      ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, 'ACTIVE',
+      ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?,
+      ?, ?, ?,
+      ?, ?, ?, ?, ?
+    )
+  `);
+
+  const insertOrderDetails = db.prepare(`
+    INSERT INTO bilateral_order_details (
+      id, transaction_id, date_from, date_to, time_from, time_to, rate_type, rate, quantum, variation
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  db.transaction(() => {
+    insertTx.run(
+      id, b.client_id || null, String(b.counterparty).trim(), b.loi_contract_ref || null, oaType, b.is_standing_clearance ? 1 : 0,
+      qty, saleRate, purchaseRate, saleRate, margin, applicationNo, region,
+      Number(b.wheeling_charges) || 0, Number(b.transmission_charges) || 0,
+      Number(b.loss_injection_state) || 0, Number(b.loss_inter_state) || 0, Number(b.loss_drawee_state) || 0,
+      b.start_date, b.end_date,
+      b.contract_type || 'Bilateral', b.transaction_type, b.loa_no, b.ppa_no, b.type_of_contract, b.product,
+      b.supplier_name, b.supplier_id, b.supplier_sldc, b.supplier_region, b.injecting_point,
+      b.procurer_name, b.procurer_id, b.procurer_sldc, b.procurer_region, b.drawal_point,
+      b.route, b.alternate_route, b.is_renewable, b.billing_type, b.remarks,
+      Number(b.compensation) || null, Number(b.late_payment_surcharge) || null, Number(b.rebate) || null, Number(b.client_registration_fee) || null, Number(b.application_fee) || null,
+      b.ists_charges_bearer, b.state_transmission_charges_bearer, b.distribution_wheeling_bearer,
+      b.rldc_operating_bearer, b.state_operating_bearer, b.dis_operating_bearer, b.noar_application_bearer, b.sldc_consent_bearer
+    );
+
+    if (b.order_details && Array.isArray(b.order_details)) {
+      for (const order of b.order_details) {
+        insertOrderDetails.run(
+          newId('BOD'), id, order.date_from, order.date_to, order.time_from, order.time_to,
+          order.rate_type, Number(order.rate) || 0, Number(order.quantum) || 0, order.variation
+        );
+      }
+    }
+  })();
 
   // A margin other than the standard ISET ₹0.03/kWh is a deliberate commercial
   // decision worth surfacing in the audit trail, not a silent field change.
@@ -399,6 +573,7 @@ router.post('/:id/schedules', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, r
   });
 
   createMany(blocks);
+  refreshLifecycle(tx.id);
   secureLogAudit(req, { action: 'CREATE_SCHEDULE', module: 'TRADING', entityType: 'bilateral_schedule', entityId: tx.id, details: { block_count: blocks.length } });
   res.status(201).json(withDetails(db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(tx.id)));
 });
@@ -421,7 +596,8 @@ router.post('/schedules/:id/approvals', requireRole(...ROLE_GROUPS.TRADING_WRITE
   }
 
   secureLogAudit(req, { action: 'NODE_APPROVAL', module: 'TRADING', entityType: 'bilateral_schedule', entityId: sched.id, details: { node_type, status }});
-  
+
+  refreshLifecycle(sched.transaction_id);
   const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(sched.transaction_id);
   res.json(withDetails(tx));
 });
@@ -435,6 +611,7 @@ router.post('/schedules/:id/curtail', requireRole(...ROLE_GROUPS.TRADING_WRITE),
   db.prepare(`UPDATE bilateral_schedules SET curtailed_mw = ?, status = 'CURTAILED' WHERE id = ?`).run(curtailed_mw, sched.id);
 
   secureLogAudit(req, { action: 'CURTAIL_SCHEDULE', module: 'TRADING', entityType: 'bilateral_schedule', entityId: sched.id, details: { curtailed_mw }});
+  refreshLifecycle(sched.transaction_id);
   const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(sched.transaction_id);
   res.json(withDetails(tx));
 });
@@ -678,6 +855,10 @@ router.post('/:id/noar', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) =
     }).catch((err) => console.error('[NOTIFY] NOAR_APPROVED failed', err.message));
   }
 
+  // The portal's verdict is what decides open access, so the transaction's
+  // open_access_status follows the NOAR status it was just moved to.
+  refreshLifecycle(tx.id);
+
   secureLogAudit(req, { action: 'NOAR_UPDATE', module: 'TRADING', entityType: 'bilateral_transaction', entityId: tx.id, details: { from: tx.noar_status, to: noar_status, noar_contract_no: contractNo, rejection_reason: rejectionReason || undefined, resubmission: isResubmission || undefined } });
   res.json(withDetails(db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(tx.id)));
 });
@@ -806,6 +987,225 @@ router.get('/:id/noar-timeline', (req, res) => {
   const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(req.params.id);
   if (!tx) return res.status(404).json({ error: 'Not found' });
   res.json(buildNoarTimeline(tx));
+});
+
+/**
+ * Seed ISET-style bilateral contract summary rows (Contract No / PPA / Created On).
+ * Skips any loa_no that already exists. Then enrich / insert full Contract Report fields.
+ */
+export function seedBilateralContractSummary() {
+  const samples = liveContractSeeds();
+  if (!samples.length) return;
+
+  const exists = db.prepare('SELECT 1 FROM bilateral_transactions WHERE loa_no = ?');
+  const insert = db.prepare(`
+    INSERT INTO bilateral_transactions (
+      id, counterparty, quantum_mw, tariff_per_unit, purchase_rate_per_unit, sale_rate_per_unit,
+      trading_margin_per_unit, start_date, end_date, status, contract_type, loa_no, ppa_no,
+      loi_contract_ref, created_at
+    ) VALUES (?, ?, 25, 4.03, 4.00, 4.03, 0.03, ?, ?, 'ACTIVE', 'Bilateral', ?, ?, ?, ?)
+  `);
+
+  const tx = db.transaction(() => {
+    for (const s of samples) {
+      if (exists.get(s.loa_no)) continue;
+      const ppa = s.ppa_no || s.loa_no;
+      const start = s.created_at.slice(0, 10);
+      const end = `${Number(start.slice(0, 4)) + 1}${start.slice(4)}`;
+      insert.run(
+        newId('BIL'),
+        s.loa_no.split(/[\s/]/)[0] || 'Counterparty',
+        start,
+        end,
+        s.loa_no,
+        ppa,
+        s.loa_no,
+        s.created_at,
+      );
+    }
+  });
+  tx();
+
+  seedBilateralContractReportFields();
+}
+
+/**
+ * Upsert ISET Bilateral Contract Report party / period / margin fields onto
+ * bilateral_transactions (live source for GET /api/bilateral/contract-report).
+ */
+function seedBilateralContractReportFields() {
+  const reportRows = liveJson("bilateralContractReportSeeds.json");
+  if (!reportRows.length) return;
+
+  const find = db.prepare('SELECT id FROM bilateral_transactions WHERE loa_no = ?');
+  const update = db.prepare(`
+    UPDATE bilateral_transactions SET
+      supplier_name = ?, supplier_sldc = ?, procurer_name = ?, procurer_sldc = ?,
+      start_date = ?, end_date = ?, trading_margin_per_unit = ?,
+      purchase_rate_per_unit = CASE
+        WHEN sale_rate_per_unit IS NOT NULL THEN ROUND(sale_rate_per_unit - ?, 4)
+        ELSE purchase_rate_per_unit END,
+      counterparty = COALESCE(NULLIF(?, ''), counterparty)
+    WHERE id = ?
+  `);
+  const insert = db.prepare(`
+    INSERT INTO bilateral_transactions (
+      id, counterparty, quantum_mw, tariff_per_unit, purchase_rate_per_unit, sale_rate_per_unit,
+      trading_margin_per_unit, start_date, end_date, status, contract_type, loa_no, ppa_no,
+      loi_contract_ref, supplier_name, supplier_sldc, procurer_name, procurer_sldc
+    ) VALUES (?, ?, 0, 0, 0, ?, ?, ?, ?, 'ACTIVE', 'Bilateral', ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const run = db.transaction(() => {
+    for (const r of reportRows) {
+      const start = parseIsetDate(r.start);
+      const end = parseIsetDate(r.end);
+      const margin = Number(r.margin) || 0;
+      const counterparty = r.seller_name || r.buyer_name || r.loa_no;
+      const existing = find.get(r.loa_no);
+      if (existing) {
+        update.run(
+          r.seller_name, r.seller_state, r.buyer_name, r.buyer_state,
+          start, end, margin, margin, counterparty, existing.id,
+        );
+      } else {
+        insert.run(
+          newId('BIL'), counterparty, margin, margin, start, end,
+          r.loa_no, r.loa_no, r.loa_no,
+          r.seller_name, r.seller_state, r.buyer_name, r.buyer_state,
+        );
+      }
+    }
+  });
+  run();
+}
+
+/* ─────────── Settlement and billing ───────────
+ *
+ * The desk's last two steps: settle the delivered energy for a supply period,
+ * then raise the bills for it. Both read the same computation, so what the
+ * preview shows is what the invoice bills.
+ */
+
+/** Settlement position for a supply period — preview only, writes nothing. */
+router.get('/:id/settlement', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
+  const { from, to, bill_type } = req.query;
+  try {
+    if (bill_type) {
+      if (!BILATERAL_BILL_TYPES.includes(bill_type)) {
+        return res.status(400).json({ error: `bill_type must be one of: ${BILATERAL_BILL_TYPES.join(', ')}` });
+      }
+      return res.json(buildBilateralInvoice({
+        transaction_id: req.params.id,
+        bill_type,
+        from: from || null,
+        to: to || null,
+        options: {
+          gst_applicable: req.query.gst_applicable === 'true',
+          bearer: req.query.bearer,
+        },
+      }));
+    }
+    res.json(computeBilateralSettlement({ transaction_id: req.params.id, from: from || null, to: to || null }));
+  } catch (err) {
+    res.status(/not found/i.test(err.message) ? 404 : 400).json({ error: err.message });
+  }
+});
+
+/** Bills already raised against this transaction. */
+router.get('/:id/invoices', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
+  const tx = db.prepare('SELECT id FROM bilateral_transactions WHERE id = ?').get(req.params.id);
+  if (!tx) return res.status(404).json({ error: 'Not found' });
+  res.json(db.prepare(`
+    SELECT * FROM view_bill_invoices
+    WHERE bilateral_id = ? AND status != 'CANCELLED'
+    ORDER BY invoice_date DESC, invoice_no DESC
+  `).all(tx.id));
+});
+
+/**
+ * Raise one of the three bilateral bills into the View Bills register.
+ *
+ * The register was previously written only by its seed, so the ISET invoice
+ * screens showed sample rows that no live transaction had produced. A bill
+ * raised here carries its quantum, its rate and its itemised breakup, and is
+ * marked PROVISIONAL until every block in the period has metered actuals.
+ */
+router.post('/:id/invoices', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+  const b = req.body || {};
+  const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(req.params.id);
+  if (!tx) return res.status(404).json({ error: 'Not found' });
+
+  if (!BILATERAL_BILL_TYPES.includes(b.bill_type)) {
+    return res.status(400).json({ error: `bill_type must be one of: ${BILATERAL_BILL_TYPES.join(', ')}` });
+  }
+  if (b.from && b.to && b.to < b.from) {
+    return res.status(400).json({ error: 'to cannot be before from' });
+  }
+  // Open access has to be granted before its energy can be billed — billing an
+  // unapproved or rejected transaction would invoice power that never flowed.
+  if (b.bill_type === 'BILATERAL_ENERGY' && !['APPROVED', 'PARTIAL'].includes(tx.open_access_status)) {
+    return res.status(400).json({
+      error: `Open access is ${tx.open_access_status}; an energy bill can only be raised once it is APPROVED or PARTIAL`,
+    });
+  }
+
+  let priced;
+  try {
+    priced = buildBilateralInvoice({
+      transaction_id: tx.id,
+      bill_type: b.bill_type,
+      from: b.from || null,
+      to: b.to || null,
+      options: {
+        gst_applicable: b.gst_applicable,
+        tds_rate: b.tds_rate,
+        bearer: b.bearer,
+        amount: b.amount,
+        client_name: b.client_name,
+        injection_state: b.injection_state,
+        drawal_state: b.drawal_state,
+        ists_rate: b.ists_rate,
+      },
+    });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const objection = billingObjection(priced, { allow_zero_volume: b.allow_zero_volume });
+  if (objection) return res.status(400).json(objection);
+
+  const invoice = raiseInvoice({
+    bill_type: b.bill_type,
+    priced,
+    bilateral_id: tx.id,
+    client_id: tx.client_id,
+    client_code: b.client_code,
+    invoice_date: b.invoice_date,
+    credit_days: b.credit_days,
+    remarks: b.remarks,
+  });
+
+  // The contracted volume basis for this buyer is what has actually been settled.
+  db.prepare('UPDATE bilateral_transactions SET contracted_mwh = ? WHERE id = ?')
+    .run(priced.settlement.energy.delivered_mwh, tx.id);
+
+  secureLogAudit(req, {
+    action: 'GENERATE_BILATERAL_INVOICE',
+    module: 'TRADING',
+    entityType: 'view_bill_invoice',
+    entityId: invoice.id,
+    details: {
+      bilateral_id: tx.id,
+      bill_type: b.bill_type,
+      invoice_no: invoice.invoice_no,
+      invoice_amount: invoice.invoice_amount,
+      quantum_mwh: invoice.quantum_mwh,
+      basis: invoice.settlement_basis,
+    },
+  });
+
+  res.status(201).json({ ...invoice, line_items: priced.line_items, warnings: priced.warnings });
 });
 
 export default router;

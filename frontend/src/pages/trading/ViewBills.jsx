@@ -4,10 +4,10 @@ import { useNavigate } from 'react-router-dom';
 const BILL_TYPES = [
   { id: 1, name: 'Exchange Trading Margin Invoice', path: '/invoices/trading-margin' },
   { id: 2, name: 'Exchange Open Access Invoice', path: '/invoices/open-access' },
-  { id: 3, name: 'Exchange Energy Settlement Invoice', path: '#' },
-  { id: 4, name: 'Bilateral Energy Settlement Invoice', path: '#' },
-  { id: 5, name: 'Bilateral SLDC Consent Fee Invoice', path: '#' },
-  { id: 6, name: 'Bilateral Open Access Invoice', path: '#' },
+  { id: 3, name: 'Exchange Energy Settlement Invoice', path: '/invoices/exchange-energy-settlement' },
+  { id: 4, name: 'Bilateral Energy Settlement Invoice', path: '/invoices/bilateral-energy-settlement' },
+  { id: 5, name: 'Bilateral SLDC Consent Fee Invoice', path: '/invoices/bilateral-sldc-consent' },
+  { id: 6, name: 'Bilateral Open Access Invoice', path: '/invoices/bilateral-open-access' },
 ];
 
 export default function ViewBills() {

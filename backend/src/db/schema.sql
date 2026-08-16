@@ -938,6 +938,9 @@ CREATE TABLE IF NOT EXISTS bids (
   no_bid_reason TEXT,
   approval_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (approval_status IN ('PENDING','APPROVED','REJECTED')),
   exchange_receipt_ref TEXT,
+  -- The exchange client agreement this bid was placed under, so cleared volume
+  -- rolls up to the contract it settles against.
+  contract_id TEXT REFERENCES exchange_contracts(id),
   carry_forward_from TEXT, -- source bid id this OCF leg was carried forward from
   ocf_leg INTEGER NOT NULL DEFAULT 0, -- 0 = original bid, 1..n = carry-forward legs
   premium_discount REAL NOT NULL DEFAULT 0, -- Rs/unit applied on carry-forward (+premium / -discount)
@@ -975,7 +978,7 @@ CREATE TABLE IF NOT EXISTS bid_events (
 
 CREATE TABLE IF NOT EXISTS bilateral_transactions (
   id TEXT PRIMARY KEY,
-  client_id TEXT NOT NULL REFERENCES trading_clients(id),
+  client_id TEXT REFERENCES trading_clients(id),
   counterparty TEXT NOT NULL,
   loi_contract_ref TEXT,
   quantum_mw REAL NOT NULL,
@@ -1024,6 +1027,54 @@ CREATE TABLE IF NOT EXISTS bilateral_transactions (
   noar_rejection_category TEXT,
   noar_rejection_reason TEXT,
   noar_resubmit_count INTEGER NOT NULL DEFAULT 0,
+  contract_type TEXT DEFAULT 'Bilateral',
+  transaction_type TEXT,
+  loa_no TEXT,
+  ppa_no TEXT,
+  type_of_contract TEXT,
+  product TEXT,
+  supplier_name TEXT,
+  supplier_id TEXT,
+  supplier_sldc TEXT,
+  supplier_region TEXT,
+  injecting_point TEXT,
+  procurer_name TEXT,
+  procurer_id TEXT,
+  procurer_sldc TEXT,
+  procurer_region TEXT,
+  drawal_point TEXT,
+  route TEXT,
+  alternate_route TEXT,
+  is_renewable TEXT DEFAULT 'Yes',
+  billing_type TEXT,
+  remarks TEXT,
+  compensation REAL,
+  late_payment_surcharge REAL,
+  rebate REAL,
+  client_registration_fee REAL,
+  application_fee REAL,
+  ists_charges_bearer TEXT,
+  state_transmission_charges_bearer TEXT,
+  distribution_wheeling_bearer TEXT,
+  rldc_operating_bearer TEXT,
+  state_operating_bearer TEXT,
+  dis_operating_bearer TEXT,
+  noar_application_bearer TEXT,
+  sldc_consent_bearer TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS bilateral_order_details (
+  id TEXT PRIMARY KEY,
+  transaction_id TEXT NOT NULL REFERENCES bilateral_transactions(id) ON DELETE CASCADE,
+  date_from TEXT,
+  date_to TEXT,
+  time_from TEXT,
+  time_to TEXT,
+  rate_type TEXT,
+  rate REAL,
+  quantum REAL,
+  variation TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -1234,6 +1285,9 @@ CREATE TABLE IF NOT EXISTS rec_transactions (
   obligated_entity TEXT,                  -- entity whose RPO a redemption settles
   reference TEXT,
   notes TEXT,
+  -- The exchange bid whose execution booked this tranche, when it came from the
+  -- trading desk rather than being recorded against the lot by hand.
+  bid_id TEXT,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -1745,3 +1799,578 @@ CREATE TABLE IF NOT EXISTS cashflow_entries (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cashflow_invoice ON cashflow_entries(direction, invoice_no);
 CREATE INDEX IF NOT EXISTS idx_cashflow_due ON cashflow_entries(due_date, direction);
+
+-- Exchange contracts (ISET Create Exchange Contract). Schedule rows and free-form
+-- commercial fields live in schedule_json / details_json so the create form can
+-- evolve without a migration per ISET field.
+CREATE TABLE IF NOT EXISTS exchange_contracts (
+  id TEXT PRIMARY KEY,
+  contract_type TEXT NOT NULL DEFAULT 'Exchange',
+  portfolio_id TEXT,
+  loa_no TEXT,
+  ppa_no TEXT,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  compensation REAL,
+  late_payment_surcharge REAL,
+  rebate REAL,
+  side TEXT NOT NULL CHECK (side IN ('Buyer','Seller')),
+  carry_over TEXT NOT NULL DEFAULT 'No' CHECK (carry_over IN ('Yes','No')),
+  client_id TEXT REFERENCES trading_clients(id),
+  client_name TEXT,
+  concerned_sldc TEXT,
+  region TEXT,
+  product TEXT,
+  bidding_type TEXT,
+  is_renewable TEXT NOT NULL DEFAULT 'No' CHECK (is_renewable IN ('Yes','No')),
+  billing_type TEXT,
+  bank_guarantee REAL,
+  bank_guarantee_validity TEXT,
+  client_registration_fee REAL,
+  trading_margin REAL,
+  application_fee REAL,
+  remarks TEXT,
+  schedule_json TEXT,
+  status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','ACTIVE','CANCELLED','COMPLETED')),
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_exchange_contracts_dates ON exchange_contracts(start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_exchange_contracts_client ON exchange_contracts(client_id);
+
+-- ISET Power Exchange Bidding applications (schedule rows in schedule_json).
+CREATE TABLE IF NOT EXISTS exchange_biddings (
+  id TEXT PRIMARY KEY,
+  client_id TEXT REFERENCES trading_clients(id),
+  client_name TEXT NOT NULL,
+  client_ref_no TEXT NOT NULL,
+  exchange TEXT NOT NULL,
+  segment TEXT NOT NULL,
+  portfolio_id TEXT NOT NULL,
+  contract_id TEXT REFERENCES exchange_contracts(id),
+  contract_label TEXT,
+  product_type TEXT NOT NULL,
+  bidding_type TEXT NOT NULL,
+  supply_start_date TEXT NOT NULL,
+  supply_end_date TEXT NOT NULL,
+  schedule_json TEXT,
+  csv_filename TEXT,
+  status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT','SUBMITTED','CANCELLED')),
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_exchange_biddings_client ON exchange_biddings(client_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_exchange_biddings_dates ON exchange_biddings(supply_start_date, supply_end_date);
+
+-- ISET Exchange Bidding (Latest) submissions — flattened into Bid Details Report rows.
+CREATE TABLE IF NOT EXISTS exchange_bidding_latest (
+  id TEXT PRIMARY KEY,
+  transaction_id TEXT NOT NULL UNIQUE,
+  client_id TEXT REFERENCES trading_clients(id),
+  client_name TEXT NOT NULL,
+  client_ref_no TEXT NOT NULL,
+  contract_id TEXT REFERENCES exchange_contracts(id),
+  contract_label TEXT,
+  product_type TEXT NOT NULL,
+  bid_type TEXT NOT NULL,
+  delivery_date TEXT NOT NULL,
+  asset_id TEXT NOT NULL,
+  bid_area_id TEXT NOT NULL,
+  user_id TEXT,
+  participant_id TEXT,
+  portfolio_id TEXT,
+  initiated_by TEXT,
+  session TEXT,
+  details_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Success',
+  status_message TEXT NOT NULL DEFAULT 'Request Submitted Successfully.',
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_exb_latest_created ON exchange_bidding_latest(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_exb_latest_txn ON exchange_bidding_latest(transaction_id);
+
+-- IEX Bid Book Request Report rows (DAM/RTM single/block). Payload lives in row_json.
+CREATE TABLE IF NOT EXISTS iex_bid_book (
+  id TEXT PRIMARY KEY,
+  report_type TEXT NOT NULL CHECK (report_type IN ('DAM_SINGLE','DAM_BLOCK','RTM_SINGLE','RTM_BLOCK')),
+  order_id TEXT,
+  row_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_iex_bid_book_type ON iex_bid_book(report_type, created_at);
+
+-- ISET Power Exchange Applications list (approval workflow placeholders).
+CREATE TABLE IF NOT EXISTS exchange_applications (
+  id TEXT PRIMARY KEY,
+  application_id TEXT NOT NULL UNIQUE,
+  application_date TEXT NOT NULL,
+  portfolio_id TEXT NOT NULL,
+  exchange TEXT NOT NULL DEFAULT 'IEX',
+  product TEXT NOT NULL,
+  bid_type TEXT NOT NULL,
+  approval_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (approval_status IN ('PENDING','APPROVED','REJECTED')),
+  px1_status TEXT NOT NULL DEFAULT 'PENDING',
+  px2_status TEXT NOT NULL DEFAULT 'PENDING',
+  exchange_request_status TEXT NOT NULL DEFAULT 'PENDING',
+  exchange_approval_status TEXT NOT NULL DEFAULT 'PENDING',
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ex_apps_date ON exchange_applications(application_date DESC);
+
+-- ISET Update Charges / Update NOAR Details — charge breakdown per application.
+CREATE TABLE IF NOT EXISTS exchange_charge_updates (
+  id TEXT PRIMARY KEY,
+  application_id TEXT NOT NULL,
+  noar_approval_id TEXT,
+  sldc_approval_id TEXT,
+  application_date TEXT,
+  applicant_name TEXT,
+  seller_name TEXT,
+  sell_side_contract TEXT,
+  buyer_name TEXT,
+  purchase_side_contract TEXT,
+  from_date TEXT,
+  to_date TEXT,
+  charges_json TEXT NOT NULL,
+  updated_by TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_ex_charge_updates_app ON exchange_charge_updates(application_id, updated_at);
+
+-- ESCert / ECERTS bid orders (ISET Order Entry + regulatory price checks).
+CREATE TABLE IF NOT EXISTS escert_orders (
+  id TEXT PRIMARY KEY,
+  client_id TEXT REFERENCES trading_clients(id),
+  entity_name TEXT NOT NULL,
+  entity_id TEXT,
+  exchange TEXT NOT NULL,
+  portfolio_code TEXT NOT NULL,
+  rec_type TEXT NOT NULL,
+  price REAL NOT NULL,
+  quantity INTEGER NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('Buy','Sell')),
+  status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT','SUBMITTED','APPROVED','EXECUTED','CANCELLED','REJECTED')),
+  notional REAL,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_escert_orders_created ON escert_orders(created_at DESC);
+
+-- REC sell-side trade settlement (ISET REC Order form).
+CREATE TABLE IF NOT EXISTS rec_orders (
+  id TEXT PRIMARY KEY,
+  trade_date TEXT NOT NULL,
+  rec_placed_for_sale REAL,
+  bid_rate REAL,
+  total_recs_sold REAL NOT NULL,
+  discovered_rate REAL NOT NULL,
+  trade_obligation REAL,
+  gst_on_trade_obligation REAL,
+  exchange_fees REAL,
+  gst_on_exchange_fees REAL,
+  net_revenue REAL,
+  buyer_name TEXT,
+  invoice_no TEXT,
+  recs_bought REAL,
+  base_amount REAL,
+  tax_amount REAL,
+  total_amount REAL,
+  status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT','SUBMITTED','APPROVED','CANCELLED')),
+  -- The executed bid this settlement was raised from, when it came off the desk.
+  bid_id TEXT,
+  -- SETTLEMENT rows are derived from an execution that moved certificates;
+  -- MANUAL rows were keyed in against a trade settled outside the desk flow and
+  -- have no ledger movement behind them. Revenue reporting has to be able to
+  -- tell them apart, or a hand-entered order double-counts a settled one.
+  generated_from TEXT CHECK (generated_from IN ('MANUAL','SETTLEMENT')),
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rec_orders_trade_date ON rec_orders(trade_date DESC);
+
+-- REC bid entry (ISET REC Order Entry) with regulatory price checks.
+CREATE TABLE IF NOT EXISTS rec_bids (
+  id TEXT PRIMARY KEY,
+  client_id TEXT REFERENCES trading_clients(id),
+  entity_name TEXT NOT NULL,
+  entity_id TEXT,
+  exchange TEXT NOT NULL,
+  portfolio_code TEXT NOT NULL,
+  rec_type TEXT NOT NULL,
+  price REAL NOT NULL,
+  quantity INTEGER NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('Buy','Sell')),
+  status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT','SUBMITTED','APPROVED','EXECUTED','CANCELLED','REJECTED')),
+  notional REAL,
+  -- What the exchange session actually did with the bid, and what it settled to.
+  -- Certificates only leave (or enter) the ledger on execution, at the rate the
+  -- session discovered — which is rarely the rate that was bid.
+  approved_by TEXT,
+  executed_quantity INTEGER,
+  discovered_rate REAL,
+  trade_date TEXT,
+  rec_order_id TEXT,
+  reject_reason TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rec_bids_created ON rec_bids(created_at DESC);
+
+-- Bilateral Format Generation / Bidding applications (ISET Application For Format Generation).
+CREATE TABLE IF NOT EXISTS bilateral_biddings (
+  id TEXT PRIMARY KEY,
+  applicant TEXT NOT NULL DEFAULT 'SJVN Limited',
+  seller_name TEXT,
+  seller_id TEXT,
+  seller_injecting_point TEXT,
+  seller_utility TEXT,
+  seller_sldc TEXT,
+  seller_region TEXT,
+  seller_contract_id TEXT,
+  seller_contract_no TEXT,
+  buyer_name TEXT,
+  buyer_id TEXT,
+  buyer_drawal_point TEXT,
+  buyer_utility TEXT,
+  buyer_sldc TEXT,
+  buyer_region TEXT,
+  buyer_contract_id TEXT,
+  buyer_contract_no TEXT,
+  under_gtam TEXT NOT NULL DEFAULT 'No' CHECK (under_gtam IN ('Yes','No')),
+  access_type TEXT NOT NULL DEFAULT 'T-GNA' CHECK (access_type IN ('GNA','T-GNA')),
+  accept_partial TEXT NOT NULL DEFAULT 'No' CHECK (accept_partial IN ('Yes','No')),
+  application_type TEXT NOT NULL,
+  route TEXT NOT NULL,
+  alternate_route TEXT,
+  generating_sources_json TEXT,
+  schedule_json TEXT,
+  csv_filename TEXT,
+  declaration_accepted INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT','SUBMITTED','APPROVED','REJECTED','CANCELLED')),
+  -- The bilateral contract this application was converted into, once the desk
+  -- has supplied the commercial terms the format-generation form does not carry.
+  transaction_id TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_bilateral_biddings_created ON bilateral_biddings(created_at DESC);
+
+-- Bilateral Format applications list (ISET Bilateral Applications).
+CREATE TABLE IF NOT EXISTS bilateral_applications (
+  id TEXT PRIMARY KEY,
+  application_id TEXT NOT NULL UNIQUE,
+  application_date TEXT NOT NULL,
+  applicant TEXT NOT NULL DEFAULT 'SJVN Limited',
+  seller_name TEXT NOT NULL,
+  buyer_name TEXT NOT NULL,
+  bidding_id TEXT,
+  seller_contract_no TEXT,
+  buyer_contract_no TEXT,
+  status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT','SUBMITTED','APPROVED','REJECTED','CANCELLED')),
+  -- Set once the application behind this row has been converted into a contract.
+  transaction_id TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_bilateral_applications_date ON bilateral_applications(application_date DESC);
+CREATE INDEX IF NOT EXISTS idx_bilateral_applications_appid ON bilateral_applications(application_id);
+
+-- ISET View Bills invoice registers (Trading Margin / Exchange OA / Exchange Energy / Bilateral Energy).
+CREATE TABLE IF NOT EXISTS view_bill_invoices (
+  id TEXT PRIMARY KEY,
+  bill_type TEXT NOT NULL CHECK (bill_type IN (
+    'TRADING_MARGIN','EXCHANGE_OA','EXCHANGE_ENERGY','BILATERAL_ENERGY','BILATERAL_OA','BILATERAL_SLDC'
+  )),
+  client_name TEXT NOT NULL,
+  invoice_no TEXT NOT NULL UNIQUE,
+  invoice_amount REAL NOT NULL DEFAULT 0,
+  invoice_date TEXT NOT NULL,
+  invoice_due_date TEXT,
+  supply_from_date TEXT,
+  supply_to_date TEXT,
+  invoice_generated_on TEXT,
+  received_amount REAL,
+  payment_date TEXT,
+  tds_rate REAL,
+  tds_deducted REAL,
+  bank_name TEXT,
+  remarks TEXT,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','CANCELLED')),
+  -- Provenance for a generated (as opposed to hand-entered) bill: the bilateral
+  -- transaction it was settled from, the quantum and rate it was priced at, and
+  -- the itemised breakup, so an invoice can be read back to its schedule blocks.
+  bilateral_id TEXT REFERENCES bilateral_transactions(id),
+  exchange_contract_id TEXT REFERENCES exchange_contracts(id),
+  quantum_mwh REAL,
+  rate_per_unit REAL,
+  gst_amount REAL,
+  breakup_json TEXT,
+  -- PROVISIONAL until every block in the supply period carries metered actuals.
+  settlement_basis TEXT CHECK (settlement_basis IN ('PROVISIONAL','FINAL')),
+  generated_from TEXT CHECK (generated_from IN ('MANUAL','SETTLEMENT')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_view_bill_type_date ON view_bill_invoices(bill_type, invoice_date DESC);
+-- idx_view_bill_bilateral is created by migrateViewBillSettlementColumns, not
+-- here: on a database that predates those columns the table already exists, so
+-- CREATE TABLE IF NOT EXISTS above is a no-op and indexing bilateral_id at this
+-- point would fail before the migration has had a chance to add it.
+
+-- Bill of Supply register (ISET Supply Bill Entry).
+--
+-- Electricity is outside GST, so a supply of power is billed on a Bill of
+-- Supply rather than a tax invoice. The register keeps the line the bill was
+-- raised on — HSN, quantity, rate — and the rebate applied to it, which is what
+-- the Report of Supply Bill reads.
+CREATE TABLE IF NOT EXISTS bill_of_supply (
+  id TEXT PRIMARY KEY,
+  bill_no TEXT NOT NULL UNIQUE,
+  client_id TEXT REFERENCES trading_clients(id),
+  client_name TEXT NOT NULL,
+  seller_name TEXT,
+  buyer_name TEXT,
+  contract_no TEXT,
+  bilateral_id TEXT REFERENCES bilateral_transactions(id),
+  invoice_date TEXT NOT NULL,
+  invoice_due_date TEXT,
+  supply_from_date TEXT NOT NULL,
+  supply_to_date TEXT NOT NULL,
+  description TEXT,
+  hsn_code TEXT,
+  quantity REAL NOT NULL DEFAULT 0,
+  unit TEXT NOT NULL DEFAULT 'MWh',
+  rate REAL NOT NULL DEFAULT 0,
+  amount REAL NOT NULL DEFAULT 0,
+  rebate_percent REAL NOT NULL DEFAULT 0,
+  amount_after_rebate REAL NOT NULL DEFAULT 0,
+  document_id TEXT REFERENCES documents(id),
+  remarks TEXT,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','CANCELLED')),
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_bill_of_supply_date ON bill_of_supply(invoice_date DESC);
+CREATE INDEX IF NOT EXISTS idx_bill_of_supply_client ON bill_of_supply(client_name, invoice_date DESC);
+
+-- CSV file uploads from ISET Uploader screens (charges / RLDC schedule / refunds).
+CREATE TABLE IF NOT EXISTS csv_uploads (
+  id TEXT PRIMARY KEY,
+  upload_kind TEXT NOT NULL CHECK (upload_kind IN (
+    'CHARGES','RLDC_SCHEDULE','REFUND','REFUND_LATEST','MMR_EXCEL'
+  )),
+  start_date TEXT,
+  end_date TEXT,
+  reading_date TEXT,
+  revision_no TEXT,
+  charges_type TEXT,
+  upload_type TEXT,
+  rldc TEXT,
+  filename TEXT NOT NULL,
+  row_count INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('SUBMITTED','PROCESSED','FAILED','CANCELLED')),
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_csv_uploads_kind ON csv_uploads(upload_kind, created_at DESC);
+
+-- PXIL Order Creation / Summary (ISET Pxil Order screens).
+CREATE TABLE IF NOT EXISTS pxil_orders (
+  id TEXT PRIMARY KEY,
+  transaction_code TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  nor TEXT NOT NULL,
+  tm_id TEXT NOT NULL,
+  reference_no TEXT NOT NULL UNIQUE,
+  tac_id TEXT NOT NULL,
+  order_type TEXT NOT NULL,
+  product_code TEXT NOT NULL,
+  quantity REAL NOT NULL,
+  price REAL NOT NULL,
+  delivery_date_from TEXT NOT NULL,
+  delivery_date_to TEXT NOT NULL,
+  from_time TEXT NOT NULL,
+  to_time TEXT NOT NULL,
+  side TEXT NOT NULL CHECK (side IN ('Seller','Buyer')),
+  status TEXT NOT NULL DEFAULT 'CREATED' CHECK (status IN ('CREATED','BID_PLACED','CANCELLED','REJECTED')),
+  bid_placed_at TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pxil_orders_created ON pxil_orders(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pxil_orders_ref ON pxil_orders(reference_no);
+
+-- ISET Reports section snapshot rows (API / registration / NOAR / NRLDC / TDS / schedules / dues).
+CREATE TABLE IF NOT EXISTS iset_report_rows (
+  id TEXT PRIMARY KEY,
+  report_kind TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  data_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_iset_report_kind ON iset_report_rows(report_kind, sort_order);
+
+-- ── ISET Reports: typed domain tables (live API source) ─────────────────────
+CREATE TABLE IF NOT EXISTS cea_api_catalog (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  link TEXT NOT NULL,
+  fetched_upto TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS client_registrations (
+  id TEXT PRIMARY KEY,
+  client_name TEXT NOT NULL,
+  reference_no TEXT NOT NULL UNIQUE,
+  short_name TEXT,
+  registered_company_name TEXT,
+  unit_address TEXT,
+  company_address TEXT,
+  state TEXT,
+  category_name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_client_reg_category ON client_registrations(category_name);
+
+CREATE TABLE IF NOT EXISTS noar_approval_entries (
+  id TEXT PRIMARY KEY,
+  application_no TEXT NOT NULL,
+  applicant_name TEXT,
+  seller_name TEXT,
+  buyer_name TEXT,
+  from_date TEXT,
+  to_date TEXT,
+  applied_capacity_mwh REAL,
+  approved_capacity_mwh REAL,
+  approval_no TEXT,
+  approval_date TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_noar_approval_app ON noar_approval_entries(application_no);
+
+CREATE TABLE IF NOT EXISTS nrldc_refunds (
+  id TEXT PRIMARY KEY,
+  application_id TEXT NOT NULL,
+  approval_no TEXT,
+  from_date TEXT,
+  to_date TEXT,
+  applicant TEXT,
+  refund_mwh_curtailment REAL NOT NULL DEFAULT 0,
+  refund_amt_curtailment REAL NOT NULL DEFAULT 0,
+  refund_amt_waiver REAL NOT NULL DEFAULT 0,
+  refund_reason TEXT,
+  net_payable REAL NOT NULL DEFAULT 0,
+  received REAL NOT NULL DEFAULT 0,
+  refund_from_rldc REAL NOT NULL DEFAULT 0,
+  rldc TEXT NOT NULL DEFAULT 'NRLDC',
+  is_latest INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_nrldc_refunds_latest ON nrldc_refunds(is_latest, from_date DESC);
+
+CREATE TABLE IF NOT EXISTS compensation_reconciliation (
+  id TEXT PRIMARY KEY,
+  delivery_date TEXT,
+  purchase_contract TEXT,
+  purchase_contracted_mwh REAL,
+  scheduled_availability_mwh REAL,
+  purchase_default_mwh REAL,
+  purchase_default_pct REAL,
+  purchase_compensation REAL,
+  sale_contract TEXT,
+  sale_contracted_mwh REAL,
+  scheduled_requisition_mwh REAL,
+  sale_default_mwh REAL,
+  sale_default_pct REAL,
+  sale_compensation REAL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS tds_format_entries (
+  id TEXT PRIMARY KEY,
+  nodal_rldc TEXT,
+  application_no TEXT,
+  noar_fee REAL,
+  approval_no TEXT,
+  stoa_posoco REAL, stoa_ctu REAL, stoa_seller_stu REAL, stoa_buyer_stu REAL,
+  stoa_seller_sldc REAL, stoa_buyer_sldc REAL, total_stoa REAL,
+  payment_date TEXT,
+  vendor_posoco TEXT, pan_posoco TEXT, tds_posoco REAL,
+  vendor_ctu TEXT, pan_ctu TEXT, tds_ctu REAL,
+  vendor_seller_sldc TEXT, name_seller_sldc TEXT, pan_seller_sldc TEXT, tds_seller_sldc REAL,
+  vendor_seller_stu TEXT, name_seller_stu TEXT, pan_seller_stu TEXT, tds_seller_stu REAL,
+  vendor_buyer_sldc TEXT, name_buyer_sldc TEXT, pan_buyer_sldc TEXT, tds_buyer_sldc REAL,
+  vendor_buyer_stu TEXT, name_buyer_stu TEXT, pan_buyer_stu TEXT, tds_buyer_stu REAL,
+  total_tds REAL, net_payment REAL,
+  actual_stoa_paid REAL, actual_tds_paid REAL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS daily_schedule_entries (
+  id TEXT PRIMARY KEY,
+  buyer_contract TEXT,
+  seller_contract TEXT,
+  delivery_from TEXT,
+  delivery_to TEXT,
+  seller_availability REAL,
+  buyer_request REAL,
+  remarks TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS implemented_schedule_summary (
+  id TEXT PRIMARY KEY,
+  reading_date TEXT,
+  seller_name TEXT,
+  buyer_name TEXT,
+  seller_schedule_mwh REAL,
+  buyer_schedule_mwh REAL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS implemented_schedule_blocks (
+  id TEXT PRIMARY KEY,
+  seller_name TEXT,
+  seller_state TEXT,
+  buyer_name TEXT,
+  buyer_state TEXT,
+  trader_name TEXT,
+  reading_date TEXT,
+  time_block INTEGER,
+  seller_schedule_mw REAL,
+  buyer_schedule_mw REAL,
+  schedule_type TEXT,
+  approval_no TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS outstanding_dues (
+  id TEXT PRIMARY KEY,
+  client_name TEXT NOT NULL,
+  bill_type TEXT,
+  bill_date TEXT,
+  bill_due_date TEXT,
+  bill_amount REAL NOT NULL DEFAULT 0,
+  amount_paid REAL NOT NULL DEFAULT 0,
+  outstanding_amount REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS registration_category_stats (
+  category_name TEXT PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS generic_report_entries (
+  id TEXT PRIMARY KEY,
+  report_kind TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_generic_report_kind ON generic_report_entries(report_kind, sort_order);

@@ -538,10 +538,82 @@ export const api = {
     carryForward: (id, body) => p(`/bids/${id}/carry-forward`, body),
     chain: (id) => g(`/bids/${id}/chain`),
   },
+  exchangeContracts: {
+    list: (params) => g('/exchange-contracts', params),
+    get: (id) => g(`/exchange-contracts/${id}`),
+    create: (body) => p('/exchange-contracts', body),
+    update: (id, body) => put(`/exchange-contracts/${id}`, body),
+    // Settlement preview over the cleared bids. Pass bill_type to price one of
+    // the three bills instead of returning the raw cleared position.
+    settlement: (id, params) => g(`/exchange-contracts/${id}/settlement`, params),
+    bids: (id, params) => g(`/exchange-contracts/${id}/bids`, params),
+    invoices: (id) => g(`/exchange-contracts/${id}/invoices`),
+    generateInvoice: (id, body) => p(`/exchange-contracts/${id}/invoices`, body),
+  },
+  exchangeBidding: {
+    list: (params) => g('/exchange-bidding', params),
+    get: (id) => g(`/exchange-bidding/${id}`),
+    create: (body) => p('/exchange-bidding', body),
+    meta: () => g('/exchange-bidding/meta'),
+  },
+  exchangeBiddingLatest: {
+    list: (params) => g('/exchange-bidding-latest', params),
+    get: (id) => g(`/exchange-bidding-latest/${id}`),
+    create: (body) => p('/exchange-bidding-latest', body),
+    report: (params) => g('/exchange-bidding-latest/report', params),
+  },
+  iexBidBook: {
+    list: (params) => g('/iex-bid-book', params),
+  },
+  exchangeApplications: {
+    list: (params) => g('/exchange-applications', params),
+    get: (id) => g(`/exchange-applications/${id}`),
+    approve: (id, body) => p(`/exchange-applications/${id}/approve`, body),
+    step: (id, body) => p(`/exchange-applications/${id}/step`, body),
+  },
+  exchangeUpdateCharges: {
+    lookup: (application_id) => g('/exchange-update-charges/lookup', { application_id }),
+    load: (source) => g('/exchange-update-charges/load', { source }),
+    save: (body) => p('/exchange-update-charges', body),
+  },
+  escertOrders: {
+    list: (params) => g('/escert-orders', params),
+    meta: () => g('/escert-orders/meta'),
+    create: (body) => p('/escert-orders', body),
+  },
+  pxilOrders: {
+    list: (params) => g('/pxil-orders', params),
+    get: (id) => g(`/pxil-orders/${id}`),
+    create: (body) => p('/pxil-orders', body),
+    placeBid: (id) => p(`/pxil-orders/${id}/place-bid`),
+  },
+  isetReports: {
+    meta: () => g('/iset-reports/meta'),
+    list: (kind) => g(`/iset-reports/${kind}`),
+    createDailySchedule: (body) => p('/iset-reports/daily-schedule', body),
+  },
+  recTrading: {
+    createOrder: (body) => p('/rec-trading/orders', body),
+    listOrders: (params) => g('/rec-trading/orders', params),
+    getOrder: (id) => g(`/rec-trading/orders/${id}`),
+    orderReport: (params) => g('/rec-trading/orders/report', params),
+    listBids: (params) => g('/rec-trading/bids', params),
+    bidsMeta: () => g('/rec-trading/bids/meta'),
+    createBid: (body) => p('/rec-trading/bids', body),
+    getBid: (id) => g(`/rec-trading/bids/${id}`),
+    // Sellable certificate position, oldest vintage first.
+    inventory: (params) => g('/rec-trading/inventory', params),
+    // Maker-checker: whoever raised the bid cannot be the one to clear it.
+    approveBid: (id, body) => p(`/rec-trading/bids/${id}/approve`, body),
+    // Records what the session cleared and moves the certificates with it.
+    executeBid: (id, body) => p(`/rec-trading/bids/${id}/execute`, body),
+    cancelBid: (id) => p(`/rec-trading/bids/${id}/cancel`, {}),
+  },
   bilateral: {
     list: (params) => g('/bilateral', params),
     get: (id) => g(`/bilateral/${id}`),
     create: (body) => p('/bilateral', body),
+    contractReport: (params) => g('/bilateral/contract-report', params),
     createSchedule: (id, body) => p(`/bilateral/${id}/schedules`, body),
     updateApproval: (id, node_type, status) => p(`/bilateral/schedules/${id}/approvals`, { node_type, status }),
     curtail: (id, curtailed_mw) => p(`/bilateral/schedules/${id}/curtail`, { curtailed_mw }),
@@ -556,6 +628,55 @@ export const api = {
     formatDUrl: (id) => `/api/bilateral/${id}/format-d`,
     downloadFormatD: (id) => client.get(`/bilateral/${id}/format-d`, { responseType: 'blob' }).then((r) => r.data),
     downloadLoi: (id) => client.get(`/bilateral/${id}/loi`, { responseType: 'blob' }).then((r) => r.data),
+    // Settlement preview for a supply period. Pass bill_type to price one of the
+    // three bills instead of returning the raw settlement position.
+    settlement: (id, params) => g(`/bilateral/${id}/settlement`, params),
+    invoices: (id) => g(`/bilateral/${id}/invoices`),
+    generateInvoice: (id, body) => p(`/bilateral/${id}/invoices`, body),
+  },
+  bilateralBidding: {
+    list: (params) => g('/bilateral-bidding', params),
+    get: (id) => g(`/bilateral-bidding/${id}`),
+    create: (body) => p('/bilateral-bidding', body),
+    meta: () => g('/bilateral-bidding/meta'),
+    // Turn a submitted application into a bilateral contract. The commercial
+    // terms are supplied here — the format-generation form carries no rate.
+    createContract: (id, body) => p(`/bilateral-bidding/${id}/contract`, body),
+  },
+  bilateralApplications: {
+    list: (params) => g('/bilateral-applications', params),
+    get: (id) => g(`/bilateral-applications/${id}`),
+    create: (body) => p('/bilateral-applications', body),
+    downloadCsv: (id) => client.get(`/bilateral-applications/${id}/csv`, { responseType: 'blob' }).then((r) => r.data),
+    downloadFormatI: (id) => client.get(`/bilateral-applications/${id}/format-i`, { responseType: 'blob' }).then((r) => r.data),
+    downloadFormatII: (id, party = 'Buyer') => client.get(`/bilateral-applications/${id}/format-ii`, { params: { party }, responseType: 'blob' }).then((r) => r.data),
+  },
+  viewBillInvoices: {
+    list: (params) => g('/view-bill-invoices', params),
+    get: (id) => g(`/view-bill-invoices/${id}`),
+    update: (id, body) => put(`/view-bill-invoices/${id}`, body),
+    recordPayment: (id, body) => p(`/view-bill-invoices/${id}/payment`, body),
+    cancel: (id) => p(`/view-bill-invoices/${id}/cancel`),
+  },
+  csvUploads: {
+    meta: () => g('/csv-uploads/meta'),
+    list: (params) => g('/csv-uploads', params),
+    create: (body) => p('/csv-uploads', body),
+    downloadSample: (kind) => client.get(`/csv-uploads/sample/${kind}`, { responseType: 'blob' }).then((r) => r.data),
+  },
+  // The Bill section: one client-first way in to all six bill types, plus the
+  // Bill of Supply register behind the supply-bill screens.
+  billing: {
+    meta: () => g('/billing/meta'),
+    clients: () => g('/billing/clients'),
+    contracts: (params) => g('/billing/contracts', params),
+    preview: (body) => p('/billing/preview', body),
+    generate: (body) => p('/billing/generate', body),
+    listBillOfSupply: (params) => g('/billing/bill-of-supply', params),
+    getBillOfSupply: (id) => g(`/billing/bill-of-supply/${id}`),
+    createBillOfSupply: (body) => p('/billing/bill-of-supply', body),
+    cancelBillOfSupply: (id) => p(`/billing/bill-of-supply/${id}/cancel`, {}),
+    supplyBillReport: (params) => g('/billing/supply-bill-report', params),
   },
   billingSettlement: {
     listInvoices: (params) => g('/billing-settlement/invoices', params),
