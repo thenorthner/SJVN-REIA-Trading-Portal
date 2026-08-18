@@ -57,7 +57,7 @@ say "Installing frontend dependencies"
 
 # ── Build ────────────────────────────────────────────────────────────────
 say "Building the front end"
-( cd frontend && npm run build )
+( cd frontend && NODE_OPTIONS="--max-old-space-size=4096" npm run build )
 [ -f "$ROOT/frontend/dist/index.html" ] || fail "The build produced no dist/index.html — check the output above."
 
 # ── Database ─────────────────────────────────────────────────────────────
