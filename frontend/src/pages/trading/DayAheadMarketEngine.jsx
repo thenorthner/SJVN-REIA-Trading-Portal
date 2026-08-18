@@ -2,9 +2,7 @@ import React, { useState } from 'react';
 import Bids from './Bids.jsx';
 import EnergySchedule from './EnergySchedule.jsx';
 import GDAMObligationConsole from './GDAMObligationConsole.jsx';
-import TaxInvoiceLedgerTable from '../../components/TaxInvoiceLedgerTable.jsx';
-import DAMInvoiceLedger from './DAMInvoiceLedger.jsx';
-import { PageHeader, Card } from '../../components/ui.jsx';
+import ViewBillInvoiceLedger from './ViewBillInvoiceLedger.jsx';
 import BidVsClearedAnalytics from '../../components/analytics/BidVsClearedAnalytics.jsx';
 import ComplianceStatusBar from '../../components/analytics/ComplianceStatusBar.jsx';
 
@@ -26,30 +24,6 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
     { id: 'MCP', label: 'Market MCP' }
   ];
 
-  // Generate mock invoice data for DAM/GDAM
-  const mockInvoiceData = Array.from({ length: 15 }).map((_, i) => {
-    const energyMUs = Math.floor(Math.random() * 500) + 100;
-    const ratePerKwh = 4.5;
-    const grossValue = (energyMUs * 1000) * ratePerKwh; // MWh * rate
-    const margin = grossValue * 0.02;
-    const isInterState = Math.random() > 0.5;
-    const igst = isInterState ? margin * 0.18 : 0;
-    const cgst = isInterState ? 0 : margin * 0.09;
-    const sgst = isInterState ? 0 : margin * 0.09;
-    const grandTotal = grossValue + margin + igst + cgst + sgst;
-    const deduction = Math.random() * 2000;
-    const netTotal = grandTotal - deduction;
-    
-    return {
-      id: `inv-${i}`,
-      deliveryDate: `1${(i % 5) + 1}-Oct-2025`,
-      energyType: productLabel === 'GDAM' ? 'Non-Solar (Green)' : 'Conventional',
-      energyMUs: energyMUs,
-      grossValue, margin, igst, cgst, sgst, grandTotal, deduction, netTotal,
-      sapStatus: Math.random() > 0.4 ? 'POSTED' : 'PENDING'
-    };
-  });
-
   const renderContent = () => {
     switch (activeTab) {
       case 'CREATE':
@@ -61,13 +35,14 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
       case 'OBLIGATION':
         return <GDAMObligationConsole product={productLabel} />;
       case 'INVOICE':
-        if (productLabel === 'DAM') {
-          return <DAMInvoiceLedger />;
-        }
         return (
-          <div style={{ padding: 20 }}>
-            <TaxInvoiceLedgerTable records={mockInvoiceData} marketSegment={productLabel} />
-          </div>
+          <ViewBillInvoiceLedger
+            billType="EXCHANGE_ENERGY"
+            product={productLabel}
+            title={`${productLabel} Energy Settlement Invoices`}
+            showPaymentColumns
+            embedded
+          />
         );
       case 'MCP':
         return (

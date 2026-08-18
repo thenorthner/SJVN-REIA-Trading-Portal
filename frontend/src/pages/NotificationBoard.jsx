@@ -24,6 +24,7 @@ export default function NotificationBoard() {
   const [showCompose, setShowCompose] = useState(false);
   const [form, setForm] = useState(EMPTY_BROADCAST);
   const [saving, setSaving] = useState(false);
+  const [testingMail, setTestingMail] = useState(false);
 
   const load = useCallback(() => {
     api.alerts.board()
@@ -56,6 +57,22 @@ export default function NotificationBoard() {
     }
   }
 
+  async function sendTestEmail() {
+    setTestingMail(true);
+    try {
+      const res = await api.notifications.testEmail();
+      if (res.mode === 'SMTP') {
+        alert(`Test email sent.\nTo: ${(res.to || []).join(', ')}\n\nOpen Mailtrap → Email Testing → My Inbox.`);
+      } else {
+        alert(`SMTP is not live (${res.mode}).\n${res.note || 'Set SMTP_HOST in backend/.env and restart the backend.'}`);
+      }
+    } catch (err) {
+      alert(err.response?.data?.error || 'Test email failed');
+    } finally {
+      setTestingMail(false);
+    }
+  }
+
   async function removeBroadcast(id) {
     if (!window.confirm('Remove this message from the board?')) return;
     try {
@@ -79,7 +96,16 @@ export default function NotificationBoard() {
       <PageHeader
         title="Notification Board"
         subtitle="Live alerts across billing, payments, security, disputes & reconciliation — all in one place"
-        actions={canPost && <button className="btn btn-primary" onClick={() => { setForm(EMPTY_BROADCAST); setShowCompose(true); }}>+ Post Message</button>}
+        actions={(
+          <>
+            <button className="btn" disabled={testingMail} onClick={sendTestEmail}>
+              {testingMail ? 'Sending…' : 'Send test email'}
+            </button>
+            {canPost && (
+              <button className="btn btn-primary" onClick={() => { setForm(EMPTY_BROADCAST); setShowCompose(true); }}>+ Post Message</button>
+            )}
+          </>
+        )}
       />
 
       <div className="kpi-grid">

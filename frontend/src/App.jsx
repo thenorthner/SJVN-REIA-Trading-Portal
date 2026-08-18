@@ -341,7 +341,7 @@ export default function App() {
         <Route path="trading/exchange/create" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CreateExchangeContract /></ProtectedRoute>} />
         <Route path="trading/exchange/contracts" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeContractsSummary /></ProtectedRoute>} />
         <Route path="trading/exchange/contracts/:id" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeContractDetail /></ProtectedRoute>} />
-        <Route path="trading/exchange/bidding" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeBidding /></ProtectedRoute>} />
+        <Route path="trading/exchange/bidding" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeBiddingLatest /></ProtectedRoute>} />
         <Route path="trading/exchange/bidding-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeBiddingLatest /></ProtectedRoute>} />
         <Route path="trading/exchange/bidding-detail" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeBiddingDetailReport /></ProtectedRoute>} />
         <Route path="trading/exchange/iex-dam-single" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><IexBidBookReport kind="dam-single" /></ProtectedRoute>} />

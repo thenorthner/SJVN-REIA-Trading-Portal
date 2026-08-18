@@ -121,9 +121,12 @@ export default function UpdateCharges() {
     setError('');
     setMessage('');
     try {
-      const data = await api.exchangeUpdateCharges.load(source);
+      const data = await api.exchangeUpdateCharges.load(source, meta.application_id);
       setCharges((data.charges || []).map(withAmounts));
-      setMessage(source === 'NOAR' ? 'Charges loaded from NOAR defaults.' : 'Charges loaded.');
+      const corridor = [data.seller_state, data.buyer_state].filter(Boolean).join(' → ');
+      setMessage(source === 'NOAR'
+        ? `Charges loaded from the rate master${corridor ? ` (${corridor})` : ''} (NOAR path).`
+        : `Charges loaded from the rate master${corridor ? ` (${corridor})` : ''}.`);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load charges.');
     } finally {

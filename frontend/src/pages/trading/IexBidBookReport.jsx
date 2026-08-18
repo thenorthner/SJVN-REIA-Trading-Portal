@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { api } from '../../api/client.js';
 import { Card } from '../../components/ui.jsx';
@@ -139,9 +140,19 @@ export default function IexBidBookReport({ kind }) {
                     </tr>
                   ) : filtered.map((r) => (
                     <tr key={`${r.order_id || r.id}-${r.sl_no}-${r.from_period_id || ''}`} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                      {columns.map((c) => (
-                        <td key={c.key} style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r[c.key] ?? ''}</td>
-                      ))}
+                      {columns.map((c) => {
+                        if (c.key === 'order_id' && r.bid_id) {
+                          const manage = r.report_type?.startsWith('RTM') ? '/trading/rtm' : '/trading/dam';
+                          return (
+                            <td key={c.key} style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                              <Link to={manage}>{r.order_id}</Link>
+                            </td>
+                          );
+                        }
+                        return (
+                          <td key={c.key} style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r[c.key] ?? ''}</td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>

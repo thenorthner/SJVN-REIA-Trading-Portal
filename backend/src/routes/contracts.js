@@ -274,7 +274,7 @@ router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
   }
   if (status !== contract.status && !allowed.includes(status)) {
     return res.status(400).json({
-      error: `Cannot move a contract from ${contract.status} to ${status}.`,
+      error: `Cannot move a contract from ${contract.status} to ${status}. Allowed next stages: ${allowed.join(', ') || 'none'}.`,
       allowed_transitions: allowed,
     });
   }

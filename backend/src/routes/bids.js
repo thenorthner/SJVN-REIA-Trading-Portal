@@ -8,6 +8,8 @@ import { getParam } from '../mastersService.js';
 import { placeOrder, getTradeResult, syncMarketRates, getIexConfig } from '../services/iexService.js';
 import { checkBidCompliance, getClearance, clearancesNeedingAttention } from '../services/standingClearance.js';
 import { refreshExchangeContractStatus } from '../services/exchangeSettlement.js';
+import { insertBid, logBidEvent, rollUp, utilizedExposure } from '../services/bidWrite.js';
+export { utilizedExposure };
 
 const router = Router();
 router.use(requireAuth);
@@ -67,96 +69,29 @@ const withDetails = (bid) => {
   return bid;
 };
 
-const logEvent = (bidId, actorId, eventType, details) =>
-  db.prepare('INSERT INTO bid_events (id, bid_id, actor_id, event_type, details) VALUES (?, ?, ?, ?, ?)')
-    .run(newId('BEV'), bidId, actorId, eventType, JSON.stringify(details ?? {}));
-
-// Delivery duration of one bid block, by product. Configurable because it is a
-// market convention rather than a constant: DAM/GDAM clear 15-minute blocks,
-// while an RTM session covers a 30-minute delivery period.
-const DEFAULT_BLOCK_HOURS = { DAM: 0.25, GDAM: 0.25, GTAM: 0.25, RTM: 0.5 };
-
-function blockHours(product) {
-  const map = getParam('bid_block_duration_hours', null);
-  const n = Number(map && typeof map === 'object' ? map[product] : undefined);
-  return Number.isFinite(n) && n > 0 ? n : (DEFAULT_BLOCK_HOURS[product] ?? 0.25);
-}
-
-/**
- * Rupee value of a block.
- *
- * quantum_mw is power and price_per_unit is Rs/kWh, so the two cannot be
- * multiplied directly — money needs energy. Convert MW to kW and multiply by
- * the block's delivery hours to get kWh first.
- */
-const blockValue = (block, product) =>
-  Number(block.quantum_mw || 0) * 1000 * blockHours(product) * Number(block.price_per_unit || 0);
-
-// Header roll-up: total MW across blocks, the MW-weighted average price, and
-// the rupee exposure the bid would create.
-const rollUp = (blocks, product) => {
-  const mw = blocks.reduce((a, b) => a + Number(b.quantum_mw || 0), 0);
-  const priceWeighted = blocks.reduce((a, b) => a + Number(b.quantum_mw || 0) * Number(b.price_per_unit || 0), 0);
-  const exposure = blocks.reduce((a, b) => a + blockValue(b, product), 0);
-  return { quantum_mw: mw, price_per_unit: mw > 0 ? priceWeighted / mw : 0, exposure };
-};
-
-// Statuses that represent a live commitment against the client's limit.
-// PARTIALLY_CLEARED belongs here: part of it has cleared and the rest is still
-// working, so leaving it out hid the exposure of every partially-filled bid.
-const LIVE_BID_STATUSES = ['SUBMITTED', 'CLEARED', 'PARTIALLY_CLEARED'];
-
-// Exposure already locked up by this client's live bids. Computed in JS rather
-// than SQL because block duration comes from configuration, not the database.
-export const utilizedExposure = (clientId) => db.prepare(`
-  SELECT b.product AS product, blk.quantum_mw AS quantum_mw, blk.price_per_unit AS price_per_unit
-  FROM bids b JOIN bid_blocks blk ON b.id = blk.bid_id
-  WHERE b.client_id = ? AND b.status IN (${LIVE_BID_STATUSES.map(() => '?').join(',')})
-`).all(clientId, ...LIVE_BID_STATUSES).reduce((a, r) => a + blockValue(r, r.product), 0);
-
 const checkGateClosure = (gate_closure_time) => {
   if (!gate_closure_time) return false;
   return new Date() > new Date(gate_closure_time);
 };
 
-// Insert a bid header + its blocks. Shared by manual create, bulk upload and carry-forward.
-function insertBid(header, blocks, actorId) {
-  const bidId = newId('BID');
-  const roll = rollUp(blocks, header.product);
-
-  db.prepare(`
-    INSERT INTO bids (
-      id, client_id, exchange, product, bid_date, delivery_date, gate_closure_time,
-      quantum_mw, price_per_unit, bid_on, contract_id, carry_forward_from, ocf_leg, premium_discount,
-      is_no_bid, approval_status, status, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING', 'DRAFT', ?)
-  `).run(
-    bidId, header.client_id, header.exchange, header.product, header.bid_date, header.delivery_date,
-    header.gate_closure_time || null, roll.quantum_mw, roll.price_per_unit,
-    header.bid_on === 'PERIPHERY' ? 'PERIPHERY' : 'EX-BUS',
-    header.contract_id || null,
-    header.carry_forward_from || null, header.ocf_leg || 0, header.premium_discount || 0, actorId
-  );
-
-  const insertBlock = db.prepare(
-    'INSERT INTO bid_blocks (id, bid_id, time_block, quantum_mw, price_per_unit) VALUES (?, ?, ?, ?, ?)'
-  );
-  for (const blk of blocks) {
-    insertBlock.run(newId('BLK'), bidId, blk.time_block, Number(blk.quantum_mw), Number(blk.price_per_unit));
-  }
-  return { bidId, roll };
-}
-
 // List all bids
 router.get('/', (req, res) => {
-  const { client_id, exchange, status, date } = req.query;
+  const { client_id, exchange, status, date, product, from, to } = req.query;
   let sql = 'SELECT * FROM bids WHERE 1=1';
   const params = [];
   if (client_id) { sql += ' AND client_id = ?'; params.push(client_id); }
   if (exchange) { sql += ' AND exchange = ?'; params.push(exchange); }
   if (status) { sql += ' AND status = ?'; params.push(status); }
+  if (product) {
+    const p = String(product).trim().toUpperCase();
+    if (!PRODUCTS.includes(p)) return res.status(400).json({ error: `product must be one of: ${PRODUCTS.join(', ')}` });
+    sql += ' AND product = ?';
+    params.push(p);
+  }
   if (date) { sql += ' AND bid_date = ?'; params.push(date); }
-  sql += ' ORDER BY created_at DESC';
+  if (from) { sql += ' AND delivery_date >= ?'; params.push(from); }
+  if (to) { sql += ' AND delivery_date <= ?'; params.push(to); }
+  sql += ' ORDER BY delivery_date DESC, created_at DESC';
 
   res.json(db.prepare(sql).all(...params).map(withDetails));
 });
@@ -399,7 +334,7 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   }
 
   const { bidId } = insertBid(b, b.blocks, req.user.id);
-  logEvent(bidId, req.user.id, 'CREATED', { totalExposure, complianceWarnings: compliance.warnings.map((w) => w.code) });
+  logBidEvent(bidId, req.user.id, 'CREATED', { totalExposure, complianceWarnings: compliance.warnings.map((w) => w.code) });
 
   secureLogAudit(req, { action: 'CREATE_BID', module: 'TRADING', entityType: 'bid', entityId: bidId, details: { totalExposure, complianceWarnings: compliance.warnings } });
 
@@ -513,7 +448,7 @@ router.post('/bulk', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     const ids = [];
     for (const group of groups.values()) {
       const { bidId } = insertBid(group.header, group.blocks, req.user.id);
-      logEvent(bidId, req.user.id, 'CREATED', { source: 'BULK_UPLOAD', rows: group.rows });
+      logBidEvent(bidId, req.user.id, 'CREATED', { source: 'BULK_UPLOAD', rows: group.rows });
       ids.push(bidId);
     }
     return ids;
@@ -558,7 +493,7 @@ router.post('/:id/submit', requireRole(...ROLE_GROUPS.TRADING_WRITE), async (req
     const receiptRef = response.receiptRef || `EXC-RCPT-${Date.now()}`;
 
     db.prepare("UPDATE bids SET status = 'SUBMITTED', exchange_receipt_ref = ? WHERE id = ?").run(receiptRef, bid.id);
-    logEvent(bid.id, req.user.id, 'SUBMITTED', { receiptRef });
+    logBidEvent(bid.id, req.user.id, 'SUBMITTED', { receiptRef });
     // A live bid on the exchange makes its agreement an active one.
     if (bid.contract_id) refreshExchangeContractStatus(bid.contract_id);
 
@@ -618,7 +553,7 @@ router.post('/:id/sync-result', requireRole(...ROLE_GROUPS.TRADING_WRITE), async
 
     // Record which source the numbers came from — a stub clearing and a real
     // exchange result must never be indistinguishable after the fact.
-    logEvent(bid.id, req.user.id, 'RESULT_SYNCED', { totalReq, totalCleared, headerStatus, source: response.mode || 'UNKNOWN' });
+    logBidEvent(bid.id, req.user.id, 'RESULT_SYNCED', { totalReq, totalCleared, headerStatus, source: response.mode || 'UNKNOWN' });
     secureLogAudit(req, { action: 'SYNC_BID_RESULT', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: { totalCleared, headerStatus, source: response.mode } });
 
     res.json(withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
@@ -660,7 +595,7 @@ router.post('/:id/result', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res)
     .run(totalCleared, totalCleared > 0 ? clearedValue / totalCleared : null, headerStatus, bid.id);
 
   if (bid.contract_id) refreshExchangeContractStatus(bid.contract_id);
-  logEvent(bid.id, req.user.id, 'RESULT_RECORDED', { totalReq, totalCleared, headerStatus });
+  logBidEvent(bid.id, req.user.id, 'RESULT_RECORDED', { totalReq, totalCleared, headerStatus });
   secureLogAudit(req, { action: 'RECORD_BID_RESULT', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: { totalCleared, headerStatus } });
 
   res.json(withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
@@ -731,8 +666,8 @@ router.post('/:id/carry-forward', requireRole(...ROLE_GROUPS.TRADING_WRITE), (re
   };
 
   const { bidId, roll } = insertBid(header, blocks, req.user.id);
-  logEvent(bidId, req.user.id, 'CARRY_FORWARD_IN', { from: source.id, from_product: source.product, premium, carried_mw: roll.quantum_mw });
-  logEvent(source.id, req.user.id, 'CARRY_FORWARD_OUT', { to: bidId, to_product: toProduct, premium, carried_mw: roll.quantum_mw });
+  logBidEvent(bidId, req.user.id, 'CARRY_FORWARD_IN', { from: source.id, from_product: source.product, premium, carried_mw: roll.quantum_mw });
+  logBidEvent(source.id, req.user.id, 'CARRY_FORWARD_OUT', { to: bidId, to_product: toProduct, premium, carried_mw: roll.quantum_mw });
 
   secureLogAudit(req, {
     action: 'CARRY_FORWARD_BID', module: 'TRADING', entityType: 'bid', entityId: bidId,
@@ -770,7 +705,7 @@ router.post('/:id/approve', requireRole(...ROLE_GROUPS.TRADING_CHECKER), (req, r
     status, status === 'REJECTED' ? 'REJECTED' : bid.status, bid.id
   );
 
-  logEvent(bid.id, req.user.id, status, { reason });
+  logBidEvent(bid.id, req.user.id, status, { reason });
 
   secureLogAudit(req, { action: 'APPROVE_BID', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: { status, reason } });
   res.json(withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));

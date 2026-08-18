@@ -10,7 +10,7 @@ export default function ProtectedRoute({ children, roles }) {
     return (
       <div className="empty-state">
         <h3>Access restricted</h3>
-        <p>Your role ({user.role.replaceAll('_', ' ')}) does not have access to this module.</p>
+        <p>Your role ({String(user.role || '').replaceAll('_', ' ') || 'unknown'}) does not have access to this module.</p>
       </div>
     );
   }

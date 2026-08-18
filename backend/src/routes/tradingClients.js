@@ -7,6 +7,9 @@ import { secureLogAudit } from '../auditEngine.js';
 const router = Router();
 router.use(requireAuth);
 
+const norm = (s) => String(s || '').trim().toLowerCase();
+const isDemoName = (name) => /(^test[_\s-])|(weak buyer)/i.test(String(name || '').trim());
+
 const withDetails = (client) => {
   if (!client) return null;
   client.signatories = db.prepare('SELECT * FROM trading_client_signatories WHERE client_id = ? ORDER BY created_at DESC').all(client.id);
@@ -19,13 +22,17 @@ const withDetails = (client) => {
 
 // 1. List clients
 router.get('/', (req, res) => {
-  const { status, client_type } = req.query;
+  const { status, client_type, include_demo } = req.query;
   let sql = 'SELECT * FROM trading_clients WHERE 1=1';
   const params = [];
   if (status) { sql += ' AND status = ?'; params.push(status); }
   if (client_type) { sql += ' AND client_type = ?'; params.push(client_type); }
-  sql += ' ORDER BY created_at DESC';
-  res.json(db.prepare(sql).all(...params));
+  sql += ' ORDER BY CASE status WHEN \'ACTIVE\' THEN 0 WHEN \'SUSPENDED\' THEN 1 ELSE 2 END, name ASC, created_at DESC';
+  let rows = db.prepare(sql).all(...params);
+  if (include_demo !== 'true' && status === 'ACTIVE') {
+    rows = rows.filter((r) => !isDemoName(r.name));
+  }
+  res.json(rows);
 });
 
 // 2. Get specific client
@@ -51,6 +58,12 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   const limit = Number(b.exposure_limit ?? 0);
   if (!Number.isFinite(limit) || limit < 0) errors.push('exposure_limit must be a non-negative number');
   if (b.entity_id && !db.prepare('SELECT 1 FROM entities WHERE id = ?').get(b.entity_id)) errors.push('entity_id does not exist');
+  const duplicate = db.prepare(`
+    SELECT id FROM trading_clients
+    WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND status = 'ACTIVE'
+    LIMIT 1
+  `).get(String(b.name || '').trim());
+  if (duplicate) errors.push('An active trading client with this name already exists');
   if (errors.length) return res.status(400).json({ error: errors[0], errors });
 
   const id = newId('TCL');
@@ -79,6 +92,12 @@ router.put('/:id', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Client not found' });
   
   const merged = { ...existing, ...req.body };
+  const duplicate = db.prepare(`
+    SELECT id FROM trading_clients
+    WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND id != ? AND status = 'ACTIVE'
+    LIMIT 1
+  `).get(String(merged.name || '').trim(), existing.id);
+  if (duplicate) return res.status(400).json({ error: 'Another active trading client already uses this name' });
   db.prepare(`
     UPDATE trading_clients SET name=@name, client_type=@client_type, noc_valid_till=@noc_valid_till,
       ppa_ref=@ppa_ref, exposure_limit=@exposure_limit, risk_rating=@risk_rating, status=@status

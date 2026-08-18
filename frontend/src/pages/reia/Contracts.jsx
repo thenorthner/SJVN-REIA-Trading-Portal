@@ -5,6 +5,39 @@ import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } 
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
 
+// Must stay in lockstep with backend CONTRACT_TRANSITIONS. A draft is not yet
+// signed or regulator-cleared, so ACTIVE is not a legal next hop from DRAFT.
+const CONTRACT_TRANSITIONS = {
+  DRAFT: ['UNDER_NEGOTIATION', 'SIGNED', 'TERMINATED'],
+  UNDER_NEGOTIATION: ['SIGNED', 'DRAFT', 'TERMINATED'],
+  SIGNED: ['PENDING_REGULATORY_APPROVAL', 'ACTIVE', 'TERMINATED'],
+  PENDING_REGULATORY_APPROVAL: ['ACTIVE', 'SIGNED', 'TERMINATED'],
+  ACTIVE: ['AMENDED', 'NEARING_EXPIRY', 'EXPIRED', 'RENEWED', 'TERMINATED', 'CLOSED'],
+  AMENDED: ['ACTIVE', 'NEARING_EXPIRY', 'EXPIRED', 'TERMINATED', 'CLOSED'],
+  NEARING_EXPIRY: ['EXPIRED', 'RENEWED', 'TERMINATED', 'CLOSED'],
+  EXPIRED: ['RENEWED', 'CLOSED'],
+  RENEWED: ['ACTIVE', 'NEARING_EXPIRY', 'EXPIRED', 'CLOSED'],
+  TERMINATED: ['CLOSED'],
+  CLOSED: [],
+};
+
+function allowedNextStatuses(current) {
+  return CONTRACT_TRANSITIONS[current] || [];
+}
+
+function lifecycleHint(current) {
+  if (current === 'DRAFT') {
+    return 'This contract is still a draft. Mark it SIGNED first (or UNDER_NEGOTIATION), then you can move it to ACTIVE.';
+  }
+  if (current === 'UNDER_NEGOTIATION') {
+    return 'Once terms are agreed, mark it SIGNED. ACTIVE is available after signing.';
+  }
+  if (current === 'SIGNED') {
+    return 'Signed contracts can go ACTIVE directly, or via PENDING_REGULATORY_APPROVAL if a clearance is still outstanding.';
+  }
+  return '';
+}
+
 const EMPTY_FORM = {
   contract_no: '', contract_type: 'PPA', seller_id: '', buyer_id: '', project_type: 'Solar', capacity_mw: '',
   tariff_type: 'FLAT', tariff_per_unit: '', tariff_structure: null, 
@@ -31,12 +64,20 @@ function renderTariffStructure(selected) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2 }}>
-      {Object.entries(ts).map(([k, v]) => (
-        <div key={k} style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--slate-100, #f1f5f9)', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>
-          <span style={{ color: 'var(--slate-600, #475569)', textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}:</span>
-          <span style={{ fontWeight: 600 }}>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
-        </div>
-      ))}
+      {Object.entries(ts).map(([k, v]) => {
+        let display;
+        try {
+          display = v != null && typeof v === 'object' ? JSON.stringify(v) : String(v ?? '');
+        } catch {
+          display = '';
+        }
+        return (
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--slate-100, #f1f5f9)', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>
+            <span style={{ color: 'var(--slate-600, #475569)', textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}:</span>
+            <span style={{ fontWeight: 600 }}>{display}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -83,6 +124,7 @@ export default function Contracts() {
   const [syncMsg, setSyncMsg] = useState('');
   const [statusForm, setStatusForm] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [allocationForm, setAllocationForm] = useState(null);
 
   async function downloadContractPdf() {
     setPdfLoading(true);
@@ -99,28 +141,29 @@ export default function Contracts() {
       setPdfLoading(false);
     }
   }
-  const [allocationForm, setAllocationForm] = useState(null);
-
   function load() {
     setLoading(true);
     const params = {};
     Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
-    api.contracts.list(params).then(setRows).finally(() => setLoading(false));
+    api.contracts.list(params)
+      .then((data) => setRows(Array.isArray(data) ? data : []))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
   }
 
   useEffect(load, [filters.contract_type, filters.status, filters.project_type, filters.q]);
 
   useEffect(() => {
     // Only approved entities
-    api.entities.list({ entity_type: 'SELLER', status: 'APPROVED' }).then(setSellers).catch(() => {});
-    api.entities.list({ entity_type: 'BUYER', status: 'APPROVED' }).then(setBuyers).catch(() => {});
+    api.entities.list({ entity_type: 'SELLER', status: 'APPROVED' }).then((d) => setSellers(Array.isArray(d) ? d : [])).catch(() => setSellers([]));
+    api.entities.list({ entity_type: 'BUYER', status: 'APPROVED' }).then((d) => setBuyers(Array.isArray(d) ? d : [])).catch(() => setBuyers([]));
   }, []);
 
   function openDetail(row) {
-    api.contracts.get(row.id).then(setSelected);
-    api.paymentSecurity.requirements(row.id).then(setRequirements).catch(() => setRequirements([]));
+    api.contracts.get(row.id).then(setSelected).catch(() => setSelected(row));
+    api.paymentSecurity.requirements(row.id).then((d) => setRequirements(Array.isArray(d) ? d : [])).catch(() => setRequirements([]));
     if (row.contract_type === 'PPA') {
-      api.contracts.allocations(row.id).then(setAllocations).catch(() => setAllocations([]));
+      api.contracts.allocations(row.id).then((d) => setAllocations(Array.isArray(d) ? d : [])).catch(() => setAllocations([]));
     } else {
       setAllocations([]);
     }
@@ -208,7 +251,11 @@ export default function Contracts() {
       setStatusForm(null);
       load();
     } catch (err) {
-      setStatusError(err.response?.data?.error || 'Failed to update contract status.');
+      const data = err.response?.data;
+      const allowed = data?.allowed_transitions?.length
+        ? ` Allowed next: ${data.allowed_transitions.join(', ')}.`
+        : '';
+      setStatusError((data?.error || 'Failed to update contract status.') + allowed);
     } finally {
       setSubmitting(false);
     }
@@ -564,7 +611,7 @@ export default function Contracts() {
                     <Field label="Select PSA">
                       <select required value={allocationForm.psa_id} onChange={e => setAllocationForm({...allocationForm, psa_id: e.target.value})}>
                         <option value="">Select PSA...</option>
-                        {rows.filter(r => r.contract_type === 'PSA').map(psa => (
+                        {rows.filter(r => r && r.contract_type === 'PSA').map(psa => (
                           <option key={psa.id} value={psa.id}>{psa.contract_no} - {psa.buyer_name}</option>
                         ))}
                       </select>
@@ -591,7 +638,16 @@ export default function Contracts() {
           <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
             {CAN_WRITE.includes(user?.role) && selected.status !== 'CLOSED' && selected.status !== 'TERMINATED' && (
               <>
-                <button className="btn btn-outline" onClick={() => setStatusForm({ status: selected.status, remarks: '', termination_date: '', termination_reason: '' })}>Update Lifecycle Stage</button>
+                <button className="btn btn-outline" onClick={() => {
+                  const next = allowedNextStatuses(selected.status);
+                  setStatusError('');
+                  setStatusForm({
+                    status: next[0] || selected.status,
+                    remarks: '',
+                    termination_date: '',
+                    termination_reason: '',
+                  });
+                }}>Update Lifecycle Stage</button>
                 <button className="btn btn-outline" onClick={() => setAmendForm(selected)}>Amend Contract</button>
               </>
             )}
@@ -608,9 +664,21 @@ export default function Contracts() {
                 {statusError}
               </div>
             )}
+            <p style={{ margin: '0 0 12px', fontSize: 13, color: '#475569' }}>
+              Current stage: <strong>{selected?.status}</strong>
+            </p>
+            {lifecycleHint(selected?.status) && (
+              <p style={{ margin: '0 0 14px', fontSize: 12, lineHeight: 1.45, color: '#64748b' }}>
+                {lifecycleHint(selected?.status)}
+              </p>
+            )}
             <Field label="New Status">
-              <select value={statusForm.status} onChange={e => setStatusForm({...statusForm, status: e.target.value})}>
-                {['DRAFT', 'UNDER_NEGOTIATION', 'SIGNED', 'PENDING_REGULATORY_APPROVAL', 'ACTIVE', 'NEARING_EXPIRY', 'EXPIRED', 'RENEWED', 'TERMINATED', 'CLOSED'].map(s => <option key={s} value={s}>{s}</option>)}
+              <select
+                value={allowedNextStatuses(selected?.status).includes(statusForm.status) ? statusForm.status : (allowedNextStatuses(selected?.status)[0] || '')}
+                onChange={e => setStatusForm({...statusForm, status: e.target.value})}
+                disabled={!allowedNextStatuses(selected?.status).length}
+              >
+                {allowedNextStatuses(selected?.status).map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </Field>
             {statusForm.status === 'TERMINATED' && (
@@ -624,7 +692,7 @@ export default function Contracts() {
             </Field>
             <div className="form-actions" style={{marginTop: 20}}>
               <button type="button" className="btn btn-ghost" onClick={() => { setStatusForm(null); setStatusError(''); }}>Cancel</button>
-              <button type="submit" className="btn btn-primary" disabled={submitting}>
+              <button type="submit" className="btn btn-primary" disabled={submitting || !allowedNextStatuses(selected?.status).length}>
                 {submitting ? 'Updating...' : 'Update Status'}
               </button>
             </div>

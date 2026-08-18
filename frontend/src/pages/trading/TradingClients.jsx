@@ -28,7 +28,7 @@ export default function TradingClients() {
 
   const fetchClients = () => {
     setLoading(true);
-    api.tradingClients.list().then(res => {
+    api.tradingClients.list({ include_demo: 'true' }).then(res => {
       setClients(res);
       setLoading(false);
     }).catch(console.error);

@@ -56,7 +56,7 @@ export const TRADING_MENU = [
       { label: 'Create Exchange Contract', to: '/trading/exchange/create' },
       { label: 'Exchange Contracts Summary', to: '/trading/exchange/contracts' },
       { label: 'Exchange Bidding', to: '/trading/exchange/bidding' },
-      { label: 'Exchange Bidding (Latest)', to: '/trading/exchange/bidding-latest' },
+      { label: 'Exchange Bidding (Legacy URL)', to: '/trading/exchange/bidding' },
       { label: 'Exchange Bidding Detail Report', to: '/trading/exchange/bidding-detail' },
       { label: 'IEX DAM Single Bid Book Report', to: '/trading/exchange/iex-dam-single' },
       { label: 'IEX DAM Block Bid Book Report', to: '/trading/exchange/iex-dam-block' },

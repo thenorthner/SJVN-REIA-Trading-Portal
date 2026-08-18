@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client.js';
-import { Card, Field } from '../../components/ui.jsx';
+import { Card, Field, Badge, Table, fmtNumber } from '../../components/ui.jsx';
 
 const TIME_BLOCKS = Array.from({ length: 96 }, (_, i) => {
   const h = String(Math.floor(i / 4)).padStart(2, '0');
@@ -28,6 +28,16 @@ function FormSection({ title, children }) {
       {children}
     </div>
   );
+}
+
+const EXCHANGE_BILL_TYPES = [
+  ['EXCHANGE_ENERGY', 'Raise Energy Bill'],
+  ['EXCHANGE_OA', 'Raise Open Access Bill'],
+  ['TRADING_MARGIN', 'Raise Trading Margin Bill'],
+];
+
+function billTypeLabel(type) {
+  return String(type || '').replace(/^EXCHANGE_/, '').replace(/_/g, ' ');
 }
 
 function fmtCreated(s) {
@@ -101,6 +111,12 @@ export default function ExchangeContractDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [settlement, setSettlement] = useState(null);
+  const [settleBusy, setSettleBusy] = useState(false);
+  const [contractInvoices, setContractInvoices] = useState([]);
+  const [billPeriod, setBillPeriod] = useState({ from: '', to: '' });
+  const [billBusy, setBillBusy] = useState('');
+  const [billMsg, setBillMsg] = useState(null);
 
   function load() {
     setLoading(true);
@@ -118,6 +134,58 @@ export default function ExchangeContractDetail() {
   }
 
   useEffect(load, [id]);
+
+  const refreshSettlement = useCallback((period) => {
+    if (!id) return;
+    setSettleBusy(true);
+    const params = {};
+    if (period?.from) params.from = period.from;
+    if (period?.to) params.to = period.to;
+    api.exchangeContracts.settlement(id, params)
+      .then(setSettlement)
+      .catch(() => setSettlement(null))
+      .finally(() => setSettleBusy(false));
+    api.exchangeContracts.invoices(id).then(setContractInvoices).catch(() => setContractInvoices([]));
+  }, [id]);
+
+  useEffect(() => {
+    if (loading || editing || !form) {
+      if (editing) {
+        setSettlement(null);
+        setContractInvoices([]);
+        setBillMsg(null);
+      }
+      return;
+    }
+    refreshSettlement({ from: '', to: '' });
+    setBillPeriod({ from: '', to: '' });
+  }, [id, loading, editing, form, refreshSettlement]);
+
+  async function handleRaiseBill(billType) {
+    setBillBusy(billType);
+    setBillMsg(null);
+    try {
+      const body = { bill_type: billType };
+      if (billPeriod.from) body.from = billPeriod.from;
+      if (billPeriod.to) body.to = billPeriod.to;
+      const inv = await api.exchangeContracts.generateInvoice(id, body);
+      setBillMsg({
+        ok: true,
+        text: `${inv.invoice_no} raised for ₹${fmtNumber(inv.invoice_amount)} (${inv.settlement_basis || 'FINAL'}).`,
+        warnings: inv.warnings || [],
+      });
+      refreshSettlement(billPeriod);
+    } catch (err) {
+      const data = err.response?.data || {};
+      setBillMsg({
+        ok: false,
+        text: data.error || 'Failed to raise the bill.',
+        warnings: data.warnings || [],
+      });
+    } finally {
+      setBillBusy('');
+    }
+  }
 
   function set(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -490,6 +558,130 @@ export default function ExchangeContractDetail() {
           </div>
         </form>
       </Card>
+
+      {!editing && (
+        <Card style={{ marginTop: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+            <h2 style={{ margin: 0, fontSize: 18 }}>Settlement &amp; Billing</h2>
+            <Link to="/billing/view-bills" className="btn btn-sm btn-outline">View Bills →</Link>
+          </div>
+          <p style={{ margin: '0 0 14px', fontSize: 13, color: '#64748b' }}>
+            Cleared exchange bids for this contract, priced the same way as Generate Bill / View Bills.
+          </p>
+
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 14 }}>
+            <Field label="Supply from">
+              <input type="date" className="input" value={billPeriod.from}
+                onChange={(e) => setBillPeriod({ ...billPeriod, from: e.target.value })} />
+            </Field>
+            <Field label="Supply to">
+              <input type="date" className="input" value={billPeriod.to}
+                onChange={(e) => setBillPeriod({ ...billPeriod, to: e.target.value })} />
+            </Field>
+            <button type="button" className="btn btn-outline" style={{ marginBottom: 4 }}
+              onClick={() => refreshSettlement(billPeriod)} disabled={settleBusy}>
+              {settleBusy ? 'Settling…' : 'Recalculate'}
+            </button>
+            {(billPeriod.from || billPeriod.to) && (
+              <button type="button" className="btn btn-outline" style={{ marginBottom: 4 }}
+                onClick={() => { setBillPeriod({ from: '', to: '' }); refreshSettlement({ from: '', to: '' }); }}>
+                Whole contract
+              </button>
+            )}
+          </div>
+
+          {settleBusy && !settlement ? (
+            <p style={{ color: '#777', fontSize: 13 }}>Computing the settled position…</p>
+          ) : !settlement ? (
+            <p style={{ color: '#777', fontSize: 13 }}>Could not load settlement — check that cleared bids exist for this contract.</p>
+          ) : (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 14 }}>
+                {[
+                  ['Cleared', `${fmtNumber(settlement.cleared?.cleared_mwh)} MWh`, `${settlement.cleared?.cleared_blocks ?? 0} of ${settlement.cleared?.blocks ?? 0} blocks`],
+                  ['Bid volume', `${fmtNumber(settlement.cleared?.bid_mwh)} MWh`, `${fmtNumber(settlement.cleared?.uncleared_mwh)} MWh uncleared`],
+                  ['Energy value', `₹${fmtNumber(settlement.money?.energy_value)}`, `@ ₹${settlement.rates?.avg_clearing_price ?? '—'}/kWh MCP`],
+                  ['Trading margin', `₹${fmtNumber(settlement.money?.trading_margin)}`, `@ ₹${settlement.rates?.trading_margin_per_unit ?? '—'}/kWh`],
+                  ['Exchange fee', `₹${fmtNumber(settlement.money?.exchange_fee)}`, settlement.exchange || 'IEX'],
+                  ['Client position', `₹${fmtNumber(settlement.money?.client_energy_position)}`, settlement.side === 'Buyer' ? 'buy-side' : 'sell-side'],
+                ].map(([label, value, sub]) => (
+                  <div key={label} style={{ padding: '10px 12px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8 }}>
+                    <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2 }}>{value}</div>
+                    <div style={{ fontSize: 11, color: 'var(--slate-500)' }}>{sub}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+                <Badge type={(settlement.cleared?.cleared_mwh ?? 0) > 0 ? 'success' : 'warning'}>
+                  {(settlement.cleared?.cleared_mwh ?? 0) > 0 ? 'FINAL' : 'NO CLEARANCE'}
+                </Badge>
+                <span style={{ fontSize: 12, color: 'var(--slate-600)' }}>
+                  {settlement.cleared?.bids ?? 0} bid(s)
+                  {settlement.cleared?.days ? ` · ${settlement.cleared.days} day(s)` : ''}
+                  {settlement.cleared?.period_from ? ` · ${settlement.cleared.period_from} to ${settlement.cleared.period_to}` : ''}
+                  {settlement.product ? ` · ${settlement.product} on ${settlement.exchange || 'IEX'}` : ''}
+                </span>
+              </div>
+
+              {settlement.warnings?.length > 0 && (
+                <ul style={{ margin: '0 0 12px 18px', fontSize: 12, color: '#92400e' }}>
+                  {settlement.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
+              )}
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {EXCHANGE_BILL_TYPES.map(([type, label]) => (
+                  <button key={type} type="button" className="btn btn-primary"
+                    disabled={billBusy === type || (settlement.cleared?.cleared_mwh ?? 0) <= 0}
+                    onClick={() => handleRaiseBill(type)}>
+                    {billBusy === type ? 'Raising…' : label}
+                  </button>
+                ))}
+              </div>
+
+              {billMsg && (
+                <div style={{
+                  marginTop: 12, padding: '10px 12px', borderRadius: 6, fontSize: 13,
+                  background: billMsg.ok ? '#f0fdf4' : '#fef2f2',
+                  border: `1px solid ${billMsg.ok ? '#bbf7d0' : '#fecaca'}`,
+                  color: billMsg.ok ? '#166534' : '#991b1b',
+                }}>
+                  {billMsg.text}
+                  {billMsg.warnings?.length > 0 && (
+                    <ul style={{ margin: '6px 0 0 18px', fontSize: 12 }}>
+                      {billMsg.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              <div style={{ marginTop: 18 }}>
+                <strong style={{ fontSize: 13 }}>Bills raised against this contract</strong>
+                {contractInvoices.length === 0 ? (
+                  <p style={{ color: '#777', fontSize: 13, marginTop: 6 }}>None yet.</p>
+                ) : (
+                  <div style={{ marginTop: 8 }}>
+                    <Table
+                      columns={[
+                        { key: 'invoice_no', label: 'Invoice No' },
+                        { key: 'bill_type', label: 'Type', render: (r) => billTypeLabel(r.bill_type) },
+                        { key: 'invoice_amount', label: 'Amount', render: (r) => `₹${fmtNumber(r.invoice_amount)}` },
+                        { key: 'quantum_mwh', label: 'MWh', render: (r) => (r.quantum_mwh == null ? '—' : fmtNumber(r.quantum_mwh)) },
+                        { key: 'supply_from_date', label: 'Supply', render: (r) => (r.supply_from_date ? `${r.supply_from_date} → ${r.supply_to_date}` : '—') },
+                        { key: 'invoice_due_date', label: 'Due' },
+                        { key: 'settlement_basis', label: 'Basis', render: (r) => <Badge type={r.settlement_basis === 'FINAL' ? 'success' : 'warning'}>{r.settlement_basis || 'MANUAL'}</Badge> },
+                      ]}
+                      data={contractInvoices}
+                    />
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </Card>
+      )}
     </div>
   );
 }

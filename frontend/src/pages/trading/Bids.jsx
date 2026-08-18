@@ -405,7 +405,14 @@ export default function Bids({ product = 'DAM', externalView = null }) {
   }
 
   const columns = [
-    { key: 'id', label: 'Bid Ref' },
+    { key: 'id', label: 'Bid Ref', render: r => (
+      <span>
+        {r.id}
+        {(r.source_kind === 'ISET' || r.source_kind === 'ISET_LATEST') && (
+          <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--slate-500)', fontWeight: 600 }}>ISET</span>
+        )}
+      </span>
+    ) },
     { key: 'client_name', label: 'Client' },
     { key: 'exchange', label: 'Exchange/Product', render: r => `${r.exchange} - ${r.product}` },
     { key: 'delivery_date', label: 'Delivery Date' },

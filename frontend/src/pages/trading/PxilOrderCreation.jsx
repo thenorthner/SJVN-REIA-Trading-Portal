@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { Card, Field } from '../../components/ui.jsx';
 
 const EMPTY = {
+  client_id: '',
+  contract_id: '',
   transaction_code: '',
   user_id: '',
   password: '',
@@ -28,6 +30,8 @@ const EMPTY = {
  */
 export default function PxilOrderCreation() {
   const navigate = useNavigate();
+  const [clients, setClients] = useState([]);
+  const [contracts, setContracts] = useState([]);
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(null);
@@ -37,12 +41,24 @@ export default function PxilOrderCreation() {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
+  useEffect(() => {
+    api.tradingClients.list({ status: 'ACTIVE' }).then(setClients).catch(() => setClients([]));
+    api.exchangeContracts.list().then(setContracts).catch(() => setContracts([]));
+  }, []);
+
+  const clientContracts = useMemo(
+    () => contracts.filter((c) => !form.client_id || c.client_id === form.client_id),
+    [contracts, form.client_id],
+  );
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     setSuccess(null);
 
     for (const [key, label] of [
+      ['client_id', 'Client'],
+      ['contract_id', 'Exchange Contract'],
       ['transaction_code', 'Transaction Code'],
       ['user_id', 'User ID'],
       ['password', 'Password'],
@@ -102,6 +118,20 @@ export default function PxilOrderCreation() {
           <div className="form-section-header" style={{ marginTop: 0 }}>Pxil Order Creation</div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <Field label="Trading Client" required>
+              <select className="input" value={form.client_id} onChange={(e) => set('client_id', e.target.value)} required>
+                <option value="">Select client</option>
+                {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+            <Field label="Exchange Contract" required>
+              <select className="input" value={form.contract_id} onChange={(e) => set('contract_id', e.target.value)} required>
+                <option value="">Select contract</option>
+                {clientContracts.map((c) => (
+                  <option key={c.id} value={c.id}>{c.loa_no || c.portfolio_id || c.id}</option>
+                ))}
+              </select>
+            </Field>
             <Field label="Transaction Code" required>
               <input className="input" value={form.transaction_code} onChange={(e) => set('transaction_code', e.target.value)} required />
             </Field>

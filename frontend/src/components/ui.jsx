@@ -93,7 +93,8 @@ export function Table({
   columns, rows, data, onRowClick, loading,
   emptyMessage = 'No records found.', caption,
 }) {
-  const list = rows ?? data ?? [];
+  const raw = rows ?? data ?? [];
+  const list = Array.isArray(raw) ? raw : [];
   return (
     <div className="table-wrap">
       {/* aria-busy tells assistive tech the table is mid-load rather than empty. */}

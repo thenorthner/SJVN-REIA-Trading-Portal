@@ -1,14 +1,13 @@
 /**
  * Invoice / notification email delivery via SMTP (nodemailer).
- * If SMTP is not configured, writes the PDF to backend/outbox/ so demos still work.
+ * Host/user/pass come from backend/.env (or Masters smtp_* params).
+ * If SMTP_HOST is empty, writes the payload to backend/outbox/ so demos still work.
  */
 import nodemailer from 'nodemailer';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { getParam } from '../mastersService.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUTBOX_DIR = path.join(process.cwd(), 'outbox');
 
 function envOrParam(envKey, paramKey, fallback = '') {
@@ -38,6 +37,16 @@ export function getMailConfig() {
   };
 }
 
+/** Same nodemailer transport Mailtrap documents (host / port / auth). */
+export function createMailTransport(cfg = getMailConfig()) {
+  return nodemailer.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    auth: cfg.user ? { user: cfg.user, pass: cfg.pass } : undefined,
+  });
+}
+
 function ensureOutbox() {
   if (!fs.existsSync(OUTBOX_DIR)) fs.mkdirSync(OUTBOX_DIR, { recursive: true });
   return OUTBOX_DIR;
@@ -53,34 +62,37 @@ export async function sendMail(opts) {
     return { ok: false, mode: 'NONE', error: 'No recipient email address' };
   }
 
-  // Real SMTP when host is set
   if (cfg.host) {
-    const transport = nodemailer.createTransport({
-      host: cfg.host,
-      port: cfg.port,
-      secure: cfg.secure,
-      auth: cfg.user ? { user: cfg.user, pass: cfg.pass } : undefined,
-    });
-    const info = await transport.sendMail({
-      from: cfg.from,
-      to: toList.join(', '),
-      cc: opts.cc || undefined,
-      subject: opts.subject,
-      text: opts.text,
-      html: opts.html || undefined,
-      attachments: opts.attachments || [],
-    });
-    return {
-      ok: true,
-      mode: 'SMTP',
-      messageId: info.messageId,
-      accepted: info.accepted,
-      rejected: info.rejected,
-      to: toList,
-    };
+    try {
+      const transport = createMailTransport(cfg);
+      const info = await transport.sendMail({
+        from: cfg.from,
+        to: toList.join(', '),
+        cc: opts.cc || undefined,
+        subject: opts.subject,
+        text: opts.text,
+        html: opts.html || undefined,
+        attachments: opts.attachments || [],
+      });
+      return {
+        ok: true,
+        mode: 'SMTP',
+        messageId: info.messageId,
+        accepted: info.accepted,
+        rejected: info.rejected,
+        to: toList,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        mode: 'SMTP',
+        error: err.message || 'SMTP send failed',
+        to: toList,
+      };
+    }
   }
 
-  // Dev / demo fallback: write .eml-ish sidecar + PDF to outbox/
+  // Dev / demo fallback: write sidecar + PDF to outbox/
   const dir = ensureOutbox();
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const safeSubject = String(opts.subject || 'mail').replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 60);

@@ -3,6 +3,7 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
+import { applyApplicationStep, withLinkedBids } from '../services/exchangeApplicationBids.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -66,19 +67,20 @@ router.get('/', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
   if (q) {
     sql += ` AND (
       application_id LIKE ? OR portfolio_id LIKE ? OR exchange LIKE ? OR product LIKE ? OR bid_type LIKE ?
+      OR IFNULL(contract_id,'') LIKE ? OR IFNULL(bid_ids,'') LIKE ?
     )`;
     const like = `%${q}%`;
-    params.push(like, like, like, like, like);
+    params.push(like, like, like, like, like, like, like);
   }
   sql += ' ORDER BY application_date DESC';
-  res.json(db.prepare(sql).all(...params));
+  res.json(db.prepare(sql).all(...params).map(withLinkedBids));
 });
 
 router.get('/:id', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
   const row = db.prepare('SELECT * FROM exchange_applications WHERE id = ? OR application_id = ?')
     .get(req.params.id, req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
-  res.json(row);
+  res.json(withLinkedBids(row));
 });
 
 router.post('/:id/approve', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
@@ -104,7 +106,7 @@ router.post('/:id/approve', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res
     details: { application_id: row.application_id, decision, notes },
   });
 
-  res.json(db.prepare('SELECT * FROM exchange_applications WHERE id = ?').get(row.id));
+  res.json(withLinkedBids(db.prepare('SELECT * FROM exchange_applications WHERE id = ?').get(row.id)));
 });
 
 router.post('/:id/step', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
@@ -113,21 +115,32 @@ router.post('/:id/step', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) =
   if (!row) return res.status(404).json({ error: 'Not found' });
 
   const step = String(req.body?.step || '').toLowerCase();
-  const field = ACTION_FIELDS[step];
-  if (!field) return res.status(400).json({ error: `step must be one of: ${Object.keys(ACTION_FIELDS).join(', ')}` });
+  if (!ACTION_FIELDS[step]) {
+    return res.status(400).json({ error: `step must be one of: ${Object.keys(ACTION_FIELDS).join(', ')}` });
+  }
 
-  const status = String(req.body?.status || 'DONE').toUpperCase();
-  db.prepare(`UPDATE exchange_applications SET ${field} = ? WHERE id = ?`).run(status, row.id);
+  let updated;
+  try {
+    updated = applyApplicationStep(row, step, req.body?.status || 'DONE');
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
 
   secureLogAudit(req, {
     action: 'UPDATE_EXCHANGE_APPLICATION_STEP',
     module: 'TRADING',
     entityType: 'exchange_application',
     entityId: row.id,
-    details: { application_id: row.application_id, step, status },
+    details: {
+      application_id: row.application_id,
+      step,
+      status: updated[ACTION_FIELDS[step]],
+      contract_id: updated.contract_id,
+      bid_ids: updated.bid_ids,
+    },
   });
 
-  res.json(db.prepare('SELECT * FROM exchange_applications WHERE id = ?').get(row.id));
+  res.json(withLinkedBids(updated));
 });
 
 export default router;

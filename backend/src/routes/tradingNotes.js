@@ -49,7 +49,7 @@ const withClient = (row) => {
 
 // ── List ─────────────────────────────────────────────────────────────────
 router.get('/', requireRole(...READ), (req, res) => {
-  const { client_id, billing_period, note_type, status, reason_code } = req.query;
+  const { client_id, billing_period, note_type, status, reason_code, trading_invoice_id, view_bill_invoice_id } = req.query;
   let sql = 'SELECT * FROM trading_debit_credit_notes WHERE 1=1';
   const params = [];
   if (client_id) { sql += ' AND client_id = ?'; params.push(client_id); }
@@ -57,6 +57,8 @@ router.get('/', requireRole(...READ), (req, res) => {
   if (note_type) { sql += ' AND note_type = ?'; params.push(note_type); }
   if (status) { sql += ' AND status = ?'; params.push(status); }
   if (reason_code) { sql += ' AND reason_code = ?'; params.push(reason_code); }
+  if (trading_invoice_id) { sql += ' AND trading_invoice_id = ?'; params.push(trading_invoice_id); }
+  if (view_bill_invoice_id) { sql += ' AND view_bill_invoice_id = ?'; params.push(view_bill_invoice_id); }
   sql += ' ORDER BY created_at DESC';
   res.json(db.prepare(sql).all(...params).map(withClient));
 });
@@ -107,8 +109,29 @@ router.get('/summary', requireRole(...READ), (req, res) => {
 // ── Raise ────────────────────────────────────────────────────────────────
 router.post('/', requireRole(...WRITE), (req, res) => {
   const b = req.body || {};
+  let resolvedClientId = b.client_id || null;
 
-  const client = db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(b.client_id);
+  if (!resolvedClientId && b.view_bill_invoice_id) {
+    const linked = db.prepare(`
+      SELECT v.id, v.client_name, v.bilateral_id, v.exchange_contract_id,
+             bt.client_id AS bilateral_client_id, ec.client_id AS exchange_client_id
+      FROM view_bill_invoices v
+      LEFT JOIN bilateral_transactions bt ON bt.id = v.bilateral_id
+      LEFT JOIN exchange_contracts ec ON ec.id = v.exchange_contract_id
+      WHERE v.id = ?
+    `).get(b.view_bill_invoice_id);
+    resolvedClientId = linked?.bilateral_client_id || linked?.exchange_client_id || null;
+    if (!resolvedClientId && linked?.client_name) {
+      resolvedClientId = db.prepare(`
+        SELECT id FROM trading_clients
+        WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND status = 'ACTIVE'
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(linked.client_name)?.id || null;
+    }
+  }
+
+  const client = db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(resolvedClientId);
   if (!client) return res.status(404).json({ error: 'Trading client not found' });
 
   const noteType = b.note_type === 'CREDIT' ? 'CREDIT' : b.note_type === 'DEBIT' ? 'DEBIT' : null;
@@ -129,18 +152,25 @@ router.post('/', requireRole(...WRITE), (req, res) => {
     const inv = db.prepare('SELECT id FROM trading_invoices WHERE id = ?').get(b.trading_invoice_id);
     if (!inv) return res.status(404).json({ error: 'Linked trading invoice not found' });
   }
+  if (b.view_bill_invoice_id) {
+    const inv = db.prepare('SELECT id, client_name, supply_from_date FROM view_bill_invoices WHERE id = ?').get(b.view_bill_invoice_id);
+    if (!inv) return res.status(404).json({ error: 'Linked View Bills invoice not found' });
+  }
+  if (!b.trading_invoice_id && !b.view_bill_invoice_id) {
+    return res.status(400).json({ error: 'Link the note to a trading invoice or a View Bills invoice' });
+  }
 
   const id = newId('TDN');
   const noteNo = genInvoiceNo(noteType === 'DEBIT' ? 'TDN' : 'TCN');
 
   db.prepare(`
     INSERT INTO trading_debit_credit_notes (
-      id, note_no, note_type, client_id, trading_invoice_id, billing_period, delivery_date,
+      id, note_no, note_type, client_id, trading_invoice_id, view_bill_invoice_id, billing_period, delivery_date,
       reason_code, quantum_mwh, rate_per_unit, amount, broker_reference, reason,
       issued_date, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, date('now'), ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, date('now'), ?)
   `).run(
-    id, noteNo, noteType, client.id, b.trading_invoice_id || null,
+    id, noteNo, noteType, client.id, b.trading_invoice_id || null, b.view_bill_invoice_id || null,
     String(b.billing_period).trim(), b.delivery_date || null, reason,
     b.quantum_mwh != null ? Number(b.quantum_mwh) : null,
     b.rate_per_unit != null ? Number(b.rate_per_unit) : null,

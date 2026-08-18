@@ -1,7 +1,7 @@
+import './loadEnv.js';
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -30,7 +30,7 @@ import bilateralApplicationsRoutes, { seedBilateralApplications } from './routes
 import viewBillInvoicesRoutes, { seedViewBillInvoices } from './routes/viewBillInvoices.js';
 import csvUploadsRoutes from './routes/csvUploads.js';
 import exchangeBiddingLatestRoutes from './routes/exchangeBiddingLatest.js';
-import iexBidBookRoutes, { seedIexBidBookSamples } from './routes/iexBidBook.js';
+import iexBidBookRoutes from './routes/iexBidBook.js';
 import exchangeApplicationsRoutes, { seedExchangeApplications } from './routes/exchangeApplications.js';
 import exchangeUpdateChargesRoutes from './routes/exchangeUpdateCharges.js';
 import escertOrdersRoutes from './routes/escertOrders.js';
@@ -47,6 +47,7 @@ import sellerDashboardRoutes from './routes/sellerDashboard.js';
 import buyerDashboardRoutes from './routes/buyerDashboard.js';
 import notificationsRoutes from './routes/notifications.js';
 import { retryFailedDeliveries } from './services/notificationService.js';
+import { getMailConfig } from './services/mailService.js';
 import alertsRoutes from './routes/alerts.js';
 import auditLogsRoutes from './routes/auditLogs.js';
 import sandboxRoutes from './routes/sandbox.js';
@@ -90,8 +91,6 @@ import { assignTraceId, requireAuth, requireRole, ROLE_GROUPS } from './middlewa
 // Read-level access to the trading desk screens. There is no TRADING_READ group
 // — TRADING_ALL is the read tier; TRADING_WRITE is the narrower acting tier.
 const TRADING_READ = ROLE_GROUPS.TRADING_ALL;
-
-dotenv.config();
 
 ensureMasterDefaults();
 
@@ -245,7 +244,10 @@ const isEntryPoint = process.argv[1] && path.resolve(process.argv[1]) === fileUR
 if (isEntryPoint) {
 app.listen(PORT, HOST, () => {
   console.log(`SJVN Energy Platform listening on http://${HOST}:${PORT}`);
-  try { seedIexBidBookSamples(); } catch (err) { console.warn('[IEX Bid Book] seed failed:', err.message); }
+  const mail = getMailConfig();
+  console.log(mail.configured
+    ? `[MAIL] SMTP ${mail.host}:${mail.port} from ${mail.from}`
+    : '[MAIL] SMTP not configured — messages written to backend/outbox/');
   try { seedExchangeApplications(); } catch (err) { console.warn('[Exchange Applications] seed failed:', err.message); }
   try { seedRecOrders(); } catch (err) { console.warn('[REC Orders] seed failed:', err.message); }
   try { seedPxilOrders(); } catch (err) { console.warn('[PXIL Orders] seed failed:', err.message); }

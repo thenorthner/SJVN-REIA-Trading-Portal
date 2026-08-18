@@ -44,6 +44,7 @@ function downloadBlob(filename, blob) {
 function rowsForExport(rows) {
   return rows.map((r) => ({
     'Reference No': r.reference_no,
+    'Contract': r.contract_id || '',
     Product: r.product_code,
     Quantity: r.quantity,
     Price: r.price,
@@ -87,6 +88,7 @@ export default function PxilOrderSummary() {
       list = rows.filter((r) => {
         const hay = [
           r.reference_no, r.product_code, r.quantity, r.price,
+          r.contract_id, Array.isArray(r.bid_ids) ? r.bid_ids.join(' ') : '',
           r.delivery_date_from, r.delivery_date_to, r.from_time, r.to_time,
           r.status, r.side, fmtCreated(r.created_at),
         ].filter(Boolean).join(' ').toLowerCase();
@@ -201,6 +203,7 @@ export default function PxilOrderSummary() {
 
   const columns = [
     ['reference_no', 'Reference No'],
+    ['contract_id', 'Contract'],
     ['product_code', 'Product'],
     ['quantity', 'Quantity'],
     ['price', 'Price'],
@@ -281,6 +284,7 @@ export default function PxilOrderSummary() {
                         <span style={{ color: '#1d4ed8', fontWeight: 500 }}>{r.reference_no}</span>
                       </td>
                       <td style={{ padding: '10px 12px' }}>{r.product_code}</td>
+                      <td style={{ padding: '10px 12px', fontSize: 12 }}>{r.contract_id || '—'}</td>
                       <td style={{ padding: '10px 12px' }}>{r.quantity}</td>
                       <td style={{ padding: '10px 12px' }}>{r.price}</td>
                       <td style={{ padding: '10px 12px' }}>{fmtDate(r.delivery_date_from)}</td>
@@ -289,7 +293,12 @@ export default function PxilOrderSummary() {
                       <td style={{ padding: '10px 12px' }}>{fmtTime(r.to_time)}</td>
                       <td style={{ padding: '10px 12px' }}>
                         {r.status === 'BID_PLACED' ? (
-                          <span style={{ color: '#15803d', fontSize: 12, fontWeight: 600 }}>Bid Placed</span>
+                          <div style={{ color: '#15803d', fontSize: 12, fontWeight: 600 }}>
+                            Bid Placed
+                            {Array.isArray(r.bid_ids) && r.bid_ids.length > 0 && (
+                              <div style={{ fontWeight: 400, color: '#475569' }}>{r.bid_ids.length} bid{r.bid_ids.length > 1 ? 's' : ''} linked</div>
+                            )}
+                          </div>
                         ) : (
                           <button
                             type="button"

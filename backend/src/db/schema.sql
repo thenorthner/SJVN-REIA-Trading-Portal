@@ -950,7 +950,10 @@ CREATE TABLE IF NOT EXISTS bids (
     'DRAFT','SUBMITTED','CLEARED','PARTIALLY_CLEARED','REJECTED','CANCELLED','NO_BID'
   )),
   created_by TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- ISET Exchange Bidding / Bidding Latest row this bid was materialised from.
+  source_kind TEXT,
+  source_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS bid_blocks (
@@ -1857,7 +1860,9 @@ CREATE TABLE IF NOT EXISTS exchange_biddings (
   csv_filename TEXT,
   status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('DRAFT','SUBMITTED','CANCELLED')),
   created_by TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- JSON array of `bids.id` created from this ISET application.
+  bid_ids TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_exchange_biddings_client ON exchange_biddings(client_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_exchange_biddings_dates ON exchange_biddings(supply_start_date, supply_end_date);
@@ -1885,7 +1890,9 @@ CREATE TABLE IF NOT EXISTS exchange_bidding_latest (
   status TEXT NOT NULL DEFAULT 'Success',
   status_message TEXT NOT NULL DEFAULT 'Request Submitted Successfully.',
   created_by TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- JSON array of `bids.id` created from this ISET submission.
+  bid_ids TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_exb_latest_created ON exchange_bidding_latest(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_exb_latest_txn ON exchange_bidding_latest(transaction_id);
@@ -1900,7 +1907,7 @@ CREATE TABLE IF NOT EXISTS iex_bid_book (
 );
 CREATE INDEX IF NOT EXISTS idx_iex_bid_book_type ON iex_bid_book(report_type, created_at);
 
--- ISET Power Exchange Applications list (approval workflow placeholders).
+-- ISET Power Exchange Applications list (PX1/PX2 join the DAM `bids` they file).
 CREATE TABLE IF NOT EXISTS exchange_applications (
   id TEXT PRIMARY KEY,
   application_id TEXT NOT NULL UNIQUE,
@@ -1914,6 +1921,8 @@ CREATE TABLE IF NOT EXISTS exchange_applications (
   px2_status TEXT NOT NULL DEFAULT 'PENDING',
   exchange_request_status TEXT NOT NULL DEFAULT 'PENDING',
   exchange_approval_status TEXT NOT NULL DEFAULT 'PENDING',
+  contract_id TEXT,
+  bid_ids TEXT,
   notes TEXT,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -2111,6 +2120,9 @@ CREATE TABLE IF NOT EXISTS view_bill_invoices (
   -- PROVISIONAL until every block in the supply period carries metered actuals.
   settlement_basis TEXT CHECK (settlement_basis IN ('PROVISIONAL','FINAL')),
   generated_from TEXT CHECK (generated_from IN ('MANUAL','SETTLEMENT')),
+  supersedes_invoice_id TEXT REFERENCES view_bill_invoices(id),
+  superseded_by_invoice_id TEXT REFERENCES view_bill_invoices(id),
+  cancel_reason TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_view_bill_type_date ON view_bill_invoices(bill_type, invoice_date DESC);
@@ -2180,6 +2192,8 @@ CREATE INDEX IF NOT EXISTS idx_csv_uploads_kind ON csv_uploads(upload_kind, crea
 -- PXIL Order Creation / Summary (ISET Pxil Order screens).
 CREATE TABLE IF NOT EXISTS pxil_orders (
   id TEXT PRIMARY KEY,
+  client_id TEXT REFERENCES trading_clients(id),
+  contract_id TEXT REFERENCES exchange_contracts(id),
   transaction_code TEXT NOT NULL,
   user_id TEXT NOT NULL,
   nor TEXT NOT NULL,
@@ -2197,6 +2211,7 @@ CREATE TABLE IF NOT EXISTS pxil_orders (
   side TEXT NOT NULL CHECK (side IN ('Seller','Buyer')),
   status TEXT NOT NULL DEFAULT 'CREATED' CHECK (status IN ('CREATED','BID_PLACED','CANCELLED','REJECTED')),
   bid_placed_at TEXT,
+  bid_ids TEXT,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

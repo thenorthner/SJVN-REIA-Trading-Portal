@@ -6,6 +6,40 @@ import { TRADING_MENU } from '../config/tradingMenu.js';
 import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from '../roles.js';
 import { PortfolioSelect } from '../context/PortfolioContext.jsx';
 
+/** Keeps the shell up if a screen's module fails to load or throws while rendering. */
+class RouteErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error) {
+    console.error('Screen failed to render:', error);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 28, maxWidth: 640 }}>
+          <h2 style={{ marginTop: 0, fontSize: 18 }}>This screen failed to load</h2>
+          <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.5 }}>
+            {this.state.error.message || 'An unexpected error occurred.'}
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => this.setState({ error: null })}
+          >
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const NAV_INTERNAL = [
   {
     section: 'Overview',
@@ -251,7 +285,7 @@ export default function Layout() {
     return () => clearInterval(interval);
   }, []);
 
-  const unread = notifications.filter((n) => !n.is_read).length;
+  const unread = (Array.isArray(notifications) ? notifications : []).filter((n) => !n.is_read).length;
 
   // Select sidebar based on user role. Matching on the role *group* (not the
   // exact 'SELLER'/'BUYER' string) keeps SELLER_L1/L2/L3 and BUYER_L1/L2/L3
@@ -389,7 +423,9 @@ export default function Layout() {
           </div>
         </header>
         <main className="content">
-          <Outlet />
+          <RouteErrorBoundary key={location.pathname}>
+            <Outlet />
+          </RouteErrorBoundary>
         </main>
       </div>
     </div>

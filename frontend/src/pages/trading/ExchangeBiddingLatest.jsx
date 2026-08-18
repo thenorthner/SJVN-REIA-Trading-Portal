@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { Card, Field } from '../../components/ui.jsx';
@@ -403,7 +403,16 @@ export default function ExchangeBiddingLatest() {
           {error && <div style={{ color: '#991b1b', marginBottom: 12, background: '#fee2e2', padding: 10, borderRadius: 4, fontSize: 13 }}>{error}</div>}
           {success && (
             <div style={{ color: '#166534', marginBottom: 12, background: '#dcfce7', padding: 10, borderRadius: 4, fontSize: 13 }}>
-              Bid submitted — Transaction ID <strong>{success.transaction_id}</strong>.{' '}
+              Bid submitted — Transaction ID <strong>{success.transaction_id}</strong>.
+              {success.bid_ids?.length > 0 && (
+                <>
+                  {' '}DAM bid <strong>{success.bid_ids[0]}</strong> created as DRAFT —{' '}
+                  <Link to={success.product_type === 'RTM' ? '/trading/rtm' : success.product_type === 'GDAM' ? '/trading/gdam' : '/trading/dam'}>
+                    open Manage Bids
+                  </Link>
+                  {' · '}
+                </>
+              )}
               <button type="button" className="btn btn-link" style={{ padding: 0 }} onClick={() => navigate('/trading/exchange/bidding-detail')}>
                 Open Bid Details Report
               </button>

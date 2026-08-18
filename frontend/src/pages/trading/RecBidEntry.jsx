@@ -42,7 +42,9 @@ export default function RecBidEntry() {
   const [actionMsg, setActionMsg] = useState(null);
 
   function loadBids() {
-    api.recTrading.listBids().then(setBids).catch(() => setBids([]));
+    api.recTrading.listBids()
+      .then((r) => setBids(Array.isArray(r) ? r : []))
+      .catch(() => setBids([]));
     api.recTrading.inventory().then(setInventory).catch(() => setInventory(null));
   }
 
@@ -326,7 +328,7 @@ export default function RecBidEntry() {
               </tr>
             </thead>
             <tbody>
-              {bids.length === 0 ? (
+              {!Array.isArray(bids) || bids.length === 0 ? (
                 <tr><td colSpan={11} style={{ padding: 16, color: '#64748b', textAlign: 'center' }}>No bids yet.</td></tr>
               ) : bids.slice(0, 15).map((o) => (
                 <tr key={o.id} style={{ borderBottom: '1px solid #e2e8f0' }}>

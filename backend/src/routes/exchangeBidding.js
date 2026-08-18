@@ -3,6 +3,12 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
+import {
+  mapIsetProduct,
+  parseBidIds,
+  planFromSchedule,
+  materialiseIsetBids,
+} from '../services/exchangeIsetToBids.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -24,7 +30,7 @@ function parseSchedule(raw) {
 
 function withDetails(row) {
   if (!row) return row;
-  return { ...row, schedule_details: parseSchedule(row.schedule_json) };
+  return { ...row, schedule_details: parseSchedule(row.schedule_json), bid_ids: parseBidIds(row.bid_ids) };
 }
 
 router.get('/meta', requireRole(...ROLE_GROUPS.TRADING_ALL), (_req, res) => {
@@ -51,6 +57,7 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   const b = req.body || {};
   const errors = [];
 
+  if (!b.client_id) errors.push('client_id is required');
   if (!String(b.client_name || b.client_id || '').trim()) errors.push('client_name is required');
   if (!String(b.client_ref_no || '').trim()) errors.push('client_ref_no is required');
   if (!EXCHANGES.includes(b.exchange)) errors.push(`exchange must be one of: ${EXCHANGES.join(', ')}`);
@@ -80,6 +87,9 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     }
   }
 
+  const product = mapIsetProduct(b.product_type);
+  if (b.product_type && !product) errors.push(`product_type '${b.product_type}' cannot be filed as a DAM-desk bid`);
+
   let clientName = String(b.client_name || '').trim();
   if (b.client_id) {
     const client = db.prepare('SELECT name, status FROM trading_clients WHERE id = ?').get(b.client_id);
@@ -97,43 +107,69 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     errors.push('contract is required');
   }
 
+  const plan = schedule.length ? planFromSchedule(schedule, { priceUnit: 'mwh' }) : { byDate: new Map(), errors: [] };
+  errors.push(...plan.errors);
+
   if (errors.length) return res.status(400).json({ error: errors[0], errors });
 
   const id = newId('EXB');
-  db.prepare(`
-    INSERT INTO exchange_biddings (
-      id, client_id, client_name, client_ref_no, exchange, segment, portfolio_id,
-      contract_id, contract_label, product_type, bidding_type,
-      supply_start_date, supply_end_date, schedule_json, csv_filename, status, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SUBMITTED', ?)
-  `).run(
-    id,
-    b.client_id || null,
-    clientName,
-    String(b.client_ref_no).trim(),
-    b.exchange,
-    b.segment,
-    String(b.portfolio_id).trim(),
-    b.contract_id || null,
-    contractLabel || String(b.contract_label || '').trim(),
-    b.product_type,
-    b.bidding_type,
-    b.supply_start_date,
-    b.supply_end_date,
-    JSON.stringify(schedule),
-    b.csv_filename || null,
-    req.user?.id || null,
-  );
+  const actorId = req.user?.id || null;
 
-  secureLogAudit(req, {
-    action: 'CREATE_EXCHANGE_BIDDING',
-    module: 'TRADING',
-    entityType: 'exchange_bidding',
-    entityId: id,
-    details: { exchange: b.exchange, product_type: b.product_type, bidding_type: b.bidding_type, rows: schedule.length },
-  });
+  try {
+    const bidIds = db.transaction(() => {
+      db.prepare(`
+        INSERT INTO exchange_biddings (
+          id, client_id, client_name, client_ref_no, exchange, segment, portfolio_id,
+          contract_id, contract_label, product_type, bidding_type,
+          supply_start_date, supply_end_date, schedule_json, csv_filename, status, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SUBMITTED', ?)
+      `).run(
+        id,
+        b.client_id || null,
+        clientName,
+        String(b.client_ref_no).trim(),
+        b.exchange,
+        b.segment,
+        String(b.portfolio_id).trim(),
+        b.contract_id || null,
+        contractLabel || String(b.contract_label || '').trim(),
+        b.product_type,
+        b.bidding_type,
+        b.supply_start_date,
+        b.supply_end_date,
+        JSON.stringify(schedule),
+        b.csv_filename || null,
+        actorId,
+      );
 
-  res.status(201).json(withDetails(db.prepare('SELECT * FROM exchange_biddings WHERE id = ?').get(id)));
+      const created = materialiseIsetBids({
+        clientId: b.client_id,
+        exchange: b.exchange,
+        product,
+        contractId: b.contract_id || null,
+        actorId,
+        sourceKind: 'ISET',
+        sourceId: id,
+        byDate: plan.byDate,
+        bidDate: b.supply_start_date,
+        securityOverride: b.security_override_reason,
+      });
+      db.prepare('UPDATE exchange_biddings SET bid_ids = ? WHERE id = ?').run(JSON.stringify(created), id);
+      return created;
+    })();
+
+    secureLogAudit(req, {
+      action: 'CREATE_EXCHANGE_BIDDING',
+      module: 'TRADING',
+      entityType: 'exchange_bidding',
+      entityId: id,
+      details: { exchange: b.exchange, product_type: b.product_type, bidding_type: b.bidding_type, rows: schedule.length, bid_ids: bidIds },
+    });
+
+    res.status(201).json(withDetails(db.prepare('SELECT * FROM exchange_biddings WHERE id = ?').get(id)));
+  } catch (err) {
+    return res.status(400).json({ error: err.message || 'Failed to submit exchange bidding.' });
+  }
 });
 
 export default router;

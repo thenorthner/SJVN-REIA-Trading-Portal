@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { api } from '../../api/client.js';
 import { Card } from '../../components/ui.jsx';
@@ -27,6 +27,7 @@ const COLUMNS = [
   { key: 'quantity_mwh', label: 'Quantity (MWh)' },
   { key: 'bid_reference', label: 'Bid Reference' },
   { key: 'block_id', label: 'Block Id (For Block Bid)' },
+  { key: 'dam_bid_id', label: 'DAM Bid' },
   { key: 'status', label: 'Status' },
   { key: 'status_message', label: 'Status Message' },
   { key: 'created_at', label: 'Created At' },
@@ -65,9 +66,10 @@ function exportRows(rows) {
 }
 
 export default function ExchangeBiddingDetailReport() {
+  const [searchParams] = useSearchParams();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(searchParams.get('q') || searchParams.get('portfolio') || '');
 
   useEffect(() => {
     setLoading(true);
@@ -183,6 +185,13 @@ export default function ExchangeBiddingDetailReport() {
                         let v = r[c.key];
                         if (c.key === 'delivery_date') v = fmtDelivery(v);
                         if (c.key === 'buy_sell') v = v === 'Buy' ? 'Buy' : v === 'Sell' ? 'Sell' : (v || '');
+                        if (c.key === 'dam_bid_id' && v) {
+                          return (
+                            <td key={c.key} style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                              <Link to="/trading/dam">{v}</Link>
+                            </td>
+                          );
+                        }
                         return <td key={c.key} style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{v ?? ''}</td>;
                       })}
                     </tr>

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { Card, Field } from '../../components/ui.jsx';
 import ExchangeBiddingSamplesModal from './ExchangeBiddingSamplesModal.jsx';
@@ -368,6 +368,18 @@ export default function ExchangeBidding() {
           {success && (
             <div style={{ color: '#166534', marginBottom: 12, background: '#dcfce7', padding: 10, borderRadius: 4, fontSize: 13 }}>
               Bidding <strong>{success.id}</strong> submitted for {success.client_name} ({success.product_type} · {success.bidding_type}).
+              {success.bid_ids?.length > 0 && (
+                <>
+                  {' '}Created DAM bid{success.bid_ids.length > 1 ? 's' : ''}{' '}
+                  {success.bid_ids.map((id, i) => (
+                    <span key={id}><strong>{id}</strong>{i < success.bid_ids.length - 1 ? ', ' : ''}</span>
+                  ))}
+                  {' '}as DRAFT — approve on{' '}
+                  <Link to={success.product_type === 'RTM' ? '/trading/rtm' : success.product_type === 'GDAM' ? '/trading/gdam' : '/trading/dam'}>
+                    Manage Bids
+                  </Link>.
+                </>
+              )}
             </div>
           )}
 

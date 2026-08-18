@@ -573,7 +573,7 @@ export const api = {
   },
   exchangeUpdateCharges: {
     lookup: (application_id) => g('/exchange-update-charges/lookup', { application_id }),
-    load: (source) => g('/exchange-update-charges/load', { source }),
+    load: (source, application_id) => g('/exchange-update-charges/load', { source, application_id }),
     save: (body) => p('/exchange-update-charges', body),
   },
   escertOrders: {
@@ -656,7 +656,8 @@ export const api = {
     get: (id) => g(`/view-bill-invoices/${id}`),
     update: (id, body) => put(`/view-bill-invoices/${id}`, body),
     recordPayment: (id, body) => p(`/view-bill-invoices/${id}/payment`, body),
-    cancel: (id) => p(`/view-bill-invoices/${id}/cancel`),
+    cancel: (id, body) => p(`/view-bill-invoices/${id}/cancel`, body),
+    downloadPdf: (id) => client.get(`/view-bill-invoices/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data),
   },
   csvUploads: {
     meta: () => g('/csv-uploads/meta'),
@@ -761,6 +762,7 @@ export const api = {
       return p(`/notifications/${id}/read`);
     },
     markAllRead: () => p('/notifications/read-all'),
+    testEmail: () => p('/notifications/test-email'),
   },
   alerts: {
     board: () => g('/alerts/board'),
@@ -779,6 +781,7 @@ export const api = {
   tradingOps: {
     dor: (params) => g('/trading/dor', params),
     schedules: (params) => g('/trading/schedules', params),
+    obligations: (params) => g('/trading/schedules/obligations', params),
     archive: (params) => g('/trading/archive', params),
     bankTransactions: (params) => g('/trading/bank-transactions', params),
   },

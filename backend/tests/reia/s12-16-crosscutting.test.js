@@ -21,6 +21,14 @@ describe('S12 Notifications and alerts', () => {
     expect(cols.some(c => /error|failure|attempt/i.test(c)), 'failed deliveries record no reason').toBe(true);
   });
 
+  it('sends a test email to the signed-in user (outbox when SMTP is off)', async () => {
+    const r = await request(app).post('/api/notifications/test-email').set(auth(reia));
+    expect(r.status).toBe(200);
+    expect(r.body.ok).toBe(true);
+    expect(r.body.mode).toBe('FILE_OUTBOX');
+    expect(r.body.to?.[0]).toMatch(/@/);
+  });
+
   it('notifies on the key REIA events', () => {
     const src = readFileSync('src/routes/invoices.js', 'utf-8') + readFileSync('src/routes/disputes.js', 'utf-8')
       + readFileSync('src/routes/paymentSecurity.js', 'utf-8');

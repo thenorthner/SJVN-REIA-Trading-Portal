@@ -11,11 +11,24 @@ const SEED_RATES = [
   { rate_category: 'ISTS', charge_name: 'ISTS', region: 'ALL', rate_value: 379.0, unit: 'Rs/MWh', note: 'CTUIL inter-state tariff (baseline; revised periodically)' },
   { rate_category: 'STU', charge_name: 'West Bengal STU', region: 'WEST_BENGAL', rate_value: 238.4, unit: 'Rs/MWh' },
   { rate_category: 'STU', charge_name: 'Delhi STU', region: 'DELHI', rate_value: 382.54, unit: 'Rs/MWh' },
+  // Remaining desk states. Names must match supplier_sldc / procurer_sldc /
+  // concerned_sldc exactly (`Himachal Pradesh`, not HP) so OA billing picks them
+  // up. Baselines — confirm against the current SERC order before a live bill.
+  { rate_category: 'STU', charge_name: 'Haryana STU', region: 'HARYANA', rate_value: 268.5, unit: 'Rs/MWh' },
+  { rate_category: 'STU', charge_name: 'Punjab STU', region: 'PUNJAB', rate_value: 291.2, unit: 'Rs/MWh' },
+  { rate_category: 'STU', charge_name: 'Gujarat STU', region: 'GUJARAT', rate_value: 214.8, unit: 'Rs/MWh' },
+  { rate_category: 'STU', charge_name: 'Sikkim STU', region: 'SIKKIM', rate_value: 248.6, unit: 'Rs/MWh' },
+  { rate_category: 'STU', charge_name: 'Himachal Pradesh STU', region: 'HIMACHAL_PRADESH', rate_value: 327.4, unit: 'Rs/MWh' },
   { rate_category: 'RLDC', charge_name: 'ERLDC', region: 'EAST', rate_value: 1000, unit: 'Rs/day' },
   { rate_category: 'RLDC', charge_name: 'NRLDC', region: 'NORTH', rate_value: 1000, unit: 'Rs/day' },
   { rate_category: 'RLDC', charge_name: 'RLDC Fee', region: 'ALL', rate_value: 1000, unit: 'Rs/day' },
   { rate_category: 'SLDC', charge_name: 'West Bengal SLDC', region: 'WEST_BENGAL', rate_value: 1000, unit: 'Rs/day' },
   { rate_category: 'SLDC', charge_name: 'Delhi SLDC', region: 'DELHI', rate_value: 1000, unit: 'Rs/day' },
+  { rate_category: 'SLDC', charge_name: 'Haryana SLDC', region: 'HARYANA', rate_value: 1000, unit: 'Rs/day' },
+  { rate_category: 'SLDC', charge_name: 'Punjab SLDC', region: 'PUNJAB', rate_value: 1000, unit: 'Rs/day' },
+  { rate_category: 'SLDC', charge_name: 'Gujarat SLDC', region: 'GUJARAT', rate_value: 1000, unit: 'Rs/day' },
+  { rate_category: 'SLDC', charge_name: 'Sikkim SLDC', region: 'SIKKIM', rate_value: 1000, unit: 'Rs/day' },
+  { rate_category: 'SLDC', charge_name: 'Himachal Pradesh SLDC', region: 'HIMACHAL_PRADESH', rate_value: 1000, unit: 'Rs/day' },
   { rate_category: 'NOAR_FEE', charge_name: 'NOAR Application Fee', region: 'ALL', rate_value: 5000, unit: 'Rs/application' },
   // Charged once per open-access application by the drawal-state SLDC for its
   // consent; billed on its own invoice in the ISET register.

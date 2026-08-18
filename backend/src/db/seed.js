@@ -11,6 +11,9 @@ import {
 } from '../paymentSecurityEngine.js';
 import { ensureMasterDefaults } from '../mastersService.js';
 import { refreshLot } from '../services/recLedger.js';
+import { seedExchangeDesk } from './seedExchangeDesk.js';
+import { seedBilateralDesk } from './seedBilateralDesk.js';
+import { seedRecDesk } from './seedRecDesk.js';
 
 // ── Market Rates & Analytics (IEX / PXIL / HPX) ──
 // Additive and idempotent: row ids are derived from exchange+product+date and
@@ -445,6 +448,27 @@ try {
   seedRecLedger();
 } catch (e) {
   console.warn('REC ledger seed skipped:', e.message);
+}
+
+// ── Exchange desk (ISET Power Trading → Exchange) ──
+// Additive: fixed ids + INSERT OR IGNORE, so an existing platform.db picks up
+// contracts / bids / invoices without a destructive reseed.
+try {
+  seedExchangeDesk();
+} catch (e) {
+  console.warn('Exchange desk seed skipped:', e.message);
+}
+
+try {
+  seedBilateralDesk();
+} catch (e) {
+  console.warn('Bilateral desk seed skipped:', e.message);
+}
+
+try {
+  seedRecDesk();
+} catch (e) {
+  console.warn('REC desk seed skipped:', e.message);
 }
 
 const already = db.prepare('SELECT COUNT(*) c FROM users').get().c;

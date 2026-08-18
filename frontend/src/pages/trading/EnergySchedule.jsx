@@ -1,280 +1,227 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { PortfolioSelect, usePortfolios } from '../../context/PortfolioContext.jsx';
 import { api } from '../../api/client.js';
-import { SampleDataNotice, PageHeader, Card, Badge, Table, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Badge, Table, fmtNumber } from '../../components/ui.jsx';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
-export default function EnergySchedule() {
-  const [blocks, setBlocks] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState('BLOCK'); // 'BLOCK' (96) or 'HOURLY' (24)
-  const [peripheryView, setPeripheryView] = useState('BOTH'); // 'BOTH', 'BUSBAR', 'GRID'
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const { activeId: portfolio, active: activePortfolio } = usePortfolios();
-  const [lossesConfig, setLossesConfig] = useState(null);
+function isoDaysAgo(n) {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
 
-  const fetchSchedule = async () => {
-    setLoading(true);
-    try {
-      const [schedule, losses] = await Promise.all([
-        api.tradingOps.schedules({ date, portfolio }),
-        api.losses.get(),
-      ]);
-      setBlocks(schedule.blocks);
-      setLossesConfig(losses);
-    } catch (err) {
-      console.error('Failed to fetch schedules or losses', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+function downloadCsv(filename, rows) {
+  const header = Object.keys(rows[0] || { block: '', time: '', bid_mw: '', cleared_mw: '', mwh: '', price: '', value: '' });
+  const lines = [
+    header.join(','),
+    ...rows.map((r) => header.map((h) => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(',')),
+  ];
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function statusBadge(status) {
+  if (status === 'CLEARED') return <Badge type="success">Cleared</Badge>;
+  if (status === 'PARTIALLY_CLEARED') return <Badge type="warning">Partial</Badge>;
+  if (status === 'SUBMITTED' || status === 'PENDING') return <Badge type="neutral">Filed</Badge>;
+  if (status === 'EMPTY') return <Badge type="neutral" style={{ opacity: 0.45 }}>—</Badge>;
+  return <Badge type="neutral">{status}</Badge>;
+}
+
+export default function EnergySchedule({ product = 'DAM' }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [viewMode, setViewMode] = useState('BLOCK');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [recent, setRecent] = useState([]);
+  const { activeId: clientId, active: activeClient } = usePortfolios();
 
   useEffect(() => {
-    fetchSchedule();
-  }, [date, portfolio]);
+    api.tradingOps.obligations({
+      product,
+      from: isoDaysAgo(-21),
+      to: isoDaysAgo(1),
+      client_id: clientId || undefined,
+    }).then((r) => setRecent((r.rows || []).map((row) => row.delivery_date)
+      .filter((d, i, a) => a.indexOf(d) === i)))
+      .catch(() => setRecent([]));
+  }, [product, clientId]);
 
-  const aggregatedData = React.useMemo(() => {
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    api.tradingOps.schedules({ date, product, client_id: clientId || undefined })
+      .then((row) => { if (!cancelled) setData(row); })
+      .catch((err) => {
+        if (cancelled) return;
+        setData(null);
+        setError(err.response?.data?.error || 'Could not load the energy schedule');
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [date, product, clientId]);
+
+  const blocks = data?.blocks || [];
+  const hasVolume = blocks.some((b) => b.bid_mw > 0 || b.cleared_mw > 0);
+
+  const aggregatedData = useMemo(() => {
     if (viewMode === 'BLOCK') return blocks;
-    
-    // Aggregate to Hourly (24 rows)
     const hourly = [];
     for (let h = 0; h < 24; h++) {
       const chunk = blocks.slice(h * 4, h * 4 + 4);
-      if (chunk.length === 0) continue;
-      
-      const plant_mw_avg = chunk.reduce((sum, b) => sum + b.plant_mw, 0) / 4;
-      const regional_mw_avg = chunk.reduce((sum, b) => sum + b.regional_mw, 0) / 4;
-      const jmr_mw_avg = chunk.reduce((sum, b) => sum + b.actual_jmr_mw, 0) / 4;
-      
+      if (!chunk.length) continue;
+      const bid = chunk.reduce((s, b) => s + b.bid_mw, 0) / chunk.length;
+      const cleared = chunk.reduce((s, b) => s + b.cleared_mw, 0) / chunk.length;
+      const mwh = chunk.reduce((s, b) => s + b.scheduled_mwh, 0);
+      const value = chunk.reduce((s, b) => s + b.trade_value, 0);
+      const pxMw = chunk.reduce((s, b) => s + (b.cleared_mw > 0 ? b.cleared_mw : 0), 0);
+      const pxVal = chunk.reduce((s, b) => s + (b.cleared_mw > 0 ? b.cleared_mw * (b.cleared_price || 0) : 0), 0);
       hourly.push({
-        block_no: `H${h+1}`,
-        time_label: `${h.toString().padStart(2, '0')}:00 - ${(h+1).toString().padStart(2, '0')}:00`,
-        plant_mw: plant_mw_avg,
-        regional_mw: regional_mw_avg,
-        buyer_mw: 0.0,
-        scheduled_mwh: chunk.reduce((sum, b) => sum + b.scheduled_mwh, 0),
-        actual_jmr_mw: jmr_mw_avg,
-        deviation_mw: chunk.reduce((sum, b) => sum + b.deviation_mw, 0) / 4
+        block_no: `H${h + 1}`,
+        time_label: `${String(h).padStart(2, '0')}:00 - ${String(h + 1).padStart(2, '0')}:00`,
+        bid_mw: bid,
+        cleared_mw: cleared,
+        scheduled_mwh: mwh,
+        cleared_price: pxMw > 0 ? pxVal / pxMw : null,
+        trade_value: value,
+        status: chunk.some((b) => b.status === 'CLEARED') ? 'CLEARED' : chunk[0].status,
       });
     }
     return hourly;
   }, [blocks, viewMode]);
 
-  const renderMwBadge = (mw, isDrawal = false) => {
-    if (mw === 0 || mw === '0.00' || !mw) {
-      return <Badge type="neutral" style={{ opacity: 0.5 }}>0.00</Badge>;
-    }
-    if (mw < 0) return <Badge type="success"> {Math.abs(mw).toFixed(2)} MW</Badge>;
-    if (mw > 0 && isDrawal) return <Badge type="danger"> {mw.toFixed(2)} MW</Badge>;
-    if (mw > 0) return <Badge type="danger"> {mw.toFixed(2)} MW</Badge>;
-    return '0.00';
-  };
-
-  const renderDeviation = (dev) => {
-    if (dev === 0) return <Badge type="neutral" style={{ opacity: 0.5 }}>0.00</Badge>;
-    const absDev = Math.abs(dev);
-    // If deviation is greater than 1MW for this example
-    if (absDev > 1) {
-      return <Badge type="danger"> {dev.toFixed(2)} (Alert)</Badge>;
-    }
-    return <Badge type="neutral">{dev.toFixed(2)}</Badge>;
-  };
-
   const columns = [
     { key: 'block_no', label: viewMode === 'BLOCK' ? 'Block (1-96)' : 'Hour (1-24)' },
     { key: 'time_label', label: 'Time Window' },
-    // GRID PERIPHERY
-    ...(peripheryView === 'BOTH' || peripheryView === 'GRID' ? [
-      { key: 'regional_mw', label: 'Injection at Regional periphery', render: r => {
-          let lossPercent = 0;
-          if (r.plant_mw !== 0) {
-              lossPercent = ((Math.abs(r.plant_mw) - Math.abs(r.regional_mw)) / Math.abs(r.plant_mw)) * 100;
-          }
-          return (
-            <span title={lossPercent > 0 ? `${lossPercent.toFixed(2)}% ISTS Loss Applied` : ''}>
-              {renderMwBadge(r.regional_mw)}
-            </span>
-          );
-      } },
-      { key: 'regional_drawal', label: 'Drawal at Regional periphery', render: () => renderMwBadge(0, true) }
-    ] : []),
-    // BUSBAR PERIPHERY
-    ...(peripheryView === 'BOTH' || peripheryView === 'BUSBAR' ? [
-      { key: 'plant_mw', label: 'Injection at Interface point', render: r => renderMwBadge(r.plant_mw) },
-      { key: 'plant_drawal', label: 'Drawal at Interface point', render: () => renderMwBadge(0, true) }
-    ] : []),
-    { key: 'scheduled_mwh', label: 'Energy (MWh)', render: r => <span style={{fontWeight:'bold'}}>{fmtNumber(r.scheduled_mwh)}</span> },
-    { key: 'actual_jmr_mw', label: 'Actual Meter (JMR)', render: r => renderMwBadge(r.actual_jmr_mw) },
-    { key: 'deviation_mw', label: 'Deviation (MW)', render: r => renderDeviation(r.deviation_mw) }
+    { key: 'bid_mw', label: 'Bid (MW)', render: (r) => fmtNumber(r.bid_mw, 2) },
+    { key: 'cleared_mw', label: 'Cleared (MW)', render: (r) => <strong>{fmtNumber(r.cleared_mw, 2)}</strong> },
+    { key: 'scheduled_mwh', label: 'Energy (MWh)', render: (r) => fmtNumber(r.scheduled_mwh, 3) },
+    { key: 'cleared_price', label: 'MCP (₹/kWh)', render: (r) => (r.cleared_price == null ? '—' : fmtNumber(r.cleared_price, 2)) },
+    { key: 'trade_value', label: 'Value (₹)', render: (r) => (r.trade_value ? fmtNumber(r.trade_value, 2) : '—') },
+    { key: 'status', label: 'Block', render: (r) => statusBadge(r.status) },
   ];
+
+  function exportCsv() {
+    downloadCsv(`${product}-schedule-${date}.csv`, aggregatedData.map((r) => ({
+      block: r.block_no,
+      time: r.time_label,
+      bid_mw: r.bid_mw,
+      cleared_mw: r.cleared_mw,
+      mwh: r.scheduled_mwh,
+      price: r.cleared_price ?? '',
+      value: r.trade_value,
+      status: r.status,
+    })));
+  }
 
   return (
     <div style={{ padding: 20, maxWidth: 1400, margin: '0 auto' }}>
-      <SampleDataNotice detail="Schedule blocks, meter (JMR) readings and deviations come from an API stub, not from WBES or the plant's meters." />
-
-      <PageHeader 
-        title="Energy Schedule & DSM Matrix" 
+      <PageHeader
+        title={`${product} Energy Schedule`}
         actions={
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-outline">Format-D (RLDC)</button>
-            <button className="btn btn-primary" style={{ background: '#28a745' }}>[ EXCEL v ] Export</button>
-            <button className="btn btn-primary" style={{ background: 'var(--sky)' }}>Sync to RLDC / SLDC Portal</button>
-          </div>
+          <button className="btn btn-outline" onClick={exportCsv} disabled={!hasVolume}>Export CSV</button>
         }
       />
 
       <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
-        <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedule-trading-date">Trading Date:</label>
-            <input id="energyschedule-trading-date" type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedule-trading-date">Delivery Date</label>
+            <input id="energyschedule-trading-date" type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedule-portfolio-id">Portfolio Id:</label>
-            <PortfolioSelect id="energyschedule-portfolio-id" scope="global" allLabel="-- Select portfolio --" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedule-portfolio-id">Client</label>
+            <PortfolioSelect id="energyschedule-portfolio-id" scope="global" allLabel="All clients" includeAll />
           </div>
-          <div style={{ marginLeft: 'auto', borderLeft: '1px solid #ccc', paddingLeft: 20 }}>
-            <span style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Aggregation Level:</span>
+          <div style={{ marginLeft: 'auto' }}>
+            <span style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Aggregation</span>
             <div role="group" aria-label="Aggregation Level" style={{ display: 'flex', gap: 5 }}>
-              <button 
-                className={`btn btn-sm ${viewMode === 'BLOCK' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setViewMode('BLOCK')}
-              >
-                15-Min Blocks (96)
-              </button>
-              <button 
-                className={`btn btn-sm ${viewMode === 'HOURLY' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setViewMode('HOURLY')}
-              >
-                Hourly (24)
-              </button>
-            </div>
-          </div>
-          <div style={{ marginLeft: 20, borderLeft: '1px solid #ccc', paddingLeft: 20 }}>
-            <span style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Periphery View:</span>
-            <div role="group" aria-label="Periphery View" style={{ display: 'flex', gap: 5 }}>
-              <button 
-                className={`btn btn-sm ${peripheryView === 'BOTH' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setPeripheryView('BOTH')}
-              >
-                Both Peripheries
-              </button>
-              <button 
-                className={`btn btn-sm ${peripheryView === 'BUSBAR' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setPeripheryView('BUSBAR')}
-              >
-                Plant Busbar (Ex-Bus)
-              </button>
-              <button 
-                className={`btn btn-sm ${peripheryView === 'GRID' ? 'btn-primary' : 'btn-outline'}`}
-                onClick={() => setPeripheryView('GRID')}
-              >
-                Grid Periphery (Ex-Grid)
-              </button>
+              <button type="button" className={`btn btn-sm ${viewMode === 'BLOCK' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setViewMode('BLOCK')}>15-min (96)</button>
+              <button type="button" className={`btn btn-sm ${viewMode === 'HOURLY' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setViewMode('HOURLY')}>Hourly (24)</button>
             </div>
           </div>
         </div>
       </Card>
 
       <Card>
-        <div style={{ marginBottom: 20, padding: 15, background: '#e9ecef', borderRadius: 4, display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ marginBottom: 16, padding: 15, background: '#e9ecef', borderRadius: 4, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <strong>Asset:</strong> {activePortfolio?.name || 'No portfolio selected'}<br/>
-            <strong>Schedule Date:</strong> {new Date(date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-')}
+            <strong>Client:</strong> {activeClient?.name || 'All clients'}<br />
+            <strong>Delivery:</strong> {date}
           </div>
-          <div>
-            <strong>Issued At:</strong> {new Date(new Date(date).getTime() - 86400000).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase().replace(/ /g, '-')} 12:44 PM<br/>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <Badge type="success">RLDC Acknowledged</Badge>
-              <Badge type="neutral">Email Sent to Operator</Badge>
-              <Badge type="neutral">CSV Exported</Badge>
+          <div style={{ textAlign: 'right' }}>
+            <div><strong>Cleared:</strong> {fmtNumber(data?.summary?.cleared_mwh || 0, 3)} MWh</div>
+            <div><strong>Value:</strong> ₹{fmtNumber(data?.summary?.cleared_value || 0, 2)}</div>
+            <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>
+              From {data?.summary?.bids || 0} filed bid{(data?.summary?.bids || 0) === 1 ? '' : 's'} — not WBES / JMR
             </div>
           </div>
         </div>
 
-        <div style={{ overflowX: 'auto', maxHeight: '70vh' }}>
-          {loading ? (
-            <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Loading Schedule Data...</div>
-          ) : (
-            <>
-              {/* 96-Block Visual Schedule Chart */}
-              {blocks.length > 0 && viewMode === 'BLOCK' && (
-                <div style={{ marginBottom: 20, height: 250, width: '100%' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={blocks} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="colorMw" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis 
-                        dataKey="block_no" 
-                        tickFormatter={(val) => {
-                          if (val === 1) return '00:00';
-                          if (val === 48) return '12:00';
-                          if (val === 96) return '24:00';
-                          return '';
-                        }}
-                      />
-                      <YAxis tickFormatter={(val) => `${val} MW`} />
-                      <Tooltip 
-                        labelFormatter={(label, payload) => {
-                          if (payload && payload.length > 0) {
-                            return `Block: ${label} | Time: ${payload[0].payload.time_label}`;
-                          }
-                          return `Block: ${label}`;
-                        }}
-                      />
-                      <Area type="stepAfter" dataKey="plant_mw" name="Plant Generation (MW)" stroke="#10b981" fillOpacity={1} fill="url(#colorMw)" />
-                      {peripheryView === 'BOTH' && (
-                        <Area type="stepAfter" dataKey="regional_mw" name="Regional Periphery (MW)" stroke="#3b82f6" fillOpacity={0} />
-                      )}
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+        {error && <div style={{ padding: 12, color: '#b91c1c', background: '#fef2f2', borderRadius: 4, marginBottom: 12 }}>{error}</div>}
 
-              <Table columns={columns} data={aggregatedData} />
-              
-              {/* Transmission Loss Waterfall */}
-              {lossesConfig && blocks.length > 0 && (
-                <div style={{ marginTop: 30, padding: 20, background: '#e9ecef', borderRadius: 8, border: '1px solid #ced4da' }}>
-                  <h3 style={{ marginTop: 0, marginBottom: 15, fontSize: 16 }}>Transmission Loss Waterfall (Daily Total)</h3>
-                  
-                  {(() => {
-                    const totalPlantMw = Math.abs(blocks.reduce((sum, b) => sum + b.plant_mw, 0) / 4); // Total MWh calculation approx
-                    // Get percentages from config
-                    const stateLossPct = lossesConfig.state.HP.injection;
-                    const corridorLossPct = lossesConfig.other;
-                    
-                    const stateLossMwh = (totalPlantMw * (stateLossPct / 100));
-                    const stuBoundaryMw = totalPlantMw - stateLossMwh;
-                    
-                    const corridorLossMwh = (stuBoundaryMw * (corridorLossPct / 100));
-                    const regionalDeliveryMw = stuBoundaryMw - corridorLossMwh;
-                    
-                    return (
-                      <div style={{ fontFamily: 'monospace', fontSize: 14, background: '#fff', padding: 20, borderRadius: 4, border: '1px dashed #6c757d' }}>
-                        <div style={{ fontWeight: 'bold' }}>[Plant Generation (Interface): {totalPlantMw.toFixed(4)} MWh]</div>
-                        <div style={{ paddingLeft: 20, color: '#c0392b', margin: '8px 0' }}>↓ (-{stateLossPct}% HP State Loss = -{stateLossMwh.toFixed(4)} MWh)</div>
-                        
-                        <div style={{ fontWeight: 'bold' }}>[STU Boundary: {stuBoundaryMw.toFixed(4)} MWh]</div>
-                        <div style={{ paddingLeft: 20, color: '#c0392b', margin: '8px 0' }}>↓ (-{corridorLossPct}% Corridor Loss = -{corridorLossMwh.toFixed(4)} MWh)</div>
-                        
-                        <div style={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: 10 }}>
-                           [Regional Delivery (ISTS): {regionalDeliveryMw.toFixed(4)} MWh] 
-                           <Badge type="success">CLEARED</Badge>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Loading schedule…</div>
+        ) : !hasVolume ? (
+          <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>
+            No {product} bids filed for this delivery date{activeClient ? ` (${activeClient.name})` : ''}.
+            {recent.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                Cleared days:{' '}
+                {recent.slice(0, 8).map((d) => (
+                  <button key={d} type="button" className="btn btn-sm btn-outline" style={{ margin: '0 4px' }} onClick={() => setDate(d)}>{d}</button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {viewMode === 'BLOCK' && (
+              <div style={{ marginBottom: 20, height: 250, width: '100%' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={blocks} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorCleared" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis
+                      dataKey="block_no"
+                      tickFormatter={(val) => {
+                        if (val === 1) return '00:00';
+                        if (val === 48) return '12:00';
+                        if (val === 96) return '24:00';
+                        return '';
+                      }}
+                    />
+                    <YAxis tickFormatter={(val) => `${val} MW`} />
+                    <Tooltip
+                      labelFormatter={(label, payload) => {
+                        if (payload && payload.length > 0) {
+                          return `Block ${label} · ${payload[0].payload.time_label}`;
+                        }
+                        return `Block ${label}`;
+                      }}
+                    />
+                    <Area type="stepAfter" dataKey="bid_mw" name="Bid (MW)" stroke="#94a3b8" fillOpacity={0} />
+                    <Area type="stepAfter" dataKey="cleared_mw" name="Cleared (MW)" stroke="#10b981" fillOpacity={1} fill="url(#colorCleared)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+            <Table columns={columns} data={aggregatedData} />
+          </>
+        )}
       </Card>
     </div>
   );

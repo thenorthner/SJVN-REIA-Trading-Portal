@@ -37,8 +37,9 @@ export default function RecOrderReport() {
         to: to || undefined,
       });
       setSummary(data.summary || {});
-      setTradeDates(data.trade_dates || []);
-      setSelected(data.trade_dates?.[0]?.trade_date || null);
+      const dates = Array.isArray(data.trade_dates) ? data.trade_dates : [];
+      setTradeDates(dates);
+      setSelected(dates[0]?.trade_date || null);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load REC order report.');
       setSummary({ total_rec_sold: 0, min_discovered_price: null, max_discovered_price: null, total_sale_value: 0 });
@@ -141,7 +142,7 @@ export default function RecOrderReport() {
                 </tr>
               </thead>
               <tbody>
-                {selectedBlock.orders.map((o) => (
+                {(selectedBlock.orders || []).map((o) => (
                   <tr key={o.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
                     <td style={{ padding: '8px 10px', fontFamily: 'monospace' }}>{o.id}</td>
                     <td style={{ padding: '8px 10px' }}>{o.buyer_name || '—'}</td>

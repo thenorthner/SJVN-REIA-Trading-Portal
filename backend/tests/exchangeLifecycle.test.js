@@ -275,6 +275,32 @@ describe('exchange invoice generation', () => {
     expect(list.body.map((i) => i.id)).toContain(r.body.id);
   });
 
+  it('filters View Bills by the exchange contract product', async () => {
+    const dam = await readyToBill();
+    const gdam = await readyToBill({ product: 'GDAM', loa_no: 'EXC/LOA/GDAM/001', is_renewable: 'Yes' });
+    const damInv = await request(app).post(`/api/exchange-contracts/${dam.id}/invoices`).set(auth(trader))
+      .send({ bill_type: 'EXCHANGE_ENERGY', invoice_date: '2026-09-08' });
+    const gdamInv = await request(app).post(`/api/exchange-contracts/${gdam.id}/invoices`).set(auth(trader))
+      .send({ bill_type: 'EXCHANGE_ENERGY', invoice_date: '2026-09-08' });
+    expect(damInv.status).toBe(201);
+    expect(gdamInv.status).toBe(201);
+
+    const damList = await request(app).get('/api/view-bill-invoices')
+      .query({ bill_type: 'EXCHANGE_ENERGY', product: 'DAM' }).set(auth(trader));
+    expect(damList.status).toBe(200);
+    expect(damList.body.map((i) => i.id)).toEqual([damInv.body.id]);
+
+    const gdamList = await request(app).get('/api/view-bill-invoices')
+      .query({ bill_type: 'EXCHANGE_ENERGY', product: 'GDAM' }).set(auth(trader));
+    expect(gdamList.body.map((i) => i.id)).toEqual([gdamInv.body.id]);
+  });
+
+  it('rejects an unknown product filter on View Bills', async () => {
+    const r = await request(app).get('/api/view-bill-invoices')
+      .query({ product: 'NOT_A_MARKET' }).set(auth(trader));
+    expect(r.status).toBe(400);
+  });
+
   it('numbers the open-access and margin bills under their own registers', async () => {
     const c = await readyToBill();
     const oa = await request(app).post(`/api/exchange-contracts/${c.id}/invoices`).set(auth(trader))

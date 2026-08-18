@@ -1,328 +1,368 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { PortfolioSelect } from '../../context/PortfolioContext.jsx';
-import { SampleDataNotice, PageHeader, Card, Badge, fmtNumber } from '../../components/ui.jsx';
+import { api } from '../../api/client.js';
+import { PageHeader, Card, Badge, fmtNumber } from '../../components/ui.jsx';
 import TAMObligationDetailsModal from './TAMObligationDetailsModal.jsx';
 
-// Mock Data Generator for TAM with Hierarchical (Weekly) support
-function generateMockTamData() {
-  const records = [];
-  const exchanges = ['IEX', 'PXIL', 'HPX'];
-  let totalTds = 0;
+function parseMinutes(hhmm) {
+  const s = String(hhmm || '').trim();
+  if (s === '24:00' || s === '24:00:00') return 24 * 60;
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h === 24 && min === 0) return 24 * 60;
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+}
 
-  for (let i = 0; i < 5; i++) {
-    const isWeekly = i % 2 !== 0; 
-    const exchange = exchanges[i % exchanges.length];
-    const acceptanceNo = isWeekly ? `GNA250927-${i}` : `SR/2025/20064/C/R/${i}`;
-    const contractType = isWeekly ? 'Weekly' : 'Day Ahead';
-
-    if (isWeekly) {
-      // Weekly Contract (Multiple Days)
-      const numDays = 16;
-      const dailyMUs = 0.140; // 140 MWh
-      const ratePerKwh = 5.0; // ₹5.0 per kWh
-      
-      const children = [];
-      let weeklyGross = 0;
-      let weeklyMargin = 0;
-      let weeklyIgst = 0;
-      let weeklyGrand = 0;
-      let weeklyTds = 0;
-      let weeklyDed = 0;
-      let weeklyNet = 0;
-      
-      for (let d = 3; d <= 18; d++) {
-        const dateStr = `${String(d).padStart(2, '0')}-Oct-2025`;
-        
-        const grossValue = (dailyMUs * 1000000) * ratePerKwh; 
-        const margin = (dailyMUs * 1000000) * 0.02;
-        const igst = margin * 0.18;
-        const grandTotal = grossValue + margin + igst;
-        const tds = grandTotal * 0.001;
-        totalTds += tds;
-        const deduction = 0;
-        const netAmount = grandTotal - tds - deduction;
-
-        weeklyGross += grossValue;
-        weeklyMargin += margin;
-        weeklyIgst += igst;
-        weeklyGrand += grandTotal;
-        weeklyTds += tds;
-        weeklyDed += deduction;
-        weeklyNet += netAmount;
-
-        children.push({
-          id: `child-${i}-${d}`,
-          exchange,
-          acceptanceNo,
-          contractType,
-          deliveryDate: dateStr,
-          tradeDate: '27-Sep-2025',
-          energyMUs: dailyMUs,
-          grossValue, margin, igst, grandTotal, tds, deduction, netAmount
-        });
-      }
-
-      records.push({
-        id: `parent-${i}`,
-        isParent: true,
-        isWeekly: true,
-        exchange,
-        acceptanceNo,
-        contractType,
-        deliveryDate: '03-Oct to 18-Oct',
-        tradeDate: '27-Sep-2025',
-        energyMUs: dailyMUs * numDays,
-        grossValue: weeklyGross,
-        margin: weeklyMargin,
-        igst: weeklyIgst,
-        grandTotal: weeklyGrand,
-        tds: weeklyTds,
-        deduction: weeklyDed,
-        netAmount: weeklyNet,
-        children
-      });
-
-    } else {
-      // Day Ahead Contract (Single Day)
-      const energyMUs = 0.819; // 819 MWh
-      const ratePerKwh = 4.8;
-      
-      const grossValue = (energyMUs * 1000000) * ratePerKwh; 
-      const margin = (energyMUs * 1000000) * 0.02;
-      const igst = margin * 0.18;
-      const grandTotal = grossValue + margin + igst;
-      const tds = grandTotal * 0.001;
-      totalTds += tds;
-      const deduction = Math.random() * 5000;
-      const netAmount = grandTotal - tds - deduction;
-
-      records.push({
-        id: `parent-${i}`,
-        isParent: false,
-        isWeekly: false,
-        exchange,
-        acceptanceNo,
-        contractType,
-        deliveryDate: '23-Aug-2025',
-        tradeDate: '22-Aug-2025',
-        energyMUs,
-        grossValue, margin, igst, grandTotal, tds, deduction, netAmount,
-        children: []
-      });
+/** Hours covered by a `HH:MM-HH:MM` label. TAM often files 00:00-24:00. */
+export function hoursFromTimeBlock(label) {
+  const raw = String(label || '');
+  const dash = raw.indexOf('-');
+  if (dash > 0) {
+    const start = parseMinutes(raw.slice(0, dash));
+    let end = parseMinutes(raw.slice(dash + 1));
+    if (start != null && end != null) {
+      if (end === 0 && start > 0) end = 24 * 60;
+      if (end === start) end += 15;
+      if (end < start) end += 24 * 60;
+      const h = (end - start) / 60;
+      if (h > 0 && h <= 24) return h;
     }
   }
-  return { records, totalTds };
+  return 0.25;
+}
+
+export function summariseBid(bid) {
+  let bidMwh = 0;
+  let clearedMwh = 0;
+  let value = 0;
+  let pxMw = 0;
+  let pxVal = 0;
+  for (const blk of bid.blocks || []) {
+    const h = hoursFromTimeBlock(blk.time_block);
+    bidMwh += Number(blk.quantum_mw || 0) * h;
+    const cmw = Number(blk.cleared_quantum_mw || 0);
+    clearedMwh += cmw * h;
+    const price = blk.cleared_price != null ? Number(blk.cleared_price) : Number(blk.price_per_unit || 0);
+    if (cmw > 0) {
+      pxMw += cmw;
+      pxVal += cmw * price;
+      value += cmw * h * 1000 * price;
+    }
+  }
+  return {
+    bidMwh,
+    clearedMwh,
+    value: Math.round(value * 100) / 100,
+    avgPrice: pxMw > 0 ? pxVal / pxMw : null,
+  };
+}
+
+function wrapBid(bid) {
+  const s = summariseBid(bid);
+  return {
+    id: bid.id,
+    isWeekly: false,
+    exchange: bid.exchange,
+    client_name: bid.client_name,
+    contract_id: bid.contract_id,
+    acceptanceNo: bid.exchange_receipt_ref || bid.id,
+    contractType: 'Daily',
+    deliveryDate: bid.delivery_date,
+    tradeDate: bid.bid_date,
+    status: bid.status,
+    energyMUs: s.clearedMwh / 1000,
+    netAmount: s.value,
+    avgPrice: s.avgPrice,
+    bid,
+    children: [],
+  };
+}
+
+function groupByContract(bids) {
+  const byContract = new Map();
+  const singles = [];
+  for (const bid of bids) {
+    if (bid.contract_id) {
+      if (!byContract.has(bid.contract_id)) byContract.set(bid.contract_id, []);
+      byContract.get(bid.contract_id).push(bid);
+    } else {
+      singles.push(wrapBid(bid));
+    }
+  }
+  const rows = [];
+  for (const [cid, list] of byContract) {
+    list.sort((a, b) => String(a.delivery_date).localeCompare(String(b.delivery_date)));
+    if (list.length === 1) {
+      rows.push(wrapBid(list[0]));
+      continue;
+    }
+    const children = list.map(wrapBid);
+    const energyMUs = children.reduce((a, c) => a + c.energyMUs, 0);
+    const netAmount = children.reduce((a, c) => a + c.netAmount, 0);
+    const statuses = [...new Set(children.map((c) => c.status))];
+    rows.push({
+      id: cid,
+      isWeekly: true,
+      exchange: list[0].exchange,
+      client_name: list[0].client_name,
+      contract_id: cid,
+      acceptanceNo: cid,
+      contractType: 'Weekly',
+      deliveryDate: `${list[0].delivery_date} → ${list[list.length - 1].delivery_date}`,
+      tradeDate: list[0].bid_date,
+      status: statuses.length === 1 ? statuses[0] : 'MIXED',
+      energyMUs,
+      netAmount,
+      avgPrice: energyMUs > 0 ? (netAmount / (energyMUs * 1000 * 1000)) : null,
+      bid: null,
+      children,
+    });
+  }
+  return [...rows, ...singles].sort((a, b) => String(b.deliveryDate).localeCompare(String(a.deliveryDate)));
+}
+
+function statusBadge(status) {
+  if (status === 'CLEARED') return <Badge type="success">Cleared</Badge>;
+  if (status === 'PARTIALLY_CLEARED') return <Badge type="warning">Partial</Badge>;
+  if (status === 'SUBMITTED') return <Badge type="neutral">Submitted</Badge>;
+  if (status === 'MIXED') return <Badge type="neutral">Mixed</Badge>;
+  return <Badge type="neutral">{status}</Badge>;
+}
+
+function downloadCsv(filename, rows) {
+  const header = Object.keys(rows[0] || { client: '', delivery: '', exchange: '', mwh: '', value: '' });
+  const lines = [
+    header.join(','),
+    ...rows.map((r) => header.map((h) => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(',')),
+  ];
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function TAMManagement({ marketType = 'TAM' }) {
-  const [exchange, setExchange] = useState('ALL');
-  const [unitMode, setUnitMode] = useState('MU'); // 'MU' or 'MWH'
-  const [selectedRows, setSelectedRows] = useState([]);
+  const product = marketType === 'GTAM' ? 'GTAM' : 'TAM';
+  const [exchange, setExchange] = useState('');
+  const [clientId, setClientId] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [unitMode, setUnitMode] = useState('MWH');
   const [expandedRows, setExpandedRows] = useState([]);
   const [selectedTamRecord, setSelectedTamRecord] = useState(null);
+  const [bids, setBids] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const mockData = useMemo(() => generateMockTamData(), []);
-  const filteredRecords = mockData.records.filter(r => exchange === 'ALL' || r.exchange === exchange);
+  function load() {
+    setLoading(true);
+    setError('');
+    api.bids.list({
+      product,
+      exchange: exchange || undefined,
+      client_id: clientId || undefined,
+      from: from || undefined,
+      to: to || undefined,
+    })
+      .then(setBids)
+      .catch((err) => {
+        setBids([]);
+        setError(err.response?.data?.error || 'Could not load bids');
+      })
+      .finally(() => setLoading(false));
+  }
 
-  const handleSelectRow = (id, childrenIds = []) => {
-    setSelectedRows(prev => {
-      const isSelected = prev.includes(id);
-      let newSelection = [...prev];
-      if (isSelected) {
-        newSelection = newSelection.filter(x => x !== id && !childrenIds.includes(x));
-      } else {
-        newSelection.push(id);
-        childrenIds.forEach(cid => {
-          if (!newSelection.includes(cid)) newSelection.push(cid);
-        });
-      }
-      return newSelection;
-    });
-  };
+  useEffect(() => { load(); }, [product]);
+
+  const records = useMemo(() => groupByContract(bids), [bids]);
+
+  const totals = useMemo(() => {
+    const mwh = records.reduce((a, r) => a + r.energyMUs * 1000, 0);
+    const value = records.reduce((a, r) => a + r.netAmount, 0);
+    return { mwh, value };
+  }, [records]);
 
   const toggleExpand = (id) => {
-    setExpandedRows(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    setExpandedRows((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const renderVolume = (mus) => {
-    if (unitMode === 'MWH') return `${fmtNumber(mus * 1000)} MWh`;
-    return `${mus.toFixed(3)} MUs`;
+    if (unitMode === 'MWH') return `${fmtNumber(mus * 1000, 3)} MWh`;
+    return `${mus.toFixed(3)} MU`;
   };
+
+  function exportCsv() {
+    const flat = [];
+    for (const r of records) {
+      if (r.children?.length) {
+        for (const c of r.children) {
+          flat.push({
+            client: c.client_name, bid_id: c.id, delivery: c.deliveryDate,
+            trade_date: c.tradeDate, exchange: c.exchange, status: c.status,
+            mwh: (c.energyMUs * 1000).toFixed(3), value: c.netAmount,
+          });
+        }
+      } else {
+        flat.push({
+          client: r.client_name, bid_id: r.id, delivery: r.deliveryDate,
+          trade_date: r.tradeDate, exchange: r.exchange, status: r.status,
+          mwh: (r.energyMUs * 1000).toFixed(3), value: r.netAmount,
+        });
+      }
+    }
+    downloadCsv(`${product}-bids.csv`, flat);
+  }
 
   return (
     <div style={{ padding: '0 20px 20px', maxWidth: 1600, margin: '0 auto' }}>
-      {/* Global Countdown Banners */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-         <div style={{ flex: 1, background: '#f39c12', color: '#fff', padding: '10px 20px', borderRadius: '0 0 8px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 'bold' }}>Remaining 19 Days for REC bid</span>
-            <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none' }}>View Calendar</button>
-         </div>
-         <div style={{ flex: 1, background: '#e74c3c', color: '#fff', padding: '10px 20px', borderRadius: '0 0 8px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 'bold' }}>Remaining 4 Days for ESCERT bid</span>
-            <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none' }}>Go to Market</button>
-         </div>
-      </div>
-
-      <SampleDataNotice detail="Term-Ahead contracts, obligations and invoices shown here are generated figures — the TAM/GTAM screens are not yet reading from the platform." />
-
-
-      <PageHeader 
-        title={marketType === 'GTAM' ? "GTAM Invoice Record List" : "TAM Obligation List"} 
+      <PageHeader
+        title={`${product} Obligation List`}
         actions={
           <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-primary" style={{ background: '#28a745' }}>[ EXCEL v ] Export Raw Data</button>
+            <Link to="/trading/exchange/bidding" className="btn btn-outline">Place bid</Link>
+            <button type="button" className="btn btn-outline" onClick={exportCsv} disabled={!records.length}>Export CSV</button>
           </div>
         }
       />
 
-      {/* Filter Bar */}
       <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
-        <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tammanagement-exchange">Exchange:</label>
-            <select id="tammanagement-exchange" className="input" value={exchange} onChange={e => setExchange(e.target.value)}>
-              <option value="ALL">All Exchanges</option>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tam-exchange">Exchange</label>
+            <select id="tam-exchange" className="input" value={exchange} onChange={(e) => setExchange(e.target.value)}>
+              <option value="">All</option>
               <option value="IEX">IEX</option>
               <option value="PXIL">PXIL</option>
               <option value="HPX">HPX</option>
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tammanagement-port-id">Port Id:</label>
-            <PortfolioSelect id="tammanagement-port-id" includeAll />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tam-client">Client</label>
+            <PortfolioSelect id="tam-client" includeAll allLabel="All clients" value={clientId} onChange={setClientId} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tammanagement-port-name">Port Name:</label>
-            <select id="tammanagement-port-name" className="input"><option>SJVN Limited-Naitwar Mori HPS</option></select>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tam-from">From delivery</label>
+            <input id="tam-from" type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tammanagement-from-trading-date">From Trading Date:</label>
-            <input id="tammanagement-from-trading-date" type="date" className="input" />
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tam-to">To delivery</label>
+            <input id="tam-to" type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tammanagement-to-trading-date">To Trading Date:</label>
-            <input id="tammanagement-to-trading-date" type="date" className="input" />
-          </div>
-          <div style={{ marginTop: 20 }}>
-            <button className="btn btn-primary">Search</button>
-          </div>
+          <button type="button" className="btn btn-primary" onClick={load}>Search</button>
         </div>
       </Card>
 
-      {/* Tax Summary & Controls */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 10 }}>
-         <div style={{ background: '#e8f5e9', border: '1px solid #c8e6c9', padding: '10px 20px', borderRadius: 4, display: 'inline-block' }}>
-            <span style={{ color: '#27ae60', fontWeight: 'bold', fontSize: 16 }}>
-              Cumulative TDS Withheld: ₹ {fmtNumber(mockData.totalTds)}
-            </span>
-         </div>
-         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 'bold', color: '#555' }}>Volume Unit:</span>
-            <div style={{ display: 'flex', background: '#eee', borderRadius: 20, overflow: 'hidden', padding: 2 }}>
-               <button onClick={() => setUnitMode('MU')} style={{ background: unitMode === 'MU' ? '#fff' : 'transparent', border: 'none', padding: '5px 15px', borderRadius: 20, cursor: 'pointer', fontWeight: unitMode === 'MU' ? 'bold' : 'normal' }}>MUs</button>
-               <button onClick={() => setUnitMode('MWH')} style={{ background: unitMode === 'MWH' ? '#fff' : 'transparent', border: 'none', padding: '5px 15px', borderRadius: 20, cursor: 'pointer', fontWeight: unitMode === 'MWH' ? 'bold' : 'normal' }}>MWh</button>
-            </div>
-         </div>
+        <div style={{ background: '#e8f5e9', border: '1px solid #c8e6c9', padding: '10px 20px', borderRadius: 4 }}>
+          <span style={{ color: '#27ae60', fontWeight: 'bold', fontSize: 16 }}>
+            Cleared {fmtNumber(totals.mwh, 3)} MWh · ₹{fmtNumber(totals.value, 2)}
+          </span>
+          <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>From live {product} bids — not IEX PDFs</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 'bold', color: '#555' }}>Volume</span>
+          <div style={{ display: 'flex', background: '#eee', borderRadius: 20, overflow: 'hidden', padding: 2 }}>
+            <button type="button" onClick={() => setUnitMode('MU')} style={{ background: unitMode === 'MU' ? '#fff' : 'transparent', border: 'none', padding: '5px 15px', borderRadius: 20, cursor: 'pointer', fontWeight: unitMode === 'MU' ? 'bold' : 'normal' }}>MU</button>
+            <button type="button" onClick={() => setUnitMode('MWH')} style={{ background: unitMode === 'MWH' ? '#fff' : 'transparent', border: 'none', padding: '5px 15px', borderRadius: 20, cursor: 'pointer', fontWeight: unitMode === 'MWH' ? 'bold' : 'normal' }}>MWh</button>
+          </div>
+        </div>
       </div>
 
       <Card>
+        {error && <div style={{ padding: 12, color: '#b91c1c', background: '#fef2f2', borderRadius: 4, marginBottom: 12 }}>{error}</div>}
         <div style={{ overflowX: 'auto' }}>
-          <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #ddd', textAlign: 'left' }}>
-                <th scope="col" style={{ padding: 10, width: 40 }}></th>
-                <th scope="col" style={{ padding: 10 }}>Trading Date</th>
-                <th scope="col" style={{ padding: 10 }}>Delivery Date</th>
-                <th scope="col" style={{ padding: 10 }}>Acceptance No</th>
-                <th scope="col" style={{ padding: 10 }}>Contract</th>
-                <th scope="col" style={{ padding: 10 }}>Total Vol</th>
-                <th scope="col" style={{ padding: 10 }}>Net Amount (₹)</th>
-                <th scope="col" style={{ padding: 10 }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRecords.map(record => {
-                const isExpanded = expandedRows.includes(record.id);
-                const childrenIds = record.children ? record.children.map(c => c.id) : [];
-                return (
-                  <React.Fragment key={record.id}>
-                    {/* Parent Row */}
-                    <tr style={{ borderBottom: '1px solid #eee', background: record.isWeekly ? '#fdfdfd' : '#fff' }}>
-                      <td style={{ padding: 10, display: 'flex', gap: 10 }}>
-                        {record.isWeekly ? (
-                          <button onClick={() => toggleExpand(record.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 14 }}>
-                            {isExpanded ? '▼' : '▶'}
-                          </button>
-                        ) : <span style={{ width: 14 }}></span>}
-                        <input type="checkbox" aria-label={`Select contract ${record.id}`} checked={selectedRows.includes(record.id)} onChange={() => handleSelectRow(record.id, childrenIds)} />
-                      </td>
-                      <td style={{ padding: 10 }}>{record.tradeDate}</td>
-                      <td style={{ padding: 10 }}>
-                        {record.deliveryDate}
-                        {marketType === 'GTAM' && (
-                          <Badge type="success" style={{ display: 'block', marginTop: 4, background: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9', fontSize: 10 }}>
-                            Green Power (GTAM)
-                          </Badge>
-                        )}
-                      </td>
-                      <td style={{ padding: 10, fontFamily: 'monospace' }}>{record.acceptanceNo}</td>
-                      <td style={{ padding: 10 }}><Badge type={record.isWeekly ? "primary" : "neutral"}>{record.contractType}</Badge></td>
-                      <td style={{ padding: 10, fontWeight: 'bold' }}>{renderVolume(record.energyMUs)}</td>
-                      <td style={{ padding: 10, color: '#27ae60', fontWeight: 'bold' }}>{fmtNumber(record.netAmount)}</td>
-                      <td style={{ padding: 10 }}>
-                        <div style={{ display: 'flex', gap: 5 }}>
-                          <button className="btn btn-sm btn-outline" title="View Details" onClick={() => setSelectedTamRecord(record)}></button>
-                          <button className="btn btn-sm btn-outline" title="View PDFs (IEX Voucher)" aria-label="View PDFs (IEX Voucher)"></button>
-                          <button className="btn btn-sm btn-outline" title="View Certificate (Standing Clearance)" aria-label="View Certificate (Standing Clearance)"></button>
-                          <button className="btn btn-sm btn-outline" style={{ color: '#e74c3c' }} title="Cancel/Archive" aria-label="Cancel/Archive"></button>
-                        </div>
-                      </td>
-                    </tr>
-
-                    {/* Child Rows (Accordion) */}
-                    {isExpanded && record.children && record.children.map(child => (
-                      <tr key={child.id} style={{ background: '#f8f9fc', borderBottom: '1px solid #eee' }}>
-                        <td style={{ padding: 10, textAlign: 'right' }}>
-                           <span style={{ color: '#aaa' }}>├─</span>
-                           <input type="checkbox" aria-label={`Select obligation ${child.id}`} checked={selectedRows.includes(child.id)} onChange={() => handleSelectRow(child.id)} style={{ marginLeft: 5 }} />
-                        </td>
-                        <td style={{ padding: 10, color: '#666' }}>{child.tradeDate}</td>
-                        <td style={{ padding: 10, color: '#666' }}>{child.deliveryDate}</td>
-                        <td style={{ padding: 10, color: '#666', fontFamily: 'monospace', fontSize: 12 }}>{child.acceptanceNo}</td>
-                        <td style={{ padding: 10, color: '#666', fontSize: 12 }}>{child.contractType}</td>
-                        <td style={{ padding: 10, color: '#444' }}>{renderVolume(child.energyMUs)}</td>
-                        <td style={{ padding: 10, color: '#444' }}>{fmtNumber(child.netAmount)}</td>
+          {loading ? (
+            <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Loading {product} bids…</div>
+          ) : records.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>
+              No {product} bids yet. File them from Exchange Bidding.
+            </div>
+          ) : (
+            <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #ddd', textAlign: 'left' }}>
+                  <th scope="col" style={{ padding: 10, width: 40 }} />
+                  <th scope="col" style={{ padding: 10 }}>Client</th>
+                  <th scope="col" style={{ padding: 10 }}>Trade Date</th>
+                  <th scope="col" style={{ padding: 10 }}>Delivery</th>
+                  <th scope="col" style={{ padding: 10 }}>Bid / Contract</th>
+                  <th scope="col" style={{ padding: 10 }}>Exchange</th>
+                  <th scope="col" style={{ padding: 10 }}>Status</th>
+                  <th scope="col" style={{ padding: 10 }}>Cleared vol</th>
+                  <th scope="col" style={{ padding: 10 }}>Value (₹)</th>
+                  <th scope="col" style={{ padding: 10 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {records.map((record) => {
+                  const isExpanded = expandedRows.includes(record.id);
+                  return (
+                    <React.Fragment key={record.id}>
+                      <tr style={{ borderBottom: '1px solid #eee', background: record.isWeekly ? '#fdfdfd' : '#fff' }}>
                         <td style={{ padding: 10 }}>
-                           <div style={{ display: 'flex', gap: 5 }}>
-                             <button className="btn btn-sm btn-outline" title="View Details" onClick={() => setSelectedTamRecord(child)}></button>
-                             <button className="btn btn-sm btn-outline" title="View PDFs (IEX Voucher)" aria-label="View PDFs (IEX Voucher)"></button>
-                           </div>
+                          {record.isWeekly ? (
+                            <button type="button" onClick={() => toggleExpand(record.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 14 }}>
+                              {isExpanded ? '▼' : '▶'}
+                            </button>
+                          ) : null}
+                        </td>
+                        <td style={{ padding: 10 }}>{record.client_name}</td>
+                        <td style={{ padding: 10 }}>{record.tradeDate}</td>
+                        <td style={{ padding: 10 }}>
+                          {record.deliveryDate}
+                          {product === 'GTAM' && (
+                            <Badge type="success" style={{ display: 'block', marginTop: 4, background: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9', fontSize: 10 }}>
+                              Green Power (GTAM)
+                            </Badge>
+                          )}
+                        </td>
+                        <td style={{ padding: 10, fontFamily: 'monospace' }}>
+                          {record.contract_id ? (
+                            <Link to={`/trading/exchange/contracts/${record.contract_id}`}>{record.acceptanceNo}</Link>
+                          ) : record.acceptanceNo}
+                        </td>
+                        <td style={{ padding: 10 }}>{record.exchange}</td>
+                        <td style={{ padding: 10 }}>{statusBadge(record.status)}</td>
+                        <td style={{ padding: 10, fontWeight: 'bold' }}>{renderVolume(record.energyMUs)}</td>
+                        <td style={{ padding: 10, color: '#27ae60', fontWeight: 'bold' }}>{fmtNumber(record.netAmount)}</td>
+                        <td style={{ padding: 10 }}>
+                          <button type="button" className="btn btn-sm btn-outline" onClick={() => setSelectedTamRecord(record)}>Blocks</button>
                         </td>
                       </tr>
-                    ))}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                      {isExpanded && record.children.map((child) => (
+                        <tr key={child.id} style={{ background: '#f8f9fc', borderBottom: '1px solid #eee' }}>
+                          <td style={{ padding: 10, textAlign: 'right', color: '#aaa' }}>├─</td>
+                          <td style={{ padding: 10, color: '#666' }}>{child.client_name}</td>
+                          <td style={{ padding: 10, color: '#666' }}>{child.tradeDate}</td>
+                          <td style={{ padding: 10, color: '#666' }}>{child.deliveryDate}</td>
+                          <td style={{ padding: 10, color: '#666', fontFamily: 'monospace', fontSize: 12 }}>{child.id}</td>
+                          <td style={{ padding: 10, color: '#666' }}>{child.exchange}</td>
+                          <td style={{ padding: 10 }}>{statusBadge(child.status)}</td>
+                          <td style={{ padding: 10, color: '#444' }}>{renderVolume(child.energyMUs)}</td>
+                          <td style={{ padding: 10, color: '#444' }}>{fmtNumber(child.netAmount)}</td>
+                          <td style={{ padding: 10 }}>
+                            <button type="button" className="btn btn-sm btn-outline" onClick={() => setSelectedTamRecord(child)}>Blocks</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       </Card>
 
-      {/* Floating Batch Action Toolbar */}
-      {selectedRows.length > 0 && (
-        <div style={{
-          position: 'fixed', bottom: 30, left: '50%', transform: 'translateX(-50%)',
-          background: '#34495e', color: '#fff', padding: '15px 30px', borderRadius: 30,
-          boxShadow: '0 10px 25px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', gap: 20, zIndex: 900
-        }}>
-          <div style={{ fontWeight: 'bold' }}>{selectedRows.length} Records Selected</div>
-          <button className="btn btn-sm" style={{ background: '#2980b9', color: '#fff', border: 'none' }}>Download Checked PDFs (.zip)</button>
-          <button className="btn btn-sm" style={{ background: '#27ae60', color: '#fff', border: 'none' }}>Export SAP Settlement Data</button>
-        </div>
-      )}
-
       {selectedTamRecord && (
-        <TAMObligationDetailsModal record={selectedTamRecord} onClose={() => setSelectedTamRecord(null)} />
+        <TAMObligationDetailsModal record={selectedTamRecord} product={product} onClose={() => setSelectedTamRecord(null)} />
       )}
     </div>
   );

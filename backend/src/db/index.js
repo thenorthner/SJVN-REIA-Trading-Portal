@@ -1890,6 +1890,11 @@ function migrateTradingNotesSchema() {
     CREATE INDEX IF NOT EXISTS idx_trading_notes_client
       ON trading_debit_credit_notes (client_id, billing_period);
   `);
+  const cols = db.prepare('PRAGMA table_info(trading_debit_credit_notes)').all().map((c) => c.name);
+  if (!cols.includes('view_bill_invoice_id')) {
+    db.exec('ALTER TABLE trading_debit_credit_notes ADD COLUMN view_bill_invoice_id TEXT');
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_trading_notes_view_bill ON trading_debit_credit_notes(view_bill_invoice_id, billing_period)');
 }
 
 try {
@@ -2000,6 +2005,9 @@ function migrateViewBillSettlementColumns() {
     ['breakup_json', 'TEXT'],
     ['settlement_basis', 'TEXT'],
     ['generated_from', 'TEXT'],
+    ['supersedes_invoice_id', 'TEXT'],
+    ['superseded_by_invoice_id', 'TEXT'],
+    ['cancel_reason', 'TEXT'],
   ];
   for (const [name, type] of additions) {
     if (!cols.includes(name)) {
@@ -2007,6 +2015,7 @@ function migrateViewBillSettlementColumns() {
     }
   }
   db.exec('CREATE INDEX IF NOT EXISTS idx_view_bill_bilateral ON view_bill_invoices(bilateral_id, bill_type)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_view_bill_supersede ON view_bill_invoices(supersedes_invoice_id, superseded_by_invoice_id)');
 }
 
 try {
@@ -2065,6 +2074,29 @@ try {
 }
 
 /**
+ * Join ISET Exchange Bidding / Bidding Latest to the DAM `bids` table the
+ * settlement engine actually reads. Without these columns the ISET form was a
+ * separate story from Manage Bids and View Bills.
+ */
+function migrateIsetBiddingToDamBids() {
+  const add = (table, name, ddl) => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (cols.length && !cols.includes(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${ddl}`);
+  };
+  add('bids', 'source_kind', 'TEXT');
+  add('bids', 'source_id', 'TEXT');
+  add('exchange_biddings', 'bid_ids', 'TEXT');
+  add('exchange_bidding_latest', 'bid_ids', 'TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_bids_source ON bids(source_kind, source_id)');
+}
+
+try {
+  migrateIsetBiddingToDamBids();
+} catch (e) {
+  console.error('ISET bidding → DAM bids migration failed:', e.message);
+}
+
+/**
  * Join a REC exchange bid to the certificates it moved.
  *
  * rec_bids recorded what was offered and then stopped — there was nowhere to
@@ -2100,6 +2132,39 @@ try {
   migrateRecTradingLinks();
 } catch (e) {
   console.error('REC trading-link migration failed:', e.message);
+}
+
+/**
+ * PX1/PX2 used to be disconnected DONE flags. Persist the contract and the
+ * DAM-desk bid ids they actually filed so Applications can join `bids`.
+ */
+function migrateExchangeApplicationBids() {
+  const cols = db.prepare('PRAGMA table_info(exchange_applications)').all().map((c) => c.name);
+  if (!cols.length) return;
+  if (!cols.includes('contract_id')) db.exec('ALTER TABLE exchange_applications ADD COLUMN contract_id TEXT');
+  if (!cols.includes('bid_ids')) db.exec('ALTER TABLE exchange_applications ADD COLUMN bid_ids TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_ex_apps_contract ON exchange_applications(contract_id)');
+}
+
+try {
+  migrateExchangeApplicationBids();
+} catch (e) {
+  console.error('Exchange application → bids migration failed:', e.message);
+}
+
+function migratePxilSettlementLinks() {
+  const cols = db.prepare('PRAGMA table_info(pxil_orders)').all().map((c) => c.name);
+  if (!cols.length) return;
+  if (!cols.includes('client_id')) db.exec('ALTER TABLE pxil_orders ADD COLUMN client_id TEXT');
+  if (!cols.includes('contract_id')) db.exec('ALTER TABLE pxil_orders ADD COLUMN contract_id TEXT');
+  if (!cols.includes('bid_ids')) db.exec('ALTER TABLE pxil_orders ADD COLUMN bid_ids TEXT');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_pxil_orders_contract ON pxil_orders(contract_id, delivery_date_from)');
+}
+
+try {
+  migratePxilSettlementLinks();
+} catch (e) {
+  console.error('PXIL settlement-link migration failed:', e.message);
 }
 
 try {

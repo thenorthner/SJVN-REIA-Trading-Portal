@@ -313,6 +313,35 @@ describe('bilateral invoice generation', () => {
     expect(txRow(tx.id).contracted_mwh).toBe(50);
   });
 
+  it('supersedes a provisional energy bill when the final restatement is raised', async () => {
+    const tx = await createContract();
+    const after = await punchSchedule(tx.id, [
+      { time_block: '00:00-00:15', approved_mw: 100 },
+      { time_block: '00:15-00:30', approved_mw: 100 },
+    ]);
+    for (const s of ['FORMAT_D_PREPARED', 'CONTRACT_CREATED', 'SUBMITTED', 'APPROVED']) {
+      await request(app).post(`/api/bilateral/${tx.id}/noar`).set(auth(trader)).send({ noar_status: s });
+    }
+    await request(app).post(`/api/bilateral/schedules/${after.schedules[0].id}/actuals`).set(auth(trader)).send({ actual_mw: 100 });
+
+    const provisional = await request(app).post(`/api/bilateral/${tx.id}/invoices`).set(auth(trader))
+      .send({ bill_type: 'BILATERAL_ENERGY' });
+    expect(provisional.status).toBe(201);
+    expect(provisional.body.settlement_basis).toBe('PROVISIONAL');
+
+    await request(app).post(`/api/bilateral/schedules/${after.schedules[1].id}/actuals`).set(auth(trader)).send({ actual_mw: 100 });
+    const final = await request(app).post(`/api/bilateral/${tx.id}/invoices`).set(auth(trader))
+      .send({ bill_type: 'BILATERAL_ENERGY' });
+    expect(final.status).toBe(201);
+    expect(final.body.settlement_basis).toBe('FINAL');
+
+    const oldRow = db.prepare('SELECT * FROM view_bill_invoices WHERE id = ?').get(provisional.body.id);
+    const newRow = db.prepare('SELECT * FROM view_bill_invoices WHERE id = ?').get(final.body.id);
+    expect(oldRow.status).toBe('CANCELLED');
+    expect(oldRow.superseded_by_invoice_id).toBe(final.body.id);
+    expect(newRow.supersedes_invoice_id).toBe(provisional.body.id);
+  });
+
   it('keeps a read-only role out of the billing run', async () => {
     const tx = await readyToBill();
     const viewer = tokenFor('MANAGEMENT');

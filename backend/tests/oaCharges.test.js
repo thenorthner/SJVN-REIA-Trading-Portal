@@ -56,6 +56,21 @@ describe('computeOaCharges', () => {
     expect(amountOf(r, 'Atlantis STU')).toBeUndefined();
   });
 
+  it('prices Haryana, Punjab, Gujarat, Sikkim and Himachal Pradesh STU/SLDC', () => {
+    for (const [state, stu] of [
+      ['Haryana', 268.5],
+      ['Punjab', 291.2],
+      ['Gujarat', 214.8],
+      ['Sikkim', 248.6],
+      ['Himachal Pradesh', 327.4],
+    ]) {
+      const r = computeOaCharges({ quantum_mwh: 100, days: 2, include_ists: false, drawal_state: state });
+      expect(amountOf(r, `${state} STU`)).toBe(Math.round(stu * 100));
+      expect(amountOf(r, `${state} SLDC`)).toBe(2000);
+      expect(r.warnings.some((w) => w.includes(`${state} STU`))).toBe(false);
+    }
+  });
+
   it('omits ISTS when asked to', () => {
     expect(amountOf(computeOaCharges({ quantum_mwh: 100, include_ists: false }), 'ISTS')).toBeUndefined();
   });

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client.js';
-import { Card, Modal, Field } from '../../components/ui.jsx';
+import { Card, Modal, Field, Badge } from '../../components/ui.jsx';
 
 function fmtAppDate(s) {
   if (!s) return '—';
@@ -51,7 +51,8 @@ export default function ExchangeApplications() {
     if (q) {
       list = rows.filter((r) => [
         r.application_id, r.portfolio_id, r.exchange, r.product, r.bid_type,
-        fmtAppDate(r.application_date), r.approval_status,
+        fmtAppDate(r.application_date), r.approval_status, r.contract_label,
+        ...(r.bid_ids || []),
       ].join(' ').toLowerCase().includes(q));
     }
     const dir = sortDir === 'asc' ? 1 : -1;
@@ -162,6 +163,7 @@ export default function ExchangeApplications() {
                     </th>
                   ))}
                   <th style={thStyle}>Approve/Reject</th>
+                  <th style={thStyle}>Linked bid</th>
                   <th style={thStyle}>PX1</th>
                   <th style={thStyle}>PX2</th>
                   <th style={thStyle}>Exchange Request</th>
@@ -171,7 +173,7 @@ export default function ExchangeApplications() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={11} style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
+                    <td colSpan={12} style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
                       No applications found.
                     </td>
                   </tr>
@@ -179,7 +181,7 @@ export default function ExchangeApplications() {
                   <tr key={r.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
                     <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{fmtAppDate(r.application_date)}</td>
                     <td style={{ padding: '10px 12px' }}>
-                      <Link to={`/trading/exchange/bidding-detail?q=${encodeURIComponent(r.application_id)}`} style={{ color: '#1d4ed8', fontWeight: 600 }}>
+                      <Link to={`/trading/exchange/bidding-detail?q=${encodeURIComponent(r.portfolio_id)}`} style={{ color: '#1d4ed8', fontWeight: 600 }}>
                         {r.application_id}
                       </Link>
                     </td>
@@ -200,6 +202,22 @@ export default function ExchangeApplications() {
                         <div style={{ fontSize: 11, marginTop: 4, color: r.approval_status === 'APPROVED' ? '#166534' : '#991b1b' }}>
                           {r.approval_status}
                         </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>
+                      {(r.bids || []).length === 0 ? (
+                        <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>
+                      ) : r.bids.map((b) => (
+                        <div key={b.id} style={{ fontSize: 12, marginBottom: 2 }}>
+                          <span style={{ fontFamily: 'ui-monospace, monospace' }}>{b.id}</span>
+                          {' '}
+                          <Badge type={b.status === 'CLEARED' ? 'success' : b.status === 'REJECTED' ? 'danger' : 'warning'}>
+                            {b.status}
+                          </Badge>
+                        </div>
+                      ))}
+                      {r.contract_label && (
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{r.contract_label}</div>
                       )}
                     </td>
                     <td style={{ padding: '10px 12px' }}>

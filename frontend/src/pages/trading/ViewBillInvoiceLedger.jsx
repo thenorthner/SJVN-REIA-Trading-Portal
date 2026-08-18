@@ -57,9 +57,9 @@ const PAYMENT_EXPORT_KEYS = [
 
 /**
  * Shared ISET View Bills ledger (CSV / Excel / PDF + search + View/Edit/Cancel).
- * @param {{ billType: string, title: string, showPaymentColumns?: boolean }} props
+ * @param {{ billType?: string, title: string, showPaymentColumns?: boolean, product?: string, embedded?: boolean }} props
  */
-export default function ViewBillInvoiceLedger({ billType, title, showPaymentColumns = false }) {
+export default function ViewBillInvoiceLedger({ billType, title, showPaymentColumns = false, product = null, embedded = false }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -71,16 +71,20 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
   const [form, setForm] = useState({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [notes, setNotes] = useState([]);
 
   function load() {
     setLoading(true);
-    api.viewBillInvoices.list({ bill_type: billType })
+    const params = {};
+    if (billType) params.bill_type = billType;
+    if (product) params.product = product;
+    api.viewBillInvoices.list(params)
       .then(setRows)
       .catch(() => setRows([]))
       .finally(() => setLoading(false));
   }
 
-  useEffect(load, [billType]);
+  useEffect(load, [billType, product]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -186,6 +190,66 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
     });
   }
 
+  async function openView(r) {
+    setViewRow(r);
+    try {
+      const [full, rowNotes] = await Promise.all([
+        api.viewBillInvoices.get(r.id),
+        api.tradingNotes.list({ view_bill_invoice_id: r.id }),
+      ]);
+      setViewRow(full);
+      setNotes(rowNotes);
+    } catch {
+      setNotes([]);
+    }
+  }
+
+  async function downloadInvoicePdf(r) {
+    try {
+      const blob = await api.viewBillInvoices.downloadPdf(r.id);
+      downloadBlob(`${r.invoice_no || r.id}.pdf`, blob);
+    } catch (err) {
+      setMessage(err.response?.data?.error || 'PDF download failed');
+    }
+  }
+
+  async function raiseNote(r) {
+    const note_type = window.prompt('Enter note type: DEBIT or CREDIT', 'DEBIT');
+    if (!note_type || !['DEBIT', 'CREDIT'].includes(note_type.toUpperCase())) return;
+    const amount = Number(window.prompt('Enter note amount', '0'));
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    const reason = window.prompt('Enter reason / remarks', '') || '';
+    try {
+      await api.tradingNotes.create({
+        note_type: note_type.toUpperCase(),
+        amount,
+        reason,
+        reason_code: 'RATE_REVISION',
+        client_id: r.client_id || r.clientId || null,
+        billing_period: String(r.supply_from_date || r.invoice_date || '').slice(0, 7),
+        delivery_date: r.supply_from_date || null,
+        quantum_mwh: r.quantum_mwh ?? null,
+        rate_per_unit: r.rate_per_unit ?? null,
+        view_bill_invoice_id: r.id,
+      });
+      setMessage(`Note issued for ${r.invoice_no}`);
+      if (viewRow?.id === r.id) openView(r);
+    } catch (err) {
+      setMessage(err.response?.data?.error || 'Failed to issue note');
+    }
+  }
+
+  async function cancelNote(note) {
+    const reason = window.prompt('Cancellation reason', 'Superseded / entered by mistake');
+    if (!reason) return;
+    try {
+      await api.tradingNotes.cancel(note.id, { reason });
+      if (viewRow) openView(viewRow);
+    } catch (err) {
+      setMessage(err.response?.data?.error || 'Failed to cancel note');
+    }
+  }
+
   async function saveEdit(e) {
     e.preventDefault();
     setBusy(true);
@@ -220,9 +284,11 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
 
   async function cancelInv(r) {
     if (!window.confirm(`Cancel invoice ${r.invoice_no}?`)) return;
+    const reason = window.prompt('Cancellation reason', '');
+    if (reason == null) return;
     setMessage('');
     try {
-      await api.viewBillInvoices.cancel(r.id);
+      await api.viewBillInvoices.cancel(r.id, { reason });
       setMessage(`Cancelled ${r.invoice_no}`);
       load();
     } catch (err) {
@@ -243,7 +309,7 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
   }
 
   return (
-    <div className="p-6 bg-[#f8f9fa] min-h-screen font-sans text-[13px]">
+    <div className={embedded ? 'bg-[#f8f9fa] font-sans text-[13px]' : 'p-6 bg-[#f8f9fa] min-h-screen font-sans text-[13px]'}>
       <div className="bg-white border border-gray-200 shadow-sm max-w-[1600px] mx-auto rounded-sm">
         <div className="bg-[#66b2ff] text-white px-4 py-2 font-semibold flex items-center justify-center tracking-wide text-sm relative">
           {title}
@@ -293,13 +359,15 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
                   <th className={th}>View</th>
                   {showPaymentColumns && <th className={th}>Payment Details</th>}
                   <th className={th}>{showPaymentColumns ? 'Edit' : 'EDIT'}</th>
+                  <th className={th}>PDF</th>
+                  <th className={th}>Note</th>
                   <th className="px-3 py-3 font-semibold">Cancel</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={showPaymentColumns ? 19 : 12} className="px-3 py-6 text-center text-gray-500 bg-[#f9f9f9]">
+                    <td colSpan={showPaymentColumns ? 21 : 14} className="px-3 py-6 text-center text-gray-500 bg-[#f9f9f9]">
                       No data available in table
                     </td>
                   </tr>
@@ -325,7 +393,7 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
                       </>
                     )}
                     <td className={td}>
-                      <button type="button" className={link} onClick={() => setViewRow(r)} title="View">👁</button>
+                      <button type="button" className={link} onClick={() => openView(r)} title="View">👁</button>
                     </td>
                     {showPaymentColumns && (
                       <td className={td}>
@@ -338,6 +406,12 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
                     )}
                     <td className={td}>
                       <button type="button" className={link} onClick={() => openEdit(r)}>Edit</button>
+                    </td>
+                    <td className={td}>
+                      <button type="button" className={link} onClick={() => downloadInvoicePdf(r)}>PDF</button>
+                    </td>
+                    <td className={td}>
+                      <button type="button" className={link} onClick={() => raiseNote(r)}>Note</button>
                     </td>
                     <td className="px-3 py-2">
                       <button type="button" className={link} onClick={() => cancelInv(r)}>Cancel</button>
@@ -364,6 +438,22 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
             <div><strong>Due Date:</strong> {fmtDisplayDate(viewRow.invoice_due_date)}</div>
             <div><strong>Supply:</strong> {fmtDisplayDate(viewRow.supply_from_date)} → {fmtDisplayDate(viewRow.supply_to_date)}</div>
             <div><strong>Generated:</strong> {fmtGenerated(viewRow.invoice_generated_on)}</div>
+            {viewRow.quantum_mwh != null && (
+              <div><strong>Quantum:</strong> {fmtNumber(viewRow.quantum_mwh, 3)} MWh</div>
+            )}
+            {viewRow.rate_per_unit != null && (
+              <div><strong>Rate:</strong> ₹{fmtNumber(viewRow.rate_per_unit, 4)}/kWh</div>
+            )}
+            {viewRow.gst_amount != null && Number(viewRow.gst_amount) !== 0 && (
+              <div><strong>GST:</strong> ₹{fmtNumber(viewRow.gst_amount, 2)}</div>
+            )}
+            {viewRow.settlement_basis && (
+              <div><strong>Settlement:</strong> {viewRow.settlement_basis}</div>
+            )}
+            <div><strong>Status:</strong> {viewRow.status}</div>
+            {viewRow.supersedes_invoice_id && <div><strong>Replaces:</strong> {viewRow.supersedes_invoice_id}</div>}
+            {viewRow.superseded_by_invoice_id && <div><strong>Replaced By:</strong> {viewRow.superseded_by_invoice_id}</div>}
+            {viewRow.cancel_reason && <div><strong>Cancel Reason:</strong> {viewRow.cancel_reason}</div>}
             {viewRow.received_amount != null && (
               <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
                 <div><strong>Received:</strong> ₹{fmtNumber(viewRow.received_amount, 2)}</div>
@@ -373,6 +463,19 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
                 <div><strong>Remarks:</strong> {viewRow.remarks || '—'}</div>
               </div>
             )}
+            <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
+              <div><strong>Debit / Credit Notes</strong></div>
+              {notes.length ? notes.map((n) => (
+                <div key={n.id} style={{ marginTop: 6 }}>
+                  {n.note_no} · {n.note_type} · ₹{fmtNumber(n.amount, 2)} · {n.status}
+                  {n.status !== 'CANCELLED' && (
+                    <>
+                      {' '}<button type="button" className={link} onClick={() => cancelNote(n)}>Cancel</button>
+                    </>
+                  )}
+                </div>
+              )) : <div style={{ color: '#64748b' }}>No notes raised.</div>}
+            </div>
           </div>
         </Modal>
       )}

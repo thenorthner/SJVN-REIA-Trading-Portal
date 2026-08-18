@@ -11,6 +11,12 @@ describe('seeded rates', () => {
   it('carries the ledger charge card', () => {
     expect(getEffectiveRate('West Bengal STU', '2026-05-01').rate_value).toBe(238.4);
     expect(getEffectiveRate('Delhi STU', '2026-05-01').rate_value).toBe(382.54);
+    expect(getEffectiveRate('Haryana STU', '2026-05-01').rate_value).toBe(268.5);
+    expect(getEffectiveRate('Punjab STU', '2026-05-01').rate_value).toBe(291.2);
+    expect(getEffectiveRate('Gujarat STU', '2026-05-01').rate_value).toBe(214.8);
+    expect(getEffectiveRate('Sikkim STU', '2026-05-01').rate_value).toBe(248.6);
+    expect(getEffectiveRate('Himachal Pradesh STU', '2026-05-01').rate_value).toBe(327.4);
+    expect(getEffectiveRate('Haryana SLDC', '2026-05-01').rate_value).toBe(1000);
     expect(getEffectiveRate('NOAR Application Fee', '2026-05-01').rate_value).toBe(5000);
     expect(getEffectiveRate('RLDC Fee', '2026-05-01').rate_value).toBe(1000);
   });

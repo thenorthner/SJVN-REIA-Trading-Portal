@@ -64,6 +64,38 @@ export function raiseInvoice({
   // reading to restate it; a bilateral bill is provisional until every block in
   // the period carries metered actuals.
   const basis = spec.kind === 'EXCHANGE' ? 'FINAL' : (priced.is_final ? 'FINAL' : 'PROVISIONAL');
+  const sourceColumn = bilateral_id ? 'bilateral_id' : 'exchange_contract_id';
+  const sourceId = bilateral_id || exchange_contract_id;
+
+  if (sourceId) {
+    const duplicate = db.prepare(`
+      SELECT * FROM view_bill_invoices
+      WHERE ${sourceColumn} = ? AND bill_type = ?
+        AND IFNULL(supply_from_date, '') = IFNULL(?, '')
+        AND IFNULL(supply_to_date, '') = IFNULL(?, '')
+        AND IFNULL(settlement_basis, '') = IFNULL(?, '')
+        AND status = 'ACTIVE'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(sourceId, bill_type, priced.supply_from_date || null, priced.supply_to_date || null, basis);
+    if (duplicate) {
+      throw new Error(`${duplicate.invoice_no} already bills this ${bill_type} period as ${basis}`);
+    }
+  }
+
+  let supersedes = null;
+  if (basis === 'FINAL' && sourceId) {
+    supersedes = db.prepare(`
+      SELECT * FROM view_bill_invoices
+      WHERE ${sourceColumn} = ? AND bill_type = ?
+        AND IFNULL(supply_from_date, '') = IFNULL(?, '')
+        AND IFNULL(supply_to_date, '') = IFNULL(?, '')
+        AND settlement_basis = 'PROVISIONAL'
+        AND status = 'ACTIVE'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).get(sourceId, bill_type, priced.supply_from_date || null, priced.supply_to_date || null);
+  }
 
   db.prepare(`
     INSERT INTO view_bill_invoices (
@@ -71,8 +103,8 @@ export function raiseInvoice({
       supply_from_date, supply_to_date, invoice_generated_on,
       tds_rate, tds_deducted, remarks, status,
       bilateral_id, exchange_contract_id, quantum_mwh, rate_per_unit, gst_amount, breakup_json,
-      settlement_basis, generated_from
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?, ?, 'SETTLEMENT')
+      settlement_basis, generated_from, supersedes_invoice_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?, ?, 'SETTLEMENT', ?)
   `).run(
     id,
     bill_type,
@@ -94,7 +126,18 @@ export function raiseInvoice({
     priced.gst_amount,
     JSON.stringify({ line_items: priced.line_items, settlement: priced.settlement, warnings: priced.warnings }),
     basis,
+    supersedes?.id || null,
   );
+
+  if (supersedes) {
+    db.prepare(`
+      UPDATE view_bill_invoices
+         SET status = 'CANCELLED',
+             cancel_reason = ?,
+             superseded_by_invoice_id = ?
+       WHERE id = ?
+    `).run(`Superseded by final invoice ${invoiceNo}`, id, supersedes.id);
+  }
 
   return db.prepare('SELECT * FROM view_bill_invoices WHERE id = ?').get(id);
 }

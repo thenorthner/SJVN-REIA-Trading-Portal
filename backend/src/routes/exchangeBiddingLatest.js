@@ -3,6 +3,12 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
+import {
+  mapIsetProduct,
+  parseBidIds,
+  planFromLatestDetails,
+  materialiseIsetBids,
+} from '../services/exchangeIsetToBids.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -25,9 +31,17 @@ function genTransactionId() {
   return `V${part()}-${part()}-${part()}${n}`;
 }
 
+function inferExchange(contract) {
+  const pf = String(contract?.portfolio_id || '').toUpperCase();
+  if (pf.startsWith('PX')) return 'PXIL';
+  if (pf.startsWith('HPX')) return 'HPX';
+  return 'IEX';
+}
+
 /** One report line per PQData entry (or one line per bid detail if no PQ rows). */
 function flattenReport(row) {
   const details = parseDetails(row.details_json);
+  const bidIds = parseBidIds(row.bid_ids);
   const lines = [];
   let sl = 0;
   for (const detail of details) {
@@ -65,6 +79,8 @@ function flattenReport(row) {
         submission_id: row.id,
         client_name: row.client_name,
         client_ref_no: row.client_ref_no,
+        dam_bid_id: bidIds[0] || null,
+        bid_ids: bidIds,
       });
     }
   }
@@ -79,7 +95,6 @@ router.get('/report', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
   if (bid_type) { sql += ' AND bid_type = ?'; params.push(bid_type); }
   sql += ' ORDER BY created_at DESC';
   let lines = db.prepare(sql).all(...params).flatMap(flattenReport);
-  // Re-number after merge across submissions
   lines = lines.map((line, i) => ({ ...line, sl_no: i + 1 }));
   if (q) {
     const needle = String(q).toLowerCase();
@@ -91,19 +106,25 @@ router.get('/report', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
 
 router.get('/', requireRole(...ROLE_GROUPS.TRADING_ALL), (_req, res) => {
   const rows = db.prepare('SELECT * FROM exchange_bidding_latest ORDER BY created_at DESC').all();
-  res.json(rows.map((r) => ({ ...r, details: parseDetails(r.details_json) })));
+  res.json(rows.map((r) => ({ ...r, details: parseDetails(r.details_json), bid_ids: parseBidIds(r.bid_ids) })));
 });
 
 router.get('/:id', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
   const row = db.prepare('SELECT * FROM exchange_bidding_latest WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
-  res.json({ ...row, details: parseDetails(row.details_json), report_lines: flattenReport(row) });
+  res.json({
+    ...row,
+    details: parseDetails(row.details_json),
+    report_lines: flattenReport(row),
+    bid_ids: parseBidIds(row.bid_ids),
+  });
 });
 
 router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   const b = req.body || {};
   const errors = [];
 
+  if (!b.client_id) errors.push('client_id is required');
   if (!String(b.client_name || b.client_id || '').trim()) errors.push('client_name is required');
   if (!String(b.client_ref_no || '').trim()) errors.push('client_ref_no is required');
   if (!PRODUCT_TYPES.includes(b.product_type)) errors.push(`product_type must be one of: ${PRODUCT_TYPES.join(', ')}`);
@@ -112,6 +133,9 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   if (!b.delivery_date) errors.push('delivery_date is required');
   if (!String(b.asset_id || '').trim()) errors.push('asset_id is required');
   if (!String(b.bid_area_id || '').trim()) errors.push('bid_area_id is required');
+
+  const product = mapIsetProduct(b.product_type);
+  if (b.product_type && !product) errors.push(`product_type '${b.product_type}' cannot be filed as a DAM-desk bid`);
 
   let clientName = String(b.client_name || '').trim();
   if (b.client_id) {
@@ -122,8 +146,9 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   }
 
   let contractLabel = b.contract_label || null;
+  let contract = null;
   if (b.contract_id) {
-    const contract = db.prepare('SELECT id, loa_no, ppa_no FROM exchange_contracts WHERE id = ?').get(b.contract_id);
+    contract = db.prepare('SELECT id, loa_no, ppa_no, portfolio_id FROM exchange_contracts WHERE id = ?').get(b.contract_id);
     if (!contract) errors.push('contract_id does not exist');
     else contractLabel = contract.loa_no || contract.ppa_no || contract.id;
   } else {
@@ -149,6 +174,11 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     }
   }
 
+  const plan = details.length && b.delivery_date
+    ? planFromLatestDetails(details, b.delivery_date, { priceUnit: 'auto' })
+    : { byDate: new Map(), errors: [] };
+  errors.push(...plan.errors);
+
   if (errors.length) return res.status(400).json({ error: errors[0], errors });
 
   const normalized = details.map((d, di) => {
@@ -173,45 +203,75 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
 
   const id = newId('EXBL');
   const transactionId = b.transaction_id || genTransactionId();
+  const actorId = req.user?.id || null;
+  const exchange = b.exchange || inferExchange(contract);
+  const premium = Number(normalized[0]?.premium_discount_price) || 0;
 
-  db.prepare(`
-    INSERT INTO exchange_bidding_latest (
-      id, transaction_id, client_id, client_name, client_ref_no, contract_id, contract_label,
-      product_type, bid_type, delivery_date, asset_id, bid_area_id, user_id, participant_id,
-      portfolio_id, initiated_by, session, details_json, status, status_message, created_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Success', 'Request Submitted Successfully.', ?)
-  `).run(
-    id,
-    transactionId,
-    b.client_id || null,
-    clientName,
-    String(b.client_ref_no).trim(),
-    b.contract_id,
-    contractLabel,
-    b.product_type,
-    bidType,
-    b.delivery_date,
-    String(b.asset_id).trim(),
-    String(b.bid_area_id).trim(),
-    b.user_id || null,
-    b.participant_id || null,
-    b.portfolio_id || null,
-    b.initiated_by || null,
-    b.session || null,
-    JSON.stringify(normalized),
-    req.user?.id || null,
-  );
+  try {
+    const bidIds = db.transaction(() => {
+      db.prepare(`
+        INSERT INTO exchange_bidding_latest (
+          id, transaction_id, client_id, client_name, client_ref_no, contract_id, contract_label,
+          product_type, bid_type, delivery_date, asset_id, bid_area_id, user_id, participant_id,
+          portfolio_id, initiated_by, session, details_json, status, status_message, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Success', 'Request Submitted Successfully.', ?)
+      `).run(
+        id,
+        transactionId,
+        b.client_id || null,
+        clientName,
+        String(b.client_ref_no).trim(),
+        b.contract_id,
+        contractLabel,
+        b.product_type,
+        bidType,
+        b.delivery_date,
+        String(b.asset_id).trim(),
+        String(b.bid_area_id).trim(),
+        b.user_id || null,
+        b.participant_id || null,
+        b.portfolio_id || null,
+        b.initiated_by || null,
+        b.session || null,
+        JSON.stringify(normalized),
+        actorId,
+      );
 
-  secureLogAudit(req, {
-    action: 'CREATE_EXCHANGE_BIDDING_LATEST',
-    module: 'TRADING',
-    entityType: 'exchange_bidding_latest',
-    entityId: id,
-    details: { transaction_id: transactionId, product_type: b.product_type, bid_type: bidType },
-  });
+      const created = materialiseIsetBids({
+        clientId: b.client_id,
+        exchange,
+        product,
+        contractId: b.contract_id,
+        actorId,
+        sourceKind: 'ISET_LATEST',
+        sourceId: id,
+        byDate: plan.byDate,
+        bidDate: b.delivery_date,
+        premiumDiscount: premium,
+        securityOverride: b.security_override_reason,
+      });
+      db.prepare('UPDATE exchange_bidding_latest SET bid_ids = ? WHERE id = ?').run(JSON.stringify(created), id);
+      return created;
+    })();
 
-  const saved = db.prepare('SELECT * FROM exchange_bidding_latest WHERE id = ?').get(id);
-  res.status(201).json({ ...saved, details: parseDetails(saved.details_json), report_lines: flattenReport(saved) });
+    secureLogAudit(req, {
+      action: 'CREATE_EXCHANGE_BIDDING_LATEST',
+      module: 'TRADING',
+      entityType: 'exchange_bidding_latest',
+      entityId: id,
+      details: { transaction_id: transactionId, product_type: b.product_type, bid_type: bidType, bid_ids: bidIds },
+    });
+
+    const saved = db.prepare('SELECT * FROM exchange_bidding_latest WHERE id = ?').get(id);
+    res.status(201).json({
+      ...saved,
+      details: parseDetails(saved.details_json),
+      report_lines: flattenReport(saved),
+      bid_ids: parseBidIds(saved.bid_ids),
+    });
+  } catch (err) {
+    return res.status(400).json({ error: err.message || 'Failed to submit bid.' });
+  }
 });
 
 export default router;

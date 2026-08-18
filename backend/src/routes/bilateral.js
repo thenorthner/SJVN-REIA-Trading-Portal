@@ -140,6 +140,13 @@ function buildNoarTimeline(tx) {
 
 const DEFAULT_SLA_DAYS = { STOA: 7, MTOA: 15, LTOA: 30 };
 
+function computeDsmPenalty({ deviationMw, policy = null }) {
+  return {
+    amount: Math.abs(Number(deviationMw) || 0) * 60,
+    basis: policy || 'FLAT_PLACEHOLDER',
+  };
+}
+
 /** SLA target in days for an open-access term, from configurable master data. */
 function slaDaysFor(oaType) {
   const map = getParam('noar_sla_days', null);
@@ -625,14 +632,17 @@ router.post('/schedules/:id/actuals', requireRole(...ROLE_GROUPS.TRADING_WRITE),
   const effectiveApproved = sched.approved_mw - sched.curtailed_mw;
   const deviation = actual_mw - effectiveApproved;
   
-  // Standard DSM logic (simplified for demo: Rs 60/MW for over/under injection)
-  const dsm_penalty = Math.abs(deviation) * 60; 
+  // Keep settlement consuming a stored per-block penalty, but isolate the
+  // calculator so CERC frequency slabs can replace this placeholder later
+  // without changing invoice rollups or historical storage.
+  const dsmCalc = computeDsmPenalty({ deviationMw: deviation });
+  const dsm_penalty = dsmCalc.amount;
 
   db.prepare(`UPDATE bilateral_schedules SET actual_mw = ?, deviation_mw = ?, dsm_penalty_amount = ? WHERE id = ?`).run(
     actual_mw, deviation, dsm_penalty, sched.id
   );
 
-  secureLogAudit(req, { action: 'RECORD_ACTUALS', module: 'TRADING', entityType: 'bilateral_schedule', entityId: sched.id, details: { actual_mw, deviation, dsm_penalty }});
+  secureLogAudit(req, { action: 'RECORD_ACTUALS', module: 'TRADING', entityType: 'bilateral_schedule', entityId: sched.id, details: { actual_mw, deviation, dsm_penalty, dsm_basis: dsmCalc.basis }});
   const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(sched.transaction_id);
   res.json(withDetails(tx));
 });

@@ -13,6 +13,18 @@ const VENDOR_SEED = [
   { name: 'West Bengal STU', pan: 'AAACW6952G', category: 'STU' },
   { name: 'Delhi SLDC', pan: 'AABCD6342A', category: 'SLDC' },
   { name: 'West Bengal SLDC', pan: 'AAACW6952G', category: 'SLDC' },
+  // Desk states beyond the ISET TDS sheet. PAN is filled once the agency's
+  // 194C line is confirmed; the name still has to match the rate-master charge.
+  { name: 'Haryana STU', pan: null, category: 'STU' },
+  { name: 'Haryana SLDC', pan: null, category: 'SLDC' },
+  { name: 'Punjab STU', pan: null, category: 'STU' },
+  { name: 'Punjab SLDC', pan: null, category: 'SLDC' },
+  { name: 'Gujarat STU', pan: null, category: 'STU' },
+  { name: 'Gujarat SLDC', pan: null, category: 'SLDC' },
+  { name: 'Sikkim STU', pan: null, category: 'STU' },
+  { name: 'Sikkim SLDC', pan: null, category: 'SLDC' },
+  { name: 'Himachal Pradesh STU', pan: null, category: 'STU' },
+  { name: 'Himachal Pradesh SLDC', pan: null, category: 'SLDC' },
 ];
 
 export function seedTdsVendors() {

@@ -74,6 +74,125 @@ function bilateralContractRows(q) {
   });
 }
 
+function matchesQuery(row, q, keys) {
+  if (!q) return true;
+  const needle = String(q).toLowerCase();
+  return keys.some((k) => String(row[k] ?? '').toLowerCase().includes(needle));
+}
+
+const BLOCK_HOURS = 0.25;
+
+/** 15-minute label `00:00-00:15` → ISET block 1..96. */
+export function timeBlockNumber(label) {
+  const raw = String(label || '').trim();
+  const start = raw.split('-')[0] || '';
+  const m = start.match(/^(\d{1,2}):(\d{2})/);
+  if (m) {
+    const mins = Number(m[1]) * 60 + Number(m[2]);
+    if (mins >= 0 && mins < 24 * 60 && mins % 15 === 0) return mins / 15 + 1;
+  }
+  const n = Number(raw.replace(/^B/i, ''));
+  if (Number.isFinite(n) && n >= 1 && n <= 96) return n;
+  return raw;
+}
+
+function implementedMw(row) {
+  if (row.actual_mw != null && Number.isFinite(Number(row.actual_mw))) return Number(row.actual_mw);
+  return Number(row.approved_mw || 0) - Number(row.curtailed_mw || 0);
+}
+
+function punchedSchedules() {
+  return db.prepare(`
+    SELECT
+      s.id, s.transaction_id, s.schedule_date, s.time_block,
+      s.approved_mw, s.curtailed_mw, s.actual_mw, s.status,
+      t.loa_no, t.loi_contract_ref, t.ppa_no, t.supplier_name, t.procurer_name,
+      t.supplier_sldc, t.procurer_sldc, t.noar_contract_no, t.counterparty
+    FROM bilateral_schedules s
+    JOIN bilateral_transactions t ON t.id = s.transaction_id
+    WHERE s.status != 'CANCELLED'
+    ORDER BY s.schedule_date DESC, s.time_block
+  `).all();
+}
+
+/** Desk-punched 15-min blocks rolled to the Daily Schedule Report shape. */
+export function dailyScheduleFromPunches() {
+  const groups = new Map();
+  for (const row of punchedSchedules()) {
+    const key = `${row.transaction_id}|${row.schedule_date}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        id: `DS-${row.transaction_id}-${row.schedule_date}`,
+        buyer_contract: row.loa_no || row.ppa_no || row.procurer_name || '',
+        seller_contract: row.loi_contract_ref || row.ppa_no || row.supplier_name || '',
+        delivery_from: row.schedule_date,
+        delivery_to: row.schedule_date,
+        seller_availability: 0,
+        buyer_request: 0,
+        remarks: row.loa_no ? `Punched ${row.loa_no}` : 'Punched bilateral schedule',
+        source: 'bilateral_schedules',
+      });
+    }
+    const g = groups.get(key);
+    const mwh = Number(row.approved_mw || 0) * BLOCK_HOURS;
+    g.seller_availability += mwh;
+    g.buyer_request += mwh;
+  }
+  return [...groups.values()].map((g) => ({
+    ...g,
+    seller_availability: Number(g.seller_availability.toFixed(4)),
+    buyer_request: Number(g.buyer_request.toFixed(4)),
+  }));
+}
+
+export function implementedSummaryFromPunches() {
+  const groups = new Map();
+  for (const row of punchedSchedules()) {
+    const key = `${row.transaction_id}|${row.schedule_date}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        id: `IS-${row.transaction_id}-${row.schedule_date}`,
+        reading_date: row.schedule_date,
+        seller_name: row.supplier_name || row.counterparty || '',
+        buyer_name: row.procurer_name || '',
+        seller_schedule_mwh: 0,
+        buyer_schedule_mwh: 0,
+        source: 'bilateral_schedules',
+      });
+    }
+    const g = groups.get(key);
+    const mwh = implementedMw(row) * BLOCK_HOURS;
+    g.seller_schedule_mwh += mwh;
+    g.buyer_schedule_mwh += mwh;
+  }
+  return [...groups.values()].map((g) => ({
+    ...g,
+    seller_schedule_mwh: Number(g.seller_schedule_mwh.toFixed(4)),
+    buyer_schedule_mwh: Number(g.buyer_schedule_mwh.toFixed(4)),
+  }));
+}
+
+export function implementedBlockWiseFromPunches() {
+  return punchedSchedules().map((row) => {
+    const mw = Number(implementedMw(row).toFixed(4));
+    return {
+      id: row.id,
+      seller_name: row.supplier_name || row.counterparty || '',
+      seller_state: row.supplier_sldc || '',
+      buyer_name: row.procurer_name || '',
+      buyer_state: row.procurer_sldc || '',
+      trader_name: 'SJVN',
+      reading_date: row.schedule_date,
+      time_block: timeBlockNumber(row.time_block),
+      seller_schedule_mw: mw,
+      buyer_schedule_mw: mw,
+      schedule_type: row.status,
+      approval_no: row.noar_contract_no || row.loa_no || '',
+      source: 'bilateral_schedules',
+    };
+  });
+}
+
 function listKind(kind, q) {
   switch (kind) {
     // Served from the Bill of Supply register rather than the pending-report
@@ -141,18 +260,29 @@ function listKind(kind, q) {
       return db.prepare('SELECT * FROM compensation_reconciliation ORDER BY delivery_date DESC').all();
     case 'tds-format':
       return db.prepare('SELECT * FROM tds_format_entries ORDER BY application_no').all();
-    case 'daily-schedule':
-      return db.prepare('SELECT * FROM daily_schedule_entries ORDER BY delivery_from, buyer_contract').all();
-    case 'implemented-schedule':
-      return db.prepare('SELECT * FROM implemented_schedule_summary ORDER BY reading_date DESC').all();
-    case 'implemented-block-wise':
-      return db.prepare(`
-        SELECT id, seller_name, seller_state, buyer_name, buyer_state, trader_name,
-               reading_date, time_block, seller_schedule_mw, buyer_schedule_mw,
-               schedule_type, approval_no
-        FROM implemented_schedule_blocks
-        ORDER BY reading_date DESC, time_block
-      `).all();
+    case 'daily-schedule': {
+      const punched = dailyScheduleFromPunches();
+      const keyed = new Set(punched.map((r) => `${r.buyer_contract}|${r.seller_contract}|${r.delivery_from}`));
+      const manual = db.prepare('SELECT * FROM daily_schedule_entries ORDER BY delivery_from, buyer_contract').all()
+        .filter((r) => !keyed.has(`${r.buyer_contract}|${r.seller_contract}|${r.delivery_from}`))
+        .map((r) => ({ ...r, source: 'daily_schedule_entries' }));
+      const rows = [...punched, ...manual];
+      return q
+        ? rows.filter((r) => matchesQuery(r, q, ['buyer_contract', 'seller_contract', 'remarks', 'delivery_from']))
+        : rows;
+    }
+    case 'implemented-schedule': {
+      const rows = implementedSummaryFromPunches();
+      return q
+        ? rows.filter((r) => matchesQuery(r, q, ['seller_name', 'buyer_name', 'reading_date']))
+        : rows;
+    }
+    case 'implemented-block-wise': {
+      const rows = implementedBlockWiseFromPunches();
+      return q
+        ? rows.filter((r) => matchesQuery(r, q, ['seller_name', 'buyer_name', 'seller_state', 'buyer_state', 'approval_no', 'reading_date']))
+        : rows;
+    }
     case 'outstanding-dues':
       return db.prepare(`
         SELECT id, client_name, bill_type, bill_date, bill_due_date,

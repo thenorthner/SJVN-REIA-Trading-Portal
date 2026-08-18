@@ -6,6 +6,7 @@ import { secureLogAudit } from '../auditEngine.js';
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { generateTradingViewBillPdf } from '../scripts/tradingViewBillPdf.js';
 
 // The sample invoices were transcribed from the live ISET ledger — real client
 // names, invoice numbers and amounts — and this repo has a remote, so they live
@@ -28,6 +29,15 @@ const BILL_TYPES = [
   'TRADING_MARGIN', 'EXCHANGE_OA', 'EXCHANGE_ENERGY',
   'BILATERAL_ENERGY', 'BILATERAL_OA', 'BILATERAL_SLDC',
 ];
+
+const CONTRACT_PRODUCTS = ['DAM', 'HPDAM', 'TAM', 'GDAM', 'RTM', 'GTAM', 'REC', 'ESCERT', 'RPO'];
+
+function parseProducts(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
+}
 
 function parseAmt(s) {
   if (s == null || s === '') return null;
@@ -79,13 +89,21 @@ export function seedViewBillInvoices() {
 }
 
 router.get('/', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
-  const { bill_type, q, status } = req.query;
+  const { bill_type, q, status, product } = req.query;
   let sql = 'SELECT * FROM view_bill_invoices WHERE 1=1';
   const params = [];
   if (bill_type) {
     if (!BILL_TYPES.includes(bill_type)) return res.status(400).json({ error: 'Invalid bill_type' });
     sql += ' AND bill_type = ?';
     params.push(bill_type);
+  }
+  if (product) {
+    const products = parseProducts(product);
+    if (!products.length || products.some((p) => !CONTRACT_PRODUCTS.includes(p))) {
+      return res.status(400).json({ error: 'Invalid product' });
+    }
+    sql += ` AND exchange_contract_id IN (SELECT id FROM exchange_contracts WHERE product IN (${products.map(() => '?').join(',')}))`;
+    params.push(...products);
   }
   if (status) { sql += ' AND status = ?'; params.push(status); }
   else { sql += " AND status != 'CANCELLED'"; }
@@ -102,6 +120,18 @@ router.get('/:id', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
   const row = db.prepare('SELECT * FROM view_bill_invoices WHERE id = ? OR invoice_no = ?').get(req.params.id, req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
   res.json(row);
+});
+
+router.get('/:id/pdf', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
+  const row = db.prepare('SELECT * FROM view_bill_invoices WHERE id = ? OR invoice_no = ?').get(req.params.id, req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  const notes = db.prepare(`
+    SELECT * FROM trading_debit_credit_notes
+    WHERE view_bill_invoice_id = ?
+    ORDER BY created_at ASC
+  `).all(row.id);
+  secureLogAudit(req, { action: 'EXPORT_VIEW_BILL_PDF', module: 'TRADING', entityType: 'view_bill_invoice', entityId: row.id });
+  generateTradingViewBillPdf(row, notes, res);
 });
 
 router.put('/:id', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
@@ -157,7 +187,8 @@ router.post('/:id/payment', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res
 router.post('/:id/cancel', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   const row = db.prepare('SELECT * FROM view_bill_invoices WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found' });
-  db.prepare(`UPDATE view_bill_invoices SET status = 'CANCELLED' WHERE id = ?`).run(row.id);
+  db.prepare(`UPDATE view_bill_invoices SET status = 'CANCELLED', cancel_reason = ? WHERE id = ?`)
+    .run(String(req.body?.reason || '').trim() || null, row.id);
   secureLogAudit(req, { action: 'CANCEL_VIEW_BILL', module: 'TRADING', entityType: 'view_bill_invoice', entityId: row.id });
   res.json(db.prepare('SELECT * FROM view_bill_invoices WHERE id = ?').get(row.id));
 });
