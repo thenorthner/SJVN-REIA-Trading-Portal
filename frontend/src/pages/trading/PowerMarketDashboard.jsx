@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
+import MarketDatePicker, { toIsoDate } from '../../components/MarketDatePicker.jsx';
 
 const LICENSEE_SHARE_DATA = [
   { name: 'PTC India', share: 45.2, color: '#3b82f6' },
@@ -29,12 +30,17 @@ const EXCHANGE_VOLUME_DATA = [
   { name: 'HPX', value: 4.4, color: '#10b981' }
 ];
 
-// Data Mocks based on the screenshot analysis
+// Data Mocks based on the screenshot analysis with expanded available dates
 const RTM_DATA = [
+  { date: '04-Aug-2026', sellVolume: 1510000.0, buyVolume: 720000.0, mcp: 2040.00 },
+  { date: '05-Aug-2026', sellVolume: 1580000.0, buyVolume: 750000.0, mcp: 2080.00 },
+  { date: '06-Aug-2026', sellVolume: 1610000.0, buyVolume: 770000.0, mcp: 2110.00 },
   { date: '07-Aug-2026', sellVolume: 1641043.6, buyVolume: 789360.1, mcp: 2130.45 },
   { date: '08-Aug-2026', sellVolume: 1680000.0, buyVolume: 820000.0, mcp: 2100.00 },
   { date: '09-Aug-2026', sellVolume: 1900000.0, buyVolume: 880000.0, mcp: 1950.00 },
   { date: '10-Aug-2026', sellVolume: 1180000.0, buyVolume: 580000.0, mcp: 2200.00 },
+  { date: '11-Aug-2026', sellVolume: 1260000.0, buyVolume: 610000.0, mcp: 2180.00 },
+  { date: '12-Aug-2026', sellVolume: 1320000.0, buyVolume: 640000.0, mcp: 2150.00 },
 ];
 
 const INTRADAY_BLOCK_DATA = [
@@ -107,28 +113,65 @@ for(let i=63; i<=96; i++) {
 }
 
 const GDAM_DATA = [
+  { date: '04-Aug-2026', sellVolume: 155000.0, buyVolume: 490000.0, mcp: 3350.00 },
+  { date: '05-Aug-2026', sellVolume: 160000.0, buyVolume: 510000.0, mcp: 3400.00 },
+  { date: '06-Aug-2026', sellVolume: 162000.0, buyVolume: 540000.0, mcp: 3420.00 },
   { date: '07-Aug-2026', sellVolume: 165000.0, buyVolume: 580000.0, mcp: 3450.00 },
   { date: '08-Aug-2026', sellVolume: 168000.0, buyVolume: 350000.0, mcp: 3300.00 },
   { date: '09-Aug-2026', sellVolume: 172360.2, buyVolume: 282266.0, mcp: 3114.13 },
   { date: '10-Aug-2026', sellVolume: 190000.0, buyVolume: 450000.0, mcp: 3200.00 },
+  { date: '11-Aug-2026', sellVolume: 185000.0, buyVolume: 420000.0, mcp: 3250.00 },
+  { date: '12-Aug-2026', sellVolume: 178000.0, buyVolume: 390000.0, mcp: 3280.00 },
 ];
 
 const DAM_OVERALL_DATA = [
+  { date: '04-Aug-2026', sellVolume: 1890000.0, buyVolume: 1450000.0, mcp: 4320.00 },
+  { date: '05-Aug-2026', sellVolume: 1920000.0, buyVolume: 1520000.0, mcp: 4410.00 },
+  { date: '06-Aug-2026', sellVolume: 1950000.0, buyVolume: 1580000.0, mcp: 4480.00 },
   { date: '07-Aug-2026', sellVolume: 1986701.3, buyVolume: 1617013.9, mcp: 4510.65 },
   { date: '08-Aug-2026', sellVolume: 2084305.9, buyVolume: 1205482.1, mcp: 4100.93 },
   { date: '09-Aug-2026', sellVolume: 2387506.6, buyVolume: 860460.3, mcp: 2413.29 },
   { date: '10-Aug-2026', sellVolume: 2283858.7, buyVolume: 1134406.8, mcp: 3772.46 },
+  { date: '11-Aug-2026', sellVolume: 2150000.0, buyVolume: 1250000.0, mcp: 3950.00 },
+  { date: '12-Aug-2026', sellVolume: 2090000.0, buyVolume: 1300000.0, mcp: 4050.00 },
 ];
 
 export default function PowerMarketDashboard() {
   const [fromDate, setFromDate] = useState('07-08-2026');
   const [toDate, setToDate] = useState('10-08-2026');
+  const [appliedFromDate, setAppliedFromDate] = useState('07-08-2026');
+  const [appliedToDate, setAppliedToDate] = useState('10-08-2026');
   const [productType, setProductType] = useState('RTM');
 
-  // Select active dataset
-  let activeData = RTM_DATA;
-  if (productType === 'GDAM') activeData = GDAM_DATA;
-  if (productType === 'DAM') activeData = DAM_OVERALL_DATA;
+  // Available dates for the active product
+  const allProductDates = useMemo(() => {
+    let raw = RTM_DATA;
+    if (productType === 'GDAM') raw = GDAM_DATA;
+    if (productType === 'DAM') raw = DAM_OVERALL_DATA;
+    return raw.map((r) => r.date);
+  }, [productType]);
+
+  // Filter dataset based on applied date range
+  const activeData = useMemo(() => {
+    let raw = RTM_DATA;
+    if (productType === 'GDAM') raw = GDAM_DATA;
+    if (productType === 'DAM') raw = DAM_OVERALL_DATA;
+
+    const fromIso = toIsoDate(appliedFromDate);
+    const toIso = toIsoDate(appliedToDate);
+
+    return raw.filter((row) => {
+      const rowIso = toIsoDate(row.date);
+      if (fromIso && rowIso < fromIso) return false;
+      if (toIso && rowIso > toIso) return false;
+      return true;
+    });
+  }, [productType, appliedFromDate, appliedToDate]);
+
+  const handleShowGraph = () => {
+    setAppliedFromDate(fromDate);
+    setAppliedToDate(toDate);
+  };
 
   const CustomChartTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -161,32 +204,59 @@ export default function PowerMarketDashboard() {
         </div>
       </div>
 
-      {/* Filter Controls Bar */}
-      <div className="filters-bar" style={{ background: 'var(--surface)', padding: '16px', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '20px' }}>
+      {/* Filter Controls Bar with Calendar DatePickers */}
+      <div className="filters-bar" style={{
+        background: 'var(--surface)',
+        padding: '16px 20px',
+        borderRadius: '8px',
+        border: '1px solid var(--border)',
+        marginBottom: '20px',
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '16px'
+      }}>
         
+        {/* From Date with Calendar Picker */}
+        <MarketDatePicker
+          label="From Date*"
+          value={fromDate}
+          onChange={(val) => {
+            setFromDate(val);
+            setAppliedFromDate(val);
+          }}
+          availableDates={allProductDates}
+          maxDate={toDate}
+          placeholder="DD-MM-YYYY"
+        />
+
+        {/* To Date with Calendar Picker */}
+        <MarketDatePicker
+          label="To Date*"
+          value={toDate}
+          onChange={(val) => {
+            setToDate(val);
+            setAppliedToDate(val);
+          }}
+          availableDates={allProductDates}
+          minDate={fromDate}
+          placeholder="DD-MM-YYYY"
+        />
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <label style={{ fontSize: '13px', fontWeight: 600 }}>From Date*</label>
-          <input 
-            type="text" 
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-          />
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '12px' }}>
-          <label style={{ fontSize: '13px', fontWeight: 600 }}>To Date*</label>
-          <input 
-            type="text" 
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-          />
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '12px' }}>
-          <label style={{ fontSize: '13px', fontWeight: 600 }}>Product Type*</label>
+          <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>Product Type*</label>
           <select 
             value={productType} 
             onChange={(e) => setProductType(e.target.value)} 
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: '1px solid #cbd5e1',
+              background: '#fff',
+              fontSize: '13px',
+              fontWeight: 500,
+              minWidth: '140px'
+            }}
           >
             <option value="RTM">RTM</option>
             <option value="GDAM">GDAM</option>
@@ -194,9 +264,18 @@ export default function PowerMarketDashboard() {
           </select>
         </div>
 
-        <button className="btn btn-primary" style={{ marginLeft: '12px' }}>
+        <button 
+          type="button" 
+          onClick={handleShowGraph} 
+          className="btn btn-primary" 
+          style={{ padding: '7px 18px', fontWeight: 600 }}
+        >
           Show Graph
         </button>
+
+        <span style={{ fontSize: '11px', color: '#64748b', marginLeft: 'auto' }}>
+          Showing {activeData.length} active market session(s)
+        </span>
       </div>
 
       {/* Main Chart Card */}
@@ -204,7 +283,7 @@ export default function PowerMarketDashboard() {
         
         <div className="card-header">
           <h3>
-            Day wise Buy Volume V/s Sell Volume V/s MCP (for dates from: {fromDate.replace(/-/g, '-')} to {toDate.replace(/-/g, '-')})
+            Day wise Buy Volume V/s Sell Volume V/s MCP (for dates from: {fromDate || '—'} to {toDate || '—'})
           </h3>
         </div>
 

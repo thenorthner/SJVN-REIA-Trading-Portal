@@ -13,8 +13,26 @@ const SEASONAL_WEIGHT = [0.072, 0.070, 0.081, 0.090, 0.101, 0.096,
                          0.085, 0.083, 0.081, 0.080, 0.078, 0.083];
 
 const LABEL_MIN_PERCENT = 0.04;
-const sliceLabel = ({ name, percent }) =>
-  (percent < LABEL_MIN_PERCENT ? null : `${name} ${(percent * 100).toFixed(1)}%`);
+
+// Two-line slice label keeps text fully inside the chart card box without clipping
+const renderCustomSliceLabel = ({ percent, name, x, y, textAnchor }) => {
+  if (percent < LABEL_MIN_PERCENT) return null;
+  const pctStr = `${(percent * 100).toFixed(1)}%`;
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="#334155"
+      textAnchor={textAnchor}
+      dominantBaseline="central"
+      fontSize={11}
+      fontWeight={600}
+    >
+      <tspan x={x} dy="-0.4em">{name}</tspan>
+      <tspan x={x} dy="1.25em" fill="#0f172a" fontWeight={700}>{pctStr}</tspan>
+    </text>
+  );
+};
 
 export default function MMRDashboard() {
   const [selectedYear, setSelectedYear] = useState('2026');
@@ -76,13 +94,7 @@ export default function MMRDashboard() {
     { name: 'RTM', value: 200.00, color: '#fb923c' },
   ];
 
-  // This is a *monthly* market report, and the month selector drove nothing at
-  // all — the four charts showed the same annual aggregate whichever month was
-  // picked. The figures above are annual, so a month is that year's volume
-  // shaped by demand: high through the summer peak, low in the monsoon.
   const monthShare = SEASONAL_WEIGHT[Math.max(0, MONTHS.indexOf(selectedMonth))];
-  // Percentage splits are shares and must not be scaled; volumes are absolute
-  // and must be. Short-term mix is the former, the exchange charts the latter.
   const forMonth = (rows) => rows.map((r) => ({ ...r, value: +(r.value * monthShare).toFixed(2) }));
 
   const activeShortTerm = selectedYear === '2026' ? shortTermData2026 : shortTermData2023;
@@ -90,46 +102,90 @@ export default function MMRDashboard() {
   const activePXIL = forMonth(selectedYear === '2026' ? pxilData2026 : pxilData2023);
   const activeHPX = forMonth(selectedYear === '2026' ? hpxData2026 : hpxData2023);
 
-  // Custom tooltips
-  const CustomPieTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 10px', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,.08)' }}>
-          <div style={{ color: '#6b7280', fontSize: 11, borderBottom: '1px solid #e5e7eb', paddingBottom: 4, marginBottom: 6 }}>{`Volume of Short-Term Transaction of Electricity and DSM (MU)`}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: payload[0].payload.color }} />
-            <span style={{ fontWeight: 500, color: '#374151' }}>{payload[0].name}</span>
-            <span style={{ marginLeft: 'auto', fontWeight: 700, color: '#111827' }}>{payload[0].value.toLocaleString()}</span>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const CustomExchangeTooltip = ({ active, payload, exchangeName }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: '8px 10px', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,.08)' }}>
-          <div style={{ color: '#6b7280', fontSize: 11, borderBottom: '1px solid #e5e7eb', paddingBottom: 4, marginBottom: 6 }}>{`Volume Transactions in ${exchangeName} (MU)`}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: payload[0].payload.color }} />
-            <span style={{ fontWeight: 500, color: '#374151' }}>{payload[0].name}</span>
-            <span style={{ marginLeft: 'auto', fontWeight: 700, color: '#111827' }}>{payload[0].value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
-
-
-  // The month scales absolute volume but pie labels are shares, so changing it
-  // moved nothing a reader could see. The heading now carries the period and the
-  // total it adds up to, which is the part that actually differs month to month.
   const totalMu = (rows) => rows.reduce((a, r) => a + r.value, 0)
     .toLocaleString('en-IN', { maximumFractionDigits: 0 });
   const period = `${selectedMonth} ${selectedYear}`;
+
+  // Uniform, beautifully styled tooltip dialog box for all graphs
+  const CustomGraphTooltip = ({ active, payload, title, isPercentage = false, totalVolume = null }) => {
+    if (!active || !payload || !payload.length) return null;
+    const entry = payload[0];
+    const color = entry.payload?.color || entry.color || '#3b82f6';
+    const name = entry.name;
+    const val = entry.value;
+
+    let valueDisplay = '';
+    let shareDisplay = '';
+
+    if (isPercentage) {
+      valueDisplay = `${val}%`;
+      shareDisplay = 'Volume Share';
+    } else {
+      valueDisplay = `${val.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MU`;
+      if (totalVolume && totalVolume > 0) {
+        shareDisplay = `${((val / totalVolume) * 100).toFixed(1)}% share`;
+      }
+    }
+
+    return (
+      <div style={{
+        background: '#ffffff',
+        border: '1px solid #cbd5e1',
+        borderRadius: '8px',
+        padding: '10px 14px',
+        boxShadow: '0 4px 16px rgba(15, 23, 42, 0.12)',
+        minWidth: '220px',
+        maxWidth: '280px',
+        boxSizing: 'border-box',
+        pointerEvents: 'none'
+      }}>
+        <div style={{ fontSize: '12px', fontWeight: 700, color: '#1e293b' }}>
+          {title}
+        </div>
+        <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', marginBottom: '6px' }}>
+          {period}
+        </div>
+        <div style={{
+          borderTop: '1px solid #e2e8f0',
+          paddingTop: '8px',
+          marginTop: '6px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{
+              width: '9px',
+              height: '9px',
+              borderRadius: '50%',
+              backgroundColor: color,
+              flexShrink: 0,
+              display: 'inline-block'
+            }} />
+            <span style={{ fontWeight: 600, color: '#334155', fontSize: '12px' }}>
+              {name}
+            </span>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '12.5px' }}>
+              {valueDisplay}
+            </div>
+            {shareDisplay && (
+              <div style={{ fontSize: '10.5px', color: '#64748b', fontWeight: 500 }}>
+                {shareDisplay}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const iexTotal = activeIEX.reduce((a, r) => a + r.value, 0);
+  const pxilTotal = activePXIL.reduce((a, r) => a + r.value, 0);
+  const hpxTotal = activeHPX.reduce((a, r) => a + r.value, 0);
+
   return (
     <div>
       <div className="page-header">
@@ -173,25 +229,27 @@ export default function MMRDashboard() {
           <div className="card-header">
             <h3>Volume of Short-Term Transaction of Electricity and DSM — {period}</h3>
           </div>
-          <div className="card-body" style={{ height: '350px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie 
-                  data={activeShortTerm} 
-                  dataKey="value" 
-                  innerRadius={70} 
-                  outerRadius={110} 
-                  label={sliceLabel}
-                  labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
-                >
-                  {activeShortTerm.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomPieTooltip />} />
-                <Legend verticalAlign="bottom" height={36} iconType="square" wrapperStyle={{fontSize: '12px', paddingTop: '20px'}}/>
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="card-body" style={{ height: '370px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart margin={{ top: 10, right: 35, bottom: 10, left: 35 }}>
+                  <Pie 
+                    data={activeShortTerm} 
+                    dataKey="value" 
+                    innerRadius={52} 
+                    outerRadius={80} 
+                    label={renderCustomSliceLabel}
+                    labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
+                  >
+                    {activeShortTerm.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomGraphTooltip title="Short-Term Transactions & DSM" isPercentage={true} />} />
+                  <Legend verticalAlign="bottom" height={36} iconType="square" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
             <SourceNote source="CERC Market Monitoring Report" period={period} />
           </div>
         </div>
@@ -201,24 +259,26 @@ export default function MMRDashboard() {
           <div className="card-header">
             <h3>Volume Transactions in IEX — {period} · {totalMu(activeIEX)} MU</h3>
           </div>
-          <div className="card-body" style={{ height: '350px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie 
-                  data={activeIEX} 
-                  dataKey="value" 
-                  outerRadius={110} 
-                  label={sliceLabel}
-                  labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
-                >
-                  {activeIEX.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomExchangeTooltip exchangeName="IEX" />} />
-                <Legend verticalAlign="bottom" height={36} iconType="square" wrapperStyle={{fontSize: '12px', paddingTop: '20px'}}/>
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="card-body" style={{ height: '370px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart margin={{ top: 10, right: 35, bottom: 10, left: 35 }}>
+                  <Pie 
+                    data={activeIEX} 
+                    dataKey="value" 
+                    outerRadius={80} 
+                    label={renderCustomSliceLabel}
+                    labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
+                  >
+                    {activeIEX.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomGraphTooltip title="Volume Transactions in IEX" totalVolume={iexTotal} />} />
+                  <Legend verticalAlign="bottom" height={36} iconType="square" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
             <SourceNote source="CERC Market Monitoring Report" period={period} />
           </div>
         </div>
@@ -233,24 +293,26 @@ export default function MMRDashboard() {
           <div className="card-header">
             <h3>Volume Transactions in PXIL — {period} · {totalMu(activePXIL)} MU</h3>
           </div>
-          <div className="card-body" style={{ height: '350px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie 
-                  data={activePXIL} 
-                  dataKey="value" 
-                  outerRadius={90} 
-                  label={sliceLabel}
-                  labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
-                >
-                  {activePXIL.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomExchangeTooltip exchangeName="PXIL" />} />
-                <Legend verticalAlign="bottom" height={36} iconType="square" wrapperStyle={{fontSize: '12px', paddingTop: '10px'}}/>
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="card-body" style={{ height: '370px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart margin={{ top: 10, right: 35, bottom: 10, left: 35 }}>
+                  <Pie 
+                    data={activePXIL} 
+                    dataKey="value" 
+                    outerRadius={80} 
+                    label={renderCustomSliceLabel}
+                    labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
+                  >
+                    {activePXIL.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomGraphTooltip title="Volume Transactions in PXIL" totalVolume={pxilTotal} />} />
+                  <Legend verticalAlign="bottom" height={36} iconType="square" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
             <SourceNote source="CERC Market Monitoring Report" period={period} />
           </div>
         </div>
@@ -260,24 +322,26 @@ export default function MMRDashboard() {
           <div className="card-header">
             <h3>Volume Transactions in HPX — {period} · {totalMu(activeHPX)} MU</h3>
           </div>
-          <div className="card-body" style={{ height: '350px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie 
-                  data={activeHPX} 
-                  dataKey="value" 
-                  outerRadius={90} 
-                  label={sliceLabel}
-                  labelLine={{ stroke: '#cbd5e1', strokeWidth: 1 }}
-                >
-                  {activeHPX.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomExchangeTooltip exchangeName="HPX" />} />
-                <Legend verticalAlign="bottom" height={36} iconType="square" wrapperStyle={{fontSize: '12px', paddingTop: '10px'}}/>
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="card-body" style={{ height: '370px', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart margin={{ top: 10, right: 35, bottom: 10, left: 35 }}>
+                  <Pie 
+                    data={activeHPX} 
+                    dataKey="value" 
+                    outerRadius={80} 
+                    label={renderCustomSliceLabel}
+                    labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
+                  >
+                    {activeHPX.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomGraphTooltip title="Volume Transactions in HPX" totalVolume={hpxTotal} />} />
+                  <Legend verticalAlign="bottom" height={36} iconType="square" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
             <SourceNote source="CERC Market Monitoring Report" period={period} />
           </div>
         </div>
