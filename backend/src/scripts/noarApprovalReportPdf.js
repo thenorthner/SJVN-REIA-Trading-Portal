@@ -198,8 +198,11 @@ export function generateNoarApprovalReportPdf(summary, decided, res) {
   const range = doc.bufferedPageRange();
   for (let i = 0; i < range.count; i += 1) {
     doc.switchToPage(range.start + i);
+    const oldBottom = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
     doc.fillColor(MUTED).font('Helvetica').fontSize(7)
       .text(`Page ${i + 1} of ${range.count}`, M, PAGE_H - M + 6, { width: CONTENT_W, align: 'right', lineBreak: false });
+    doc.page.margins.bottom = oldBottom;
   }
 
   doc.end();
