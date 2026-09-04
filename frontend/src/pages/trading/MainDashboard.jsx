@@ -171,25 +171,26 @@ export default function MainDashboard() {
           <div className="card-header">
             <h3>All-India Generation Mix (Thermal/Hydro/Nuclear/RE)</h3>
           </div>
-          <div className="card-body" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '350px' }}>
+          <div className="card-body" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '380px' }}>
             <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
+              <PieChart margin={{ top: 10, right: 20, bottom: 10, left: 10 }}>
                 <Pie
                   data={GENERATION_MIX_DATA}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={80}
-                  outerRadius={120}
+                  cx="46%"
+                  cy="42%"
+                  innerRadius={64}
+                  outerRadius={104}
                   paddingAngle={2}
                   dataKey="value"
                   label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+                  labelLine={{ stroke: '#94a3b8', strokeWidth: 1 }}
                 >
                   {GENERATION_MIX_DATA.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
                 <Tooltip formatter={(value) => `${value}%`} />
-                <Legend verticalAlign="bottom" height={36} />
+                <Legend verticalAlign="bottom" height={36} wrapperStyle={{ paddingTop: '8px', fontSize: '12px' }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -204,7 +205,7 @@ export default function MainDashboard() {
             <h3>Volume of Short-Term Transaction vs DSM (MU)</h3>
           </div>
           <div className="card-body">
-            <div style={{ width: '100%', height: '350px' }}>
+            <div style={{ width: '100%', height: '380px' }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={SHORT_TERM_VS_DSM_DATA} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />

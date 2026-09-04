@@ -279,10 +279,13 @@ export function generateEnergyReportPdf(report, meta, res) {
   const pages = doc.bufferedPageRange();
   for (let i = 0; i < pages.count; i++) {
     doc.switchToPage(i);
+    const oldBottom = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
     doc.moveTo(M, PAGE_H - 22).lineTo(M + CONTENT_W, PAGE_H - 22).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
     doc.fillColor(MUTED).font('Helvetica').fontSize(7)
       .text('SJVN Limited  ·  Confidential — for internal use', M, PAGE_H - 16, { lineBreak: false })
       .text(`Page ${i + 1} of ${pages.count}`, M, PAGE_H - 16, { width: CONTENT_W, align: 'right', lineBreak: false });
+    doc.page.margins.bottom = oldBottom;
   }
 
   doc.end();
