@@ -29,7 +29,7 @@ export default function NOARDetailCard() {
       <div className="bg-white border border-gray-200 shadow-sm rounded-sm max-w-6xl mx-auto">
         
         {/* Header */}
-        <div className="bg-[#66b2ff] text-white px-4 py-2 flex items-center justify-center font-semibold tracking-wide">
+        <div className="bg-[#101a2e] text-white px-4 py-2 flex items-center justify-center font-semibold tracking-wide">
           NOAR Approvals Details
         </div>
 
@@ -95,14 +95,14 @@ export default function NOARDetailCard() {
         </div>
 
         {/* Secondary Header */}
-        <div className="bg-[#66b2ff] text-white px-4 py-2 flex items-center justify-center font-semibold tracking-wide">
+        <div className="bg-[#101a2e] text-white px-4 py-2 flex items-center justify-center font-semibold tracking-wide">
           Charges Details
         </div>
 
         {/* Charges Table */}
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-[#66b2ff] text-white">
+            <tr className="bg-[#101a2e] text-white">
               <th className="px-4 py-2 font-semibold border-r border-white/20">#</th>
               <th className="px-4 py-2 font-semibold border-r border-white/20">Charge Name</th>
               <th className="px-4 py-2 font-semibold border-r border-white/20">Payable Amount</th>

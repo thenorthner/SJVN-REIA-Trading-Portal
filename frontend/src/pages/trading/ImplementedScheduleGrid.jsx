@@ -6,16 +6,16 @@ export default function ImplementedScheduleGrid() {
       <div className="bg-white border border-gray-200 overflow-x-auto shadow-sm max-w-7xl mx-auto rounded-sm">
         
         {/* Header Title */}
-        <div className="bg-[#66b2ff] text-white px-4 py-2 flex items-center justify-center font-semibold tracking-wide border-b border-white/20">
+        <div className="bg-[#101a2e] text-white px-4 py-2 flex items-center justify-center font-semibold tracking-wide border-b border-white/20">
           Implemented Schedule
         </div>
 
         {/* Action Bar */}
         <div className="flex justify-between items-center p-3 border-b border-gray-200">
           <div className="flex gap-2">
-            <button className="bg-[#5bc0de] hover:bg-[#31b0d5] text-white px-4 py-1.5 text-xs rounded-full shadow-sm transition-colors">CSV</button>
-            <button className="bg-[#5bc0de] hover:bg-[#31b0d5] text-white px-4 py-1.5 text-xs rounded-full shadow-sm transition-colors">Excel</button>
-            <button className="bg-[#5bc0de] hover:bg-[#31b0d5] text-white px-4 py-1.5 text-xs rounded-full shadow-sm transition-colors">PDF</button>
+            <button className="bg-[#17243d] hover:bg-[#273c61] text-white px-4 py-1.5 text-xs rounded-full shadow-sm transition-colors">CSV</button>
+            <button className="bg-[#17243d] hover:bg-[#273c61] text-white px-4 py-1.5 text-xs rounded-full shadow-sm transition-colors">Excel</button>
+            <button className="bg-[#17243d] hover:bg-[#273c61] text-white px-4 py-1.5 text-xs rounded-full shadow-sm transition-colors">PDF</button>
           </div>
           <div className="flex items-center gap-2">
             <label className="text-gray-600 text-xs font-medium">Search:</label>
@@ -26,7 +26,7 @@ export default function ImplementedScheduleGrid() {
         {/* Main Data Grid */}
         <table className="w-full text-center border-collapse whitespace-nowrap">
           <thead>
-            <tr className="bg-[#66b2ff] text-white text-[13px]">
+            <tr className="bg-[#101a2e] text-white text-[13px]">
               <th className="px-4 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400 transition-colors w-16">Sr. No. ⇕</th>
               <th className="px-4 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400 transition-colors">Reading Date ⇕</th>
               <th className="px-4 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400 transition-colors">Seller Name ⇕</th>

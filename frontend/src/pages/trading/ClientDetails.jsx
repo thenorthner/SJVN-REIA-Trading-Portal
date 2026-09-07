@@ -39,7 +39,7 @@ export default function ClientDetails() {
         <div className="overflow-x-auto px-4 pb-4">
           <table className="w-full text-center border-collapse whitespace-nowrap border border-gray-200">
             <thead>
-              <tr className="bg-[#66b2ff] text-white">
+              <tr className="bg-[#101a2e] text-white">
                 <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Sr. No. ⇕</th>
                 <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Client ID ⇕</th>
                 <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Client Name ⇕</th>

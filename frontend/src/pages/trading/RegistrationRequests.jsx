@@ -45,7 +45,7 @@ export default function RegistrationRequests() {
         <div className="overflow-x-auto px-4 pb-4">
           <table className="w-full text-left border-collapse whitespace-nowrap border border-gray-200">
             <thead>
-              <tr className="bg-[#66b2ff] text-white">
+              <tr className="bg-[#101a2e] text-white">
                 <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">
                   <div className="flex items-center justify-between">Client Name <span className="text-[10px]">▲</span></div>
                 </th>

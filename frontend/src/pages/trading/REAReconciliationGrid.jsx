@@ -32,7 +32,7 @@ export default function REAReconciliationGrid() {
             <input type="text" value="New Delhi Municipal Council" readOnly className="w-full border border-gray-300 rounded-sm px-3 py-1.5 text-gray-700 outline-none" />
           </div>
           <div className="mb-0.5">
-            <button className="bg-[#3399ff] hover:bg-blue-500 text-white px-6 py-1.5 rounded-sm font-medium transition-colors">
+            <button className="bg-[#17243d] hover:bg-blue-500 text-white px-6 py-1.5 rounded-sm font-medium transition-colors">
               Search
             </button>
           </div>
@@ -42,7 +42,7 @@ export default function REAReconciliationGrid() {
         <div className="overflow-x-auto p-4">
           <table className="w-full text-center border-collapse whitespace-nowrap text-[13px]">
             <thead>
-              <tr className="bg-[#66b2ff] text-white">
+              <tr className="bg-[#101a2e] text-white">
                 <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400 w-12">#</th>
                 <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Contract No</th>
                 <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Name Of The Entity</th>

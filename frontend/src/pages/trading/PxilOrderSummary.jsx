@@ -169,7 +169,7 @@ export default function PxilOrderSummary() {
         body { font-family: Arial, sans-serif; padding: 24px; }
         h1 { font-size: 18px; margin-bottom: 16px; }
         table { width: 100%; border-collapse: collapse; font-size: 11px; }
-        th { background: #5b9bd5; color: #fff; text-align: left; padding: 8px; }
+        th { background: #101a2e; color: #fff; text-align: left; padding: 8px; }
         td { border-bottom: 1px solid #ddd; padding: 8px; }
       </style></head><body>
       <h1>Pxil Order Details</h1>
@@ -185,7 +185,7 @@ export default function PxilOrderSummary() {
   }
 
   const thStyle = {
-    background: '#5b9bd5',
+    background: '#101a2e',
     color: '#fff',
     padding: '10px 12px',
     fontWeight: 600,

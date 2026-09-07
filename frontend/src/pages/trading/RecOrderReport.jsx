@@ -70,7 +70,7 @@ export default function RecOrderReport() {
         </div>
       </div>
 
-      <div style={{ background: '#5b9bd5', color: '#fff', textAlign: 'center', padding: '10px 12px', borderRadius: 4, fontWeight: 600, marginBottom: 16 }}>
+      <div style={{ background: '#101a2e', color: '#fff', textAlign: 'center', padding: '10px 12px', borderRadius: 4, fontWeight: 600, marginBottom: 16 }}>
         REC Order Report
       </div>
 
@@ -115,7 +115,7 @@ export default function RecOrderReport() {
               borderRadius: 6,
               padding: '12px 16px',
               cursor: 'pointer',
-              background: selected === t.trade_date ? '#5b9bd5' : '#d6eaf8',
+              background: selected === t.trade_date ? '#101a2e' : '#d6eaf8',
               color: selected === t.trade_date ? '#fff' : '#0f172a',
               fontWeight: 600,
               fontSize: 14,

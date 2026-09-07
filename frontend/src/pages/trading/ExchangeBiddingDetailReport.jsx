@@ -116,7 +116,7 @@ export default function ExchangeBiddingDetailReport() {
         h1{font-size:16px}
         table{border-collapse:collapse;width:100%}
         th,td{border:1px solid #ccc;padding:4px;white-space:nowrap}
-        th{background:#5b9bd5;color:#fff}
+        th{background:#101a2e;color:#fff}
       </style></head><body>
       <h1>Bid Details Report</h1>
       <table><thead><tr>${head}</tr></thead><tbody>${body || '<tr><td colspan="25">No entries</td></tr>'}</tbody></table>
@@ -127,7 +127,7 @@ export default function ExchangeBiddingDetailReport() {
   }
 
   const thStyle = {
-    background: '#5b9bd5',
+    background: '#101a2e',
     color: '#fff',
     padding: '8px 10px',
     fontSize: 11,

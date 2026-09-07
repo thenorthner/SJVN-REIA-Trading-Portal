@@ -6,33 +6,76 @@ import { TRADING_MENU } from '../config/tradingMenu.js';
 import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from '../roles.js';
 import { PortfolioSelect } from '../context/PortfolioContext.jsx';
 
-/** Keeps the shell up if a screen's module fails to load or throws while rendering. */
+/**
+ * Keeps the shell up if a screen's module fails to load or throws while
+ * rendering.
+ *
+ * The common cause is not a broken screen at all: the server has been
+ * redeployed, every code-split chunk has a new content hash, and a tab that has
+ * been open across the deploy asks for a file that no longer exists. Re-mounting
+ * that screen fails the same way for ever, so a stale bundle reloads the page
+ * once (guarded, so a genuinely missing chunk cannot loop) and only a second
+ * failure is shown to the user.
+ */
+const RELOAD_GUARD = 'sjvn:chunk-reload-at';
+
+function isStaleBundleError(error) {
+  const msg = String(error?.message || '');
+  return /dynamically imported module|Importing a module script failed|ChunkLoadError|Loading chunk \d+ failed/i.test(msg);
+}
+
 class RouteErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { error: null };
+    this.state = { error: null, reloading: false };
   }
   static getDerivedStateFromError(error) {
     return { error };
   }
   componentDidCatch(error) {
     console.error('Screen failed to render:', error);
+    if (!isStaleBundleError(error)) return;
+    // One reload per minute at most: if the chunk is genuinely gone, the second
+    // failure lands on the message below instead of reloading for ever.
+    let last = 0;
+    try { last = Number(sessionStorage.getItem(RELOAD_GUARD)) || 0; } catch { /* private mode */ }
+    if (Date.now() - last < 60_000) return;
+    try { sessionStorage.setItem(RELOAD_GUARD, String(Date.now())); } catch { /* private mode */ }
+    this.setState({ reloading: true });
+    window.location.reload();
   }
   render() {
+    if (this.state.reloading) {
+      return <div className="page-loading" style={{ padding: 28 }}>Loading the latest version…</div>;
+    }
     if (this.state.error) {
+      const stale = isStaleBundleError(this.state.error);
       return (
         <div style={{ padding: 28, maxWidth: 640 }}>
           <h2 style={{ marginTop: 0, fontSize: 18 }}>This screen failed to load</h2>
-          <p style={{ color: '#64748b', fontSize: 14, lineHeight: 1.5 }}>
-            {this.state.error.message || 'An unexpected error occurred.'}
+          <p style={{ color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.5 }}>
+            {stale
+              ? 'The application was updated while this tab was open, so this screen’s code is no longer on the server. Reloading picks up the new version.'
+              : this.state.error.message || 'An unexpected error occurred.'}
           </p>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => this.setState({ error: null })}
-          >
-            Try again
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => window.location.reload()}
+            >
+              Reload
+            </button>
+            {!stale && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => this.setState({ error: null })}
+              >
+                Try again
+              </button>
+            )}
+          </div>
         </div>
       );
     }
@@ -356,7 +399,10 @@ export default function Layout() {
             {!branded && (
               <img className="topbar-logo" src="/sjvn-logo.png" alt="SJVN" />
             )}
-            <div className="topbar-title">
+            <div
+              className="topbar-title"
+              title={branded ? `${entity.name} — ${portalKind}` : 'Integrated Renewable Energy Commercial, Billing, Settlement & Power Trading Management Platform'}
+            >
               {branded
                 ? `${entity.name} — ${portalKind}`
                 : 'Integrated Renewable Energy Commercial, Billing, Settlement & Power Trading Management Platform'}

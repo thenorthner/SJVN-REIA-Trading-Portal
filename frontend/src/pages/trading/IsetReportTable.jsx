@@ -122,7 +122,7 @@ export default function IsetReportTable({
         body{font-family:Arial,sans-serif;padding:24px}
         h1{font-size:18px;margin-bottom:16px}
         table{width:100%;border-collapse:collapse;font-size:10px}
-        th{background:#5b9bd5;color:#fff;text-align:left;padding:6px}
+        th{background:#101a2e;color:#fff;text-align:left;padding:6px}
         td{border-bottom:1px solid #ddd;padding:6px}
       </style></head><body>
       <h1>${title}</h1>
@@ -134,38 +134,28 @@ export default function IsetReportTable({
     w.print();
   }
 
-  const thStyle = {
-    background: '#5b9bd5',
-    color: '#fff',
-    padding: '10px 12px',
-    fontWeight: 600,
-    fontSize: 12,
-    cursor: 'pointer',
-    userSelect: 'none',
-    whiteSpace: 'nowrap',
-  };
-
-  const exportBtnStyle = { background: '#3b82f6', color: '#fff', border: 'none' };
+  // Header, zebra rows and export chrome all come from the shared .report-table
+  // rules, so an ISET report and an ERP format report look like one grid.
   const colCount = columns.length + (showSr ? 1 : 0);
 
   return (
-    <div style={{ padding: 20 }}>
+    <div className="report-shell">
       <div className="form-section-header" style={{ marginTop: 0 }}>{title}</div>
       <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className="btn btn-sm" style={exportBtnStyle} onClick={exportCsv}>CSV</button>
-            <button type="button" className="btn btn-sm" style={exportBtnStyle} onClick={exportExcel}>Excel</button>
-            <button type="button" className="btn btn-sm" style={exportBtnStyle} onClick={exportPdf}>PDF</button>
+        <div className="report-toolbar">
+          <div className="export-group">
+            <button type="button" className="btn btn-sm btn-navy" onClick={exportCsv}>CSV</button>
+            <button type="button" className="btn btn-sm btn-navy" onClick={exportExcel}>Excel</button>
+            <button type="button" className="btn btn-sm btn-navy" onClick={exportPdf}>PDF</button>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+          <label className="report-search">
             Search:
             <input
               type="search"
               className="input"
-              style={{ width: 260 }}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter these rows"
             />
           </label>
         </div>
@@ -174,16 +164,22 @@ export default function IsetReportTable({
           <div className="page-loading">Loading report…</div>
         ) : (
           <>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <div className="report-table-wrap">
+              <table className="report-table">
                 <thead>
                   <tr>
-                    {showSr && <th style={{ ...thStyle, cursor: 'default' }}>Sr. No.</th>}
+                    {showSr && <th scope="col" style={{ width: 64 }}>Sr. No.</th>}
                     {columns.map((c) => (
-                      <th key={c.key} style={thStyle} onClick={() => toggleSort(c.key)}>
-                        {c.label}{' '}
-                        <span style={{ opacity: sortKey === c.key ? 1 : 0.45 }}>
-                          {sortKey === c.key && sortDir === 'asc' ? '▲' : '▼'}
+                      <th
+                        key={c.key}
+                        scope="col"
+                        className={`sortable${sortKey === c.key ? ' sorted' : ''}`}
+                        onClick={() => toggleSort(c.key)}
+                        aria-sort={sortKey === c.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
+                        {c.label}
+                        <span className="sort-arrow">
+                          {sortKey === c.key && sortDir === 'desc' ? '▼' : '▲'}
                         </span>
                       </th>
                     ))}
@@ -191,10 +187,10 @@ export default function IsetReportTable({
                 </thead>
                 <tbody>
                   {totals && (
-                    <tr style={{ background: '#e8f0fe', fontWeight: 600 }}>
-                      {showSr && <td style={{ padding: '10px 12px' }}>Total</td>}
+                    <tr className="totals-row">
+                      {showSr && <td>Total</td>}
                       {columns.map((c) => (
-                        <td key={c.key} style={{ padding: '10px 12px' }}>
+                        <td key={c.key} className={totalKeys.includes(c.key) ? 'num' : undefined}>
                           {totalKeys.includes(c.key)
                             ? Number(totals[c.key]).toLocaleString('en-IN', { maximumFractionDigits: 2 })
                             : ''}
@@ -204,26 +200,22 @@ export default function IsetReportTable({
                   )}
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={colCount} style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
-                        {emptyText}
-                      </td>
+                      <td className="empty-cell" colSpan={colCount}>{emptyText}</td>
                     </tr>
                   ) : filtered.map((r, idx) => (
-                    <tr key={r.id || idx} style={{ borderBottom: '1px solid #e2e8f0', background: idx % 2 ? '#eef6ff' : '#fff' }}>
-                      {showSr && <td style={{ padding: '10px 12px', textAlign: 'center' }}>{idx + 1}</td>}
+                    <tr key={r.id || idx}>
+                      {showSr && <td style={{ textAlign: 'center' }}>{idx + 1}</td>}
                       {columns.map((c) => (
-                        <td key={c.key} style={{ padding: '10px 12px', whiteSpace: c.nowrap ? 'nowrap' : undefined }}>
-                          {cellValue(r, c.key)}
-                        </td>
+                        <td key={c.key}>{cellValue(r, c.key)}</td>
                       ))}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 12, fontSize: 12, color: '#64748b' }}>
+            <p style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
               Showing {filtered.length ? 1 : 0} to {filtered.length} of {filtered.length} entries.
-            </div>
+            </p>
           </>
         )}
       </Card>

@@ -21,16 +21,16 @@ export default function TDSSummaryLedger() {
       <div className="bg-white shadow-sm border border-gray-200 rounded-sm">
         
         {/* Header Title */}
-        <div className="bg-[#66b2ff] text-white px-4 py-2 flex items-center justify-center font-bold tracking-widest text-[14px]">
+        <div className="bg-[#101a2e] text-white px-4 py-2 flex items-center justify-center font-bold tracking-widest text-[14px]">
           TDS FORMAT REPORT
         </div>
 
         {/* Action Bar */}
         <div className="flex justify-between items-center p-3 border-b border-gray-200">
           <div className="flex gap-2">
-            <button className="bg-[#5bc0de] hover:bg-[#31b0d5] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold transition-colors">CSV</button>
-            <button className="bg-[#5bc0de] hover:bg-[#31b0d5] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold transition-colors">Excel</button>
-            <button className="bg-[#5bc0de] hover:bg-[#31b0d5] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold transition-colors">PDF</button>
+            <button className="bg-[#17243d] hover:bg-[#273c61] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold transition-colors">CSV</button>
+            <button className="bg-[#17243d] hover:bg-[#273c61] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold transition-colors">Excel</button>
+            <button className="bg-[#17243d] hover:bg-[#273c61] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold transition-colors">PDF</button>
           </div>
           <div className="flex items-center gap-2">
             <label className="text-gray-600 font-medium">Search:</label>
@@ -42,7 +42,7 @@ export default function TDSSummaryLedger() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse whitespace-nowrap">
             <thead>
-              <tr className="bg-[#66b2ff] text-white">
+              <tr className="bg-[#101a2e] text-white">
                 <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">S.No. ⇕</th>
                 <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Nodal RLDC ⇕</th>
                 <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Application No. ⇕</th>

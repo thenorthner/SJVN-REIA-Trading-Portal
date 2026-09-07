@@ -35,6 +35,8 @@ import exchangeApplicationsRoutes, { seedExchangeApplications } from './routes/e
 import exchangeUpdateChargesRoutes from './routes/exchangeUpdateCharges.js';
 import escertOrdersRoutes from './routes/escertOrders.js';
 import pxilOrdersRoutes, { seedPxilOrders } from './routes/pxilOrders.js';
+import pxilRoutes from './routes/pxil.js';
+import iexRoutes from './routes/iex.js';
 import isetReportsRoutes, { seedIsetReports } from './routes/isetReports.js';
 import recOrdersRoutes, { seedRecOrders } from './routes/recOrders.js';
 import billingSettlementRoutes from './routes/billingSettlement.js';
@@ -73,11 +75,9 @@ import notesRoutes from './routes/notes.js';
 import tradingNotesRoutes from './routes/tradingNotes.js';
 import powerDiversionRoutes from './routes/powerDiversion.js';
 import rateMasterRoutes from './routes/rateMaster.js';
-import hydroBillingRoutes from './routes/hydroBilling.js';
 import dsmChargesRoutes from './routes/dsmCharges.js';
+import hydroBillingRoutes from './routes/hydroBilling.js';
 import nocUpdationRoutes from './routes/nocUpdation.js';
-import iexRoutes from './routes/iex.js';
-import pxilRoutes from './routes/pxil.js';
 import tdsLedgerRoutes from './routes/tdsLedger.js';
 import oaChargesRoutes from './routes/oaCharges.js';
 import importsRoutes from './routes/imports.js';
@@ -167,6 +167,8 @@ app.use('/api/exchange-applications', exchangeApplicationsRoutes);
 app.use('/api/exchange-update-charges', exchangeUpdateChargesRoutes);
 app.use('/api/escert-orders', escertOrdersRoutes);
 app.use('/api/pxil-orders', pxilOrdersRoutes);
+app.use('/api/pxil', pxilRoutes);
+app.use('/api/iex', iexRoutes);
 app.use('/api/iset-reports', isetReportsRoutes);
 app.use('/api/rec-trading', recOrdersRoutes);
 app.use('/api/billing-settlement', billingSettlementRoutes);
@@ -181,10 +183,6 @@ app.use('/api/margin', marginAssuranceRoutes);
 app.use('/api/energy-banking', requireAuth, energyBankingRoutes);
 app.use('/api/generator-billing', generatorBillingRoutes);
 app.use('/api/hydro-billing', hydroBillingRoutes);
-app.use('/api/masters/dsm', requireAuth, dsmChargesRoutes);
-app.use('/api/noc-updation', requireAuth, nocUpdationRoutes);
-app.use('/api/iex', iexRoutes);
-app.use('/api/pxil', pxilRoutes);
 app.use('/api/market-analytics', marketAnalyticsRoutes);
 app.use('/api/cerc-market', requireAuth, cercMarketDataRoutes);
 app.use('/api/trading-notes', requireAuth, tradingNotesRoutes);
@@ -200,6 +198,8 @@ app.use('/api/documents', documentsRoutes);
 app.use('/api/masters/holidays', requireAuth, holidaysRoutes);
 app.use('/api/masters/losses', requireAuth, lossesRoutes);
 app.use('/api/masters/rates', requireAuth, rateMasterRoutes);
+app.use('/api/masters/dsm', requireAuth, dsmChargesRoutes);
+app.use('/api/noc-updation', requireAuth, nocUpdationRoutes);
 app.use('/api/masters', requireAuth, mastersRoutes);
 app.use('/api/reports', requireAuth, reportsRoutes);
 
@@ -221,10 +221,28 @@ const CLIENT_DIR = process.env.CLIENT_DIR
   || path.resolve(__dirname, '../../frontend/dist');
 
 if (fs.existsSync(path.join(CLIENT_DIR, 'index.html'))) {
-  app.use(express.static(CLIENT_DIR));
+  // Asset filenames carry a content hash, so they can be cached hard. index.html
+  // must not be: it is the file that names the current hashes, and a cached copy
+  // is what makes a tab ask for chunks a redeploy has already removed
+  // ("Failed to fetch dynamically imported module").
+  app.use(express.static(CLIENT_DIR, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-store, must-revalidate');
+      } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  }));
+  // A hashed asset that express.static did not find is gone, not a page. Handing
+  // back index.html would answer a script request with HTML, which is what turns
+  // a stale chunk into an unreadable parse error instead of a plain 404.
+  app.get(/^\/assets\//, (req, res) => res.status(404).type('text/plain').send('Not found'));
+
   // Anything that is not an API route is a client-side route: hand back
   // index.html and let React Router resolve it.
   app.get(/^(?!\/api\/|\/verify\/|\/uploads\/).*/, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
     res.sendFile(path.join(CLIENT_DIR, 'index.html'));
   });
   console.log(`[WEB] Serving the built front end from ${CLIENT_DIR}`);

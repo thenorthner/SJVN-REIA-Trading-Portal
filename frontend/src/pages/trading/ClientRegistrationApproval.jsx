@@ -152,7 +152,7 @@ export default function ClientRegistrationApproval() {
         <div className="p-4">
           <table className="w-full text-center border-collapse">
             <thead>
-              <tr className="bg-[#66b2ff] text-white">
+              <tr className="bg-[#101a2e] text-white">
                 <th className="px-3 py-2 font-medium border-r border-white/20 w-16">S.No.</th>
                 <th className="px-3 py-2 font-medium border-r border-white/20">Name</th>
                 <th className="px-3 py-2 font-medium border-r border-white/20">segment</th>

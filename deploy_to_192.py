@@ -54,7 +54,7 @@ def deploy():
         payload_sent = False
         start_time = time.time()
         
-        while time.time() - start_time < 180:
+        while time.time() - start_time < 600:
             r, _, _ = select.select([master], [], [], 0.2)
             if master in r:
                 try:

@@ -405,7 +405,7 @@ export default function ExchangeContractDetail() {
           <FormSection title="Order Details">
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-                <thead style={{ background: '#5b9bd5', color: '#fff' }}>
+                <thead style={{ background: '#101a2e', color: '#fff' }}>
                   <tr>
                     <th colSpan="2" style={{ padding: 8, textAlign: 'center' }}>Date</th>
                     <th colSpan="2" style={{ padding: 8, textAlign: 'center' }}>Hours</th>

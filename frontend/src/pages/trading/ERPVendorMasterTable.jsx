@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
+import { PageHeader, Card, Field } from '../../components/ui.jsx';
+import FormatReport from './FormatReport.jsx';
 
-const DUMMY_DATA = [
+// Vendor Format (ERP) — the FLVN00 FI-Vendor layout finance uploads into SAP.
+// The column row carries both the SAP field name and its plain-English label,
+// because the person running it reads the label and the person loading the file
+// into SAP reads the field name.
+
+const VENDOR_ROWS = [
   { type: 'Discom', firstName: 'DOP, Govt. of Arunachal Pradesh', lastName: '', lang: 'EN', searchTerm: 'DOP, Govt. of Arunachal Pradesh' },
   { type: 'Discom', firstName: 'Himachal Pradesh State Electricity Board Ltd.', lastName: '', lang: 'EN', searchTerm: 'Himachal Pradesh State Electricity Board Ltd.' },
   { type: 'Generator', firstName: 'BALRAMPUR CHINI MILLS LTD', lastName: '', lang: 'EN', searchTerm: 'BALRAMPUR CHINI MILLS LTD' },
@@ -17,90 +24,56 @@ const DUMMY_DATA = [
   { type: 'Generator', firstName: 'SHREE RENUKA SUGARS LIMITED HAVALGA', lastName: '', lang: 'EN', searchTerm: 'SHREE RENUKA SUGARS LIMITED HAVALGA' },
 ];
 
+const COLUMNS = [
+  { key: 'type', label: 'Vendor Type' },
+  { key: 'partnerRole', label: 'BP Role', code: 'PARTNER_ROLE' },
+  { key: 'creationGroup', label: 'Grouping', code: 'CREATION_GROUP' },
+  { key: 'firstName', label: 'First Name', code: 'NAME_FIRST' },
+  { key: 'lastName', label: 'Last Name', code: 'NAME_LAST' },
+  { key: 'lang', label: 'Correspondence Lang', code: 'LANGUOCORR' },
+  { key: 'searchTerm', label: 'Search Term / Old Vendor No.', code: 'BU_SORT1_TXT' },
+];
+
+const BANDS = [
+  [{ label: 'FLVN00 (FI Vendor)', span: COLUMNS.length }],
+  [{ label: 'General', span: COLUMNS.length }],
+];
+
 export default function ERPVendorMasterTable() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [range, setRange] = useState(null);
 
   return (
-    <div className="p-6 bg-[#f8f9fa] min-h-screen font-sans text-sm">
-      <div className="bg-white shadow-sm border border-gray-200 rounded-sm mb-6 max-w-2xl">
-        <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
-          <h2 className="font-semibold text-gray-700 text-[13px]">Vendor Format</h2>
-        </div>
-        <div className="p-4">
-          <div className="mb-4 max-w-xs">
-            <label className="block text-[12px] text-red-600 mb-1">Client Creation Date --From*</label>
-            <input 
-              type="date" 
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="w-full border border-gray-300 rounded px-2 py-1.5 text-gray-700 outline-none focus:border-blue-400"
-            />
-          </div>
-          <div className="mb-4 max-w-xs">
-            <label className="block text-[12px] text-red-600 mb-1">Client Creation Date --To*</label>
-            <input 
-              type="date" 
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="w-full border border-gray-300 rounded px-2 py-1.5 text-gray-700 outline-none focus:border-blue-400"
-            />
-          </div>
-          <button className="bg-[#3399ff] hover:bg-blue-500 text-white px-4 py-1.5 rounded-sm font-medium transition-colors mt-2">
-            Download
-          </button>
-        </div>
-      </div>
+    <div className="page">
+      <PageHeader
+        title="Vendor Format"
+        subtitle="FLVN00 vendor master extract for the SAP FI upload."
+      />
 
-      {/* Action Bar */}
-      <div className="flex justify-between items-center bg-white border border-b-0 border-gray-200 p-2 shadow-sm rounded-t-sm">
-        <div className="flex gap-2">
-          <button className="bg-[#5bc0de] hover:bg-[#31b0d5] text-white px-4 py-1.5 text-xs rounded-full shadow-sm font-semibold transition-colors">CSV</button>
-          <button className="bg-[#5bc0de] hover:bg-[#31b0d5] text-white px-4 py-1.5 text-xs rounded-full shadow-sm font-semibold transition-colors">Excel</button>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-gray-600 font-medium text-xs">Search:</label>
-          <input type="text" className="border border-gray-300 px-2 py-1 rounded-sm w-48 outline-none focus:border-blue-400" />
-        </div>
-      </div>
+      <Card title="Selection Criteria">
+        <form
+          className="report-criteria"
+          onSubmit={(e) => { e.preventDefault(); setRange({ fromDate, toDate }); }}
+        >
+          <Field label="Client Creation Date — From" required>
+            <input type="date" className="input" required value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          </Field>
+          <Field label="Client Creation Date — To" required>
+            <input type="date" className="input" required value={toDate} onChange={(e) => setToDate(e.target.value)} min={fromDate || undefined} />
+          </Field>
+          <button type="submit" className="btn btn-primary">Download</button>
+        </form>
+        {range && (
+          <p style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+            Showing vendors created between {range.fromDate} and {range.toDate}.
+          </p>
+        )}
+      </Card>
 
-      {/* Main Data Table */}
-      <div className="bg-white border border-gray-200 overflow-x-auto shadow-sm rounded-b-sm">
-        <table className="w-full text-left border-collapse whitespace-nowrap text-[13px]">
-          <thead>
-            {/* Super Header */}
-            <tr className="bg-[#66b2ff] text-white">
-              <th className="px-4 py-2 border-r border-b border-white/20 font-semibold" colSpan="7">FLVN00 (FI Vendor)</th>
-            </tr>
-            <tr className="bg-[#66b2ff] text-white">
-              <th className="px-4 py-2 border-r border-b border-white/20 font-semibold" colSpan="7">General</th>
-            </tr>
-            {/* Sub Headers */}
-            <tr className="bg-[#66b2ff] text-white text-[12px]">
-              <th className="px-4 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Vendor Type ⇕</th>
-              <th className="px-4 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">PARTNER_ROLE<br/>BP Role ⇕</th>
-              <th className="px-4 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">CREATION_GROUP<br/>Grouping ⇕</th>
-              <th className="px-4 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">NAME_FIRST<br/>First Name ⇕</th>
-              <th className="px-4 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">NAME_LAST<br/>Last Name ⇕</th>
-              <th className="px-4 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">LANGUOCORR<br/>Correspondence Lang ⇕</th>
-              <th className="px-4 py-2 font-semibold cursor-pointer hover:bg-blue-400">BU_SORT1_TXT<br/>Search Term/ Old Vendor No. ⇕</th>
-            </tr>
-          </thead>
-          <tbody>
-            {DUMMY_DATA.map((row, idx) => (
-              <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50 text-gray-700">
-                <td className="px-4 py-2.5">{row.type}</td>
-                <td className="px-4 py-2.5"></td>
-                <td className="px-4 py-2.5"></td>
-                <td className="px-4 py-2.5">{row.firstName}</td>
-                <td className="px-4 py-2.5">{row.lastName}</td>
-                <td className="px-4 py-2.5">{row.lang}</td>
-                <td className="px-4 py-2.5">{row.searchTerm}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Card title="FLVN00 (FI Vendor) — General">
+        <FormatReport filename="vendor-format" columns={COLUMNS} rows={VENDOR_ROWS} bands={BANDS} />
+      </Card>
     </div>
   );
 }

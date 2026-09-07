@@ -49,6 +49,15 @@
   --sky: #0284c7;
   --navy: #0b4a8f;
 
+  /* The sidebar navy, promoted to a token. Report headers, section bars and
+     the export chrome all read from it so a table header and the navigation
+     beside it are the same colour rather than two different blues. */
+  --navy-900: #101a2e;
+  --navy-800: #17243d;
+  --navy-700: #1e2f4d;
+  --navy-600: #273c61;
+  --navy-tint: #eef2f8;
+
   /* --slate-400 is 2.56:1 on white and fails WCAG AA for text. It stays for
      borders and chart strokes; --text-subtle is the readable alternative where
      the value was being used as a text colour. */
@@ -312,6 +321,13 @@ a { color: var(--primary); text-decoration: none; }
   font-weight: 600;
   color: var(--text);
   max-width: 700px;
+  /* The platform's full name is long. It gets one line and an ellipsis rather
+     than wrapping into a column that pushes the bell and the user chip out of
+     the bar. The full text stays available on hover. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .topbar-actions {
@@ -560,6 +576,17 @@ a { color: var(--primary); text-decoration: none; }
 
 @media (max-width: 980px) {
   .grid-2, .grid-3 { grid-template-columns: 1fr; }
+}
+
+/* Narrow viewports: the bar keeps the logo and the user's identity, and drops
+   the long platform name, which the sidebar already carries. */
+@media (max-width: 1180px) {
+  .topbar { padding: 12px 16px; gap: 10px; }
+  .topbar-portfolio__select { min-width: 150px; }
+}
+@media (max-width: 900px) {
+  .topbar-title { display: none; }
+  .topbar-actions { gap: 10px; }
 }
 
 /* ---------------- Badges ---------------- */
@@ -1531,4 +1558,99 @@ a { color: var(--primary); text-decoration: none; }
   }
 }
 
-.form-section-header { background: #33598d; color: white; padding: 6px 12px; font-weight: 600; font-size: 14px; margin-top: 20px; margin-bottom: 12px; border-radius: 4px; }
+.form-section-header { background: var(--navy-800); color: white; padding: 6px 12px; font-weight: 600; font-size: 14px; margin-top: 20px; margin-bottom: 12px; border-radius: 4px; }
+
+
+/* ---------------- Report tables (ISET / ERP formats) ----------------
+   One navy header treatment shared by every format report, so the grids read
+   as part of the application rather than as pasted-in spreadsheets. */
+.report-shell { padding: 20px; }
+
+.report-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.report-toolbar .export-group { display: flex; gap: 8px; }
+.report-search { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
+.report-search .input { width: 260px; }
+
+.btn-navy {
+  background: var(--navy-800);
+  color: #fff;
+  border: 1px solid var(--navy-800);
+}
+.btn-navy:hover { background: var(--navy-600); border-color: var(--navy-600); }
+
+.report-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.report-table thead th {
+  background: var(--navy-900);
+  color: #fff;
+  text-align: left;
+  padding: 10px 12px;
+  font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+/* A grouping band above the column names (FLVN00 / General). */
+.report-table thead th.group-band {
+  background: var(--navy-700);
+  text-align: center;
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  position: static;
+}
+.report-table thead th.sortable { cursor: pointer; user-select: none; }
+.report-table thead th.sortable:hover { background: var(--navy-600); }
+.report-table thead th:last-child { border-right: none; }
+.report-table thead th .sort-arrow { opacity: 0.45; margin-left: 4px; font-size: 10px; }
+.report-table thead th.sorted .sort-arrow { opacity: 1; }
+.report-table thead th .col-code {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.report-table tbody td {
+  padding: 9px 12px;
+  /* The wrapper scrolls sideways, so a long vendor name stays on one line
+     rather than making its row three times the height of its neighbours. */
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  color: var(--text);
+}
+.report-table tbody tr:nth-child(even) td { background: var(--navy-tint); }
+.report-table tbody tr:hover td { background: #e2e9f4; }
+.report-table tbody tr.totals-row td { background: var(--navy-tint); font-weight: 600; }
+.report-table .empty-cell { text-align: center; color: var(--text-muted); padding: 28px !important; }
+.report-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* The criteria strip a format report is run from (dates, then a run button). */
+.report-criteria {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.report-criteria .field { margin: 0; }
+.report-criteria .input { min-width: 190px; }

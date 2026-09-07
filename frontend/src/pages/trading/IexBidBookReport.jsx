@@ -82,7 +82,7 @@ export default function IexBidBookReport({ kind }) {
         h1{font-size:15px}
         table{border-collapse:collapse;width:100%}
         th,td{border:1px solid #ccc;padding:3px;white-space:nowrap}
-        th{background:#5b9bd5;color:#fff}
+        th{background:#101a2e;color:#fff}
       </style></head><body>
       <h1>${config.title}</h1>
       <table><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${columns.length}">No data available in table</td></tr>`}</tbody></table>
@@ -93,7 +93,7 @@ export default function IexBidBookReport({ kind }) {
   }
 
   const thStyle = {
-    background: '#5b9bd5',
+    background: '#101a2e',
     color: '#fff',
     padding: '8px 10px',
     fontSize: 11,

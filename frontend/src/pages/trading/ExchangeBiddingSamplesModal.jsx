@@ -80,7 +80,7 @@ export default function ExchangeBiddingSamplesModal({ open, onClose }) {
         <thead>
           <tr>
             {['S.No', 'File Name', 'Download'].map((h) => (
-              <th key={h} style={{ background: '#5b9bd5', color: '#fff', padding: '8px 12px', textAlign: 'left' }}>{h}</th>
+              <th key={h} style={{ background: '#101a2e', color: '#fff', padding: '8px 12px', textAlign: 'left' }}>{h}</th>
             ))}
           </tr>
         </thead>

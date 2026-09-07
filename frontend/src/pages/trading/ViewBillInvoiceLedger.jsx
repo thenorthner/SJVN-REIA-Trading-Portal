@@ -156,7 +156,7 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
     const body = data.map((r) => `<tr>${keys.map((k) => `<td>${r[k] ?? ''}</td>`).join('')}</tr>`).join('');
     w.document.write(`<!doctype html><html><head><title>${title}</title>
       <style>body{font-family:Arial,sans-serif;padding:20px;font-size:10px}
-      table{width:100%;border-collapse:collapse} th{background:#66b2ff;color:#fff;padding:6px;text-align:left}
+      table{width:100%;border-collapse:collapse} th{background:#101a2e;color:#fff;padding:6px;text-align:left}
       td{border-bottom:1px solid #ddd;padding:6px}</style></head><body>
       <h1>${title}</h1><table><thead><tr>${head}</tr></thead><tbody>${body || '<tr><td colspan="9">No data</td></tr>'}</tbody></table>
       </body></html>`);
@@ -311,16 +311,16 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
   return (
     <div className={embedded ? 'bg-[#f8f9fa] font-sans text-[13px]' : 'p-6 bg-[#f8f9fa] min-h-screen font-sans text-[13px]'}>
       <div className="bg-white border border-gray-200 shadow-sm max-w-[1600px] mx-auto rounded-sm">
-        <div className="bg-[#66b2ff] text-white px-4 py-2 font-semibold flex items-center justify-center tracking-wide text-sm relative">
+        <div className="bg-[#101a2e] text-white px-4 py-2 font-semibold flex items-center justify-center tracking-wide text-sm relative">
           {title}
           <span className="absolute right-4 text-xs">▼</span>
         </div>
 
         <div className="flex justify-between items-center p-3 border-b border-gray-200 bg-gray-50/50 flex-wrap gap-2">
           <div className="flex gap-2">
-            <button type="button" className="bg-[#5bc0de] hover:bg-[#31b0d5] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold" onClick={exportCsv}>CSV</button>
-            <button type="button" className="bg-[#5bc0de] hover:bg-[#31b0d5] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold" onClick={exportExcel}>Excel</button>
-            <button type="button" className="bg-[#5bc0de] hover:bg-[#31b0d5] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold" onClick={exportPdf}>PDF</button>
+            <button type="button" className="bg-[#17243d] hover:bg-[#273c61] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold" onClick={exportCsv}>CSV</button>
+            <button type="button" className="bg-[#17243d] hover:bg-[#273c61] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold" onClick={exportExcel}>Excel</button>
+            <button type="button" className="bg-[#17243d] hover:bg-[#273c61] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold" onClick={exportPdf}>PDF</button>
           </div>
           <div className="flex items-center gap-2">
             <label className="text-gray-600 font-medium">Search:</label>
@@ -336,7 +336,7 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
           ) : (
             <table className="w-full text-center border-collapse">
               <thead>
-                <tr className="bg-[#66b2ff] text-white">
+                <tr className="bg-[#101a2e] text-white">
                   <SortTh k="invoice_no" label={showPaymentColumns ? 'S.No.' : '#'} />
                   <SortTh k="client_name" label="Client Name" />
                   <SortTh k="invoice_no" label="Invoice No" />
