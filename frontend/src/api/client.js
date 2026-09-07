@@ -595,6 +595,16 @@ export const api = {
     create: (body) => p('/pxil-orders', body),
     placeBid: (id) => p(`/pxil-orders/${id}/place-bid`),
   },
+  // IEX Front Office API. Read-only; each response carries `mode`, which is
+  // STUB until IEX credentials and a base URL are configured on the server.
+  iex: {
+    status: () => g('/iex/status'),
+    connectivity: (params) => g('/iex/connectivity', params),
+    decimals: (params) => g('/iex/decimals', params),
+    deliveryDates: (params) => g('/iex/delivery-dates', params),
+    pqResults: (params) => g('/iex/pq-results', params),
+    scheduleReport: (params) => g('/iex/schedule-report', params),
+  },
   isetReports: {
     meta: () => g('/iset-reports/meta'),
     list: (kind) => g(`/iset-reports/${kind}`),

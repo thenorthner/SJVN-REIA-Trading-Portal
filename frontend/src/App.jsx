@@ -84,6 +84,7 @@ const LatestRefundUploader = lazy(() => import('./pages/trading/LatestRefundUplo
 const MmrExcelUploader = lazy(() => import('./pages/trading/MmrExcelUploader.jsx'));
 const PxilOrderCreation = lazy(() => import('./pages/trading/PxilOrderCreation.jsx'));
 const PxilOrderSummary = lazy(() => import('./pages/trading/PxilOrderSummary.jsx'));
+const IexIntegration = lazy(() => import('./pages/trading/IexIntegration.jsx'));
 const ApiDetailsReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.ApiDetailsReport })));
 const RegistrationReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.RegistrationReport })));
 const RegistrationCategoryReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.RegistrationCategoryReport })));
@@ -359,6 +360,7 @@ export default function App() {
         <Route path="trading/exchange/daily-schedule-entry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><DailyScheduleEntry /></ProtectedRoute>} />
         <Route path="trading/pxil/create" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PxilOrderCreation /></ProtectedRoute>} />
         <Route path="trading/pxil/summary" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PxilOrderSummary /></ProtectedRoute>} />
+        <Route path="trading/iex" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><IexIntegration /></ProtectedRoute>} />
         <Route path="billing/supply-bill-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="supply-bill-report" /></ProtectedRoute>} />
         <Route path="invoices/exchange-energy-settlement" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ExchangeEnergySettlementInvoice /></ProtectedRoute>} />
         <Route path="invoices/bilateral-energy-settlement" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BilateralEnergySettlementInvoice /></ProtectedRoute>} />

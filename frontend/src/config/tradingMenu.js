@@ -82,6 +82,12 @@ export const TRADING_MENU = [
     ],
   },
   {
+    group: 'IEX',
+    items: [
+      { label: 'IEX Integration (API)', to: '/trading/iex', ours: true },
+    ],
+  },
+  {
     group: 'REC Order Details',
     items: [
       { label: 'REC Order', to: '/trading/rec' },
