@@ -55,6 +55,7 @@ const EnergySchedule = lazy(() => import('./pages/trading/EnergySchedule.jsx'));
 const EnergyScheduleArchive = lazy(() => import('./pages/trading/EnergyScheduleArchive.jsx'));
 const DailyObligationReport = lazy(() => import('./pages/trading/DailyObligationReport.jsx'));
 const RateMaster = lazy(() => import('./pages/trading/RateMaster.jsx'));
+const DsmSlabMaster = lazy(() => import('./pages/trading/DsmSlabMaster.jsx'));
 const TDSRegister = lazy(() => import('./pages/trading/TDSRegister.jsx'));
 const OAChargeCalculator = lazy(() => import('./pages/trading/OAChargeCalculator.jsx'));
 const DeviationRegister = lazy(() => import('./pages/trading/DeviationRegister.jsx'));
@@ -284,6 +285,7 @@ export default function App() {
         <Route path="trading/pnl" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ContractPnl /></ProtectedRoute>} />
         <Route path="trading/ledger-import" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><LedgerImport /></ProtectedRoute>} />
         <Route path="trading/rate-master" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RateMaster /></ProtectedRoute>} />
+        <Route path="trading/dsm-slabs" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><DsmSlabMaster /></ProtectedRoute>} />
         <Route path="trading/tds-register" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TDSRegister /></ProtectedRoute>} />
         <Route path="trading/oa-calculator" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><OAChargeCalculator /></ProtectedRoute>} />
         <Route path="trading/rec" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RecOrder /></ProtectedRoute>} />

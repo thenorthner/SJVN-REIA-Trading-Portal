@@ -1081,6 +1081,50 @@ CREATE TABLE IF NOT EXISTS bilateral_order_details (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Frequency-linked deviation (DSM) charge slabs.
+--
+-- Deviation charges are not a flat number: the rate depends on which side of its
+-- schedule a 15-minute block landed and on the grid frequency during that block,
+-- and the notified slabs are revised, so they are held here as effective-dated
+-- data the desk maintains rather than as constants in code.
+--
+-- A slab prices a block one of two ways:
+--   FLAT               charge_value is paise/kWh of deviation.
+--   PCT_OF_REFERENCE   charge_value is a percentage of a reference price
+--                      (reference_price_key, e.g. DAM_ACP), optionally capped at
+--                      cap_paise_per_kwh.
+--
+-- is_verified is 0 until someone has checked the row against the notified CERC /
+-- SERC slab. The calculator refuses to price a block on an unverified slab, so a
+-- placeholder can never quietly become a number on a bill.
+CREATE TABLE IF NOT EXISTS dsm_charge_slabs (
+  id TEXT PRIMARY KEY,
+  slab_name TEXT NOT NULL,
+  -- OVER  = block delivered more than it was scheduled for
+  -- UNDER  = block delivered less
+  -- BOTH   = same rate either way
+  deviation_side TEXT NOT NULL CHECK (deviation_side IN ('OVER','UNDER','BOTH')),
+  -- Half-open band [freq_from_hz, freq_to_hz). NULL freq_from_hz is open below,
+  -- NULL freq_to_hz is open above, so the bands can cover the whole range.
+  freq_from_hz REAL,
+  freq_to_hz REAL,
+  charge_basis TEXT NOT NULL CHECK (charge_basis IN ('FLAT','PCT_OF_REFERENCE')),
+  charge_value REAL,                -- NULL until the notified value is entered
+  reference_price_key TEXT,         -- PCT_OF_REFERENCE only, e.g. 'DAM_ACP'
+  cap_paise_per_kwh REAL,
+  -- 1  = the deviating party pays the charge
+  -- -1 = the deviating party is credited
+  settlement_sign INTEGER NOT NULL DEFAULT 1 CHECK (settlement_sign IN (-1, 1)),
+  effective_from TEXT NOT NULL,     -- YYYY-MM-DD inclusive
+  effective_to TEXT,                -- YYYY-MM-DD inclusive; NULL = open-ended
+  is_verified INTEGER NOT NULL DEFAULT 0,
+  source_note TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- 15-minute block-wise schedules for a bilateral transaction (Format-D source).
 CREATE TABLE IF NOT EXISTS bilateral_schedules (
   id TEXT PRIMARY KEY,
@@ -1091,7 +1135,17 @@ CREATE TABLE IF NOT EXISTS bilateral_schedules (
   curtailed_mw REAL NOT NULL DEFAULT 0,
   actual_mw REAL,
   deviation_mw REAL,
+  -- Grid frequency at the block, as reported on the RLDC/SLDC deviation account.
+  -- Deviation charges are frequency-linked, so a block without it cannot be
+  -- priced from the slab master and is reported as unpriced rather than free.
+  grid_frequency_hz REAL,
   dsm_penalty_amount REAL NOT NULL DEFAULT 0,
+  -- How dsm_penalty_amount was arrived at: the slab that priced it, the rate it
+  -- was priced at, and the basis code (CERC_SLAB when priced, otherwise the
+  -- reason it was not — see services/dsmCharges.js).
+  dsm_slab_id TEXT REFERENCES dsm_charge_slabs(id),
+  dsm_rate_paise_per_kwh REAL,
+  dsm_basis TEXT,
   status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','CURTAILED','CANCELLED')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

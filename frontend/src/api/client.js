@@ -474,6 +474,14 @@ export const api = {
     create: (body) => p('/masters/rates', body),
     revise: (body) => p('/masters/rates/revise', body),
   },
+  dsmSlabs: {
+    list: (params) => g('/masters/dsm/slabs', params),
+    effective: (params) => g('/masters/dsm/slabs/effective', params),
+    create: (body) => p('/masters/dsm/slabs', body),
+    update: (id, body) => patch(`/masters/dsm/slabs/${id}`, body),
+    preview: (body) => p('/masters/dsm/preview', body),
+    readiness: () => g('/masters/dsm/readiness'),
+  },
   tds: {
     vendors: () => g('/tds/vendors'),
     list: (params) => g('/tds', params),
@@ -617,7 +625,7 @@ export const api = {
     createSchedule: (id, body) => p(`/bilateral/${id}/schedules`, body),
     updateApproval: (id, node_type, status) => p(`/bilateral/schedules/${id}/approvals`, { node_type, status }),
     curtail: (id, curtailed_mw) => p(`/bilateral/schedules/${id}/curtail`, { curtailed_mw }),
-    recordActuals: (id, actual_mw) => p(`/bilateral/schedules/${id}/actuals`, { actual_mw }),
+    recordActuals: (id, actual_mw, grid_frequency_hz) => p(`/bilateral/schedules/${id}/actuals`, { actual_mw, grid_frequency_hz }),
     updateNoar: (id, body) => p(`/bilateral/${id}/noar`, body),
     wbesStatus: () => g('/bilateral/wbes/status'),
     wbesSync: (body) => p('/bilateral/wbes/sync', body),

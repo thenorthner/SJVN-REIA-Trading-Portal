@@ -55,6 +55,7 @@ export function summariseSchedules(transactionId, from = null, to = null) {
   let deliveredMwh = 0;
   let dsmPenalty = 0;
   let meteredBlocks = 0;
+  let unpricedDeviationBlocks = 0;
 
   for (const r of rows) {
     dates.add(r.schedule_date);
@@ -68,6 +69,12 @@ export function summariseSchedules(transactionId, from = null, to = null) {
     curtailedMwh += curtailed * BLOCK_HOURS;
     deliveredMwh += delivered * BLOCK_HOURS;
     dsmPenalty += num(r.dsm_penalty_amount);
+    // A block that deviated but could not be priced off the DSM slab master —
+    // no frequency recorded, no slab for that band, or a slab still carrying no
+    // notified rate. Counted so a bill can say so rather than imply zero.
+    if (r.dsm_basis && r.dsm_basis !== 'CERC_SLAB' && r.dsm_basis !== 'NO_DEVIATION') {
+      unpricedDeviationBlocks += 1;
+    }
   }
 
   const sortedDates = [...dates].sort();
@@ -84,6 +91,7 @@ export function summariseSchedules(transactionId, from = null, to = null) {
     delivered_mwh: Number(deliveredMwh.toFixed(4)),
     deviation_mwh: Number((deliveredMwh - scheduledMwh).toFixed(4)),
     dsm_penalty_amount: rupees(dsmPenalty),
+    unpriced_deviation_blocks: unpricedDeviationBlocks,
   };
 }
 
@@ -263,6 +271,9 @@ export function buildBilateralInvoice({ transaction_id, bill_type, from = null, 
   let extra = {};
   if (bill_type === 'BILATERAL_ENERGY') {
     lines = energyBillLines(tx, settlement, options);
+    if (settlement.energy.unpriced_deviation_blocks) {
+      warnings = [`${settlement.energy.unpriced_deviation_blocks} block(s) deviated but carry no DSM slab price — the deviation charge on this bill excludes them`];
+    }
   } else if (bill_type === 'BILATERAL_OA') {
     const built = oaBillLines(tx, settlement, options);
     lines = built.lines;

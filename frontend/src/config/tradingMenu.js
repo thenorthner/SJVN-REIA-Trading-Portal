@@ -144,6 +144,7 @@ export const TRADING_MENU = [
       { label: 'OA Charge Calculator', to: '/trading/oa-calculator' },
       { label: 'OA Reconciliation', to: '/trading/oa-reconciliation' },
       { label: 'OA Rate Master', to: '/trading/rate-master' },
+      { label: 'Deviation (DSM) Slabs', to: '/trading/dsm-slabs' },
     ],
   },
   {

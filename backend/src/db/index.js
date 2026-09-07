@@ -182,6 +182,21 @@ function migrateContractVersionSchema() {
 }
 migrateContractVersionSchema();
 
+// Add the frequency-linked DSM columns to bilateral_schedules on existing DBs.
+// Blocks recorded before the slab master existed keep their stored penalty and
+// simply have no frequency or slab against them.
+function migrateBilateralScheduleDsm() {
+  const cols = db.prepare('PRAGMA table_info(bilateral_schedules)').all().map((c) => c.name);
+  const add = (col, type) => {
+    if (!cols.includes(col)) db.exec(`ALTER TABLE bilateral_schedules ADD COLUMN ${col} ${type}`);
+  };
+  add('grid_frequency_hz', 'REAL');
+  add('dsm_slab_id', 'TEXT');
+  add('dsm_rate_paise_per_kwh', 'REAL');
+  add('dsm_basis', 'TEXT');
+}
+migrateBilateralScheduleDsm();
+
 // Add release_source to payments (generator pay-out source) on existing DBs.
 function migratePaymentReleaseSource() {
   const cols = db.prepare('PRAGMA table_info(payments)').all().map((c) => c.name);

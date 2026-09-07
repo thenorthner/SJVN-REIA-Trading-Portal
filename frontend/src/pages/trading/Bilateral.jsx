@@ -6,6 +6,15 @@ import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../c
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { ScheduleGridModal } from './ScheduleGridModal.jsx';
 
+// Why a deviating block carries no DSM charge. Spelled out in the tracker so an
+// unpriced block reads as an open item rather than as a block that cost nothing.
+const DSM_UNPRICED_LABEL = {
+  NO_FREQUENCY: 'no frequency',
+  NO_SLAB: 'no slab for that band',
+  SLAB_UNVERIFIED: 'slab rate not entered',
+  NO_REFERENCE_PRICE: 'no reference price',
+};
+
 const EMPTY_FORM = {
   contract_type: 'Bilateral', transaction_type: '', loa_no: '', ppa_no: '', start_date: '', end_date: '',
   compensation: '', late_payment_surcharge: '', rebate: '', type_of_contract: 'Purchase Side', product: '',
@@ -127,6 +136,11 @@ export default function Bilateral() {
   const [syncResult, setSyncResult] = useState(null);
   // Settlement & billing: the settled position for a supply period, the bills
   // already raised against it, and the period the desk is billing for.
+  // Recording a block's actuals: MW plus the grid frequency that prices its
+  // deviation off the DSM slab master.
+  const [actualsFor, setActualsFor] = useState(null);
+  const [actualsForm, setActualsForm] = useState({ actual_mw: '', grid_frequency_hz: '' });
+  const [actualsResult, setActualsResult] = useState(null);
   const [settlement, setSettlement] = useState(null);
   const [settleBusy, setSettleBusy] = useState(false);
   const [txInvoices, setTxInvoices] = useState([]);
@@ -316,17 +330,31 @@ export default function Bilateral() {
     }
   }
 
-  async function handleRecordActuals(schedId) {
-    const mw = prompt("Enter Actual MW flow (used for DSM calculation):");
-    if (!mw) return;
+  function openActuals(sched) {
+    setActualsResult(null);
+    setActualsFor(sched);
+    setActualsForm({
+      actual_mw: sched.actual_mw ?? '',
+      grid_frequency_hz: sched.grid_frequency_hz ?? '',
+    });
+  }
+
+  async function handleRecordActuals(e) {
+    e.preventDefault();
     try {
-      const updated = await api.bilateral.recordActuals(schedId, Number(mw));
+      const updated = await api.bilateral.recordActuals(
+        actualsFor.id,
+        Number(actualsForm.actual_mw),
+        actualsForm.grid_frequency_hz === '' ? null : Number(actualsForm.grid_frequency_hz),
+      );
       setSelectedTx(updated);
+      // The response says how the deviation was priced — or why it could not be.
+      setActualsResult(updated.dsm || null);
       // Metered actuals move the settled quantum, so the position is restated.
       refreshSettlement(selectedTx.id, billPeriod);
       load();
     } catch (err) {
-      alert("Failed to record actuals");
+      alert(err.response?.data?.error || "Failed to record actuals");
     }
   }
 
@@ -931,7 +959,16 @@ export default function Bilateral() {
                 { key: 'actual_mw', label: 'Actual MW', render: r => r.actual_mw === null ? '-' : r.actual_mw },
                 { key: 'curtailed_mw', label: 'Curtailed', render: r => r.curtailed_mw > 0 ? <span style={{color: 'red'}}>{r.curtailed_mw} MW</span> : '-' },
                 { key: 'deviation_mw', label: 'Deviation', render: r => r.deviation_mw ? <Badge type={Math.abs(r.deviation_mw) > 2 ? 'danger' : 'warning'}>{r.deviation_mw} MW</Badge> : '-' },
-                { key: 'dsm_penalty_amount', label: 'DSM Penalty', render: r => r.dsm_penalty_amount ? `₹${fmtNumber(r.dsm_penalty_amount)}` : '-' },
+                { key: 'grid_frequency_hz', label: 'Frequency', render: r => (r.grid_frequency_hz != null ? `${fmtNumber(r.grid_frequency_hz, 2)} Hz` : '-') },
+                {
+                  key: 'dsm_penalty_amount',
+                  label: 'DSM Penalty',
+                  render: r => {
+                    if (r.dsm_penalty_amount) return `₹${fmtNumber(r.dsm_penalty_amount)}`;
+                    const reason = DSM_UNPRICED_LABEL[r.dsm_basis];
+                    return reason ? <Badge type="warning">unpriced — {reason}</Badge> : '-';
+                  },
+                },
                 { key: 'status', label: 'Status', render: r => <Badge type={r.status === 'APPROVED' ? 'success' : 'neutral'}>{r.status}</Badge> },
               ]}
               data={selectedTx.schedules || []}
@@ -944,7 +981,7 @@ export default function Bilateral() {
                 <strong>Multi-Hop Approval: {sched.schedule_date}</strong>
                 <div style={{ display: 'flex', gap: 10 }}>
                   <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => handleCurtail(sched.id)}>Grid Curtailment</button>
-                  <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => handleRecordActuals(sched.id)}>Record Actuals (DSM)</button>
+                  <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => openActuals(sched)}>Record Actuals (DSM)</button>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 15 }}>
@@ -1014,6 +1051,17 @@ export default function Bilateral() {
                     </div>
                   ))}
                 </div>
+
+                {settlement.energy.unpriced_deviation_blocks > 0 && (
+                  <div style={{
+                    marginBottom: 12, padding: '8px 12px', borderRadius: 8, fontSize: 13,
+                    background: 'var(--amber-50, #fffbeb)', border: '1px solid var(--warning, #b45309)',
+                    color: 'var(--warning, #b45309)',
+                  }}>
+                    {settlement.energy.unpriced_deviation_blocks} block(s) deviated but carry no DSM slab price —
+                    the DSM charge above excludes them.
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
                   <Badge type={settlement.energy.is_final ? 'success' : 'warning'}>
@@ -1141,6 +1189,50 @@ export default function Bilateral() {
               </div>
             )}
           </div>
+        </Modal>
+      )}
+
+      {actualsFor && (
+        <Modal open={true} onClose={() => setActualsFor(null)} title={`Record Actuals — ${actualsFor.schedule_date} ${actualsFor.time_block}`}>
+          <form onSubmit={handleRecordActuals}>
+            <p style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 14 }}>
+              Deviation charges are frequency-linked. Without the block's grid frequency the
+              deviation is still recorded, but it cannot be priced off the DSM slab master.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+              <Field label="Actual MW flow" required>
+                <input type="number" step="0.01" className="input" value={actualsForm.actual_mw}
+                  onChange={e => setActualsForm({ ...actualsForm, actual_mw: e.target.value })} required />
+              </Field>
+              <Field label="Grid frequency (Hz)">
+                <input type="number" step="0.01" className="input" value={actualsForm.grid_frequency_hz}
+                  onChange={e => setActualsForm({ ...actualsForm, grid_frequency_hz: e.target.value })} placeholder="49.90" />
+              </Field>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 6 }}>
+              Scheduled after curtailment: {fmtNumber((actualsFor.approved_mw || 0) - (actualsFor.curtailed_mw || 0), 2)} MW
+            </div>
+
+            {actualsResult && (
+              <div style={{
+                marginTop: 14, padding: '10px 12px', borderRadius: 8,
+                background: actualsResult.basis === 'CERC_SLAB' ? 'var(--slate-50)' : 'var(--amber-50, #fffbeb)',
+                border: `1px solid ${actualsResult.basis === 'CERC_SLAB' ? 'var(--slate-200)' : 'var(--warning, #b45309)'}`,
+                fontSize: 13,
+              }}>
+                {actualsResult.basis === 'CERC_SLAB' && (
+                  <span><strong>₹{fmtNumber(actualsResult.amount, 0)}</strong> at {fmtNumber(actualsResult.rate_paise_per_kwh, 2)} p/kWh · {actualsResult.slab_name}</span>
+                )}
+                {actualsResult.basis === 'NO_DEVIATION' && <span>Block met its schedule — no deviation charge.</span>}
+                {actualsResult.warning && <span style={{ color: 'var(--warning, #b45309)' }}>{actualsResult.warning}</span>}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18 }}>
+              <button type="button" className="btn btn-ghost" onClick={() => setActualsFor(null)}>Close</button>
+              <button type="submit" className="btn btn-primary">Record</button>
+            </div>
+          </form>
         </Modal>
       )}
     </div>

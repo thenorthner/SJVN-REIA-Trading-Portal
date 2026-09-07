@@ -7,6 +7,7 @@ import { syncSchedulesForDate, getWbesConfig } from '../services/wbesService.js'
 import { secureLogAudit } from '../auditEngine.js';
 import { generateLoiPdf } from '../scripts/tradingReportsPdf.js';
 import { getParam, getParamNumber } from '../mastersService.js';
+import { computeDsmChargeFromMw } from '../services/dsmCharges.js';
 import { generateNoarApprovalReportPdf } from '../scripts/noarApprovalReportPdf.js';
 import { sendMail } from '../services/mailService.js';
 import { readFileSync } from 'fs';
@@ -139,13 +140,6 @@ function buildNoarTimeline(tx) {
 }
 
 const DEFAULT_SLA_DAYS = { STOA: 7, MTOA: 15, LTOA: 30 };
-
-function computeDsmPenalty({ deviationMw, policy = null }) {
-  return {
-    amount: Math.abs(Number(deviationMw) || 0) * 60,
-    basis: policy || 'FLAT_PLACEHOLDER',
-  };
-}
 
 /** SLA target in days for an open-access term, from configurable master data. */
 function slaDaysFor(oaType) {
@@ -624,27 +618,36 @@ router.post('/schedules/:id/curtail', requireRole(...ROLE_GROUPS.TRADING_WRITE),
 });
 
 // Record Actuals & DSM Penalty
+//
+// Deviation charges are frequency-linked, so the block's grid frequency is what
+// prices it. Where the frequency is not given the deviation is recorded and left
+// unpriced, with the reason returned on the response — the desk sees an open
+// item instead of a bill line that quietly reads zero.
 router.post('/schedules/:id/actuals', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
-  const { actual_mw } = req.body;
+  const { actual_mw, grid_frequency_hz } = req.body;
   const sched = db.prepare('SELECT * FROM bilateral_schedules WHERE id = ?').get(req.params.id);
   if (!sched) return res.status(404).json({ error: 'Not found' });
 
   const effectiveApproved = sched.approved_mw - sched.curtailed_mw;
   const deviation = actual_mw - effectiveApproved;
-  
-  // Keep settlement consuming a stored per-block penalty, but isolate the
-  // calculator so CERC frequency slabs can replace this placeholder later
-  // without changing invoice rollups or historical storage.
-  const dsmCalc = computeDsmPenalty({ deviationMw: deviation });
+
+  const frequency = grid_frequency_hz != null ? Number(grid_frequency_hz) : sched.grid_frequency_hz;
+  const dsmCalc = computeDsmChargeFromMw({
+    deviationMw: deviation,
+    frequencyHz: frequency ?? null,
+    onDate: sched.schedule_date,
+  });
   const dsm_penalty = dsmCalc.amount;
 
-  db.prepare(`UPDATE bilateral_schedules SET actual_mw = ?, deviation_mw = ?, dsm_penalty_amount = ? WHERE id = ?`).run(
-    actual_mw, deviation, dsm_penalty, sched.id
+  db.prepare(`UPDATE bilateral_schedules SET actual_mw = ?, deviation_mw = ?, grid_frequency_hz = ?,
+      dsm_penalty_amount = ?, dsm_slab_id = ?, dsm_rate_paise_per_kwh = ?, dsm_basis = ? WHERE id = ?`).run(
+    actual_mw, deviation, frequency ?? null,
+    dsm_penalty, dsmCalc.slab_id, dsmCalc.rate_paise_per_kwh, dsmCalc.basis, sched.id
   );
 
-  secureLogAudit(req, { action: 'RECORD_ACTUALS', module: 'TRADING', entityType: 'bilateral_schedule', entityId: sched.id, details: { actual_mw, deviation, dsm_penalty, dsm_basis: dsmCalc.basis }});
+  secureLogAudit(req, { action: 'RECORD_ACTUALS', module: 'TRADING', entityType: 'bilateral_schedule', entityId: sched.id, details: { actual_mw, deviation, grid_frequency_hz: frequency ?? null, dsm_penalty, dsm_basis: dsmCalc.basis, dsm_slab_id: dsmCalc.slab_id }});
   const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(sched.transaction_id);
-  res.json(withDetails(tx));
+  res.json({ ...withDetails(tx), dsm: dsmCalc });
 });
 
 // Format-D: 15-minute block-wise schedule document (CSV) for a bilateral txn.
