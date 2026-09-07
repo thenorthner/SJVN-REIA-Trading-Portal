@@ -2444,6 +2444,41 @@ CREATE TABLE IF NOT EXISTS generic_report_entries (
 );
 CREATE INDEX IF NOT EXISTS idx_generic_report_kind ON generic_report_entries(report_kind, sort_order);
 
+-- NOC Updation (ERP): the standing clearance an RLDC/SLDC issues against a
+-- client, plus the injection/drawal blocks it clears. ISET enters the header
+-- once and the order lines beneath it, so the two are stored that way: a
+-- clearance with no lines is not a clearance anyone can schedule against.
+CREATE TABLE IF NOT EXISTS noc_updations (
+  id TEXT PRIMARY KEY,
+  client_name TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  noar_id TEXT NOT NULL,
+  issuing_authority TEXT NOT NULL,          -- name of the RLDC / SLDC issuing the NOC
+  noc_reference_no TEXT NOT NULL,
+  noc_valid_from TEXT NOT NULL,
+  noc_valid_to TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ACTIVE',    -- ACTIVE | CANCELLED
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_noc_updations_client ON noc_updations(client_id, noc_valid_from);
+
+CREATE TABLE IF NOT EXISTS noc_updation_orders (
+  id TEXT PRIMARY KEY,
+  noc_id TEXT NOT NULL REFERENCES noc_updations(id) ON DELETE CASCADE,
+  line_no INTEGER NOT NULL DEFAULT 1,
+  direction TEXT NOT NULL DEFAULT 'INJECTION',   -- INJECTION | DRAWAL
+  energy_source TEXT NOT NULL DEFAULT 'CONVENTIONAL',
+  valid_from TEXT NOT NULL,
+  valid_to TEXT NOT NULL,
+  hour_from TEXT NOT NULL,                        -- HH:MM block start
+  hour_to TEXT NOT NULL,                          -- HH:MM block end
+  quantum_mw REAL NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_noc_updation_orders_noc ON noc_updation_orders(noc_id, line_no);
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Hydro station billing (NJHPS-style CERC two-part bill)
 --

@@ -482,6 +482,13 @@ export const api = {
     preview: (body) => p('/masters/dsm/preview', body),
     readiness: () => g('/masters/dsm/readiness'),
   },
+  nocUpdation: {
+    meta: () => g('/noc-updation/meta'),
+    list: (params) => g('/noc-updation', params),
+    get: (id) => g(`/noc-updation/${id}`),
+    create: (body) => p('/noc-updation', body),
+    cancel: (id, body) => patch(`/noc-updation/${id}/cancel`, body),
+  },
   tds: {
     vendors: () => g('/tds/vendors'),
     list: (params) => g('/tds', params),

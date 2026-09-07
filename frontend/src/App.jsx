@@ -100,6 +100,7 @@ const ImplementedBlockWiseReport = lazy(() => import('./pages/trading/IsetReport
 const OutstandingDuesReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.OutstandingDuesReport })));
 const BilateralContractsReport = lazy(() => import('./pages/trading/IsetReportPages.jsx').then((m) => ({ default: m.BilateralContractsReport })));
 const GenericIsetReport = lazy(() => import('./pages/trading/GenericIsetReport.jsx'));
+const NocUpdation = lazy(() => import('./pages/trading/NocUpdation.jsx'));
 const DailyScheduleEntry = lazy(() => import('./pages/trading/DailyScheduleEntry.jsx'));
 const BilateralSldcConsentInvoice = lazy(() => import('./pages/trading/BilateralSldcConsentInvoice.jsx'));
 const BilateralOpenAccessInvoice = lazy(() => import('./pages/trading/BilateralOpenAccessInvoice.jsx'));
@@ -421,7 +422,7 @@ export default function App() {
         <Route path="erp/tds-format" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TdsFormatReport /></ProtectedRoute>} />
         <Route path="erp/dam-orders" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="erp-dam-orders" /></ProtectedRoute>} />
         <Route path="erp/rtm-orders" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="erp-rtm-orders" /></ProtectedRoute>} />
-        <Route path="erp/noc-updation" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="erp-noc-updation" /></ProtectedRoute>} />
+        <Route path="erp/noc-updation" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NocUpdation /></ProtectedRoute>} />
         <Route path="erp/noc-status" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="erp-noc-status" /></ProtectedRoute>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
