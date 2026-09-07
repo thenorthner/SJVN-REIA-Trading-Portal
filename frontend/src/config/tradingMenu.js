@@ -79,6 +79,7 @@ export const TRADING_MENU = [
     items: [
       { label: 'PXIL Order Creation', to: '/trading/pxil/create' },
       { label: 'PXIL Order Summary', to: '/trading/pxil/summary' },
+      { label: 'PXIL Member Reports (API)', to: '/trading/pxil/reports', ours: true },
     ],
   },
   {

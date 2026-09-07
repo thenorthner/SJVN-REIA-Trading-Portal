@@ -605,6 +605,17 @@ export const api = {
     pqResults: (params) => g('/iex/pq-results', params),
     scheduleReport: (params) => g('/iex/schedule-report', params),
   },
+  // PXIL member report APIs. Read-only; each response carries `mode`, which is
+  // STUB until PXIL credentials are configured on the server.
+  pxil: {
+    status: () => g('/pxil/status'),
+    tamGtam: (params) => g('/pxil/tam-gtam', params),
+    tamGtamSlotWise: (params) => g('/pxil/tam-gtam/slot-wise', params),
+    formatD: (params) => g('/pxil/format-d', params),
+    memberDor: (params) => g('/pxil/member-dor', params),
+    tradeMargin: (params) => g('/pxil/trade-margin', params),
+    reverseAuction: () => g('/pxil/reverse-auction'),
+  },
   isetReports: {
     meta: () => g('/iset-reports/meta'),
     list: (kind) => g(`/iset-reports/${kind}`),
