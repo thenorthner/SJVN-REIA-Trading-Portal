@@ -15,6 +15,14 @@ export default defineConfig({
       },
     },
   },
+  test: {
+    // jsdom rather than node: most of what is worth testing here eventually
+    // touches the DOM, and a pure module does not mind running inside one.
+    environment: 'jsdom',
+    // Vite serves this app from src/, so tests live beside the code they cover
+    // rather than in a parallel tree that drifts out of step with it.
+    include: ['src/**/*.{test,spec}.{js,jsx}'],
+  },
   server: {
     port: 5173,
     proxy: {

@@ -23,6 +23,8 @@ const Reports = lazy(() => import('./pages/reia/Reports.jsx'));
 const DeviationSettlements = lazy(() => import('./pages/reia/DeviationSettlements.jsx'));
 const PowerDiversion = lazy(() => import('./pages/reia/PowerDiversion.jsx'));
 const EnergyBanking = lazy(() => import('./pages/reia/EnergyBanking.jsx'));
+const HydroBilling = lazy(() => import('./pages/reia/HydroBilling.jsx'));
+const HydroLedger = lazy(() => import('./pages/reia/HydroLedger.jsx'));
 
 const TradingDashboard = lazy(() => import('./pages/trading/TradingDashboard.jsx'));
 const TradingClients = lazy(() => import('./pages/trading/TradingClients.jsx'));
@@ -224,6 +226,8 @@ export default function App() {
         <Route path="reia/deviation" element={<ProtectedRoute roles={REIA_ROLES}><DeviationSettlements /></ProtectedRoute>} />
         <Route path="reia/power-diversion" element={<ProtectedRoute roles={REIA_ROLES}><PowerDiversion /></ProtectedRoute>} />
         <Route path="reia/energy-banking" element={<ProtectedRoute roles={REIA_ROLES}><EnergyBanking /></ProtectedRoute>} />
+        <Route path="reia/hydro-billing" element={<ProtectedRoute roles={REIA_ROLES}><HydroBilling /></ProtectedRoute>} />
+        <Route path="reia/hydro-ledger" element={<ProtectedRoute roles={REIA_ROLES}><HydroLedger /></ProtectedRoute>} />
         <Route path="reia/reports" element={<ProtectedRoute roles={REIA_ROLES}><Reports /></ProtectedRoute>} />
 
         {/* Seller Portal */}

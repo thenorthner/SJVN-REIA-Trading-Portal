@@ -1063,6 +1063,44 @@ function migrateCercHydroContractSchema() {
   }
 }
 
+/**
+ * Hydro station bill lifecycle columns.
+ *
+ * The bill table shipped computing and saving a bill; approval and the due date
+ * that drives the beneficiary ledger came later, so an existing database needs
+ * them added rather than recreated.
+ */
+function migrateHydroBillLifecycle() {
+  const has = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='hydro_station_bills'`).get();
+  if (!has) return;
+  const cols = db.prepare('PRAGMA table_info(hydro_station_bills)').all().map((c) => c.name);
+  if (!cols.includes('approval_status')) {
+    db.exec(`ALTER TABLE hydro_station_bills ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'NOT_SENT'`);
+  }
+  if (!cols.includes('due_date')) {
+    db.exec('ALTER TABLE hydro_station_bills ADD COLUMN due_date TEXT');
+  }
+  const lineCols = db.prepare('PRAGMA table_info(hydro_bill_lines)').all().map((c) => c.name);
+  if (!lineCols.includes('deducted_scheduled_energy_kwh')) {
+    db.exec('ALTER TABLE hydro_bill_lines ADD COLUMN actual_scheduled_energy_kwh REAL NOT NULL DEFAULT 0');
+    db.exec('ALTER TABLE hydro_bill_lines ADD COLUMN deducted_scheduled_energy_kwh REAL NOT NULL DEFAULT 0');
+    db.exec('ALTER TABLE hydro_bill_lines ADD COLUMN is_regulated INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!cols.includes('urs_nr_kwh')) {
+    db.exec('ALTER TABLE hydro_station_bills ADD COLUMN urs_nr_kwh REAL NOT NULL DEFAULT 0');
+  }
+  if (!cols.includes('final_approver_id')) {
+    db.exec('ALTER TABLE hydro_station_bills ADD COLUMN final_approver_id TEXT');
+    db.exec('ALTER TABLE hydro_station_bills ADD COLUMN final_approver_name TEXT');
+  }
+}
+
+try {
+  migrateHydroBillLifecycle();
+} catch (e) {
+  console.error('Hydro bill lifecycle migration failed:', e.message);
+}
+
 try {
   migrateCercHydroContractSchema();
 } catch (e) {

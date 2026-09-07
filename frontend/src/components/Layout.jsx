@@ -70,6 +70,8 @@ const NAV_INTERNAL = [
       { to: '/reia/contracts', label: 'Contracts (PPA/PSA)' },
       { to: '/reia/energy-data', label: 'Energy Data & Validation' },
       { to: '/reia/invoices', label: 'Billing & Invoicing' },
+      { to: '/reia/hydro-billing', label: 'Hydro Billing (Station-wise)' },
+      { to: '/reia/hydro-ledger', label: 'Hydro Account Display' },
       { to: '/reia/disputes', label: 'Dispute Management' },
       { to: '/reia/payment-security', label: 'Payment Security' },
       { to: '/reia/power-diversion', label: 'Power Diversion' },

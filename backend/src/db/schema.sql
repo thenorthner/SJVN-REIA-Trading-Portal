@@ -2389,3 +2389,295 @@ CREATE TABLE IF NOT EXISTS generic_report_entries (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_generic_report_kind ON generic_report_entries(report_kind, sort_order);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Hydro station billing (NJHPS-style CERC two-part bill)
+--
+-- The generator_bills table above bills one beneficiary at a time from a handful
+-- of inputs. The bill SJVN's Commercial & System Operation Department actually
+-- issues for Nathpa Jhakri is a different animal: one bill per station per month
+-- that computes the station's charges once (A/C/E/EE blocks) and then splits
+-- every rupee across the beneficiaries of the station in the proportions the
+-- NRPC Regional Energy Account fixes. These three tables hold that bill.
+
+-- Who the station's energy is allocated to, and in what proportion.
+--
+-- Only pct_rea is stored as money-bearing input: it is column B of the REA
+-- allocation sheet — the weighted average % including 22% equity and 12% free
+-- power, after the SoR share has been reallocated to HPSEB — and it sums to 100
+-- across the station. Everything the bill charges on is derived from it:
+--
+--   excluding free power   = pct_rea, less FEHS for the home state that receives
+--                            the free power (GoHP on NJHPS); sums to 100 - FEHS
+--   proportionate          = the above / (1 - FEHS/100); sums back to 100
+--
+-- Storing the derived columns would let them drift out of step with FEHS on the
+-- contract, so they are computed at bill time instead (services/hydroStationBill.js).
+--
+-- pct_incl_free is column A — the raw REA allocation before the SoR reallocation.
+-- It appears on the allocation sheet the bill carries but no charge derives from
+-- it, so it is nullable and purely for reproducing that sheet.
+--
+-- Rows are the billing-level parties, so a state billed through its discoms is
+-- held as the discoms (TPDDL, BSES Rajdhani, ...) with parent_state naming the
+-- state they roll up to on the allocation sheet.
+CREATE TABLE IF NOT EXISTS hydro_beneficiary_allocations (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  beneficiary_name TEXT NOT NULL,
+  -- Optional link to a registered entity; the REA names many beneficiaries that
+  -- are not counterparties on this platform, so the name is the source of truth.
+  beneficiary_id TEXT REFERENCES entities(id),
+  parent_state TEXT,
+  sr_no INTEGER,
+  pct_incl_free REAL,
+  pct_rea REAL NOT NULL,
+  -- The state that receives the free energy (FEHS) and therefore carries the
+  -- carve-out when the charging percentages are derived. Exactly one row per
+  -- station should carry this.
+  is_home_state INTEGER NOT NULL DEFAULT 0,
+  effective_from TEXT NOT NULL,
+  effective_to TEXT,
+  source_note TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hydro_alloc_contract
+  ON hydro_beneficiary_allocations (contract_id, effective_from);
+
+-- The station bill header: the A, C, E and EE blocks of the printed bill.
+--
+-- Every field is stored rather than recomputed on read, because a bill that has
+-- been issued must keep showing the numbers it was issued with even after the
+-- contract's AFC, NAPAF or allocation master is revised.
+--
+-- Energy is held in kWh throughout this table, matching the printed bill; the
+-- MWh figures (a2/a5/a6) are the design-energy constants and stay in MWh, again
+-- as printed.
+CREATE TABLE IF NOT EXISTS hydro_station_bills (
+  id TEXT PRIMARY KEY,
+  bill_no TEXT UNIQUE NOT NULL,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  station_name TEXT NOT NULL,
+  billing_month TEXT NOT NULL,          -- YYYY-MM
+  financial_year TEXT NOT NULL,         -- e.g. 2026-2027
+  -- PROVISIONAL is billed on the provisional REA. REVISION restates an earlier
+  -- bill when an input changes (β certified late, REA revised) and carries only
+  -- the difference. FINAL closes the month against the final REA.
+  bill_kind TEXT NOT NULL DEFAULT 'PROVISIONAL'
+    CHECK (bill_kind IN ('PROVISIONAL','REVISION','FINAL')),
+  revises_bill_id TEXT REFERENCES hydro_station_bills(id),
+  rea_reference TEXT,                   -- e.g. "Provisional REA dated 01.07.2026"
+  revision_reason TEXT,
+
+  a1_afc REAL NOT NULL,                 -- Annual Fixed Charges, Rs
+  a2_design_energy_mwh REAL NOT NULL,
+  a3_aux_pct REAL NOT NULL,
+  a4_fehs_pct REAL NOT NULL,
+  a5_ex_bus_design_energy_mwh REAL NOT NULL,
+  a6_ex_bus_saleable_design_energy_mwh REAL NOT NULL,
+  a7_installed_capacity_mw REAL,
+  a8_days_in_month INTEGER NOT NULL,
+  a9_days_in_year INTEGER NOT NULL,
+  a11_napaf_pct REAL NOT NULL,
+  a12_ecr REAL NOT NULL,                -- Rs/kWh up to annual saleable design energy
+  a13_ecr_excess REAL NOT NULL,         -- Rs/kWh beyond it
+
+  c1_pafm_pct REAL NOT NULL,
+  c2_capacity_charge REAL NOT NULL,
+  c3_beta_factor REAL,                  -- NULL until NRPC certifies it
+  c4_beta_incentive REAL NOT NULL DEFAULT 0,
+  c4_beta_note TEXT,
+  c5_total_capacity_charge REAL NOT NULL,
+
+  e1_ex_bus_scheduled_kwh REAL NOT NULL,
+  e2_free_power_kwh REAL NOT NULL,
+  e3_saleable_scheduled_kwh REAL NOT NULL,
+  e4_cum_scheduled_kwh REAL NOT NULL,
+  e5_cum_free_power_kwh REAL NOT NULL,
+  e6_cum_saleable_kwh REAL NOT NULL,
+  e7_excess_kwh REAL NOT NULL,
+  e8_upto_design_kwh REAL NOT NULL,
+  -- Un-requisitioned surplus: energy the REA scheduled from the station that no
+  -- beneficiary is billed for, because SJVN regulated that beneficiary's supply.
+  -- It sits on the REA as its own row with a nil allocation, and the deductions
+  -- taken off the regulated beneficiaries below must add back to exactly this.
+  -- Zero on an ordinary month, which is why E7/E8 and the charges are unchanged
+  -- when no power was regulated.
+  urs_nr_kwh REAL NOT NULL DEFAULT 0,
+
+  ee1_energy_charge REAL NOT NULL,
+  ee2_excess_energy_charge REAL NOT NULL,
+  total_charges REAL NOT NULL,
+
+  -- NRLDC (POSOCO) fees are billed through to beneficiaries untouched: the
+  -- station is a conduit, so this total is split, never marked up, and it sits
+  -- outside total_charges exactly as it does on the printed bill.
+  nrldc_total_fee REAL NOT NULL DEFAULT 0,
+
+  -- On a REVISION these hold the "already billed" side, so C = B - A on the
+  -- printed differential is reproducible without re-reading the earlier bill.
+  prev_total_charges REAL,
+  differential_amount REAL,
+
+  status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','ISSUED','CANCELLED')),
+  -- Where the bill stands in the C&SO approval chain. A bill is only issuable
+  -- once this reaches APPROVED, so an unapproved bill cannot reach a beneficiary.
+  approval_status TEXT NOT NULL DEFAULT 'NOT_SENT'
+    CHECK (approval_status IN ('NOT_SENT','IN_APPROVAL','APPROVED','REJECTED')),
+  -- Last date for payment without surcharge; drives the ledger and LPS.
+  due_date TEXT,
+  -- Named when the bill is sent for approval and fixed thereafter: it is the
+  -- signature the beneficiaries' bill goes out on, so it is not something each
+  -- step gets to rewrite.
+  final_approver_id TEXT REFERENCES users(id),
+  final_approver_name TEXT,
+  prepared_by TEXT,
+  checked_by TEXT,
+  issued_by TEXT,
+  issued_at TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One live bill per station, month and kind. A REVISION is excluded from the
+-- constraint because a month can be revised more than once (β, then a revised
+-- REA); a CANCELLED bill is excluded so a mistake can be re-billed.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_hydro_bill_station_month
+  ON hydro_station_bills (contract_id, billing_month, bill_kind)
+  WHERE bill_kind <> 'REVISION' AND status <> 'CANCELLED';
+
+-- The beneficiary-wise breakup: pages 2 to 4 of the printed bill, one row per
+-- beneficiary. The percentages are frozen here as they were applied, so a later
+-- change to the allocation master cannot restate an issued bill.
+CREATE TABLE IF NOT EXISTS hydro_bill_lines (
+  id TEXT PRIMARY KEY,
+  bill_id TEXT NOT NULL REFERENCES hydro_station_bills(id) ON DELETE CASCADE,
+  sr_no INTEGER NOT NULL,
+  beneficiary_name TEXT NOT NULL,
+  beneficiary_id TEXT REFERENCES entities(id),
+  parent_state TEXT,
+
+  pct_incl_free REAL,                   -- allocation sheet col A
+  pct_rea REAL NOT NULL,                -- col B  — NRLDC fees are split on this
+  pct_excl_free REAL NOT NULL,          -- col C
+  pct_proportionate REAL NOT NULL,      -- col D  — charges are split on this
+
+  capacity_charge REAL NOT NULL,
+  saleable_energy_kwh REAL NOT NULL,
+  -- Regulation of power: what this beneficiary was entitled to on its share
+  -- (ACTUAL SCHEDULED ENERGY), what was withheld, and what it is billed for.
+  -- saleable_energy_kwh is the remainder — entitlement less the deduction — so
+  -- the energy columns still add to what the station actually billed.
+  actual_scheduled_energy_kwh REAL NOT NULL DEFAULT 0,
+  deducted_scheduled_energy_kwh REAL NOT NULL DEFAULT 0,
+  is_regulated INTEGER NOT NULL DEFAULT 0,
+  energy_upto_design_kwh REAL NOT NULL,
+  energy_excess_kwh REAL NOT NULL,
+  energy_charge_upto REAL NOT NULL,
+  energy_charge_excess REAL NOT NULL,
+  energy_charge_total REAL NOT NULL,
+  nrldc_fee REAL NOT NULL DEFAULT 0,
+  total_charges REAL NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hydro_bill_lines_bill ON hydro_bill_lines (bill_id, sr_no);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Hydro bill lifecycle: approval, despatch, and the beneficiary ledger
+--
+-- The station bill above stops at "computed and saved". SJVN's SAP process
+-- (ZHDBILL / ZHYBILL) carries it much further: the bill is approved up a chain
+-- inside C&SO, released and printed, despatched by courier, and then each
+-- beneficiary pays against it in its own subsidiary ledger — the "Account
+-- Display" screen, where a bill, a payment, an unapplied advance and a late
+-- payment surcharge each appear as a document with its own number.
+-- These tables carry that lifecycle.
+
+-- The approval chain a bill climbs before it can be issued.
+--
+-- SJVN routes each bill to a Next Approver and a Final Approver by position, and
+-- an approver may approve, reject, or forward to someone else before the final
+-- one signs. Levels are created as the bill moves rather than all at once,
+-- because who the next approver is can change at each step.
+CREATE TABLE IF NOT EXISTS hydro_bill_approvals (
+  id TEXT PRIMARY KEY,
+  bill_id TEXT NOT NULL REFERENCES hydro_station_bills(id) ON DELETE CASCADE,
+  level INTEGER NOT NULL,
+  approver_user_id TEXT REFERENCES users(id),
+  approver_name TEXT,
+  -- The last level in the chain: approving here is what releases the bill.
+  is_final INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'PENDING'
+    CHECK (status IN ('PENDING','APPROVED','REJECTED','FORWARDED')),
+  comments TEXT,
+  acted_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hydro_bill_approvals_bill
+  ON hydro_bill_approvals (bill_id, level);
+-- One open step at a time: a bill cannot be sitting with two approvers at once.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_hydro_bill_approvals_open
+  ON hydro_bill_approvals (bill_id) WHERE status = 'PENDING';
+
+-- The beneficiary's subsidiary ledger — SAP's "Account Display".
+--
+-- Every movement is a document with its own number, exactly as the desk reads
+-- it off that screen:
+--   PB  periodic bill      the beneficiary's share of a station bill (debit)
+--   LPS late payment surcharge on an overdue PB              (debit)
+--   PMT payment received                                     (credit)
+--
+-- A credit with nothing applied to it is what SAP shows as ADV (advance); that
+-- is a state, not a separate row, so it is derived from the clearings rather
+-- than stored — which is also what makes "reset clearing" turn a PMT back into
+-- an ADV without rewriting the document.
+CREATE TABLE IF NOT EXISTS hydro_ledger_docs (
+  id TEXT PRIMARY KEY,
+  doc_no TEXT UNIQUE NOT NULL,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  beneficiary_name TEXT NOT NULL,
+  beneficiary_id TEXT REFERENCES entities(id),
+  doc_type TEXT NOT NULL CHECK (doc_type IN ('PB','PMT','LPS')),
+  -- PB and LPS point back at the bill they came from; PMT does not.
+  bill_id TEXT REFERENCES hydro_station_bills(id),
+  bill_line_id TEXT REFERENCES hydro_bill_lines(id),
+  -- Always positive. doc_type says which side of the account it falls on, so a
+  -- sign convention never has to be remembered at a call site.
+  amount REAL NOT NULL CHECK (amount >= 0),
+  doc_date TEXT NOT NULL,
+  due_date TEXT,
+  status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','REVERSED')),
+  -- A reversal does not delete the document; it marks it and records the pair,
+  -- so the ledger still shows what happened.
+  reverses_doc_no TEXT,
+  reversed_by_doc_no TEXT,
+  reversal_reason TEXT,
+  mode TEXT,
+  reference TEXT,
+  info TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hydro_ledger_beneficiary
+  ON hydro_ledger_docs (contract_id, beneficiary_name, doc_date);
+CREATE INDEX IF NOT EXISTS idx_hydro_ledger_bill ON hydro_ledger_docs (bill_id);
+
+-- What a credit was applied to. One payment can clear several bills and one
+-- bill can be cleared by several payments, so the application is its own row
+-- rather than a column on either side — which is also what lets a clearing be
+-- reset without touching the documents.
+CREATE TABLE IF NOT EXISTS hydro_ledger_clearings (
+  id TEXT PRIMARY KEY,
+  credit_doc_id TEXT NOT NULL REFERENCES hydro_ledger_docs(id) ON DELETE CASCADE,
+  debit_doc_id TEXT NOT NULL REFERENCES hydro_ledger_docs(id) ON DELETE CASCADE,
+  amount REAL NOT NULL CHECK (amount > 0),
+  cleared_on TEXT NOT NULL,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hydro_clearings_credit ON hydro_ledger_clearings (credit_doc_id);
+CREATE INDEX IF NOT EXISTS idx_hydro_clearings_debit ON hydro_ledger_clearings (debit_doc_id);

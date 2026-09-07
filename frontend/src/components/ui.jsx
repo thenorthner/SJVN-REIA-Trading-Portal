@@ -373,9 +373,15 @@ export function Tab({ active, onClick, children }) {
         border: 'none',
         borderBottom: active ? '2px solid var(--primary)' : '2px solid transparent',
         color: active ? 'var(--primary)' : 'var(--text-muted)',
-        fontWeight: active ? 600 : 400,
         marginBottom: '-1px',
-        font: 'inherit',
+        // The longhands, not the `font` shorthand: a button needs to be told to
+        // take the page's font rather than the browser's default, but `font`
+        // also resets font-weight, so pairing it with a fontWeight that changes
+        // with `active` left the two fighting over every render.
+        fontFamily: 'inherit',
+        fontSize: 'inherit',
+        lineHeight: 'inherit',
+        fontWeight: active ? 600 : 400,
       }}
     >
       {children}
