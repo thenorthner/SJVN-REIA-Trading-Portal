@@ -24,26 +24,39 @@
  * "Order Display Quantity = 10.0 and Order Quantity Decimal = 10 then at API
  * Order Quantity value should be 100". So 100 / 10 = 10.0.
  *
- * DATES: the API takes and returns delivery dates as epoch SECONDS, not as an
- * ISO string. The spec does not say which midnight those seconds are counted
- * from, so we do not guess: resolveDeliveryDate() asks the exchange's own
- * deliverydates API and uses the value it returns. The IST-midnight
- * computation is only a fallback, and it says so in the result.
+ * DATES: the API takes and returns delivery dates as epoch SECONDS at UTC
+ * midnight. IEX confirmed this by worked example on 08-09-2026: delivery date
+ * T+1 came back as 1788912000, which is exactly divisible by 86400 and reads
+ * as 2026-09-09T00:00:00Z. It is NOT IST midnight — that would have been
+ * 1788892200, and using it would address the neighbouring trading day.
+ * resolveDeliveryDate() still prefers the exchange's own value ("use the values
+ * returned by the respective APIs without any modification or recalculation",
+ * per IEX); the UTC-midnight computation is only the offline fallback.
  *
- * OPEN QUESTIONS with IEX — see docs/IEX_API_Clarifications_Email_Draft.md:
- *   1. No base URL is published in any of the four documents. IEX_BASE_URL must
- *      come from the exchange (UAT/alpha and live differ).
- *   2. No login or token-refresh endpoint is documented, yet the issued token
- *      carries a one-hour expiry and CnS defines error CNSAPI-509 "Token is
- *      expired". Until IEX confirms a refresh call, the token is operated as a
- *      manually-rotated credential and this module reports its expiry rather
- *      than discovering it as a 401.
- *   3. The schedule report's quantity/price fields carry no "Refer ... Decimal"
- *      note, unlike every bid field. We scale them with the TRADE decimals and
- *      report which factor was applied, so a wrong assumption is visible in the
- *      payload rather than silently baked into settlement.
- *   4. REC and ESCerts are in SJVN's UAT entitlement but have no FO API
- *      document in this repo, so they are not implemented.
+ * HOSTS: there is no single base URL. IEX serves each segment from its own
+ * host and appends the same {product}/api/v2/... path grammar to it — their
+ * own example is
+ *   GET https://alphaidamapi.iexindia.com/dam/api/v2/deliverydates/USER,PARTICIPANT
+ * DAM and GDAM share the iDAM host; RTM, HPDAM and REC each have their own.
+ *
+ * SCALING (confirmed by IEX 08-09-2026): results — including the Portfolio
+ * Schedule Report — are scaled by the TRADE decimals, and in UAT that factor is
+ * 100 ("Quantity or Price must be divided by 100 to get the exact quantity in
+ * MW and Price in Rs/MWh").
+ *
+ * CAUTION for whoever wires bid submission: IEX states the SUBMIT side uses a
+ * different factor from the RESULT side — "while submitting bid order Quantity
+ * (MW) x 10, e.g. 5.3 MW -> 53" against divide-by-100 when reading results.
+ * That asymmetry is a silent 10x waiting to happen. Submission must read its
+ * own factor from the Asset Master order decimals, never reuse the trade ones.
+ *
+ * TOKEN: valid for six months from issue, renewed by mail 15 days before it
+ * lapses. There is no login or refresh endpoint — IEX confirmed none exists.
+ * The one-hour expiry on the first UAT token was, in IEX's words, a typo, so
+ * the JWT `exp` claim is treated as advisory here rather than as a gate.
+ *
+ * NOT IMPLEMENTED: REC has a host and a document but no client yet; ESCerts
+ * likewise. Bid submission stays manual.
  */
 import db from '../db/index.js';
 import { getParam } from '../mastersService.js';
@@ -53,10 +66,52 @@ const PRODUCT_PATH = { DAM: 'dam', GDAM: 'gdam', RTM: 'rtm', HPDAM: 'hpdam' };
 
 export const SUPPORTED_PRODUCTS = Object.keys(PRODUCT_PATH);
 
-/** The spec fixes the response timeout for every API at 40 seconds. */
-const REQUEST_TIMEOUT_MS = 40_000;
+/**
+ * The spec fixes the response timeout for every API at 40 seconds. Overridable
+ * so the abort path can actually be exercised — a timeout nobody has ever seen
+ * fire is a guess, not a guarantee — and so ops can tighten it if the exchange
+ * turns out to hang for the full 40s under load.
+ *
+ * Read per request rather than captured at import: every other setting in this
+ * module is resolved at call time, and a value frozen at module load cannot be
+ * changed without a restart.
+ */
+const requestTimeoutMs = () => {
+  const v = Number(envOrParam('IEX_TIMEOUT_MS', 'iex_timeout_ms', ''));
+  return Number.isFinite(v) && v > 0 ? v : 40_000;
+};
 
-const IST_OFFSET_SECONDS = 5.5 * 3600;
+/**
+ * Per-segment hosts, as supplied by IEX on 08-09-2026. There is no single base
+ * URL: each segment answers on its own host, with the usual {product}/api/v2/
+ * path appended. DAM and GDAM share the iDAM host.
+ *
+ * A blank means IEX has not supplied that host — REC has no production URL in
+ * their table, and asking for one is better than guessing at a name that looks
+ * plausible and silently fails.
+ */
+export const PRODUCT_HOSTS = {
+  UAT: {
+    DAM: 'https://alphaidamapi.iexindia.com/',
+    GDAM: 'https://alphaidamapi.iexindia.com/',
+    HPDAM: 'https://alphahpdamapi.iexindia.com/',
+    RTM: 'https://alphartmapi.iexindia.com/',
+    REC: 'https://alpharecapi.iexindia.com/',
+  },
+  LIVE: {
+    DAM: 'https://idamapi.iexindia.com/',
+    GDAM: 'https://idamapi.iexindia.com/',
+    HPDAM: 'https://hpdamapi.iexindia.com/',
+    RTM: 'https://rtmapi.iexindia.com/',
+    REC: '',
+  },
+};
+
+/** Post-trade (Clearing & Settlement back office) — a different system entirely. */
+export const CNS_HOSTS = {
+  UAT: 'https://alphawebportal.iexindia.com/',
+  LIVE: 'https://energx.iexindia.com/',
+};
 
 /** Rs/MWh (exchange) -> Rs/kWh (this platform). */
 export const mwhToKwhPrice = (rsPerMwh) => Number(rsPerMwh) / 1000;
@@ -95,7 +150,6 @@ export function readTokenExpiry(token) {
 
 export function getIexConfig() {
   const token = envOrParam('IEX_API_TOKEN', 'iex_api_token', '');
-  const baseUrl = envOrParam('IEX_BASE_URL', 'iex_base_url', '');
   const loginUserId = envOrParam('IEX_LOGIN_USER_ID', 'iex_login_user_id', '');
   const participantId = envOrParam('IEX_PARTICIPANT_ID', 'iex_participant_id', '');
   // 'ALL' is the spec's own wildcard for both of these.
@@ -103,14 +157,29 @@ export function getIexConfig() {
   const portfolioId = envOrParam('IEX_PORTFOLIO_ID', 'iex_portfolio_id', 'ALL');
   const environment = envOrParam('IEX_ENVIRONMENT', 'iex_environment', 'UAT').toUpperCase();
   const enabled = String(envOrParam('IEX_ENABLED', 'iex_enabled', 'false')) === 'true';
+  // A single override still wins over the per-segment table — it is how you
+  // point the whole client at a mock or at a host IEX moves without notice.
+  const baseUrlOverride = envOrParam('IEX_BASE_URL', 'iex_base_url', '');
+  // IEX says the token lasts six months and that the one-hour expiry on the
+  // first UAT token was a typo, so a stale `exp` no longer blocks a request by
+  // default. Set this to re-arm the hard refusal if their claim proves wrong.
+  const enforceTokenExpiry = String(envOrParam('IEX_ENFORCE_TOKEN_EXPIRY', 'iex_enforce_token_expiry', 'false')) === 'true';
 
   const tokenExpiresAt = readTokenExpiry(token);
   const tokenExpired = tokenExpiresAt != null && tokenExpiresAt * 1000 <= Date.now();
 
+  const hosts = PRODUCT_HOSTS[environment] || {};
+  const baseUrlFor = (product) => baseUrlOverride || hosts[product] || '';
+
   return {
     enabled,
-    live: enabled && !!token && !!baseUrl && !!loginUserId,
-    token, baseUrl, loginUserId, participantId, bidAreaId, portfolioId, environment,
+    // The host no longer has to be configured — IEX has published it, so a
+    // token and a user id are all that stand between us and a live call.
+    live: enabled && !!token && !!loginUserId,
+    token, loginUserId, participantId, bidAreaId, portfolioId, environment,
+    baseUrlOverride, baseUrlFor, hosts,
+    cnsBaseUrl: CNS_HOSTS[environment] || '',
+    enforceTokenExpiry,
     tokenExpiresAt,
     tokenExpiresAtIso: tokenExpiresAt ? new Date(tokenExpiresAt * 1000).toISOString() : null,
     tokenExpired,
@@ -128,30 +197,57 @@ function iexHeaders(cfg) {
 }
 
 /**
+ * Turn an upstream error body into something a desk can act on.
+ *
+ * Gateways answer with HTML, and dumping "<!DOCTYPE html><html><head>..." into
+ * an operator's face says nothing. 403 in particular is THE expected failure
+ * for this integration — IEX only serves whitelisted IPs — so it gets named
+ * rather than left as a status code to look up.
+ */
+function describeHttpError(status, body) {
+  const text = String(body || '').trim();
+  const isHtml = /^<(!doctype|html)/i.test(text);
+  const title = isHtml ? (text.match(/<title>([^<]*)<\/title>/i)?.[1] || '').trim() : '';
+  const detail = isHtml ? (title || `${text.length} bytes of HTML`) : text.slice(0, 300);
+  if (status === 403) {
+    return `HTTP 403 (${detail}) — most likely this host is not whitelisted for the calling IP. IEX only serves requests from the IP registered with them.`;
+  }
+  if (status === 401) {
+    return `HTTP 401 (${detail}) — the token was rejected. Check that it is current and issued for this environment.`;
+  }
+  return `HTTP ${status}: ${detail}`;
+}
+
+/**
  * One GET against the exchange.
  *
  * An expired token is refused before the call rather than after: firing it
  * would return a 401 that is indistinguishable from a credential being revoked
  * or the exchange being down, and the desk would chase the wrong problem.
  */
-async function iexGet(cfg, path) {
-  if (cfg.tokenExpired) {
-    throw new Error(`IEX token expired at ${cfg.tokenExpiresAtIso} — request not sent. Obtain a fresh token from the exchange and update iex_api_token.`);
+async function iexGet(cfg, product, path) {
+  if (cfg.tokenExpired && cfg.enforceTokenExpiry) {
+    throw new Error(`IEX token expired at ${cfg.tokenExpiresAtIso} — request not sent (iex_enforce_token_expiry is on). Obtain a fresh token from the exchange and update iex_api_token.`);
   }
-  const url = `${cfg.baseUrl.replace(/\/$/, '')}/${path}`;
+  const base = cfg.baseUrlFor(product);
+  if (!base) {
+    throw new Error(`No IEX host is configured for ${product} in ${cfg.environment}. IEX has not published one — set iex_base_url to override.`);
+  }
+  const url = `${base.replace(/\/$/, '')}/${path}`;
+  const timeoutMs = requestTimeoutMs();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let resp;
   try {
     resp = await fetch(url, { method: 'GET', headers: iexHeaders(cfg), signal: controller.signal });
   } catch (err) {
-    if (err?.name === 'AbortError') throw new Error(`IEX request timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${path}`);
+    if (err?.name === 'AbortError') throw new Error(`IEX request timed out after ${timeoutMs / 1000}s: ${path}`);
     throw new Error(`IEX request failed (${path}): ${err.message}`);
   } finally {
     clearTimeout(timer);
   }
   const text = await resp.text();
-  if (!resp.ok) throw new Error(`IEX HTTP ${resp.status}: ${text.slice(0, 300)}`);
+  if (!resp.ok) throw new Error(`IEX ${describeHttpError(resp.status, text)}`);
   try {
     return JSON.parse(text);
   } catch {
@@ -197,7 +293,7 @@ export async function getDecimals(product) {
 
   let data;
   try {
-    data = await iexGet(cfg, `${productPath(product)}/api/v2/master/assets/${cfg.loginUserId},${cfg.participantId}`);
+    data = await iexGet(cfg, product, `${productPath(product)}/api/v2/master/assets/${cfg.loginUserId},${cfg.participantId}`);
   } catch (err) {
     // Do not silently assume 1 — an unscaled price is off by a power of ten.
     throw new Error(`Cannot read IEX Asset Master decimals for ${product}: ${err.message}`);
@@ -221,16 +317,22 @@ export async function getDecimals(product) {
 
 /* ------------------------------------------------------------------- dates */
 
-/** Epoch seconds at IST midnight of an ISO date — the fallback, not the truth. */
-export const istMidnightEpoch = (isoDate) => {
+/**
+ * Epoch seconds at UTC midnight of an ISO date — the fallback, not the truth.
+ *
+ * IEX confirmed the convention with a worked example: T+1 came back as
+ * 1788912000, exactly 20705 whole days since the epoch, i.e. 2026-09-09T00:00Z.
+ * An IST midnight would have been 1788892200 and would address the wrong day.
+ */
+export const utcMidnightEpoch = (isoDate) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoDate || '').trim());
   if (!m) throw new Error(`Delivery date must be YYYY-MM-DD, got "${isoDate}"`);
-  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 1000 - IST_OFFSET_SECONDS;
+  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 1000;
 };
 
-/** The IST calendar date an epoch-seconds value falls on. */
-export const epochToIstDate = (epochSeconds) =>
-  new Date((Number(epochSeconds) + IST_OFFSET_SECONDS) * 1000).toISOString().slice(0, 10);
+/** The calendar date an epoch-seconds delivery value denotes. */
+export const epochToDate = (epochSeconds) =>
+  new Date(Number(epochSeconds) * 1000).toISOString().slice(0, 10);
 
 /**
  * Delivery dates the exchange is currently trading, with their own epoch values.
@@ -239,12 +341,12 @@ export async function fetchDeliveryDates(product) {
   const cfg = getIexConfig();
   if (!cfg.live) return { ok: true, mode: 'STUB', dates: null, note: stubNote(cfg) };
   try {
-    const data = await iexGet(cfg, `${productPath(product)}/api/v2/deliverydates/${cfg.loginUserId},${cfg.participantId}`);
+    const data = await iexGet(cfg, product, `${productPath(product)}/api/v2/deliverydates/${cfg.loginUserId},${cfg.participantId}`);
     const rows = data?.DeliveryDates || data?.DeliveryDateDetails || (Array.isArray(data) ? data : []);
     const dates = rows.map((r) => ({
       delivery_date_id: r.DeliveryDateId ?? null,
       epoch_seconds: Number(r.DeliveryDate),
-      iso_date: Number.isFinite(Number(r.DeliveryDate)) ? epochToIstDate(r.DeliveryDate) : null,
+      iso_date: Number.isFinite(Number(r.DeliveryDate)) ? epochToDate(r.DeliveryDate) : null,
     }));
     return { ok: true, mode: 'IEX', dates };
   } catch (err) {
@@ -257,11 +359,11 @@ export async function fetchDeliveryDates(product) {
  *
  * Asking beats computing: the spec never states which midnight its seconds are
  * counted from, and a delivery date that is off by 5.5 hours silently returns
- * the wrong trading day. We only fall back to a computed IST midnight when the
+ * the wrong trading day. We only fall back to a computed UTC midnight when the
  * exchange cannot be asked, and the caller is told which of the two it got.
  */
 export async function resolveDeliveryDate(product, isoDate) {
-  const fallback = istMidnightEpoch(isoDate);
+  const fallback = utcMidnightEpoch(isoDate);
   const listed = await fetchDeliveryDates(product);
   if (listed.ok && listed.dates) {
     const match = listed.dates.find((d) => d.iso_date === isoDate);
@@ -269,10 +371,10 @@ export async function resolveDeliveryDate(product, isoDate) {
     return {
       epoch: fallback,
       source: 'COMPUTED',
-      warning: `${isoDate} is not in the exchange's open delivery dates for ${product} (${listed.dates.map((d) => d.iso_date).filter(Boolean).join(', ') || 'none returned'}); using a computed IST midnight.`,
+      warning: `${isoDate} is not in the exchange's open delivery dates for ${product} (${listed.dates.map((d) => d.iso_date).filter(Boolean).join(', ') || 'none returned'}); using a computed UTC midnight.`,
     };
   }
-  return { epoch: fallback, source: 'COMPUTED', warning: listed.error ? `Delivery date list unavailable (${listed.error}); using a computed IST midnight.` : undefined };
+  return { epoch: fallback, source: 'COMPUTED', warning: listed.error ? `Delivery date list unavailable (${listed.error}); using a computed UTC midnight.` : undefined };
 }
 
 /* ----------------------------------------------------------------- reports */
@@ -281,11 +383,21 @@ const stubNote = (cfg) => {
   if (!cfg.enabled) return 'IEX not enabled (iex_enabled != true) — running in stub mode.';
   const missing = [
     !cfg.token && 'iex_api_token',
-    !cfg.baseUrl && 'iex_base_url',
     !cfg.loginUserId && 'iex_login_user_id',
   ].filter(Boolean);
   return `IEX enabled but credentials incomplete (needs ${missing.join(', ')}) — running in stub mode.`;
 };
+
+/**
+ * The expiry warning that rides along with a live response.
+ *
+ * Since a stale `exp` no longer blocks the call, it has to surface somewhere or
+ * it may as well not be read at all. A 401 arriving next to this line is
+ * self-explanatory; a 401 on its own is not.
+ */
+const expiryNote = (cfg) => (cfg.tokenExpired
+  ? `The configured token's own expiry claim passed at ${cfg.tokenExpiresAtIso}. IEX states tokens last six months and that this claim was a typo, so the request was still sent — but if it came back 401, this is why.`
+  : undefined);
 
 /**
  * What our portfolios actually cleared for a delivery date, block by block.
@@ -311,7 +423,7 @@ export async function fetchClearedResults(product, deliveryDate) {
     const decimals = await getDecimals(product);
     const { epoch, source, warning } = await resolveDeliveryDate(product, deliveryDate);
     const data = await iexGet(
-      cfg,
+      cfg, product,
       `${productPath(product)}/api/v2/portfolioschedulereport/${cfg.loginUserId},${cfg.participantId},${epoch},${cfg.bidAreaId},${cfg.portfolioId}`,
     );
 
@@ -344,7 +456,7 @@ export async function fetchClearedResults(product, deliveryDate) {
       delivery_date_epoch: epoch,
       delivery_date_source: source,
       scaling: { qty_factor: decimals.tradeQty, price_factor: decimals.tradePrice, source: decimals.source },
-      warning,
+      warning: warning || expiryNote(cfg),
     };
   } catch (err) {
     return { ok: false, mode: 'IEX', error: err.message };
@@ -369,7 +481,7 @@ export async function fetchMarketPq(product, deliveryDate) {
     const decimals = await getDecimals(product);
     const { epoch, source, warning } = await resolveDeliveryDate(product, deliveryDate);
     const data = await iexGet(
-      cfg,
+      cfg, product,
       `${productPath(product)}/api/v2/pqresults/${cfg.loginUserId},${cfg.participantId},${epoch}`,
     );
 
@@ -405,7 +517,7 @@ export async function fetchMarketPq(product, deliveryDate) {
       delivery_date_epoch: epoch,
       delivery_date_source: source,
       scaling: { qty_factor: decimals.tradeQty, price_factor: decimals.tradePrice, source: decimals.source },
-      warning,
+      warning: warning || expiryNote(cfg),
     };
   } catch (err) {
     return { ok: false, mode: 'IEX', error: err.message };
@@ -421,18 +533,26 @@ export async function checkConnectivity(product = 'DAM') {
   if (!cfg.live) return { ok: false, mode: 'STUB', reachable: false, note: stubNote(cfg) };
   const started = Date.now();
   try {
-    const data = await iexGet(cfg, `${productPath(product)}/api/v2/businessconfig/${cfg.loginUserId},${cfg.participantId}`);
+    const data = await iexGet(cfg, product, `${productPath(product)}/api/v2/businessconfig/${cfg.loginUserId},${cfg.participantId}`);
     return {
       ok: true,
       mode: 'IEX',
       reachable: true,
       product,
+      base_url: cfg.baseUrlFor(product),
       elapsed_ms: Date.now() - started,
       business_date: data?.BusinessDate ?? null,
-      business_date_iso: Number.isFinite(Number(data?.BusinessDate)) ? epochToIstDate(data.BusinessDate) : null,
+      business_date_iso: Number.isFinite(Number(data?.BusinessDate)) ? epochToDate(data.BusinessDate) : null,
+      warning: expiryNote(cfg),
     };
   } catch (err) {
-    return { ok: false, mode: 'IEX', reachable: false, product, elapsed_ms: Date.now() - started, error: err.message };
+    return {
+      ok: false, mode: 'IEX', reachable: false, product,
+      base_url: cfg.baseUrlFor(product),
+      elapsed_ms: Date.now() - started,
+      error: err.message,
+      warning: expiryNote(cfg),
+    };
   }
 }
 

@@ -47,13 +47,30 @@ describe('status', () => {
     expect(JSON.stringify(r.body)).not.toMatch(/eyJ/); // no JWT anywhere in it
   });
 
-  it('says plainly which segments are not implemented', async () => {
+  it('publishes the per-segment hosts it will call', async () => {
+    const r = await get('/status');
+    expect(r.body.hosts.DAM).toBe('https://alphaidamapi.iexindia.com/');
+    expect(r.body.hosts.RTM).toBe('https://alphartmapi.iexindia.com/');
+    expect(r.body.cns_base_url).toMatch(/webportal|energx/);
+  });
+
+  it('says plainly what is read-only and what is not implemented at all', async () => {
     const r = await get('/status');
     expect(r.body.capabilities).toMatchObject({
+      // Money-moving calls stay unimplemented on both sides of the integration.
       bid_submission: 'STUB',
-      rec: 'NOT_IMPLEMENTED',
-      escerts: 'NOT_IMPLEMENTED',
+      rec_order_entry: 'NOT_IMPLEMENTED',
+      // REC and EC read paths exist now; STUB only because nothing is configured.
+      rec: 'STUB',
+      escerts: 'STUB',
     });
+  });
+
+  it('reports the REC segment separately from the Front Office one', async () => {
+    const r = await get('/status');
+    expect(r.body.rec).toMatchObject({ live: false, mode: 'STUB' });
+    // IEX published a UAT REC host; the client defaults to it.
+    expect(r.body.rec.base_url).toBe('https://alpharecapi.iexindia.com/');
   });
 
   it('surfaces the token expiry so a lapsed credential is visible before it is used', async () => {
@@ -63,6 +80,9 @@ describe('status', () => {
     expect(r.body.token_present).toBe(true);
     expect(r.body.token_expired).toBe(true);
     expect(r.body.token_expires_at).toBe('2026-07-26T09:51:28.000Z');
+    // Advisory, not a gate: IEX called that expiry a typo and puts real token
+    // life at six months.
+    expect(r.body.token_expiry_enforced).toBe(false);
   });
 });
 
@@ -85,6 +105,28 @@ describe('report routes', () => {
     expect(r.body.mode).toBe('STUB');
     expect(r.body.blocks).toBeNull();
     expect(r.body.note).toMatch(/iex_enabled/);
+  });
+
+  it('rejects a clock time that is not HH:MM:SS or the ALL wildcard', async () => {
+    const r = await get('/rec/orders', { from_time: '10:00' });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/HH:MM:SS/);
+  });
+
+  it('rejects an order status the REC spec does not define', async () => {
+    const r = await get('/rec/orders', { status: 'Partial' });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/Pending, Executed, Rejected, Cancelled/);
+  });
+
+  it('answers the REC books in stub mode', async () => {
+    const orders = await get('/rec/orders');
+    expect(orders.status).toBe(200);
+    expect(orders.body.mode).toBe('STUB');
+    expect(orders.body.orders).toBeNull();
+    const trades = await get('/rec/trades', { side: 'Sell', from_time: '10:00:00' });
+    expect(trades.status).toBe(200);
+    expect(trades.body.trades).toBeNull();
   });
 
   it('reports an unconfigured connectivity probe as unreachable, not as an error', async () => {

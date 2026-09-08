@@ -1,5 +1,13 @@
 # Email draft — IEX Front Office API clarifications
 
+> **STATUS: SENT 07-09-2026 — ANSWERED BY IEX 08-09-2026.**
+> Do not re-send. Kept as the record of what was asked and why.
+> IEX's answers, and the three code changes they forced, are written up in
+> [WORKLOG_2026-09-07_IEX_Integration.md](WORKLOG_2026-09-07_IEX_Integration.md).
+>
+> Still outstanding after their reply: the **ESCerts API document** (never
+> supplied), and the **production REC host** (left blank in their table).
+
 **Send from your SJVN address** (@sjvn.nic.in)
 
 **To:** sandeep.kumar3@iexindia.com
@@ -81,6 +89,34 @@ For our records, please confirm the segments enabled for `N2DL0SJV0000` in UAT.
 Your mail of 04-09-2026 lists "iDAM, HPDAM, RTM & REC". Please confirm whether
 **iDAM** is served by the DAM 2.2 API document (`dam/api/v2/...`) or has a
 separate document, and whether **G-DAM** is included.
+
+Kindly let us know if any additional formality is required from our side.
+
+Regards,
+
+Kshitij Sharma
+ERP Cell
+SJVN Corporate HQ, Shimla
+
+---
+---
+
+# Follow-up email draft — REC/EC attachment missing
+
+**Send from your SJVN address** (@sjvn.nic.in)
+
+**To:** sandeep.kumar3@iexindia.com
+**Cc:** sudhir.bharti@iexindia.com, nikhil.sharma34@sjvn.nic.in, praveen.kalta@sjvn.nic.in
+
+**Subject:** RE: IEX FO API (UAT/Alpha) — REC/EC API document not received — SJVN Limited (N2DL0SJV0000)
+
+---
+
+Dear Sandeep Sir,
+
+Thank you for the detailed clarifications on the base URLs, token validity, delivery date convention and decimal scaling — these are very helpful and we have updated our integration accordingly.
+
+One item from your reply is still pending on our side: against point 5 (REC and ESCerts API documents), your email states "Please find attached the required doc for REC/EC," but no attachment came through to us — we received only the email text. Could you kindly resend the REC/ESCerts API document(s)? A PDF attachment, similar to the DAM/GDAM/HPDAM/RTM documents you shared earlier, would be ideal.
 
 Kindly let us know if any additional formality is required from our side.
 

@@ -22,6 +22,13 @@ import {
   getDecimals,
   SUPPORTED_PRODUCTS,
 } from '../services/iexService.js';
+import {
+  getRecConfig,
+  checkRecConnectivity,
+  fetchProductMaster,
+  fetchOrderBook,
+  fetchTradeBook,
+} from '../services/iexRecService.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -68,28 +75,44 @@ function dated(handler) {
  */
 router.get('/status', requireRole(...IEX_READ), (_req, res) => {
   const cfg = getIexConfig();
+  const rec = getRecConfig();
   res.json({
     enabled: cfg.enabled,
     live: cfg.live,
     mode: cfg.live ? 'IEX' : 'STUB',
     environment: cfg.environment,
-    base_url_set: !!cfg.baseUrl,
+    // Per-segment hosts, published by IEX — not a single base URL.
+    hosts: cfg.hosts,
+    base_url_override: cfg.baseUrlOverride || null,
+    cns_base_url: cfg.cnsBaseUrl || null,
     token_present: !!cfg.token,
     token_expires_at: cfg.tokenExpiresAtIso,
     token_expired: cfg.tokenExpired,
+    // IEX puts token life at six months and called the short expiry on the
+    // first UAT token a typo, so a stale claim warns rather than blocks.
+    token_expiry_enforced: cfg.enforceTokenExpiry,
     login_user_id: cfg.loginUserId || null,
     participant_id: cfg.participantId || null,
     bid_area_id: cfg.bidAreaId,
     portfolio_id: cfg.portfolioId,
     products: SUPPORTED_PRODUCTS,
+    rec: {
+      live: rec.live,
+      mode: rec.live ? 'IEX' : 'STUB',
+      base_url: rec.baseUrl || null,
+      // REC/EC may or may not share the FO token — IEX has not confirmed.
+      token_present: !!rec.token,
+    },
     capabilities: {
       cleared_results: cfg.live ? 'LIVE' : 'STUB',
       market_prices: cfg.live ? 'LIVE' : 'STUB',
       // Two-way and money-moving: stays manual until a controlled rollout.
       bid_submission: 'STUB',
-      // No FO API document has been supplied for these segments.
-      rec: 'NOT_IMPLEMENTED',
-      escerts: 'NOT_IMPLEMENTED',
+      // One document and one host serve both REC and EC/ESCerts; the segments
+      // are told apart by product symbol, not by URL.
+      rec: rec.live ? 'LIVE' : 'STUB',
+      escerts: rec.live ? 'LIVE' : 'STUB',
+      rec_order_entry: 'NOT_IMPLEMENTED',
     },
   });
 });
@@ -139,5 +162,84 @@ router.get('/pq-results', requireRole(...IEX_READ), dated((product, date) => fet
 
 /** What our own portfolios cleared for a delivery date. */
 router.get('/schedule-report', requireRole(...IEX_READ), dated((product, date) => fetchClearedResults(product, date)));
+
+/* --------------------------------------------------------------- REC / EC */
+
+/**
+ * REC and EC (ESCerts) share one API, one host and one path prefix; the
+ * `product` filter is what separates the two segments. These are read-only —
+ * order entry is not implemented, the same as bid submission on the FO side.
+ */
+
+router.get('/rec/connectivity', requireRole(...IEX_READ), async (_req, res, next) => {
+  try {
+    res.json(await checkRecConnectivity());
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Tradable REC/EC products, with the decimal locators everything else needs. */
+router.get('/rec/products', requireRole(...IEX_READ), async (_req, res, next) => {
+  try {
+    send(res, await fetchProductMaster());
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * The spec takes clock times as HH:MM:SS or its own 'ALL' wildcard. Anything
+ * else is rejected here rather than passed through to come back as an empty
+ * book that reads like a quiet session.
+ */
+const TIME_OR_ALL = /^(ALL|([01]\d|2[0-3]):[0-5]\d:[0-5]\d)$/;
+
+function readBookFilters(req) {
+  const fromTime = String(req.query.from_time || 'ALL').trim().toUpperCase();
+  const toTime = String(req.query.to_time || 'ALL').trim().toUpperCase();
+  if (!TIME_OR_ALL.test(fromTime) || !TIME_OR_ALL.test(toTime)) {
+    return { error: "from_time and to_time must be HH:MM:SS (24-hour) or ALL" };
+  }
+  const buySell = String(req.query.side || 'ALL').trim();
+  if (!['ALL', 'Buy', 'Sell'].includes(buySell)) {
+    return { error: 'side must be Buy, Sell or ALL' };
+  }
+  return {
+    filters: {
+      instrumentName: String(req.query.instrument || 'ALL').trim(),
+      product: String(req.query.product || 'ALL').trim(),
+      buySell,
+      fromTime,
+      toTime,
+      pageNumber: Number(req.query.page || 0) || 0,
+      pageSize: Number(req.query.page_size || 0) || 0,
+    },
+  };
+}
+
+router.get('/rec/orders', requireRole(...IEX_READ), async (req, res, next) => {
+  const { filters, error } = readBookFilters(req);
+  if (error) return res.status(400).json({ error });
+  const status = String(req.query.status || 'ALL').trim();
+  if (!['ALL', 'Pending', 'Executed', 'Rejected', 'Cancelled'].includes(status)) {
+    return res.status(400).json({ error: 'status must be one of: ALL, Pending, Executed, Rejected, Cancelled' });
+  }
+  try {
+    send(res, await fetchOrderBook({ ...filters, status }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/rec/trades', requireRole(...IEX_READ), async (req, res, next) => {
+  const { filters, error } = readBookFilters(req);
+  if (error) return res.status(400).json({ error });
+  try {
+    send(res, await fetchTradeBook(filters));
+  } catch (err) {
+    next(err);
+  }
+});
 
 export default router;

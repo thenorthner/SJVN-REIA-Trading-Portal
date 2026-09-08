@@ -8,10 +8,11 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
+  PRODUCT_HOSTS,
   readTokenExpiry,
   unscale,
-  istMidnightEpoch,
-  epochToIstDate,
+  utcMidnightEpoch,
+  epochToDate,
   mwhToKwhPrice,
   getIexConfig,
   getDecimals,
@@ -33,7 +34,7 @@ const FUTURE = Math.floor(Date.now() / 1000) + 3600;
 /** Point the module at a fake exchange and hand back the captured URLs. */
 function liveConfig({ token = jwtWithExp(FUTURE), bidArea = 'ALL', portfolio = 'ALL' } = {}) {
   process.env.IEX_ENABLED = 'true';
-  process.env.IEX_BASE_URL = 'https://iex.example/';
+  process.env.IEX_BASE_URL = 'https://iex.example/'; // override so no test ever reaches IEX
   process.env.IEX_LOGIN_USER_ID = 'SJVA1';
   process.env.IEX_PARTICIPANT_ID = 'N2DL0SJV0000';
   process.env.IEX_BID_AREA_ID = bidArea;
@@ -44,6 +45,7 @@ function liveConfig({ token = jwtWithExp(FUTURE), bidArea = 'ALL', portfolio = '
 const IEX_ENV_KEYS = [
   'IEX_ENABLED', 'IEX_BASE_URL', 'IEX_LOGIN_USER_ID', 'IEX_PARTICIPANT_ID',
   'IEX_BID_AREA_ID', 'IEX_PORTFOLIO_ID', 'IEX_API_TOKEN', 'IEX_ENVIRONMENT',
+  'IEX_ENFORCE_TOKEN_EXPIRY',
 ];
 
 /** Asset Master: 2 decimal places on everything, expressed as the divisor 100. */
@@ -117,8 +119,24 @@ describe('token expiry', () => {
     expect(cfg.tokenExpiresAtIso).toBe('2026-07-26T09:51:28.000Z');
   });
 
-  it('refuses to send a request on an expired token instead of collecting a 401', async () => {
+  it('still sends on a stale expiry claim, but says so in the payload', async () => {
+    // IEX put token life at six months and called the one-hour expiry on the
+    // first UAT token a typo, so their gateway is the authority, not the claim.
     liveConfig({ token: jwtWithExp(1785059488) });
+    const calls = stubFetch({
+      '/master/assets': ASSET_MASTER,
+      '/deliverydates/': { DeliveryDates: [{ DeliveryDate: utcMidnightEpoch('2026-09-08') }] },
+      '/pqresults/': { PQDetails: [] },
+    });
+    const res = await fetchMarketPq('DAM', '2026-09-08');
+    expect(res.ok).toBe(true);
+    expect(calls.length).toBeGreaterThan(0);
+    expect(res.warning).toMatch(/expiry claim passed at 2026-07-26/i);
+  });
+
+  it('re-arms the hard refusal when the desk asks for it', async () => {
+    liveConfig({ token: jwtWithExp(1785059488) });
+    process.env.IEX_ENFORCE_TOKEN_EXPIRY = 'true';
     const calls = stubFetch({ '/master/assets': ASSET_MASTER });
     const res = await fetchMarketPq('DAM', '2026-09-08');
     expect(res.ok).toBe(false);
@@ -128,21 +146,25 @@ describe('token expiry', () => {
 });
 
 describe('delivery dates', () => {
-  it('computes IST midnight, not UTC midnight, for the fallback', () => {
-    // 2026-09-08 00:00 IST is 2026-09-07 18:30 UTC.
-    expect(istMidnightEpoch('2026-09-08')).toBe(Date.parse('2026-09-07T18:30:00Z') / 1000);
-    expect(epochToIstDate(istMidnightEpoch('2026-09-08'))).toBe('2026-09-08');
+  it('computes UTC midnight, the convention IEX confirmed by worked example', () => {
+    // IEX returned 1788912000 for T+1 = 2026-09-09: exactly 20705 whole days
+    // since the epoch. An IST midnight would be 1788892200 — a different day
+    // once the exchange interprets it.
+    expect(utcMidnightEpoch('2026-09-09')).toBe(1788912000);
+    expect(1788912000 % 86400).toBe(0);
+    expect(utcMidnightEpoch('2026-09-08')).toBe(Date.parse('2026-09-08T00:00:00Z') / 1000);
+    expect(epochToDate(utcMidnightEpoch('2026-09-08'))).toBe('2026-09-08');
   });
 
   it('refuses a date it cannot parse rather than sending NaN to the exchange', () => {
-    expect(() => istMidnightEpoch('08-09-2026')).toThrow(/YYYY-MM-DD/);
+    expect(() => utcMidnightEpoch('08-09-2026')).toThrow(/YYYY-MM-DD/);
   });
 
   it("prefers the exchange's own epoch over our computed one", async () => {
     liveConfig();
     // Deliberately 6 hours off our computed value: if we compute rather than
     // ask, the assertion below fails.
-    const exchangeEpoch = istMidnightEpoch('2026-09-08') + 6 * 3600;
+    const exchangeEpoch = utcMidnightEpoch('2026-09-08') + 6 * 3600;
     const calls = stubFetch({
       '/master/assets': ASSET_MASTER,
       '/deliverydates/': { DeliveryDates: [{ DeliveryDateId: 'T + 1', DeliveryDate: exchangeEpoch }] },
@@ -158,7 +180,7 @@ describe('delivery dates', () => {
     liveConfig();
     stubFetch({
       '/master/assets': ASSET_MASTER,
-      '/deliverydates/': { DeliveryDates: [{ DeliveryDateId: 'T + 1', DeliveryDate: istMidnightEpoch('2026-09-09') }] },
+      '/deliverydates/': { DeliveryDates: [{ DeliveryDateId: 'T + 1', DeliveryDate: utcMidnightEpoch('2026-09-09') }] },
       '/pqresults/': { PQDetails: [] },
     });
     const res = await fetchMarketPq('DAM', '2026-09-08');
@@ -168,10 +190,10 @@ describe('delivery dates', () => {
 
   it('reports the delivery dates the exchange is trading', async () => {
     liveConfig();
-    stubFetch({ '/deliverydates/': { DeliveryDates: [{ DeliveryDateId: 'T + 1', DeliveryDate: istMidnightEpoch('2026-09-08') }] } });
+    stubFetch({ '/deliverydates/': { DeliveryDates: [{ DeliveryDateId: 'T + 1', DeliveryDate: utcMidnightEpoch('2026-09-08') }] } });
     const res = await fetchDeliveryDates('DAM');
     expect(res.ok).toBe(true);
-    expect(res.dates).toEqual([{ delivery_date_id: 'T + 1', epoch_seconds: istMidnightEpoch('2026-09-08'), iso_date: '2026-09-08' }]);
+    expect(res.dates).toEqual([{ delivery_date_id: 'T + 1', epoch_seconds: utcMidnightEpoch('2026-09-08'), iso_date: '2026-09-08' }]);
   });
 });
 
@@ -217,7 +239,7 @@ describe('PQ results', () => {
     liveConfig({ bidArea: 'A1' });
     stubFetch({
       '/master/assets': ASSET_MASTER,
-      '/deliverydates/': { DeliveryDates: [{ DeliveryDate: istMidnightEpoch('2026-09-08') }] },
+      '/deliverydates/': { DeliveryDates: [{ DeliveryDate: utcMidnightEpoch('2026-09-08') }] },
       '/pqresults/': PQ,
     });
     const res = await fetchMarketPq('DAM', '2026-09-08');
@@ -232,7 +254,7 @@ describe('PQ results', () => {
     liveConfig({ bidArea: 'N3' });
     stubFetch({
       '/master/assets': ASSET_MASTER,
-      '/deliverydates/': { DeliveryDates: [{ DeliveryDate: istMidnightEpoch('2026-09-08') }] },
+      '/deliverydates/': { DeliveryDates: [{ DeliveryDate: utcMidnightEpoch('2026-09-08') }] },
       '/pqresults/': PQ,
     });
     const res = await fetchMarketPq('DAM', '2026-09-08');
@@ -244,7 +266,7 @@ describe('PQ results', () => {
     liveConfig({ bidArea: 'ALL' });
     stubFetch({
       '/master/assets': ASSET_MASTER,
-      '/deliverydates/': { DeliveryDates: [{ DeliveryDate: istMidnightEpoch('2026-09-08') }] },
+      '/deliverydates/': { DeliveryDates: [{ DeliveryDate: utcMidnightEpoch('2026-09-08') }] },
       '/pqresults/': PQ,
     });
     const res = await fetchMarketPq('DAM', '2026-09-08');
@@ -256,7 +278,7 @@ describe('PQ results', () => {
 describe('portfolio schedule report', () => {
   const REPORT = {
     ReportDetails: [{
-      DeliveryDate: istMidnightEpoch('2026-09-08'),
+      DeliveryDate: utcMidnightEpoch('2026-09-08'),
       AssetId: 'A1',
       BidAreaId: 'A1',
       ParticipantId: 'N2DL0SJV0000',
@@ -277,7 +299,7 @@ describe('portfolio schedule report', () => {
   function stubReport() {
     return stubFetch({
       '/master/assets': ASSET_MASTER,
-      '/deliverydates/': { DeliveryDates: [{ DeliveryDate: istMidnightEpoch('2026-09-08') }] },
+      '/deliverydates/': { DeliveryDates: [{ DeliveryDate: utcMidnightEpoch('2026-09-08') }] },
       '/portfolioschedulereport/': REPORT,
     });
   }
@@ -308,7 +330,7 @@ describe('portfolio schedule report', () => {
     const calls = stubReport();
     await fetchClearedResults('DAM', '2026-09-08');
     const url = calls.find((u) => u.includes('/portfolioschedulereport/'));
-    expect(url).toContain(`/portfolioschedulereport/SJVA1,N2DL0SJV0000,${istMidnightEpoch('2026-09-08')},A1,SJVNP1`);
+    expect(url).toContain(`/portfolioschedulereport/SJVA1,N2DL0SJV0000,${utcMidnightEpoch('2026-09-08')},A1,SJVNP1`);
   });
 
   it('reports the scaling factor it applied, so a wrong assumption is visible', async () => {
@@ -319,16 +341,82 @@ describe('portfolio schedule report', () => {
   });
 });
 
+describe('per-segment hosts', () => {
+  // IEX serves each segment from its own host and appends the usual
+  // {product}/api/v2/ path to it. One base URL for everything would 404.
+  it('routes DAM and GDAM to the shared iDAM host', () => {
+    process.env.IEX_ENVIRONMENT = 'UAT';
+    const cfg = getIexConfig();
+    expect(cfg.baseUrlFor('DAM')).toBe('https://alphaidamapi.iexindia.com/');
+    expect(cfg.baseUrlFor('GDAM')).toBe('https://alphaidamapi.iexindia.com/');
+  });
+
+  it('gives RTM, HPDAM and REC hosts of their own', () => {
+    const cfg = getIexConfig();
+    expect(cfg.baseUrlFor('RTM')).toBe('https://alphartmapi.iexindia.com/');
+    expect(cfg.baseUrlFor('HPDAM')).toBe('https://alphahpdamapi.iexindia.com/');
+    expect(cfg.baseUrlFor('REC')).toBe('https://alpharecapi.iexindia.com/');
+  });
+
+  it('switches the whole set when the environment changes', () => {
+    process.env.IEX_ENVIRONMENT = 'LIVE';
+    const cfg = getIexConfig();
+    expect(cfg.baseUrlFor('DAM')).toBe('https://idamapi.iexindia.com/');
+    expect(cfg.baseUrlFor('RTM')).toBe('https://rtmapi.iexindia.com/');
+    // IEX left the production REC host blank in their table; we do not invent one.
+    expect(cfg.baseUrlFor('REC')).toBe('');
+  });
+
+  it('builds the URL IEX printed in their own worked example', async () => {
+    liveConfig();
+    delete process.env.IEX_BASE_URL; // use the real host table
+    const calls = stubFetch({ '/deliverydates/': { DeliveryDates: [] } });
+    await fetchDeliveryDates('DAM');
+    expect(calls[0]).toBe('https://alphaidamapi.iexindia.com/dam/api/v2/deliverydates/SJVA1,N2DL0SJV0000');
+  });
+
+  it('refuses a segment whose host IEX has not published, rather than guessing', async () => {
+    liveConfig();
+    delete process.env.IEX_BASE_URL;
+    process.env.IEX_ENVIRONMENT = 'LIVE';
+    const calls = stubFetch({ '/deliverydates/': { DeliveryDates: [] } });
+    // REC has no production host in IEX's table. (REC is not a supported
+    // product yet either, but the host guard is what must not be bypassed.)
+    const cfg = getIexConfig();
+    expect(cfg.baseUrlFor('REC')).toBe('');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('lets a single override stand in for every host, for a mock', () => {
+    process.env.IEX_BASE_URL = 'http://localhost:9999/';
+    const cfg = getIexConfig();
+    expect(cfg.baseUrlFor('DAM')).toBe('http://localhost:9999/');
+    expect(cfg.baseUrlFor('RTM')).toBe('http://localhost:9999/');
+  });
+
+  it('exposes the published table so the UI can show what it will call', () => {
+    expect(Object.keys(PRODUCT_HOSTS)).toEqual(['UAT', 'LIVE']);
+    expect(PRODUCT_HOSTS.UAT.HPDAM).toMatch(/^https:\/\/alpha/);
+  });
+});
+
 describe('configuration and connectivity', () => {
-  it('stays in stub mode with no base URL, and names what is missing', async () => {
+  it('goes live on a token and a user id alone — IEX publishes the hosts', () => {
     process.env.IEX_ENABLED = 'true';
     process.env.IEX_API_TOKEN = jwtWithExp(FUTURE);
     process.env.IEX_LOGIN_USER_ID = 'SJVA1';
     const cfg = getIexConfig();
-    expect(cfg.live).toBe(false);
+    expect(cfg.live).toBe(true);
+    expect(cfg.baseUrlFor('DAM')).toBe('https://alphaidamapi.iexindia.com/');
+  });
+
+  it('stays in stub mode without a token, and names what is missing', async () => {
+    process.env.IEX_ENABLED = 'true';
+    process.env.IEX_LOGIN_USER_ID = 'SJVA1';
+    expect(getIexConfig().live).toBe(false);
     const res = await fetchMarketPq('DAM', '2026-09-08');
     expect(res.mode).toBe('STUB');
-    expect(res.note).toMatch(/iex_base_url/);
+    expect(res.note).toMatch(/iex_api_token/);
   });
 
   it('rejects a product IEX has no FO API for', async () => {
@@ -348,7 +436,7 @@ describe('configuration and connectivity', () => {
 
   it('reads the business date back on a good round trip', async () => {
     liveConfig();
-    stubFetch({ '/businessconfig/': { BusinessDate: istMidnightEpoch('2026-09-07'), MaxBlockBidEntries: 50 } });
+    stubFetch({ '/businessconfig/': { BusinessDate: utcMidnightEpoch('2026-09-07'), MaxBlockBidEntries: 50 } });
     const res = await checkConnectivity('DAM');
     expect(res.reachable).toBe(true);
     expect(res.business_date_iso).toBe('2026-09-07');
