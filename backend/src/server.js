@@ -471,18 +471,18 @@ const server = app.listen(PORT, HOST, () => {
     }
   });
 
-  // Monthly MIS Report Distribution — 1st of every month at 09:00 IST (03:30 UTC)
+  // Monthly MIS pack — 1st of every month at 09:00 IST (03:30 UTC), mailed to
+  // the executive group with the MIS and REIA dashboard PDFs attached. The log
+  // says what happened, including when nothing was sent and why.
   cron.schedule('30 3 1 * *', async () => {
-    console.log('[MIS-DISTRIBUTION] Generating and dispatching monthly MIS reports to authorized users...');
     try {
-      const { sendMail } = await import('./services/mailService.js');
-      await sendMail({
-        to: 'management@sjvn.local',
-        subject: `Monthly SJVN MIS Reports - ${new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}`,
-        text: 'Please find the automated monthly MIS reports (Billing, Trading, Reconciliation, and Disputes) available on the Consolidated Dashboard.',
-        // Real implementation would generate PDF buffers via reportPdfKit and attach them here
-      });
-      console.log('[MIS-DISTRIBUTION] Monthly MIS report distribution completed successfully');
+      const { distributeMonthlyMis } = await import('./services/misDistribution.js');
+      const r = await distributeMonthlyMis();
+      if (r.sent) {
+        console.log(`[MIS-DISTRIBUTION] ${r.period}: sent to ${r.recipients} recipient(s) via ${r.mode} — ${r.attachments.join(', ')}`);
+      } else {
+        console.warn(`[MIS-DISTRIBUTION] ${r.period}: not sent — ${r.reason || r.error}`);
+      }
     } catch (err) {
       console.error('[MIS-DISTRIBUTION] failed', err.message);
     }
