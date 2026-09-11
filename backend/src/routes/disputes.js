@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import db from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide, SELLER_ROLES, BUYER_ROLES } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, genInvoiceNo } from '../util.js';
 import { dispatch } from '../services/notificationService.js';
 import {
@@ -410,7 +410,7 @@ router.get('/:id', (req, res) => {
 });
 
 // ---------- create ----------
-router.post('/', requireRole('SELLER', 'BUYER', ...REIA_WRITE), (req, res) => {
+router.post('/', requireRole(...SELLER_ROLES, ...BUYER_ROLES, ...REIA_WRITE), (req, res) => {
   const {
     invoice_id,
     reason_code,
@@ -440,7 +440,9 @@ router.post('/', requireRole('SELLER', 'BUYER', ...REIA_WRITE), (req, res) => {
   `).get(invoice_id);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-  const raisedByCounterparty = ['SELLER', 'BUYER'].includes(req.user.role);
+  // Every seller or buyer user, company admin or not. Naming only SELLER and
+  // BUYER here would let their L1–L3 users past the dispute window below.
+  const raisedByCounterparty = counterpartySide(req.user) !== null;
 
   // You cannot dispute a bill you were never given. SJVN's own drafts and bills
   // still in approval were open to being disputed by the counterparty, which

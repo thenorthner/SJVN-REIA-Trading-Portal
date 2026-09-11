@@ -45,6 +45,18 @@ export function invoicePresentedTo(user, invoice) {
 }
 
 /**
+ * Whether the caller wrote this bill.
+ *
+ * A seller's own invoice to SJVN is the seller's document from the moment it is
+ * saved; the presented bar above is for bills SJVN issues to a counterparty.
+ * Applied to both, it hid a seller's submitted and rejected invoices from the
+ * seller that raised them. Ownership is checked separately, by contractVisibleTo.
+ */
+export function authoredBy(user, invoice) {
+  return !!invoice && counterpartySide(user) === 'SELLER' && invoice.direction === 'SELLER_TO_SJVN';
+}
+
+/**
  * The date a bill's dispute window runs from.
  *
  * PSA Art. 6.7.1 measures the window from presentation. Nothing recorded

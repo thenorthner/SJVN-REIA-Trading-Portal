@@ -100,6 +100,7 @@ export const api = {
     list: (params) => g('/invoices', params),
     get: (id) => g(`/invoices/${id}`),
     downloadPdf: (id) => client.get(`/invoices/${id}/pdf`, { responseType: 'blob' }).then(res => res.data),
+    payments: (params) => g('/invoices/payments', params),
     getVerification: (id) => g(`/invoices/${id}/verification`),
     saveVerification: (id, body) => p(`/invoices/${id}/verification`, body),
     generate: (body) => p('/invoices/generate', body),

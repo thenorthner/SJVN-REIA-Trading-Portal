@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAuth, requireRole, SELLER_ROLES } from '../middleware/auth.js';
 import { OPEN_STATUSES } from '../disputesConstants.js';
 
 const router = Router();
 router.use(requireAuth);
 
-router.get('/', requireRole('SELLER', 'SJVN_ADMIN'), (req, res) => {
+// Every user of a seller company, not just its admin: listing 'SELLER' alone
+// refused the maker, checker and approver (SELLER_L1–L3) with a 403, and the
+// screen told them their account was not linked to a seller.
+router.get('/', requireRole(...SELLER_ROLES, 'SJVN_ADMIN'), (req, res) => {
   const entityId = req.user.linked_entity_id;
   if (!entityId) return res.status(400).json({ error: 'No linked entity found for this user' });
 
@@ -33,21 +36,21 @@ router.get('/', requireRole('SELLER', 'SJVN_ADMIN'), (req, res) => {
     SELECT COUNT(*) as count, COALESCE(SUM(capacity_mw), 0) as capacity
     FROM contracts WHERE id IN (${ph})
   `).get(...contractIds);
-  
-  const invStats = db.prepare(`SELECT 
+
+  const invStats = db.prepare(`SELECT
     COUNT(*) as total,
     SUM(CASE WHEN status IN ('SUBMITTED','UNDER_APPROVAL') THEN 1 ELSE 0 END) as pending_approval,
     SUM(CASE WHEN status = 'PAID' THEN 1 ELSE 0 END) as paid,
     SUM(CASE WHEN status IN ('SENT','PARTIALLY_PAID') AND due_date < date('now') THEN 1 ELSE 0 END) as overdue,
     COALESCE(SUM(total_amount), 0) as total_billed
   FROM invoices WHERE contract_id IN (${ph}) AND direction = 'SELLER_TO_SJVN'`).get(...contractIds);
-  
+
   const payStats = db.prepare(`SELECT COALESCE(SUM(p.amount), 0) as total_received FROM payments p JOIN invoices i ON p.invoice_id = i.id WHERE i.contract_id IN (${ph}) AND i.direction = 'SELLER_TO_SJVN'`).get(...contractIds);
-  
+
   const lastPayment = db.prepare(`SELECT p.amount, p.payment_date, p.reference, p.mode FROM payments p JOIN invoices i ON p.invoice_id = i.id WHERE i.contract_id IN (${ph}) AND i.direction = 'SELLER_TO_SJVN' ORDER BY p.payment_date DESC LIMIT 1`).get(...contractIds) || null;
-  
+
   const disputes = db.prepare(`SELECT COUNT(*) as count FROM disputes d JOIN invoices i ON d.invoice_id = i.id WHERE i.contract_id IN (${ph}) AND d.status IN (${OPEN_STATUSES.map(() => '?').join(',')})`).get(...contractIds, ...OPEN_STATUSES);
-  
+
   res.json({
     active_contracts: contractStats.count,
     total_capacity_mw: contractStats.capacity,

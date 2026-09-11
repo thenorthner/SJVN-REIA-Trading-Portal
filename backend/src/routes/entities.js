@@ -306,7 +306,10 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req
 
 router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req, res) => {
   const existing = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Entity not found' });
+  // A counterparty edits its own record only. This let any seller rename another
+  // company, change the contacts its invoices are mailed to, or stage a change
+  // to its bank account.
+  if (!existing || !entityVisibleTo(req.user, existing.id)) return res.status(404).json({ error: 'Entity not found' });
 
   const fields = [
     'category', 'name', 'pan_no', 'gst_no', 'cin', 'credit_rating', 'capacity_mw', 'technology',
@@ -435,7 +438,7 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
 
 router.put('/:id/regulatory-approvals/:approvalId', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req, res) => {
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
-  if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  if (!entity || !entityVisibleTo(req.user, entity.id)) return res.status(404).json({ error: 'Entity not found' });
 
   const row = db.prepare('SELECT * FROM entity_regulatory_approvals WHERE id = ? AND entity_id = ?')
     .get(req.params.approvalId, entity.id);
@@ -572,7 +575,7 @@ router.post('/:id/approve', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =
 router.post('/:id/logo', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), upload.single('logo'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No logo file provided' });
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
-  if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  if (!entity || !entityVisibleTo(req.user, entity.id)) return res.status(404).json({ error: 'Entity not found' });
 
   const logoUrl = `/uploads/${req.file.filename}`;
   db.prepare(`UPDATE entities SET logo_url = ?, updated_at = datetime('now') WHERE id = ?`).run(logoUrl, entity.id);
@@ -583,7 +586,7 @@ router.post('/:id/logo', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER
 router.post('/:id/signature', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), upload.single('signature'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No signature file provided' });
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
-  if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  if (!entity || !entityVisibleTo(req.user, entity.id)) return res.status(404).json({ error: 'Entity not found' });
 
   const signatureUrl = `/uploads/${req.file.filename}`;
   db.prepare(`UPDATE entities SET signature_url = ?, updated_at = datetime('now') WHERE id = ?`).run(signatureUrl, entity.id);

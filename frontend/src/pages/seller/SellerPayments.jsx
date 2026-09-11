@@ -2,8 +2,13 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { PageHeader, Card, Table, fmtCurrency } from '../../components/ui.jsx';
 
+// Bills that count as billed: sent to SJVN and not withdrawn. A draft still with
+// the company's checker, or one SJVN rejected, is not yet money owed.
+const NOT_BILLED = ['DRAFT', 'PENDING_L2', 'REJECTED', 'CANCELLED'];
+
 export default function SellerPayments() {
   const [invoices, setInvoices] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({ contract_id: '' });
   const [contracts, setContracts] = useState([]);
@@ -16,40 +21,28 @@ export default function SellerPayments() {
     setLoading(true);
     const params = { direction: 'SELLER_TO_SJVN' };
     if (filters.contract_id) params.contract_id = filters.contract_id;
-    api.invoices.list(params).then(async (invs) => {
-      // For each invoice, fetch payment details
-      const detailed = await Promise.all(
-        invs.map((inv) => api.invoices.get(inv.id).catch(() => inv))
-      );
-      setInvoices(detailed);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    // Two requests for the whole ledger — the bills, for the totals, and their
+    // payments. Fetching each bill for its payments cost a request per bill and
+    // recorded every one of them as opened.
+    Promise.all([api.invoices.list(params), api.invoices.payments(params)])
+      .then(([invs, pays]) => {
+        setInvoices(invs || []);
+        setPayments(pays || []);
+      })
+      .catch(() => {
+        setInvoices([]);
+        setPayments([]);
+      })
+      .finally(() => setLoading(false));
   }, [filters.contract_id]);
 
-  // Flatten all payments with invoice reference
-  const allPayments = [];
-  let totalBilled = 0;
-  let totalReceived = 0;
-
-  for (const inv of invoices) {
-    totalBilled += inv.total_amount || 0;
-    if (inv.payments && inv.payments.length > 0) {
-      for (const p of inv.payments) {
-        totalReceived += p.amount || 0;
-        allPayments.push({
-          ...p,
-          invoice_no: inv.invoice_no,
-          contract_no: inv.contract_no,
-          billing_period: inv.billing_period,
-          net_received: (p.amount || 0) - (p.deduction || 0),
-        });
-      }
-    }
-  }
-
-  allPayments.sort((a, b) => (b.payment_date || '').localeCompare(a.payment_date || ''));
+  const totalBilled = invoices
+    .filter((inv) => !NOT_BILLED.includes(inv.status))
+    .reduce((s, inv) => s + (inv.total_amount || 0), 0);
+  const totalReceived = payments.reduce((s, p) => s + (p.amount || 0), 0);
   const pendingAmount = totalBilled - totalReceived;
-  const lastPayment = allPayments.length > 0 ? allPayments[0] : null;
+  const rows = payments.map((p) => ({ ...p, net_received: (p.amount || 0) - (p.deduction || 0) }));
+  const lastPayment = rows[0] || null;
 
   const columns = [
     { key: 'payment_date', header: 'Date' },
@@ -101,7 +94,7 @@ export default function SellerPayments() {
       </div>
 
       <Card>
-        <Table columns={columns} rows={loading ? [] : allPayments} emptyMessage={loading ? 'Loading...' : 'No payments recorded yet.'} />
+        <Table columns={columns} rows={loading ? [] : rows} emptyMessage={loading ? 'Loading...' : 'No payments recorded yet.'} />
       </Card>
     </div>
   );

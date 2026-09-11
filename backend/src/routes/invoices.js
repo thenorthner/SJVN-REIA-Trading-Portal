@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { resolveTariff } from '../services/tariffStructure.js';
 import db from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES, counterpartySide } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct, billableCapacityMw, invalidDecision } from '../util.js';
 import { payableNow, lpsBaseAmount, accruedLps, tieredRebatePct, daysBetween } from '../disputesConstants.js';
 import { payerStateForInvoice } from '../services/workingCalendar.js';
@@ -10,7 +10,7 @@ import { resolveBetaRow } from '../services/betaFactor.js';
 import { sendSms } from '../services/smsService.js';
 import { channelsFor, dispatch } from '../services/notificationService.js';
 import { allocationsInForce } from '../services/allocations.js';
-import { contractVisibleTo, invoicePresentedTo, billPresentedOn, PRESENTED_STATUSES } from '../services/counterpartyScope.js';
+import { contractVisibleTo, invoicePresentedTo, authoredBy, billPresentedOn, PRESENTED_STATUSES } from '../services/counterpartyScope.js';
 import { asOfFrom, isProjection } from '../services/clock.js';
 import { computeCercHydroBill } from '../services/cercHydroBilling.js';
 import { computeCufPenalty } from '../services/cufPenalty.js';
@@ -192,6 +192,14 @@ function withContract(inv, asOf = new Date()) {
   };
 }
 
+// A counterparty acts only on bills under its own company's contracts. The
+// routes that move or validate an invoice took its id and acted for any seller
+// who asked, including one billing under a different company's PPA.
+function ownsInvoice(user, inv) {
+  const contract = db.prepare('SELECT seller_id, buyer_id FROM contracts WHERE id = ?').get(inv.contract_id);
+  return contractVisibleTo(user, contract);
+}
+
 // E/F. Billing & Invoicing + Seller Invoice Management - list
 router.get('/', (req, res) => {
   const { status, contract_id, direction, billing_period } = req.query;
@@ -201,7 +209,11 @@ router.get('/', (req, res) => {
   // the same bar the send route uses for distribution.
   const presented = ` AND i.status IN (${PRESENTED_STATUSES.map(() => '?').join(',')})`;
   if (req.user.role.startsWith('SELLER')) {
-    sql = 'SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.seller_id = ?' + presented;
+    // A seller's own invoices to SJVN are its documents at every status; the
+    // presented bar is for bills SJVN issues to it. Applied to both, it hid a
+    // seller's submitted and rejected invoices from the seller that raised them.
+    sql = "SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.seller_id = ? AND (i.direction = 'SELLER_TO_SJVN' OR i.status IN ("
+      + PRESENTED_STATUSES.map(() => '?').join(',') + '))';
     params.push(req.user.linked_entity_id, ...PRESENTED_STATUSES);
   } else if (req.user.role.startsWith('BUYER')) {
     sql = 'SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.buyer_id = ?' + presented;
@@ -216,6 +228,37 @@ router.get('/', (req, res) => {
   if (billing_period) { sql += ' AND i.billing_period = ?'; params.push(billing_period); }
   sql += ' ORDER BY i.created_at DESC';
   res.json(db.prepare(sql).all(...params).map(withContract));
+});
+
+/**
+ * Payments against the bills the caller can see, newest first — the ledger the
+ * counterparty payment screens show. They used to fetch every invoice one by one
+ * for its payments: a request per bill and, now that a counterparty opening a
+ * bill is recorded, a false "opened" entry per bill.
+ */
+router.get('/payments', (req, res) => {
+  const { contract_id, direction } = req.query;
+  const where = [];
+  const params = [];
+  const presented = PRESENTED_STATUSES.map(() => '?').join(',');
+  const side = counterpartySide(req.user);
+  if (side === 'SELLER') {
+    where.push(`c.seller_id = ? AND (i.direction = 'SELLER_TO_SJVN' OR i.status IN (${presented}))`);
+    params.push(req.user.linked_entity_id, ...PRESENTED_STATUSES);
+  } else if (side === 'BUYER') {
+    where.push(`c.buyer_id = ? AND i.status IN (${presented})`);
+    params.push(req.user.linked_entity_id, ...PRESENTED_STATUSES);
+  }
+  if (contract_id) { where.push('i.contract_id = ?'); params.push(String(contract_id)); }
+  if (direction) { where.push('i.direction = ?'); params.push(String(direction)); }
+  res.json(db.prepare(`
+    SELECT p.*, i.invoice_no, i.billing_period, i.direction, i.contract_id, c.contract_no
+    FROM payments p
+    JOIN invoices i ON i.id = p.invoice_id
+    JOIN contracts c ON c.id = i.contract_id
+    ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY p.payment_date DESC, p.rowid DESC
+  `).all(...params));
 });
 
 import { generateInvoicePdf, generateInvoicePdfBuffer } from '../scripts/invoicePdf.js';
@@ -238,7 +281,7 @@ router.get('/:id/pdf', async (req, res) => {
   }
   // The rule the detail view already applies: a bill SJVN has not finished
   // approving is not yet the counterparty's to read — and the PDF is the bill.
-  if (!invoicePresentedTo(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
+  if (!invoicePresentedTo(req.user, inv) && !authoredBy(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
 
   // Who took a copy of which bill, and when — the access history the buyer-portal
   // scope asks for. The counterparty's views are recorded on GET /:id.
@@ -307,7 +350,7 @@ router.get('/:id', (req, res) => {
   const contract = db.prepare('SELECT seller_id, buyer_id FROM contracts WHERE id = ?').get(inv.contract_id);
   if (!contractVisibleTo(req.user, contract)) return res.status(404).json({ error: 'Invoice not found' });
   // A bill SJVN has not finished approving is not yet the counterparty's to read.
-  if (!invoicePresentedTo(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
+  if (!invoicePresentedTo(req.user, inv) && !authoredBy(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
 
   // Scope G's access history: when the counterparty actually opened its bill.
   // SJVN's own reads are not recorded — the desk opens a bill many times in the
@@ -999,13 +1042,19 @@ router.post('/supplementary', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res)
 });
 
 // Seller invoice submission (manual upload)
-router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const b = req.body;
   const id = newId('INV');
   const total = (b.energy_charges || 0) + (b.transmission_charges || 0) + (b.trading_margin || 0) + (b.taxes || 0) - (b.rebate || 0) + (b.lps || 0) + (b.penalty || 0) + (b.other_adjustments || 0);
   
   // Due date = bill date + the contract's structured payment terms (fallback 30d).
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(b.contract_id);
+  // A seller bills only on its own PPAs. Nothing checked this, so any seller
+  // could raise an invoice against another company's contract.
+  if (!contract || !contractVisibleTo(req.user, contract)) return res.status(404).json({ error: 'Contract not found' });
+  // The company's maker (L1) prepares a draft, which its checker sends to SJVN
+  // through submit-l2 and approve-l2. The company admin and checkers submit directly.
+  const initialStatus = req.user.role === 'SELLER_L1' ? 'DRAFT' : 'SUBMITTED';
   const dueDateStr = computeDueDate(new Date(), contract, getParamNumber('default_payment_terms_days', 30));
   const direction = 'SELLER_TO_SJVN';
   const billingFamilyRef = contract
@@ -1018,7 +1067,7 @@ router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) =>
       other_adjustments, total_amount, due_date, status, billing_family_ref, energy_data_id, parent_invoice_id, created_by, created_by_id)
     VALUES (@id, @invoice_no, @contract_id, @invoice_type, @direction, @billing_period, @energy_mwh,
       @tariff_per_unit, @energy_charges, @transmission_charges, @rebate, @lps, @penalty, @trading_margin, @taxes,
-      @other_adjustments, @total_amount, @due_date, 'SUBMITTED', @billing_family_ref, @energy_data_id, @parent_invoice_id, @created_by, @created_by_id)
+      @other_adjustments, @total_amount, @due_date, @status, @billing_family_ref, @energy_data_id, @parent_invoice_id, @created_by, @created_by_id)
   `).run({
     id,
     invoice_no: b.invoice_no || genInvoiceNo('SELLER-INV'),
@@ -1038,6 +1087,7 @@ router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     other_adjustments: b.other_adjustments || 0,
     total_amount: total,
     due_date: dueDateStr,
+    status: initialStatus,
     billing_family_ref: billingFamilyRef,
     energy_data_id: b.energy_data_id || null,
     parent_invoice_id: b.parent_invoice_id || null,
@@ -1059,8 +1109,10 @@ router.post('/', requireRole('SELLER', ...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     created = db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
   }
 
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SUBMIT', module: 'REIA', entityType: 'invoice', entityId: id, details: { ...b, validation_status: created.validation_status } });
-  pushNotification({ role: 'REIA_USER', type: 'INVOICE_SUBMITTED', message: `Seller invoice ${b.invoice_no || id} submitted for review` });
+  const isDraft = initialStatus === 'DRAFT';
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: isDraft ? 'CREATE' : 'SUBMIT', module: 'REIA', entityType: 'invoice', entityId: id, details: { ...b, validation_status: created.validation_status } });
+  // SJVN hears of a maker's draft only when the company's checker sends it on.
+  if (!isDraft) pushNotification({ role: 'REIA_USER', type: 'INVOICE_SUBMITTED', message: `Seller invoice ${b.invoice_no || id} submitted for review` });
   res.status(201).json(created);
 });
 
@@ -1128,7 +1180,7 @@ router.post('/:id/cancel', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
 // Validate seller invoice vs system-generated counterpart
 router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE, ...SELLER_ROLES), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (!inv || !ownsInvoice(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status === 'CANCELLED') {
     return res.status(400).json({ error: 'Cannot validate a cancelled invoice' });
   }
@@ -1226,9 +1278,11 @@ router.post('/:id/verification', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, r
 });
 
 // G. Invoice Approval Workflow
-router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER'), (req, res) => {
+// Sending a seller's bill to SJVN is for the company admin and its checkers;
+// the maker's draft reaches SJVN through them (submit-l2, then approve-l2).
+router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'SELLER_L2', 'SELLER_L3'), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (!inv || !ownsInvoice(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status === 'CANCELLED') {
     return res.status(400).json({ error: 'Cannot submit a cancelled invoice for approval' });
   }
@@ -1296,20 +1350,28 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
 
 // Submit invoice to L2 (Maker)
 router.post('/:id/submit-l2', requireRole('SELLER_L1', 'BUYER_L1', ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
-  const inv = db.prepare('SELECT status FROM invoices WHERE id = ?').get(req.params.id);
-  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  const inv = db.prepare('SELECT id, status, contract_id FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv || !ownsInvoice(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status !== 'DRAFT') return res.status(400).json({ error: 'Only DRAFT invoices can be submitted to L2' });
 
   db.prepare("UPDATE invoices SET status = 'PENDING_L2', updated_at = datetime('now') WHERE id = ?").run(req.params.id);
-  logAudit(req.traceId, 'SUBMIT_L2', 'INVOICES', req.params.id, 'DRAFT', 'PENDING_L2', req.user);
+  // logAudit takes one object. Called positionally, as it was here, it wrote no
+  // action at all, and the NOT NULL on audit_logs.action turned every hand-off
+  // to the checker into a 500.
+  logAudit({
+    req, user: req.user, action: 'SUBMIT_L2', module: 'REIA', entityType: 'invoice', entityId: inv.id,
+    beforeValue: { status: 'DRAFT' }, afterValue: { status: 'PENDING_L2' },
+  });
   res.json({ success: true });
 });
 
 // Approve invoice from L2 to SJVN (Checker)
-router.post('/:id/approve-l2', requireRole('SELLER_L2', 'SELLER_L3', 'BUYER_L2', 'BUYER_L3', ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
-  const { comments } = req.body;
-  const inv = db.prepare('SELECT status, created_by, created_by_id, validation_status FROM invoices WHERE id = ?').get(req.params.id);
-  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+// The company admin approves as well as its checkers: a company that has not
+// appointed a checker could otherwise never send its maker's draft to SJVN.
+router.post('/:id/approve-l2', requireRole('SELLER', 'SELLER_L2', 'SELLER_L3', 'BUYER', 'BUYER_L2', 'BUYER_L3', ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const { comments } = req.body || {};
+  const inv = db.prepare('SELECT id, contract_id, status, created_by, created_by_id, validation_status FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv || !ownsInvoice(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status !== 'PENDING_L2') return res.status(400).json({ error: 'Only PENDING_L2 invoices can be approved by L2' });
 
   // This route clears an invoice too, so it needs the same separation the
@@ -1322,7 +1384,13 @@ router.post('/:id/approve-l2', requireRole('SELLER_L2', 'SELLER_L3', 'BUYER_L2',
   if (unresolved) return res.status(400).json({ error: unresolved, validation_status: inv.validation_status });
 
   db.prepare("UPDATE invoices SET status = 'SUBMITTED', updated_at = datetime('now') WHERE id = ?").run(req.params.id);
-  logAudit(req.traceId, 'APPROVE_L2', 'INVOICES', req.params.id, 'PENDING_L2', 'SUBMITTED', req.user);
+  logAudit({
+    req, user: req.user, action: 'APPROVE_L2', module: 'REIA', entityType: 'invoice', entityId: inv.id,
+    beforeValue: { status: 'PENDING_L2' }, afterValue: { status: 'SUBMITTED' },
+    details: comments ? { comments } : undefined,
+  });
+  const invoiceNo = db.prepare('SELECT invoice_no FROM invoices WHERE id = ?').get(inv.id)?.invoice_no || inv.id;
+  pushNotification({ role: 'REIA_USER', type: 'INVOICE_SUBMITTED', message: `Seller invoice ${invoiceNo} submitted for review` });
   res.json({ success: true });
 });
 

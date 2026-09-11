@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { requireAuth, requireRole } from '../middleware/auth.js';
+import { requireAuth, requireRole, BUYER_ROLES } from '../middleware/auth.js';
 import { OPEN_STATUSES } from '../disputesConstants.js';
 
 const router = Router();
 router.use(requireAuth);
 
-router.get('/', requireRole('BUYER', 'SJVN_ADMIN'), (req, res) => {
+// Every user of a buyer company, as on the seller side: 'BUYER' alone refused
+// the company's maker, checker and approver (BUYER_L1–L3) with a 403.
+router.get('/', requireRole(...BUYER_ROLES, 'SJVN_ADMIN'), (req, res) => {
   const entityId = req.user.linked_entity_id;
   if (!entityId) return res.status(400).json({ error: 'No linked entity found for this user' });
   

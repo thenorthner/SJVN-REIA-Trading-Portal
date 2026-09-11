@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import {
   InvoiceBreakdown,
@@ -12,9 +13,10 @@ import {
 } from '../../components/invoiceShared.jsx';
 import { REASON_CODES, CHARGE_LINES } from '../../disputesMeta.js';
 
-const STATUS_STEPS = ['DRAFT', 'SUBMITTED', 'UNDER_APPROVAL', 'APPROVED', 'PAID'];
+const STATUS_STEPS = ['DRAFT', 'PENDING_L2', 'SUBMITTED', 'UNDER_APPROVAL', 'APPROVED', 'PAID'];
 const STATUS_LABELS = {
-  DRAFT: 'Created',
+  DRAFT: 'Draft',
+  PENDING_L2: 'Company check',
   SUBMITTED: 'Submitted to SJVN',
   UNDER_APPROVAL: 'SJVN Verification',
   APPROVED: 'Approved',
@@ -65,6 +67,11 @@ const CREATE_FORM = { contract_id: '', period_month: '', invoice_type: 'FINAL', 
 const DISPUTE_FORM = { reason_code: '', charge_line: 'energy_charges', issue_description: '', disputed_amount: '' };
 
 export default function SellerInvoices() {
+  const { user } = useAuth();
+  // The company's maker (L1) drafts; its admin and checkers (L2, L3) are the
+  // ones who send a bill to SJVN.
+  const isMaker = user?.role === 'SELLER_L1';
+  const canSendToSjvn = ['SELLER', 'SELLER_L2', 'SELLER_L3'].includes(user?.role);
   const [rows, setRows] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [filters, setFilters] = useState({ status: '', billing_period: '' });
@@ -187,12 +194,20 @@ export default function SellerInvoices() {
     }
   }
 
-  async function handleSubmitForApproval() {
-    await api.invoices.submitForApproval(selected.id);
-    const fresh = await api.invoices.get(selected.id);
-    setSelected(fresh);
-    load();
+  // Every workflow button goes through here, so a refusal is shown rather than
+  // lost as an unhandled rejection with the modal sitting unchanged.
+  async function act(call, failure) {
+    try {
+      await call();
+      setSelected(await api.invoices.get(selected.id));
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || failure);
+    }
   }
+  const handleSubmitForApproval = () => act(() => api.invoices.submitForApproval(selected.id), 'Could not resubmit the invoice.');
+  const handleSendToChecker = () => act(() => api.invoices.submitL2(selected.id), 'Could not send the invoice to your checker.');
+  const handleCheckerApprove = () => act(() => api.invoices.approveL2(selected.id), 'Could not approve and submit the invoice.');
 
   async function handleRaiseDispute(e) {
     e.preventDefault();
@@ -324,7 +339,7 @@ export default function SellerInvoices() {
 
           <div className="form-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={!energyPreview}>Submit to SJVN</button>
+            <button type="submit" className="btn btn-primary" disabled={!energyPreview}>{isMaker ? 'Save draft for your checker' : 'Submit to SJVN'}</button>
           </div>
         </form>
       </Modal>
@@ -401,15 +416,18 @@ export default function SellerInvoices() {
 
             <div className="form-actions" style={{ marginTop: 18, flexWrap: 'wrap' }}>
               {selected.status === 'DRAFT' && (
-                <button type="button" className="btn btn-primary" onClick={handleSubmitForApproval}>Submit for Approval</button>
+                <button type="button" className="btn btn-primary" onClick={handleSendToChecker}>Send to checker</button>
               )}
-              {selected.status === 'REJECTED' && (
-                <button type="button" className="btn btn-secondary" onClick={handleSubmitForApproval}>Revise &amp; Resubmit</button>
-              )}
+              {selected.status === 'PENDING_L2' && (canSendToSjvn
+                ? <button type="button" className="btn btn-primary" onClick={handleCheckerApprove}>Approve &amp; submit to SJVN</button>
+                : <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Waiting for your company&apos;s checker to approve it and submit it to SJVN.</span>)}
+              {selected.status === 'REJECTED' && (canSendToSjvn
+                ? <button type="button" className="btn btn-secondary" onClick={handleSubmitForApproval}>Revise &amp; Resubmit</button>
+                : <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Rejected by SJVN — your company&apos;s checker resubmits it.</span>)}
               {selected.status !== 'CANCELLED' && (
                 <button type="button" className="btn btn-secondary" onClick={handleValidate}>Validate vs System</button>
               )}
-              {!['DRAFT', 'CANCELLED', 'PAID'].includes(selected.status) && (
+              {!['DRAFT', 'PENDING_L2', 'CANCELLED', 'PAID'].includes(selected.status) && (
                 <button type="button" className="btn btn-danger" onClick={() => setShowDispute(true)}>Raise Dispute</button>
               )}
             </div>
