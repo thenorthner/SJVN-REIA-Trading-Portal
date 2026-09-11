@@ -893,9 +893,28 @@ export const api = {
   auditLogs: {
     list: (params) => g('/audit-logs', params),
     get: (id) => g(`/audit-logs/${id}`),
+    facets: (params) => g('/audit-logs/facets', params),
+    summary: (params) => g('/audit-logs/summary', params),
+    integrity: () => g('/audit-logs/integrity'),
     verifyIntegrity: () => p('/audit-logs/verify-integrity'),
     violationsSod: () => g('/audit-logs/violations/sod'),
     logExport: (body) => p('/audit-logs/log-export', body),
+    // The server writes the export to the trail before sending the file.
+    exportCsv: async (params) => {
+      const res = await client.get('/audit-logs/export.csv', { params, responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `SJVN_Audit_Trail_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      return {
+        rows: Number(res.headers['x-export-rows'] || 0),
+        truncated: res.headers['x-export-truncated'] ? Number(res.headers['x-export-truncated']) : null,
+      };
+    },
   },
   cercMarket: {
     getSummary: (period) => g(period ? `/cerc-market/summary/${period}` : '/cerc-market/summary'),

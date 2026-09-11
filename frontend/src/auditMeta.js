@@ -39,14 +39,32 @@ export const ACTION_META = {
   INTEGRITY_CHECK: { label: 'Integrity checked', tone: 'gray', icon: '' },
   PENNY_DROP_VERIFIED: { label: 'Bank verified', tone: 'green', icon: '' },
   REA_TRIGGER: { label: 'REA fetch triggered', tone: 'blue', icon: '⇩' },
+  LOGIN_FAILED: { label: 'Sign-in failed', tone: 'red', icon: '!' },
+  LOGIN_BLOCKED: { label: 'Sign-in blocked', tone: 'red', icon: '×' },
+  ACCESS_DENIED: { label: 'Access denied', tone: 'red', icon: '×' },
+  VIEW_INVOICE: { label: 'Opened', tone: 'gray', icon: '◦' },
+  DOWNLOAD_INVOICE_PDF: { label: 'Downloaded', tone: 'amber', icon: '⇩' },
+  EXPORT_PDF: { label: 'Report exported', tone: 'amber', icon: '⇩' },
+  DISTRIBUTE_MIS: { label: 'MIS pack sent', tone: 'blue', icon: '✉' },
+  CREATE_PORTFOLIO_ID: { label: 'Portfolio mapped', tone: 'blue', icon: '＋' },
+  UPDATE_PORTFOLIO_ID: { label: 'Portfolio changed', tone: 'amber', icon: '' },
 };
 
 export const MODULE_LABELS = {
   AUTH: 'Authentication',
   REIA: 'REIA Billing & Settlement',
   TRADING: 'Power Trading',
+  MIS: 'MIS & Reports',
   SYSTEM: 'System',
 };
+
+/** The named slices of the trail; `key` is what the API's `category` takes. */
+export const AUDIT_CATEGORIES = [
+  { key: '', label: 'All activity' },
+  { key: 'changes', label: 'Data changes' },
+  { key: 'security', label: 'Security' },
+  { key: 'exports', label: 'Exports & downloads' },
+];
 
 export const ENTITY_LABELS = {
   energy_data: 'energy record',
