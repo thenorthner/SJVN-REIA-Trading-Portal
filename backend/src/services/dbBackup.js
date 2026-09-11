@@ -25,6 +25,23 @@ export function backupDir() {
     || path.resolve(__dirname, '../../backups');
 }
 
+/**
+ * Whether snapshots land on the same disk as the live database.
+ *
+ * A copy on the same disk covers a bad migration or a corrupted page, which is
+ * most of what goes wrong — but not the disk failing or the server being lost,
+ * which take the copies with them. SJVN_BACKUP_DIR pointed at a second disk or
+ * a mounted share covers those. Null when it cannot tell.
+ */
+export function backupSharesDiskWithDatabase(dir = backupDir()) {
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    return fs.statSync(dir).dev === fs.statSync(db.name).dev;
+  } catch {
+    return null;
+  }
+}
+
 /** How many snapshots to keep. Two weeks of dailies at ~7 MB each. */
 const DEFAULT_KEEP = Number(process.env.SJVN_BACKUP_KEEP) || 14;
 
@@ -104,7 +121,10 @@ export async function backupDatabase({ dir = backupDir(), keep = DEFAULT_KEEP } 
     }
 
     const { removed } = pruneBackups(dir, keep);
-    return { file: dest, bytes: fs.statSync(dest).size, pruned: removed };
+    return {
+      file: dest, bytes: fs.statSync(dest).size, pruned: removed,
+      same_disk: backupSharesDiskWithDatabase(dir),
+    };
   } finally {
     running = false;
   }

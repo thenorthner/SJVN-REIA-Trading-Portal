@@ -538,9 +538,17 @@ const server = app.listen(PORT, HOST, () => {
   // moment just after a release ran its migrations, so the snapshot is the
   // pre-upgrade state if the new schema turns out to be wrong — and one a day
   // at 01:00 IST (19:30 UTC), before the settlement sweeps run.
+  let warnedSameDisk = false;
   const announceBackup = (r) => {
     if (r.skipped) return;
     console.log(`[BACKUP] ${path.basename(r.file)} (${(r.bytes / 1e6).toFixed(1)} MB)${r.pruned ? `, pruned ${r.pruned}` : ''}`);
+    // A copy on the database's own disk survives a bad migration, not a dead
+    // disk. Said once per boot, so an install notices without the journal
+    // repeating it every night.
+    if (r.same_disk && !warnedSameDisk) {
+      warnedSameDisk = true;
+      console.warn(`[BACKUP] snapshots are on the same disk as the database (${path.dirname(r.file)}) — set SJVN_BACKUP_DIR to a second disk or a mounted share`);
+    }
   };
   backupDatabase().then(announceBackup).catch((err) => console.error('[BACKUP] boot snapshot failed:', err.message));
   cron.schedule('30 19 * * *', () => {
