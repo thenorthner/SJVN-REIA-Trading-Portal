@@ -83,6 +83,27 @@ async function clearBid(contractId, { date = '2026-09-01', blocks, cleared } = {
 
 const contractRow = (id) => db.prepare('SELECT * FROM exchange_contracts WHERE id = ?').get(id);
 
+describe('submitting while the exchange API is not live', () => {
+  it('records the submission as a stub and says nothing reached the exchange', async () => {
+    const c = await createContract();
+    const bid = await request(app).post('/api/bids').set(auth(trader)).send({
+      client_id: clientId, contract_id: c.id, exchange: 'IEX', product: 'DAM',
+      bid_date: '2026-09-01', delivery_date: '2026-09-01', quantum_mw: 10, price_per_unit: 4.2,
+      blocks: [{ time_block: '00:00-00:15', quantum_mw: 10, price_per_unit: 4.2 }],
+    });
+    expect(bid.status).toBe(201);
+    await request(app).post(`/api/bids/${bid.body.id}/approve`).set(auth(checker)).send({ status: 'APPROVED' });
+
+    const sub = await request(app).post(`/api/bids/${bid.body.id}/submit`).set(auth(trader)).send({});
+    expect(sub.status).toBe(200);
+    expect(sub.body.status).toBe('SUBMITTED');
+    expect(sub.body.submission_mode).toBe('STUB');
+    expect(sub.body.submission.mode).toBe('STUB');
+    expect(sub.body.submission.message).toMatch(/without contacting the exchange/);
+    expect(db.prepare('SELECT submission_mode FROM bids WHERE id = ?').get(bid.body.id).submission_mode).toBe('STUB');
+  });
+});
+
 describe('filing a bid under an exchange contract', () => {
   it('records the agreement the bid was placed for', async () => {
     const c = await createContract();

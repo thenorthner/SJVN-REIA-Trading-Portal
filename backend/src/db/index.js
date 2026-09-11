@@ -387,6 +387,12 @@ function migrateBidsWorkflow() {
   if (!cols.includes('ocf_leg')) {
     db.exec('ALTER TABLE bids ADD COLUMN ocf_leg INTEGER NOT NULL DEFAULT 0');
   }
+  // Bids submitted before this column existed are told apart by the receipt
+  // the stub hands back; anything else is left unknown rather than guessed.
+  if (!cols.includes('submission_mode')) {
+    db.exec('ALTER TABLE bids ADD COLUMN submission_mode TEXT');
+    db.exec(`UPDATE bids SET submission_mode = 'STUB' WHERE exchange_receipt_ref LIKE 'IEX-STUB-%'`);
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS bid_blocks (
       id TEXT PRIMARY KEY,

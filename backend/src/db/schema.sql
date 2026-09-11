@@ -950,6 +950,10 @@ CREATE TABLE IF NOT EXISTS bids (
   no_bid_reason TEXT,
   approval_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (approval_status IN ('PENDING','APPROVED','REJECTED')),
   exchange_receipt_ref TEXT,
+  -- How the submission went out: LIVE reached the exchange, STUB was only
+  -- recorded here because the exchange API is not live. Kept on the row so a
+  -- stub submission can never be read afterwards as one the exchange received.
+  submission_mode TEXT,
   -- The exchange client agreement this bid was placed under, so cleared volume
   -- rolls up to the contract it settles against.
   contract_id TEXT REFERENCES exchange_contracts(id),

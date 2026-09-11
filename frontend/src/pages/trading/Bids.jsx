@@ -396,9 +396,14 @@ export default function Bids({ product = 'DAM', externalView = null }) {
 
   async function handleSubmitToExchange(id) {
     try {
-      await api.bids.submit(id);
+      const r = await api.bids.submit(id);
       setSelectedBid(null);
       load();
+      // While the exchange API is not live nothing leaves the platform; say so
+      // at the moment the desk would otherwise believe the exchange has the bid.
+      if (r?.submission?.mode === 'STUB') {
+        alert(`Not sent to the exchange — stub mode.\n\n${r.submission.message || 'The bid was recorded as submitted without contacting the exchange.'}`);
+      }
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to submit to exchange. Check Gate Closure.');
     }
@@ -424,6 +429,18 @@ export default function Bids({ product = 'DAM', externalView = null }) {
       <Badge type={r.approval_status === 'APPROVED' ? 'success' : r.approval_status === 'REJECTED' ? 'danger' : 'warning'}>{r.approval_status}</Badge>
     ) },
     { key: 'status', label: 'Exchange Status', render: r => {
+      // A stub submission was recorded here, not received by the exchange — on
+      // every tab, so no product's view can present it as sent.
+      if (r.status === 'SUBMITTED' && r.submission_mode === 'STUB') {
+        return (
+          <span
+            style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 12, cursor: 'help' }}
+            title={`Recorded without contacting the exchange (stub mode). Receipt ${r.exchange_receipt_ref || '—'} is local, not an exchange acknowledgement.`}
+          >
+            Not sent — stub
+          </span>
+        );
+      }
       if (tab.short === 'RTM') {
         if (r.status === 'SUBMITTED') return <span style={{ color: 'var(--green-strong)', fontWeight: 'bold', fontSize: 12 }}>Submitted to Exchange</span>;
         if (r.status === 'PENDING') return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 12 }}>Pending Gateway</span>;

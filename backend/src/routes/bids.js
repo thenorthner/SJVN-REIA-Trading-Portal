@@ -491,15 +491,24 @@ router.post('/:id/submit', requireRole(...ROLE_GROUPS.TRADING_WRITE), async (req
 
     const response = await placeOrder(fullBid);
     const receiptRef = response.receiptRef || `EXC-RCPT-${Date.now()}`;
+    // Until the exchange API is live, placeOrder records the bid without
+    // contacting the exchange. The bid still moves to SUBMITTED so the rest of
+    // the lifecycle can be exercised, but the row and the reply both say it was
+    // a stub — otherwise the desk reads "Submitted" as "the exchange has it".
+    const mode = response.mode === 'STUB' ? 'STUB' : 'LIVE';
 
-    db.prepare("UPDATE bids SET status = 'SUBMITTED', exchange_receipt_ref = ? WHERE id = ?").run(receiptRef, bid.id);
-    logBidEvent(bid.id, req.user.id, 'SUBMITTED', { receiptRef });
+    db.prepare("UPDATE bids SET status = 'SUBMITTED', exchange_receipt_ref = ?, submission_mode = ? WHERE id = ?")
+      .run(receiptRef, mode, bid.id);
+    logBidEvent(bid.id, req.user.id, 'SUBMITTED', { receiptRef, mode });
     // A live bid on the exchange makes its agreement an active one.
     if (bid.contract_id) refreshExchangeContractStatus(bid.contract_id);
 
-    secureLogAudit(req, { action: 'SUBMIT_BID', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: { receiptRef } });
+    secureLogAudit(req, { action: 'SUBMIT_BID', module: 'TRADING', entityType: 'bid', entityId: bid.id, details: { receiptRef, mode } });
 
-    res.json(withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)));
+    res.json({
+      ...withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bid.id)),
+      submission: { mode, message: response.message || null },
+    });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Failed to submit to exchange' });
   }
