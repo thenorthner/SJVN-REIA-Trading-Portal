@@ -2,6 +2,8 @@ node_modules/
 .DS_Store
 .env
 backend/src/db/platform.db
+# Database snapshots taken on boot and nightly — restore material, not source.
+backend/backups/
 backend/src/db/platform.db-journal
 backend/src/db/platform.db-wal
 backend/src/db/platform.db-shm
@@ -78,3 +80,4 @@ reference/**
 # when this folder is absent, which is what a fresh clone should get.
 backend/src/data/live/**
 backend/src/data/isetReportSeeds.json
+.gstack/

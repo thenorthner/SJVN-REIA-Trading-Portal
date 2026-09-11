@@ -89,7 +89,9 @@ import marginAssuranceRoutes from './routes/marginAssurance.js';
 import energyBankingRoutes from './routes/energyBanking.js';
 import { settleExpiredBanking } from './services/energyBanking.js';
 import { ensureMasterDefaults } from './mastersService.js';
-import { repairAuditChainIfBroken } from './auditEngine.js';
+import { repairAuditChainIfBroken, verifyRecentIntegrity } from './auditEngine.js';
+import { db } from './db/index.js';
+import { backupDatabase } from './services/dbBackup.js';
 
 import { assignTraceId, requireAuth, requireRole, ROLE_GROUPS } from './middleware/auth.js';
 
@@ -100,12 +102,26 @@ const TRADING_READ = ROLE_GROUPS.TRADING_ALL;
 ensureMasterDefaults();
 
 // Retire audit hashes written by the earlier inconsistent hashing logic, so the
-// integrity check reflects tamper state rather than a code bug. No-op once valid.
+// integrity check reflects tamper state rather than a code bug. This runs at
+// most once per database and reads nothing at all afterwards — a full
+// verification on every boot grew with the audit history until start-up
+// outlasted the health check a deploy waits on.
 try {
   const r = repairAuditChainIfBroken();
   if (r.rebuilt) console.log(`[AUDIT] Rebuilt ${r.rebuilt} audit hash(es); chain now ${r.nowValid ? 'valid' : 'STILL INVALID'}`);
 } catch (err) {
   console.error('[AUDIT] chain repair failed', err.message);
+}
+
+// What the boot check costs now: the newest few hundred links, not the whole
+// history. It cannot prove the chain back to genesis — the Audit screen's full
+// verification does that, on request — but it says whether anything has written
+// to the table since this server last ran, which is what is worth knowing here.
+try {
+  const recent = verifyRecentIntegrity();
+  if (!recent.isValid) console.error(`[AUDIT] ${recent.message} — run the full integrity check from the Audit screen.`);
+} catch (err) {
+  console.error('[AUDIT] recent-chain check failed', err.message);
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -118,12 +134,38 @@ app.use(cors(
     ? { origin: process.env.CORS_ORIGIN.split(',').map((o) => o.trim()) }
     : (process.env.NODE_ENV === 'production' ? { origin: false } : undefined)
 ));
-app.use(express.json({ limit: '10mb' }));
-app.use(morgan('dev'));
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// Before the body parser: a request whose JSON does not parse never reaches
+// the routes, and the reply it gets should still name a log line.
 app.use(assignTraceId);
+app.use(express.json({ limit: '10mb' }));
+// `dev` writes ANSI colour codes, which journalctl stores verbatim and every
+// later grep has to step over. Deployed logs get the standard Apache line
+// instead, which log tooling already knows how to read.
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'sjvn-energy-platform-backend' }));
+// Health is what update.sh watches to decide whether a release came up or has
+// to be rolled back, so it has to fail when the platform is unusable — not
+// merely when the process is dead. Express answering while the database is
+// locked, missing or corrupt is exactly the state a deploy must not be told is
+// fine, so the check reads a row rather than returning a constant.
+app.get('/api/health', (req, res) => {
+  try {
+    db.prepare('SELECT 1 AS ok').get();
+  } catch (err) {
+    console.error('[HEALTH] database unreachable:', err.message);
+    return res.status(503).json({
+      status: 'degraded',
+      service: 'sjvn-energy-platform-backend',
+      error: 'database unavailable',
+    });
+  }
+  res.json({
+    status: 'ok',
+    service: 'sjvn-energy-platform-backend',
+    uptime_seconds: Math.floor(process.uptime()),
+  });
+});
 
 // Public invoice-authenticity page reached by scanning the bill's QR code (no login).
 app.use('/verify', verifyRoutes);
@@ -252,10 +294,62 @@ if (fs.existsSync(path.join(CLIENT_DIR, 'index.html'))) {
 
 app.use((req, res) => res.status(404).json({ error: 'Not found' }));
 
+/**
+ * Last-resort error handler.
+ *
+ * Three things it has to get right, because each of them is a way a live server
+ * either falls over or says something it should not:
+ *
+ *  - A malformed JSON body, or a file above a route's size limit, is the
+ *    caller's mistake. Answering 500 tells the operator the platform broke and
+ *    sends them looking for a fault that is not there.
+ *  - `err.message` on an unexpected failure is a SQL statement or an absolute
+ *    path. Deployed, the client gets the trace id and the detail stays in the
+ *    journal, where it is still one `grep` away.
+ *  - If the response has already begun — a PDF stream that died halfway — there
+ *    is no status left to set. Writing one throws inside the handler, and that
+ *    throw takes the process down.
+ */
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(500).json({ error: err.message || 'Internal server error' });
+  const trace = req.traceId || '-';
+
+  if (res.headersSent) {
+    console.error(`[ERR ${trace}] after response started:`, err);
+    return req.socket?.destroy();
+  }
+
+  // Body parser: JSON that does not parse, or a body past the 10mb cap.
+  if (err.type === 'entity.parse.failed' || (err instanceof SyntaxError && 'body' in err)) {
+    return res.status(400).json({ error: 'Malformed JSON body', trace_id: trace });
+  }
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Request body is too large', trace_id: trace });
+  }
+
+  // Multer: an upload over the route's limit, or one its filter refused.
+  if (err.name === 'MulterError') {
+    const tooBig = err.code === 'LIMIT_FILE_SIZE';
+    return res.status(tooBig ? 413 : 400).json({
+      error: tooBig ? 'The uploaded file is too large' : `Upload rejected: ${err.message}`,
+      trace_id: trace,
+    });
+  }
+
+  const status = Number(err.status || err.statusCode) || 500;
+  console.error(`[ERR ${trace}] ${req.method} ${req.originalUrl}`, err);
+
+  // A status a route chose deliberately carries a message meant for the caller.
+  // A 500 did not: it is whatever threw.
+  if (status < 500) {
+    return res.status(status).json({ error: err.message || 'Request failed', trace_id: trace });
+  }
+  res.status(500).json({
+    error: process.env.NODE_ENV === 'production'
+      ? 'Internal server error — quote the trace id when reporting this.'
+      : (err.message || 'Internal server error'),
+    trace_id: trace,
+  });
 });
 
 // Exported so tests can drive the routes without binding a port. Listening and
@@ -270,7 +364,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 const isEntryPoint = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isEntryPoint) {
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   console.log(`SJVN Energy Platform listening on http://${HOST}:${PORT}`);
   const mail = getMailConfig();
   console.log(mail.configured
@@ -435,5 +529,82 @@ app.listen(PORT, HOST, () => {
   cercScraper.autoSeedLocalReports().catch(err => {
     console.warn('[CERC Scraper] Auto-seed initial run error:', err.message);
   });
+
+  // ─── Database snapshots ───────────────────────────────────────────────
+  // Everything the platform knows lives in one SQLite file, and nothing else in
+  // the deployment keeps a second copy. Take one on boot — which is also the
+  // moment just after a release ran its migrations, so the snapshot is the
+  // pre-upgrade state if the new schema turns out to be wrong — and one a day
+  // at 01:00 IST (19:30 UTC), before the settlement sweeps run.
+  const announceBackup = (r) => {
+    if (r.skipped) return;
+    console.log(`[BACKUP] ${path.basename(r.file)} (${(r.bytes / 1e6).toFixed(1)} MB)${r.pruned ? `, pruned ${r.pruned}` : ''}`);
+  };
+  backupDatabase().then(announceBackup).catch((err) => console.error('[BACKUP] boot snapshot failed:', err.message));
+  cron.schedule('30 19 * * *', () => {
+    backupDatabase().then(announceBackup).catch((err) => console.error('[BACKUP] daily snapshot failed:', err.message));
+  });
 });
+
+// ─── Staying up, and going down cleanly ─────────────────────────────────
+//
+// A rejected promise nobody caught terminates the process by default on Node
+// 15 and later. That is the right default for a script and the wrong one for
+// this server: one route forgetting a `.catch`, or one scraper losing its
+// connection mid-fetch, would take down billing, trading and the dashboards
+// along with it. The failure is logged loudly and the other requests continue.
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] Unhandled promise rejection — the server is still serving:',
+    reason instanceof Error ? reason.stack : reason);
+});
+
+// An uncaught synchronous throw is different: it escaped every handler, so the
+// state it left behind is unknown and continuing on it is a guess. Log it, then
+// hand over to systemd, which restarts within five seconds — a short restart
+// beats a process serving from state nobody can describe.
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception — restarting:', err.stack || err);
+  shutdown('uncaughtException', 1);
+});
+
+// systemctl restart (which is what update.sh runs on every release) sends
+// SIGTERM. Without a handler the process dies where it stands: replies in
+// flight are cut off mid-body, and the WAL is left for the next boot to
+// recover. Stop taking new connections, let the open ones finish, checkpoint
+// the WAL back into the database, then exit.
+let shuttingDown = false;
+function shutdown(signal, code = 0) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[SHUTDOWN] ${signal} — finishing in-flight requests`);
+
+  // A client holding a keep-alive connection open would otherwise hold the
+  // whole shutdown open with it. Ten seconds is longer than any request here.
+  const forced = setTimeout(() => {
+    console.warn('[SHUTDOWN] requests did not finish within 10s — exiting anyway');
+    closeDbAndExit(code);
+  }, 10_000);
+  forced.unref();
+
+  server.close(() => {
+    clearTimeout(forced);
+    closeDbAndExit(code);
+  });
+}
+
+function closeDbAndExit(code) {
+  try {
+    // Fold the write-ahead log back into the main file so the next start opens
+    // a complete database, and so a backup taken from a stopped server is whole.
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    db.close();
+    console.log('[SHUTDOWN] database closed');
+  } catch (err) {
+    console.error('[SHUTDOWN] closing the database failed:', err.message);
+  }
+  process.exit(code);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 }

@@ -223,21 +223,32 @@ const DEFAULT_HOLIDAYS = [
   { holiday_date: '2026-11-15', name: 'Chhath Puja', scope: 'STATE', state: 'Delhi', holiday_type: 'PUBLIC', remarks: 'Delhi State Gazetted' },
 ];
 
+/**
+ * Master parameters, held in memory because they are read on nearly every
+ * calculation and change perhaps a few times a year.
+ *
+ * The cache used to expire five seconds after it was filled. That made the
+ * platform's behaviour depend on the clock: a parameter changed at one moment
+ * took effect immediately, and the same change a moment later did not take
+ * effect until the window ran out. Every writer already announces its change
+ * through invalidateParamCache — masters.js does it when a parameter is created
+ * or edited, and ensureMasterDefaults does it after seeding — so the timer was
+ * never what kept the cache honest, only what made it unpredictable.
+ *
+ * Now the cache lives until something says it is stale. Anything that writes to
+ * system_parameters outside those paths — a migration, a fixture, a hand-run
+ * UPDATE — has to call invalidateParamCache() itself.
+ */
 let cache = null;
-let cacheAt = 0;
-const CACHE_MS = 5000;
 
 export function invalidateParamCache() {
   cache = null;
-  cacheAt = 0;
 }
 
 function loadParamMap() {
-  const now = Date.now();
-  if (cache && now - cacheAt < CACHE_MS) return cache;
+  if (cache) return cache;
   const rows = db.prepare(`SELECT param_key, param_value, data_type FROM system_parameters WHERE is_active = 1`).all();
   cache = Object.fromEntries(rows.map((r) => [r.param_key, r]));
-  cacheAt = now;
   return cache;
 }
 

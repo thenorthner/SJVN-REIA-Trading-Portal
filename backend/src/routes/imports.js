@@ -9,7 +9,9 @@ import { importTradingLedger } from '../services/ledgerImporter.js';
 const router = Router();
 router.use(requireAuth);
 
-const upload = multer({ dest: 'uploads/' });
+// The ledger workbook is read into memory whole; cap it so a mistaken upload
+// cannot exhaust the heap and take the process down.
+const upload = multer({ dest: 'uploads/', limits: { fileSize: 25 * 1024 * 1024 } });
 const IMPORT_WRITE = [...ROLE_GROUPS.TRADING_WRITE];
 
 // Default location of the ledger workbook shipped with the repo docs.

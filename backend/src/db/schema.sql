@@ -21,6 +21,15 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Internal bookkeeping the platform keeps about itself: which one-time
+-- migrations have run, and anything else that is state rather than data. Not
+-- business configuration — that is master_params, which people edit.
+CREATE TABLE IF NOT EXISTS platform_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS audit_logs (
   id TEXT PRIMARY KEY,
   trace_id TEXT,
@@ -2770,3 +2779,67 @@ CREATE TABLE IF NOT EXISTS hydro_ledger_clearings (
 );
 CREATE INDEX IF NOT EXISTS idx_hydro_clearings_credit ON hydro_ledger_clearings (credit_doc_id);
 CREATE INDEX IF NOT EXISTS idx_hydro_clearings_debit ON hydro_ledger_clearings (debit_doc_id);
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- Indexes for the tables that keep growing
+--
+-- Everything below is a table whose row count rises with time rather than with
+-- the size of the business: block-level schedule and energy data (96 rows per
+-- day per contract), and the audit and notification logs, which gain a row per
+-- action and are never pruned. Each had only the automatic index behind its
+-- PRIMARY KEY, so every lookup was a full table scan.
+--
+-- At a few thousand rows a scan is invisible, which is exactly why this is
+-- worth doing before it stops being invisible: the queries do not change and
+-- nothing looks wrong, the same screens simply get slower every month until one
+-- day they time out. The column order in each index follows the query that
+-- actually runs — filter columns first, then whatever the query sorts by, so
+-- the sort comes out of the index rather than out of a temporary table.
+-- ─────────────────────────────────────────────────────────────────────────
+
+-- Read on every billing run: WHERE contract_id = ? AND period_month = ?
+-- [AND data_type = ?]. One index serves all three shapes by leftmost prefix.
+CREATE INDEX IF NOT EXISTS idx_energy_data_contract_period
+  ON energy_data (contract_id, period_month, data_type);
+-- The provisional↔final trail is followed by billing family reference.
+CREATE INDEX IF NOT EXISTS idx_energy_data_bfr
+  ON energy_data (billing_family_ref);
+
+-- WHERE bid_id = ? ORDER BY time_block — 96 blocks per bid, sorted every read.
+CREATE INDEX IF NOT EXISTS idx_bid_blocks_bid
+  ON bid_blocks (bid_id, time_block);
+
+-- WHERE transaction_id = ? [AND schedule_date = ?] ORDER BY schedule_date, time_block.
+CREATE INDEX IF NOT EXISTS idx_bilateral_schedules_txn
+  ON bilateral_schedules (transaction_id, schedule_date, time_block);
+
+-- Block-wise ISET schedule reports are read a day at a time.
+CREATE INDEX IF NOT EXISTS idx_impl_sched_blocks_date
+  ON implemented_schedule_blocks (reading_date, time_block);
+
+-- ORDER BY delivery_from, buyer_contract.
+CREATE INDEX IF NOT EXISTS idx_daily_sched_entries_delivery
+  ON daily_schedule_entries (delivery_from, buyer_contract);
+
+-- deviation_settlements needs nothing here: its UNIQUE (contract_id,
+-- period_month, week_no, entry_type) constraint already carries exactly the
+-- index that query wants, and a second copy of it would cost writes for nothing.
+
+-- One index per filter the audit screen offers, because an audit trail that
+-- cannot be searched is not much of an audit trail. `action` also serves the
+-- segregation-of-duties scan; `trace_id` is what ties an error a user reported
+-- back to what the platform recorded at that moment. Every one of these is a
+-- single-column index on an insert-only table, so the write cost stays flat.
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs (created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity  ON audit_logs (entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action  ON audit_logs (action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user    ON audit_logs (user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_trace   ON audit_logs (trace_id);
+
+-- The bell menu: WHERE user_id = ? OR role = ? ORDER BY created_at DESC.
+-- Two indexes rather than one, because SQLite resolves an OR by taking each
+-- branch through its own index and merging the results.
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_notifications_role ON notifications (role, created_at);
+-- The duplicate-suppression check before sending: WHERE type = ? AND ...
+CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications (type, created_at);

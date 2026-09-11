@@ -3,7 +3,28 @@ import crypto from 'crypto';
 import db from './db/index.js';
 import { computeDueDateWorking } from './services/workingCalendar.js';
 
-export const newId = (prefix) => `${prefix}-${uuidv4().slice(0, 8)}`;
+/**
+ * Primary key for a new row.
+ *
+ * This took the first 8 hex characters of a UUID — 32 bits, about 4.3 billion
+ * values. That sounds like plenty and is not: by the birthday bound a single
+ * table has an even chance of holding two identical ids by around 77,000 rows,
+ * and is essentially certain to by 200,000. These are PRIMARY KEY columns, so
+ * the collision does not show up as a duplicate row — the INSERT is rejected
+ * and whatever the user was doing fails.
+ *
+ * audit_logs makes that concrete: a row per action, never pruned, and the
+ * insert happens inside the route's own transaction. Once that table passes
+ * roughly 77,000 rows — months of ordinary use — raising an invoice or
+ * approving a contract starts failing at random, more and more often as the
+ * history grows, for a reason that looks like nothing to do with invoices.
+ *
+ * Sixteen characters is 64 bits: an even chance of a collision needs about five
+ * billion rows in one table, which this platform will not reach. Ids already
+ * issued are eight characters long and can never equal a sixteen-character one,
+ * so old and new rows coexist safely.
+ */
+export const newId = (prefix) => `${prefix}-${uuidv4().replace(/-/g, '').slice(0, 16)}`;
 
 // ── Invoice verification (QR-code authenticity) ──────────────────────────────
 // A short HMAC of the invoice id. Printed into the QR so the public /verify
@@ -48,10 +69,32 @@ export function pushNotification({ userId = null, role = null, type, message }) 
   stmt.run({ id: newId('NTF'), userId, role, type, message });
 }
 
+/**
+ * The next document number in a series — invoices, debit and credit notes,
+ * generator bills, hydro station bills, DSM settlements.
+ *
+ * This drew six random digits, which is 900,000 possible numbers per series per
+ * year. Nine of the columns it feeds are declared UNIQUE, so a repeat is not a
+ * cosmetic duplicate: the INSERT is rejected, the request fails with a 500, and
+ * the invoice simply does not get raised. And a repeat is not a remote
+ * possibility — by the birthday bound, a series issuing 1,000 documents in a
+ * year has already about a 42% chance of having drawn the same number twice,
+ * and 2,000 documents makes it about 89%. One caller had noticed and wrapped
+ * the call in a retry loop; the other eleven had not.
+ *
+ * So the number comes from a register instead, through the same atomic
+ * read-and-increment already used for the SJVN invoice series. Two documents
+ * cannot be handed the same number, and the numbers now run in order, which is
+ * what an auditor expects of a document series anyway.
+ *
+ * The sequence starts at 1 and is padded to six digits, so the numbers it
+ * issues (000001 upward) cannot collide with the ones already issued by the old
+ * random draw, which were all 100000 or above.
+ */
 export function genInvoiceNo(prefix = 'INV') {
-  const rand = Math.floor(100000 + Math.random() * 900000);
   const year = new Date().getFullYear();
-  return `${prefix}/${year}/${rand}`;
+  const seq = nextInvoiceSeq(prefix, String(year));
+  return `${prefix}/${year}/${String(seq).padStart(6, '0')}`;
 }
 
 // Short uppercase code for a client, used inside the SJVN invoice number. Takes
@@ -94,6 +137,20 @@ function nextInvoiceSeq(seriesType, clientCode) {
     return row.next_seq;
   });
   return tx();
+}
+
+/**
+ * The next number in any document series, taken from the same register.
+ *
+ * `seriesType` names the series (a prefix such as 'DSP' or 'RCN'); `scope`
+ * separates registers that restart independently — normally the year.
+ *
+ * Exposed because several modules mint their own document numbers and every one
+ * of them writes into a column declared UNIQUE. A number drawn at random is a
+ * failed INSERT waiting to happen; a number drawn from here cannot repeat.
+ */
+export function nextSeriesNo(seriesType, scope) {
+  return nextInvoiceSeq(seriesType, String(scope));
 }
 
 // Continue the ISET ledger's real registers: the last issued Kreate numbers were

@@ -27,12 +27,26 @@ const dbPath = process.env.SJVN_DB_PATH || path.join(__dirname, 'platform.db');
 export const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+// A writer holds the file for the length of its transaction. Without a busy
+// timeout every reader that arrives during one throws SQLITE_BUSY immediately,
+// which surfaces as a 500 on a page that would have succeeded a millisecond
+// later. Five seconds is far longer than any statement here takes, so it turns
+// a spurious error into a short wait. Backups and the sqlite3 CLI take the
+// same lock, so this matters as soon as anything but the server touches the file.
+db.pragma('busy_timeout = 5000');
+// WAL's own recommendation: the write is durable at the OS level on commit, and
+// only an operating-system crash (not a process crash, and not a restart) can
+// lose the last transactions. FULL costs an fsync per commit for a guarantee
+// that a UPS-backed server does not need.
+db.pragma('synchronous = NORMAL');
 
 const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
 db.exec(schema);
 
 function localId(prefix) {
-  return `${prefix}-${uuidv4().slice(0, 8)}`;
+  // Same width as util.js newId, and for the same reason: eight hex characters
+  // collide inside one table at a scale this platform reaches.
+  return `${prefix}-${uuidv4().replace(/-/g, '').slice(0, 16)}`;
 }
 
 /** Recreate disputes tables when upgrading from the old 4-status MVP schema. */

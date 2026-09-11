@@ -1,4 +1,5 @@
 import { surchargeDays } from './services/workingCalendar.js';
+import { nextSeriesNo } from './util.js';
 
 /** Dispute Management constants & helpers */
 
@@ -158,10 +159,12 @@ export function tieredRebatePct(daysFromBill, tiers) {
   return 0;
 }
 
+// disputes.dispute_no is UNIQUE, and four random digits collide long before a
+// register of this kind fills up — see the note on genInstrumentNo. Sequential
+// from the shared register, five digits so it clears the old four-digit range.
 export function genDisputeNo() {
-  const rand = Math.floor(1000 + Math.random() * 9000);
   const year = new Date().getFullYear();
-  return `DSP/${year}/${rand}`;
+  return `DSP/${year}/${String(nextSeriesNo('DSP', year)).padStart(5, '0')}`;
 }
 
 export const ALLOWED_TRANSITIONS = {

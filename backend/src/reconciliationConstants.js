@@ -1,3 +1,5 @@
+import { nextSeriesNo } from './util.js';
+
 /** Reconciliation constants */
 
 export const TOLERANCE_QTY_PCT = 0.5; // ±0.5%
@@ -20,9 +22,11 @@ export const ITEM_TYPES = [
   'INTERNAL_SAP', 'TRADING_BID_CLEAR_BILL', 'CARRY_FORWARD', 'DISPUTE_REF',
 ];
 
+// reconciliations.recon_no is UNIQUE, and a monthly run per contract fills a
+// four-digit random space fast — see the note on genInstrumentNo.
 export function genReconNo() {
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `RCN/${new Date().getFullYear()}/${rand}`;
+  const year = new Date().getFullYear();
+  return `RCN/${year}/${String(nextSeriesNo('RCN', year)).padStart(5, '0')}`;
 }
 
 export function classifyVariance(variance, baseValue, { qtyPct = TOLERANCE_QTY_PCT, amountTol = TOLERANCE_AMOUNT, unit = 'INR' } = {}) {

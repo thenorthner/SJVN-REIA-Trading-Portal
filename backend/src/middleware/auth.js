@@ -67,7 +67,9 @@ export function requireRole(...roles) {
 import { v4 as uuidv4 } from 'uuid';
 
 export function assignTraceId(req, res, next) {
-  req.traceId = req.headers['x-trace-id'] || `TRC-${uuidv4().slice(0, 8)}`;
+  // A trace id is how one reported error is found among the day's requests, so
+  // it wants to be unique across the log rather than merely across a moment.
+  req.traceId = req.headers['x-trace-id'] || `TRC-${uuidv4().replace(/-/g, '').slice(0, 16)}`;
   next();
 }
 

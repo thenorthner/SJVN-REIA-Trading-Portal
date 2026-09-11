@@ -11,7 +11,8 @@ seedInvoiceCounters();
 const router = express.Router();
 
 function newId(prefix) {
-  return `${prefix}-${uuidv4().slice(0, 8)}`;
+  // Same width as util.js newId — see the note there on 32-bit ids colliding.
+  return `${prefix}-${uuidv4().replace(/-/g, '').slice(0, 16)}`;
 }
 
 // Ensure the user has trading or admin rights

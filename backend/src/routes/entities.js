@@ -21,7 +21,10 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+// A logo or a signature is a small image. Without a cap, one authenticated
+// user can stream a file of any size into uploads/ until the disk is full,
+// and a full disk stops SQLite from writing — that is, it stops the platform.
+const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } });
 
 const router = Router();
 router.use(requireAuth);

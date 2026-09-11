@@ -12,7 +12,9 @@ import fs from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const upload = multer({ dest: 'temp/' });
+// The uploaded workbook is parsed into memory in one go, so an unbounded file
+// is an out-of-memory kill of the whole server, not just a failed import.
+const upload = multer({ dest: 'temp/', limits: { fileSize: 15 * 1024 * 1024 } });
 
 const router = Router();
 router.use(requireAuth);

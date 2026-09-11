@@ -1,3 +1,7 @@
+import { nextSeriesNo } from './util.js';
+
+const pad5 = (n) => String(n).padStart(5, '0');
+
 /** Payment Security constants */
 
 export const INVOCATION_OVERDUE_DAYS = 30;
@@ -27,14 +31,22 @@ export const INSTRUMENTS_BY_SIDE = {
   SELLER: ['BANK_GUARANTEE', 'CORPUS_FUND', 'PAYMENT_SECURITY_FUND', 'OTHER'],
 };
 
+// Both of these land in columns declared UNIQUE (payment_security.instrument_no,
+// and the invocation register). They used to draw four random digits — nine
+// thousand possible numbers — so by the birthday bound a register holding just
+// 100 instruments had already about a 42% chance of having drawn the same
+// number twice, and 200 made it near-certain. A repeat is not a duplicate on a
+// report: the INSERT is rejected and the instrument cannot be recorded at all.
+// Numbers come from the shared register instead, padded to five digits so they
+// cannot land on one of the four-digit numbers already issued.
 export function genInstrumentNo(type = 'LC') {
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `PS/${type}/${new Date().getFullYear()}/${rand}`;
+  const year = new Date().getFullYear();
+  return `PS/${type}/${year}/${pad5(nextSeriesNo(`PS-${type}`, year))}`;
 }
 
 export function genInvocationNo() {
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `INVOK/${new Date().getFullYear()}/${rand}`;
+  const year = new Date().getFullYear();
+  return `INVOK/${year}/${pad5(nextSeriesNo('INVOK', year))}`;
 }
 
 export function refreshAvailable(row) {
