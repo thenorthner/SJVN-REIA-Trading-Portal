@@ -1,8 +1,13 @@
 export const ROLE_GROUPS = {
-  REIA_ALL: ['SJVN_ADMIN', 'REIA_USER', 'FINANCE_USER', 'MANAGEMENT', 'IT_SUPER_ADMIN'],
-  REIA_WRITE: ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN'],
-  TRADING_ALL: ['SJVN_ADMIN', 'TRADING_USER', 'FINANCE_USER', 'MANAGEMENT', 'IT_SUPER_ADMIN'],
-  TRADING_WRITE: ['SJVN_ADMIN', 'TRADING_USER', 'IT_SUPER_ADMIN'],
+  // These four mirror ROLE_GROUPS in backend/src/middleware/auth.js exactly,
+  // because the API is what actually decides. A role listed here and not there
+  // is shown screens whose every call answers 403; one listed there and not here
+  // is allowed by the API but never offered the menu. The backend test
+  // roleGroupsParity.test.js fails if the two lists drift apart again.
+  REIA_ALL: ['SJVN_ADMIN', 'REIA_ADMIN', 'IT_SUPER_ADMIN', 'REIA_USER', 'FINANCE_USER', 'MANAGEMENT'],
+  REIA_WRITE: ['SJVN_ADMIN', 'REIA_ADMIN', 'IT_SUPER_ADMIN', 'REIA_USER'],
+  TRADING_ALL: ['SJVN_ADMIN', 'TRADING_USER', 'FINANCE_USER', 'MANAGEMENT'],
+  TRADING_WRITE: ['SJVN_ADMIN', 'TRADING_USER'],
 
   // Counterparty portal roles. Company admins (SELLER / BUYER) plus the
   // maker-checker sub-users they create from Team Management. These must be
