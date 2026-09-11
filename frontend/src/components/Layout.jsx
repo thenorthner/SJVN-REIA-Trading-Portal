@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../api/client.js';
 import { TRADING_MENU } from '../config/tradingMenu.js';
 import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from '../roles.js';
 import { PortfolioSelect } from '../context/PortfolioContext.jsx';
+import { RouteSkeleton } from './ui.jsx';
 
 /**
  * Keeps the shell up if a screen's module fails to load or throws while
@@ -472,7 +473,12 @@ export default function Layout() {
         </header>
         <main className="content">
           <RouteErrorBoundary key={location.pathname}>
-            <Outlet />
+            {/* The boundary nearest a suspending child wins, so putting one
+                here keeps the sidebar and top bar mounted while the next
+                screen's chunk loads — only the content column redraws. */}
+            <Suspense fallback={<RouteSkeleton />}>
+              <Outlet />
+            </Suspense>
           </RouteErrorBoundary>
         </main>
       </div>

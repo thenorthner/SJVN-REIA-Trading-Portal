@@ -193,12 +193,17 @@ function HomeRoute() {
   );
 }
 
-// Shown while a route's code is being fetched. Routes are code-split, so the
-// first visit to a screen downloads only that screen.
+/**
+ * Shown while a route's code is being fetched, in the two cases with no shell
+ * to suspend inside: the login screen and the very first paint of a cold tab.
+ * Everything reached from the signed-in shell suspends against Layout's own
+ * boundary instead, which keeps the navigation on screen.
+ */
 function RouteFallback() {
   return (
-    <div style={{ padding: 40, color: 'var(--slate-500)', fontSize: 14 }} role="status" aria-live="polite">
-      Loading…
+    <div className="boot-screen" role="status" aria-live="polite">
+      <div className="boot-spinner" aria-hidden="true" />
+      <div className="boot-text">Loading…</div>
     </div>
   );
 }

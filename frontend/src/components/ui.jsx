@@ -1,5 +1,37 @@
 import React from 'react';
 
+/**
+ * What the content column shows while a route's chunk is in flight.
+ *
+ * Every screen is code-split, so a navigation always waits on a network round
+ * trip. The old fallback sat above the whole app and replaced the sidebar and
+ * top bar with the word "Loading…" in the corner, so each click flashed the
+ * chrome away and back. This renders inside the shell instead, in roughly the
+ * shape a screen arrives in: a header, a row of figures, and a table.
+ */
+export function RouteSkeleton() {
+  return (
+    <div className="skeleton-page" role="status" aria-live="polite" aria-busy="true">
+      <span className="sr-only">Loading screen…</span>
+      <div className="skeleton skeleton-title" />
+      <div className="skeleton skeleton-subtitle" />
+      <div className="skeleton-kpis" aria-hidden="true">
+        <div className="skeleton-kpi" />
+        <div className="skeleton-kpi" />
+        <div className="skeleton-kpi" />
+        <div className="skeleton-kpi" />
+      </div>
+      <div className="skeleton-card" aria-hidden="true">
+        <div className="skeleton skeleton-row" />
+        <div className="skeleton skeleton-row" />
+        <div className="skeleton skeleton-row" />
+        <div className="skeleton skeleton-row" />
+        <div className="skeleton skeleton-row" />
+      </div>
+    </div>
+  );
+}
+
 export function PageHeader({ title, subtitle, actions, onAdd, addLabel }) {
   return (
     <div className="page-header">

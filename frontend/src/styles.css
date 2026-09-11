@@ -25,6 +25,32 @@
   --success: var(--green);
   --danger: var(--red);
   --warning: var(--amber);
+
+  /* --text-light was read in seventy-odd places across the screens but never
+     defined, so every "secondary" line — table sub-labels, card meta, alert
+     detail — fell back to the inherited body colour and shouted as loudly as
+     the value above it. It is the muted text colour those call sites meant. */
+  --text-light: var(--text-muted);
+
+  /* Elevation ramp. --shadow stays the flat resting shadow every card already
+     uses; -md is the raised step for hover, -lg for modals and popovers. */
+  --shadow-sm: 0 1px 2px rgba(20, 30, 50, 0.06);
+  --shadow-md: 0 2px 4px rgba(20, 30, 50, 0.05), 0 8px 20px rgba(20, 30, 50, 0.08);
+  --shadow-lg: 0 8px 24px rgba(20, 30, 50, 0.10), 0 24px 56px rgba(20, 30, 50, 0.14);
+
+  /* One focus ring for the whole app, so a keyboard user sees the same halo on
+     a button, a nav link, a tab and a row wherever they land. */
+  --ring: 0 0 0 3px rgba(11, 95, 255, 0.32);
+  --ring-inverse: 0 0 0 3px rgba(255, 255, 255, 0.45);
+  --radius-sm: 6px;
+  --radius-lg: 14px;
+
+  /* How tall a table may grow before it scrolls inside itself under a pinned
+     header. Roughly the viewport less the chrome a ledger screen carries above
+     its table — top bar, page header, filter strip — with a floor so a short
+     window still shows a useful number of rows. A screen that wants a taller
+     or shorter region sets --table-max-h on any ancestor; `none` opts out. */
+  --table-max-h: max(360px, calc(100vh - 260px));
 }
 
 :root {
@@ -71,19 +97,56 @@ html, body, #root { height: 100%; }
 
 body {
   margin: 0;
-  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  /* The native UI face of whatever the operator is sitting at — Segoe UI on
+     the Windows desks, SF on macOS — instead of every machine falling through
+     to Arial. */
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-h1, h2, h3, h4 { margin: 0; font-weight: 600; }
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.012em; }
 p { margin: 0; }
+
+/* This is a billing and settlement platform: every figure sits in a column
+   under another figure. Proportional digits make those columns ragged, so the
+   whole app opts into fixed-width numerals and only prose opts back out. */
+body { font-variant-numeric: tabular-nums; }
+p, .page-subtitle, .login-subtitle, .inline-note { font-variant-numeric: normal; }
 
 button, input, select, textarea { font-family: inherit; font-size: inherit; }
 
 a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Nothing in the app drew a focus ring, so tabbing through a screen moved an
+   invisible cursor. One rule covers every control; the components below only
+   reshape the ring where a square outline would clip. */
+:focus-visible {
+  /* Transparent, so the ring is a shadow in normal rendering but survives
+     Windows high-contrast mode, which throws shadows away and keeps outlines. */
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: var(--ring);
+}
+.sidebar :focus-visible { box-shadow: var(--ring-inverse); }
+
+/* Respect the operator's motion preference: transitions become instant rather
+   than animating under someone who asked the OS for less movement. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* ---------------- App Shell ---------------- */
 .app-shell {
@@ -274,7 +337,20 @@ a { color: var(--primary); text-decoration: none; }
   background: var(--primary);
   color: #fff;
   font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
+
+/* The sidebar carries a hundred destinations, so it scrolls on every screen.
+   A dark, thin bar keeps that scroll from cutting a bright stripe down the
+   navy. */
+.sidebar::-webkit-scrollbar { width: 8px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+.sidebar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.24); }
+.sidebar { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
 
 .main-col {
   flex: 1;
@@ -466,7 +542,115 @@ a { color: var(--primary); text-decoration: none; }
   color: var(--text-muted);
 }
 
-.empty-state h3 { margin-bottom: 8px; color: var(--text); }
+/* Seventeen screens fetch their data and, while that is in flight, print one
+   grey sentence against an otherwise empty column. The sentence stays — it
+   says what is loading — but it now sits under a spinner, so the page reads as
+   working rather than broken. */
+.page-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 220px;
+  font-size: 13px;
+}
+
+.page-loading::before {
+  content: '';
+  width: 24px;
+  height: 24px;
+  border: 2.5px solid var(--slate-200);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: boot-spin 0.7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-loading::before { animation: none; border-top-color: var(--slate-200); }
+}
+
+.empty-state h3 { margin-bottom: 8px; color: var(--text); font-size: 15px; }
+/* An empty state is usually one line of explanation. Holding it to a reading
+   measure stops it stretching the full width of a 1440px ledger screen. */
+.empty-state p {
+  max-width: 46ch;
+  margin: 0 auto;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-light);
+}
+
+/* ---------------- Loading skeletons ----------------
+   A route used to blank the whole shell and print "Loading…" in the corner
+   while its chunk arrived. These are the shapes the shell shows in the content
+   column instead, so the sidebar, the top bar and the page's footprint stay
+   put across a navigation. */
+@keyframes skeleton-sweep {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--slate-100) 25%,
+    var(--slate-200) 37%,
+    var(--slate-100) 63%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-page { padding: 4px 0; }
+.skeleton-title { height: 22px; width: 300px; max-width: 60%; margin-bottom: 10px; }
+.skeleton-subtitle { height: 12px; width: 200px; max-width: 40%; margin-bottom: 26px; }
+
+.skeleton-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.skeleton-kpi {
+  height: 92px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+}
+.skeleton-kpi::before,
+.skeleton-kpi::after {
+  content: '';
+  display: block;
+  border-radius: var(--radius-sm);
+  background: var(--slate-100);
+}
+.skeleton-kpi::before { height: 10px; width: 62%; margin-bottom: 14px; }
+.skeleton-kpi::after { height: 20px; width: 44%; }
+
+.skeleton-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.skeleton-row {
+  height: 15px;
+  margin: 16px 18px;
+}
+.skeleton-row:nth-child(1) { width: 70%; }
+.skeleton-row:nth-child(2) { width: 92%; }
+.skeleton-row:nth-child(3) { width: 84%; }
+.skeleton-row:nth-child(4) { width: 60%; }
+.skeleton-row:nth-child(5) { width: 76%; }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; background: var(--slate-100); }
+}
 
 /* ---------------- Page header ---------------- */
 .page-header {
@@ -498,7 +682,15 @@ a { color: var(--primary); text-decoration: none; }
 
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.btn-primary { background: var(--primary); color: #fff; }
+/* A button that does not move under the cursor reads as a picture of a button.
+   One pixel of travel on press is enough to feel like it took the click. */
+.btn:active:not(:disabled) { transform: translateY(1px); }
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(11, 71, 196, 0.24);
+}
 .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
 
 .btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
@@ -543,7 +735,13 @@ a { color: var(--primary); text-decoration: none; }
   margin-bottom: 8px;
 }
 
-.stat-value { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
 .stat-hint { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; }
 
 .stat-card.tone-green .stat-value { color: var(--green); }
@@ -570,6 +768,18 @@ a { color: var(--primary); text-decoration: none; }
 
 .card-header h3 { font-size: 14.5px; }
 .card-body { padding: 18px; }
+
+/* Cards that navigate somewhere earn a hover; the plain ones stay put, so the
+   lift is a signal rather than decoration. */
+.card.clickable, .card[role="button"] {
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.card.clickable:hover, .card[role="button"]:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--slate-300);
+  transform: translateY(-1px);
+}
 
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
@@ -609,25 +819,86 @@ a { color: var(--primary); text-decoration: none; }
 .badge-gray { background: var(--gray-bg); color: var(--gray); }
 
 /* ---------------- Filters bar ---------------- */
+/* The controls used to float loose on the page background above the card they
+   filter. Sitting them on their own surface makes the strip read as one
+   toolbar attached to the table below it. */
 .filters-bar {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
 }
 
-.filters-bar select, .filters-bar input[type="text"], .filters-bar input[type="search"] {
+/* Every control in the strip is the same height, whatever the browser's own
+   idea of a select or a date field is. */
+.filters-bar select,
+.filters-bar input[type="text"],
+.filters-bar input[type="search"],
+.filters-bar input[type="date"],
+.filters-bar input[type="month"],
+.filters-bar input[type="number"] {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 7px 10px;
+  height: 34px;
   background: var(--surface);
   color: var(--text);
   min-width: 140px;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.filters-bar select:hover,
+.filters-bar input:hover { border-color: var(--slate-300); }
+
+.filters-bar select:focus,
+.filters-bar input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+/* An unset date field renders as a row of dashes in the same weight as real
+   text, so an empty filter reads as a broken control. Muting the placeholder
+   fields makes an unset date look unset. */
+.filters-bar input[type="date"]::-webkit-datetime-edit-year-field:not([aria-valuenow]),
+.filters-bar input[type="date"]::-webkit-datetime-edit-month-field:not([aria-valuenow]),
+.filters-bar input[type="date"]::-webkit-datetime-edit-day-field:not([aria-valuenow]),
+.filters-bar input[type="month"]::-webkit-datetime-edit-year-field:not([aria-valuenow]),
+.filters-bar input[type="month"]::-webkit-datetime-edit-month-field:not([aria-valuenow]) {
+  color: var(--text-light);
 }
 
 /* ---------------- Table ---------------- */
-.table-wrap { overflow-x: auto; }
+/* A ledger of several hundred rows used to scroll its column names off the top
+   of the window, leaving a wall of unlabelled figures. Capping the wrapper
+   turns it into its own scroll region, which is what gives the header
+   something to stick to.
+ *
+ * It is self-activating: `max-height` does nothing to a table that already
+ * fits, so short tables keep today's layout and grow no scrollbar, and only a
+ * table tall enough to lose its header pays for the region. */
+.table-wrap {
+  overflow: auto;
+  max-height: var(--table-max-h);
+}
+
+/* Scoped to the wrapper on purpose. A bare .data-table — several screens put
+   one straight into a card — has no scrolling ancestor, so a sticky header
+   there would pin to the window instead and slide under the top bar, which
+   sits at a higher layer. Without the wrapper there is nothing to stick to and
+   the header stays where it is. */
+.table-wrap .data-table thead th {
+  position: sticky;
+  top: 0;
+  /* Above the cells that scroll beneath it, below the top bar's 20. */
+  z-index: 2;
+}
 
 .data-table {
   width: 100%;
@@ -637,14 +908,25 @@ a { color: var(--primary); text-decoration: none; }
 
 .data-table th {
   text-align: left;
-  padding: 10px 14px;
-  background: var(--bg);
-  color: var(--text-muted);
+  padding: 11px 14px;
+  background: var(--slate-50);
+  color: var(--slate-600);
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   font-weight: 700;
-  border-bottom: 1px solid var(--border);
+  /* Two-tone rule: the header strip needs to separate from the first row more
+     firmly than the rows separate from each other.
+   *
+   * The inset shadow is not decoration duplicating the border. `border-collapse:
+   * collapse` hands the border to the table rather than the cell, so a sticky
+   * header loses its bottom rule the moment it lifts off and rows run straight
+   * into the column names. The shadow belongs to the cell and travels with it.
+   * The outer shadow lifts the pinned strip above the rows passing under it. */
+  border-bottom: 1px solid var(--slate-200);
+  box-shadow:
+    inset 0 -1px 0 var(--slate-200),
+    0 2px 4px rgba(20, 30, 50, 0.05);
   white-space: nowrap;
 }
 
@@ -657,17 +939,76 @@ a { color: var(--primary); text-decoration: none; }
 
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tr.clickable { cursor: pointer; }
-.data-table tr.clickable:hover td { background: var(--bg); }
 
-.empty-cell { text-align: center; color: var(--text-muted); padding: 30px !important; white-space: normal; }
+/* Hovering a row used to tint it the same grey as the header strip above it.
+   The tinted row now reads as the live one, and a clickable row says so with
+   a left edge rather than only a cursor change. */
+.data-table tbody tr:hover td { background: var(--slate-50); }
+.data-table tr.clickable:hover td { background: var(--primary-light); }
+.data-table tr.clickable:hover td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
+.data-table tr.clickable:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+/* Right-align and lock the width of any column carrying a figure, so rupees
+   and megawatt-hours stack digit over digit down the page. */
+.data-table td.num, .data-table th.num,
+.table td.num, .table th.num,
+.data-table td.text-right, .table td.text-right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty-cell {
+  text-align: center;
+  color: var(--text-light);
+  padding: 44px 20px !important;
+  white-space: normal;
+  font-size: 13px;
+}
+
+/* A modal body is already the scroll region, and a table nested inside it
+   would put a second scrollbar within the first. The modal's own tables are
+   short, so they keep the full-height layout and no pinned header. */
+.modal .table-wrap,
+.modal .report-table-wrap { max-height: none; }
+
+/* Printing and PDF export walk the whole document, so a scroll region would
+   hand the printer one screenful and drop the rest of the ledger. Every table
+   goes back to its full height on paper, and the header rides along with the
+   flow rather than pinning to a page that does not scroll.
+ *
+ * thead already repeats on each printed page by default, which is the paper
+ * equivalent of what the sticky header does on screen. */
+@media print {
+  .table-wrap,
+  .report-table-wrap {
+    max-height: none;
+    overflow: visible;
+  }
+  .table-wrap .data-table thead th,
+  .report-table-wrap .report-table thead th {
+    position: static;
+    box-shadow: none;
+  }
+}
 
 .cell-actions { display: flex; gap: 6px; }
 
 /* ---------------- Modal ---------------- */
+@keyframes modal-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.99); }
+  to { opacity: 1; transform: none; }
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(15, 20, 32, 0.5);
+  animation: modal-backdrop-in 0.14s ease-out;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -683,7 +1024,8 @@ a { color: var(--primary); text-decoration: none; }
   max-height: calc(100vh - 80px);
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-lg);
+  animation: modal-in 0.16s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .modal-header {
@@ -764,8 +1106,13 @@ a { color: var(--primary); text-decoration: none; }
   margin-bottom: -1px;
 }
 
-.tab-btn:hover { color: var(--text); }
+.tab-btn {
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+  border-radius: 8px 8px 0 0;
+}
+.tab-btn:hover { color: var(--text); background: var(--slate-50); }
 .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+.tab-btn:focus-visible { box-shadow: var(--ring); }
 
 /* ---------------- Detail rows ---------------- */
 .detail-grid {
@@ -789,6 +1136,34 @@ a { color: var(--primary); text-decoration: none; }
 }
 
 .timeline-item .t-meta { color: var(--text-muted); font-size: 11px; margin-top: 3px; }
+
+/* ---------------- Cold boot ---------------- */
+.boot-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: var(--bg);
+}
+
+.boot-spinner {
+  width: 26px;
+  height: 26px;
+  border: 2.5px solid var(--slate-200);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: boot-spin 0.7s linear infinite;
+}
+
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+
+.boot-text { font-size: 13px; color: var(--text-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-spinner { animation: none; border-top-color: var(--slate-200); }
+}
 
 /* ---------------- Login page ---------------- */
 .login-screen {
@@ -847,6 +1222,20 @@ a { color: var(--primary); text-decoration: none; }
 .demo-role-btn:hover { border-color: var(--primary); background: var(--primary-light); }
 
 /* ---------------- Misc ---------------- */
+/* Announced to a screen reader, invisible on screen — used to name a loading
+   state whose visual form is a set of grey blocks. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .text-muted { color: var(--text-muted); }
 .text-right { text-align: right; }
 .mono { font-variant-numeric: tabular-nums; }
@@ -854,8 +1243,19 @@ a { color: var(--primary); text-decoration: none; }
 .chart-box { width: 100%; height: 280px; }
 .section-title { font-size: 13px; font-weight: 700; margin-bottom: 12px; color: var(--text); }
 .inline-note { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
-.progress-track { background: var(--gray-bg); border-radius: 999px; height: 6px; overflow: hidden; }
-.progress-fill { background: var(--primary); height: 100%; border-radius: 999px; }
+.progress-track {
+  background: var(--slate-100);
+  box-shadow: inset 0 0 0 1px var(--slate-200);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+.progress-fill {
+  background: linear-gradient(90deg, var(--primary), #4f8dff);
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
 
 /* ---------------- Status Stepper (Seller Invoices) ---------------- */
 .status-stepper {
@@ -1586,7 +1986,11 @@ a { color: var(--primary); text-decoration: none; }
 .btn-navy:hover { background: var(--navy-600); border-color: var(--navy-600); }
 
 .report-table-wrap {
-  overflow-x: auto;
+  /* The header below has asked to be sticky since the ERP report screens
+     landed, but a wrapper that only scrolls sideways never scrolls past it, so
+     the request was inert. The cap gives it a scrollport to stick to. */
+  overflow: auto;
+  max-height: var(--table-max-h);
   border: 1px solid var(--border);
   border-radius: 8px;
 }
@@ -1604,9 +2008,12 @@ a { color: var(--primary); text-decoration: none; }
   font-size: 12px;
   white-space: nowrap;
   border-right: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.report-table-wrap .report-table thead th {
   position: sticky;
   top: 0;
-  z-index: 1;
+  z-index: 2;
 }
 /* A grouping band above the column names (FLVN00 / General). */
 .report-table thead th.group-band {
