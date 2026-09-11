@@ -2061,3 +2061,25 @@ a:hover { text-decoration: underline; }
 }
 .report-criteria .field { margin: 0; }
 .report-criteria .input { min-width: 190px; }
+
+/* Inline messages — the errors, warnings and confirmations inside a screen.
+   Screens have used these class names all along (error, danger, warning,
+   success) but nothing defined them, so a failed save rendered as plain body
+   text that read like part of the form. The tint and the left rule carry the
+   meaning; the text stays at body colour so it keeps its contrast. */
+.alert {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.alert-error,
+.alert-danger { background: var(--red-bg); border-color: var(--red-bg); border-left-color: var(--red); }
+.alert-warning { background: var(--amber-bg); border-color: var(--amber-bg); border-left-color: var(--amber); }
+.alert-success { background: var(--green-bg); border-color: var(--green-bg); border-left-color: var(--green); }
+.alert-info { background: var(--blue-bg); border-color: var(--blue-bg); border-left-color: var(--blue); }
