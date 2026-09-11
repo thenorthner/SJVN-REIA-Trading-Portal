@@ -997,8 +997,8 @@ function migrateStationBetaSchema() {
         normative_aux, free_energy_home_state, capacity_charges_total, annual_afc, annual_design_energy_mwh, napaf_percent
       ) VALUES (
         ?, 'PPA/SJVN/RHPS/001', 'PPA', ?, 'Hydro', 412, 412,
-        '2014-05-13', 'TWO_PART', 1.85, '2014-05-13', '2049-05-12', 'MONTHLY', 'Net 45 days', 'ACTIVE',
-        1.2, 12, 36000000, 4320000000, 1878000, 85
+        '2014-05-13', 'TWO_PART', 2.425, '2014-05-13', '2049-05-12', 'MONTHLY', 'Net 45 days', 'ACTIVE',
+        1.0, 13, 36000000, 7846038000, 1878080, 83
       )
     `).run(rhpsCid, rhpsSid);
   } catch (e) {
@@ -1073,6 +1073,10 @@ function migrateCercHydroContractSchema() {
   add('annual_afc', 'ALTER TABLE contracts ADD COLUMN annual_afc REAL');
   add('annual_design_energy_mwh', 'ALTER TABLE contracts ADD COLUMN annual_design_energy_mwh REAL');
   add('napaf_percent', 'ALTER TABLE contracts ADD COLUMN napaf_percent REAL');
+  // Rs/kWh for energy beyond the annual saleable design energy (A13 on the
+  // bill). NJHPS prices it at the same rate as A12; Rampur does not, so it
+  // cannot be assumed equal.
+  add('ecr_excess_rate', 'ALTER TABLE contracts ADD COLUMN ecr_excess_rate REAL');
   add('transmission_charge_per_mwh', 'ALTER TABLE contracts ADD COLUMN transmission_charge_per_mwh REAL');
 
   // Soft-upgrade NJHPS demo contract to real CERC parameters (idempotent).
@@ -1099,6 +1103,48 @@ function migrateCercHydroContractSchema() {
  * that drives the beneficiary ledger came later, so an existing database needs
  * them added rather than recreated.
  */
+/**
+ * Rampur's tariff constants, from the station's own provisional bill.
+ *
+ * The demo seed carried placeholders for RHPS that were wrong in five places at
+ * once, and every one of them moves money: the AFC was 4,320,000,000 against an
+ * actual 7,846,038,000, the auxiliary consumption 1.2% against 1.0%, the NAPAF
+ * 85% against 83%, the design energy 1,878,000 MWh against 1,878,080, and the
+ * free energy to the home state 12% against 13%. Reading them off the August
+ * 2026 bill reproduces that bill to the paisa.
+ *
+ * Rampur also prices energy beyond the annual design energy at 1.300 Rs/kWh
+ * where the rate up to it is 2.425 — unlike NJHPS, where the two are equal — so
+ * the excess rate is carried on the contract rather than assumed.
+ *
+ * The seed only INSERTs OR IGNOREs, so a database that already has the row
+ * keeps the placeholders unless they are corrected here.
+ */
+function migrateRampurTariffConstants() {
+  // Runs once. Filling the excess rate on every boot would put 1.300 back each
+  // time the desk cleared it, so a deliberate edit could never stick.
+  const MARKER = 'migration.rampur_tariff_constants';
+  if (db.prepare('SELECT 1 FROM platform_meta WHERE key = ?').get(MARKER)) return;
+
+  const row = db.prepare(
+    `SELECT id, annual_afc, ecr_excess_rate FROM contracts WHERE contract_no = 'PPA/SJVN/RHPS/001'`,
+  ).get();
+  if (!row) return;
+  // Only the known-placeholder AFC is corrected, so a desk that has since
+  // entered its own figures is not overwritten.
+  if (Number(row.annual_afc) === 4320000000) {
+    db.prepare(`
+      UPDATE contracts SET annual_afc = 7846038000, annual_design_energy_mwh = 1878080,
+        normative_aux = 1.0, free_energy_home_state = 13, napaf_percent = 83,
+        tariff_per_unit = 2.425, ecr_excess_rate = 1.300
+      WHERE id = ?
+    `).run(row.id);
+  } else if (row.ecr_excess_rate == null) {
+    db.prepare('UPDATE contracts SET ecr_excess_rate = 1.300 WHERE id = ?').run(row.id);
+  }
+  db.prepare(`INSERT INTO platform_meta (key, value) VALUES (?, '1')`).run(MARKER);
+}
+
 function migrateHydroBillLifecycle() {
   const has = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='hydro_station_bills'`).get();
   if (!has) return;
@@ -1134,6 +1180,12 @@ try {
   migrateCercHydroContractSchema();
 } catch (e) {
   console.error('CERC hydro contract migration failed:', e.message);
+}
+
+try {
+  migrateRampurTariffConstants();
+} catch (e) {
+  console.error('Rampur tariff constants migration failed:', e.message);
 }
 
 function migrateInvoiceDeliveriesSchema() {

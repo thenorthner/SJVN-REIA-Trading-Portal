@@ -153,6 +153,9 @@ describe('laying in a whole allocation sheet', () => {
   ];
 
   it('makes an unbillable station billable', async () => {
+    // Rampur ships with its own allocation seeded, so this clears it to get back
+    // to the state the test is about: a station that cannot yet be billed.
+    db.prepare('DELETE FROM hydro_beneficiary_allocations WHERE contract_id = ?').run(rampur.id);
     const before = await get('/api/hydro-billing/stations', viewer);
     expect(before.body.find((s) => s.id === rampur.id).ready).toBe(false);
 
@@ -170,9 +173,11 @@ describe('laying in a whole allocation sheet', () => {
   it('derives the charging percentages from the sheet it was given', async () => {
     const r = await post('/api/hydro-billing/allocations/bulk', reia, sheet(OK_ROWS));
     const gohp = r.body.rows.find((x) => x.beneficiary_name === 'GoHP');
-    // 30 - 12 = 18, then 18 / 0.88.
-    expect(gohp.pct_excl_free).toBeCloseTo(18, 6);
-    expect(gohp.pct_proportionate).toBeCloseTo(20.454545, 5);
+    // Rampur gives 13% free energy to its home state, not the 12% NJHPS gives
+    // (NRPC's June 2026 REA schedules 261.234525 LU free against 2009.501850 LU
+    // total, exactly 13%), so: 30 - 13 = 17, then 17 / 0.87.
+    expect(gohp.pct_excl_free).toBeCloseTo(17, 6);
+    expect(gohp.pct_proportionate).toBeCloseTo(19.540230, 5);
     expect(r.body.rows.reduce((a, x) => a + x.pct_proportionate, 0)).toBeCloseTo(100, 4);
   });
 

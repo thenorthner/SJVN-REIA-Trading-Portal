@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAllocationPaste } from './allocationPaste.js';
+import { parseAllocationPaste, parseEnergyPaste } from './allocationPaste.js';
 
 // The desk has the REA allocation in a spreadsheet, so the sheet arrives here as
 // a paste. What matters most is that a multi-word beneficiary name survives the
@@ -100,5 +100,63 @@ describe('parsing a pasted REA allocation sheet', () => {
     // "J & K" keeps its ampersand rather than being split on it.
     expect(rows.find((r) => r.pct_rea === 7.423054).beneficiary_name).toBe('J & K');
     expect(rows.filter((r) => r.is_home_state)).toHaveLength(1);
+  });
+});
+
+// The REA states each beneficiary's scheduled energy in its table D2, in Lakh
+// Units. That column is what SJVN actually bills on, so it is pasted in the same
+// way the allocation sheet is — and the unit is asked for rather than guessed,
+// because reading LU as kWh is a factor-of-100,000 error.
+
+describe('parsing the REA table D2 energy column', () => {
+  // NRPC Provisional REA, June 2026, NJHPS — verbatim.
+  const D2 = [
+    'CHANDIGARH\t125.396150',
+    'DELHI\t816.163800',
+    'HARYANA\t420.496400',
+    'UTTAR PRADESH\t1077.003700',
+  ].join('\n');
+
+  it('converts Lakh Units to kWh by default', () => {
+    const { rows, errors } = parseEnergyPaste(D2);
+    expect(errors).toEqual([]);
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toEqual({ beneficiary_name: 'CHANDIGARH', kwh: 12539615 });
+    expect(rows[3]).toEqual({ beneficiary_name: 'UTTAR PRADESH', kwh: 107700370 });
+  });
+
+  it('takes the figures as they are when they are already kWh', () => {
+    const { rows } = parseEnergyPaste('CHANDIGARH\t12539615', { unit: 'kWh' });
+    expect(rows[0].kwh).toBe(12539615);
+  });
+
+  it('keeps a multi-word beneficiary name in one piece', () => {
+    const { rows } = parseEnergyPaste('BSES RAJDHANI POWER\t427.863857');
+    expect(rows[0].beneficiary_name).toBe('BSES RAJDHANI POWER');
+    expect(rows[0].kwh).toBeCloseTo(42786385.7, 1);
+  });
+
+  it('reports the total so it can be checked against the station', () => {
+    const { total } = parseEnergyPaste(D2);
+    expect(total).toBeCloseTo(12539615 + 81616380 + 42049640 + 107700370, 1);
+  });
+
+  it('drops a serial number and accepts thousands separators', () => {
+    const { rows, errors } = parseEnergyPaste('1\tCHANDIGARH\t1,077.003700');
+    expect(errors).toEqual([]);
+    expect(rows[0]).toEqual({ beneficiary_name: 'CHANDIGARH', kwh: 107700370 });
+  });
+
+  it('reports lines it cannot read instead of dropping them', () => {
+    const { rows, errors } = parseEnergyPaste('CHANDIGARH\t125.396150\nDELHI\nHARYANA\tabc');
+    expect(rows).toHaveLength(1);
+    expect(errors).toHaveLength(2);
+    expect(errors[0]).toMatch(/Line 2/);
+  });
+
+  it('refuses a negative figure', () => {
+    const { rows, errors } = parseEnergyPaste('CHANDIGARH\t-5');
+    expect(rows).toEqual([]);
+    expect(errors[0]).toMatch(/not a usable energy figure/);
   });
 });

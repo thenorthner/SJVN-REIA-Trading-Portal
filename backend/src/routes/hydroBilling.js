@@ -166,7 +166,13 @@ function buildBill(contract, month, body, { excludeBillId = null } = {}) {
   // Regulation of power: which beneficiaries had supply withheld and by how
   // much, keyed by name as the exclusion screen lists them.
   const deductions = body.deductions && typeof body.deductions === 'object' ? body.deductions : null;
-  const lines = allocateBeneficiaries(bill, allocations, { deductions });
+  // The REA's own per-beneficiary energy (its table D2), when the desk has it.
+  const scheduledEnergy = body.scheduled_energy && typeof body.scheduled_energy === 'object'
+    ? body.scheduled_energy : null;
+  const lines = allocateBeneficiaries(bill, allocations, { deductions, scheduledEnergy });
+  sources.beneficiary_energy = scheduledEnergy
+    ? 'REA table D2, as entered'
+    : 'derived from the allocation percentages';
   if (bill.urs_nr_kwh > 0) {
     sources.regulation = `${lines.filter((l) => l.is_regulated).length} beneficiary(ies) regulated, `
       + `${bill.urs_nr_kwh} kWh withheld`;

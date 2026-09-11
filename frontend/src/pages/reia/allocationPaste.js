@@ -53,3 +53,55 @@ export function parseAllocationPaste(text) {
   const total = rows.reduce((a, r) => a + r.pct_rea, 0);
   return { rows, errors, total, closesOn100: rows.length > 0 && Math.abs(total - 100) <= 0.01 };
 }
+
+/**
+ * Read the REA's per-beneficiary scheduled energy, pasted out of table D2.
+ *
+ * The Regional Energy Account states each beneficiary's energy in Lakh Units,
+ * and the bill is in kWh, so the unit is asked for rather than guessed: reading
+ * 125.396150 LU as kWh understates that beneficiary by a factor of 100,000, and
+ * a silent factor is a worse failure than a wrong one.
+ *
+ * Same line shape as the allocation sheet — one beneficiary per line, name and
+ * figure separated by a tab or two or more spaces, so a multi-word name such as
+ * "BSES RAJDHANI POWER" survives intact.
+ */
+export function parseEnergyPaste(text, { unit = 'LU' } = {}) {
+  const factor = unit === 'kWh' ? 1 : 100000;
+  const rows = [];
+  const errors = [];
+
+  String(text || '').split(/\r?\n/).forEach((raw, i) => {
+    const line = raw.trim();
+    if (!line) return;
+    const parts = line.split(/\t|\s{2,}|\s*\|\s*/).map((x) => x.trim()).filter(Boolean);
+    if (parts.length < 2) {
+      errors.push(`Line ${i + 1}: "${line}" — expected a name and an energy figure`);
+      return;
+    }
+    // The figure is the last purely numeric field, so a serial number carried in
+    // from the sheet is not mistaken for the energy.
+    let numIdx = -1;
+    for (let j = parts.length - 1; j > 0; j -= 1) {
+      if (/^-?[\d,]+(\.\d+)?$/.test(parts[j])) { numIdx = j; break; }
+    }
+    if (numIdx < 0) {
+      errors.push(`Line ${i + 1}: "${line}" — no energy figure found`);
+      return;
+    }
+    let name = parts.slice(0, numIdx).join(' ').replace(/^\d+[.)]?\s+/, '').trim();
+    if (!name) {
+      errors.push(`Line ${i + 1}: "${line}" — no beneficiary name`);
+      return;
+    }
+    const value = Number(parts[numIdx].replace(/,/g, ''));
+    if (!Number.isFinite(value) || value < 0) {
+      errors.push(`Line ${i + 1}: "${parts[numIdx]}" is not a usable energy figure`);
+      return;
+    }
+    rows.push({ beneficiary_name: name, kwh: Math.round(value * factor * 10) / 10 });
+  });
+
+  const total = Math.round(rows.reduce((a, r) => a + r.kwh, 0) * 10) / 10;
+  return { rows, errors, total, unit };
+}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import api from '../../api/client.js';
-import { parseAllocationPaste } from './allocationPaste.js';
+import { parseAllocationPaste, parseEnergyPaste } from './allocationPaste.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import {
@@ -554,6 +554,10 @@ export default function HydroBilling() {
   const [cancelReason, setCancelReason] = useState('');
   // Regulation of power: which beneficiaries had supply withheld, keyed by name.
   const [deductions, setDeductions] = useState({});
+  // The REA's own per-beneficiary energy (table D2), pasted by the desk.
+  const [energyPaste, setEnergyPaste] = useState('');
+  const [energyUnit, setEnergyUnit] = useState('LU');
+  const [useReaEnergy, setUseReaEnergy] = useState(false);
   const [approvers, setApprovers] = useState([]);
   const [inbox, setInbox] = useState([]);
   const [sending, setSending] = useState(null);
@@ -562,6 +566,17 @@ export default function HydroBilling() {
   const [actForm, setActForm] = useState({ action: 'APPROVE', comments: '', next_approver_id: '', mark_final: true });
 
   const station = useMemo(() => stations.find((s) => s.id === stationId), [stations, stationId]);
+
+  const parsedEnergy = useMemo(
+    () => parseEnergyPaste(energyPaste, { unit: energyUnit }),
+    [energyPaste, energyUnit],
+  );
+  // Only sent once the desk turns it on and the paste actually read; otherwise
+  // the bill falls back to splitting E3 on the allocation percentages.
+  const scheduledEnergy = useMemo(() => {
+    if (!useReaEnergy || !parsedEnergy.rows.length) return null;
+    return Object.fromEntries(parsedEnergy.rows.map((r) => [r.beneficiary_name, r.kwh]));
+  }, [useReaEnergy, parsedEnergy]);
 
   const loadInbox = useCallback(() => {
     api.hydroBilling.inbox().then((r) => setInbox(r || [])).catch(() => setInbox([]));
@@ -595,6 +610,7 @@ export default function HydroBilling() {
   // preview left showing another month's numbers is worse than an empty panel.
   useEffect(() => {
     setPreview(null); setNotice(''); setDeductions({});
+    setEnergyPaste(''); setUseReaEnergy(false);
   }, [stationId, form.billing_month, form.bill_kind]);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -622,7 +638,9 @@ export default function HydroBilling() {
     e?.preventDefault();
     setError(''); setNotice(''); setPreviewing(true);
     try {
-      const r = await api.hydroBilling.preview({ contract_id: stationId, ...form, deductions });
+      const r = await api.hydroBilling.preview({
+        contract_id: stationId, ...form, deductions, scheduled_energy: scheduledEnergy,
+      });
       setPreview(r);
       setTab('bill');
     } catch (err) {
@@ -636,7 +654,9 @@ export default function HydroBilling() {
   async function doSave() {
     setError(''); setSaving(true);
     try {
-      const r = await api.hydroBilling.create({ contract_id: stationId, ...form, deductions });
+      const r = await api.hydroBilling.create({
+        contract_id: stationId, ...form, deductions, scheduled_energy: scheduledEnergy,
+      });
       setNotice(`Saved as ${r.bill_no} — ${fmtCurrency(r.total_charges)} across ${r.lines.length} beneficiaries. It is a draft until issued.`);
       setPreview(null);
       loadBills();
@@ -894,6 +914,84 @@ export default function HydroBilling() {
         </form>
       </Card>
 
+      <Card title="Beneficiary energy from the REA (table D2)">
+        <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+          The bill is billed on each beneficiary&apos;s own scheduled energy as the Regional Energy
+          Account states it, not on a share of the station total — on NJHPS for June 2026 the two
+          differ by a few thousand kWh per beneficiary. Paste the REA&apos;s table D2 column here to
+          bill on it; leave this off and each share is derived from the allocation percentages
+          instead.
+        </p>
+
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+          <input
+            type="checkbox" checked={useReaEnergy}
+            onChange={(e) => setUseReaEnergy(e.target.checked)}
+          />
+          <span>Bill on the REA&apos;s figures</span>
+        </label>
+
+        {useReaEnergy && (
+          <>
+            <div className="form-grid">
+              <Field label="The figures are in" htmlFor="hb-eunit">
+                <select id="hb-eunit" value={energyUnit} onChange={(e) => setEnergyUnit(e.target.value)}>
+                  <option value="LU">Lakh Units (as the REA prints them)</option>
+                  <option value="kWh">kWh</option>
+                </select>
+              </Field>
+            </div>
+            <Field label="Table D2 — one beneficiary per line" required htmlFor="hb-epaste">
+              <textarea
+                id="hb-epaste" rows={8} value={energyPaste}
+                onChange={(e) => setEnergyPaste(e.target.value)}
+                style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
+                placeholder={'CHANDIGARH\t125.396150\nTPDDL\t212.428759\nGoHP\t1608.549250'}
+              />
+            </Field>
+
+            {energyPaste.trim() && (
+              <div style={{
+                padding: '10px 12px', marginBottom: 12, borderRadius: 4,
+                background: 'var(--bg-subtle, #f7fafc)', fontVariantNumeric: 'tabular-nums',
+              }}>
+                <div>
+                  Read {parsedEnergy.rows.length} beneficiaries, totalling{' '}
+                  <strong>{fmtNumber(parsedEnergy.total, 1)} kWh</strong>
+                  {energyUnit === 'LU' && (
+                    <span style={{ color: 'var(--text-light)' }}> (converted from Lakh Units)</span>
+                  )}
+                </div>
+                {(() => {
+                  // The one check that matters: the column has to add up to the
+                  // month's saleable energy, or the station is billing energy it
+                  // did not allocate.
+                  const e3 = preview?.bill?.e3_saleable_scheduled_kwh;
+                  if (e3 == null) {
+                    return (
+                      <div style={{ color: 'var(--text-light)', fontSize: 12 }}>
+                        Compute the bill to check this against the month&apos;s saleable energy (E3).
+                      </div>
+                    );
+                  }
+                  const diff = Math.round((parsedEnergy.total - e3) * 10) / 10;
+                  const ties = Math.abs(diff) <= 1;
+                  return (
+                    <div style={{ color: ties ? 'var(--green, #276749)' : 'var(--red)', fontSize: 12 }}>
+                      Station saleable energy (E3) is {fmtNumber(e3, 1)} kWh —
+                      {ties ? ' they agree' : ` ${diff > 0 ? 'over by' : 'short by'} ${fmtNumber(Math.abs(diff), 1)} kWh`}
+                    </div>
+                  );
+                })()}
+                {parsedEnergy.errors.map((e2) => (
+                  <div key={e2} style={{ color: 'var(--red)', fontSize: 12 }}>{e2}</div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </Card>
+
       {Number(form.urs_nr_kwh) > 0 && alloc && (
         <RegulationPanel
           ursNr={Number(form.urs_nr_kwh)}
@@ -936,6 +1034,11 @@ export default function HydroBilling() {
               <span style={{ fontSize: 12, color: 'var(--text-light)' }}>
                 energy: {preview.sources.energy} · availability: {preview.sources.pafm} ·
                 {' '}β: {preview.sources.beta} · cumulative: {preview.sources.cumulative}
+                {preview.sources.beneficiary_energy && (
+                  <span style={{ display: 'block' }}>
+                    beneficiary energy: {preview.sources.beneficiary_energy}
+                  </span>
+                )}
               </span>
             }
           >

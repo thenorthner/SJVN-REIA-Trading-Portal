@@ -394,6 +394,263 @@ describe('regulation of power (URS_NR)', () => {
   });
 });
 
+describe("scheduled energy from the REA's table D2", () => {
+  // NRPC's Provisional REA for June 2026, table D2 ("Energy Scheduled To the
+  // Beneficiaries from CS Hydro Stations"), in kWh. The states the bill splits
+  // into discoms are split here in the proportions the printed bill uses; every
+  // other figure is the REA's own. These add to E3 exactly.
+  const D2_JUNE = {
+    CHANDIGARH: 12539615.0,
+    TPDDL: 21242875.9,
+    'BSES RAJDHANI POWER': 42786385.7,
+    'BSES YAMUNA POWER': 17587118.4,
+    GoHP: 160854925.0,
+    HPSEB: 18059872.5,
+    HARYANA: 42049640.0,
+    'J & K': 54274947.5,
+    PUNJAB: 83039017.5,
+    MPPMCL: 1262165.0,
+    'AJMER VVNL': 20543860.7,
+    'JAIPUR VVNL': 28984361.5,
+    'JODHPUR VVNL': 26307365.3,
+    UTTARAKHAND: 6187195.0,
+    'UTTAR PRADESH': 107700370.0,
+  };
+
+  const build = (opts) => {
+    const bill = computeStationBill({ contract: NJHPS, ...JUNE });
+    return { bill, lines: allocateBeneficiaries(bill, getAllocations(contractId, '2026-06', 12), opts) };
+  };
+
+  it("the REA's own figures add up to the station's saleable energy", () => {
+    const total = Object.values(D2_JUNE).reduce((a, b) => a + b, 0);
+    expect(total).toBeCloseTo(643419715.0, 1);
+  });
+
+  it('bills each beneficiary on the REA figure rather than the derived one', () => {
+    const { lines } = build({ scheduledEnergy: D2_JUNE });
+    // The printed bill's own column, to the kWh — where deriving from the
+    // six-decimal percentage lands 3,528 kWh out on Chandigarh.
+    const chandigarh = lines.find((l) => l.beneficiary_name === 'CHANDIGARH');
+    expect(chandigarh.actual_scheduled_energy_kwh).toBe(12539615.0);
+    expect(chandigarh.saleable_energy_kwh).toBe(12539615.0);
+
+    const up = lines.find((l) => l.beneficiary_name === 'UTTAR PRADESH');
+    expect(up.saleable_energy_kwh).toBe(107700370.0);
+  });
+
+  it('reproduces the printed energy charges once the REA figures are used', () => {
+    const { lines } = build({ scheduledEnergy: D2_JUNE });
+    // Printed bill, column H: Chandigarh 15,937,851 and UP 136,887,170.
+    const chandigarh = lines.find((l) => l.beneficiary_name === 'CHANDIGARH');
+    expect(chandigarh.energy_charge_total).toBeCloseTo(15937851, -1);
+    const up = lines.find((l) => l.beneficiary_name === 'UTTAR PRADESH');
+    expect(up.energy_charge_total).toBeCloseTo(136887170, -1);
+  });
+
+  it('still ties to the station bill', () => {
+    const { bill, lines } = build({ scheduledEnergy: D2_JUNE });
+    const sum = (k) => lines.reduce((a, r) => a + r[k], 0);
+    expect(sum('saleable_energy_kwh')).toBeCloseTo(bill.e3_saleable_scheduled_kwh, 1);
+    expect(sum('energy_charge_total')).toBeCloseTo(bill.ee1_energy_charge + bill.ee2_excess_energy_charge, 2);
+    expect(sum('total_charges')).toBeCloseTo(bill.total_charges, 2);
+  });
+
+  it('derives from the percentages when the REA figures are not given', () => {
+    const { lines } = build({});
+    const chandigarh = lines.find((l) => l.beneficiary_name === 'CHANDIGARH');
+    // The derived figure, which is close to but not the REA's.
+    expect(chandigarh.saleable_energy_kwh).toBeCloseTo(12536087, 0);
+    expect(chandigarh.saleable_energy_kwh).not.toBe(12539615.0);
+  });
+
+  it('refuses a column that does not add up to the saleable energy', () => {
+    const short = { ...D2_JUNE, CHANDIGARH: 1000 };
+    expect(() => build({ scheduledEnergy: short })).toThrow(/the two must agree/);
+  });
+
+  it('refuses a half-keyed column rather than deriving the rest', () => {
+    const partial = { CHANDIGARH: 12539615.0, 'UTTAR PRADESH': 107700370.0 };
+    expect(() => build({ scheduledEnergy: partial })).toThrow(/missing for/);
+  });
+
+  it('refuses a name that is not a beneficiary of this station', () => {
+    const typo = { ...D2_JUNE, 'TPDDL LTD': 5 };
+    expect(() => build({ scheduledEnergy: typo })).toThrow(/not a beneficiary/);
+  });
+
+  it('refuses negative scheduled energy', () => {
+    const bad = { ...D2_JUNE, MPPMCL: -1, CHANDIGARH: 12539615.0 + 1262165.0 + 1 };
+    expect(() => build({ scheduledEnergy: bad })).toThrow(/negative scheduled energy/);
+  });
+
+  it('works alongside a regulated beneficiary', () => {
+    const bill = computeStationBill({ contract: NJHPS, ...JUNE, ursNrKwh: 21242875.9 });
+    const lines = allocateBeneficiaries(bill, getAllocations(contractId, '2026-06', 12), {
+      scheduledEnergy: D2_JUNE,
+      deductions: { TPDDL: 21242875.9 },
+    });
+    const tpddl = lines.find((l) => l.beneficiary_name === 'TPDDL');
+    expect(tpddl.actual_scheduled_energy_kwh).toBe(21242875.9);
+    expect(tpddl.saleable_energy_kwh).toBe(0);
+    expect(tpddl.energy_charge_total).toBe(0);
+    // And the rest still add to what the station actually bills.
+    expect(lines.reduce((a, l) => a + l.saleable_energy_kwh, 0)).toBeCloseTo(bill.e3_billable_kwh, 1);
+  });
+});
+
+describe('station bill — RHPS (Rampur) August 2026', () => {
+  // Rampur's own provisional bill, and a useful counterweight to NJHPS: it gives
+  // 13% free energy rather than 12%, prices energy beyond the annual design
+  // energy at its own rate (1.300 against 2.425 up to the cap) where NJHPS
+  // prices both alike, bills Delhi through one discom rather than three, and
+  // reallocates 2.810000 to HPSEB where NJHPS reallocates 2.470000. Constants
+  // come from block A of that bill.
+  const RHPS = {
+    project_type: 'Hydro',
+    annual_afc: 7846038000,
+    annual_design_energy_mwh: 1878080,
+    normative_aux: 1.0,
+    free_energy_home_state: 13,
+    napaf_percent: 83,
+    capacity_mw: 412,
+    ecr_excess_rate: 1.300,
+  };
+  const AUGUST = {
+    periodMonth: '2026-08',
+    exBusScheduledKwh: 317031530.0,
+    freePowerKwh: 41214125.0,
+    pafmPercent: 109.963,
+    betaValue: 0,
+    priorScheduledKwh: 718971400.0,
+    priorFreeKwh: 93465560.0,
+  };
+
+  let rhpsId;
+  beforeEach(() => {
+    rhpsId = db.prepare(`SELECT id FROM contracts WHERE contract_no = 'PPA/SJVN/RHPS/001'`).get()?.id;
+  });
+
+  const bill = () => computeStationBill({ contract: RHPS, ...AUGUST });
+
+  it('reproduces the A block', () => {
+    const b = bill();
+    expect(b.a5_ex_bus_design_energy_mwh).toBeCloseTo(1859299.2, 3);
+    expect(b.a6_ex_bus_saleable_design_energy_mwh).toBeCloseTo(1617590.304, 3);
+    expect(b.a12_ecr).toBe(2.425);
+    // The excess rate is the station's own, not a copy of A12.
+    expect(b.a13_ecr_excess).toBe(1.3);
+    expect(b.a8_days_in_month).toBe(31);
+  });
+
+  it('takes the excess rate from the contract when none is passed', () => {
+    expect(computeStationBill({ contract: RHPS, ...AUGUST }).a13_ecr_excess).toBe(1.3);
+    // A station that does not set one still falls back to A12, as NJHPS does.
+    const noRate = computeStationBill({ contract: { ...RHPS, ecr_excess_rate: null }, ...AUGUST });
+    expect(noRate.a13_ecr_excess).toBe(noRate.a12_ecr);
+  });
+
+  it('reproduces the capacity charge of Rs 441,425,816', () => {
+    expect(bill().c2_capacity_charge).toBeCloseTo(441425816, -1);
+  });
+
+  it('reproduces the E block including the cumulative rows', () => {
+    const b = bill();
+    expect(b.e3_saleable_scheduled_kwh).toBe(275817405.0);
+    expect(b.e4_cum_scheduled_kwh).toBe(1036002930.0);
+    expect(b.e5_cum_free_power_kwh).toBe(134679685.0);
+    expect(b.e6_cum_saleable_kwh).toBe(901323245.0);
+    expect(b.e7_excess_kwh).toBe(0);
+    expect(b.e8_upto_design_kwh).toBe(275817405.0);
+  });
+
+  it('reproduces the energy charge and the bill total', () => {
+    const b = bill();
+    expect(b.ee1_energy_charge).toBeCloseTo(668857207, -1);
+    expect(b.total_charges).toBeCloseTo(1110283023, -1);
+  });
+
+  it('carves 13% out of the home state, not 12%', () => {
+    const rows = getAllocations(rhpsId, '2026-08', 13);
+    expect(rows).toHaveLength(13);
+    const gohp = rows.find((r) => r.beneficiary_name === 'GoHP');
+    // Printed sheet: 39.100000 -> 26.100000 -> 30.000000
+    expect(gohp.pct_rea).toBe(39.1);
+    expect(gohp.pct_excl_free).toBeCloseTo(26.1, 6);
+    expect(gohp.pct_proportionate).toBeCloseTo(30.0, 6);
+    expect(rows.reduce((a, r) => a + r.pct_excl_free, 0)).toBeCloseTo(87, 4);
+  });
+
+  it('bills Delhi through one discom and Rajasthan through three', () => {
+    const rows = getAllocations(rhpsId, '2026-08', 13);
+    expect(rows.filter((r) => r.parent_state === 'DELHI').map((r) => r.beneficiary_name))
+      .toEqual(['BSES RAJDHANI POWER']);
+    expect(rows.filter((r) => r.parent_state === 'RAJASTHAN')).toHaveLength(3);
+  });
+
+  // The printed bill, page 4: each beneficiary's energy as the Provisional REA
+  // states it (column C), its capacity charge (B) and its total (I).
+  const PRINTED = {
+    CHANDIGARH: { energy: 3462862.5, capacity: 5540221, total: 13937663 },
+    GoHP: { energy: 82745229.3, capacity: 132427745, total: 333084926 },
+    HPSEB: { energy: 8908603.2, capacity: 14257546, total: 35860909 },
+    HARYANA: { energy: 17485945.0, capacity: 27981793, total: 70385210 },
+    'J & K': { energy: 23806705.0, capacity: 38104535, total: 95835793 },
+    PUNJAB: { energy: 23871030.0, capacity: 38210476, total: 96097724 },
+    MPPMCL: { energy: 505127.5, capacity: 800243, total: 2025177 },
+    'AJMER VVNL': { energy: 8919218.6, capacity: 14273967, total: 35903072 },
+    'JAIPUR VVNL': { energy: 12583703.8, capacity: 20138468, total: 50653950 },
+    'JODHPUR VVNL': { energy: 11421472.6, capacity: 18278472, total: 45975543 },
+    UTTARAKHAND: { energy: 33544720.0, capacity: 53681440, total: 135027386 },
+    'UTTAR PRADESH': { energy: 43620885.0, capacity: 69816313, total: 175596959 },
+    'BSES RAJDHANI POWER': { energy: 4941902.5, capacity: 7914597, total: 19898711 },
+  };
+
+  // PAFM is printed to three decimals, so the station's own capacity charge has
+  // a little sub-rupee slack in it before it is even apportioned; a rupee or two
+  // on a three-crore share is that, not a difference in method.
+  const nearlyExact = (actual, printed, name) => {
+    expect(Math.abs(actual - printed) / printed, name).toBeLessThan(1e-6);
+  };
+
+  it('reproduces every printed capacity charge', () => {
+    const b = bill();
+    const lines = allocateBeneficiaries(b, getAllocations(rhpsId, '2026-08', 13));
+    for (const [name, p] of Object.entries(PRINTED)) {
+      const line = lines.find((l) => l.beneficiary_name === name);
+      expect(line, name).toBeTruthy();
+      nearlyExact(line.capacity_charge, p.capacity, name);
+    }
+    expect(lines.reduce((a, r) => a + r.capacity_charge, 0)).toBeCloseTo(b.c5_total_capacity_charge, 2);
+  });
+
+  it("reproduces the whole printed breakup once the REA's own energy is used", () => {
+    const b = bill();
+    const scheduledEnergy = Object.fromEntries(
+      Object.entries(PRINTED).map(([name, p]) => [name, p.energy]),
+    );
+    const lines = allocateBeneficiaries(b, getAllocations(rhpsId, '2026-08', 13), { scheduledEnergy });
+
+    for (const [name, p] of Object.entries(PRINTED)) {
+      const line = lines.find((l) => l.beneficiary_name === name);
+      expect(line.saleable_energy_kwh, name).toBeCloseTo(p.energy, 1);
+      nearlyExact(line.total_charges, p.total, name);
+    }
+    const sum = (k) => lines.reduce((a, r) => a + r[k], 0);
+    expect(sum('saleable_energy_kwh')).toBeCloseTo(275817405.0, 1);
+    expect(sum('total_charges')).toBeCloseTo(b.total_charges, 2);
+  });
+
+  it('splits the NRLDC fees the printed sheet charges', () => {
+    const b = computeStationBill({ contract: RHPS, ...AUGUST, nrldcTotalFee: 172412.0 });
+    const lines = allocateBeneficiaries(b, getAllocations(rhpsId, '2026-08', 13));
+    // Printed: GoHP 67,413 on 39.100000%, Chandigarh 1,883 on 1.091914%.
+    expect(lines.find((l) => l.beneficiary_name === 'GoHP').nrldc_fee).toBeCloseTo(67413, 0);
+    expect(lines.find((l) => l.beneficiary_name === 'CHANDIGARH').nrldc_fee).toBeCloseTo(1883, 0);
+    expect(lines.reduce((a, l) => a + l.nrldc_fee, 0)).toBeCloseTo(172412, 2);
+  });
+});
+
 describe('apportion', () => {
   it('splits exactly, carrying the rounding residue to the largest share', () => {
     const parts = apportion(100, [1, 1, 1]);
@@ -426,13 +683,15 @@ describe('beneficiary breakup — NJHPS June 2026', () => {
     expect(sum('nrldc_fee')).toBeCloseTo(bill.nrldc_total_fee, 2);
   });
 
-  // The printed sheet's own energy columns do not tie exactly to E3 x D%: on the
-  // June bill Chandigarh's saleable energy sits 3,528 kWh above that product and
-  // Uttar Pradesh's 685 kWh below it, in opposite directions, so the residues are
-  // the source sheet's per-row rounding rather than a single consistent basis we
-  // could reproduce. What is reproduced exactly is the capacity charge and the
-  // station tie-out; the energy columns are matched to within a thousandth of a
-  // percent of the printed figures.
+  // These cases derive each beneficiary's energy from its allocation percentage,
+  // which is the fallback path. That lands close to the printed bill but not on
+  // it — Chandigarh 3,528 kWh under, Uttar Pradesh 685 kWh over — because the
+  // bill is not billed on the percentage at all: NRPC's Regional Energy Account
+  // states each beneficiary's scheduled energy directly in its table D2, and
+  // that is what SJVN bills. Feed those figures in and the printed rupee figures
+  // come back exactly; see the table D2 tests above. Here the capacity charge
+  // and the station tie-out are exact and the energy columns are matched to
+  // within a thousandth of a percent.
   const nearly = (actual, printed) => {
     expect(Math.abs(actual - printed) / printed).toBeLessThan(1e-5);
   };

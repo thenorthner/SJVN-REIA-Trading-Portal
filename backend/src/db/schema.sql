@@ -286,6 +286,9 @@ CREATE TABLE IF NOT EXISTS contracts (
   annual_afc REAL, -- CERC Annual Fixed Charges (₹)
   annual_design_energy_mwh REAL, -- Annual Design Energy DE (MWh)
   napaf_percent REAL, -- Normative Annual Plant Availability Factor % (e.g. 87)
+  -- Rs/kWh beyond the annual saleable design energy (A13). Not assumed equal
+  -- to the main ECR: NJHPS prices both the same, Rampur does not.
+  ecr_excess_rate REAL,
   transmission_charge_per_mwh REAL, -- ₹/MWh wheeling/transmission if applicable
   min_cuf_percent REAL, -- Guaranteed / contractual min CUF % (Solar/Wind/Hybrid); NULL = master default
   version INTEGER NOT NULL DEFAULT 1,

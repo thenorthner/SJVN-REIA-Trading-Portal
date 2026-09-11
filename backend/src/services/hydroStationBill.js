@@ -229,9 +229,13 @@ export function computeStationBill({
   const a6 = (de * (100 - aux) * (100 - fehs)) / 10000;
   const a12 = computeEcr3(afc, de, aux, fehs);
   if (a12 == null) throw new Error('Energy Charge Rate could not be derived — check AFC, design energy, AUX and FEHS');
-  // Energy beyond the annual design energy is billed at the same rate unless the
-  // tariff order sets a different one; NJHPS prints A12 and A13 equal.
-  const a13 = ecrExcessOverride == null || ecrExcessOverride === '' ? a12 : num(ecrExcessOverride);
+  // Energy beyond the annual design energy has its own rate. NJHPS prints A12
+  // and A13 equal, so falling back to A12 is right there — but Rampur bills the
+  // excess at 1.300 against 2.425 up to the cap, so the station's own rate is
+  // taken from the contract before that fallback applies.
+  const a13 = ecrExcessOverride != null && ecrExcessOverride !== ''
+    ? num(ecrExcessOverride)
+    : (num(contract.ecr_excess_rate) > 0 ? num(contract.ecr_excess_rate) : a12);
 
   // ─── C block: capacity charges, inclusive of the beta incentive ───
   // PAFM defaults to NAPAF so a month whose availability has not yet been
@@ -325,6 +329,61 @@ export function computeStationBill({
 }
 
 /**
+ * Each beneficiary's ex-bus saleable scheduled energy for the month.
+ *
+ * The authoritative figure is the Regional Energy Account's own table D2,
+ * "Energy Scheduled To the Beneficiaries from CS Hydro Stations", which states
+ * it per beneficiary rather than leaving it to be derived. Deriving it from the
+ * allocation percentage instead lands a few thousand kWh out — on NJHPS for
+ * June 2026 the REA gives Chandigarh 12,539,615 kWh where the percentage gives
+ * 12,536,087, because a share rounded to six decimals is not the number the
+ * energy was actually scheduled on.
+ *
+ * So the REA's figures are used whenever the desk supplies them, and the
+ * percentage split remains the fallback for a month whose D2 is not to hand.
+ *
+ * Supplying them is all-or-nothing and has to add up to E3: a partly-keyed
+ * column that silently derived the rest would tie to the station total while
+ * being wrong beneficiary by beneficiary, which is precisely the failure this
+ * exists to remove.
+ */
+function resolveActualEnergy(bill, allocations, weights, scheduledEnergy) {
+  if (!scheduledEnergy || Object.keys(scheduledEnergy).length === 0) {
+    return apportion(bill.e3_saleable_scheduled_kwh, weights, kwh);
+  }
+
+  const known = new Set(allocations.map((r) => r.beneficiary_name));
+  const strays = Object.keys(scheduledEnergy).filter((n) => !known.has(n));
+  if (strays.length) {
+    throw new Error(
+      `Scheduled energy was given for ${strays.join(', ')}, which ${strays.length === 1 ? 'is not a beneficiary' : 'are not beneficiaries'} of this station`,
+    );
+  }
+
+  const missing = allocations.filter((r) => scheduledEnergy[r.beneficiary_name] == null);
+  if (missing.length) {
+    throw new Error(
+      `Scheduled energy is missing for ${missing.map((r) => r.beneficiary_name).join(', ')} — give the REA figure for every beneficiary, or none and let it be derived`,
+    );
+  }
+
+  const values = allocations.map((r) => {
+    const v = kwh(scheduledEnergy[r.beneficiary_name]);
+    if (v < 0) throw new Error(`${r.beneficiary_name} has negative scheduled energy`);
+    return v;
+  });
+
+  const total = kwh(values.reduce((a, b) => a + b, 0));
+  const e3 = kwh(bill.e3_saleable_scheduled_kwh);
+  if (Math.abs(total - e3) > 1) {
+    throw new Error(
+      `Scheduled energy totals ${total} kWh across the beneficiaries but the station's saleable energy for the month is ${e3} kWh — the two must agree`,
+    );
+  }
+  return values;
+}
+
+/**
  * Split the station's charges across its beneficiaries.
  *
  * Charges are apportioned on the proportionate percentage (column D), which is
@@ -333,7 +392,7 @@ export function computeStationBill({
  * whole capacity allocation, free power included, so the home state carries its
  * full share of them.
  */
-export function allocateBeneficiaries(bill, allocations, { deductions = null } = {}) {
+export function allocateBeneficiaries(bill, allocations, { deductions = null, scheduledEnergy = null } = {}) {
   if (!allocations.length) throw new Error('No beneficiary allocation is in force for this station and month');
 
   const totalD = allocations.reduce((a, r) => a + num(r.pct_proportionate), 0);
@@ -358,7 +417,7 @@ export function allocateBeneficiaries(bill, allocations, { deductions = null } =
   // of the exclusion screen; what is withheld from a regulated beneficiary is
   // the DEDUCTED SCHEDULED ENERGY, and what is left is what it is billed for.
   const urs = kwh(bill.urs_nr_kwh ?? 0);
-  const actual = apportion(bill.e3_saleable_scheduled_kwh, w, kwh);
+  const actual = resolveActualEnergy(bill, allocations, w, scheduledEnergy);
   const deducted = allocations.map((r) => kwh(deductions?.[r.beneficiary_name] ?? 0));
 
   const deductedTotal = kwh(deducted.reduce((a, b) => a + b, 0));
@@ -383,8 +442,9 @@ export function allocateBeneficiaries(bill, allocations, { deductions = null } =
 
   // What is left after the deduction is what carries the energy charge, so the
   // billed column adds to the station's own billable energy rather than to E3.
-  const remaining = actual.map((a, i) => kwh(a - deducted[i]));
-  const saleable = urs > 0 ? remaining : apportion(bill.e3_saleable_scheduled_kwh, w, kwh);
+  // With nothing regulated this is the entitlement unchanged, so one expression
+  // covers both cases.
+  const saleable = actual.map((a, i) => kwh(a - deducted[i]));
   const upto = apportion(bill.e8_upto_design_kwh, saleable, kwh);
   const excess = apportion(bill.e7_excess_kwh, saleable, kwh);
 
@@ -458,13 +518,48 @@ const NJHPS_SOURCE = 'Provisional REA, NJHPS, FY 2026-2027 — weighted average 
   + 'including 22% equity and 12% free power, after allocating the SoR share to HPSEB';
 
 /**
+ * The RHPS beneficiary allocation, from the station's August 2026 bill.
+ *
+ * Thirteen billing parties, not NJHPS's fifteen, and the differences are the
+ * point: Rampur's Delhi share sits entirely with BSES Rajdhani rather than
+ * splitting three ways, its Sale of Rights reallocation to HPSEB is 2.810000
+ * against NJHPS's 2.470000, and its free energy to the home state is 13% — so
+ * GoHP's 39.100000 here becomes 26.100000 net of it, where the same arithmetic
+ * on NJHPS uses 12%. Rajasthan splits on the same discom shares as NJHPS
+ * (27.090 / 38.220 / 34.690).
+ */
+const RHPS_ALLOCATIONS = [
+  { sr_no: 1, beneficiary_name: 'CHANDIGARH', pct_incl_free: 1.091914, pct_rea: 1.091914 },
+  { sr_no: 2, beneficiary_name: 'GoHP', pct_incl_free: 41.910000, pct_rea: 39.100000, is_home_state: 1 },
+  { sr_no: 3, beneficiary_name: 'HPSEB', pct_incl_free: 0.000000, pct_rea: 2.810000 },
+  { sr_no: 4, beneficiary_name: 'HARYANA', pct_incl_free: 5.514893, pct_rea: 5.514893 },
+  { sr_no: 5, beneficiary_name: 'J & K', pct_incl_free: 7.509969, pct_rea: 7.509969 },
+  { sr_no: 6, beneficiary_name: 'PUNJAB', pct_incl_free: 7.530850, pct_rea: 7.530850 },
+  { sr_no: 7, beneficiary_name: 'MPPMCL', pct_incl_free: 0.157719, pct_rea: 0.157719 },
+  { sr_no: 8, beneficiary_name: 'AJMER VVNL', parent_state: 'RAJASTHAN', pct_incl_free: 2.813236, pct_rea: 2.813236 },
+  { sr_no: 9, beneficiary_name: 'JAIPUR VVNL', parent_state: 'RAJASTHAN', pct_incl_free: 3.969063, pct_rea: 3.969063 },
+  { sr_no: 10, beneficiary_name: 'JODHPUR VVNL', parent_state: 'RAJASTHAN', pct_incl_free: 3.602479, pct_rea: 3.602479 },
+  { sr_no: 11, beneficiary_name: 'UTTARAKHAND', pct_incl_free: 10.580000, pct_rea: 10.580000 },
+  { sr_no: 12, beneficiary_name: 'UTTAR PRADESH', pct_incl_free: 13.760000, pct_rea: 13.760000 },
+  { sr_no: 13, beneficiary_name: 'BSES RAJDHANI POWER', parent_state: 'DELHI', pct_incl_free: 1.559877, pct_rea: 1.559877 },
+];
+
+const RHPS_SOURCE = 'Provisional REA, RHPS, FY 2026-2027 — weighted average capacity allocation '
+  + 'including 26.1% equity and 13% free power, after allocating the SoR share to HPSEB';
+
+/**
  * Lay out the NJHPS allocation master once.
  *
  * Idempotent on (contract, beneficiary, effective_from), so a desk that has
  * corrected a percentage never has it reset on restart.
  */
 export function seedNjhpsAllocations() {
-  const contract = db.prepare(`SELECT id FROM contracts WHERE contract_no = 'PPA/SJVN/NJHPS/001'`).get();
+  return seedStationAllocations('PPA/SJVN/NJHPS/001', NJHPS_ALLOCATIONS, NJHPS_SOURCE)
+    + seedStationAllocations('PPA/SJVN/RHPS/001', RHPS_ALLOCATIONS, RHPS_SOURCE);
+}
+
+function seedStationAllocations(contractNo, rows, sourceNote) {
+  const contract = db.prepare('SELECT id FROM contracts WHERE contract_no = ?').get(contractNo);
   if (!contract) return 0;
 
   const effectiveFrom = '2026-04-01';
@@ -481,11 +576,11 @@ export function seedNjhpsAllocations() {
 
   let added = 0;
   const tx = db.transaction(() => {
-    for (const a of NJHPS_ALLOCATIONS) {
+    for (const a of rows) {
       if (exists.get(contract.id, a.beneficiary_name, effectiveFrom)) continue;
       insert.run(
         newId('HBA'), contract.id, a.beneficiary_name, a.parent_state || null, a.sr_no,
-        a.pct_incl_free, a.pct_rea, a.is_home_state ? 1 : 0, effectiveFrom, NJHPS_SOURCE,
+        a.pct_incl_free, a.pct_rea, a.is_home_state ? 1 : 0, effectiveFrom, sourceNote,
       );
       added += 1;
     }
