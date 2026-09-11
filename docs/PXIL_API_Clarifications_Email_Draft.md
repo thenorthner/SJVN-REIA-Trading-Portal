@@ -1,51 +1,88 @@
 # Reply draft — PXIL API integration clarifications
 
 **To:** gaurav.tiwari@pxil.co.in
-**Cc:** it@pxil.co.in
-**Subject:** Re: PXIL API Documentation — clarifications before Phase 1 integration (Billing, Format-D, Obligation Report, Reverse Auction, Trade Margin)
+**Cc:** it@pxil.co.in; avadheshkumar.bari@pxil.co.in
+**Subject:** Re: PXIL API Documentation — clarifications before Phase 1 integration
 
 ---
 
 Dear Gaurav,
 
-Thank you for the API documentation and access details. We have completed a full review of the five Phase 1 modules and have begun implementation against the documented request/response shapes.
+Thank you for the API documentation and access details. We have completed a detailed review of all six Phase 1 documents (TAM-GTAM, TAM-GTAM Slot-Wise, Format-D, Member DOR, Reverse Auction L1 Summary and Trade Margin) and have built our integration layer against the documented request and response shapes.
 
-Before we point the integration at your environment, we need clarification on the following points. Items 1–4 are blocking; items 5–9 are needed to finalise parsing and avoid silent data errors.
+Before we point it at your environment, we need clarification on the points below. We have numbered them so you can reply inline.
 
-## Blocking
+Sections A and B are blocking. Section A prevents us from calling the endpoint at all; Section B would let us call it but post incorrect figures. Sections C and D are needed to finalise the mapping.
 
-**1. TAM-GTAM (daily) endpoint URL appears to be incorrect**
+---
 
-Both `TAMGTAM_API_Document.pdf` and `TAMGTAM_Slot_Wise_API_Document.pdf` list the same API URL:
+## A. Blocking — endpoint cannot be called as documented
 
-```
-https://dashboard.pxil.in/PXILPublish/api/tam-gtam-slot-wise/
-```
+**A1. The daily TAM-GTAM document prints the slot-wise URL**
 
-We assume this is a copy-paste error in the daily document. Could you confirm the correct path for the daily/aggregate TAM-GTAM API — is it `/PXILPublish/api/tam-gtam/`?
+`TAMGTAM_API_Document.pdf` and `TAMGTAM_Slot_Wise_API_Document.pdf` both give the same API URL:
 
-**2. Two different authentication mechanisms across the five APIs**
+> `https://dashboard.pxil.in/PXILPublish/api/tam-gtam-slot-wise/`
 
-- TAM-GTAM, TAM-GTAM Slot-Wise, Format-D, Trade Margin — documented as `Authorization: Bearer <token>` (header)
-- Member DOR, Reverse Auction L1 Summary — documented as `APITokenNo` passed as a **query parameter**
+We assume this is a copy-paste error in the daily document. Please confirm the correct path for the daily/aggregate TAM-GTAM API — is it `/PXILPublish/api/tam-gtam/`?
 
-Could you confirm this is intentional? If the gateway accepts the Bearer header on all five, we would prefer to standardise on the header. Passing the token in a query string means it is recorded in web-server access logs, proxy logs and browser/referrer history, which is a credential-handling risk on both sides. If the query parameter is mandatory for those two endpoints, please confirm and we will handle them separately with logging suppressed.
+**A2. Two different authentication mechanisms are documented**
 
-**3. Environment for the issued token**
+| API | Documented auth |
+|---|---|
+| TAM-GTAM, TAM-GTAM Slot-Wise, Format-D, Trade Margin | `Authorization: Bearer <token>` header |
+| Member DOR, Reverse Auction L1 Summary | `APITokenNo` as a **query parameter** |
 
-Your email lists the API URL as `https://dashboard.pxil.in/`, but the example request in `Member DOR API Doc.pdf` is against:
+Please confirm whether this is intentional.
 
-```
-https://stagingmypratyaydashboard.pxil.in/PXILPublish/api/member-dor/
-```
+If the gateway accepts the Bearer header on all six, we would prefer to standardise on it. A token in a query string is written into web-server access logs, proxy logs and any intermediate monitoring on both sides, which is a credential-exposure risk we would rather avoid. If the query parameter is mandatory for those two endpoints, please confirm and we will isolate them with request logging suppressed.
+
+**A3. Which environment is the issued token valid for?**
+
+Your email gives the API URL as `https://dashboard.pxil.in/`, but the example request in `Member DOR API Doc.pdf` is against a different host:
+
+> `https://stagingmypratyaydashboard.pxil.in/PXILPublish/api/member-dor/`
 
 Please confirm:
-- Is the token you shared valid for production (`dashboard.pxil.in`), staging, or both?
-- We would prefer to complete first-pass integration and validation against **staging**. Could you confirm the staging base URL for all five Phase 1 APIs and issue a staging token if it differs?
 
-**4. Member DOR sample response — Total does not equal the sum of Category**
+- Is the token you shared valid for production (`dashboard.pxil.in`), for staging, or for both?
+- We would prefer to complete first-pass validation against **staging**. Could you confirm the staging base URL for all six Phase 1 APIs, and issue a staging token if it differs from the one already shared?
 
-In the sample response, the `Category` values sum as follows:
+**A4. Does our server IP need to be whitelisted?**
+
+None of the documents mention IP whitelisting, but it is common for exchange APIs. Please confirm whether access is restricted by source IP.
+
+If it is, kindly whitelist our server:
+
+```
+49.50.97.173
+```
+
+Please also confirm whether staging and production require separate whitelisting requests, and the typical turnaround.
+
+We are raising this now because if whitelisting is required and not in place, our first call will fail as a connection timeout rather than a clear authorisation error, which is slow to diagnose from our side.
+
+**A5. Trailing slash on the endpoint paths**
+
+The documented URLs are inconsistent on this point:
+
+| API | Documented URL ends with |
+|---|---|
+| TAM-GTAM, TAM-GTAM Slot-Wise, Format-D, Member DOR | a trailing slash — e.g. `/api/format-d/` |
+| Trade Margin | no trailing slash — `/api/trade-margin` |
+| Reverse Auction L1 Summary | no trailing slash — `/api/reverse-auction/l1-summary` |
+
+Please confirm the exact path for each, and whether the gateway redirects when the trailing slash is wrong.
+
+This matters more than it may appear: if a missing or extra slash produces a 301 redirect, some HTTP clients drop the `Authorization` header when following it, which would surface as an intermittent 401 that is hard to attribute.
+
+---
+
+## B. Blocking for correctness — figures would be wrong
+
+**B1. Member DOR — `Total` does not equal the sum of its own `Category`**
+
+In the sample response:
 
 | Field | Value |
 |---|---|
@@ -55,68 +92,210 @@ In the sample response, the `Category` values sum as follows:
 | CGST | 0.0 |
 | SGST | 0.0 |
 | CP | 13,20,997.15 |
-| **Sum** | **13,26,614.363** |
-| **`Total` as stated** | **14,42,000.683** |
+| **Sum of the above** | **13,26,614.363** |
+| **`Total` as printed** | **14,42,000.683** |
 | **Difference** | **1,15,386.320** |
 
-The document annotates `Charges` as `APPLICATION + OPERATING + TRANSMISSION`. Is `Charges: 0` a placeholder in the sample that should have carried the ₹1,15,386.32 difference, or does `Total` include a component not listed under `Category`?
+The document annotates `Charges` as `APPLICATION + OPERATING + TRANSMISSION` and leaves it at 0.
 
-This directly affects how we reconcile obligations against our books, so we need the exact composition of `Total` confirmed.
+Is `Charges: 0` a placeholder that should have carried the ₹1,15,386.32 difference, or does `Total` include a component that is not listed under `Category`?
 
-## Needed to finalise parsing
+Please also confirm the exact definition of `Total` — specifically whether it is inclusive of GST and of `CP` (Cost of Power). We cannot post an obligation to our books until the composition of this figure is confirmed.
 
-**5. Reverse Auction L1 Summary has no date parameters**
+**B2. Reverse Auction — `L1` is lower than every bid in the same response**
 
-The parameter table lists only `APITokenNo`. We understand this returns the current live auction state rather than a historical range.
+The sample shows:
 
-- Is there any date or auction-ID filter available for retrieving past auctions? Without one we cannot backfill or restate history.
-- If the endpoint must be polled, what polling interval is acceptable to you? We would work from `remainingTime` / `auctionCloseTime` and back off outside auction windows, but we do not want to breach any rate limit. Please confirm if a rate limit exists on any of the five APIs.
+> `"L1": 5.5` with `sellerData` containing `bidPrice: 89` and `bidPrice: 41`
 
-**6. Format-D sample response contains no populated values**
+In a reverse auction L1 should be the lowest seller bid, which would be 41 here, not 5.5.
 
-Every field in the sample is `""` or `0`. Could you share one populated sample response so we can confirm value formats — particularly `Product`, `ApplicationNo`, and how `TransactionPrice` and `TransactionRate` differ (units and basis for each).
+Please confirm:
 
-**7. Date formats differ between request and response, and between APIs**
+- What unit is `bidPrice` in, and what unit is `L1` in? (₹/kWh, ₹/MWh, or ₹ lakh/MW/month?)
+- If they are in the same unit, why is `L1` below the minimum bid shown?
+- Is `L1` the current lowest bid, or a reserve/ceiling price set by the buyer?
+
+**B3. Reverse Auction — `remainingTime` does not agree with the other timestamps**
+
+The same sample carries:
+
+> `"remainingTime": "07:39:34"`, `"lastUpdate": "06-01-2026 16:44:59.529"`, `"auctionCloseTime": "07-01-2026 20:00"`, and a response `"timestamp": "13-01-2026 12:54:07"`
+
+The gap between `lastUpdate` and `auctionCloseTime` is roughly 27 hours, not 7h 39m, and the response `timestamp` is a week after both.
+
+Which clock is `remainingTime` measured against — the response `timestamp`, `lastUpdate`, or the server's current time at the moment of the call? We need this to know whether an auction is still open at the time we read the response.
+
+**B4. Trade Margin — `TotalTrades` does not match the applications returned**
+
+The sample declares:
+
+> `"TotalTrades": 10` and `"NumberOfPortfolios": 1`
+
+but contains only **one** application under the single portfolio.
+
+Is the sample truncated for readability, or does `TotalTrades` count something other than applications (for example individual matched trades that are aggregated into one application)? We reconcile portfolio and entity totals against the rows underneath them, so we need to know what this figure is counting.
+
+**B5. Trade Margin — units are not stated for `Price` and `TradedQty`**
+
+The TAM-GTAM documents name their fields explicitly (`PriceRsMWh`, `TradedQtyMWh`). Trade Margin uses bare `Price`, `TradedQty` and `QtyforSchedule`.
+
+From the sample, `Price 4500.00 × TradedQty 100.00 = TradeValue 450000.00`, which is consistent with ₹/MWh and MWh. Please confirm this is correct, and confirm the unit of `QtyforSchedule`.
+
+**B6. The daily TAM-GTAM response omits two margin fields the other endpoints carry**
+
+The daily TAM-GTAM sample ends its application object with:
+
+> `TotalPayinPayout`, `ApplicableMargin`, `BalanceMargin`, `MarginRelease`
+
+The slot-wise sample additionally carries `InitialMargin(Post-Trade Margin)` and `DeliveryMargin`, and the Trade Margin API carries both as well.
+
+Does the daily TAM-GTAM endpoint actually return `InitialMargin` and `DeliveryMargin`, or are those genuinely absent from that response? If absent, we cannot reconcile daily billing margins against the Trade Margin report without also calling the slot-wise endpoint.
+
+**B7. Confirmation of the margin relationship**
+
+In the Trade Margin sample, `InitialMargin 50,000 + DeliveryMargin 200,000 = ApplicableMargin 250,000 = TotalMargin 250,000`.
+
+Please confirm whether `ApplicableMargin = InitialMargin + DeliveryMargin` and `TotalMargin = ApplicableMargin` hold as general rules, or whether that is a coincidence of this sample. Also please define `BalanceMargin` and `MarginRelease`, which appear in the billing responses but are not explained in any document.
+
+---
+
+## C. Field-level confirmations
+
+**C1. Exact JSON key casing**
+
+JSON keys are case-sensitive, and a key we read with the wrong casing returns zero silently rather than raising an error. The documents are internally inconsistent, so we need the exact casing as emitted by the API:
+
+| Observation | Where |
+|---|---|
+| `TradedQtyMWh` (lower-case *h*) alongside `SchedulingRequestedInvoiceQtyMWH`, `TotalScheduledAcceptedInvoiceQtyMWH`, `RealTimeCurtailmentMWH`, `FinalscheduledQtyMWH` (upper-case *H*) | Same object, slot-wise |
+| `FinalscheduledQtyMWH` (lower-case *s*) vs `TotalScheduledAcceptedInvoiceQtyMWH` (upper-case *S*) | Slot-wise |
+| `InitialMargin(PostTradeMargin)` vs `InitialMargin(Post-Trade Margin)` | Daily/Trade Margin vs slot-wise |
+| `PortfolioId` vs `PortfolioID` | TAM-GTAM vs Member DOR |
+| `delivery_date_from`, `delivery_date_to` in snake_case inside an otherwise PascalCase object | Member DOR |
+| `fromTime`, `toTime`, `Mw`, `Mwh` in the slot objects, PascalCase in the parent | Slot-wise |
+| `QtyforSchedule` (lower-case *f*) | Trade Margin |
+| `auctionID` vs `sellerId` | Reverse Auction |
+
+A machine-readable sample response for each endpoint (a `.json` file rather than a PDF) would settle all of these at once and would be the single most useful thing you could send us.
+
+**C2. Date format and time zone**
 
 Requests are consistently `YYYY-MM-DD`. Responses are not:
 
-- TAM-GTAM: `"Date": "06-11-2025"`, `"DeliveryDate": "01-02-2026"` — appears to be DD-MM-YYYY
+- TAM-GTAM: `"Date": "06-11-2025"`, `"DeliveryDate": "01-02-2026"`
 - Format-D: documented as `DD-MM-YYYY`
-- Member DOR: `"delivery_date_from": "2026-01-11"` — YYYY-MM-DD
-- Reverse Auction: `"deliveryMonth": "07-01-2026"`, `"lastUpdate": "06-01-2026 16:44:59.529"`
+- Member DOR: `"delivery_date_from": "2026-01-11"` — `YYYY-MM-DD`
+- Reverse Auction: `"lastUpdate": "06-01-2026 16:44:59.529"`
 
-Please confirm that all response dates other than Member DOR are **DD-MM-YYYY**. A misread here silently swaps day and month for the first twelve days of any month, which would corrupt settlement periods without raising an error.
+Please confirm that every response date **other than Member DOR** is `DD-MM-YYYY`. Misreading this silently swaps day and month for the first twelve days of every month, which would corrupt settlement periods without producing any error.
 
-Also, `deliveryMonth` in the Reverse Auction response carries a full date (`07-01-2026`) rather than a month. Could you confirm what this field represents?
+Please also confirm the time zone for all timestamps (we assume IST), as it is not stated in any document.
 
-**8. Response envelope differs across the three document sets**
+**C3. Reverse Auction — `deliveryMonth` carries a full date**
 
-- TAM-GTAM / Format-D / Trade Margin: `ResponseStatus.Code` (`"CNSAPI-200"`, string) and `ResponseStatus.Message`, with payload under `ResponseBody`
-- Member DOR: `ResponseStatus.StatusCode` (`"200"`) and `ResponseStatus.StatusMessage`
-- Reverse Auction: flat `message` / `statuscode` (integer `200`) / `data` / `timestamp`, with no `ResponseStatus` or `ResponseBody` wrapper
+The field is named `deliveryMonth` but the sample value is `"07-01-2026"`, a complete date. Does this represent a delivery month, a specific delivery date, or the auction date?
 
-We will normalise these on our side. Please confirm the above is accurate and stable, and share the full list of possible `Code` values (e.g. any `CNSAPI-4xx` / `CNSAPI-5xx` equivalents) so we can distinguish "no data for this range" from a genuine failure. This matters because a 200 response with an empty body is a normal outcome for a non-trading day, and we must not treat it as an error.
+**C4. Format-D — a populated sample, and the two price fields**
 
-**9. Slot-wise details — block numbering and field naming**
+Every field in the Format-D sample is `""` or `0`, so we have no example of real values.
 
-- The sample shows the first slot as `{"fromTime": "00:15", "toTime": "00:30"}`. Should a full day contain 96 slots beginning at `00:00`–`00:15`, or is the first block `00:15`–`00:30`? Please confirm whether slots are labelled by start time or end time.
-- The margin field is spelled `"InitialMargin(PostTradeMargin)"` in the daily and Trade Margin documents but `"InitialMargin(Post-Trade Margin)"` in the slot-wise document. Could you confirm the exact key as emitted by the API?
-- The slot-wise document header lists JSON only as output, while the other four list JSON/EXCEL. Is `reportType=EXCEL` supported on the slot-wise endpoint?
+Could you share one populated response? In particular we need to know:
 
-## Next steps from our side
+- How `TransactionPrice` and `TransactionRate` differ — what unit and basis each uses
+- The unit of `ScheduledVolume` (MW or MWh)
+- Whether `EndTime` for a full day is rendered as `"24:00"` or `"00:00"`
 
-We have built the integration layer against the documented shapes and it is running in stub mode, so once the above are confirmed we can switch to your environment and begin validation immediately. Our suggested sequence:
+**C5. Slot-wise — block numbering**
 
-1. You confirm the above and, if applicable, issue staging credentials.
-2. We run a read-only pull for an agreed historical date range on staging and share the reconciliation output with you.
-3. On sign-off, we repeat against production and confirm Phase 1 complete.
-4. We then begin the DAM and RTM WebSocket modules, for which we will need a session token generated in staging as you mentioned.
+The sample's first slot is `{"fromTime": "00:15", "toTime": "00:30"}`.
 
-One note on DAM/RTM for when we get there: the staging endpoint is listed as `ws://apieastern.pxil.in/`, which is unencrypted. Please confirm whether a `wss://` endpoint is available, as we would not want session tokens or order data traversing an unencrypted connection even in staging.
+- Does a full delivery day contain 96 slots beginning `00:00`–`00:15`, or does the first slot begin at `00:15`?
+- Are slots labelled by their start time or their end time?
+- How is the final slot of the day rendered — `23:45`–`24:00` or `23:45`–`00:00`?
 
-A team call would be helpful to close items 1–4 quickly. We are available at your convenience this week.
+We have deliberately not renumbered slots onto block indices, because guessing wrong would shift every block by fifteen minutes.
+
+**C6. `BuySell` convention across endpoints**
+
+Member DOR states `B = Buyer`, `S = Seller`. Please confirm the same convention applies in TAM-GTAM, Slot-Wise and Trade Margin, and that the value is always a single character.
+
+---
+
+## D. Operational
+
+**D1. Response codes and the error envelope**
+
+The three document sets wrap their payload three different ways:
+
+| APIs | Envelope |
+|---|---|
+| TAM-GTAM, Slot-Wise, Format-D, Trade Margin | `ResponseStatus.Code` (`"CNSAPI-200"`) + `ResponseStatus.Message`, payload under `ResponseBody` |
+| Member DOR | `ResponseStatus.StatusCode` (`"200"`) + `ResponseStatus.StatusMessage` |
+| Reverse Auction | flat `message` / `statuscode` (integer) / `data` / `timestamp`, no wrapper |
+
+We have normalised these on our side. Please confirm the above is accurate and stable, and share the full list of possible `Code` values (for example any `CNSAPI-4xx` / `CNSAPI-5xx` equivalents), together with the body shape returned on a 400 and a 401.
+
+This matters because **a 200 response with an empty body is a normal outcome on a non-trading day**, and we must be able to distinguish it from a genuine failure rather than treating either one as the other.
+
+**D2. Date-range limits and pagination**
+
+- Is there a maximum span for `fromdate`–`todate` on any of the five date-ranged APIs?
+- Is any response paginated? Format-D returns `TotalCount`, but no `page`, `offset` or `limit` parameter is documented. If a large range exceeds a page size, how do we retrieve the remainder?
+
+**D3. Rate limits and polling**
+
+The Reverse Auction L1 Summary takes no date parameter, so it returns only the current live state and cannot be backfilled.
+
+- Is there any date or auction-ID filter for retrieving past auctions?
+- If the endpoint must be polled, what polling interval is acceptable to you? We would drive it from `remainingTime` and `auctionCloseTime` and back off outside auction windows, but we do not want to breach a limit.
+- Please confirm whether any rate limit applies to the other five APIs.
+
+**D4. `reportType=EXCEL`**
+
+- What does the response look like for `reportType=EXCEL` — a binary file body, or a URL to a generated file? What `Content-Type` is returned?
+- The slot-wise document lists JSON only as its output while the other five list JSON/EXCEL. Is `reportType=EXCEL` supported on the slot-wise endpoint?
+
+**D5. `portfolioId`**
+
+Three of the APIs accept an optional `portfolioId` (documented examples `KARC10020001` and `PXIL10020001`; the Member DOR sample shows `PortfolioID: "524"`, a plain number).
+
+Could you confirm the portfolio identifier(s) associated with our membership, and the format we should send?
+
+Please also confirm that the token scopes the response to our entity automatically — that is, that we will only ever receive our own data and do not need to pass an entity identifier.
+
+**D6. When does a trade date's data become available, and can it change afterwards?**
+
+Two questions that determine how we schedule our syncs and whether we can treat a figure as final:
+
+- **Availability.** For a given trade or delivery date, at what point is the data complete on each API? Is billing data available the same evening (T+0), the next morning (T+1), or only after a settlement run? If the timings differ between the six APIs, please indicate which.
+- **Revisions.** Can figures for a past date be revised after they are first published — for example following a curtailment adjustment, a correction, or a settlement re-run? If so, is there any way to detect that a previously fetched date has changed (a revision number, a last-modified field, or a published-at timestamp)?
+
+If revisions are possible and undetectable, we would need to re-pull a rolling window rather than fetch each date once, so please let us know either way.
+
+**D7. Token lifecycle**
+
+- Does the issued API token expire? If so, what is its validity period and what is the renewal process?
+- Is there a rotation procedure we should follow, and will we be notified before a token is invalidated?
+- Who should we contact if the API is unavailable during a settlement window, and is there an availability window during which the APIs are down for maintenance?
+
+---
+
+## Next steps
+
+Our integration layer is built and running against the documented shapes, so once the above are confirmed we can switch environments and begin validation immediately. We propose:
+
+1. You confirm the points above and, if applicable, issue staging credentials.
+2. We run a read-only pull for an agreed historical date range and share the reconciliation output with you — including the Member DOR `Total` check in B1 and the Trade Margin totals in B4, so any remaining gap is visible to both sides on real data rather than on samples.
+3. On your sign-off we repeat against production and confirm Phase 1 complete.
+4. We then begin the DAM and RTM modules, for which we will need the session token generated in staging as you mentioned.
+
+One note on DAM/RTM for when we reach it: the staging endpoint is given as `ws://apieastern.pxil.in/`, which is an unencrypted WebSocket. Please confirm whether a `wss://` endpoint is available. We would prefer not to carry session tokens or order data over an unencrypted connection even in a test environment.
+
+If it is easier to answer in stages, **A1 to A5 and B1 to B2 are the ones that hold us up** — the rest can follow. A short team call this week would let us close them quickly, and we are available at your convenience.
 
 Warm regards,
 
 Kshitij Sharma
-SJVN Energy Platform
+ERP Cell
+SJVN Limited, Corporate HQ, Shimla
