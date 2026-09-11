@@ -2850,3 +2850,21 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id, cre
 CREATE INDEX IF NOT EXISTS idx_notifications_role ON notifications (role, created_at);
 -- The duplicate-suppression check before sending: WHERE type = ? AND ...
 CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications (type, created_at);
+
+-- Update Portfolio ID (ISET): the portfolio each exchange assigned a trading
+-- client, e.g. IEX's N1HP0PTC0850. One per client per exchange, and a portfolio
+-- id belongs to one client only — two clients sharing one would route one
+-- client's obligations to the other. Compared without regard to case, as the
+-- exchanges issue them in capitals and the desk does not always type them so.
+CREATE TABLE IF NOT EXISTS client_exchange_portfolios (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL REFERENCES trading_clients(id),
+  exchange TEXT NOT NULL CHECK (exchange IN ('IEX','PXIL','HPX','BILATERAL')),
+  portfolio_id TEXT NOT NULL COLLATE NOCASE,
+  portfolio_name TEXT NOT NULL,
+  updated_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (client_id, exchange),
+  UNIQUE (exchange, portfolio_id)
+);

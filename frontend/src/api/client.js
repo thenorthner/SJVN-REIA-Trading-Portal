@@ -489,6 +489,10 @@ export const api = {
     create: (body) => p('/noc-updation', body),
     cancel: (id, body) => patch(`/noc-updation/${id}/cancel`, body),
   },
+  clientPortfolios: {
+    list: (params) => g('/client-portfolios', params),
+    save: (body) => put('/client-portfolios', body),
+  },
   tds: {
     vendors: () => g('/tds/vendors'),
     list: (params) => g('/tds', params),

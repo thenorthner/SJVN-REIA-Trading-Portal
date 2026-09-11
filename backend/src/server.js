@@ -78,6 +78,7 @@ import rateMasterRoutes from './routes/rateMaster.js';
 import dsmChargesRoutes from './routes/dsmCharges.js';
 import hydroBillingRoutes from './routes/hydroBilling.js';
 import nocUpdationRoutes from './routes/nocUpdation.js';
+import clientPortfoliosRoutes from './routes/clientPortfolios.js';
 import tdsLedgerRoutes from './routes/tdsLedger.js';
 import oaChargesRoutes from './routes/oaCharges.js';
 import importsRoutes from './routes/imports.js';
@@ -242,6 +243,7 @@ app.use('/api/masters/losses', requireAuth, lossesRoutes);
 app.use('/api/masters/rates', requireAuth, rateMasterRoutes);
 app.use('/api/masters/dsm', requireAuth, dsmChargesRoutes);
 app.use('/api/noc-updation', requireAuth, nocUpdationRoutes);
+app.use('/api/client-portfolios', requireAuth, clientPortfoliosRoutes);
 app.use('/api/masters', requireAuth, mastersRoutes);
 app.use('/api/reports', requireAuth, reportsRoutes);
 
