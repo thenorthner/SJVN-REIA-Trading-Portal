@@ -236,6 +236,16 @@ router.get('/:id/pdf', async (req, res) => {
   if (req.user.role.startsWith('BUYER') && contract.buyer_id !== req.user.linked_entity_id) {
     return res.status(403).json({ error: 'You can only download your own invoices' });
   }
+  // The rule the detail view already applies: a bill SJVN has not finished
+  // approving is not yet the counterparty's to read — and the PDF is the bill.
+  if (!invoicePresentedTo(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
+
+  // Who took a copy of which bill, and when — the access history the buyer-portal
+  // scope asks for. The counterparty's views are recorded on GET /:id.
+  logAudit({
+    req, action: 'DOWNLOAD_INVOICE_PDF', module: 'REIA', entityType: 'invoice', entityId: inv.id,
+    details: { invoice_no: inv.invoice_no },
+  });
 
   // Hydro/PSP PPA bills carry a beneficiary-allocation page — how the plant's
   // charges split across the DISCOMs allocated to it (per REA / NRPC order),
@@ -299,6 +309,23 @@ router.get('/:id', (req, res) => {
   // A bill SJVN has not finished approving is not yet the counterparty's to read.
   if (!invoicePresentedTo(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
 
+  // Scope G's access history: when the counterparty actually opened its bill.
+  // SJVN's own reads are not recorded — the desk opens a bill many times in the
+  // ordinary course, and those rows would bury the ones that matter. The desk
+  // gets the history back; the counterparty does not.
+  const isCounterparty = req.user.role.startsWith('SELLER') || req.user.role.startsWith('BUYER');
+  if (isCounterparty) {
+    logAudit({
+      req, action: 'VIEW_INVOICE', module: 'REIA', entityType: 'invoice', entityId: inv.id,
+      details: { invoice_no: inv.invoice_no },
+    });
+  }
+  const access_log = isCounterparty ? undefined : db.prepare(`
+    SELECT created_at, user_name, user_role, action FROM audit_logs
+    WHERE entity_type = 'invoice' AND entity_id = ? AND action IN ('VIEW_INVOICE', 'DOWNLOAD_INVOICE_PDF')
+    ORDER BY rowid DESC LIMIT 100
+  `).all(inv.id);
+
   const approvals = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? ORDER BY level').all(req.params.id);
   const payments = db.prepare('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date').all(req.params.id);
   const disputes = db.prepare('SELECT * FROM disputes WHERE invoice_id = ? ORDER BY created_at DESC').all(req.params.id);
@@ -320,7 +347,7 @@ router.get('/:id', (req, res) => {
 
   res.json({
     ...withContract(inv, asOf),
-    approvals, payments, disputes, generator_realization,
+    approvals, payments, disputes, generator_realization, access_log,
     ...(isProjection(req) ? { projected_as_of: asOf.toISOString().slice(0, 10) } : {}),
   });
 });

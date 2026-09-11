@@ -776,8 +776,22 @@ export default function Invoices() {
               </>
             )}
 
+            {selected.access_log?.length > 0 && (
+              <>
+                <div className="section-title" style={{ marginTop: 18 }}>Access History</div>
+                <div className="timeline">
+                  {selected.access_log.map((a, i) => (
+                    <div className="timeline-item" key={`${a.created_at}-${i}`}>
+                      {a.action === 'DOWNLOAD_INVOICE_PDF' ? 'Downloaded' : 'Opened'} by {a.user_name || '—'} ({a.user_role})
+                      <div className="t-meta">{String(a.created_at).replace('T', ' ').slice(0, 19)}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
             <div style={{ marginTop: 24, marginBottom: 24 }}>
-              <DocumentManager 
+              <DocumentManager
                 moduleName="REIA_BILLING"
                 contractId={selected.contract_id} 
                 title="Invoice Documents & Calculations" 
