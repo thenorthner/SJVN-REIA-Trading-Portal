@@ -82,16 +82,15 @@ hain. Bhejne se pehle dekh lena: sirf numbering hai ya 5 sawal chhoot gaye.)
 
 | # | Kya | Haalat |
 |---|-----|--------|
-| 25 🟡 | **`.alert` CSS kabhi bani hi nahi** | `alert alert-error` / `alert-success` HydroBilling, NOC Updation, Portfolio ID samet kai screens use karti hain, par kisi CSS file mein ye classes nahi hain (git history mein bhi kabhi nahi thi). Error aur success message bina rang ke plain text dikhte hain. ~15 lines CSS ka kaam. |
-| 26 🟡 | **Frontend aur backend ke `TRADING_WRITE` alag** | Frontend `roles.js` mein `IT_SUPER_ADMIN` hai, backend `auth.js` mein nahi — us role ko Save/Submit buttons dikhte hain aur click pe 403 aata hai. Ek list sach maan ke doosri usse milani hai. |
+| 25 ✅ | **`.alert` CSS kabhi bani hi nahi** | **Fix, 11 Sep.** `styles.css` mein `.alert` + error / danger / warning / success / info. Pehle HydroBilling, NOC Updation, Portfolio ID samet kai screens ke error/success message plain text dikhte the. |
+| 26 ✅ | **Frontend aur backend ke role groups alag** | **Fix, 11 Sep.** Frontend ko backend jaisa kiya (API hi decide karti hai): `IT_SUPER_ADMIN` trading screens se hata (API waise bhi 403 deti thi), `REIA_ADMIN` ko REIA screens. `roleGroupsParity.test.js` aage drift pakdega. |
 | 27 🟡 | **Portfolio Registry abhi mock** | `master/portfolio-registry` `MOCK_ASSETS` pe chalti hai. Ab `client_exchange_portfolios` table hai — registry ko usse joda ja sakta hai. |
 
 ---
 
 ## Seedha agla kadam
 
-1. **Humare haath mein, jaldi:** #25 alert CSS, #26 roles milana, #27 registry
-   jodna, #21 push + merge ka faisla.
+1. **Humare haath mein, jaldi:** #27 registry jodna, #21 push + merge ka faisla.
 2. **Emails bhejo / follow-up karo:** #3 PXIL, #4 WBES, #5 NOAR, #2 IEX REC.
 3. **Deploy pe:** #1 IEX enable + connectivity probe.
 4. **Committee/Delhi:** #6 DSM rates aur section D.
