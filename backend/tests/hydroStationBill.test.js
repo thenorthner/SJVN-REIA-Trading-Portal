@@ -479,6 +479,28 @@ describe("scheduled energy from the REA's table D2", () => {
     expect(() => build({ scheduledEnergy: typo })).toThrow(/not a beneficiary/);
   });
 
+  it('matches a name spelt the way the REA prints it', () => {
+    const { 'J & K': jk, CHANDIGARH: ch, ...rest } = D2_JUNE;
+    const { lines } = build({ scheduledEnergy: { ...rest, 'J&K': jk, Chandigarh: ch } });
+    expect(lines.find((l) => l.beneficiary_name === 'J & K').actual_scheduled_energy_kwh).toBe(jk);
+    expect(lines.find((l) => l.beneficiary_name === 'CHANDIGARH').actual_scheduled_energy_kwh).toBe(ch);
+  });
+
+  it('refuses one beneficiary given twice under two spellings', () => {
+    expect(() => build({ scheduledEnergy: { ...D2_JUNE, 'J&K': 1 } })).toThrow(/given twice, as "J & K" and "J&K"/);
+  });
+
+  it('will not guess between two beneficiaries whose names differ only in punctuation', () => {
+    const bill = computeStationBill({ contract: NJHPS, ...JUNE });
+    // Rename one party so the station has both "J & K" and "J&K"; "j & k" then
+    // reads as either, and has to be refused rather than given to one of them.
+    const allocs = getAllocations(contractId, '2026-06', 12)
+      .map((r) => (r.beneficiary_name === 'TPDDL' ? { ...r, beneficiary_name: 'J&K' } : r));
+    const { TPDDL: t, 'J & K': jk, ...rest } = D2_JUNE;
+    expect(() => allocateBeneficiaries(bill, allocs, { scheduledEnergy: { ...rest, 'J&K': t, 'j & k': jk } }))
+      .toThrow(/more than one beneficiary/);
+  });
+
   it('refuses negative scheduled energy', () => {
     const bad = { ...D2_JUNE, MPPMCL: -1, CHANDIGARH: 12539615.0 + 1262165.0 + 1 };
     expect(() => build({ scheduledEnergy: bad })).toThrow(/negative scheduled energy/);

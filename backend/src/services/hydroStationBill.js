@@ -352,15 +352,41 @@ function resolveActualEnergy(bill, allocations, weights, scheduledEnergy) {
     return apportion(bill.e3_saleable_scheduled_kwh, weights, kwh);
   }
 
-  const known = new Set(allocations.map((r) => r.beneficiary_name));
-  const strays = Object.keys(scheduledEnergy).filter((n) => !known.has(n));
+  // The REA prints "J&K" where the allocation sheet says "J & K", and
+  // "Chandigarh" where it says "CHANDIGARH". Making the desk retype a pasted
+  // column to match is how a figure lands on the wrong row, so a name that is
+  // not an exact match is matched on its letters and digits alone. Two
+  // beneficiaries that would read the same that way are never guessed between.
+  const nameKey = (s) => String(s).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const exact = new Set(allocations.map((r) => r.beneficiary_name));
+  const byKey = new Map();
+  for (const r of allocations) {
+    const k = nameKey(r.beneficiary_name);
+    byKey.set(k, byKey.has(k) ? null : r.beneficiary_name); // null: more than one reads this way
+  }
+
+  const energy = {};
+  const pastedAs = {};
+  const strays = [];
+  for (const [name, value] of Object.entries(scheduledEnergy)) {
+    const match = exact.has(name) ? name : byKey.get(nameKey(name));
+    if (match === null) {
+      throw new Error(`"${name}" could be more than one beneficiary of this station — enter it exactly as the allocation names it`);
+    }
+    if (match === undefined) { strays.push(name); continue; }
+    if (match in energy) {
+      throw new Error(`Scheduled energy for ${match} was given twice, as "${pastedAs[match]}" and "${name}"`);
+    }
+    energy[match] = value;
+    pastedAs[match] = name;
+  }
   if (strays.length) {
     throw new Error(
       `Scheduled energy was given for ${strays.join(', ')}, which ${strays.length === 1 ? 'is not a beneficiary' : 'are not beneficiaries'} of this station`,
     );
   }
 
-  const missing = allocations.filter((r) => scheduledEnergy[r.beneficiary_name] == null);
+  const missing = allocations.filter((r) => energy[r.beneficiary_name] == null);
   if (missing.length) {
     throw new Error(
       `Scheduled energy is missing for ${missing.map((r) => r.beneficiary_name).join(', ')} — give the REA figure for every beneficiary, or none and let it be derived`,
@@ -368,7 +394,7 @@ function resolveActualEnergy(bill, allocations, weights, scheduledEnergy) {
   }
 
   const values = allocations.map((r) => {
-    const v = kwh(scheduledEnergy[r.beneficiary_name]);
+    const v = kwh(energy[r.beneficiary_name]);
     if (v < 0) throw new Error(`${r.beneficiary_name} has negative scheduled energy`);
     return v;
   });
