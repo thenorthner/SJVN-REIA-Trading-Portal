@@ -44,7 +44,7 @@ scope ka wo hissa hai jahan paisa/grid ko asli mein chhoona padta hai.
 | 12 🟠 | **IEX obligation report upload → REC ledger** | CP-83-85 §5 step 6 | Koi upload endpoint nahi. REC order/obligation figures abhi haath se daale jaate hain. |
 | 13 🟠 | **REC for CSPP: JMR aur registry application tracking** | CP-83-85 §5 steps 1–3 | REC lot create + `issue` action hai, par JMR data aur NLDC registry application / documents / follow-up track karne ki jagah nahi dikhi. |
 | 14 🟠 | **Power Market Dashboard live data** | CP-86 §3 | `CEAReportsDashboard.jsx` aur `PowerMarketDashboard.jsx` **hardcoded arrays** pe chalte hain (installed capacity Nov-2024 tak ruki hai). Installed capacity, peak demand vs met, energy req vs available, generation pie — sab ke liye CEA data upload/feed chahiye. "Day-wise buy vs sell vs MCP" bhi static hai. |
-| 15 🟡 | **Client home dashboard** (`/trading/home`) | — | `HomeDashboard.jsx` mein `mockSummaryData` (Naitwar Mori ke sample rows) — "sample data" notice ke saath. Client ke apne obligations se jodna hai. |
+| 15 ✅ | **Client home dashboard** (`/trading/home`) | — | **Fix, 12 Sep.** Pehle `mockSummaryData` (Naitwar Mori ke sample rows) dikhta tha — kisi aur company ka data. Ab naye `/api/trading-client/summary` se client ke apne bids, contracts, bills aur ledger balance. Do market wale mock charts hata diye, wo client ka data nahi the. |
 | 16 ✅ | **Update Portfolio ID** | ISET screen | **Fix, 11 Sep.** Naya table `client_exchange_portfolios` + `/api/client-portfolios` (GET / PUT). Ek client ka ek exchange pe ek portfolio; ek portfolio sirf ek client ka (case-insensitive, 409). Screen ab live client list se, record ki list neeche, har change audit mein. Pehle 26 naam hardcoded the aur Save sirf `console.log` karta tha. |
 | 17 🟡 | **ERP Vendor Payable Ledger** | ISET screen | Screen mein koi API call nahi mili — static ho sakti hai, check karna hai. |
 
@@ -85,6 +85,21 @@ hain. Bhejne se pehle dekh lena: sirf numbering hai ya 5 sawal chhoot gaye.)
 | 25 ✅ | **`.alert` CSS kabhi bani hi nahi** | **Fix, 11 Sep.** `styles.css` mein `.alert` + error / danger / warning / success / info. Pehle HydroBilling, NOC Updation, Portfolio ID samet kai screens ke error/success message plain text dikhte the. |
 | 26 ✅ | **Frontend aur backend ke role groups alag** | **Fix, 11 Sep.** Frontend ko backend jaisa kiya (API hi decide karti hai): `IT_SUPER_ADMIN` trading screens se hata (API waise bhi 403 deti thi), `REIA_ADMIN` ko REIA screens. `roleGroupsParity.test.js` aage drift pakdega. |
 | 27 🟡 | **Portfolio Registry abhi mock** | `master/portfolio-registry` `MOCK_ASSETS` pe chalti hai. Ab `client_exchange_portfolios` table hai — registry ko usse joda ja sakta hai. |
+
+## G. Trading Client Portal — 12 Sep ki jaanch
+
+Client ke menu ke saare links **internal desk ki screens** par jaate hain. Screens
+khulti to hain, par unke backend endpoints client ko allow hi nahi karte the —
+yaani har call 403. Jo module allow karta tha, usme data kisi ka bhi mil jaata tha.
+
+| # | Kya | Haalat |
+|---|-----|--------|
+| 28 ✅ | **Client ka apna data** | **Fix.** Bids, exchange contracts, bilateral deals aur billing ab client ke hisaab se scoped hain — uska apna dikhta hai, aur doosre client ka record id se bhi nahi khulta (404). |
+| 29 ✅ | **Ledger / SOA / netting ke suraakh** | **Fix.** `/ledger/:client_id` URL se koi bhi client id leta tha (doosre ka ledger padha ja sakta tha), `/soa` sab clients ke statements deta tha, aur `/netting` client ko bhi ledger entry daalne deta tha. Ab teeno band. |
+| 30 ✅ | **Client ki pehchaan** | **Fix.** Pehle "assuming linked_entity_id is trading_client id" par tika tha. Ab ek hi helper dono convention (client id ya entity id) samajhta hai, aur bina link wale account ko saaf 400 milta hai — poora desk nahi. |
+| 31 ✅ | **Role list ka farak** | **Fix.** Frontend `TRADING_CLIENT_ADMIN/MAKER/CHECKER/VIEWER` ginta tha, jabki DB ka CHECK sirf `TRADING_CLIENT` maanta hai. Dono ab ek jaise. |
+| 32 🟠 | **Desk ke buttons client ko dikhte hain** | Client ab apna data dekh leta hai, par screens desk ki hain — "Create", "Submit to exchange" jaise buttons abhi bhi dikhte hain aur click par backend mana karega (403). Inhe client ke liye chhupana baaki hai. |
+| 33 🟠 | **Client ke liye alag screens** | Aage: client ko apne bids/deals ka read-only view, uska bill aur ledger — desk ki screens dobara istemaal karne ke bajaye. |
 
 ---
 

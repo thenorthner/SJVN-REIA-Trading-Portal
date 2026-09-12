@@ -89,6 +89,7 @@ judna** (SAP, DSC/e-invoice, SMS), **CP-58-61 ke dashboards aur reports**, aur
 | 23 ✅ | **`.alert` CSS** | **Fix, 11 Sep** (PT list #25 bhi) — HydroBilling samet saari screens ke error/warning/success message ab rang ke saath. |
 | 24 ✅ | **REIA roles frontend-backend alag** | **Fix, 11 Sep.** Frontend ko backend jaisa kiya: `REIA_ADMIN` ko ab REIA menu/screens dikhti hain (API pehle se allow karti thi); trading se `IT_SUPER_ADMIN` hataya (PT list #26). `roleGroupsParity.test.js` aage drift pakdega. |
 | 25 🟠 | **Branch merge** | PT list #21 — sab kaam `feat/trading-settlement-billing` pe hai, `main` mein nahi; deploy `main` se hota hai. |
+| 27 ✅ | **Dashboards ka "pending" alag-alag tha** *(12 Sep)* | **Fix.** Ek hi bill par SJVN ka "receivable" 19,50,000 aur buyer ka "pending" 21,50,000 dikhta tha — farak disputed amount ka tha. Desk `total − rebate + LPS − disputed − payments` se ginta hai, counterparty dashboards seedha `billed − paid` kar rahe the. Ab buyer aur seller dono dashboards wahi formula use karte hain (`outstandingForContracts`), aur buyer dashboard `disputed_amount` bhi dikhata hai. |
 | 26 ✅ | **Invoice PDF se unapproved bill leak** *(11 Sep ko mila)* | **Fix.** Detail route pe rule tha ki jo bill SJVN ne approve nahi kiya wo counterparty ka nahi — par `GET /api/invoices/:id/pdf` ye check nahi karta tha. Invoice id jaanne wala buyer DRAFT bill ka PDF le sakta tha. Ab wahan bhi 404; SJVN desk draft download kar sakta hai. |
 
 ## G. Committee se jawab chahiye (Delhi checklist section A)
