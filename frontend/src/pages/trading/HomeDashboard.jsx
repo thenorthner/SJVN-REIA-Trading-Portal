@@ -1,96 +1,82 @@
-import React from 'react';
-import { SampleDataNotice, PageHeader, Card, Badge } from '../../components/ui.jsx';
-import BidVsClearedAnalytics from '../../components/analytics/BidVsClearedAnalytics.jsx';
-import ACPTrendWidget from '../../components/analytics/ACPTrendWidget.jsx';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../../api/client.js';
+import { PageHeader, Card, Table, Badge, StatCard, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { fmtDate } from '../../datetime.js';
 
-const mockSummaryData = [
-  { date: '09-07-2026', portfolio: 'SJVN Limited-Naitwar Mori HPS', type: 'Sell', bidPlaced: 0.00, bidCleared: 64.80, exchangeObligation: 26661.09, grandTotal: 26363.01 },
-  { date: '07-07-2026', portfolio: 'SJVN Limited-Naitwar Mori HPS', type: 'Sell', bidPlaced: 0.00, bidCleared: 75.40, exchangeObligation: 59727.02, grandTotal: 59380.18 },
-  { date: '06-07-2026', portfolio: 'SJVN Limited-Naitwar Mori HPS', type: 'Sell', bidPlaced: 0.00, bidCleared: 108.60, exchangeObligation: 70187.18, grandTotal: 69687.62 },
-  { date: '02-07-2026', portfolio: 'SJVN Limited-Naitwar Mori HPS', type: 'Sell', bidPlaced: 0.00, bidCleared: 180.25, exchangeObligation: 172615.38, grandTotal: 171786.23 },
-  { date: '01-07-2026', portfolio: 'SJVN Limited-Naitwar Mori HPS', type: 'Sell', bidPlaced: 0.00, bidCleared: 23.75, exchangeObligation: 18009.01, grandTotal: 17899.76 },
-  { date: '07-06-2026', portfolio: 'SJVN Limited-Naitwar Mori HPS', type: 'Sell', bidPlaced: 0.00, bidCleared: 2.35, exchangeObligation: 0.00, grandTotal: 0.00 },
-  { date: '01-06-2026', portfolio: 'SJVN Limited-Naitwar Mori HPS', type: 'Sell', bidPlaced: 0.00, bidCleared: 24.20, exchangeObligation: 23431.08, grandTotal: 23319.76 },
-];
-
+// The trading client's landing screen. It used to show a fixed table of another
+// company's trades — the desk's sample rows — so nothing on it belonged to the
+// client looking at it. These figures come from the client's own bids,
+// contracts, bills and ledger, through /api/trading-client/summary.
 export default function HomeDashboard() {
-  const handleExportCSV = () => {
-    // In a real application, we would generate a CSV blob and download it.
-    alert('Not available yet — the bid summary export is not built, and this dashboard is running on placeholder figures.');
-  };
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    api.tradingClient.summary()
+      .then(setData)
+      .catch((err) => setError(err?.response?.data?.error || 'Could not load your account summary.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="page-loading">Loading your account…</div>;
+
+  if (error) {
+    return (
+      <div>
+        <PageHeader title="Home" subtitle="Your trading account with SJVN" />
+        <div className="alert alert-error" role="alert">{error}</div>
+      </div>
+    );
+  }
+
+  const { client, bids, contracts, invoices, ledger_balance: balance, ledger_as_of: asOf, recent_invoices: recent } = data;
+
+  const columns = [
+    { key: 'invoice_no', header: 'Invoice' },
+    { key: 'invoice_kind', header: 'Type', render: (r) => r.invoice_kind || '—' },
+    { key: 'created_at', header: 'Raised', render: (r) => fmtDate(r.created_at) },
+    { key: 'total_amount', header: 'Amount', render: (r) => fmtCurrency(r.total_amount) },
+    { key: 'net_payable', header: 'Net payable', render: (r) => fmtCurrency(r.net_payable ?? r.total_amount) },
+    { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
+  ];
 
   return (
-    <div style={{ padding: '0 20px 20px', maxWidth: 1600, margin: '0 auto' }}>
-      <SampleDataNotice detail="Portfolio figures on this dashboard are placeholders, not the platform's own trade and settlement data." />
-
-      <PageHeader 
-        title="Home (Portal Landing Dashboard)" 
-        description="Master dashboard view for SJVN Limited-Naitwar Mori HPS."
+    <div>
+      <PageHeader
+        title={client?.name || 'My trading account'}
+        subtitle={`${client?.client_type || 'Trading client'} · account ${client?.status || '—'}`}
       />
 
-      {/* Top Analytics Grid: 2-column flex/grid container */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
-        <BidVsClearedAnalytics />
-        <ACPTrendWidget />
+      <div className="kpi-grid">
+        <StatCard label="Bids placed" value={fmtNumber(bids.total)} hint={`${fmtNumber(bids.quantum_mw)} MW offered`} tone="blue" />
+        <StatCard label="Cleared" value={`${fmtNumber(bids.cleared_mw)} MW`} hint={`${fmtNumber(bids.cleared)} of ${fmtNumber(bids.total)} bids`} tone="green" />
+        <StatCard label="Exchange contracts" value={fmtNumber(contracts.exchange_contracts)} />
+        <StatCard label="Bilateral deals" value={fmtNumber(contracts.bilateral_deals)} />
+        <StatCard label="Billed to you" value={fmtCurrency(invoices.billed)} hint={`${fmtNumber(invoices.total)} invoice(s)`} />
+        <StatCard
+          label="Outstanding"
+          value={fmtCurrency(invoices.outstanding)}
+          tone={invoices.outstanding > 0 ? 'amber' : 'green'}
+          hint={`${fmtNumber(invoices.paid_count)} settled`}
+          onClick={() => navigate('/trading/billing-settlement')}
+        />
+        <StatCard
+          label="Ledger balance"
+          value={fmtCurrency(balance)}
+          hint={asOf ? `as at ${fmtDate(asOf)}` : 'no entries yet'}
+          tone={balance < 0 ? 'red' : 'default'}
+        />
       </div>
 
-      {/* Bottom Full-Width Data Table: Last 10 days bid summary */}
-      <Card style={{ padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--slate-200)', background: 'var(--slate-50)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <h3 style={{ margin: 0, fontSize: 16, color: 'var(--slate-800)' }}>Last 10 days bid summary</h3>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <Badge type="info" style={{ fontSize: 13, padding: '4px 8px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}>
-                <strong>Total Cleared Volume (7 Days):</strong> 479.35 MWh
-              </Badge>
-              <Badge type="success" style={{ fontSize: 13, padding: '4px 8px', background: '#dcfce7', color: '#15803d', border: '1px solid #bbf7d0' }}>
-                <strong>Total Net Realization:</strong> ₹3,68,436.56
-              </Badge>
-            </div>
-          </div>
-          <button 
-            className="btn btn-sm btn-outline" 
-            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-            onClick={handleExportCSV}
-          >
-            Export CSV
-          </button>
-        </div>
-        
-        <div style={{ overflowX: 'auto' }}>
-          <table className="table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-            <thead>
-              <tr style={{ background: 'var(--slate-100)', borderBottom: '2px solid var(--slate-300)', textAlign: 'left' }}>
-                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600 }}>Delivery Date</th>
-                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600 }}>Portfolio Name</th>
-                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600 }}>Bid Type</th>
-                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600, textAlign: 'right' }}>Bid Placed (MWH)</th>
-                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600, textAlign: 'right' }}>Bid Cleared (MWH)</th>
-                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600, textAlign: 'right' }}>Exchange Oblig(Rs)</th>
-                <th scope="col" style={{ padding: '12px 20px', color: 'var(--slate-600)', fontWeight: 600, textAlign: 'right' }}>Grand Total (Rs)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {mockSummaryData.map((row, idx) => (
-                <tr key={idx} style={{ borderBottom: '1px solid var(--slate-200)', background: idx % 2 === 0 ? '#fff' : 'var(--slate-50)' }}>
-                  <td style={{ padding: '12px 20px', fontWeight: 500, color: 'var(--slate-700)' }}>{row.date}</td>
-                  <td style={{ padding: '12px 20px', color: 'var(--slate-600)' }}>{row.portfolio}</td>
-                  <td style={{ padding: '12px 20px' }}>
-                    <span style={{ color: 'var(--red-strong)', fontWeight: 600 }}>{row.type}</span>
-                  </td>
-                  <td style={{ padding: '12px 20px', textAlign: 'right', color: 'var(--slate-600)' }}>{row.bidPlaced.toFixed(2)}</td>
-                  <td style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 600, color: 'var(--slate-900)' }}>{row.bidCleared.toFixed(2)}</td>
-                  <td style={{ padding: '12px 20px', textAlign: 'right', color: 'var(--slate-600)' }}>
-                    {row.exchangeObligation.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td style={{ padding: '12px 20px', textAlign: 'right', fontWeight: 600, color: 'var(--green-strong)' }}>
-                    {row.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <Card title="Your latest bills">
+        <Table
+          columns={columns}
+          rows={recent || []}
+          emptyMessage="No bills have been raised on your account yet."
+        />
       </Card>
     </div>
   );

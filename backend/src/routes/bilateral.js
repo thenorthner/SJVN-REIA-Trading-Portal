@@ -37,6 +37,10 @@ const router = Router();
 
 // Continue the ledger's NOAR application register (last filed was WR2850).
 seedApplicationCounters();
+import { clientScope, mayUseClient, TRADING_CLIENT_ROLES } from '../services/tradingClientScope.js';
+
+import { clientScope, mayUseClient, TRADING_CLIENT_ROLES } from '../services/tradingClientScope.js';
+
 router.use(requireAuth);
 
 // NOAR open-access lifecycle, in the order the PT workflow walks it.
@@ -228,6 +232,9 @@ router.get('/', (req, res) => {
   const { status, oa_type } = req.query;
   let sql = 'SELECT * FROM bilateral_transactions WHERE 1=1';
   const params = [];
+  // The client's own deals only.
+  const scope = clientScope(req.user);
+  if (scope.restricted) { sql += scope.sql; params.push(...scope.params); }
   if (status) { sql += ' AND status = ?'; params.push(status); }
   if (oa_type) { sql += ' AND oa_type = ?'; params.push(oa_type); }
   sql += ' ORDER BY created_at DESC';
@@ -399,7 +406,7 @@ router.get('/contract-report', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, re
 // Get single transaction
 router.get('/:id', (req, res) => {
   const tx = db.prepare('SELECT * FROM bilateral_transactions WHERE id = ?').get(req.params.id);
-  if (!tx) return res.status(404).json({ error: 'Not found' });
+  if (!tx || !mayUseClient(req.user, tx.client_id)) return res.status(404).json({ error: 'Not found' });
   res.json(withDetails(tx));
 });
 

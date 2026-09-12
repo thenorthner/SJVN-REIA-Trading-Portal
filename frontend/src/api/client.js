@@ -789,6 +789,9 @@ export const api = {
     consolidated: () => g('/dashboard/consolidated'),
   },
   sellerDashboard: () => g('/seller-dashboard'),
+  tradingClient: {
+    summary: (params) => g('/trading-client/summary', params),
+  },
   buyerDashboard: () => g('/buyer-dashboard'),
   notifications: {
     /**

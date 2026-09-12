@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, SELLER_ROLES } from '../middleware/auth.js';
 import { OPEN_STATUSES } from '../disputesConstants.js';
+import { outstandingForContracts } from '../services/outstanding.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -60,7 +61,8 @@ router.get('/', requireRole(...SELLER_ROLES, 'SJVN_ADMIN'), (req, res) => {
     overdue_invoices: invStats.overdue,
     total_billed: invStats.total_billed,
     total_received: payStats.total_received,
-    pending_amount: invStats.total_billed - payStats.total_received,
+    // Net of rebate, LPS, disputes and payments, as the desk's payables are.
+    pending_amount: outstandingForContracts('SELLER_TO_SJVN', contractIds),
     open_disputes: disputes.count,
     last_payment: lastPayment,
   });

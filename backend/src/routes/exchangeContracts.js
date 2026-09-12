@@ -13,6 +13,10 @@ import {
 import { raiseInvoice, billingObjection } from '../services/billingRegister.js';
 
 const router = Router();
+import { clientScope, mayUseClient, TRADING_CLIENT_ROLES } from '../services/tradingClientScope.js';
+
+import { clientScope, mayUseClient, TRADING_CLIENT_ROLES } from '../services/tradingClientScope.js';
+
 router.use(requireAuth);
 
 function parseSchedule(raw) {
@@ -115,12 +119,15 @@ function numOrNull(v) {
   return v !== '' && v != null ? Number(v) : null;
 }
 
-router.get('/', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
+router.get('/', requireRole(...ROLE_GROUPS.TRADING_ALL, ...TRADING_CLIENT_ROLES), (req, res) => {
   const { status, client_id, q } = req.query;
   let sql = 'SELECT * FROM exchange_contracts WHERE 1=1';
   const params = [];
   if (status) { sql += ' AND status = ?'; params.push(status); }
-  if (client_id) { sql += ' AND client_id = ?'; params.push(client_id); }
+  // The client's own agreements only.
+  const scope = clientScope(req.user);
+  if (scope.restricted) { sql += scope.sql; params.push(...scope.params); }
+  else if (client_id) { sql += ' AND client_id = ?'; params.push(client_id); }
   if (q) {
     sql += ` AND (
       loa_no LIKE ? OR ppa_no LIKE ? OR client_name LIKE ? OR portfolio_id LIKE ? OR id LIKE ?
@@ -132,9 +139,9 @@ router.get('/', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
   res.json(db.prepare(sql).all(...params).map(withDetails));
 });
 
-router.get('/:id', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
+router.get('/:id', requireRole(...ROLE_GROUPS.TRADING_ALL, ...TRADING_CLIENT_ROLES), (req, res) => {
   const row = db.prepare('SELECT * FROM exchange_contracts WHERE id = ?').get(req.params.id);
-  if (!row) return res.status(404).json({ error: 'Not found' });
+  if (!row || !mayUseClient(req.user, row.client_id)) return res.status(404).json({ error: 'Not found' });
   res.json(withDetails(row));
 });
 

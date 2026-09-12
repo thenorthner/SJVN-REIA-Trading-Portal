@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, BUYER_ROLES } from '../middleware/auth.js';
 import { OPEN_STATUSES } from '../disputesConstants.js';
+import { outstandingForContracts } from '../services/outstanding.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -19,7 +20,7 @@ router.get('/', requireRole(...BUYER_ROLES, 'SJVN_ADMIN'), (req, res) => {
     return res.json({
       active_contracts: 0, total_capacity_mw: 0,
       total_invoices: 0, pending_invoices: 0, paid_invoices: 0, overdue_invoices: 0,
-      total_payable: 0, total_paid: 0, pending_amount: 0,
+      total_payable: 0, total_paid: 0, pending_amount: 0, disputed_amount: 0,
       open_disputes: 0, last_payment: null,
     });
   }
@@ -47,6 +48,15 @@ router.get('/', requireRole(...BUYER_ROLES, 'SJVN_ADMIN'), (req, res) => {
   // Disputes
   const disputes = db.prepare(`SELECT COUNT(*) as count FROM disputes d JOIN invoices i ON d.invoice_id = i.id WHERE i.contract_id IN (${ph}) AND d.status IN (${OPEN_STATUSES.map(() => '?').join(',')})`).get(...contractIds, ...OPEN_STATUSES);
   
+  // The same arithmetic the desk's receivables use — net of rebate, LPS,
+  // disputed amounts and what has been paid — so "pending" here and
+  // "receivable" on the SJVN dashboard are the same number for the same bills.
+  const outstanding = outstandingForContracts('SJVN_TO_BUYER', contractIds);
+  const disputedTotal = db.prepare(`
+    SELECT COALESCE(SUM(disputed_amount), 0) AS s FROM invoices
+    WHERE contract_id IN (${ph}) AND direction = 'SJVN_TO_BUYER' AND status NOT IN ('PAID','CANCELLED')
+  `).get(...contractIds).s;
+
   res.json({
     active_contracts: contractStats.count,
     total_capacity_mw: contractStats.capacity,
@@ -56,7 +66,8 @@ router.get('/', requireRole(...BUYER_ROLES, 'SJVN_ADMIN'), (req, res) => {
     overdue_invoices: invStats.overdue,
     total_payable: invStats.total_payable,
     total_paid: payStats.total_paid,
-    pending_amount: invStats.total_payable - payStats.total_paid,
+    pending_amount: outstanding,
+    disputed_amount: disputedTotal,
     open_disputes: disputes.count,
     last_payment: lastPayment,
   });

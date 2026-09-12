@@ -47,6 +47,19 @@ export function payablesOutstanding() {
   return sum(`i.direction = 'SELLER_TO_SJVN' AND ${OPEN}`);
 }
 
+/**
+ * Outstanding on one set of contracts, on the same formula as the totals above.
+ *
+ * The counterparty dashboards each did their own arithmetic — billed minus
+ * paid — which ignores rebate, LPS and disputed amounts, so SJVN's receivable
+ * and the buyer's "pending" disagreed on the same bills.
+ */
+export function outstandingForContracts(direction, contractIds = []) {
+  if (!contractIds.length) return 0;
+  const ph = contractIds.map(() => '?').join(',');
+  return sum(`i.direction = ? AND ${OPEN} AND i.contract_id IN (${ph})`, [direction, ...contractIds]);
+}
+
 /** Receivable that is already past its due date. */
 export function overdueReceivable() {
   return sum(`i.direction = 'SJVN_TO_BUYER' AND ${OPEN} AND i.due_date IS NOT NULL AND i.due_date < date('now')`);

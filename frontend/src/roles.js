@@ -16,8 +16,12 @@ export const ROLE_GROUPS = {
   SELLER_ALL: ['SELLER', 'SELLER_L1', 'SELLER_L2', 'SELLER_L3'],
   BUYER_ALL: ['BUYER', 'BUYER_L1', 'BUYER_L2', 'BUYER_L3'],
   
-  // Trading Client external portal roles (Maker/Checker)
-  TRADING_CLIENT_ALL: ['TRADING_CLIENT', 'TRADING_CLIENT_ADMIN', 'TRADING_CLIENT_MAKER', 'TRADING_CLIENT_CHECKER', 'TRADING_CLIENT_VIEWER'],
+  // Trading client external portal. One role, because that is what the platform
+  // has: users.role accepts 'TRADING_CLIENT' and nothing else on this side, so
+  // the four sub-roles listed here before could never be created. A maker and a
+  // checker for client companies means adding them here, in the backend's
+  // tradingClientScope.js, and to that CHECK together.
+  TRADING_CLIENT_ALL: ['TRADING_CLIENT'],
 
   // Cross-module executive view (Consolidated Dashboard). Deliberately narrow:
   // it aggregates REIA + Trading financials across every counterparty, so no

@@ -12,6 +12,10 @@ import { insertBid, logBidEvent, rollUp, utilizedExposure } from '../services/bi
 export { utilizedExposure };
 
 const router = Router();
+import { clientScope, mayUseClient, TRADING_CLIENT_ROLES } from '../services/tradingClientScope.js';
+
+import { clientScope, mayUseClient, TRADING_CLIENT_ROLES } from '../services/tradingClientScope.js';
+
 router.use(requireAuth);
 
 const EXCHANGES = ['IEX', 'PXIL', 'HPX'];
@@ -79,7 +83,12 @@ router.get('/', (req, res) => {
   const { client_id, exchange, status, date, product, from, to } = req.query;
   let sql = 'SELECT * FROM bids WHERE 1=1';
   const params = [];
-  if (client_id) { sql += ' AND client_id = ?'; params.push(client_id); }
+  // A trading client sees its own bids and nobody else's; the desk keeps its
+  // own client filter. Without this the client portal's bid screens either
+  // answered 403 or, where they did not, showed the whole desk's book.
+  const scope = clientScope(req.user);
+  if (scope.restricted) { sql += scope.sql; params.push(...scope.params); }
+  else if (client_id) { sql += ' AND client_id = ?'; params.push(client_id); }
   if (exchange) { sql += ' AND exchange = ?'; params.push(exchange); }
   if (status) { sql += ' AND status = ?'; params.push(status); }
   if (product) {
