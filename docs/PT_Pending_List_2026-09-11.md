@@ -98,8 +98,8 @@ yaani har call 403. Jo module allow karta tha, usme data kisi ka bhi mil jaata t
 | 29 ✅ | **Ledger / SOA / netting ke suraakh** | **Fix.** `/ledger/:client_id` URL se koi bhi client id leta tha (doosre ka ledger padha ja sakta tha), `/soa` sab clients ke statements deta tha, aur `/netting` client ko bhi ledger entry daalne deta tha. Ab teeno band. |
 | 30 ✅ | **Client ki pehchaan** | **Fix.** Pehle "assuming linked_entity_id is trading_client id" par tika tha. Ab ek hi helper dono convention (client id ya entity id) samajhta hai, aur bina link wale account ko saaf 400 milta hai — poora desk nahi. |
 | 31 ✅ | **Role list ka farak** | **Fix.** Frontend `TRADING_CLIENT_ADMIN/MAKER/CHECKER/VIEWER` ginta tha, jabki DB ka CHECK sirf `TRADING_CLIENT` maanta hai. Dono ab ek jaise. |
-| 32 🟠 | **Desk ke buttons client ko dikhte hain** | Client ab apna data dekh leta hai, par screens desk ki hain — "Create", "Submit to exchange" jaise buttons abhi bhi dikhte hain aur click par backend mana karega (403). Inhe client ke liye chhupana baaki hai. |
-| 33 🟠 | **Client ke liye alag screens** | Aage: client ko apne bids/deals ka read-only view, uska bill aur ledger — desk ki screens dobara istemaal karne ke bajaye. |
+| 32 ✅ | **Desk ke buttons client ko dikhte the** | **Fix, 12 Sep.** Buttons chhupane ke bajaye client ko desk ki screens se hi hata diya — 16 desk routes ab internal-only hain, toh client URL type karke bhi nahi khol sakta. Market Rates & Analytics dono ke paas rahi, kyunki wo data market ka hai kisi client ka nahi. Backend par bhi likha hua hai: client ke liye bid banana, bilateral/exchange contract banana aur invoice generate karna — sab 403. |
+| 33 ✅ | **Client ke liye alag screens** | **Fix, 12 Sep.** Teen nayi read-only screens: **My Bids** (kitna offer kiya, kitna clear hua, stub wali bids saaf mark), **My Deals** (bilateral + exchange contracts, NOAR status ke saath), **My Bills & Ledger** (invoices, account ledger, balance). Client ka menu ab inhi par jaata hai. |
 
 ---
 
