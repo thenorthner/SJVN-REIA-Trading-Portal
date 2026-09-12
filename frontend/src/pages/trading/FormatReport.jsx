@@ -128,7 +128,7 @@ export default function FormatReport({ filename, columns, rows, bands, emptyText
         </table>
       </div>
 
-      <p style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+      <p className="report-count">
         Showing {filtered.length} of {rows.length} {rows.length === 1 ? 'row' : 'rows'}.
       </p>
     </>

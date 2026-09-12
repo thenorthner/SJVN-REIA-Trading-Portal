@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { api } from '../../api/client.js';
-import { Modal, Field, fmtNumber } from '../../components/ui.jsx';
+import { Modal, Field, Card, fmtNumber } from '../../components/ui.jsx';
 
 function fmtDisplayDate(iso) {
   if (!iso) return '';
@@ -110,6 +110,10 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
     else { setSortKey(key); setSortDir('asc'); }
   }
 
+  // Counter + nine invoice columns + five actions, plus the six payment columns
+  // and the payment action when this ledger shows them.
+  const colCount = showPaymentColumns ? 21 : 14;
+
   function exportKeys() {
     return showPaymentColumns ? [...BASE_EXPORT_KEYS, ...PAYMENT_EXPORT_KEYS] : BASE_EXPORT_KEYS;
   }
@@ -136,7 +140,7 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
       header.join(','),
       ...data.map((row) => header.map((h) => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(',')),
     ];
-    downloadBlob(`${billType.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`, new Blob([lines.join('\n')], { type: 'text/csv' }));
+    downloadBlob(`${String(billType || 'invoices').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`, new Blob([lines.join('\n')], { type: 'text/csv' }));
   }
 
   function exportExcel() {
@@ -144,7 +148,7 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
     const sheet = XLSX.utils.json_to_sheet(data.length ? data : [{ '#': '', 'Client Name': '', 'Invoice No': '' }]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, sheet, 'Invoices');
-    XLSX.writeFile(wb, `${billType.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `${String(billType || 'invoices').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
   function exportPdf() {
@@ -296,138 +300,143 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
     }
   }
 
-  const th = 'px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400 whitespace-nowrap';
-  const td = 'px-3 py-2 border-r border-gray-100 whitespace-nowrap';
-  const link = 'text-[#428bca] hover:underline bg-transparent border-0 cursor-pointer p-0 text-[13px]';
-
-  function SortTh({ k, label }) {
+  // The grid, its navy header and its export strip are the shared .report-*
+  // chrome every other report screen uses, so this ledger and an ERP format
+  // report look like one system.
+  // A function that returns a <th>, not a component declared in here: a nested
+  // component is a new type on every render, so React would throw away and
+  // rebuild the whole header row each time the sort or the search changed.
+  const sortTh = (k, label, className = '') => {
+    const on = sortKey === k;
     return (
-      <th className={th} onClick={() => toggleSort(k)}>
-        {label} {sortKey === k ? (sortDir === 'asc' ? '▲' : '▼') : '⇕'}
+      <th
+        key={label}
+        scope="col"
+        className={`sortable${on ? ' sorted' : ''}${className ? ` ${className}` : ''}`}
+        onClick={() => toggleSort(k)}
+        aria-sort={on ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      >
+        {label}
+        <span className="sort-arrow">{on && sortDir === 'desc' ? '▼' : '▲'}</span>
       </th>
     );
-  }
+  };
 
   return (
-    <div className={embedded ? 'bg-[#f8f9fa] font-sans text-[13px]' : 'p-6 bg-[#f8f9fa] min-h-screen font-sans text-[13px]'}>
-      <div className="bg-white border border-gray-200 shadow-sm max-w-[1600px] mx-auto rounded-sm">
-        <div className="bg-[#101a2e] text-white px-4 py-2 font-semibold flex items-center justify-center tracking-wide text-sm relative">
-          {title}
-          <span className="absolute right-4 text-xs">▼</span>
+    <div className={embedded ? undefined : 'report-shell'}>
+      <div className="form-section-header" style={{ marginTop: 0 }}>{title}</div>
+      <Card>
+        <div className="report-toolbar">
+          <div className="export-group">
+            <button type="button" className="btn btn-sm btn-navy" onClick={exportCsv}>CSV</button>
+            <button type="button" className="btn btn-sm btn-navy" onClick={exportExcel}>Excel</button>
+            <button type="button" className="btn btn-sm btn-navy" onClick={exportPdf}>PDF</button>
+          </div>
+          <label className="report-search">
+            Search:
+            <input
+              type="search"
+              className="input"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter these invoices"
+            />
+          </label>
         </div>
 
-        <div className="flex justify-between items-center p-3 border-b border-gray-200 bg-gray-50/50 flex-wrap gap-2">
-          <div className="flex gap-2">
-            <button type="button" className="bg-[#17243d] hover:bg-[#273c61] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold" onClick={exportCsv}>CSV</button>
-            <button type="button" className="bg-[#17243d] hover:bg-[#273c61] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold" onClick={exportExcel}>Excel</button>
-            <button type="button" className="bg-[#17243d] hover:bg-[#273c61] text-white px-4 py-1.5 rounded-full shadow-sm font-semibold" onClick={exportPdf}>PDF</button>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-gray-600 font-medium">Search:</label>
-            <input type="search" className="border border-gray-300 px-2 py-1 rounded-sm w-48 outline-none focus:border-blue-400" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
-        </div>
+        {message && <div className="alert alert-success" role="status">{message}</div>}
 
-        {message && <div className="px-4 py-2 text-sm text-green-800 bg-green-50 border-b">{message}</div>}
-
-        <div className="overflow-x-auto">
-          {loading ? (
-            <div className="p-8 text-center text-gray-500">Loading invoices…</div>
-          ) : (
-            <table className="w-full text-center border-collapse">
-              <thead>
-                <tr className="bg-[#101a2e] text-white">
-                  <SortTh k="invoice_no" label={showPaymentColumns ? 'S.No.' : '#'} />
-                  <SortTh k="client_name" label="Client Name" />
-                  <SortTh k="invoice_no" label="Invoice No" />
-                  <SortTh k="invoice_amount" label="Invoice Amount(INR)" />
-                  <SortTh k="invoice_date" label="Invoice Date" />
-                  <SortTh k="invoice_due_date" label="Invoice Due Date" />
-                  <SortTh k="supply_from_date" label="Supply From Date" />
-                  <SortTh k="supply_to_date" label="Supply To Date" />
-                  <SortTh k="invoice_generated_on" label="Invoice Generated On" />
+        <div className="report-table-wrap">
+          <table className="report-table">
+            <thead>
+              <tr>
+                {/* A row counter, not a column of the data: nothing to sort by. */}
+                <th scope="col" style={{ width: 64 }}>{showPaymentColumns ? 'S.No.' : '#'}</th>
+                {sortTh('client_name', 'Client Name')}
+                {sortTh('invoice_no', 'Invoice No')}
+                {sortTh('invoice_amount', 'Invoice Amount(INR)', 'num')}
+                {sortTh('invoice_date', 'Invoice Date')}
+                {sortTh('invoice_due_date', 'Invoice Due Date')}
+                {sortTh('supply_from_date', 'Supply From Date')}
+                {sortTh('supply_to_date', 'Supply To Date')}
+                {sortTh('invoice_generated_on', 'Invoice Generated On')}
+                {showPaymentColumns && (
+                  <>
+                    <th scope="col" className="num">Received Amount (Rs.)</th>
+                    <th scope="col">Date of Payment</th>
+                    <th scope="col" className="num">TDS Rate(%)</th>
+                    <th scope="col" className="num">TDS Deducted (Rs)</th>
+                    <th scope="col">Bank Name</th>
+                    <th scope="col">Remarks</th>
+                  </>
+                )}
+                <th scope="col">View</th>
+                {showPaymentColumns && <th scope="col">Payment Details</th>}
+                <th scope="col">Edit</th>
+                <th scope="col">PDF</th>
+                <th scope="col">Note</th>
+                <th scope="col">Cancel</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td className="empty-cell" colSpan={colCount}>Loading invoices…</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td className="empty-cell" colSpan={colCount}>No data available in table</td></tr>
+              ) : filtered.map((r, i) => (
+                <tr key={r.id}>
+                  <td>{i + 1}</td>
+                  <td>{r.client_name}</td>
+                  <td>{r.invoice_no}</td>
+                  <td className="num">{fmtNumber(r.invoice_amount, 2)}</td>
+                  <td>{fmtDisplayDate(r.invoice_date)}</td>
+                  <td>{fmtDisplayDate(r.invoice_due_date)}</td>
+                  <td>{fmtDisplayDate(r.supply_from_date)}</td>
+                  <td>{fmtDisplayDate(r.supply_to_date)}</td>
+                  <td>{fmtGenerated(r.invoice_generated_on)}</td>
                   {showPaymentColumns && (
                     <>
-                      <th className={th}>Received Amount (Rs.)</th>
-                      <th className={th}>Date of Payment</th>
-                      <th className={th}>TDS Rate(%)</th>
-                      <th className={th}>TDS Deducted (Rs)</th>
-                      <th className={th}>Bank Name</th>
-                      <th className={th}>Remarks</th>
+                      <td className="num">{r.received_amount != null ? fmtNumber(r.received_amount, 0) : ''}</td>
+                      <td>{fmtDisplayDate(r.payment_date)}</td>
+                      <td className="num">{r.tds_rate != null ? r.tds_rate : ''}</td>
+                      <td className="num">{r.tds_deducted != null ? fmtNumber(r.tds_deducted, 1) : ''}</td>
+                      <td>{r.bank_name || ''}</td>
+                      <td title={r.remarks || ''}>{r.remarks || ''}</td>
                     </>
                   )}
-                  <th className={th}>View</th>
-                  {showPaymentColumns && <th className={th}>Payment Details</th>}
-                  <th className={th}>{showPaymentColumns ? 'Edit' : 'EDIT'}</th>
-                  <th className={th}>PDF</th>
-                  <th className={th}>Note</th>
-                  <th className="px-3 py-3 font-semibold">Cancel</th>
+                  <td>
+                    <button type="button" className="btn-link" onClick={() => openView(r)} title={`View ${r.invoice_no}`}>View</button>
+                  </td>
+                  {showPaymentColumns && (
+                    <td>
+                      {r.received_amount != null ? '—' : (
+                        <button type="button" className="btn-link" onClick={() => openPay(r)}>Payment Details</button>
+                      )}
+                    </td>
+                  )}
+                  <td>
+                    <button type="button" className="btn-link" onClick={() => openEdit(r)}>Edit</button>
+                  </td>
+                  <td>
+                    <button type="button" className="btn-link" onClick={() => downloadInvoicePdf(r)}>PDF</button>
+                  </td>
+                  <td>
+                    <button type="button" className="btn-link" onClick={() => raiseNote(r)}>Note</button>
+                  </td>
+                  <td>
+                    <button type="button" className="btn-link" onClick={() => cancelInv(r)}>Cancel</button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={showPaymentColumns ? 21 : 14} className="px-3 py-6 text-center text-gray-500 bg-[#f9f9f9]">
-                      No data available in table
-                    </td>
-                  </tr>
-                ) : filtered.map((r, i) => (
-                  <tr key={r.id} className="border-b border-gray-100 hover:bg-gray-50 text-gray-700">
-                    <td className={td}>{i + 1}</td>
-                    <td className={`${td} text-left font-medium`}>{r.client_name}</td>
-                    <td className={`${td} text-left`}>{r.invoice_no}</td>
-                    <td className={td}>{fmtNumber(r.invoice_amount, 2)}</td>
-                    <td className={td}>{fmtDisplayDate(r.invoice_date)}</td>
-                    <td className={td}>{fmtDisplayDate(r.invoice_due_date)}</td>
-                    <td className={td}>{fmtDisplayDate(r.supply_from_date)}</td>
-                    <td className={td}>{fmtDisplayDate(r.supply_to_date)}</td>
-                    <td className={td}>{fmtGenerated(r.invoice_generated_on)}</td>
-                    {showPaymentColumns && (
-                      <>
-                        <td className={td}>{r.received_amount != null ? fmtNumber(r.received_amount, 0) : ''}</td>
-                        <td className={td}>{fmtDisplayDate(r.payment_date)}</td>
-                        <td className={td}>{r.tds_rate != null ? r.tds_rate : ''}</td>
-                        <td className={td}>{r.tds_deducted != null ? fmtNumber(r.tds_deducted, 1) : ''}</td>
-                        <td className={td}>{r.bank_name || ''}</td>
-                        <td className={`${td} text-left max-w-[160px] truncate`} title={r.remarks || ''}>{r.remarks || ''}</td>
-                      </>
-                    )}
-                    <td className={td}>
-                      <button type="button" className={link} onClick={() => openView(r)} title="View">👁</button>
-                    </td>
-                    {showPaymentColumns && (
-                      <td className={td}>
-                        {r.received_amount != null ? (
-                          <span className="text-gray-400">—</span>
-                        ) : (
-                          <button type="button" className={link} onClick={() => openPay(r)}>Payment Details</button>
-                        )}
-                      </td>
-                    )}
-                    <td className={td}>
-                      <button type="button" className={link} onClick={() => openEdit(r)}>Edit</button>
-                    </td>
-                    <td className={td}>
-                      <button type="button" className={link} onClick={() => downloadInvoicePdf(r)}>PDF</button>
-                    </td>
-                    <td className={td}>
-                      <button type="button" className={link} onClick={() => raiseNote(r)}>Note</button>
-                    </td>
-                    <td className="px-3 py-2">
-                      <button type="button" className={link} onClick={() => cancelInv(r)}>Cancel</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        <div className="bg-white px-4 py-2 text-gray-500 text-xs border-t border-gray-200">
-          Showing {filtered.length === 0 ? 0 : 1} to {filtered.length} of {filtered.length} entries
-          {search.trim() && rows.length !== filtered.length ? ` (filtered from ${rows.length})` : ''}
-        </div>
-      </div>
+        <p className="report-count">
+          Showing {filtered.length} of {rows.length} {rows.length === 1 ? 'invoice' : 'invoices'}
+          {search.trim() && rows.length !== filtered.length ? ' (filtered)' : ''}.
+        </p>
+      </Card>
 
       {viewRow && (
         <Modal open onClose={() => setViewRow(null)} title={viewRow.invoice_no} width={560}>
@@ -470,7 +479,7 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
                   {n.note_no} · {n.note_type} · ₹{fmtNumber(n.amount, 2)} · {n.status}
                   {n.status !== 'CANCELLED' && (
                     <>
-                      {' '}<button type="button" className={link} onClick={() => cancelNote(n)}>Cancel</button>
+                      {' '}<button type="button" className="btn-link" onClick={() => cancelNote(n)}>Cancel</button>
                     </>
                   )}
                 </div>

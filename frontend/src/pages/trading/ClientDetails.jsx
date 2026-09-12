@@ -1,81 +1,123 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { api } from '../../api/client.js';
+import { PageHeader, Card, Badge, StatCard, fmtNumber } from '../../components/ui.jsx';
+import { fmtDate } from '../../datetime.js';
 
-const DEMO_DATA = [
-  {
-    id: 1,
-    clientId: 'Demo Value',
-    clientName: 'Demo Value',
-    category: 'Demo Value',
-    contactPerson: 'Demo Value',
-    contactPhone: 'Demo Value',
-    regOfficeAddress: 'Demo Value',
-    regUnitAddress: 'Demo Value',
-    phoneNumber: 'Demo Value',
-    emailId: 'Demo Value',
-    accountNo: 'Demo Value',
-    ifscCode: 'Demo Value'
-  }
-];
+// The clients the desk trades for. This screen used to show one row reading
+// "Demo Value" in every column — client id, contact person, bank account, IFSC —
+// and a search box that filtered nothing. It reads `trading_clients` now, and
+// shows the fields that register actually keeps.
+
+const TYPES = ['GENERATOR', 'DISCOM', 'TRADER', 'C&I', 'OTHER'];
 
 export default function ClientDetails() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [q, setQ] = useState('');
+  const [type, setType] = useState('');
+
+  useEffect(() => {
+    api.tradingClients.list()
+      .then((r) => setRows(Array.isArray(r) ? r : []))
+      .catch((err) => setError(err?.response?.data?.error || 'Could not load the client register.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (type && r.client_type !== type) return false;
+      if (!needle) return true;
+      return [r.id, r.name, r.client_type, r.sldc_name, r.noar_id, r.standing_clearance_no]
+        .join(' ').toLowerCase().includes(needle);
+    });
+  }, [rows, q, type]);
+
+  const active = rows.filter((r) => r.status === 'ACTIVE').length;
+
   return (
-    <div className="p-6 bg-[#f8f9fa] min-h-screen font-sans text-[13px]">
-      <div className="bg-white border border-gray-200 shadow-sm w-full mx-auto rounded-sm">
-        
-        {/* Header Title */}
-        <div className="bg-white px-4 py-3 text-gray-700 font-semibold border-b border-gray-200">
-          Client Details
+    <div className="page">
+      <PageHeader
+        title="Client Details"
+        subtitle="The trading clients on record, as the desk registered them"
+        actions={<Link className="btn btn-primary" to="/trading/clients">Open the client master</Link>}
+      />
+
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
+
+      <div className="kpi-grid">
+        <StatCard label="Clients on record" value={fmtNumber(rows.length, 0)} tone="blue" />
+        <StatCard label="Active" value={fmtNumber(active, 0)} tone="green" />
+        <StatCard label="Suspended or inactive" value={fmtNumber(rows.length - active, 0)} tone={rows.length - active ? 'amber' : 'default'} />
+      </div>
+
+      <Card>
+        <div className="report-toolbar">
+          <label className="report-search">
+            Type:
+            <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
+              <option value="">All types</option>
+              {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </label>
+          <label className="report-search">
+            Search:
+            <input
+              type="search"
+              className="input"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Name, id, SLDC, NOAR id"
+            />
+          </label>
         </div>
 
-        {/* Action Bar */}
-        <div className="flex justify-end items-center p-3">
-          <div className="flex items-center gap-2">
-            <label className="text-gray-600 font-medium">Search:</label>
-            <input type="text" className="border border-gray-300 px-2 py-1 rounded-sm w-48 outline-none focus:border-blue-400" />
-          </div>
-        </div>
-
-        {/* Main Data Table */}
-        <div className="overflow-x-auto px-4 pb-4">
-          <table className="w-full text-center border-collapse whitespace-nowrap border border-gray-200">
+        <div className="report-table-wrap">
+          <table className="report-table">
             <thead>
-              <tr className="bg-[#101a2e] text-white">
-                <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Sr. No. ⇕</th>
-                <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Client ID ⇕</th>
-                <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Client Name ⇕</th>
-                <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Category ⇕</th>
-                <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Contact Person Name ⇕</th>
-                <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Contact Person phone No ⇕</th>
-                <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Registered Office Address ⇕</th>
-                <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Registered Unit Address ⇕</th>
-                <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Phone Number ⇕</th>
-                <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Email Id ⇕</th>
-                <th className="px-3 py-2 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Account No ⇕</th>
-                <th className="px-3 py-2 font-semibold cursor-pointer hover:bg-blue-400">IFSC Code ⇕</th>
+              <tr>
+                <th scope="col" style={{ width: 64 }}>Sr. No.</th>
+                <th scope="col">Client ID</th>
+                <th scope="col">Client Name</th>
+                <th scope="col">Category</th>
+                <th scope="col">SLDC</th>
+                <th scope="col">Standing Clearance No.</th>
+                <th scope="col">NOC Valid Till</th>
+                <th scope="col" className="num">T-GNA (MW)</th>
+                <th scope="col" className="num">Exposure Limit (Rs.)</th>
+                <th scope="col">Status</th>
               </tr>
             </thead>
             <tbody>
-              {DEMO_DATA.map((row) => (
-                <tr key={row.id} className="border-b border-gray-200 text-gray-700 hover:bg-gray-50">
-                  <td className="px-3 py-2 border-r border-gray-200">{row.id}</td>
-                  <td className="px-3 py-2 border-r border-gray-200">{row.clientId}</td>
-                  <td className="px-3 py-2 border-r border-gray-200">{row.clientName}</td>
-                  <td className="px-3 py-2 border-r border-gray-200">{row.category}</td>
-                  <td className="px-3 py-2 border-r border-gray-200">{row.contactPerson}</td>
-                  <td className="px-3 py-2 border-r border-gray-200">{row.contactPhone}</td>
-                  <td className="px-3 py-2 border-r border-gray-200">{row.regOfficeAddress}</td>
-                  <td className="px-3 py-2 border-r border-gray-200">{row.regUnitAddress}</td>
-                  <td className="px-3 py-2 border-r border-gray-200">{row.phoneNumber}</td>
-                  <td className="px-3 py-2 border-r border-gray-200">{row.emailId}</td>
-                  <td className="px-3 py-2 border-r border-gray-200">{row.accountNo}</td>
-                  <td className="px-3 py-2">{row.ifscCode}</td>
+              {loading ? (
+                <tr><td className="empty-cell" colSpan={10}>Loading the client register…</td></tr>
+              ) : shown.length === 0 ? (
+                <tr><td className="empty-cell" colSpan={10}>{rows.length ? 'No client matches this selection' : 'No clients on record'}</td></tr>
+              ) : shown.map((r, i) => (
+                <tr key={r.id}>
+                  <td>{i + 1}</td>
+                  <td><Link className="btn-link" to={`/trading/clients/${r.id}`}>{r.id}</Link></td>
+                  <td>{r.name}</td>
+                  <td>{r.client_type}</td>
+                  <td>{r.sldc_name || '—'}</td>
+                  <td>{r.standing_clearance_no || '—'}</td>
+                  <td>{r.noc_valid_till ? fmtDate(r.noc_valid_till) : '—'}</td>
+                  <td className="num">{r.tgna_approved_mw != null ? fmtNumber(r.tgna_approved_mw) : '—'}</td>
+                  <td className="num">{fmtNumber(r.exposure_limit, 0)}</td>
+                  <td><Badge status={r.status}>{r.status}</Badge></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-      </div>
+        <p className="report-count">
+          Showing {shown.length} of {rows.length} {rows.length === 1 ? 'client' : 'clients'}
+          {(q.trim() || type) && rows.length !== shown.length ? ' (filtered)' : ''}.
+        </p>
+      </Card>
     </div>
   );
 }

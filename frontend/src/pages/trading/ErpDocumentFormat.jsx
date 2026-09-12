@@ -47,7 +47,7 @@ export default function ErpDocumentFormat({ kind, title, subtitle, filename, car
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDate('')}>Clear</button>
           )}
         </div>
-        <p style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+        <p className="report-count">
           {date ? `Showing documents dated ${toSapDate(date)}.` : `Showing every ${noun} on record.`}
         </p>
       </Card>

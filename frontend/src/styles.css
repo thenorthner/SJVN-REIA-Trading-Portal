@@ -2062,6 +2062,9 @@ a:hover { text-decoration: underline; }
 .report-criteria .field { margin: 0; }
 .report-criteria .input { min-width: 190px; }
 
+/* "Showing 12 of 40 invoices." — the line under a report grid. */
+.report-count { margin: 10px 0 0; font-size: 12px; color: var(--text-muted); }
+
 /* Inline messages — the errors, warnings and confirmations inside a screen.
    Screens have used these class names all along (error, danger, warning,
    success) but nothing defined them, so a failed save rendered as plain body

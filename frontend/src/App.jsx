@@ -69,7 +69,6 @@ const MarginAssurance = lazy(() => import('./pages/trading/MarginAssurance.jsx')
 const OAReconciliation = lazy(() => import('./pages/trading/OAReconciliation.jsx'));
 const CustomerReceivablesTable = lazy(() => import('./pages/trading/CustomerReceivablesTable.jsx'));
 const NOARDetailCard = lazy(() => import('./pages/trading/NOARDetailCard.jsx'));
-const ImplementedScheduleGrid = lazy(() => import('./pages/trading/ImplementedScheduleGrid.jsx'));
 const BillOfSupplyForm = lazy(() => import('./pages/trading/BillOfSupplyForm.jsx'));
 const REAReconciliationGrid = lazy(() => import('./pages/trading/REAReconciliationGrid.jsx'));
 const ERPVendorMasterTable = lazy(() => import('./pages/trading/ERPVendorMasterTable.jsx'));
@@ -112,7 +111,6 @@ const UpdatePortfolioID = lazy(() => import('./pages/trading/UpdatePortfolioID.j
 const ClientDetails = lazy(() => import('./pages/trading/ClientDetails.jsx'));
 const ClientRegistrationApproval = lazy(() => import('./pages/trading/ClientRegistrationApproval.jsx'));
 const Top10GDAMParticipantsChart = lazy(() => import('./pages/trading/Top10GDAMParticipantsChart.jsx'));
-const PortalLevel1Dashboard = lazy(() => import('./pages/trading/PortalLevel1Dashboard.jsx'));
 const PreRegistrationRequests = lazy(() => import('./pages/trading/PreRegistrationRequests.jsx'));
 const MainDashboard = lazy(() => import('./pages/trading/MainDashboard.jsx'));
 const RegistrationRequests = lazy(() => import('./pages/trading/RegistrationRequests.jsx'));
@@ -324,14 +322,15 @@ export default function App() {
         <Route path="clients/details" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ClientDetails /></ProtectedRoute>} />
         <Route path="registration/details/:id" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ClientRegistrationApproval /></ProtectedRoute>} />
         <Route path="market/gdam/participants" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><Top10GDAMParticipantsChart /></ProtectedRoute>} />
-        <Route path="level1/dashboard" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PortalLevel1Dashboard /></ProtectedRoute>} />
         <Route path="dashboard" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><MainDashboard /></ProtectedRoute>} />
         <Route path="registration/initial/requests" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PreRegistrationRequests /></ProtectedRoute>} />
         <Route path="registration/requests" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RegistrationRequests /></ProtectedRoute>} />
         <Route path="trading/mmr-dashboard" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><MMRDashboard /></ProtectedRoute>} />
         <Route path="trading/cea-reports" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CEAReportsDashboard /></ProtectedRoute>} />
         <Route path="trading/power-market" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PowerMarketDashboard /></ProtectedRoute>} />
-        <Route path="reports/dispatch/implemented" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ImplementedScheduleGrid /></ProtectedRoute>} />
+        {/* One Implemented Schedule report, built from the punched schedules. This
+            path used to open a static replica of it. */}
+        <Route path="reports/dispatch/implemented" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ImplementedScheduleSummaryReport /></ProtectedRoute>} />
         {/* The TDS format report has one implementation, read from tds_format_entries.
             This path used to open a second, hard-coded copy of it. */}
         <Route path="compliance/tax/tds-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TdsFormatReport /></ProtectedRoute>} />
