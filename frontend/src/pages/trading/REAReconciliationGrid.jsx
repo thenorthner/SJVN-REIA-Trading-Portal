@@ -1,84 +1,114 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
+import { PageHeader, Card, Field, Badge, StatCard, fmtNumber } from '../../components/ui.jsx';
+import useErpFormat from './useErpFormat.js';
 
-const DUMMY_DATA = [
-  { id: 1, contract: 'LOAIOCLNDMC29042023', entity: 'New Delhi Municipal Council', appNo: 'AD20230602', approvalNo: 'NR/2023/13149/C', approved: 200, rea: 200, rldc: 200, status: 'Done' },
-  { id: 2, contract: 'LOAIOCLNDMC29042023', entity: 'New Delhi Municipal Council', appNo: 'AD20230603', approvalNo: 'NR/2023/13223/D', approved: 400, rea: 400, rldc: 400, status: 'Done' },
-  { id: 3, contract: 'LOAIOCLNDMC29042023', entity: 'New Delhi Municipal Council', appNo: 'AD20230605', approvalNo: 'NR/2023/13424/C', approved: 200, rea: 180, rldc: 180, status: 'Pending' },
-  { id: 4, contract: 'LOAIOCLNDMC29042023', entity: 'New Delhi Municipal Council', appNo: 'AD20230606', approvalNo: 'NR/2023/13145/F', approved: 5000, rea: 5000, rldc: 5000, status: 'Done' },
-];
+// REA/SEA Reconciliation — what the regional energy account says a buyer drew
+// against what its open-access approval allowed, application by application.
+//
+// This screen was a mockup: its rows were transcribed from the live portal and
+// sat in tracked source, its Month / Year / Entity boxes were readOnly, its
+// column headers offered a sort that was not wired, and its markup was written
+// for a CSS framework this app does not ship, so it rendered unstyled. The
+// filters below select on the register; the gap column is what the screen is for.
+
+const DONE = /^done$/i;
 
 export default function REAReconciliationGrid() {
+  const { rows, loading, error } = useErpFormat('rea-sea-reconciliation');
+  const [month, setMonth] = useState('');
+  const [entity, setEntity] = useState('');
+
+  const months = useMemo(() => [...new Set(rows.map((r) => r.month).filter(Boolean))], [rows]);
+  const entities = useMemo(() => [...new Set(rows.map((r) => r.entity).filter(Boolean))].sort(), [rows]);
+
+  const shown = useMemo(() => rows.filter(
+    (r) => (!month || r.month === month) && (!entity || r.entity === entity),
+  ), [rows, month, entity]);
+
+  const totals = useMemo(() => shown.reduce((t, r) => ({
+    approved: t.approved + (Number(r.approved) || 0),
+    rea: t.rea + (Number(r.rea) || 0),
+    pending: t.pending + (DONE.test(r.status || '') ? 0 : 1),
+  }), { approved: 0, rea: 0, pending: 0 }), [shown]);
+
   return (
-    <div className="p-6 bg-[#f8f9fa] min-h-screen font-sans text-sm">
-      <div className="bg-white border border-gray-200 shadow-sm max-w-6xl mx-auto rounded-sm">
-        
-        {/* Header Title */}
-        <div className="bg-[#2b5682] text-white px-4 py-2 font-semibold tracking-wide">
-          REA/SEA Reconciliation
-        </div>
+    <div className="page">
+      <PageHeader
+        title="REA/SEA Reconciliation"
+        subtitle="Approved open-access energy against what the regional energy account records"
+      />
 
-        {/* Filters */}
-        <div className="p-4 border-b border-gray-200 flex flex-wrap gap-6 items-end">
-          <div className="w-48">
-            <label className="block text-red-600 mb-1 text-[12px] font-medium">Month*</label>
-            <input type="text" value="June 2023" readOnly className="w-full border border-gray-300 rounded-sm px-3 py-1.5 text-gray-700 outline-none" />
-          </div>
-          <div className="w-48">
-            <label className="block text-red-600 mb-1 text-[12px] font-medium">Year*</label>
-            <input type="text" value="June 2023" readOnly className="w-full border border-gray-300 rounded-sm px-3 py-1.5 text-gray-700 outline-none" />
-          </div>
-          <div className="flex-1 max-w-md">
-            <label className="block text-red-600 mb-1 text-[12px] font-medium">Entity Name*</label>
-            <input type="text" value="New Delhi Municipal Council" readOnly className="w-full border border-gray-300 rounded-sm px-3 py-1.5 text-gray-700 outline-none" />
-          </div>
-          <div className="mb-0.5">
-            <button className="bg-[#17243d] hover:bg-blue-500 text-white px-6 py-1.5 rounded-sm font-medium transition-colors">
-              Search
-            </button>
-          </div>
-        </div>
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
 
-        {/* Main Data Grid */}
-        <div className="overflow-x-auto p-4">
-          <table className="w-full text-center border-collapse whitespace-nowrap text-[13px]">
+      <Card title="Selection Criteria">
+        <div className="report-criteria">
+          <Field label="Month">
+            <select className="input" value={month} onChange={(e) => setMonth(e.target.value)}>
+              <option value="">All months</option>
+              {months.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </Field>
+          <Field label="Entity Name">
+            <select className="input" value={entity} onChange={(e) => setEntity(e.target.value)}>
+              <option value="">All entities</option>
+              {entities.map((e) => <option key={e} value={e}>{e}</option>)}
+            </select>
+          </Field>
+        </div>
+      </Card>
+
+      <div className="kpi-grid">
+        <StatCard label="Approved energy" value={`${fmtNumber(totals.approved)} MWh`} />
+        <StatCard label="As per REA" value={`${fmtNumber(totals.rea)} MWh`} />
+        <StatCard
+          label="Gap to reconcile"
+          value={`${fmtNumber(totals.approved - totals.rea)} MWh`}
+          tone={totals.approved - totals.rea ? 'amber' : 'green'}
+        />
+        <StatCard label="Applications pending" value={fmtNumber(totals.pending, 0)} tone={totals.pending ? 'amber' : 'green'} />
+      </div>
+
+      <Card title="Applications">
+        <div className="table-wrap">
+          <table className="data-table">
             <thead>
-              <tr className="bg-[#101a2e] text-white">
-                <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400 w-12">#</th>
-                <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Contract No</th>
-                <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Name Of The Entity</th>
-                <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Application Number</th>
-                <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Approval Number</th>
-                <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Approved Energy(MWh)</th>
-                <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Energy As Per REA(MWh)</th>
-                <th className="px-3 py-3 border-r border-white/20 font-semibold cursor-pointer hover:bg-blue-400">Current Energy As Per RLDC Schedule(MWh)</th>
-                <th className="px-3 py-3 font-semibold cursor-pointer hover:bg-blue-400">Reconciliation Status</th>
+              <tr>
+                <th scope="col">Contract No</th>
+                <th scope="col">Name Of The Entity</th>
+                <th scope="col">Application Number</th>
+                <th scope="col">Approval Number</th>
+                <th scope="col" className="num">Approved Energy (MWh)</th>
+                <th scope="col" className="num">Energy As Per REA (MWh)</th>
+                <th scope="col" className="num">As Per RLDC Schedule (MWh)</th>
+                <th scope="col" className="num">Gap (MWh)</th>
+                <th scope="col">Reconciliation Status</th>
               </tr>
             </thead>
             <tbody>
-              {DUMMY_DATA.map((row) => (
-                <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50 text-gray-700">
-                  <td className="px-3 py-3 border-r border-gray-100">{row.id}</td>
-                  <td className="px-3 py-3 border-r border-gray-100">{row.contract}</td>
-                  <td className="px-3 py-3 border-r border-gray-100 text-left">{row.entity}</td>
-                  <td className="px-3 py-3 border-r border-gray-100">{row.appNo}</td>
-                  <td className="px-3 py-3 border-r border-gray-100">{row.approvalNo}</td>
-                  <td className="px-3 py-3 border-r border-gray-100">{row.approved}</td>
-                  <td className="px-3 py-3 border-r border-gray-100">{row.rea}</td>
-                  <td className="px-3 py-3 border-r border-gray-100">{row.rldc}</td>
-                  <td className="px-3 py-3 font-medium">
-                    {row.status === 'Pending' ? (
-                      <span className="text-amber-600">Pending</span>
-                    ) : (
-                      <span className="text-gray-700">{row.status}</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {loading ? (
+                <tr><td colSpan={9} className="empty-cell">Loading the reconciliation…</td></tr>
+              ) : shown.length === 0 ? (
+                <tr><td colSpan={9} className="empty-cell">No applications on record for this selection</td></tr>
+              ) : shown.map((r, i) => {
+                const gap = (Number(r.approved) || 0) - (Number(r.rea) || 0);
+                return (
+                  <tr key={r.id || `${r.appNo}-${i}`}>
+                    <td>{r.contract}</td>
+                    <td>{r.entity}</td>
+                    <td>{r.appNo}</td>
+                    <td>{r.approvalNo}</td>
+                    <td className="num">{fmtNumber(r.approved)}</td>
+                    <td className="num">{fmtNumber(r.rea)}</td>
+                    <td className="num">{fmtNumber(r.rldc)}</td>
+                    <td className="num">{gap ? fmtNumber(gap) : '—'}</td>
+                    <td><Badge type={DONE.test(r.status || '') ? 'success' : 'warning'}>{r.status}</Badge></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-
-      </div>
+      </Card>
     </div>
   );
 }

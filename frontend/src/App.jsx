@@ -70,7 +70,6 @@ const OAReconciliation = lazy(() => import('./pages/trading/OAReconciliation.jsx
 const CustomerReceivablesTable = lazy(() => import('./pages/trading/CustomerReceivablesTable.jsx'));
 const NOARDetailCard = lazy(() => import('./pages/trading/NOARDetailCard.jsx'));
 const ImplementedScheduleGrid = lazy(() => import('./pages/trading/ImplementedScheduleGrid.jsx'));
-const TDSSummaryLedger = lazy(() => import('./pages/trading/TDSSummaryLedger.jsx'));
 const BillOfSupplyForm = lazy(() => import('./pages/trading/BillOfSupplyForm.jsx'));
 const REAReconciliationGrid = lazy(() => import('./pages/trading/REAReconciliationGrid.jsx'));
 const ERPVendorMasterTable = lazy(() => import('./pages/trading/ERPVendorMasterTable.jsx'));
@@ -333,7 +332,9 @@ export default function App() {
         <Route path="trading/cea-reports" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CEAReportsDashboard /></ProtectedRoute>} />
         <Route path="trading/power-market" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PowerMarketDashboard /></ProtectedRoute>} />
         <Route path="reports/dispatch/implemented" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ImplementedScheduleGrid /></ProtectedRoute>} />
-        <Route path="compliance/tax/tds-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TDSSummaryLedger /></ProtectedRoute>} />
+        {/* The TDS format report has one implementation, read from tds_format_entries.
+            This path used to open a second, hard-coded copy of it. */}
+        <Route path="compliance/tax/tds-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TdsFormatReport /></ProtectedRoute>} />
         <Route path="trading/form-iv" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CERCFormIV /></ProtectedRoute>} />
         <Route path="trading/bulk-communications" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BulkCommunications /></ProtectedRoute>} />
         <Route path="trading/inbox" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><InboxMailList /></ProtectedRoute>} />

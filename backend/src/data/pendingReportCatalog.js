@@ -160,6 +160,76 @@ export const PENDING_REPORT_CATALOG = {
       { key: 'last_updated', label: 'Last Updated' },
     ],
   },
+  // The two SAP upload layouts finance pulls out of here. `code` is the SAP
+  // field name, shown above the plain-English label: the person running the
+  // report reads the label, the person loading the file into SAP reads the code.
+  'erp-vendor-master': {
+    title: 'Vendor Format',
+    showSr: false,
+    columns: [
+      { key: 'type', label: 'Vendor Type' },
+      { key: 'partnerRole', label: 'BP Role', code: 'PARTNER_ROLE' },
+      { key: 'creationGroup', label: 'Grouping', code: 'CREATION_GROUP' },
+      { key: 'firstName', label: 'First Name', code: 'NAME_FIRST' },
+      { key: 'lastName', label: 'Last Name', code: 'NAME_LAST' },
+      { key: 'lang', label: 'Correspondence Lang', code: 'LANGUOCORR' },
+      { key: 'searchTerm', label: 'Search Term / Old Vendor No.', code: 'BU_SORT1_TXT' },
+    ],
+  },
+  'erp-vendor-payable': {
+    title: 'Vendor Payable Format',
+    showSr: false,
+    columns: [
+      { key: 'desc', label: 'Description' },
+      { key: 'docDate', label: 'Document Date' },
+      { key: 'docType', label: 'Document Type' },
+      { key: 'companyCode', label: 'Company Code' },
+      { key: 'postingDate', label: 'Posting Date' },
+      { key: 'currency', label: 'Currency' },
+      { key: 'reference', label: 'Reference' },
+      { key: 'headerText', label: 'Document Header Text' },
+      { key: 'postingKey', label: 'Posting Key' },
+      { key: 'vendorNo', label: 'SAP Vendor No.' },
+      { key: 'vendorName', label: 'Vendor Name' },
+      { key: 'refGL', label: 'Reference GL' },
+      { key: 'pan', label: 'PAN' },
+    ],
+  },
+  'erp-customer-receivable': {
+    title: 'Customer Receivables Format',
+    showSr: false,
+    columns: [
+      { key: 'desc', label: 'Description' },
+      { key: 'docDate', label: 'Document Date' },
+      { key: 'docType', label: 'Document Type' },
+      { key: 'companyCode', label: 'Company Code' },
+      { key: 'postingDate', label: 'Posting Date' },
+      { key: 'currency', label: 'Currency' },
+      { key: 'reference', label: 'Reference' },
+      { key: 'headerText', label: 'Document Header Text' },
+      { key: 'postingKey', label: 'Posting Key' },
+      { key: 'customerNo', label: 'SAP Customer No.' },
+      { key: 'customerName', label: 'Customer Name' },
+      { key: 'refGL', label: 'Reference GL' },
+      { key: 'pan', label: 'PAN' },
+    ],
+  },
+  // What the RLDC's regional energy account says a buyer drew against what its
+  // open-access approval allowed, application by application.
+  'rea-sea-reconciliation': {
+    title: 'REA/SEA Reconciliation',
+    columns: [
+      { key: 'month', label: 'Month' },
+      { key: 'contract', label: 'Contract' },
+      { key: 'entity', label: 'Entity Name' },
+      { key: 'appNo', label: 'Application No.' },
+      { key: 'approvalNo', label: 'Approval No.' },
+      { key: 'approved', label: 'Approved (MWh)' },
+      { key: 'rea', label: 'As per REA (MWh)' },
+      { key: 'rldc', label: 'As per RLDC (MWh)' },
+      { key: 'status', label: 'Status' },
+    ],
+  },
 };
 
 const CERC_FORMS = [

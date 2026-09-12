@@ -84,7 +84,7 @@ hain. Bhejne se pehle dekh lena: sirf numbering hai ya 5 sawal chhoot gaye.)
 |---|-----|--------|
 | 25 ✅ | **`.alert` CSS kabhi bani hi nahi** | **Fix, 11 Sep.** `styles.css` mein `.alert` + error / danger / warning / success / info. Pehle HydroBilling, NOC Updation, Portfolio ID samet kai screens ke error/success message plain text dikhte the. |
 | 26 ✅ | **Frontend aur backend ke role groups alag** | **Fix, 11 Sep.** Frontend ko backend jaisa kiya (API hi decide karti hai): `IT_SUPER_ADMIN` trading screens se hata (API waise bhi 403 deti thi), `REIA_ADMIN` ko REIA screens. `roleGroupsParity.test.js` aage drift pakdega. |
-| 27 🟡 | **Portfolio Registry abhi mock** | `master/portfolio-registry` `MOCK_ASSETS` pe chalti hai. Ab `client_exchange_portfolios` table hai — registry ko usse joda ja sakta hai. |
+| 27 ✅ | **Portfolio Registry abhi mock** | **Fix, 12 Sep.** Registry ab `client_exchange_portfolios` se padhti hai — client ke hisaab se group, exchange / portfolio id / naam / kisne kab badla. Ek hi banaayi hui company ("NAITWAR MORI HEP"), do banaaye hue portfolio id, 14 field ka nakli profile drawer aur "Not available yet" wale do button hat gaye. |
 
 ## G. Trading Client Portal — 12 Sep ki jaanch
 
@@ -101,11 +101,32 @@ yaani har call 403. Jo module allow karta tha, usme data kisi ka bhi mil jaata t
 | 32 ✅ | **Desk ke buttons client ko dikhte the** | **Fix, 12 Sep.** Buttons chhupane ke bajaye client ko desk ki screens se hi hata diya — 16 desk routes ab internal-only hain, toh client URL type karke bhi nahi khol sakta. Market Rates & Analytics dono ke paas rahi, kyunki wo data market ka hai kisi client ka nahi. Backend par bhi likha hua hai: client ke liye bid banana, bilateral/exchange contract banana aur invoice generate karna — sab 403. |
 | 33 ✅ | **Client ke liye alag screens** | **Fix, 12 Sep.** Teen nayi read-only screens: **My Bids** (kitna offer kiya, kitna clear hua, stub wali bids saaf mark), **My Deals** (bilateral + exchange contracts, NOAR status ke saath), **My Bills & Ledger** (invoices, account ledger, balance). Client ka menu ab inhi par jaata hai. |
 
+## H. Bina input wala backlog — 12 Sep
+
+Jo kaam user ke faisle ke bina ho sakta tha. Poora backend suite: **74 files /
+1225 tests pass**, frontend build clean.
+
+| # | Kya | Haalat |
+|---|-----|--------|
+| 34 ✅ | **Client scoping ke bache hue suraakh** | **Fix.** `GET /api/bids/:id` aur `/:id/chain` list ke scope ko nahi maante the — doosre client ki bid id se khul jaati thi (ab 404). `/standing-clearance/:clientId` bhi kisi bhi client ki clearance deta tha; `/standing-clearance` (poore desk ka board) ab desk-only hai. |
+| 35 ✅ | **Trading invoices sabko dikhti thi** | **Fix.** `/api/trading-invoices` par sirf `requireAuth` tha — koi bhi logged-in user, seller/buyer portal wala bhi, platform ki saari trading invoices list kar sakta tha. Ab desk + jiska bill hai, aur detail bhi scoped. |
+| 36 ✅ | **`/audit-logs/log-export` khula tha** | **Fix.** Koi bhi logged-in user kisi bhi module ka `DATA_EXPORT` entry likh sakta tha — chain mein jhoothi trail daalne ka raasta. Ab sirf SJVN ke apne roles. |
+| 37 ✅ | **Role parity test DB tak** | **Fix.** `roleGroupsParity.test.js` ab `users.role` ke CHECK constraint se roles padh kar match karta hai — UI ya API kabhi aisa role na gine jo DB hi na maane (yahi #31 mein hua tha). |
+| 38 ✅ | **ERP format screens hardcoded thi** | **Fix.** Vendor Format (FLVN00), Vendor Payable aur Customer Receivable — teen SAP upload layouts — rows source mein likhi hui thi: asli company naam, asli SAP vendor/customer number (`1010562`, `1004872`), asli invoice reference (`KEIPL/SOP/340`, `SJVN/OA/NDMC/...`). Ye live portal se utaari hui data hai aur repo ka remote hai. Teeno ab `iset-reports` catalog ke kind hain; rows ignored `data/live/` mein gayi, jaise baaki saare pending report. Fresh clone par layout dikhti hai, rows nahi. |
+| 39 ✅ | **"Selection Criteria" jo kuch filter nahi karti thi** | **Fix.** Vendor Payable aur Customer Receivable ka Document Date, aur Vendor Format ka date range — teeno enter karne par wahi rows dikhati thi. Ab date asli filter hai (register DD.MM.YYYY rakhta hai, conversion screen karti hai), aur Vendor Format wahi poochhti hai jo register jaanta hai: vendor type. |
+| 40 ✅ | **REA/SEA Reconciliation ek mockup thi** | **Fix.** Month / Year / Entity ke box `readOnly` the, column header pe sort ka hover tha par sort nahi, CSV/Excel/PDF button kuch nahi karte the, aur markup ek CSS framework ke liye likha tha jo ye app ship nahi karti — screen unstyled khulti thi. Ab app ke apne components: month + entity ke asli filter, approved vs REA ka **gap** column aur pending applications ka count. Rows bhi register se. |
+| 41 ✅ | **TDS Format Report do jagah** | **Fix.** `compliance/tax/tds-report` ek doosri, hardcoded aur unstyled copy kholti thi (12 asli application/approval number source mein). Wahi route ab asli `tds_format_entries` wali report kholta hai; nakli copy delete. |
+
+**Bacha hua (isi list se):** REIA dashboard ke CP-58-61 KPI (LPS recovered /
+recoverable, CERC Form-IV status, developer vs buyer pending split, ageing
+buckets) · contract bulk upload · seller invoice Excel template upload · #22 test
+flake · Tailwind ke liye likhi hui 16 aur screens (unstyled khulti hain).
+
 ---
 
 ## Seedha agla kadam
 
-1. **Humare haath mein, jaldi:** #27 registry jodna, #21 push + merge ka faisla.
+1. **Humare haath mein, jaldi:** #21 push + merge ka faisla, #22 test flake, section H ke bache hue kaam.
 2. **Emails bhejo / follow-up karo:** #3 PXIL, #4 WBES, #5 NOAR, #2 IEX REC.
 3. **Deploy pe:** #1 IEX enable + connectivity probe.
 4. **Committee/Delhi:** #6 DSM rates aur section D.
