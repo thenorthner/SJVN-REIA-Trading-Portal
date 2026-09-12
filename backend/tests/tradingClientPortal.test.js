@@ -167,3 +167,21 @@ describe('trading client — the screens its menu opens', () => {
     expect((await get('/api/billing-settlement/soa', t.desk)).body).toHaveLength(2);
   });
 });
+
+describe('the desk keeps its own actions', () => {
+  // The client's menu used to open the desk's consoles, so their buttons were
+  // in front of a client that the API would refuse. The menu now points at the
+  // client's own screens; these are the refusals behind that.
+  it('refuses a client the writes those consoles offer', async () => {
+    const bid = {
+      client_id: clientA, exchange: 'IEX', product: 'DAM', bid_date: '2026-09-01',
+      delivery_date: '2026-09-01', quantum_mw: 10, price_per_unit: 4,
+      blocks: [{ time_block: '00:00-00:15', quantum_mw: 10, price_per_unit: 4 }],
+    };
+    expect((await post('/api/bids', t.byClientId, bid)).status).toBe(403);
+    expect((await post('/api/bilateral', t.byClientId, {})).status).toBe(403);
+    expect((await post('/api/exchange-contracts', t.byClientId, {})).status).toBe(403);
+    expect((await post('/api/billing-settlement/invoices/generate', t.byClientId, {})).status).toBe(403);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM bids').get().n).toBe(3);
+  });
+});

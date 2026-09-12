@@ -196,16 +196,14 @@ const NAV_TRADING_CLIENT = [
     section: 'Trading Client Portal',
     roles: null,
     links: [
-      { to: '/trading/home', label: 'Home Dashboard' },
-      { to: '/master/portfolio-registry', label: 'Portfolio Registry' },
+      // The client's own screens. This menu used to list the desk's consoles —
+      // the bidding engine, the bilateral desk, Billing & Settlement — which a
+      // client can open but whose every call the API refuses.
+      { to: '/trading/home', label: 'Home Dashboard', end: true },
       { to: '/trading/my-profile', label: 'My Profile & Portfolio' },
-      { to: '/trading/pre-trade', label: 'Pre-Trade Board' },
-      { to: '/trading/dam', label: 'My DAM Bids' },
-      { to: '/trading/gdam', label: 'My GDAM Bids' },
-      { to: '/trading/rtm', label: 'My RTM Bids' },
-      { to: '/trading/bilateral', label: 'Bilateral Contracts' },
-      { to: '/trading/bilateral/desk', label: 'My Bilateral Deals' },
-      { to: '/trading/billing-settlement', label: 'My Billing & Settlement' },
+      { to: '/trading/my-bids', label: 'My Bids' },
+      { to: '/trading/my-deals', label: 'My Deals' },
+      { to: '/trading/my-bills', label: 'My Bills & Ledger' },
       { to: '/trading/market-analytics', label: 'Market Rates & Analytics' },
     ],
   },
