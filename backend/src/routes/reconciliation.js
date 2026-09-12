@@ -631,8 +631,14 @@ router.post('/:id/acknowledge', (req, res) => {
     db.prepare(`UPDATE reconciliations SET sjvn_ack_at = datetime('now'), sjvn_ack_by = ?, discrepancy_notes = COALESCE(?, discrepancy_notes), updated_at = datetime('now') WHERE id = ?`)
       .run(req.user.name, remarks ? `SJVN Note: ${remarks}` : null, recon.id);
   } else {
+    // Compared by side rather than by exact role: a company's L1-L3 users are
+    // that counterparty too, and matching 'BUYER' against 'BUYER_L2' refused
+    // every sub-user the sign-off their own screen offers them. A statement
+    // with no side recorded falls back to canAccessRecon above, which has
+    // already established that this company is a party to the contract.
+    const side = counterpartySide(req.user);
     const okRole =
-      (req.user.role === recon.counterparty_role) ||
+      (side !== null && (recon.counterparty_role == null || side === recon.counterparty_role)) ||
       (recon.counterparty_role === 'TRADING_CLIENT' && ['TRADING_CLIENT', 'TRADING_USER'].includes(req.user.role));
     if (!okRole && req.user.role !== 'SJVN_ADMIN') {
       return res.status(403).json({ error: 'Only counterparty can acknowledge on this side' });

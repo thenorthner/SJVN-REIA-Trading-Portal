@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { resolveTariff } from '../services/tariffStructure.js';
 import db from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES, counterpartySide } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES, BUYER_ROLES, counterpartySide } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct, billableCapacityMw, invalidDecision } from '../util.js';
 import { payableNow, lpsBaseAmount, accruedLps, tieredRebatePct, daysBetween } from '../disputesConstants.js';
 import { payerStateForInvoice } from '../services/workingCalendar.js';
@@ -1696,9 +1696,12 @@ router.post('/waterfall-payment', requireRole(...ROLE_GROUPS.FINANCE, ...ROLE_GR
   res.status(201).json({ received: Math.round(amt), allocated: Math.round(amt - remaining), unallocated: Math.round(remaining), allocations });
 });
 
-router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, 'BUYER'), (req, res) => {
+// Every user of a buyer company may notify a payment, not only its admin — and
+// the bill has to be one of that company's. Nothing checked the second, so a
+// buyer could record a payment against another company's invoice by its id.
+router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, ...BUYER_ROLES), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (!inv || !ownsInvoice(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status === 'CANCELLED') {
     return res.status(400).json({ error: 'Cannot record payment against a cancelled invoice' });
   }

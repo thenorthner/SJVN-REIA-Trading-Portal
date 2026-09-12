@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { generateDemandLetterPdf } from '../scripts/demandLetterPdf.js';
-import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, BUYER_ROLES, counterpartySide } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, invalidDecision } from '../util.js';
 import {
   computeCoverage,
@@ -500,7 +500,10 @@ router.post('/:id/utilize', requireRole(...REIA_WRITE), (req, res) => {
   res.json(enrich(fresh));
 });
 
-router.post('/:id/replenish', requireRole(...REIA_WRITE, 'BUYER'), (req, res) => {
+// The whole buyer company, not only its admin: topping up a revolving LC is
+// the sort of thing a company's finance maker does. Ownership is enforced by
+// canAccessInstrument below either way.
+router.post('/:id/replenish', requireRole(...REIA_WRITE, ...BUYER_ROLES), (req, res) => {
   const amount = Number(req.body.amount);
   const ps = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(req.params.id);
   if (!ps) return res.status(404).json({ error: 'Not found' });

@@ -36,9 +36,16 @@ export default function BuyerPaymentSecurity() {
   }
 
   async function requestRelease() {
-    await api.paymentSecurity.releaseRequest(detail.id, 'Buyer release request');
-    setDetail(await api.paymentSecurity.get(detail.id));
-    load();
+    setError('');
+    try {
+      await api.paymentSecurity.releaseRequest(detail.id, 'Buyer release request');
+      setDetail(await api.paymentSecurity.get(detail.id));
+      load();
+    } catch (err) {
+      // A refusal used to disappear into an unhandled rejection, leaving the
+      // panel looking as though the request had gone in.
+      setError(err.response?.data?.error || 'Release request failed');
+    }
   }
 
   return (
