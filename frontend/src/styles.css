@@ -709,6 +709,9 @@ a:hover { text-decoration: underline; }
 .btn-success:hover:not(:disabled) { background: #d3f0e1; }
 
 .btn-sm { padding: 5px 10px; font-size: 12px; }
+/* Nineteen buttons across eight screens asked for btn-xs — the row actions
+   inside a dense table — and nothing defined it, so each came out full size. */
+.btn-xs { padding: 3px 8px; font-size: 11.5px; line-height: 1.45; }
 
 /* ---------------- Stat cards / KPI grid ---------------- */
 .kpi-grid {

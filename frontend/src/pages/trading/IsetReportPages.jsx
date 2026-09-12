@@ -1,3 +1,5 @@
+import React from 'react';
+import { Link } from 'react-router-dom';
 import IsetReportTable from './IsetReportTable.jsx';
 
 const API_DETAILS_COLS = [
@@ -23,7 +25,16 @@ const REG_CATEGORY_COLS = [
 ];
 
 const NOAR_COLS = [
-  { key: 'application_no', label: 'Application No.' },
+  {
+    key: 'application_no',
+    label: 'Application No.',
+    // The application's own page — its approval and the charges booked on it.
+    render: (r) => (
+      <Link className="btn-link" to={`/compliance/noar/${encodeURIComponent(r.application_no)}`}>
+        {r.application_no}
+      </Link>
+    ),
+  },
   { key: 'applicant_name', label: 'Applicant Name' },
   { key: 'seller_name', label: 'Seller Name' },
   { key: 'buyer_name', label: 'Buyer Name' },

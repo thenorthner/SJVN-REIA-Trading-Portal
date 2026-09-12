@@ -305,6 +305,35 @@ function listKind(kind, q) {
   }
 }
 
+// The charge lines an open-access application is billed, as the TDS format
+// register holds them: the application fee, then each agency's STOA charge with
+// the tax withheld from it. A line with nothing against it is left out.
+const NOAR_CHARGE_LINES = [
+  { name: 'Application Fee', amount: 'noar_fee' },
+  { name: 'STOA — Grid India (POSOCO)', amount: 'stoa_posoco', tds: 'tds_posoco', vendor: 'vendor_posoco', pan: 'pan_posoco' },
+  { name: 'STOA — CTU', amount: 'stoa_ctu', tds: 'tds_ctu', vendor: 'vendor_ctu', pan: 'pan_ctu' },
+  { name: "STOA — Seller's STU", amount: 'stoa_seller_stu', tds: 'tds_seller_stu', vendor: 'name_seller_stu', pan: 'pan_seller_stu' },
+  { name: "STOA — Buyer's STU", amount: 'stoa_buyer_stu', tds: 'tds_buyer_stu', vendor: 'name_buyer_stu', pan: 'pan_buyer_stu' },
+  { name: "STOA — Seller's SLDC", amount: 'stoa_seller_sldc', tds: 'tds_seller_sldc', vendor: 'name_seller_sldc', pan: 'pan_seller_sldc' },
+  { name: "STOA — Buyer's SLDC", amount: 'stoa_buyer_sldc', tds: 'tds_buyer_sldc', vendor: 'name_buyer_sldc', pan: 'pan_buyer_sldc' },
+];
+
+function noarChargeLines(tds) {
+  if (!tds) return [];
+  return NOAR_CHARGE_LINES.map((line) => {
+    const payable = tds[line.amount];
+    const withheld = line.tds ? tds[line.tds] : null;
+    return {
+      name: line.name,
+      vendor: line.vendor ? tds[line.vendor] || null : null,
+      pan: line.pan ? tds[line.pan] || null : null,
+      payable: payable == null ? null : Number(payable),
+      tds: withheld == null ? null : Number(withheld),
+      net: payable == null ? null : Number(payable) - Number(withheld || 0),
+    };
+  }).filter((line) => line.payable || line.tds);
+}
+
 router.get('/meta', requireRole(...ROLE_GROUPS.TRADING_ALL), (_req, res) => {
   const catalogs = {};
   for (const kind of ALL_PENDING_KINDS) {
@@ -312,6 +341,39 @@ router.get('/meta', requireRole(...ROLE_GROUPS.TRADING_ALL), (_req, res) => {
     catalogs[kind] = { title: c.title, columns: c.columns, showSr: c.showSr !== false };
   }
   res.json({ kinds: KINDS, source: 'typed-tables', catalogs });
+});
+
+// One NOAR application in full: the approval NRLDC granted, and the open-access
+// charges booked against it. Both are on record — the approval in
+// noar_approval_entries, the charges in the TDS format register — but nothing
+// read them together, so the detail screen behind the NOAR Approvals report
+// carried one application's numbers written into the page.
+router.get('/noar-approvals/:applicationNo', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
+  const applicationNo = String(req.params.applicationNo || '').trim();
+  const approval = db.prepare(`
+    SELECT * FROM noar_approval_entries WHERE application_no = ?
+    ORDER BY approval_date DESC, created_at DESC
+  `).get(applicationNo) || null;
+  const tds = db.prepare('SELECT * FROM tds_format_entries WHERE application_no = ?').get(applicationNo) || null;
+
+  if (!approval && !tds) {
+    return res.status(404).json({ error: `No NOAR application on record with number ${applicationNo}` });
+  }
+
+  res.json({
+    application_no: applicationNo,
+    approval,
+    charges: noarChargeLines(tds),
+    payment: tds ? {
+      nodal_rldc: tds.nodal_rldc || null,
+      payment_date: tds.payment_date || null,
+      total_stoa: tds.total_stoa,
+      total_tds: tds.total_tds,
+      net_payment: tds.net_payment,
+      actual_stoa_paid: tds.actual_stoa_paid,
+      actual_tds_paid: tds.actual_tds_paid,
+    } : null,
+  });
 });
 
 router.get('/:kind', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {

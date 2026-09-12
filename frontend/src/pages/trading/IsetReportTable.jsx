@@ -21,6 +21,8 @@ function cellValue(row, key) {
 
 /**
  * Shared ISET-style report: section header, CSV/Excel/PDF, search, sortable table.
+ * A column may carry `render(row)` to draw its own cell; sorting, searching and
+ * every export keep using the row's plain value.
  */
 export default function IsetReportTable({
   kind,
@@ -206,7 +208,9 @@ export default function IsetReportTable({
                     <tr key={r.id || idx}>
                       {showSr && <td style={{ textAlign: 'center' }}>{idx + 1}</td>}
                       {columns.map((c) => (
-                        <td key={c.key}>{cellValue(r, c.key)}</td>
+                        // A column may render its own cell (a link to the record
+                        // it names); exports still take the plain value.
+                        <td key={c.key}>{c.render ? c.render(r) : cellValue(r, c.key)}</td>
                       ))}
                     </tr>
                   ))}

@@ -557,6 +557,10 @@ export const api = {
     syncResult: (id) => p(`/bids/${id}/sync-result`),
     carryForward: (id, body) => p(`/bids/${id}/carry-forward`, body),
     chain: (id) => g(`/bids/${id}/chain`),
+    // The SLDC standing clearance behind a client's bids: its validity, T-GNA,
+    // ramp rate, losses and the charges that come with it.
+    standingClearance: (clientId) => g(`/bids/standing-clearance/${clientId}`),
+    clearancesNeedingAttention: () => g('/bids/standing-clearance'),
   },
   exchangeContracts: {
     list: (params) => g('/exchange-contracts', params),
@@ -636,6 +640,7 @@ export const api = {
   isetReports: {
     meta: () => g('/iset-reports/meta'),
     list: (kind) => g(`/iset-reports/${kind}`),
+    noarApplication: (applicationNo) => g(`/iset-reports/noar-approvals/${encodeURIComponent(applicationNo)}`),
     createDailySchedule: (body) => p('/iset-reports/daily-schedule', body),
   },
   recTrading: {
