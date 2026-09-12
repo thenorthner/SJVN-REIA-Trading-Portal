@@ -133,6 +133,30 @@ describe('trading client — the screens its menu opens', () => {
     expect(bilateral.body.map((c) => c.client_id)).toEqual([clientA]);
   });
 
+  it("cannot open another client's bid, its carry-forward chain or its clearance", async () => {
+    const theirBid = db.prepare('SELECT id FROM bids WHERE client_id = ?').get(clientB).id;
+    const ourBid = db.prepare('SELECT id FROM bids WHERE client_id = ?').get(clientA).id;
+    expect((await get(`/api/bids/${theirBid}`, t.byClientId)).status).toBe(404);
+    expect((await get(`/api/bids/${theirBid}/chain`, t.byClientId)).status).toBe(404);
+    expect((await get(`/api/bids/${ourBid}`, t.byClientId)).status).toBe(200);
+    expect((await get(`/api/bids/standing-clearance/${clientB}`, t.byClientId)).status).toBe(404);
+    // The desk's board covers every client, so it stays the desk's.
+    expect((await get('/api/bids/standing-clearance', t.byClientId)).status).toBe(403);
+    expect((await get('/api/bids/standing-clearance', t.desk)).status).toBe(200);
+  });
+
+  it('shows only its own trading invoices, and keeps them from other portals', async () => {
+    const list = await get('/api/trading-invoices', t.byClientId);
+    expect(list.status).toBe(200);
+    expect(list.body.map((i) => i.client_id)).toEqual([clientA]);
+
+    const theirs = db.prepare('SELECT id FROM trading_invoices WHERE client_id = ?').get(clientB).id;
+    expect((await get(`/api/trading-invoices/${theirs}`, t.byClientId)).status).toBe(404);
+    expect((await get('/api/trading-invoices', t.desk)).body).toHaveLength(2);
+    // A seller or buyer has no business in the trading desk's billing at all.
+    expect((await get('/api/trading-invoices', tokenFor('SELLER'))).status).toBe(403);
+  });
+
   it("cannot open another client's agreement or deal by id", async () => {
     const theirExchange = db.prepare('SELECT id FROM exchange_contracts WHERE client_id = ?').get(clientB).id;
     const theirDeal = db.prepare('SELECT id FROM bilateral_transactions WHERE client_id = ?').get(clientB).id;

@@ -227,8 +227,16 @@ router.get('/violations/sod', requireRole(...AUDITOR), (req, res) => {
   res.json(detectSoDViolations());
 });
 
+// Whoever is signed in could write a DATA_EXPORT entry here, with any module
+// and any payload — a way to put noise, or a false trail, into the chain. The
+// screens that call it are SJVN's own.
+const EXPORT_LOGGERS = [
+  'SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'REIA_USER',
+  'TRADING_USER', 'FINANCE_USER', 'MANAGEMENT', 'COMPLIANCE_AUDITOR',
+];
+
 /** Record an export made by another screen (the audit trail's own CSV records itself). */
-router.post('/log-export', (req, res) => {
+router.post('/log-export', requireRole(...EXPORT_LOGGERS), (req, res) => {
   const { module, details } = req.body;
   secureLogAudit(req, {
     action: 'DATA_EXPORT',

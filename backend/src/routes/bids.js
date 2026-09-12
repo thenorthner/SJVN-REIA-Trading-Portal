@@ -109,13 +109,15 @@ router.get('/', (req, res) => {
 // IEX connection state — which pulls are live and what is still stub.
 // Clearance states across the desk — drives the compliance ticker and the
 // clearance alerts on the notification bell. Declared before '/:id'.
-router.get('/standing-clearance', (req, res) => {
+router.get('/standing-clearance', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
   res.json(clearancesNeedingAttention());
 });
 
 // Standing clearance on record for a client, with its derived state. Declared
 // before '/:id' so the literal path is not swallowed by the id route.
 router.get('/standing-clearance/:clientId', (req, res) => {
+  // A client's clearance is its own — its TGNA, ramp rate and approver.
+  if (!mayUseClient(req.user, req.params.clientId)) return res.status(404).json({ error: 'Client not found' });
   const clearance = getClearance(req.params.clientId);
   if (!clearance) return res.status(404).json({ error: 'Client not found' });
   res.json(clearance);
@@ -195,14 +197,15 @@ router.get('/bulk-template', (_req, res) => {
 // Get single bid
 router.get('/:id', (req, res) => {
   const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(req.params.id);
-  if (!bid) return res.status(404).json({ error: 'Bid not found' });
+  // The list is scoped to the caller's client; so is a single bid by id.
+  if (!bid || !mayUseClient(req.user, bid.client_id)) return res.status(404).json({ error: 'Bid not found' });
   res.json(withDetails(bid));
 });
 
 // Full OCF lineage for a bid — walks back to the original leg, then forward through carry-forwards.
 router.get('/:id/chain', (req, res) => {
   const bid = db.prepare('SELECT * FROM bids WHERE id = ?').get(req.params.id);
-  if (!bid) return res.status(404).json({ error: 'Bid not found' });
+  if (!bid || !mayUseClient(req.user, bid.client_id)) return res.status(404).json({ error: 'Bid not found' });
 
   // Walk back to the original leg, guarding against a malformed cycle.
   let root = bid;

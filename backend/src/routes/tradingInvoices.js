@@ -3,9 +3,14 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit, seedInvoiceCounters } from '../util.js';
 import { createTradingInvoice } from '../services/tradingInvoice.js';
+import { clientScope, mayUseClient, TRADING_CLIENT_ROLES } from '../services/tradingClientScope.js';
 
 const router = Router();
 router.use(requireAuth);
+// The trading desk, and the client whose bills these are. Only requireAuth stood
+// here, so any signed-in user — a seller or buyer on their own portal included —
+// could list every trading invoice the platform holds.
+router.use(requireRole(...ROLE_GROUPS.TRADING_ALL, ...TRADING_CLIENT_ROLES));
 
 // Continue the ledger's real invoice registers (ENERGY 146+, OA 266+).
 seedInvoiceCounters();
@@ -21,7 +26,9 @@ router.get('/', (req, res) => {
   const { client_id, status } = req.query;
   let sql = 'SELECT * FROM trading_invoices WHERE 1=1';
   const params = [];
-  if (client_id) { sql += ' AND client_id = ?'; params.push(client_id); }
+  const scope = clientScope(req.user);
+  if (scope.restricted) { sql += scope.sql; params.push(...scope.params); }
+  else if (client_id) { sql += ' AND client_id = ?'; params.push(client_id); }
   if (status) { sql += ' AND status = ?'; params.push(status); }
   sql += ' ORDER BY created_at DESC';
   res.json(db.prepare(sql).all(...params).map(withClient));
@@ -29,7 +36,7 @@ router.get('/', (req, res) => {
 
 router.get('/:id', (req, res) => {
   const inv = db.prepare('SELECT * FROM trading_invoices WHERE id = ?').get(req.params.id);
-  if (!inv) return res.status(404).json({ error: 'Not found' });
+  if (!inv || !mayUseClient(req.user, inv.client_id)) return res.status(404).json({ error: 'Not found' });
   const payments = db.prepare('SELECT * FROM trading_payments WHERE trading_invoice_id = ? ORDER BY payment_date').all(req.params.id);
   res.json({ ...withClient(inv), payments });
 });

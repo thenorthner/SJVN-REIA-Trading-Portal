@@ -156,4 +156,14 @@ describe('audit trail — integrity and access', () => {
     expect((await get('/export.csv', {}, trader)).status).toBe(403);
     expect((await get('/summary', {}, trader)).status).toBe(403);
   });
+
+  it('lets only SJVN staff record an export in the trail', async () => {
+    const seller = tokenFor('SELLER');
+    const asSeller = await request(app).post('/api/audit-logs/log-export').set(auth(seller)).send({ module: 'REIA', details: { rows: 1 } });
+    expect(asSeller.status).toBe(403);
+
+    const asDesk = await request(app).post('/api/audit-logs/log-export').set(auth(trader)).send({ module: 'TRADING', details: { rows: 1 } });
+    expect(asDesk.status).toBe(200);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM audit_logs WHERE action = 'DATA_EXPORT' AND module = 'TRADING'").get().n).toBe(1);
+  });
 });
