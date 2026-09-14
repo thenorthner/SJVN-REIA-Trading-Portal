@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 
 // Seven invoice screens render through this one ledger. Its markup was written
 // in utility classes for a CSS framework this app does not ship, so it came out
@@ -49,7 +50,11 @@ afterEach(() => { act(() => root.unmount()); host.remove(); });
 
 const render = async (props = {}) => {
   await act(async () => {
-    root.render(<ViewBillInvoiceLedger billType="TRADING_MARGIN" title="Trading Margin Invoice Summary" {...props} />);
+    root.render(
+      <MemoryRouter>
+        <ViewBillInvoiceLedger billType="TRADING_MARGIN" title="Trading Margin Invoice Summary" {...props} />
+      </MemoryRouter>,
+    );
   });
 };
 const bodyRows = () => [...host.querySelectorAll('tbody tr')].map((tr) => tr.textContent);

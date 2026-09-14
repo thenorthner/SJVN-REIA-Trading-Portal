@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
+import { Link } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { Modal, Field, Card, fmtNumber } from '../../components/ui.jsx';
 
@@ -387,7 +388,7 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
                 <tr key={r.id}>
                   <td>{i + 1}</td>
                   <td>{r.client_name}</td>
-                  <td>{r.invoice_no}</td>
+                  <td><Link className="btn-link" to={`/invoices/view-bill/${r.id}`}>{r.invoice_no}</Link></td>
                   <td className="num">{fmtNumber(r.invoice_amount, 2)}</td>
                   <td>{fmtDisplayDate(r.invoice_date)}</td>
                   <td>{fmtDisplayDate(r.invoice_due_date)}</td>
