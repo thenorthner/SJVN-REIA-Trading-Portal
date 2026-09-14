@@ -91,6 +91,8 @@ export function buildBillingSummary({ from, to } = {}) {
         net_profit,
         collected,
         paid_out,
+        // What the month actually did to the bank, as against what it billed.
+        net_cash_flow: collected - paid_out,
         outstanding_receivable: Math.max(0, sales_billed - collected),
         outstanding_payable: Math.max(0, purchase_billed - paid_out),
         sales_count: r.sales_count || 0,
@@ -103,7 +105,7 @@ export function buildBillingSummary({ from, to } = {}) {
   const totals = months.reduce((acc, m) => {
     for (const k of [
       'sales_billed', 'purchase_billed', 'gross_margin', 'trading_margin', 'rebate_saved',
-      'lps_receivable', 'lps_payable', 'net_profit', 'collected', 'paid_out',
+      'lps_receivable', 'lps_payable', 'net_profit', 'collected', 'paid_out', 'net_cash_flow',
       'outstanding_receivable', 'outstanding_payable', 'sales_count', 'purchase_count', 'energy_mwh',
     ]) {
       acc[k] = (acc[k] || 0) + m[k];
@@ -111,12 +113,29 @@ export function buildBillingSummary({ from, to } = {}) {
     return acc;
   }, {});
 
+  // The security standing behind all of it: what counterparties have lodged, what
+  // has been drawn against it, and what is still available to draw. The MIS pack
+  // asks for it beside the cash figures, and nothing was reporting it.
+  const security = db.prepare(`
+    SELECT
+      COALESCE(SUM(limit_amount), 0) AS held,
+      COALESCE(SUM(utilized_amount), 0) AS utilized,
+      COALESCE(SUM(available_amount), 0) AS available,
+      COUNT(*) AS instruments,
+      COALESCE(SUM(CASE
+        WHEN validity_end IS NOT NULL AND date(validity_end) <= date('now','+60 days') THEN 1 ELSE 0
+      END), 0) AS expiring_soon
+    FROM payment_security
+    WHERE status IN ('ACTIVE','PARTIALLY_UTILIZED','RENEWED')
+  `).get();
+
   return {
     from: from || (months[0]?.billing_period ?? null),
     to: to || (months[months.length - 1]?.billing_period ?? null),
     month_count: months.length,
     months,
     totals,
+    payment_security: security,
   };
 }
 

@@ -131,6 +131,12 @@ export default function Reports() {
       <span style={{ color: r.net_profit >= 0 ? '#047857' : 'var(--red-deep)', fontWeight: 700 }}>{fmtCurrency(r.net_profit)}</span>
     )},
     { key: 'collected', header: 'Collected', render: (r) => fmtCurrency(r.collected) },
+    { key: 'paid_out', header: 'Paid Out', render: (r) => fmtCurrency(r.paid_out) },
+    { key: 'net_cash_flow', header: 'Net Cash Flow', render: (r) => (
+      <span style={{ color: (r.net_cash_flow ?? 0) >= 0 ? '#047857' : 'var(--red-deep)', fontWeight: 600 }}>
+        {fmtCurrency(r.net_cash_flow ?? (r.collected - r.paid_out))}
+      </span>
+    )},
     { key: 'outstanding_receivable', header: 'Outstanding Recv.', render: (r) => (
       <span style={{ color: r.outstanding_receivable > 0 ? 'var(--amber-strong)' : 'var(--slate-500)' }}>{fmtCurrency(r.outstanding_receivable)}</span>
     )},
@@ -247,6 +253,24 @@ export default function Reports() {
             <StatCard label="Net Profit" value={inrCompact(t.net_profit)} sub="Gross + rebate + LPS recv − LPS paid" tone={t.net_profit >= 0 ? 'good' : 'bad'} />
             <StatCard label="Collected" value={inrCompact(t.collected)} sub="Received from buyers" />
             <StatCard label="Outstanding Receivable" value={inrCompact(t.outstanding_receivable)} sub="Yet to collect" tone={t.outstanding_receivable > 0 ? 'bad' : undefined} />
+            {/* What the period did to the bank, as against what it billed — and
+                the security standing behind the whole book. The MIS pack asks
+                for both and nothing was reporting them. */}
+            <StatCard label="Paid Out" value={inrCompact(t.paid_out)} sub="Disbursed to developers" />
+            <StatCard
+              label="Net Cash Flow"
+              value={inrCompact(t.net_cash_flow ?? (t.collected - t.paid_out))}
+              sub="Collected − paid out"
+              tone={(t.net_cash_flow ?? (t.collected - t.paid_out)) >= 0 ? 'good' : 'bad'}
+            />
+            {data.payment_security && (
+              <StatCard
+                label="Payment Security Held"
+                value={inrCompact(data.payment_security.held)}
+                sub={`${data.payment_security.instruments || 0} live · ${inrCompact(data.payment_security.available)} available`}
+                tone={data.payment_security.expiring_soon > 0 ? 'bad' : undefined}
+              />
+            )}
           </div>
 
           <Card title={`Month-wise Breakup (${data.from || '—'} → ${data.to || '—'})`}>
