@@ -1,4 +1,5 @@
 import React from 'react';
+import { Card } from '../../components/ui.jsx';
 import { 
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   ComposedChart, AreaChart, Area, Cell
@@ -76,15 +77,14 @@ const ENLARGED_GTAM_DATA = [
 
 export default function GTAMAnalyticsWidget() {
   return (
-    <div className="p-4 space-y-6">
+    <div>
       
       {/* Top 10 Participants Row */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid-2">
         
         {/* Bilateral Chart */}
-        <div className="bg-white p-4 border border-gray-200 rounded-sm shadow-sm">
-          <h3 className="text-center font-bold text-gray-700 mb-6 text-lg">Top 10 Bilateral Participants</h3>
-          <div className="h-64">
+        <Card title="Top 10 Bilateral Participants">
+          <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={BILATERAL_DATA} margin={{ top: 0, right: 0, left: -20, bottom: 0 }} barCategoryGap="25%">
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -104,12 +104,11 @@ export default function GTAMAnalyticsWidget() {
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </Card>
 
         {/* DAM Chart */}
-        <div className="bg-white p-4 border border-gray-200 rounded-sm shadow-sm">
-          <h3 className="text-center font-bold text-gray-700 mb-6 text-lg">Top 10 DAM Participants</h3>
-          <div className="h-64">
+        <Card title="Top 10 DAM Participants">
+          <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={DAM_DATA} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -122,20 +121,20 @@ export default function GTAMAnalyticsWidget() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </Card>
 
       </div>
 
       {/* Enlarged GTAM Chart */}
-      <div className="bg-white p-4 border border-gray-200 rounded-sm shadow-sm">
-        <h3 className="text-center font-bold text-gray-700 mb-2 text-lg">Volume and Price of Electricity Under GTAM in PX's</h3>
+      <div style={{ background: 'var(--surface)', padding: 16, border: '1px solid var(--border)', borderRadius: 2, boxShadow: 'var(--shadow-sm)' }}>
+        <h3 style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text)', marginBottom: 8, fontSize: 17 }}>Volume and Price of Electricity Under GTAM in PX's</h3>
         
-        <div className="flex justify-between text-xs text-gray-500 mb-4 px-10">
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginBottom: 16, paddingLeft: 40, paddingRight: 40 }}>
           <span>TAM Actual Scheduled Volume (MU)</span>
           <span>TAM Weighted Average Price (₹/kWh)</span>
         </div>
 
-        <div className="h-80 w-full mb-10">
+        <div style={{ height: 320, width: '100%', marginBottom: 40 }}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={ENLARGED_GTAM_DATA} margin={{ top: 20, right: 20, bottom: 60, left: 20 }}>
               <CartesianGrid stroke="#eee" vertical={false} />
@@ -161,104 +160,104 @@ export default function GTAMAnalyticsWidget() {
         </div>
 
         {/* Custom Labels for PX Groups */}
-        <div className="relative -mt-20 mb-10 flex text-sm font-bold text-gray-700 justify-around ml-20 mr-10">
+        <div style={{ position: 'relative', marginTop: -80, marginBottom: 40, display: 'flex', fontSize: 13, fontWeight: 700, color: 'var(--text)', justifyContent: 'space-around', marginLeft: 80, marginRight: 40 }}>
            <span>HPX</span>
            <span>IEX</span>
            <span>PXIL</span>
         </div>
         
         {/* Custom Legend */}
-        <div className="flex justify-center gap-6 mt-6 pb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-3 bg-[#4b8ce3] rounded-sm"></div>
-            <span className="text-gray-600 text-sm font-semibold">TAM Actual Scheduled Volume (MU)</span>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 24, paddingBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 24, height: 12, background: '#4b8ce3', borderRadius: 2 }}></div>
+            <span className="chart-legend-label">TAM Actual Scheduled Volume (MU)</span>
           </div>
-          <div className="flex items-center gap-2">
-             <div className="w-4 h-4 rounded-full border-2 border-[#df5661] bg-white flex items-center justify-center">
-               <div className="w-full h-[2px] bg-[#df5661]"></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+             <div style={{ width: 16, height: 16, borderRadius: 999, border: '2px solid var(--border)', borderColor: '#df5661', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+               <div style={{ width: '100%', height: 2, background: '#df5661' }}></div>
             </div>
-            <span className="text-gray-600 text-sm font-semibold">TAM Weighted Average Price (₹/kWh)</span>
+            <span className="chart-legend-label">TAM Weighted Average Price (₹/kWh)</span>
           </div>
         </div>
 
       </div>
 
       {/* GTAM Data Table */}
-      <div className="bg-white border border-gray-200 rounded-sm shadow-sm overflow-hidden">
-        <table className="w-full text-sm text-center border-collapse">
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 2, boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
+        <table className="report-table">
           <thead>
-            <tr className="bg-[#4eb1fc] text-white">
-              <th className="p-3 border-r border-white/30 font-semibold w-24">PX</th>
-              <th className="p-3 border-r border-white/30 font-semibold text-left">Product</th>
-              <th className="p-3 border-r border-white/30 font-semibold">GTAM Actual Scheduled<br/>Volume (MU)</th>
-              <th className="p-3 font-semibold">GTAM Weighted Average Price<br/>(₹/kWh)</th>
+            <tr style={{ background: '#4eb1fc', color: '#fff' }}>
+              <th style={{ padding: 12, borderRight: '1px solid var(--border)', borderColor: 'rgba(255,255,255,0.25)', fontWeight: 600, width: 96 }}>PX</th>
+              <th style={{ padding: 12, borderRight: '1px solid var(--border)', borderColor: 'rgba(255,255,255,0.25)', fontWeight: 600, textAlign: 'left' }}>Product</th>
+              <th>GTAM Actual Scheduled<br/>Volume (MU)</th>
+              <th style={{ padding: 12, fontWeight: 600 }}>GTAM Weighted Average Price<br/>(₹/kWh)</th>
             </tr>
           </thead>
-          <tbody className="text-gray-700">
+          <tbody style={{ color: 'var(--text)' }}>
             {/* HPX Section */}
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 align-top" rowSpan={6}>HPX</td>
-              <td className="p-3 border-r border-gray-200 text-left">Any Day Single Sided<br/>Contracts</td>
-              <td className="p-3 border-r border-gray-200">28.40</td>
-              <td className="p-3">4.62</td>
+            <tr>
+              <td rowSpan={6}>HPX</td>
+              <td>Any Day Single Sided<br/>Contracts</td>
+              <td>28.40</td>
+              <td>4.62</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">Daily Contracts</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td>Daily Contracts</td>
+              <td>0.00</td>
+              <td>0.00</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">Day Ahead Contingency<br/>Contracts</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td>Day Ahead Contingency<br/>Contracts</td>
+              <td>0.00</td>
+              <td>0.00</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">Intra-Day Contracts</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td>Intra-Day Contracts</td>
+              <td>0.00</td>
+              <td>0.00</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">Monthly Contracts</td>
-              <td className="p-3 border-r border-gray-200">14.88</td>
-              <td className="p-3">4.67</td>
+            <tr>
+              <td>Monthly Contracts</td>
+              <td>14.88</td>
+              <td>4.67</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">Weekly Contracts</td>
-              <td className="p-3 border-r border-gray-200">9.92</td>
-              <td className="p-3">8.15</td>
+            <tr>
+              <td>Weekly Contracts</td>
+              <td>9.92</td>
+              <td>8.15</td>
             </tr>
 
             {/* IEX Section */}
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 align-top" rowSpan={6}>IEX</td>
-              <td className="p-3 border-r border-gray-200 text-left">Any Day Single Sided<br/>Contracts</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td rowSpan={6}>IEX</td>
+              <td>Any Day Single Sided<br/>Contracts</td>
+              <td>0.00</td>
+              <td>0.00</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">Daily Contracts</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td>Daily Contracts</td>
+              <td>0.00</td>
+              <td>0.00</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">Day Ahead Contingency<br/>Contracts</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td>Day Ahead Contingency<br/>Contracts</td>
+              <td>0.00</td>
+              <td>0.00</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">Intra-Day Contracts</td>
-              <td className="p-3 border-r border-gray-200">52.25</td>
-              <td className="p-3">3.01</td>
+            <tr>
+              <td>Intra-Day Contracts</td>
+              <td>52.25</td>
+              <td>3.01</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">Monthly Contracts</td>
-              <td className="p-3 border-r border-gray-200">4.07</td>
-              <td className="p-3">5.55</td>
+            <tr>
+              <td>Monthly Contracts</td>
+              <td>4.07</td>
+              <td>5.55</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">Weekly Contracts</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td>Weekly Contracts</td>
+              <td>0.00</td>
+              <td>0.00</td>
             </tr>
           </tbody>
         </table>

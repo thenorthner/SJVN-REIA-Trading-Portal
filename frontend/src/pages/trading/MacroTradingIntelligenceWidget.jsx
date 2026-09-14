@@ -1,4 +1,5 @@
 import React from 'react';
+import { Card } from '../../components/ui.jsx';
 import { 
   PieChart, Pie, Cell, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
 } from 'recharts';
@@ -37,8 +38,8 @@ const HPX_VOLUME_DATA = [
 const CustomREC_Tooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-white border border-gray-200 shadow-xl rounded-md p-4 text-sm min-w-[280px] z-50">
-        <div className="text-gray-500 font-medium mb-3 border-b border-gray-100 pb-2">{label}</div>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)', borderRadius: 6, padding: 16, fontSize: 13, minWidth: 280, zIndex: 50 }}>
+        <div style={{ color: 'var(--text-muted)', fontWeight: 500, marginBottom: 12, borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>{label}</div>
         
         {/* We expect the 4 payloads in order: Traded Vol, Buy Bid, Sell Bid, Price. Let's find them manually for exact styling */}
         {payload.map((entry, index) => {
@@ -50,12 +51,12 @@ const CustomREC_Tooltip = ({ active, payload, label }) => {
           if (entry.dataKey === 'sellBid') { labelText = 'Volume of Sell Bid'; color = '#eab308'; }
 
           return (
-            <div key={`rec-item-${index}`} className="flex justify-between items-center mb-1.5">
-              <div className="flex items-center gap-2">
-                 <span className="w-3 h-3 rounded-full" style={{ backgroundColor: color }}></span>
-                 <span className="text-gray-600 font-medium">{labelText}</span>
+            <div key={`rec-item-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                 <span style={{ width: 10, height: 10, borderRadius: 999, backgroundColor: color}}></span>
+                 <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{labelText}</span>
               </div>
-              <span className="font-bold text-gray-800 ml-6">
+              <span style={{ fontWeight: 700, color: 'var(--text)', marginLeft: 24 }}>
                  {entry.value ? entry.value.toLocaleString() : '0'}
               </span>
             </div>
@@ -86,15 +87,15 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, per
 
 export default function MacroTradingIntelligenceWidget() {
   return (
-    <div className="p-4 space-y-6">
+    <div>
       
       {/* Top Row: Licensee Market Share & REC Market Depth */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid-2">
         
         {/* Licensee Market Share Pie */}
-        <div className="bg-white p-6 border border-gray-200 rounded-sm shadow-sm flex flex-col">
-          <h3 className="text-center font-bold text-gray-700 mb-6 text-lg">% Share of Electricity Transacted By Top 7 Trading Licensees</h3>
-          <div className="flex-1 min-h-[300px]">
+        <div style={{ background: 'var(--surface)', padding: 24, border: '1px solid var(--border)', borderRadius: 2, boxShadow: 'var(--shadow-sm)', display: 'flex', flexDirection: 'column' }}>
+          <h3 style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text)', marginBottom: 24, fontSize: 17 }}>% Share of Electricity Transacted By Top 7 Trading Licensees</h3>
+          <div style={{ height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie 
@@ -120,25 +121,25 @@ export default function MacroTradingIntelligenceWidget() {
           </div>
           
           {/* Custom Grid Legend */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-2 mt-4 text-xs text-gray-600 px-4">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', rowGap: 8, marginTop: 16, fontSize: 11, color: 'var(--text-muted)', paddingLeft: 16, paddingRight: 16 }}>
              {LICENSEE_DATA.map((entry, index) => (
-               <div key={index} className="flex items-center gap-2">
-                 <div className="w-4 h-3 rounded-sm" style={{backgroundColor: entry.color}}></div>
-                 <span className="truncate" title={entry.name}>{entry.name}</span>
+               <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                 <div style={{ width: 14, height: 10, borderRadius: 2, backgroundColor: entry.color}}></div>
+                 <span title={entry.name}>{entry.name}</span>
                </div>
              ))}
           </div>
         </div>
 
         {/* REC Market Depth Chart */}
-        <div className="bg-[#f8f9fa] p-6 border border-gray-200 rounded-sm shadow-sm">
-          <h3 className="text-center font-bold text-gray-700 mb-2 text-lg">Vol & Price Of RECs Transacted Through PX & Traders (Bilateral)</h3>
-          <div className="flex justify-between text-xs text-gray-500 mb-4 px-10">
+        <div style={{ background: '#f8f9fa', padding: 24, border: '1px solid var(--border)', borderRadius: 2, boxShadow: 'var(--shadow-sm)' }}>
+          <h3 style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text)', marginBottom: 8, fontSize: 17 }}>Vol & Price Of RECs Transacted Through PX & Traders (Bilateral)</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginBottom: 16, paddingLeft: 40, paddingRight: 40 }}>
             <span>Volume (MWh)</span>
             <span>Price (₹/MWh)</span>
           </div>
 
-          <div className="h-[300px] w-full">
+          <div style={{ height: 300, width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={REC_DEPTH_DATA} margin={{ top: 20, right: 20, bottom: 20, left: 40 }}>
                 <CartesianGrid stroke="#e5e7eb" vertical={false} />
@@ -188,12 +189,11 @@ export default function MacroTradingIntelligenceWidget() {
       </div>
 
       {/* Bottom Row: Exchange Volume Transactions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid-2">
         
         {/* PXIL Volume Pie */}
-        <div className="bg-white p-6 border border-gray-200 rounded-sm shadow-sm">
-           <h3 className="text-center font-bold text-gray-700 mb-6 text-lg">Volume Transactions in PXIL (MU)</h3>
-           <div className="h-64 w-full">
+        <Card title="Volume Transactions in PXIL (MU)">
+           <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie 
@@ -215,12 +215,11 @@ export default function MacroTradingIntelligenceWidget() {
               </PieChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </Card>
 
         {/* HPX Volume Pie */}
-        <div className="bg-white p-6 border border-gray-200 rounded-sm shadow-sm">
-           <h3 className="text-center font-bold text-gray-700 mb-6 text-lg">Volume Transactions in HPX (MU)</h3>
-           <div className="h-64 w-full">
+        <Card title="Volume Transactions in HPX (MU)">
+           <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie 
@@ -242,7 +241,7 @@ export default function MacroTradingIntelligenceWidget() {
               </PieChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </Card>
 
       </div>
 

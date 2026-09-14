@@ -38,23 +38,23 @@ const CustomTooltip = ({ active, payload, label }) => {
     const displayState = label || (isSale && payload[0].value > 300 ? 'Delhi' : label);
 
     return (
-      <div className="bg-white border border-gray-200 shadow-md p-3 rounded-md text-sm font-sans min-w-[200px]">
-        <div className="text-gray-500 mb-2">{displayState || 'State'}</div>
-        <div className="flex justify-between items-center mb-1">
-          <div className="flex items-center gap-2">
-             <span className="w-2.5 h-2.5 rounded-full bg-blue-400"></span>
-             <span className="text-gray-600">Volume of Purchase</span>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)', padding: 12, borderRadius: 6, fontSize: 13, minWidth: 200 }}>
+        <div style={{ color: 'var(--text-muted)', marginBottom: 8 }}>{displayState || 'State'}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+             <span style={{ width: 10, height: 10, borderRadius: 999, background: '#60a5fa' }}></span>
+             <span className="audit-muted">Volume of Purchase</span>
           </div>
-          <span className="font-semibold text-gray-800">
+          <span style={{ fontWeight: 600, color: 'var(--text)' }}>
              {payload[0].payload.purchase ? payload[0].payload.purchase.toFixed(2) : '-'}
           </span>
         </div>
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-             <span className="w-2.5 h-2.5 rounded-full bg-red-400"></span>
-             <span className="text-gray-600">Volume of Sale</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+             <span style={{ width: 10, height: 10, borderRadius: 999, background: '#f87171' }}></span>
+             <span className="audit-muted">Volume of Sale</span>
           </div>
-          <span className="font-semibold text-gray-800">
+          <span style={{ fontWeight: 600, color: 'var(--text)' }}>
              {payload[0].payload.sale ? payload[0].payload.sale.toFixed(2) : '-'}
           </span>
         </div>
@@ -66,14 +66,14 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 export default function Top10GDAMParticipantsChart() {
   return (
-    <div className="p-6 bg-[#f8f9fa] min-h-screen font-sans">
-      <div className="bg-white border border-gray-200 shadow-sm max-w-5xl mx-auto rounded-sm p-6">
+    <div style={{ padding: 24, background: '#f8f9fa' }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', maxWidth: 1024, margin: '0 auto', borderRadius: 2, padding: 24 }}>
         
-        <h2 className="text-xl font-semibold text-gray-700 text-center mb-8">
+        <h2 style={{ fontSize: 20, fontWeight: 600, color: 'var(--text)', textAlign: 'center', marginBottom: 32 }}>
           Top 10 GDAM Participants
         </h2>
         
-        <div className="h-[400px] w-full">
+        <div style={{ height: 400, width: '100%' }}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
               data={data}
@@ -130,18 +130,18 @@ export default function Top10GDAMParticipantsChart() {
         </div>
 
         {/* Legend */}
-        <div className="flex justify-center gap-6 mt-6">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full border-2 border-blue-400 bg-white flex items-center justify-center">
-               <div className="w-full h-[2px] bg-blue-400"></div>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 16, height: 16, borderRadius: 999, border: '2px solid #60a5fa', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+               <div style={{ width: '100%', height: 2, background: '#60a5fa' }}></div>
             </div>
-            <span className="text-gray-600 text-sm">Volume of Purchase</span>
+            <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>Volume of Purchase</span>
           </div>
-          <div className="flex items-center gap-2">
-             <div className="w-4 h-4 rounded-full border-2 border-red-400 bg-white flex items-center justify-center">
-               <div className="w-full h-[2px] bg-red-400"></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+             <div style={{ width: 16, height: 16, borderRadius: 999, border: '2px solid #f87171', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+               <div style={{ width: '100%', height: 2, background: '#f87171' }}></div>
             </div>
-            <span className="text-gray-600 text-sm">Volume of Sale</span>
+            <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>Volume of Sale</span>
           </div>
         </div>
 

@@ -25,25 +25,25 @@ const CustomTooltip = ({ active, payload, label }) => {
     const total = payload.reduce((sum, entry) => sum + entry.value, 0);
     
     return (
-      <div className="bg-white p-4 border border-gray-200 shadow-lg rounded-md">
-        <h4 className="text-gray-700 font-semibold mb-3 border-b pb-2">{label}</h4>
+      <div style={{ background: 'var(--surface)', padding: 16, border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)', borderRadius: 6 }}>
+        <h4 style={{ color: 'var(--text)', fontWeight: 600, marginBottom: 12, borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>{label}</h4>
         <div className="space-y-2">
           {payload.map((entry, index) => {
             const percentage = ((entry.value / total) * 100).toFixed(1);
             return (
-              <div key={index} className="flex items-center justify-between gap-6 text-sm">
-                <div className="flex items-center gap-2">
+              <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, fontSize: 13 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div 
-                    className="w-3 h-3 rounded-full" 
+                    style={{ width: 10, height: 10, borderRadius: 999 }} 
                     style={{ backgroundColor: entry.color }}
                   ></div>
-                  <span className="text-gray-600 font-medium">{entry.name}</span>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{entry.name}</span>
                 </div>
-                <div className="flex gap-4 items-center">
-                  <span className="text-gray-900 font-bold">
+                <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text)', fontWeight: 700 }}>
                     {entry.value.toLocaleString()} MW
                   </span>
-                  <span className="text-gray-500 w-12 text-right">
+                  <span style={{ color: 'var(--text-muted)', width: 48, textAlign: 'right' }}>
                     {percentage}%
                   </span>
                 </div>
@@ -51,7 +51,7 @@ const CustomTooltip = ({ active, payload, label }) => {
             );
           })}
         </div>
-        <div className="mt-3 pt-2 border-t flex justify-between items-center text-sm font-bold text-gray-800">
+        <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
           <span>Total Capacity</span>
           <span>{total.toLocaleString()} MW</span>
         </div>
@@ -69,17 +69,17 @@ const formatYAxisLeft = (tickItem) => {
 
 const NationalCapacityChart = () => {
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-      <div className="mb-6">
-        <h3 className="text-lg font-bold text-gray-800 font-sans">
+    <div style={{ background: 'var(--surface)', padding: 24, borderRadius: 12, boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)' }}>
+      <div style={{ marginBottom: 24 }}>
+        <h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text)' }}>
           Category Wise Installed Capacity (All India) (MW)
         </h3>
-        <p className="text-sm text-gray-500 mt-1">
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
           National grid generation asset tracking (Thermal/Hydro/Nuclear base load vs RES)
         </p>
       </div>
       
-      <div className="h-[400px] w-full">
+      <div style={{ height: 400, width: '100%' }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={data}

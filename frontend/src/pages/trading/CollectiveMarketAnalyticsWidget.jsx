@@ -28,16 +28,16 @@ const REC_DATA = [
 const CustomCollectiveTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-white border border-gray-200 shadow-lg rounded-md p-3 text-sm min-w-[220px] z-50">
-        <div className="text-gray-600 font-bold border-b border-gray-100 pb-2 mb-3">{label}</div>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)', borderRadius: 6, padding: 12, fontSize: 13, minWidth: 220, zIndex: 50 }}>
+        <div style={{ color: 'var(--text-muted)', fontWeight: 700, borderBottom: '1px solid var(--border)', paddingBottom: 8, marginBottom: 12 }}>{label}</div>
         
         {payload.map((entry, index) => (
-          <div key={`item-${index}`} className="flex justify-between items-center mb-1.5">
-            <div className="flex items-center gap-2">
-               <span className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.color }}></span>
-               <span className="text-gray-500 font-medium">{entry.name}</span>
+          <div key={`item-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+               <span style={{ width: 10, height: 10, borderRadius: 999, backgroundColor: entry.color}}></span>
+               <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{entry.name}</span>
             </div>
-            <span className="font-bold text-gray-800 ml-6">
+            <span style={{ fontWeight: 700, color: 'var(--text)', marginLeft: 24 }}>
                {entry.value !== null && entry.value !== undefined ? entry.value.toFixed(2) : '0.00'}
             </span>
           </div>
@@ -50,15 +50,15 @@ const CustomCollectiveTooltip = ({ active, payload, label }) => {
 
 export default function CollectiveMarketAnalyticsWidget() {
   return (
-    <div className="p-4 space-y-6">
+    <div>
       
       {/* Min Max & Avg Line Chart */}
-      <div className="bg-white p-6 border border-gray-200 rounded-sm shadow-sm">
-        <div className="text-center mb-6">
-           <h3 className="font-bold text-gray-700 text-xl">Min Max and Weight Avg Price of Collective Market in PX</h3>
+      <div style={{ background: 'var(--surface)', padding: 24, border: '1px solid var(--border)', borderRadius: 2, boxShadow: 'var(--shadow-sm)' }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+           <h3 style={{ fontWeight: 700, color: 'var(--text)', fontSize: 20 }}>Min Max and Weight Avg Price of Collective Market in PX</h3>
         </div>
         
-        <div className="h-80 w-full px-4">
+        <div style={{ height: 320, width: '100%', paddingLeft: 16, paddingRight: 16 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={COLLECTIVE_MARKET_DATA} margin={{ top: 20, right: 30, left: 0, bottom: 40 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
@@ -93,15 +93,15 @@ export default function CollectiveMarketAnalyticsWidget() {
       </div>
 
       {/* REC Transacted Volume & Price Chart */}
-      <div className="bg-[#f8f9fa] p-6 border border-gray-200 rounded-sm shadow-sm">
-        <h3 className="text-center font-bold text-gray-700 mb-2 text-xl">Vol & Price Of RECs Transacted Through PX & Traders (Bilateral)</h3>
+      <div style={{ background: '#f8f9fa', padding: 24, border: '1px solid var(--border)', borderRadius: 2, boxShadow: 'var(--shadow-sm)' }}>
+        <h3 style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text)', marginBottom: 8, fontSize: 20 }}>Vol & Price Of RECs Transacted Through PX & Traders (Bilateral)</h3>
         
-        <div className="flex justify-between text-xs text-gray-500 mb-4 px-10">
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginBottom: 16, paddingLeft: 40, paddingRight: 40 }}>
           <span>Volume (MWh)</span>
           <span>Price (₹/MWh)</span>
         </div>
 
-        <div className="h-80 w-full">
+        <div style={{ height: 320, width: '100%' }}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={REC_DATA} margin={{ top: 20, right: 20, bottom: 20, left: 40 }}>
               <CartesianGrid stroke="#e5e7eb" vertical={false} />
@@ -147,97 +147,97 @@ export default function CollectiveMarketAnalyticsWidget() {
       </div>
 
       {/* Collective Market Price Metrics Table */}
-      <div className="bg-white border border-gray-200 rounded-sm shadow-sm overflow-hidden mt-8">
-        <table className="w-full text-sm text-center border-collapse">
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 2, boxShadow: 'var(--shadow-sm)', overflow: 'hidden', marginTop: 32 }}>
+        <table className="report-table">
           <thead>
-            <tr className="bg-[#4eb1fc] text-white">
-              <th className="p-3 border-r border-white/30 font-semibold w-32">PX</th>
-              <th className="p-3 border-r border-white/30 font-semibold text-left">Product</th>
-              <th className="p-3 border-r border-white/30 font-semibold">Maximum Price<br/>(₹/kWh)</th>
-              <th className="p-3 border-r border-white/30 font-semibold">Minimum Price<br/>(₹/kWh)</th>
-              <th className="p-3 font-semibold">Weighted Average<br/>Price (₹/kWh)</th>
+            <tr style={{ background: '#4eb1fc', color: '#fff' }}>
+              <th style={{ padding: 12, borderRight: '1px solid var(--border)', borderColor: 'rgba(255,255,255,0.25)', fontWeight: 600, width: 128 }}>PX</th>
+              <th style={{ padding: 12, borderRight: '1px solid var(--border)', borderColor: 'rgba(255,255,255,0.25)', fontWeight: 600, textAlign: 'left' }}>Product</th>
+              <th>Maximum Price<br/>(₹/kWh)</th>
+              <th>Minimum Price<br/>(₹/kWh)</th>
+              <th style={{ padding: 12, fontWeight: 600 }}>Weighted Average<br/>Price (₹/kWh)</th>
             </tr>
           </thead>
-          <tbody className="text-gray-700">
+          <tbody style={{ color: 'var(--text)' }}>
             {/* IEX Section */}
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 align-top font-medium" rowSpan={4}>IEX</td>
-              <td className="p-3 border-r border-gray-200 text-left">DAM</td>
-              <td className="p-3 border-r border-gray-200">10.00</td>
-              <td className="p-3 border-r border-gray-200">1.43</td>
-              <td className="p-3">3.82</td>
+            <tr>
+              <td rowSpan={4}>IEX</td>
+              <td>DAM</td>
+              <td>10.00</td>
+              <td>1.43</td>
+              <td>3.82</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">GDAM</td>
-              <td className="p-3 border-r border-gray-200">10.00</td>
-              <td className="p-3 border-r border-gray-200">1.60</td>
-              <td className="p-3">4.06</td>
+            <tr>
+              <td>GDAM</td>
+              <td>10.00</td>
+              <td>1.60</td>
+              <td>4.06</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">HPDAM</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td>HPDAM</td>
+              <td>0.00</td>
+              <td>0.00</td>
+              <td>0.00</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">RTM</td>
-              <td className="p-3 border-r border-gray-200">5.92</td>
-              <td className="p-3 border-r border-gray-200">10.00</td>
-              <td className="p-3">11.00</td>
+            <tr>
+              <td>RTM</td>
+              <td>5.92</td>
+              <td>10.00</td>
+              <td>11.00</td>
             </tr>
 
             {/* PXIL Section */}
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 align-top font-medium" rowSpan={4}>PXIL</td>
-              <td className="p-3 border-r border-gray-200 text-left">DAM</td>
-              <td className="p-3 border-r border-gray-200">10.00</td>
-              <td className="p-3 border-r border-gray-200">10.00</td>
-              <td className="p-3">10.00</td>
+            <tr>
+              <td rowSpan={4}>PXIL</td>
+              <td>DAM</td>
+              <td>10.00</td>
+              <td>10.00</td>
+              <td>10.00</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">GDAM</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td>GDAM</td>
+              <td>0.00</td>
+              <td>0.00</td>
+              <td>0.00</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">HPDAM</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td>HPDAM</td>
+              <td>0.00</td>
+              <td>0.00</td>
+              <td>0.00</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">RTM</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3 border-r border-gray-200">10.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td>RTM</td>
+              <td>0.00</td>
+              <td>10.00</td>
+              <td>0.00</td>
             </tr>
 
             {/* HPX Section */}
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 align-top font-medium" rowSpan={4}>HPX</td>
-              <td className="p-3 border-r border-gray-200 text-left">DAM</td>
-              <td className="p-3 border-r border-gray-200">10.00</td>
-              <td className="p-3 border-r border-gray-200">10.00</td>
-              <td className="p-3">10.00</td>
+            <tr>
+              <td rowSpan={4}>HPX</td>
+              <td>DAM</td>
+              <td>10.00</td>
+              <td>10.00</td>
+              <td>10.00</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">GDAM</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td>GDAM</td>
+              <td>0.00</td>
+              <td>0.00</td>
+              <td>0.00</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">HPDAM</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td>HPDAM</td>
+              <td>0.00</td>
+              <td>0.00</td>
+              <td>0.00</td>
             </tr>
-            <tr className="border-b border-gray-200">
-              <td className="p-3 border-r border-gray-200 text-left">RTM</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3 border-r border-gray-200">0.00</td>
-              <td className="p-3">0.00</td>
+            <tr>
+              <td>RTM</td>
+              <td>0.00</td>
+              <td>0.00</td>
+              <td>0.00</td>
             </tr>
           </tbody>
         </table>

@@ -120,7 +120,7 @@ Jo kaam user ke faisle ke bina ho sakta tha. Poora backend suite: **74 files /
 **Bacha hua (isi list se):** REIA dashboard ke CP-58-61 KPI (LPS recovered /
 recoverable, CERC Form-IV status, developer vs buyer pending split, ageing
 buckets) · contract bulk upload · seller invoice Excel template upload · #22 test
-flake · Tailwind ke liye likhi hui 16 aur screens (unstyled khulti hain).
+flake · Tailwind ke liye likhi hui screens — **14 Sep ko poori nipat gayi**, ab poore frontend mein ek bhi utility class nahi bachi.
 
 ## I. Faisle jo aa gaye — 14 Sep
 
