@@ -248,6 +248,8 @@ export const api = {
     paymentMonitoring: (side = 'RECEIVABLE') => g('/reports/payment-monitoring', { side }),
     // Energy against what each contract's capacity could make.
     generationPerformance: (params) => g('/reports/generation-performance', params),
+    // Tenure, commissioning, security and approvals, per contract.
+    contractCompliance: (params) => g('/reports/contract-compliance', params),
     billingSummary: (params) => g('/reports/billing-summary', params),
     billingSummaryPdf: async (params = {}) => {
       const qs = new URLSearchParams();

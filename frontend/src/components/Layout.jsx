@@ -112,6 +112,8 @@ const NAV_INTERNAL = [
       { to: '/reia', label: 'REIA Dashboard', end: true },
       { to: '/reia/entities', label: 'Stakeholders (Sellers/Buyers)' },
       { to: '/reia/contracts', label: 'Contracts (PPA/PSA)' },
+      // Tenure, commissioning, security and approvals, contract by contract.
+      { to: '/reia/contract-compliance', label: 'Contract Compliance' },
       { to: '/reia/energy-data', label: 'Energy Data & Validation' },
       { to: '/reia/invoices', label: 'Billing & Invoicing' },
       // Outstanding, delay days and surcharge, on both sides of the desk.

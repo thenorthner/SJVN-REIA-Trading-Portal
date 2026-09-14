@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { paymentMonitoring } from '../services/paymentMonitoring.js';
 import { generationPerformance } from '../services/generationPerformance.js';
+import { contractCompliance } from '../services/contractCompliance.js';
 import { receivablesOutstanding, payablesOutstanding, overdueCount } from '../services/outstanding.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
@@ -139,6 +140,26 @@ export function buildBillingSummary({ from, to } = {}) {
     payment_security: security,
   };
 }
+
+/**
+ * GET /api/reports/contract-compliance?status=&expiry_notice_days=
+ *
+ * Where each contract stands against its own timeline and obligations: tenure,
+ * commissioning, commissioned capacity, the security it requires, and the
+ * counterparty's statutory approvals.
+ */
+router.get('/contract-compliance', requireRole(...REPORT_READ), (req, res) => {
+  const notice = Number(req.query.expiry_notice_days);
+  try {
+    res.json(contractCompliance({
+      status: req.query.status || null,
+      expiryNoticeDays: Number.isFinite(notice) && notice > 0 ? notice : 90,
+    }));
+  } catch (err) {
+    console.error('Contract compliance error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 /**
  * GET /api/reports/generation-performance?from=YYYY-MM&to=YYYY-MM&contract_id=
