@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import ContractBulkLoad from './ContractBulkLoad.jsx';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
 
@@ -111,6 +112,7 @@ export default function Contracts() {
   const [filters, setFilters] = useState({ contract_type: '', status: '', project_type: '', q: '' });
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [uploadFile, setUploadFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -302,7 +304,10 @@ export default function Contracts() {
               {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
             </button>
             {CAN_WRITE.includes(user?.role) && (
-              <button className="btn btn-secondary" onClick={() => setShowCreate(true)}>+ New Contract</button>
+              <>
+                <button className="btn btn-secondary" onClick={() => setShowBulk(true)}>Load from Spreadsheet</button>
+                <button className="btn btn-secondary" onClick={() => setShowCreate(true)}>+ New Contract</button>
+              </>
             )}
           </div>
         }
@@ -324,6 +329,12 @@ export default function Contracts() {
       <Card>
         <Table columns={columns} rows={loading ? [] : rows} onRowClick={openDetail} emptyMessage={loading ? 'Loading...' : 'No contracts found.'} />
       </Card>
+
+      <ContractBulkLoad
+        open={showBulk}
+        onClose={() => setShowBulk(false)}
+        onLoaded={load}
+      />
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create New Contract" width={800}>
         {error && <div className="form-error">{error}</div>}

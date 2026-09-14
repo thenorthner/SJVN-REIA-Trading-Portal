@@ -83,7 +83,12 @@ export const api = {
     updateStatus: (id, body) => p(`/contracts/${id}/status`, body),
     allocations: (id) => g(`/contracts/${id}/allocations`),
     addAllocation: (id, body) => p(`/contracts/${id}/allocations`, body),
-    bulkUpload: (rows) => p('/contracts/bulk-upload', { rows }),
+    // dry_run validates and reports without writing, so the desk sees what a
+    // file would do before it does it.
+    bulkUpload: (rows, dryRun = false) => p('/contracts/bulk-upload', { rows, dry_run: !!dryRun }),
+    // Through the axios client so the JWT is attached — a plain <a href> hits the
+    // API unauthenticated and downloads the 401 body as the template.
+    bulkTemplate: () => client.get('/contracts/bulk-template', { responseType: 'blob' }).then((r) => r.data),
   },
   energyData: {
     list: (params) => g('/energy-data', params),

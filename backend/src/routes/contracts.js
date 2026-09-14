@@ -158,6 +158,21 @@ router.get('/', (req, res) => {
   res.json(rows);
 });
 
+// Registered before '/:id', or the router reads "bulk-template" as a contract
+// id and answers 404.
+router.get('/bulk-template', requireRole(...ROLE_GROUPS.REIA_ALL), (_req, res) => {
+  const lines = [
+    BULK_COLUMNS.join(','),
+    // A PPA is bought from a generator, so it carries a seller and no buyer;
+    // a PSA is sold to a discom, so it carries a buyer and no seller.
+    'PPA/SOLAR/001,PPA,SOLAR,SELL-0001,,100,100,2026-04-01,3.15,2026-04-01,2051-03-31,MONTHLY,5000000,20000000',
+    'PSA/DISCOM/001,PSA,SOLAR,,BUY-0001,100,100,,3.45,2026-04-01,2051-03-31,MONTHLY,,',
+  ];
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=contract_bulk_template.csv');
+  res.send(lines.join('\n'));
+});
+
 router.get('/:id', (req, res) => {
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
@@ -665,48 +680,186 @@ router.post('/:id/allocations/revise', requireRole(...ROLE_GROUPS.REIA_WRITE), (
   });
 });
 
+// ── Bulk load ────────────────────────────────────────────────────────────────
+//
+// A desk with fifty signed PPAs to enter should not type them one form at a
+// time. What was missing around the loader was everything that makes a bulk load
+// safe to run: the template that says which columns it reads, a dry run that
+// says what would happen before anything is written, and the checks the single
+// create route applies — a spreadsheet could name a counterparty that does not
+// exist, or one still in onboarding, and the row would load anyway.
+
+/** The columns the loader reads. Anything else in a row is named back to the user. */
+const BULK_COLUMNS = [
+  'contract_no', 'contract_type', 'project_type', 'seller_id', 'buyer_id',
+  'capacity_mw', 'commissioned_capacity_mw', 'cod_date',
+  'tariff_per_unit', 'tenure_start', 'tenure_end', 'billing_cycle',
+  'emd_amount', 'pbg_amount',
+];
+
+const BILLING_CYCLES = ['DAILY', 'WEEKLY', 'MONTHLY', 'CUSTOM'];
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** One row, validated the way the single create route validates a form. */
+function checkBulkRow(raw, entityCache, seenNumbers) {
+  const errors = [];
+  const unknown = Object.keys(raw || {}).filter((k) => !BULK_COLUMNS.includes(k));
+  if (unknown.length) errors.push(`unknown column(s): ${unknown.join(', ')} — see /api/contracts/bulk-template`);
+
+  const num = (v) => (v === '' || v == null ? null : Number(v));
+  const str = (v) => (v == null ? '' : String(v).trim());
+
+  const row = {
+    contract_no: str(raw.contract_no),
+    contract_type: str(raw.contract_type).toUpperCase(),
+    project_type: str(raw.project_type).toUpperCase(),
+    seller_id: str(raw.seller_id) || null,
+    buyer_id: str(raw.buyer_id) || null,
+    capacity_mw: num(raw.capacity_mw),
+    commissioned_capacity_mw: num(raw.commissioned_capacity_mw),
+    cod_date: str(raw.cod_date) || null,
+    tariff_per_unit: num(raw.tariff_per_unit),
+    tenure_start: str(raw.tenure_start) || null,
+    tenure_end: str(raw.tenure_end) || null,
+    billing_cycle: (str(raw.billing_cycle) || 'MONTHLY').toUpperCase(),
+    emd_amount: num(raw.emd_amount),
+    pbg_amount: num(raw.pbg_amount),
+  };
+
+  if (!row.contract_no) errors.push('contract_no is required');
+  else if (seenNumbers.has(row.contract_no)) errors.push(`contract_no ${row.contract_no} appears twice in this file`);
+  else if (db.prepare('SELECT id FROM contracts WHERE contract_no = ?').get(row.contract_no)) {
+    errors.push(`contract_no ${row.contract_no} is already on record`);
+  }
+
+  if (!['PPA', 'PSA'].includes(row.contract_type)) errors.push('contract_type must be PPA or PSA');
+  if (!row.project_type) errors.push('project_type is required');
+  if (!Number.isFinite(row.capacity_mw) || row.capacity_mw <= 0) errors.push('capacity_mw must be a positive number');
+  if (!Number.isFinite(row.tariff_per_unit) || row.tariff_per_unit < 0) errors.push('tariff_per_unit must be a non-negative number');
+  if (row.commissioned_capacity_mw != null
+      && (!Number.isFinite(row.commissioned_capacity_mw) || row.commissioned_capacity_mw < 0)) {
+    errors.push('commissioned_capacity_mw must be a number');
+  }
+  if (!BILLING_CYCLES.includes(row.billing_cycle)) errors.push(`billing_cycle must be one of ${BILLING_CYCLES.join('/')}`);
+
+  for (const field of ['tenure_start', 'tenure_end', 'cod_date']) {
+    if (row[field] && !ISO_DATE.test(row[field])) errors.push(`${field} must be YYYY-MM-DD`);
+  }
+  if (!row.tenure_start) errors.push('tenure_start is required');
+  if (!row.tenure_end) errors.push('tenure_end is required');
+  if (row.tenure_start && row.tenure_end && row.tenure_end <= row.tenure_start) {
+    errors.push('tenure_end must be after tenure_start');
+  }
+
+  // A PPA is bought from a generator and a PSA is sold to a discom, so each
+  // needs its own side named. Both were optional, which let a contract load with
+  // no counterparty at all.
+  if (row.contract_type === 'PPA' && !row.seller_id) errors.push('a PPA needs seller_id');
+  if (row.contract_type === 'PSA' && !row.buyer_id) errors.push('a PSA needs buyer_id');
+
+  // The same rule the form route applies: onboarding is what checks a
+  // counterparty's licences, registration and bank account, and a contract
+  // against one that has not finished it is not a contract.
+  for (const [side, entityId] of [['seller', row.seller_id], ['buyer', row.buyer_id]]) {
+    if (!entityId) continue;
+    if (!entityCache.has(entityId)) {
+      entityCache.set(entityId, db.prepare('SELECT id, name, entity_type, status FROM entities WHERE id = ?').get(entityId));
+    }
+    const entity = entityCache.get(entityId);
+    if (!entity) { errors.push(`${side} ${entityId} not found`); continue; }
+    if (entity.status !== 'APPROVED') {
+      errors.push(`${side} ${entity.name} is ${entity.status}, not APPROVED — onboarding is not complete`);
+    }
+    const expected = side === 'seller' ? 'SELLER' : 'BUYER';
+    if (entity.entity_type !== expected) errors.push(`${entityId} is a ${entity.entity_type}, not a ${expected}`);
+  }
+
+  for (const field of ['emd_amount', 'pbg_amount']) {
+    if (row[field] != null && (!Number.isFinite(row[field]) || row[field] < 0)) {
+      errors.push(`${field} must be a non-negative number`);
+    }
+  }
+
+  if (row.commissioned_capacity_mw == null) row.commissioned_capacity_mw = row.capacity_mw;
+  return { row, errors };
+}
+
+/**
+ * Load signed contracts from a spreadsheet.
+ *
+ * `dry_run: true` validates and reports without writing. Rows are loaded as
+ * DRAFT — going live is the status route's job, which is where the approvals a
+ * contract needs are enforced — and the good rows of a mixed file still load,
+ * with every rejected row named by its spreadsheet line.
+ */
 router.post('/bulk-upload', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
-  const rows = req.body.rows || [];
-  const results = { successful: 0, failed: 0, errors: [] };
-  
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  const dryRun = !!req.body?.dry_run;
+  if (rows.length === 0) return res.status(400).json({ error: 'No rows supplied' });
+
   const insert = db.prepare(`
     INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
       tariff_type, tariff_per_unit, tenure_start, tenure_end, billing_cycle, emd_amount, pbg_amount, status)
     VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
       'FLAT', @tariff_per_unit, @tenure_start, @tenure_end, @billing_cycle, @emd_amount, @pbg_amount, 'DRAFT')
   `);
-  // Loaded as drafts. These went in ACTIVE, so a spreadsheet put contracts
-  // straight into a billable state without passing through the approvals the
-  // status route exists to enforce — the one route that checks them.
-  
-  db.transaction(() => {
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
-      try {
-        if (!r.contract_no || !r.capacity_mw || !r.tariff_per_unit) throw new Error('Missing required fields (contract_no, capacity_mw, tariff_per_unit)');
-        // A default for every named parameter, because better-sqlite3 throws on
-        // any it is not given and only some had one. A PPA row omitting buyer_id
-        // — the natural shape, a PPA has no buyer — failed every time with
-        // "Missing named parameter buyer_id", which reads like a bug in the file
-        // rather than a column the template was expected to carry.
-        insert.run({
-          id: newId('CON'),
-          seller_id: null, buyer_id: null, project_type: null,
-          tenure_start: null, tenure_end: null, cod_date: null,
-          billing_cycle: 'MONTHLY', emd_amount: null, pbg_amount: null,
-          commissioned_capacity_mw: r.commissioned_capacity_mw ?? r.capacity_mw,
-          ...r,
-        });
-        results.successful++;
-      } catch (err) {
-        results.failed++;
-        results.errors.push({ row: i+1, contract_no: r.contract_no, error: err.message });
-      }
+
+  const results = { dry_run: dryRun, rows_received: rows.length, successful: 0, failed: 0, errors: [], preview: [] };
+  const entityCache = new Map();
+  const seenNumbers = new Set();
+  const accepted = [];
+
+  rows.forEach((raw, idx) => {
+    const line = idx + 1; // 1-based, matching the row the user sees in the file
+    const { row, errors } = checkBulkRow(raw, entityCache, seenNumbers);
+    if (errors.length) {
+      results.failed += 1;
+      results.errors.push({ row: line, contract_no: row.contract_no || null, error: errors.join('; '), errors });
+      return;
     }
-  })();
-  
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'BULK_UPLOAD', module: 'REIA', entityType: 'contract', details: results });
-  res.status(201).json(results);
+    seenNumbers.add(row.contract_no);
+    accepted.push({ line, row });
+    results.preview.push({
+      row: line,
+      contract_no: row.contract_no,
+      contract_type: row.contract_type,
+      counterparty: entityCache.get(row.seller_id || row.buyer_id)?.name || null,
+      capacity_mw: row.capacity_mw,
+      tariff_per_unit: row.tariff_per_unit,
+      tenure: `${row.tenure_start} → ${row.tenure_end}`,
+      status: 'DRAFT',
+    });
+  });
+
+  if (!dryRun && accepted.length) {
+    db.transaction(() => {
+      for (const { line, row } of accepted) {
+        try {
+          insert.run({ id: newId('CON'), ...row });
+          results.successful += 1;
+        } catch (err) {
+          // A row that passes every check and still will not insert is a
+          // constraint nobody wrote down; it is reported, not swallowed.
+          results.failed += 1;
+          results.successful = Math.max(0, results.successful);
+          results.errors.push({ row: line, contract_no: row.contract_no, error: err.message, errors: [err.message] });
+        }
+      }
+    })();
+  } else if (dryRun) {
+    results.would_load = accepted.length;
+  }
+
+  logAudit({
+    req: typeof req !== 'undefined' ? req : null,
+    user: req.user,
+    action: dryRun ? 'BULK_UPLOAD_DRY_RUN' : 'BULK_UPLOAD',
+    module: 'REIA',
+    entityType: 'contract',
+    details: { rows_received: rows.length, successful: results.successful, failed: results.failed, errors: results.errors },
+  });
+
+  res.status(dryRun ? 200 : 201).json(results);
 });
 
 export default router;
