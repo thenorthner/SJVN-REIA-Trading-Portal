@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { PortfolioSelect, usePortfolios } from '../../context/PortfolioContext.jsx';
 import { api } from '../../api/client.js';
-import { SampleDataNotice, PageHeader, Card, Table, Badge } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge } from '../../components/ui.jsx';
 
 export default function EnergyScheduleArchive() {
   const [archives, setArchives] = useState([]);
+  const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const { activeId: portfolio } = usePortfolios();
   const [dateFilter, setDateFilter] = useState('LAST_30'); // 'LAST_7', 'LAST_30', 'CUSTOM'
@@ -17,11 +18,12 @@ export default function EnergyScheduleArchive() {
     setLoading(true);
     try {
       const data = await api.tradingOps.archive({ portfolio });
-      let filtered = data.archives;
+      let filtered = data.archives || [];
       if (dateFilter === 'LAST_7') {
         filtered = filtered.slice(0, 7);
       }
       setArchives(filtered);
+      setNote(data.note || '');
     } catch (err) {
       console.error('Failed to fetch archives', err);
     } finally {
@@ -59,24 +61,19 @@ export default function EnergyScheduleArchive() {
     return <Badge type="neutral">{status}</Badge>;
   };
 
-  const renderSettlementStatus = (status) => {
-    if (status === 'FULLY_RECONCILED') return <Badge type="success">Fully Reconciled</Badge>;
-    if (status === 'PENDING_PAYOUT') return <Badge type="warning" style={{ background: '#f39c12', color: '#fff' }}>Pending Bank Payout</Badge>;
-    if (status === 'DISCREPANCY') return <Badge type="danger">Discrepancy</Badge>;
-    return null;
-  };
-
   const columns = [
     { 
       key: 'checkbox', 
       label: <input type="checkbox" aria-label="Select all archives" onChange={handleSelectAll} checked={archives.length > 0 && selectedRows.length === archives.length} />, 
       render: r => <input type="checkbox" aria-label={`Select archive ${r.filename || r.id}`} checked={selectedRows.includes(r.id)} onChange={() => handleSelectRow(r.id)} /> 
     },
-    { key: 'portfolio_id', label: 'PORTFOLIO ID' },
-    { key: 'trade_date', label: 'TRADE DATE' },
-    { key: 'delivery_date', label: 'DELIVERY DATE' },
+    { key: 'filename', label: 'FILE' },
+    { key: 'rldc', label: 'RLDC', render: r => r.rldc || '—' },
+    { key: 'delivery_date', label: 'DELIVERY DATE', render: r => r.delivery_date || '—' },
+    { key: 'trade_date', label: 'UPLOADED' },
+    { key: 'row_count', label: 'ROWS', render: r => r.row_count ?? '—' },
     { key: 'status', label: 'INGESTION', render: r => renderStatus(r.status) },
-    { key: 'settlement_status', label: 'SETTLEMENT', render: r => renderSettlementStatus(r.settlement_status) },
+    { key: 'uploaded_by', label: 'BY', render: r => r.uploaded_by || '—' },
     { key: 'actions', label: 'ACTIONS', render: r => (
        <div style={{ display: 'flex', gap: 5 }}>
          <button className="btn btn-sm btn-outline" onClick={() => handlePreview(r)} title="View 96-Block Schedule"></button>
@@ -90,7 +87,9 @@ export default function EnergyScheduleArchive() {
   return (
     <div style={{ padding: 20, maxWidth: 1400, margin: '0 auto', display: 'flex', position: 'relative' }}>
       <div style={{ flex: 1, marginRight: drawerOpen ? 300 : 0, transition: 'margin 0.3s' }}>
-        <SampleDataNotice detail="The archive list is generated. No exchange schedule files have been ingested yet." />
+        {/* The archive is the upload register now, so an empty one means nothing
+            has been uploaded — which is worth saying plainly. */}
+        {note && <div className="alert alert-info" role="status">{note}</div>}
 
         <PageHeader 
           title="DAILY TRADING DOSSIER (OBLIGATIONS & SCHEDULES)" 
@@ -156,33 +155,28 @@ export default function EnergyScheduleArchive() {
              <button onClick={() => setDrawerOpen(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>&times;</button>
           </div>
           <div style={{ padding: 20, flex: 1, overflowY: 'auto' }}>
-             <div style={{ marginBottom: 20, fontSize: 13 }}>
-                <strong>Delivery Date:</strong> {selectedPreview.delivery_date}<br/>
-                <strong>Filename:</strong> {selectedPreview.filename}
+             <div style={{ display: 'grid', gap: 8, fontSize: 13 }}>
+                <div><strong>File:</strong> {selectedPreview.filename}</div>
+                <div><strong>Kind:</strong> {selectedPreview.kind}</div>
+                <div><strong>RLDC:</strong> {selectedPreview.rldc || '—'}</div>
+                <div><strong>Delivery date:</strong> {selectedPreview.delivery_date || '—'}</div>
+                {(selectedPreview.period_from || selectedPreview.period_to) && (
+                  <div><strong>Period:</strong> {selectedPreview.period_from || '—'} → {selectedPreview.period_to || '—'}</div>
+                )}
+                <div><strong>Revision:</strong> {selectedPreview.revision_no || '—'}</div>
+                <div><strong>Rows:</strong> {selectedPreview.row_count ?? '—'}</div>
+                <div><strong>Uploaded:</strong> {selectedPreview.trade_date} by {selectedPreview.uploaded_by || '—'}</div>
+                <div><strong>Ingestion:</strong> {renderStatus(selectedPreview.status)}</div>
+                {selectedPreview.notes && <div><strong>Notes:</strong> {selectedPreview.notes}</div>}
              </div>
-             
-             {/* 96-Block Mini Bar Chart (CSS-based) */}
-             <div style={{ height: 300, borderLeft: '2px solid #ccc', borderBottom: '2px solid #ccc', position: 'relative', display: 'flex', alignItems: 'flex-end', paddingTop: 20 }}>
-                {selectedPreview.blocks.map((mw, i) => {
-                   // Calculate height % relative to max max(abs) e.g. 30MW
-                   const h = (Math.abs(mw) / 30) * 100;
-                   return (
-                     <div key={i} style={{
-                        flex: 1,
-                        height: `${h}%`,
-                        background: mw === 0 ? 'transparent' : '#2ecc71',
-                        borderTop: mw === 0 ? 'none' : '1px solid #27ae60',
-                        marginRight: 1
-                     }} title={`Block ${i+1}: ${mw} MW`}></div>
-                   )
-                })}
-             </div>
-             <div style={{ textAlign: 'center', fontSize: 11, marginTop: 10, color: '#666' }}>96 Blocks (00:00 to 24:00)</div>
-             
-             <div style={{ marginTop: 20 }}>
-                <p style={{ fontSize: 12, color: '#555' }}>Hover over the bars to see block-wise MW.</p>
-                {renderStatus(selectedPreview.status)}
-             </div>
+
+             {/* There was a 96-block bar chart here, drawn from a curve the API
+                 made up. The register keeps the upload — file, period, revision,
+                 row count — and not the parsed block values, so this says what it
+                 has rather than drawing a day that was never read. */}
+             <p style={{ fontSize: 12, color: '#555', marginTop: 20 }}>
+                The platform records the file and its ingestion; the block-wise schedule inside it is not stored here.
+             </p>
           </div>
         </div>
       )}

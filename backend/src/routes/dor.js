@@ -1,89 +1,123 @@
 import express from 'express';
+import db from '../db/index.js';
+import { timeBlockNumber } from './isetReports.js';
 
+/**
+ * Daily Obligation Report: what the desk actually has on the exchange for a
+ * delivery date, block by block.
+ *
+ * This endpoint used to generate its answer — 96 blocks off a hand-written
+ * generation curve, a hardcoded total revenue "for screenshot replica", and a
+ * named signatory who does not work here. It answered the same way whatever date
+ * was asked for and whatever the desk had actually bid, which makes it worse than
+ * an empty screen: a number nobody entered, presented as the day's position.
+ *
+ * It reads the bids now. A block's obligation is what cleared on it; the rate is
+ * the price it cleared at; where nothing cleared the block is there with a zero,
+ * because "no obligation in that block" is an answer.
+ */
 const router = express.Router();
 
-function generateMockDOR(date, portfolio) {
-  const blocks = [];
-  let totalMwh = 0;
-  let totalRevenue = 0;
+const BLOCK_HOURS = 0.25;
 
-  for (let i = 1; i <= 96; i++) {
-    const startMins = (i - 1) * 15;
-    const endMins = i * 15;
-    const sh = Math.floor(startMins / 60).toString().padStart(2, '0');
-    const sm = (startMins % 60).toString().padStart(2, '0');
-    const eh = Math.floor(endMins / 60).toString().padStart(2, '0');
-    const em = (endMins % 60).toString().padStart(2, '0');
-    const timeLabel = `${sh}:${sm} - ${eh === '24' ? '24' : eh}:${em}`;
-
-    let volumeMw = 0;
-    
-    // Simulate generation curve (Peaking Efficiency Strategy)
-    if (i >= 1 && i <= 30) {
-      volumeMw = -17.10; // Early morning
-    } else if (i > 30 && i <= 48) {
-      volumeMw = -25.70; // Step up before afternoon
-    } else if (i >= 49 && i <= 64) {
-      volumeMw = 0.0; // Conserving water (12:00 PM to 04:00 PM)
-    } else {
-      volumeMw = -12.80; // Late evening
-    }
-
-    // Simulate MCP (Even during 0.0 MW blocks)
-    let mcp = 2300.34;
-    if (i > 30 && i <= 50) mcp = 3727.02;
-    
-    // Evening peak hits price cap
-    if (i >= 69 && i <= 72) { // 17:15 - 18:15 approx
-      mcp = 10000.00;
-    }
-
-    const mwh = Number((Math.abs(volumeMw) / 4).toFixed(5));
-    const tradeValue = Number((mwh * mcp).toFixed(2));
-
-    totalMwh += mwh;
-    totalRevenue += tradeValue;
-
-    blocks.push({
-      block_no: i,
-      time_label: timeLabel,
-      volume_mw: volumeMw, // Keep negative sign for seller injection
-      mcp: mcp,
-      trade_value: volumeMw === 0 ? 0.0 : tradeValue
-    });
-  }
-  
-  return {
-    date,
-    portfolio,
-    blocks,
-    summary: {
-      total_mwh: Number(totalMwh.toFixed(5)),
-      total_revenue: 1321932.90, // Hardcoded for screenshot replica
-      weighted_avg_rate: totalMwh > 0 ? Number((1321932.90 / totalMwh).toFixed(2)) : 0
-    },
-    financial_summary: {
-      gross_revenue: 1321932.90,
-      nldc_fee: 7.56,
-      ctu_charges: 0.00,
-      stu_charges: 24289.07,
-      sldc_charges: 2000.00,
-      iex_fees: 7175.50,
-      igst: 1291.59,
-      net_payout: 1287169.18,
-      is_discrepancy: false
-    },
-    signatory: {
-      name: "Amit Kumar",
-      designation: "Sr VP Market Operations"
-    }
-  };
+/** "00:00-00:15" → "00:00 - 00:15", which is how the report reads. */
+function timeLabel(block) {
+  const raw = String(block || '').trim();
+  const parts = raw.split('-');
+  return parts.length === 2 ? `${parts[0].trim()} - ${parts[1].trim()}` : raw;
 }
 
 router.get('/', (req, res) => {
-  const { date = new Date().toISOString().split('T')[0], portfolio = 'PTC0850_HP0_Naitwar_Mori_HPS' } = req.query;
-  const data = generateMockDOR(date, portfolio);
-  res.json(data);
+  const date = String(req.query.date || new Date().toISOString().slice(0, 10)).slice(0, 10);
+  const portfolio = req.query.portfolio ? String(req.query.portfolio) : null;
+  const clientId = req.query.client_id ? String(req.query.client_id) : null;
+
+  // The bids that carry an obligation on that delivery date. A portfolio is the
+  // exchange's name for a client's account, so it resolves through the contract
+  // that carries it.
+  const where = ['b.delivery_date = ?', "b.status IN ('SUBMITTED','CLEARED','PARTIALLY_CLEARED')"];
+  const params = [date];
+  if (clientId) { where.push('b.client_id = ?'); params.push(clientId); }
+  if (portfolio) {
+    where.push('(ec.portfolio_id = ? OR cep.portfolio_id = ?)');
+    params.push(portfolio, portfolio);
+  }
+
+  const blocks = db.prepare(`
+    SELECT
+      bb.time_block, bb.quantum_mw, bb.cleared_quantum_mw, bb.cleared_price, bb.price_per_unit, bb.status,
+      b.id AS bid_id, b.exchange, b.product, b.client_id,
+      -- The side is the agreement's, not the bid's: a bid under a Seller-side
+      -- exchange contract is an injection.
+      ec.side AS side
+    FROM bid_blocks bb
+    JOIN bids b ON b.id = bb.bid_id
+    LEFT JOIN exchange_contracts ec ON ec.id = b.contract_id
+    LEFT JOIN client_exchange_portfolios cep ON cep.client_id = b.client_id AND cep.exchange = b.exchange
+    WHERE ${where.join(' AND ')}
+    ORDER BY bb.time_block
+  `).all(...params);
+
+  // One row per 15-minute block, whatever number of bids touched it.
+  const byBlock = new Map();
+  for (const row of blocks) {
+    const key = row.time_block;
+    if (!byBlock.has(key)) {
+      byBlock.set(key, {
+        block_no: timeBlockNumber(key),
+        time_label: timeLabel(key),
+        volume_mw: 0,
+        offered_mw: 0,
+        mcp: null,
+        trade_value: 0,
+        bids: [],
+      });
+    }
+    const block = byBlock.get(key);
+    const cleared = Number(row.cleared_quantum_mw) || 0;
+    // A sell injects, which the report reads as a negative position.
+    const isSell = ['SELL', 'SELLER'].includes(String(row.side || '').toUpperCase());
+    const signed = isSell ? -cleared : cleared;
+    block.volume_mw += signed;
+    block.offered_mw += Number(row.quantum_mw) || 0;
+    const rate = row.cleared_price != null ? Number(row.cleared_price) : null;
+    if (rate != null) block.mcp = rate;
+    // Cleared price is Rs/kWh on the bid; the report states value in rupees.
+    block.trade_value += cleared * BLOCK_HOURS * (rate ?? 0) * 1000;
+    if (!block.bids.includes(row.bid_id)) block.bids.push(row.bid_id);
+  }
+
+  const rows = [...byBlock.values()]
+    .sort((a, b) => (Number(a.block_no) || 0) - (Number(b.block_no) || 0))
+    .map((b) => ({
+      ...b,
+      volume_mw: Number(b.volume_mw.toFixed(4)),
+      offered_mw: Number(b.offered_mw.toFixed(4)),
+      trade_value: Number(b.trade_value.toFixed(2)),
+      mwh: Number((Math.abs(b.volume_mw) * BLOCK_HOURS).toFixed(5)),
+    }));
+
+  const totalMwh = rows.reduce((a, b) => a + b.mwh, 0);
+  const totalValue = rows.reduce((a, b) => a + b.trade_value, 0);
+
+  res.json({
+    date,
+    portfolio,
+    client_id: clientId,
+    blocks: rows,
+    summary: {
+      blocks_with_obligation: rows.filter((b) => b.volume_mw !== 0).length,
+      total_mwh: Number(totalMwh.toFixed(5)),
+      total_revenue: Number(totalValue.toFixed(2)),
+      weighted_avg_rate: totalMwh > 0 ? Number((totalValue / totalMwh).toFixed(2)) : 0,
+    },
+    // The charges that turn a gross position into a payout are raised on the
+    // exchange invoice, not held here. Saying so beats inventing them.
+    financial_summary: null,
+    note: rows.length === 0
+      ? `No bid carries an obligation on ${date}${portfolio ? ` for portfolio ${portfolio}` : ''}.`
+      : null,
+  });
 });
 
 export default router;
