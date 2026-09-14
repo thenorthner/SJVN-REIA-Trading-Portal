@@ -48,6 +48,7 @@ const EMPTY_FORM = {
   payment_terms_days: 30, rebate_pct: '', rebate_days: '', rebate_basis: 'BILL_DATE',
   lps_annual_pct: '', lps_grace_days: 0, payment_security_type: 'LETTER_OF_CREDIT',
   min_cuf_percent: '',
+  peak_window_start: '', peak_window_end: '', min_peak_availability_percent: '', peak_penalty_per_mwh: '',
   projects: []
 };
 
@@ -517,6 +518,26 @@ export default function Contracts() {
             </div>
             <p style={{ fontSize: 12, color: 'var(--slate-500)', margin: '8px 0 0' }}>
               If actual CUF (from energy data) is below this threshold, invoice generate applies a shortfall penalty = shortfall MWh × tariff (or master ₹/MWh rate).
+            </p>
+            <h4 style={{ margin: '16px 0 12px 0', color: '#0369a1' }}>4c. Peak Availability Obligation</h4>
+            <div className="form-grid">
+              <Field label="Peak window from">
+                <input type="time" value={form.peak_window_start || ''} onChange={(e) => setForm({ ...form, peak_window_start: e.target.value })} />
+              </Field>
+              <Field label="Peak window to">
+                <input type="time" value={form.peak_window_end || ''} onChange={(e) => setForm({ ...form, peak_window_end: e.target.value })} />
+              </Field>
+              <Field label="Min peak availability (%)">
+                <input type="number" step="0.01" min="0" max="100" placeholder="Blank = no peak obligation" value={form.min_peak_availability_percent || ''} onChange={(e) => setForm({ ...form, min_peak_availability_percent: e.target.value })} />
+              </Field>
+              <Field label="Peak shortfall penalty (₹/MWh)">
+                <input type="number" step="0.01" min="0" placeholder="Blank = master rate, else tariff" value={form.peak_penalty_per_mwh || ''} onChange={(e) => setForm({ ...form, peak_penalty_per_mwh: e.target.value })} />
+              </Field>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--slate-500)', margin: '8px 0 0' }}>
+              A peak-power or FDRE PSA buys energy when the system needs it. Leave the minimum blank and this contract
+              carries no peak obligation — nothing is charged on it. With one set, a month whose reported peak-window
+              availability falls short is billed shortfall % × capacity × peak hours × rate.
             </p>
           </div>
           )}

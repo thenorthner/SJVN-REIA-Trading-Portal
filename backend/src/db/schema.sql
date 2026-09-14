@@ -294,7 +294,14 @@ CREATE TABLE IF NOT EXISTS contracts (
   -- to the main ECR: NJHPS prices both the same, Rampur does not.
   ecr_excess_rate REAL,
   transmission_charge_per_mwh REAL, -- ₹/MWh wheeling/transmission if applicable
-  min_cuf_percent REAL, -- Guaranteed / contractual min CUF % (Solar/Wind/Hybrid); NULL = master default
+  min_cuf_percent REAL,
+  -- A peak-power or FDRE PSA buys energy when the system needs it, so it states
+  -- a peak window and the availability the project must hold inside it. Null on
+  -- a contract with no peak obligation, which is most of them.
+  peak_window_start TEXT,                -- HH:MM
+  peak_window_end TEXT,                  -- HH:MM, may cross midnight
+  min_peak_availability_percent REAL,
+  peak_penalty_per_mwh REAL, -- Guaranteed / contractual min CUF % (Solar/Wind/Hybrid); NULL = master default
   version INTEGER NOT NULL DEFAULT 1,
   parent_contract_id TEXT,
   termination_reason TEXT,
@@ -358,6 +365,9 @@ CREATE TABLE IF NOT EXISTS energy_data (
   energy_mwh REAL NOT NULL,
   cuf_percent REAL,
   availability_percent REAL,
+  -- Availability inside the contract's peak window, as the regional energy
+  -- account or the JMR reports it. Monthly, like everything else here.
+  peak_availability_percent REAL,
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','VALIDATED','LOCKED','DISPUTED')),
   deviation_notes TEXT,
   billing_family_ref TEXT, -- BFR/{contract}/{YYYY-MM}/{S2S|S2B} — provisional↔final trail key

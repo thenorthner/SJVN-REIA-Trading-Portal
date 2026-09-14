@@ -2350,6 +2350,26 @@ try {
   console.error('Trading-client maker/checker role migration failed:', e.message);
 }
 
+/** The peak-window obligation on a contract, and what each month reported. */
+function migratePeakAvailabilityColumns() {
+  const add = (table, column, type) => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+    if (!cols.length || cols.includes(column)) return;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  };
+  add('contracts', 'peak_window_start', 'TEXT');
+  add('contracts', 'peak_window_end', 'TEXT');
+  add('contracts', 'min_peak_availability_percent', 'REAL');
+  add('contracts', 'peak_penalty_per_mwh', 'REAL');
+  add('energy_data', 'peak_availability_percent', 'REAL');
+}
+
+try {
+  migratePeakAvailabilityColumns();
+} catch (e) {
+  console.error('Peak availability migration failed:', e.message);
+}
+
 try {
   db.prepare(`UPDATE contracts SET tariff_structure_json = NULL WHERE tariff_structure_json = '{}' OR tariff_structure_json = '"{}"' OR TRIM(tariff_structure_json) = ''`).run();
 } catch (e) {

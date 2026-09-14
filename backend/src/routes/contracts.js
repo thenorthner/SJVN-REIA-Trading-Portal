@@ -26,6 +26,12 @@ function hydroBillingFields(b) {
     napaf_percent: num(b.napaf_percent),
     transmission_charge_per_mwh: num(b.transmission_charge_per_mwh),
     min_cuf_percent: num(b.min_cuf_percent),
+    // A peak-power or FDRE PSA's peak obligation. Null on a contract that has
+    // none, which is what leaves it uncharged.
+    peak_window_start: b.peak_window_start || null,
+    peak_window_end: b.peak_window_end || null,
+    min_peak_availability_percent: num(b.min_peak_availability_percent),
+    peak_penalty_per_mwh: num(b.peak_penalty_per_mwh),
   };
 }
 
@@ -210,11 +216,13 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
       INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
         tariff_type, tariff_per_unit, tariff_structure_json, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type, pbg_expiry,
         rebate_rule, lps_rule, payment_security_type, payment_terms_days, rebate_pct, rebate_days, rebate_basis, lps_annual_pct, lps_grace_days, trading_margin_per_mwh,
-        normative_aux, free_energy_home_state, capacity_charges_total, annual_afc, annual_design_energy_mwh, napaf_percent, transmission_charge_per_mwh, min_cuf_percent, status)
+        normative_aux, free_energy_home_state, capacity_charges_total, annual_afc, annual_design_energy_mwh, napaf_percent, transmission_charge_per_mwh, min_cuf_percent,
+        peak_window_start, peak_window_end, min_peak_availability_percent, peak_penalty_per_mwh, status)
       VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
         @tariff_type, @tariff_per_unit, @tariff_structure_json, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type, @pbg_expiry,
         @rebate_rule, @lps_rule, @payment_security_type, @payment_terms_days, @rebate_pct, @rebate_days, @rebate_basis, @lps_annual_pct, @lps_grace_days, @trading_margin_per_mwh,
-        @normative_aux, @free_energy_home_state, @capacity_charges_total, @annual_afc, @annual_design_energy_mwh, @napaf_percent, @transmission_charge_per_mwh, @min_cuf_percent, @status)
+        @normative_aux, @free_energy_home_state, @capacity_charges_total, @annual_afc, @annual_design_energy_mwh, @napaf_percent, @transmission_charge_per_mwh, @min_cuf_percent,
+        @peak_window_start, @peak_window_end, @min_peak_availability_percent, @peak_penalty_per_mwh, @status)
     `).run({
       id,
       contract_no: b.contract_no,
@@ -407,12 +415,16 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
         tariff_type, tariff_per_unit, tariff_structure_json, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type,
         pbg_expiry, rebate_rule, lps_rule, payment_security_type, payment_terms_days, rebate_pct, rebate_days, rebate_basis, lps_annual_pct, lps_grace_days,
         trading_margin_per_mwh, normative_aux, free_energy_home_state, capacity_charges_total, annual_afc, annual_design_energy_mwh, napaf_percent,
-        transmission_charge_per_mwh, min_cuf_percent, version, parent_contract_id, status, remarks, amendment_effective_from)
+        transmission_charge_per_mwh, min_cuf_percent,
+        peak_window_start, peak_window_end, min_peak_availability_percent, peak_penalty_per_mwh,
+        version, parent_contract_id, status, remarks, amendment_effective_from)
       VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
         @tariff_type, @tariff_per_unit, @tariff_structure_json, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type,
         @pbg_expiry, @rebate_rule, @lps_rule, @payment_security_type, @payment_terms_days, @rebate_pct, @rebate_days, @rebate_basis, @lps_annual_pct, @lps_grace_days,
         @trading_margin_per_mwh, @normative_aux, @free_energy_home_state, @capacity_charges_total, @annual_afc, @annual_design_energy_mwh, @napaf_percent,
-        @transmission_charge_per_mwh, @min_cuf_percent, @version, @parent_contract_id, 'PENDING_REGULATORY_APPROVAL', @remarks, @amendment_effective_from)
+        @transmission_charge_per_mwh, @min_cuf_percent,
+        @peak_window_start, @peak_window_end, @min_peak_availability_percent, @peak_penalty_per_mwh,
+        @version, @parent_contract_id, 'PENDING_REGULATORY_APPROVAL', @remarks, @amendment_effective_from)
     `).run({
       ...updated,
       id: newVersionId,

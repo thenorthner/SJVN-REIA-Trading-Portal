@@ -14,6 +14,7 @@ import { contractVisibleTo, invoicePresentedTo, authoredBy, billPresentedOn, PRE
 import { asOfFrom, isProjection } from '../services/clock.js';
 import { computeCercHydroBill } from '../services/cercHydroBilling.js';
 import { computeCufPenalty } from '../services/cufPenalty.js';
+import { computePeakAvailabilityPenalty } from '../services/peakAvailability.js';
 import {
   compareSellerToSystem,
   findSystemCounterpart,
@@ -699,16 +700,34 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     cufPercent: energy.cuf_percent,
     tariffPerUnit: appliedTariff || contract.tariff_per_unit,
   });
-  const penalty = cufPen.penalty || 0;
-  if (cufPen.applicable && cufPen.breakdown && penalty > 0) {
+  const cufPenalty = cufPen.penalty || 0;
+  if (cufPen.applicable && cufPen.breakdown && cufPenalty > 0) {
     breakdown.push(cufPen.breakdown);
-  } else if (cufPen.applicable && cufPen.label && penalty === 0 && cufPen.actualCuf != null) {
+  } else if (cufPen.applicable && cufPen.label && cufPenalty === 0 && cufPen.actualCuf != null) {
     breakdown.push({
       code: 'PEN',
       label: cufPen.label,
       value: 0,
     });
   }
+
+  // Peak availability shortfall. A peak-power or FDRE PSA buys energy when the
+  // system needs it, and states the availability the project must hold inside
+  // its peak window. Nothing is charged unless the contract carries that
+  // obligation, so an ordinary PPA is not silently given one.
+  const peakPen = computePeakAvailabilityPenalty({
+    contract,
+    periodMonth: period_month,
+    capacityMw: billableCapacityMw(contract),
+    peakAvailabilityPercent: energy.peak_availability_percent,
+    tariffPerUnit: appliedTariff || contract.tariff_per_unit,
+  });
+  if (peakPen.breakdown) {
+    breakdown.push(peakPen.breakdown);
+  } else if (peakPen.label) {
+    breakdown.push({ code: 'PEAKPEN', label: peakPen.label, value: 0 });
+  }
+  const penalty = cufPenalty + (peakPen.penalty || 0);
 
   const grossTotal = capacityCharges + energyCharges + deemedCharges + incentiveCharges + tradingMargin + nrldcFees + transmissionCharges + gstAmount - freePowerDeduction - penalty;
   breakdown.push({ code: 'GROSS', label: 'Gross Amount (before provisional true-up)', value: grossTotal });

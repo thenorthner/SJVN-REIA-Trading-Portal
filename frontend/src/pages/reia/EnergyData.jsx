@@ -8,7 +8,7 @@ import { fmtDateTime } from '../../datetime.js';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
 
-const EMPTY_FORM = { contract_id: '', period_month: '', data_type: 'PROVISIONAL', source: 'MANUAL', energy_mwh: '', cuf_percent: '', availability_percent: '' };
+const EMPTY_FORM = { contract_id: '', period_month: '', data_type: 'PROVISIONAL', source: 'MANUAL', energy_mwh: '', cuf_percent: '', availability_percent: '', peak_availability_percent: '' };
 
 export default function EnergyData() {
   const { user } = useAuth();
@@ -88,6 +88,7 @@ export default function EnergyData() {
         energy_mwh: Number(form.energy_mwh),
         cuf_percent: form.cuf_percent ? Number(form.cuf_percent) : null,
         availability_percent: form.availability_percent ? Number(form.availability_percent) : null,
+        peak_availability_percent: form.peak_availability_percent ? Number(form.peak_availability_percent) : null,
       });
       setShowCreate(false);
       setForm(EMPTY_FORM);
@@ -176,6 +177,7 @@ export default function EnergyData() {
     { key: 'energy_mwh', header: 'Energy (MWh)', render: (r) => fmtNumber(r.energy_mwh) },
     { key: 'cuf_percent', header: 'CUF %', render: (r) => r.cuf_percent != null ? `${fmtNumber(r.cuf_percent)}%` : '-' },
     { key: 'availability_percent', header: 'Availability %', render: (r) => r.availability_percent != null ? `${fmtNumber(r.availability_percent)}%` : '-' },
+    { key: 'peak_availability_percent', header: 'Peak Avail. %', render: (r) => r.peak_availability_percent != null ? `${fmtNumber(r.peak_availability_percent)}%` : '-' },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
     { key: 'deviation_notes', header: 'Notes', render: (r) => r.deviation_notes || '-' },
     ...(CAN_WRITE.includes(user?.role) ? [{
@@ -542,6 +544,16 @@ export default function EnergyData() {
             </Field>
             <Field label="Availability (%)">
               <input type="number" step="0.01" value={form.availability_percent} onChange={(e) => setForm({ ...form, availability_percent: e.target.value })} />
+            </Field>
+            {/* Only a contract with a peak obligation is billed on this, but the
+                account reports it either way, so it is recorded either way. */}
+            <Field label="Peak-window Availability (%)">
+              <input
+                type="number" step="0.01" min="0" max="100"
+                placeholder="As the energy account reports the peak window"
+                value={form.peak_availability_percent}
+                onChange={(e) => setForm({ ...form, peak_availability_percent: e.target.value })}
+              />
             </Field>
           </div>
           <div className="form-actions">
