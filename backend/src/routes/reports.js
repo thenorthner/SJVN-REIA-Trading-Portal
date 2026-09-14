@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { paymentMonitoring } from '../services/paymentMonitoring.js';
+import { generationPerformance } from '../services/generationPerformance.js';
 import { receivablesOutstanding, payablesOutstanding, overdueCount } from '../services/outstanding.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
@@ -138,6 +139,25 @@ export function buildBillingSummary({ from, to } = {}) {
     payment_security: security,
   };
 }
+
+/**
+ * GET /api/reports/generation-performance?from=YYYY-MM&to=YYYY-MM&contract_id=
+ *
+ * What each project generated against what its contract expects: CUF actual and
+ * required, the shortfall, and the availability the meter data reported.
+ */
+router.get('/generation-performance', requireRole(...REPORT_READ), (req, res) => {
+  try {
+    res.json(generationPerformance({
+      from: req.query.from || null,
+      to: req.query.to || null,
+      contractId: req.query.contract_id || null,
+    }));
+  } catch (err) {
+    console.error('Generation performance error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 /**
  * GET /api/reports/payment-monitoring?side=RECEIVABLE|PAYABLE

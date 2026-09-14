@@ -246,6 +246,8 @@ export const api = {
   reports: {
     // Who owes what, how late it is, and what the lateness has earned.
     paymentMonitoring: (side = 'RECEIVABLE') => g('/reports/payment-monitoring', { side }),
+    // Energy against what each contract's capacity could make.
+    generationPerformance: (params) => g('/reports/generation-performance', params),
     billingSummary: (params) => g('/reports/billing-summary', params),
     billingSummaryPdf: async (params = {}) => {
       const qs = new URLSearchParams();

@@ -116,6 +116,8 @@ const NAV_INTERNAL = [
       { to: '/reia/invoices', label: 'Billing & Invoicing' },
       // Outstanding, delay days and surcharge, on both sides of the desk.
       { to: '/reia/payment-monitoring', label: 'Payment Monitoring' },
+      // Energy against what each project's capacity could make.
+      { to: '/reia/generation-performance', label: 'Generation Performance' },
       { to: '/reia/hydro-billing', label: 'Hydro Billing (Station-wise)' },
       { to: '/reia/hydro-ledger', label: 'Hydro Account Display' },
       { to: '/reia/disputes', label: 'Dispute Management' },
