@@ -28,7 +28,7 @@ export default function ReiaDashboard() {
   }
 
   if (!data) return <div className="page-loading">Loading REIA dashboard...</div>;
-  const { kpis, byStatus, byProjectType, monthlyBilling } = data;
+  const { kpis, byStatus, byProjectType, monthlyBilling, lps, pendingSplit, ageing, formIv } = data;
 
   return (
     <div>
@@ -87,7 +87,102 @@ export default function ReiaDashboard() {
         <div style={{ cursor: 'pointer' }} onClick={() => navigate('/reia/invoices')}>
           <StatCard label="Overdue Invoices" value={kpis.overdue} tone={kpis.overdue > 0 ? 'red' : 'default'} />
         </div>
+        {/* CP-58-61 asked this dashboard for the surcharge position, the split
+            between what developers are owed and what buyers owe, and the age of
+            that money. All four came from the same figures the cards above use. */}
+        <div style={{ cursor: 'pointer' }} onClick={() => navigate('/reia/invoices')}>
+          <StatCard
+            label="LPS Recovered"
+            value={fmtCurrency(kpis.lpsRecovered)}
+            tone={kpis.lpsRecovered > 0 ? 'green' : 'default'}
+            hint="Surcharge on bills since settled"
+          />
+        </div>
+        <div style={{ cursor: 'pointer' }} onClick={() => navigate('/reia/invoices')}>
+          <StatCard
+            label="LPS Recoverable"
+            value={fmtCurrency(kpis.lpsRecoverable)}
+            tone={kpis.lpsRecoverable > 0 ? 'amber' : 'default'}
+            hint={lps ? `${fmtCurrency(lps.receivable.accrued_unbilled + lps.payable.accrued_unbilled)} not yet billed` : undefined}
+          />
+        </div>
+        <div style={{ cursor: 'pointer' }} onClick={() => navigate('/reia/invoices')}>
+          <StatCard
+            label="Pending to Developers"
+            value={fmtCurrency(kpis.developerPending)}
+            tone={kpis.developerPending > 0 ? 'amber' : 'default'}
+            hint={pendingSplit ? `${pendingSplit.developer.invoices} bills · ${pendingSplit.developer.overdue_invoices} overdue` : undefined}
+          />
+        </div>
+        <div style={{ cursor: 'pointer' }} onClick={() => navigate('/reia/invoices')}>
+          <StatCard
+            label="Pending from Buyers"
+            value={fmtCurrency(kpis.buyerPending)}
+            tone={kpis.buyerPending > 0 ? 'amber' : 'default'}
+            hint={pendingSplit ? `${pendingSplit.buyer.invoices} bills · ${pendingSplit.buyer.overdue_invoices} overdue` : undefined}
+          />
+        </div>
+        {/* The filing screen itself lives in the trading module and is guarded to
+            it, so this card reports rather than navigates. */}
+        <div>
+          <StatCard
+            label="CERC Form-IV"
+            value={formIv?.latest_period ? `${formIv.latest_period} · ${formIv.latest_status}` : 'Nothing filed'}
+            tone={kpis.formIvOverdue > 0 ? 'red' : kpis.formIvPending > 0 ? 'amber' : 'green'}
+            hint={formIv
+              ? `${kpis.formIvPending} pending${kpis.formIvOverdue ? `, ${kpis.formIvOverdue} past due` : ''}${formIv.open_breaches ? ` · ${formIv.open_breaches} margin breaches` : ''}`
+              : undefined}
+          />
+        </div>
       </div>
+
+      {ageing && (
+        <Card title="Outstanding by age">
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th scope="col">Age</th>
+                  <th scope="col" className="num">From buyers</th>
+                  <th scope="col" className="num">Bills</th>
+                  <th scope="col" className="num">To developers</th>
+                  <th scope="col" className="num">Bills</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ageing.receivable.map((row, i) => {
+                  const pay = ageing.payable[i] || { amount: 0, invoices: 0 };
+                  const late = row.bucket !== 'NOT_DUE';
+                  return (
+                    <tr key={row.bucket}>
+                      <td style={late ? { fontWeight: 600 } : undefined}>{row.label}</td>
+                      <td className="num">{fmtCurrency(row.amount)}</td>
+                      <td className="num">{row.invoices}</td>
+                      <td className="num">{fmtCurrency(pay.amount)}</td>
+                      <td className="num">{pay.invoices}</td>
+                    </tr>
+                  );
+                })}
+                <tr className="totals-row">
+                  <td>Total outstanding</td>
+                  <td className="num">{fmtCurrency(kpis.receivables)}</td>
+                  <td className="num">{pendingSplit?.buyer.invoices ?? ''}</td>
+                  <td className="num">{fmtCurrency(kpis.payables)}</td>
+                  <td className="num">{pendingSplit?.developer.invoices ?? ''}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {lps && (lps.receivable.accrued_unbilled > 0 || lps.payable.accrued_unbilled > 0) && (
+            <p className="report-count">
+              Late payment surcharge of{' '}
+              <strong>{fmtCurrency(lps.receivable.accrued_unbilled + lps.payable.accrued_unbilled)}</strong>{' '}
+              has accrued on overdue bills at {lps.receivable.annual_pct}% a year and has not been raised on any
+              invoice yet.
+            </p>
+          )}
+        </Card>
+      )}
 
       <div className="grid-2">
         <Card title="Monthly Billing Trend">

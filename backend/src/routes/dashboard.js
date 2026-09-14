@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { receivablesOutstanding, payablesOutstanding, overdueReceivable, overdueCount } from '../services/outstanding.js';
+import {
+  receivablesOutstanding, payablesOutstanding, overdueReceivable, overdueCount,
+  ageingBuckets, openPosition,
+} from '../services/outstanding.js';
+import { lpsPosition } from '../services/lpsPosition.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { OPEN_STATUSES } from '../disputesConstants.js';
 import { buildTradingProfitabilitySummary } from './reports.js';
@@ -100,6 +104,50 @@ router.get('/reia', (req, res) => {
     ORDER BY v.expiry_date
   `).all();
 
+  // The three things the scope asks this dashboard for that it could not answer
+  // (CP-58-61): what the overdue bills have earned in surcharge, how the pending
+  // money splits between the developers SJVN owes and the buyers who owe SJVN,
+  // and how old that money is. All on the same outstanding formula as the KPIs
+  // above, so the cards and the ageing table cannot disagree.
+  const lps = {
+    receivable: lpsPosition('SJVN_TO_BUYER'),
+    payable: lpsPosition('SELLER_TO_SJVN'),
+  };
+
+  const pendingSplit = {
+    buyer: openPosition('SJVN_TO_BUYER'),
+    developer: openPosition('SELLER_TO_SJVN'),
+  };
+
+  const ageing = {
+    receivable: ageingBuckets('SJVN_TO_BUYER'),
+    payable: ageingBuckets('SELLER_TO_SJVN'),
+  };
+
+  // Where the CERC trading-margin return stands. The filing register already
+  // answers this at /api/form-iv/summary; the dashboard had no idea it existed.
+  const formIvRow = db.prepare(`
+    SELECT
+      COUNT(*) AS total,
+      COALESCE(SUM(CASE WHEN status = 'SUBMITTED' THEN 1 ELSE 0 END), 0) AS submitted,
+      COALESCE(SUM(CASE WHEN status != 'SUBMITTED' THEN 1 ELSE 0 END), 0) AS pending,
+      COALESCE(SUM(breach_count), 0) AS open_breaches,
+      COALESCE(SUM(CASE
+        WHEN status != 'SUBMITTED' AND due_date IS NOT NULL AND date(due_date) < date('now')
+        THEN 1 ELSE 0 END), 0) AS overdue
+    FROM cerc_form_iv
+  `).get();
+  const latestFormIv = db.prepare(`
+    SELECT period, status, due_date FROM cerc_form_iv
+    WHERE period_type = 'MONTHLY' ORDER BY period DESC LIMIT 1
+  `).get();
+  const formIv = {
+    ...formIvRow,
+    latest_period: latestFormIv?.period || null,
+    latest_status: latestFormIv?.status || null,
+    latest_due_date: latestFormIv?.due_date || null,
+  };
+
   res.json({
     kpis: {
       activeContracts, contractedCapacity, energySupplied, billedEnergy,
@@ -108,9 +156,16 @@ router.get('/reia', (req, res) => {
       contractsNearingExpiry, documentsExpiringSoon: documentsExpiringSoon.length,
       totalInvoices: totalInvoices.c, totalInvoiceValue: totalInvoices.s,
       receivables, payables, paymentsReceived, paymentsDisbursed, overdue,
+      lpsRecovered: lps.receivable.recovered + lps.payable.recovered,
+      lpsRecoverable: lps.receivable.recoverable + lps.payable.recoverable,
+      developerPending: pendingSplit.developer.outstanding,
+      buyerPending: pendingSplit.buyer.outstanding,
+      formIvPending: formIv.pending,
+      formIvOverdue: formIv.overdue,
     },
     byStatus, contractsByStatus, byProjectType, monthlyBilling,
     documentsExpiring: documentsExpiringSoon,
+    lps, pendingSplit, ageing, formIv,
   });
 });
 

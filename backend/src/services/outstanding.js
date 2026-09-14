@@ -78,3 +78,88 @@ export function overdueCount() {
       AND ${OUTSTANDING_SQL} > 0
   `).get().c;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// How old the outstanding is, and what surcharge it has earned.
+//
+// Both answer on the same OUTSTANDING_SQL as the totals above, so an ageing
+// table can never add up to a different receivable than the KPI beside it.
+
+/** Days past due → bucket name. `date('now')` is the cut, as everywhere else. */
+const AGEING_BUCKETS = [
+  { bucket: 'NOT_DUE', label: 'Not yet due', where: `(i.due_date IS NULL OR date(i.due_date) >= date('now'))` },
+  { bucket: 'DAYS_0_30', label: '1–30 days', where: `date(i.due_date) < date('now') AND date(i.due_date) >= date('now','-30 days')` },
+  { bucket: 'DAYS_31_60', label: '31–60 days', where: `date(i.due_date) < date('now','-30 days') AND date(i.due_date) >= date('now','-60 days')` },
+  { bucket: 'DAYS_61_90', label: '61–90 days', where: `date(i.due_date) < date('now','-60 days') AND date(i.due_date) >= date('now','-90 days')` },
+  { bucket: 'DAYS_90_PLUS', label: 'Over 90 days', where: `date(i.due_date) < date('now','-90 days')` },
+];
+
+/**
+ * Outstanding in one direction, split by how long it has been due.
+ *
+ * Only bills with something left on them: a fully collected invoice whose status
+ * has not caught up is not ageing debt.
+ */
+export function ageingBuckets(direction) {
+  return AGEING_BUCKETS.map(({ bucket, label, where }) => {
+    const row = db.prepare(`
+      SELECT COUNT(*) invoices, COALESCE(SUM(${OUTSTANDING_SQL}), 0) amount
+      FROM invoices i
+      WHERE i.direction = ? AND ${OPEN} AND ${OUTSTANDING_SQL} > 0 AND ${where}
+    `).get(direction);
+    return { bucket, label, invoices: row.invoices, amount: row.amount };
+  });
+}
+
+/** What is still open in one direction: how many bills, and how much of it is late. */
+export function openPosition(direction) {
+  const row = db.prepare(`
+    SELECT COUNT(*) invoices, COALESCE(SUM(${OUTSTANDING_SQL}), 0) amount
+    FROM invoices i WHERE i.direction = ? AND ${OPEN} AND ${OUTSTANDING_SQL} > 0
+  `).get(direction);
+  const late = db.prepare(`
+    SELECT COUNT(*) invoices, COALESCE(SUM(${OUTSTANDING_SQL}), 0) amount
+    FROM invoices i
+    WHERE i.direction = ? AND ${OPEN} AND ${OUTSTANDING_SQL} > 0
+      AND i.due_date IS NOT NULL AND date(i.due_date) < date('now')
+  `).get(direction);
+  const disputed = db.prepare(`
+    SELECT COUNT(*) invoices, COALESCE(SUM(i.disputed_amount), 0) amount
+    FROM invoices i WHERE i.direction = ? AND ${OPEN} AND COALESCE(i.disputed_amount, 0) > 0
+  `).get(direction);
+  return {
+    invoices: row.invoices,
+    outstanding: row.amount,
+    overdue_invoices: late.invoices,
+    overdue_amount: late.amount,
+    disputed_invoices: disputed.invoices,
+    disputed_amount: disputed.amount,
+  };
+}
+
+/** Late payment surcharge already raised on bills, and what became of it. */
+export function lpsBilled(direction) {
+  const row = db.prepare(`
+    SELECT
+      COALESCE(SUM(i.lps), 0) AS charged,
+      COALESCE(SUM(CASE WHEN i.status = 'PAID' THEN i.lps ELSE 0 END), 0) AS recovered,
+      COALESCE(SUM(CASE WHEN i.status NOT IN ('PAID','CANCELLED') THEN i.lps ELSE 0 END), 0) AS open_charged,
+      COALESCE(SUM(CASE WHEN i.status = 'CANCELLED' THEN i.lps ELSE 0 END), 0) AS cancelled
+    FROM invoices i WHERE i.direction = ?
+  `).get(direction);
+  return row;
+}
+
+/** The open bills a surcharge accrues on, with what each has already been charged. */
+export function openOverdueInvoices(direction) {
+  return db.prepare(`
+    SELECT i.id, i.invoice_no, i.contract_id, i.direction, i.total_amount, i.disputed_amount,
+           i.lps, i.due_date, i.status,
+           COALESCE((SELECT SUM(p.amount + COALESCE(p.deduction, 0)) FROM payments p WHERE p.invoice_id = i.id), 0) AS paid,
+           ${OUTSTANDING_SQL} AS outstanding
+    FROM invoices i
+    WHERE i.direction = ? AND ${OPEN} AND ${OUTSTANDING_SQL} > 0
+      AND i.due_date IS NOT NULL AND date(i.due_date) < date('now')
+    ORDER BY i.due_date
+  `).all(direction);
+}
