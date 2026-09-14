@@ -7,7 +7,12 @@ import { fmtDate } from '../../datetime.js';
 import { catalogForEntityType, APPROVAL_STATUS_LABELS } from '../../constants/regulatoryApprovals.js';
 
 const CAN_APPROVE = ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN', 'REIA_ADMIN'];
-const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER', 'SELLER', 'BUYER', 'IT_SUPER_ADMIN', 'REIA_ADMIN'];
+// SELLER and BUYER were on this list, which reads as though a counterparty
+// edits its record here — this screen is the REIA desk's, and the route that
+// serves it is guarded to REIA roles, so those two never reached it. A
+// company's own login edits its profile through the API; its sub-users do not
+// edit it at all.
+const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN', 'REIA_ADMIN'];
 const CAN_VERIFY = ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN', 'REIA_ADMIN'];
 
 const EMPTY_FORM = {

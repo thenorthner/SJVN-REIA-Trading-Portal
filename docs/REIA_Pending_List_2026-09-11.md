@@ -57,6 +57,18 @@ judna** (SAP, DSC/e-invoice, SMS), **CP-58-61 ke dashboards aur reports**, aur
 | 11 🟠 | **Seller invoice: template upload + API** | F | Seller form se invoice banata hai aur system-generated counterpart se milan hota hai ✅. Excel template se upload aur API se submission nahi. |
 | 12 🟠 | **Peak availability penalty** | H, J | CUF penalty hai (`cuf_penalty_per_mwh`); peak availability ka hisaab kahin nahi — FDRE / peak-power PSA ke liye chahiye hoga. |
 
+### Faisle jo aa gaye (14 Sep)
+
+- **Sub-user company profile edit nahi kar sakta.** Routes pehle se sirf primary
+  login (`SELLER` / `BUYER`) aur REIA desk ko allow karte the; ab
+  `tests/reia/s26-company-profile-edits.test.js` ise pakad kar rakhta hai — L1/L2/L3
+  ko naam, capacity, bank, regulatory approval, logo aur signature sab par 403.
+  REIA Entities screen ke `CAN_WRITE` se `SELLER`/`BUYER` hata diye (wo screen
+  REIA-only hai, to wo entries sirf galat padhti thi).
+- **Trading client ko maker/checker roles chahiye** — alag item ke roop mein PT
+  list mein.
+- **Push / merge** sab kaam hone ke baad.
+
 ## C. Security / infra (scope section 4–5)
 
 | # | Kya | Scope ref | Haalat |
