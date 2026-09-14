@@ -193,6 +193,18 @@ export function implementedBlockWiseFromPunches() {
   });
 }
 
+/** The rows a pending report keeps in the generic register. */
+function genericRows(kind) {
+  return db.prepare(`
+    SELECT id, payload_json FROM generic_report_entries
+    WHERE report_kind = ? ORDER BY sort_order ASC, id ASC
+  `).all(kind).map((r) => {
+    let data = {};
+    try { data = JSON.parse(r.payload_json || '{}'); } catch { /* ignore */ }
+    return { id: r.id, ...data };
+  });
+}
+
 function listKind(kind, q) {
   switch (kind) {
     // Served from the Bill of Supply register rather than the pending-report
@@ -260,6 +272,27 @@ function listKind(kind, q) {
       return db.prepare('SELECT * FROM compensation_reconciliation ORDER BY delivery_date DESC').all();
     case 'tds-format':
       return db.prepare('SELECT * FROM tds_format_entries ORDER BY application_no').all();
+    case 'erp-vendor-master': {
+      // The FLVN00 extract is a list of the vendors SJVN pays, and the platform
+      // keeps that list: the TDS register, which carries each agency's name, PAN
+      // and category and is what the deduction entries hang off. Reading it here
+      // means the file finance uploads to SAP matches who is actually being paid.
+      // The pasted register is the fallback for a database with no vendors yet.
+      const vendors = db.prepare(`
+        SELECT name, pan, category FROM tds_vendors WHERE is_active = 1 ORDER BY name
+      `).all();
+      // Nothing in the register yet: fall back to whatever was pasted in.
+      if (!vendors.length) return genericRows(kind);
+      return vendors.map((v) => ({
+        type: v.category || 'OTHER',
+        partnerRole: '',
+        creationGroup: '',
+        firstName: v.name,
+        lastName: '',
+        lang: 'EN',
+        searchTerm: v.pan ? `${v.name} (${v.pan})` : v.name,
+      }));
+    }
     case 'daily-schedule': {
       const punched = dailyScheduleFromPunches();
       const keyed = new Set(punched.map((r) => `${r.buyer_contract}|${r.seller_contract}|${r.delivery_from}`));
@@ -291,17 +324,9 @@ function listKind(kind, q) {
       `).all();
     case 'bilateral-contracts':
       return bilateralContractRows(q);
-    default: {
+    default:
       if (!ALL_PENDING_KINDS.includes(kind)) return null;
-      return db.prepare(`
-        SELECT id, payload_json FROM generic_report_entries
-        WHERE report_kind = ? ORDER BY sort_order ASC, id ASC
-      `).all(kind).map((r) => {
-        let data = {};
-        try { data = JSON.parse(r.payload_json || '{}'); } catch { /* ignore */ }
-        return { id: r.id, ...data };
-      });
-    }
+      return genericRows(kind);
   }
 }
 

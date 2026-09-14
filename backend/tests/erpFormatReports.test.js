@@ -20,6 +20,10 @@ let trader;
 
 beforeEach(() => {
   for (const kind of KINDS) db.prepare('DELETE FROM generic_report_entries WHERE report_kind = ?').run(kind);
+  // The vendor extract prefers the TDS register — the vendors SJVN actually pays
+  // — and falls back to the pasted one. These start from the fallback; the test
+  // below fills the register.
+  db.prepare('DELETE FROM tds_vendors').run();
   trader = tokenFor('TRADING_USER');
   put('erp-vendor-master', 1, { type: 'Discom', firstName: 'Test Discom Ltd', lang: 'EN', searchTerm: 'Test Discom Ltd' });
   put('erp-vendor-master', 2, { type: 'Generator', firstName: 'Test Generator Ltd', lang: 'EN', searchTerm: 'Test Generator Ltd' });
@@ -76,6 +80,9 @@ describe('ERP upload formats', () => {
     expect(vendors.status).toBe(200);
     expect(vendors.body.map((v) => v.firstName)).toEqual(['Test Discom Ltd', 'Test Generator Ltd']);
     expect(vendors.body[0].type).toBe('Discom');
+    // The pasted register is the fallback; the TDS vendor register wins when it
+    // has anything in it — see the test below.
+
 
     const payables = await get('/api/iset-reports/erp-vendor-payable');
     expect(payables.body).toHaveLength(1);
@@ -86,6 +93,26 @@ describe('ERP upload formats', () => {
 
     const reaSea = await get('/api/iset-reports/rea-sea-reconciliation');
     expect(reaSea.body[0]).toMatchObject({ appNo: 'AD20260601', approved: 200, rea: 180, status: 'Pending' });
+  });
+
+  it('builds the vendor extract from the vendors SJVN actually pays', async () => {
+    // FLVN00 is a list of payees, and the platform keeps that list: the TDS
+    // register the deduction entries hang off.
+    db.prepare('DELETE FROM tds_vendors').run();
+    db.prepare(`
+      INSERT INTO tds_vendors (id, name, pan, category, is_active) VALUES
+        (?, 'GRID-INDIA', 'AAFCP2086B', 'RLDC', 1),
+        (?, 'CTUIL', 'AAJCC2026N', 'CTU', 1),
+        (?, 'Retired Agency', 'AAACR1111R', 'OTHER', 0)
+    `).run(newId('TDV'), newId('TDV'), newId('TDV'));
+
+    const r = await get('/api/iset-reports/erp-vendor-master');
+    expect(r.body.map((v) => v.firstName)).toEqual(['CTUIL', 'GRID-INDIA']);
+    expect(r.body[0]).toMatchObject({ type: 'CTU', lang: 'EN', searchTerm: 'CTUIL (AAJCC2026N)' });
+    // An inactive vendor is not somebody to pay.
+    expect(r.text).not.toMatch(/Retired Agency/);
+
+    db.prepare('DELETE FROM tds_vendors').run();
   });
 
   it('renders the layout with no rows when nothing has been loaded', async () => {
