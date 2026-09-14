@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { paymentMonitoring } from '../services/paymentMonitoring.js';
 import { receivablesOutstanding, payablesOutstanding, overdueCount } from '../services/outstanding.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
@@ -118,6 +119,26 @@ export function buildBillingSummary({ from, to } = {}) {
     totals,
   };
 }
+
+/**
+ * GET /api/reports/payment-monitoring?side=RECEIVABLE|PAYABLE
+ *
+ * Who owes what, how late it is, and what the lateness has earned — per bill and
+ * per counterparty. The scope asks for payment monitoring, developer payments and
+ * an outstanding ageing view; they are one question asked three ways.
+ */
+router.get('/payment-monitoring', requireRole(...REPORT_READ), (req, res) => {
+  const side = String(req.query.side || 'RECEIVABLE').toUpperCase();
+  if (!['RECEIVABLE', 'PAYABLE'].includes(side)) {
+    return res.status(400).json({ error: 'side must be RECEIVABLE or PAYABLE' });
+  }
+  try {
+    res.json(paymentMonitoring(side));
+  } catch (err) {
+    console.error('Payment monitoring error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 /**
  * GET /api/reports/billing-summary?from=YYYY-MM&to=YYYY-MM

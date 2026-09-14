@@ -244,6 +244,8 @@ export const api = {
     rejectConsent: (consentId) => p(`/pre-trade/consents/${consentId}/reject`),
   },
   reports: {
+    // Who owes what, how late it is, and what the lateness has earned.
+    paymentMonitoring: (side = 'RECEIVABLE') => g('/reports/payment-monitoring', { side }),
     billingSummary: (params) => g('/reports/billing-summary', params),
     billingSummaryPdf: async (params = {}) => {
       const qs = new URLSearchParams();

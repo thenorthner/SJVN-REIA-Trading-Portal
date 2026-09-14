@@ -114,6 +114,8 @@ const NAV_INTERNAL = [
       { to: '/reia/contracts', label: 'Contracts (PPA/PSA)' },
       { to: '/reia/energy-data', label: 'Energy Data & Validation' },
       { to: '/reia/invoices', label: 'Billing & Invoicing' },
+      // Outstanding, delay days and surcharge, on both sides of the desk.
+      { to: '/reia/payment-monitoring', label: 'Payment Monitoring' },
       { to: '/reia/hydro-billing', label: 'Hydro Billing (Station-wise)' },
       { to: '/reia/hydro-ledger', label: 'Hydro Account Display' },
       { to: '/reia/disputes', label: 'Dispute Management' },
