@@ -340,6 +340,19 @@ router.get('/buyer-outstanding', requireRole(...ROLE_GROUPS.REIA_ALL, ...ROLE_GR
   });
 });
 
+// Registered above '/:id', or the router reads "upload-template" as an
+// invoice id and answers 404.
+router.get('/upload-template', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), (_req, res) => {
+  const lines = [
+    INVOICE_UPLOAD_COLUMNS.join(','),
+    'PPA/SOLAR/001,2026-08,,FINAL,1250.5,3.15,3939075,0,0,0,0,0,0',
+    'PPA/WIND/002,2026-08,SELLER/2026/08/02,FINAL,880,3.40,2992000,15000,0,0,0,0,0',
+  ];
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=seller_invoice_template.csv');
+  res.send(lines.join('\n'));
+});
+
 router.get('/:id', (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
@@ -1042,6 +1055,219 @@ router.post('/supplementary', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res)
 });
 
 // Seller invoice submission (manual upload)
+// ── Loading a month of bills from the seller's own sheet ─────────────────────
+//
+// A generator with twenty PPAs raises twenty bills a month, one form at a time.
+// The sheet those numbers already live in is the honest way in — the same shape
+// the single form takes, with the contract named the way the seller knows it (its
+// contract number, not an id from this database), checked against the same rules,
+// and never landing anywhere the form would not.
+
+const INVOICE_UPLOAD_COLUMNS = [
+  'contract_no', 'billing_period', 'invoice_no', 'invoice_type',
+  'energy_mwh', 'tariff_per_unit', 'energy_charges', 'transmission_charges',
+  'rebate', 'lps', 'penalty', 'other_adjustments', 'taxes',
+];
+const INVOICE_UPLOAD_NUMERIC = [
+  'energy_mwh', 'tariff_per_unit', 'energy_charges', 'transmission_charges',
+  'rebate', 'lps', 'penalty', 'other_adjustments', 'taxes',
+];
+const INVOICE_TYPES = ['PROVISIONAL', 'FINAL', 'SUPPLEMENTARY', 'CREDIT_NOTE', 'DEBIT_NOTE'];
+const BILLING_PERIOD = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** One row of the sheet, held to the rules the form is held to. */
+function checkInvoiceRow(raw, user, contractCache, seenKeys) {
+  const errors = [];
+  const unknown = Object.keys(raw || {}).filter((k) => !INVOICE_UPLOAD_COLUMNS.includes(k));
+  if (unknown.length) errors.push(`unknown column(s): ${unknown.join(', ')} — see /api/invoices/upload-template`);
+
+  const str = (v) => (v == null ? '' : String(v).trim());
+  const num = (v) => (v === '' || v == null ? 0 : Number(v));
+
+  const row = {
+    contract_no: str(raw.contract_no),
+    billing_period: str(raw.billing_period),
+    invoice_no: str(raw.invoice_no) || null,
+    invoice_type: (str(raw.invoice_type) || 'FINAL').toUpperCase(),
+  };
+  for (const field of INVOICE_UPLOAD_NUMERIC) row[field] = num(raw[field]);
+
+  if (!row.contract_no) errors.push('contract_no is required');
+  if (!BILLING_PERIOD.test(row.billing_period)) errors.push('billing_period must be YYYY-MM');
+  if (!INVOICE_TYPES.includes(row.invoice_type)) errors.push(`invoice_type must be one of ${INVOICE_TYPES.join('/')}`);
+  for (const field of INVOICE_UPLOAD_NUMERIC) {
+    if (!Number.isFinite(row[field])) errors.push(`${field} must be a number`);
+    else if (row[field] < 0) errors.push(`${field} cannot be negative`);
+  }
+  if (Number.isFinite(row.energy_mwh) && row.energy_mwh <= 0) errors.push('energy_mwh must be greater than zero');
+
+  // The contract as the seller names it, and only one the seller may bill on.
+  let contract = null;
+  if (row.contract_no) {
+    if (!contractCache.has(row.contract_no)) {
+      contractCache.set(row.contract_no, db.prepare('SELECT * FROM contracts WHERE contract_no = ?').get(row.contract_no) || null);
+    }
+    contract = contractCache.get(row.contract_no);
+    if (!contract) errors.push(`contract ${row.contract_no} not found`);
+    else if (!contractVisibleTo(user, contract)) errors.push(`contract ${row.contract_no} is not yours to bill on`);
+    else if (contract.status !== 'ACTIVE') errors.push(`contract ${row.contract_no} is ${contract.status}, not ACTIVE`);
+  }
+
+  if (row.invoice_no && db.prepare('SELECT id FROM invoices WHERE invoice_no = ?').get(row.invoice_no)) {
+    errors.push(`invoice_no ${row.invoice_no} is already on record`);
+  }
+
+  // Two bills for the same contract and month in one file is a copy-paste, not a
+  // supplementary — a supplementary says so in its type.
+  if (contract && BILLING_PERIOD.test(row.billing_period) && row.invoice_type === 'FINAL') {
+    const key = `${contract.id}|${row.billing_period}`;
+    if (seenKeys.has(key)) errors.push(`a FINAL bill for ${row.contract_no} ${row.billing_period} appears twice in this file`);
+    else {
+      const existing = db.prepare(`
+        SELECT invoice_no FROM invoices
+        WHERE contract_id = ? AND billing_period = ? AND direction = 'SELLER_TO_SJVN'
+          AND invoice_type = 'FINAL' AND status != 'CANCELLED'
+      `).get(contract.id, row.billing_period);
+      if (existing) errors.push(`${row.contract_no} ${row.billing_period} is already billed by ${existing.invoice_no}`);
+    }
+  }
+
+  // What the seller says the bill comes to. Left as given rather than recomputed:
+  // the energy charge is the seller's claim, and the validation against SJVN's own
+  // figure is what the desk reads afterwards.
+  row.total_amount = row.energy_charges + row.transmission_charges + row.taxes
+    - row.rebate + row.lps + row.penalty + row.other_adjustments;
+  if (row.total_amount <= 0) errors.push('the bill totals zero or less');
+
+  return { row, contract, errors };
+}
+
+/**
+ * Raise a month of bills from a sheet.
+ *
+ * `dry_run: true` checks and reports without writing. Each bill lands exactly
+ * where the form would put it — a maker's (L1) as a DRAFT for its own checker,
+ * anyone else's as SUBMITTED — and is validated against SJVN's own figure for
+ * that period the same way.
+ */
+router.post('/upload', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  const dryRun = !!req.body?.dry_run;
+  if (rows.length === 0) return res.status(400).json({ error: 'No rows supplied' });
+
+  const results = { dry_run: dryRun, rows_received: rows.length, successful: 0, failed: 0, errors: [], preview: [], invoices: [] };
+  const contractCache = new Map();
+  const seenKeys = new Set();
+  const accepted = [];
+
+  rows.forEach((raw, idx) => {
+    const line = idx + 1;
+    const { row, contract, errors } = checkInvoiceRow(raw, req.user, contractCache, seenKeys);
+    if (errors.length) {
+      results.failed += 1;
+      results.errors.push({ row: line, contract_no: row.contract_no || null, error: errors.join('; '), errors });
+      return;
+    }
+    if (row.invoice_type === 'FINAL') seenKeys.add(`${contract.id}|${row.billing_period}`);
+    accepted.push({ line, row, contract });
+    results.preview.push({
+      row: line,
+      contract_no: row.contract_no,
+      billing_period: row.billing_period,
+      invoice_type: row.invoice_type,
+      energy_mwh: row.energy_mwh,
+      total_amount: row.total_amount,
+      status: req.user.role === 'SELLER_L1' ? 'DRAFT' : 'SUBMITTED',
+    });
+  });
+
+  if (dryRun) {
+    results.would_raise = accepted.length;
+    return res.json(results);
+  }
+
+  const initialStatus = req.user.role === 'SELLER_L1' ? 'DRAFT' : 'SUBMITTED';
+  const termsFallback = getParamNumber('default_payment_terms_days', 30);
+
+  for (const { line, row, contract } of accepted) {
+    try {
+      const id = newId('INV');
+      const invoiceNo = row.invoice_no || genInvoiceNo('SELLER-INV');
+      db.prepare(`
+        INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh,
+          tariff_per_unit, energy_charges, transmission_charges, rebate, lps, penalty, taxes,
+          other_adjustments, total_amount, due_date, status, billing_family_ref, created_by, created_by_id)
+        VALUES (@id, @invoice_no, @contract_id, @invoice_type, 'SELLER_TO_SJVN', @billing_period, @energy_mwh,
+          @tariff_per_unit, @energy_charges, @transmission_charges, @rebate, @lps, @penalty, @taxes,
+          @other_adjustments, @total_amount, @due_date, @status, @billing_family_ref, @created_by, @created_by_id)
+      `).run({
+        id,
+        invoice_no: invoiceNo,
+        contract_id: contract.id,
+        invoice_type: row.invoice_type,
+        billing_period: row.billing_period,
+        energy_mwh: row.energy_mwh,
+        tariff_per_unit: row.tariff_per_unit,
+        energy_charges: row.energy_charges,
+        transmission_charges: row.transmission_charges,
+        rebate: row.rebate,
+        lps: row.lps,
+        penalty: row.penalty,
+        taxes: row.taxes,
+        other_adjustments: row.other_adjustments,
+        total_amount: row.total_amount,
+        due_date: computeDueDate(new Date(), contract, termsFallback),
+        status: initialStatus,
+        billing_family_ref: buildBillingFamilyRef(contract.contract_no, row.billing_period, 'SELLER_TO_SJVN'),
+        created_by: req.user.name,
+        created_by_id: req.user?.id ?? null,
+      });
+      db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)')
+        .run(newId('APR'), id, 'PENDING');
+
+      // The same check the form runs: against SJVN's own figure for that period,
+      // when there is one.
+      let created = db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
+      const counterpart = findSystemCounterpart(created);
+      if (counterpart) {
+        created = persistValidation(id, compareSellerToSystem(created, counterpart), { userName: req.user.name || 'upload' });
+      } else {
+        db.prepare("UPDATE invoices SET validation_status = 'PENDING', updated_at = datetime('now') WHERE id = ?").run(id);
+        created = db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
+      }
+
+      results.successful += 1;
+      results.invoices.push({
+        row: line, id, invoice_no: invoiceNo, status: created.status,
+        validation_status: created.validation_status, total_amount: created.total_amount,
+      });
+    } catch (err) {
+      results.failed += 1;
+      results.errors.push({ row: line, contract_no: row.contract_no, error: err.message, errors: [err.message] });
+    }
+  }
+
+  logAudit({
+    req: typeof req !== 'undefined' ? req : null,
+    user: req.user,
+    action: 'BULK_UPLOAD_INVOICES',
+    module: 'REIA',
+    entityType: 'invoice',
+    details: { rows_received: rows.length, successful: results.successful, failed: results.failed, status: initialStatus },
+  });
+
+  // SJVN hears about bills, not about a maker's drafts.
+  if (initialStatus === 'SUBMITTED' && results.successful > 0) {
+    pushNotification({
+      role: 'REIA_USER',
+      type: 'INVOICE_SUBMITTED',
+      message: `${results.successful} seller invoice(s) submitted from a template upload`,
+    });
+  }
+
+  res.status(201).json(results);
+});
+
 router.post('/', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const b = req.body;
   const id = newId('INV');

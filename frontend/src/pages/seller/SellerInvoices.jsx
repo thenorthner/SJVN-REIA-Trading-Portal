@@ -12,6 +12,7 @@ import {
   INVOICE_STATUS_OPTIONS,
 } from '../../components/invoiceShared.jsx';
 import { REASON_CODES, CHARGE_LINES } from '../../disputesMeta.js';
+import SellerInvoiceUpload from './SellerInvoiceUpload.jsx';
 
 const STATUS_STEPS = ['DRAFT', 'PENDING_L2', 'SUBMITTED', 'UNDER_APPROVAL', 'APPROVED', 'PAID'];
 const STATUS_LABELS = {
@@ -77,6 +78,7 @@ export default function SellerInvoices() {
   const [filters, setFilters] = useState({ status: '', billing_period: '' });
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
   const [form, setForm] = useState(CREATE_FORM);
   const [energyPreview, setEnergyPreview] = useState(null);
   const [contractPreview, setContractPreview] = useState(null);
@@ -247,11 +249,18 @@ export default function SellerInvoices() {
         title="My Invoices"
         subtitle="Create invoices, submit to SJVN for approval, and track payment status"
         actions={
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-            + Create Invoice
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn btn-secondary" onClick={() => setShowUpload(true)}>
+              Raise from a Sheet
+            </button>
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+              + Create Invoice
+            </button>
+          </div>
         }
       />
+
+      <SellerInvoiceUpload open={showUpload} onClose={() => setShowUpload(false)} onRaised={load} />
 
       <div className="filters-bar">
         <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>

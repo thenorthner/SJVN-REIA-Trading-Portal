@@ -102,6 +102,10 @@ export const api = {
     reaScan: (body) => p('/energy-data/rea-scan', body),
   },
   invoices: {
+    // A month of bills from the seller's own sheet: dry_run checks and reports
+    // without raising anything.
+    upload: (rows, dryRun = false) => p('/invoices/upload', { rows, dry_run: !!dryRun }),
+    uploadTemplate: () => client.get('/invoices/upload-template', { responseType: 'blob' }).then((r) => r.data),
     list: (params) => g('/invoices', params),
     get: (id) => g(`/invoices/${id}`),
     downloadPdf: (id) => client.get(`/invoices/${id}/pdf`, { responseType: 'blob' }).then(res => res.data),
