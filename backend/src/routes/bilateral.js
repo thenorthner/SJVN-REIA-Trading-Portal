@@ -39,8 +39,6 @@ const router = Router();
 seedApplicationCounters();
 import { clientScope, mayUseClient, TRADING_CLIENT_ROLES } from '../services/tradingClientScope.js';
 
-import { clientScope, mayUseClient, TRADING_CLIENT_ROLES } from '../services/tradingClientScope.js';
-
 router.use(requireAuth);
 
 // NOAR open-access lifecycle, in the order the PT workflow walks it.

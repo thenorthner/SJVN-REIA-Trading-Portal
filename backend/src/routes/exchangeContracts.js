@@ -15,8 +15,6 @@ import { raiseInvoice, billingObjection } from '../services/billingRegister.js';
 const router = Router();
 import { clientScope, mayUseClient, TRADING_CLIENT_ROLES } from '../services/tradingClientScope.js';
 
-import { clientScope, mayUseClient, TRADING_CLIENT_ROLES } from '../services/tradingClientScope.js';
-
 router.use(requireAuth);
 
 function parseSchedule(raw) {

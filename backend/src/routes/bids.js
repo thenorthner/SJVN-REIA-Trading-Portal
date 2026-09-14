@@ -14,8 +14,6 @@ export { utilizedExposure };
 const router = Router();
 import { clientScope, mayUseClient, TRADING_CLIENT_ROLES } from '../services/tradingClientScope.js';
 
-import { clientScope, mayUseClient, TRADING_CLIENT_ROLES } from '../services/tradingClientScope.js';
-
 router.use(requireAuth);
 
 const EXCHANGES = ['IEX', 'PXIL', 'HPX'];
