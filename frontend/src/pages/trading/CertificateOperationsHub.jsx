@@ -1,85 +1,22 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { api } from '../../api/client.js';
 import { PortfolioSelect } from '../../context/PortfolioContext.jsx';
-import { SampleDataNotice, PageHeader, Card, Table, fmtNumber, Badge, Modal, Field } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, StatCard, fmtNumber, Badge, Modal, Field } from '../../components/ui.jsx';
 import TaxInvoiceLedgerTable from '../../components/TaxInvoiceLedgerTable.jsx';
 
-function generateMockCertData(certType, subView) {
-  const records = [];
-  const exchanges = ['IEX', 'PXIL'];
-  
-  if (subView === 'BIDDING') {
-    for (let i = 0; i < 5; i++) {
-      const qty = Math.floor(Math.random() * 100) + 50;
-      const price = certType === 'ESCERT' ? (1200 + Math.random() * 200) : (1000 + Math.random() * 100);
-      records.push({
-        id: `BID-${certType}-${i}`,
-        portfolioId: 'N1HP0PTC0850',
-        portfolioName: 'SJVN Limited-Naitwar Mori HPS',
-        tradeDate: `1${i}-Oct-2025`,
-        type: Math.random() > 0.5 ? 'Buy' : 'Sell',
-        energyType: certType === 'ESCERT' ? 'PAT Cycle 2' : 'Non-Solar',
-        exchange: exchanges[i % 2],
-        qty,
-        price,
-        status: i === 0 ? 'New' : i === 1 ? 'Approved' : 'Executed',
-        creationDate: `1${i}-Oct-2025 10:00:00`,
-        updationDate: `1${i}-Oct-2025 10:15:00`
-      });
-    }
-    return records;
-  }
-  
-  for (let i = 0; i < 8; i++) {
-    const qty = Math.floor(Math.random() * 50) + 10;
-    const price = certType === 'ESCERT' ? (1200 + Math.random() * 500) : (1000 + Math.random() * 200);
-    const totalIEX = qty * price;
-    
-    // Default zero state
-    let margin = 0;
-    let igst = 0;
-    let cgst = 0;
-    let sgst = 0;
-    let grandTotal = totalIEX;
-    let deduction = 0;
-    let netTotal = totalIEX;
-    
-    if (subView === 'OBLIGATION' || subView === 'INVOICE') {
-      margin = qty * 15; // ₹15 margin per cert
-      const isInterState = Math.random() > 0.5;
-      
-      if (isInterState) {
-        igst = margin * 0.18;
-      } else {
-        cgst = margin * 0.09;
-        sgst = margin * 0.09;
-      }
-      
-      grandTotal = totalIEX + margin + igst + cgst + sgst;
-      deduction = subView === 'INVOICE' ? (qty * 5) : 0; // Registry fee deduction in invoice
-      netTotal = grandTotal - deduction;
-    }
-    
-    records.push({
-      id: `${certType.toLowerCase()}-${i}`,
-      portfolioId: 'N1HP0PTC0850',
-      portfolioName: 'SJVN Limited-Naitwar Mori HPS',
-      tradeDate: `1${i}-Oct-2025`,
-      deliveryDate: `1${i}-Oct-2025`,
-      energyType: certType === 'ESCERT' ? 'PAT Cycle 2' : 'Non-Solar',
-      registrationNo: certType === 'ESCERT' ? `BEE/PAT/${10000 + i * 42}` : `REC/REG/${20000 + i * 15}`,
-      state: 'Himachal Pradesh',
-      exchange: exchanges[i % 2],
-      totalObligation: qty,
-      totalAmount: totalIEX, // renamed totalIEX visually later
-      margin, igst, cgst, sgst, grandTotal, deduction, netTotal,
-      sapStatus: Math.random() > 0.3 ? 'POSTED' : 'PENDING',
-      fileName: `IEX_${certType}_${i}.pdf`
-    });
-  }
-  
-  return records;
-}
+// The bid book and the certificate position are the platform's own: rec_bids
+// carries every REC/ESCert bid the desk raises, approves and executes, and the
+// REC ledger carries what is held and sellable. This screen used to invent both
+// with Math.random() while all of that sat in the database unread.
+//
+// The registry, obligation and tax-invoice views have no such store — those come
+// from the national registry and the RPO filings, which nothing feeds in yet — so
+// they say that rather than showing generated rows.
+const NO_STORE = {
+  REGISTRY: 'Registry entries come from the national REC/ESCert registry (POSOCO / BEE transfer slips). Nothing feeds that into the platform yet, so there is nothing to list.',
+  OBLIGATION: 'RPO obligation records come from the state filings. Nothing feeds those into the platform yet, so there is nothing to list.',
+  INVOICE: 'Certificate tax invoices are raised outside the platform today. Once they are raised here they will appear in this ledger.',
+};
 
 export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
   const [activeTab, setActiveTab] = useState(defaultTab);
@@ -152,38 +89,130 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
     e.preventDefault();
     setFormError('');
     
-    // Registry Balance Validation
-    const totalAvailable = activeTab === 'REC' ? (currentSummary.solarAvailable + currentSummary.nonSolarAvailable) : currentSummary.available;
-    if (createForm.type === 'Sell' && Number(createForm.qty) > totalAvailable) {
-      setFormError(`Insufficient Balance: You are trying to sell ${createForm.qty} units, but only ${totalAvailable} units are available in your registry holding.`);
+    // What can actually be sold: held, less what other live bids already commit.
+    // The API checks this again on execute; catching it here saves a round trip.
+    const sellable = currentSummary.sellable;
+    if (createForm.type === 'Sell' && sellable != null && Number(createForm.qty) > sellable) {
+      setFormError(`Only ${sellable} certificate(s) are sellable — ${currentSummary.held} held, ${currentSummary.committed} already committed to other bids.`);
+      return;
+    }
+    if (createForm.type === 'Sell' && sellable == null) {
+      setFormError('The certificate position could not be read, so a sell bid cannot be checked against it.');
       return;
     }
     
     setShowConfirm(true);
   };
   
-  const confirmAndSaveBid = () => {
-    // Nothing is persisted here yet: there is no certificate-bid endpoint. This
-    // used to report the bid as saved and queued for the exchange, which would
-    // leave a trader believing a REC/ESCert position had been taken.
-    setShowConfirm(false);
-    setShowCreate(false);
-    alert(
-      'Not submitted.\n\n'
-      + 'Certificate bidding is still a prototype screen — this platform has no '
-      + 'REC/ESCert bid endpoint yet, so nothing was saved or sent to the exchange.'
-    );
-  };
+  // A REC bid is a rec_bids row; an ESCert bid is an escert_orders row. Both
+  // registers have existed for a while — this screen simply was not writing to
+  // them, and said so in an alert. It writes to them now, and the bid it raises
+  // goes through the desk's own approve-then-execute path like any other.
+  const [saving, setSaving] = useState(false);
 
-  const mockData = useMemo(() => generateMockCertData(activeTab, activeSubView), [activeTab, activeSubView]);
-  const filteredRecords = mockData.filter(r => exchange === 'ALL' || r.exchange === exchange);
+  async function confirmAndSaveBid() {
+    setSaving(true);
+    setFormError('');
+    const body = {
+      entity_name: createForm.portfolioId,
+      exchange: createForm.exchange,
+      portfolio_code: createForm.portfolioId,
+      rec_type: createForm.certType,
+      side: createForm.type,
+      price: Number(createForm.price),
+      quantity: Number(createForm.qty),
+      trade_date: createForm.date || undefined,
+    };
+    try {
+      if (activeTab === 'REC') await api.recTrading.createBid(body);
+      else await api.escertOrders.create(body);
+      setShowConfirm(false);
+      setShowCreate(false);
+      setCreateForm((f) => ({ ...f, qty: '', price: '' }));
+      loadBook();
+    } catch (err) {
+      const data = err?.response?.data;
+      setFormError(data?.error || (data?.errors || []).join('; ') || 'The bid could not be raised.');
+      setShowConfirm(false);
+    } finally {
+      setSaving(false);
+    }
+  }
 
-  const inventorySummary = {
-    REC: { solarAvailable: 800, nonSolarAvailable: 400, price: '₹ 1,000.00', nextClosure: '10 Days : 5 Hrs' },
-    ESCERT: { available: 4250, price: '₹ 1,524.00', nextClosure: '4 Days : 12 Hrs' }
+  // The desk's own bid book, for this certificate type.
+  const [bids, setBids] = useState([]);
+  const [inventory, setInventory] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  function loadBook() {
+    setLoading(true);
+    setLoadError('');
+    // Each certificate has its own register: RECs in rec_bids against the REC
+    // ledger, ESCerts in escert_orders. The ESCert holding is a configured
+    // figure, not a ledger position — the platform has no ESCert register — so it
+    // is read from its meta endpoint and labelled for what it is.
+    const book = activeTab === 'REC'
+      ? Promise.all([
+        api.recTrading.listBids(),
+        api.recTrading.inventory({ rec_type: activeTab }).catch(() => null),
+      ])
+      : Promise.all([
+        api.escertOrders.list(),
+        api.escertOrders.meta().then((m) => ({
+          held_qty: m?.registry_available ?? null,
+          committed_qty: null,
+          sellable_qty: m?.registry_available ?? null,
+          configured: true,
+        })).catch(() => null),
+      ]);
+
+    book
+      .then(([bidRows, position]) => {
+        setBids(Array.isArray(bidRows) ? bidRows : []);
+        setInventory(position);
+      })
+      .catch((err) => {
+        setLoadError(err?.response?.data?.error || 'Could not load the certificate book.');
+        setBids([]);
+        setInventory(null);
+      })
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(loadBook, [activeTab]);
+
+  // rec_bids as the screen's rows: same fields, named the way this screen reads.
+  const records = useMemo(() => bids
+    .map((b) => ({
+      id: b.id,
+      portfolioId: b.portfolio_code,
+      portfolioName: b.entity_name,
+      tradeDate: b.trade_date || String(b.created_at || '').slice(0, 10),
+      type: b.side,
+      energyType: b.rec_type,
+      exchange: b.exchange,
+      qty: b.quantity,
+      price: b.price,
+      status: b.status,
+      executed_quantity: b.executed_quantity,
+      discovered_rate: b.discovered_rate,
+      creationDate: b.created_at,
+      updationDate: b.updated_at || b.created_at,
+    })), [bids, activeTab]);
+
+  const filteredRecords = activeSubView === 'BIDDING'
+    ? records.filter(r => exchange === 'ALL' || r.exchange === exchange)
+    : [];
+
+  // What is actually held and sellable, from the REC ledger.
+  const currentSummary = {
+    held: inventory?.held_qty ?? null,
+    committed: inventory?.committed_qty ?? null,
+    sellable: inventory?.sellable_qty ?? null,
+    floor: priceBands?.[activeTab]?.floor ?? null,
+    ceiling: priceBands?.[activeTab]?.forbearance ?? priceBands?.[activeTab]?.ceiling ?? null,
   };
-  
-  const currentSummary = inventorySummary[activeTab];
 
   const getColumns = () => {
     let cols = [];
@@ -280,8 +309,9 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
       {activeSubView === 'BIDDING' && (
         <div style={{ background: '#fff3cd', border: '1px solid #ffe69c', padding: '10px 15px', borderRadius: 6, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ color: '#664d03', fontWeight: 600 }}>
-            <span style={{ marginRight: 8 }}></span>
-            Closing in {currentSummary.nextClosure} for {activeTab} auction (Gate Closure: 15:00 PM)
+            {/* The gate closure used to count down from a literal string. The
+                exchange's calendar is not something the platform holds. */}
+            {activeTab} bids are placed on the exchange's own session; check its calendar for the gate closure.
           </div>
           <div>
             <button className="btn btn-primary btn-sm" style={{ background: '#664d03', borderColor: '#664d03' }} onClick={() => setShowCreate(true)}>Create New Bid</button>
@@ -313,51 +343,38 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: 20, marginBottom: 20 }}>
-        {activeTab === 'REC' ? (
-          <>
-            <div style={{ flex: 1, background: '#fff', border: '1px solid #e0e0e0', padding: 20, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 15, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-              <div style={{ fontSize: 32 }}></div>
-              <div>
-                <div style={{ fontSize: 12, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Solar RECs Held</div>
-                <div style={{ fontSize: 24, fontWeight: 'bold', color: '#2c3e50' }}>{fmtNumber(currentSummary.solarAvailable)} Units</div>
-              </div>
-            </div>
-            <div style={{ flex: 1, background: '#fff', border: '1px solid #e0e0e0', padding: 20, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 15, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-              <div style={{ fontSize: 32 }}></div>
-              <div>
-                <div style={{ fontSize: 12, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Non-Solar / Hydro RECs Held</div>
-                <div style={{ fontSize: 24, fontWeight: 'bold', color: '#2c3e50' }}>{fmtNumber(currentSummary.nonSolarAvailable)} Units</div>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div style={{ flex: 1, background: '#fff', border: '1px solid #e0e0e0', padding: 20, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 15, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-            <div style={{ fontSize: 32 }}></div>
-            <div>
-              <div style={{ fontSize: 12, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Available {activeTab}s in Registry</div>
-              <div style={{ fontSize: 24, fontWeight: 'bold', color: '#2c3e50' }}>{fmtNumber(currentSummary.available)} Units</div>
-            </div>
-          </div>
-        )}
-        <div style={{ flex: 1, background: '#fff', border: '1px solid #e0e0e0', padding: 20, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 15, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: 32 }}></div>
-          <div>
-            <div style={{ fontSize: 12, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Last Traded MCP</div>
-            <div style={{ fontSize: 24, fontWeight: 'bold', color: '#27ae60' }}>{currentSummary.price}</div>
-            <div style={{ fontSize: 11, color: '#999' }}>Per {activeTab}</div>
-          </div>
-        </div>
-        <div style={{ flex: 1, background: '#fff', border: '1px solid #e0e0e0', padding: 20, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 15, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-          <div style={{ fontSize: 32 }}></div>
-          <div>
-            <div style={{ fontSize: 12, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Next Auction Gate Closure</div>
-            <div style={{ fontSize: 24, fontWeight: 'bold', color: '#e74c3c' }}>{currentSummary.nextClosure}</div>
-          </div>
-        </div>
+      <div className="kpi-grid" style={{ marginBottom: 20 }}>
+        <StatCard
+          label={`${activeTab}s held`}
+          value={currentSummary.held == null ? '—' : `${fmtNumber(currentSummary.held)} units`}
+          hint={inventory?.configured
+            ? 'Configured figure — the platform has no ESCert register'
+            : 'On the certificate ledger'}
+          tone="blue"
+        />
+        <StatCard
+          label="Committed to live bids"
+          value={currentSummary.committed == null ? '—' : `${fmtNumber(currentSummary.committed)} units`}
+        />
+        <StatCard
+          label="Sellable now"
+          value={currentSummary.sellable == null ? '—' : `${fmtNumber(currentSummary.sellable)} units`}
+          hint="Held less what is already committed"
+          tone={currentSummary.sellable ? 'green' : 'default'}
+        />
+        <StatCard
+          label="Price band"
+          value={currentSummary.floor == null && currentSummary.ceiling == null
+            ? 'Not configured'
+            : `₹${fmtNumber(currentSummary.floor ?? 0)} – ₹${currentSummary.ceiling != null ? fmtNumber(currentSummary.ceiling) : '—'}`}
+          hint="Floor and forbearance, from master data"
+        />
       </div>
 
-      <SampleDataNotice detail="Certificate holdings, bids, obligations and tax invoices on this screen are generated figures. REC/ESCert data is not yet read from the platform or the national registry, and bids placed here are not sent anywhere." />
+      {loadError && <div className="alert alert-error" role="alert">{loadError}</div>}
+      {NO_STORE[activeSubView] && (
+        <div className="alert alert-info" role="status">{NO_STORE[activeSubView]}</div>
+      )}
 
       <PageHeader 
         title={`${activeTab} ${activeSubView === 'BIDDING' ? 'Bid List' : activeSubView === 'REGISTRY' ? 'Registry Holdings' : activeSubView === 'OBLIGATION' ? 'Clearing Obligations' : 'Tax Invoices'}`} 
@@ -421,12 +438,21 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
       </Card>
 
       <Card>
-        {activeSubView === 'INVOICE' ? (
-          <TaxInvoiceLedgerTable records={filteredRecords} marketSegment={activeTab} />
-        ) : (
+        {/* Only the bid book has a store behind it; the other three views say so
+            above rather than filling a grid with rows nobody entered. */}
+        {activeSubView === 'BIDDING' ? (
           <div style={{ overflowX: 'auto' }}>
-            <Table columns={getColumns()} data={filteredRecords} />
+            <Table
+              columns={getColumns()}
+              data={filteredRecords}
+              loading={loading}
+              emptyMessage={`No ${activeTab} bid has been raised yet.`}
+            />
           </div>
+        ) : activeSubView === 'INVOICE' ? (
+          <TaxInvoiceLedgerTable records={[]} marketSegment={activeTab} />
+        ) : (
+          <Table columns={getColumns()} data={[]} emptyMessage="Nothing on record." />
         )}
       </Card>
       
@@ -470,15 +496,16 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
                   <option value="Sell">Sell</option>
                 </select>
               </Field>
-              {activeTab === 'REC' && (
-                <Field label="Certificate Type">
-                  <select className="input" value={createForm.certType} onChange={e => setCreateForm({...createForm, certType: e.target.value})}>
-                    <option value="Solar REC">Solar REC</option>
-                    <option value="Non-Solar REC">Non-Solar REC</option>
-                    <option value="Hydro REC">Hydro REC</option>
-                  </select>
-                </Field>
-              )}
+              <Field label="Certificate Type">
+                {/* Each register takes its own list, and a value outside it is
+                    refused by the API — so the form offers only what it accepts. */}
+                <select className="input" value={createForm.certType} onChange={e => setCreateForm({...createForm, certType: e.target.value})}>
+                  {(activeTab === 'REC'
+                    ? ['Solar REC', 'Non-Solar REC', 'Hydro REC']
+                    : ['PAT Cycle 1', 'PAT Cycle 2', 'PAT Cycle 3', 'PAT Cycle 4', 'ESCERT']
+                  ).map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
               <div style={{ display: 'flex', gap: 10 }}>
                 <Field label="Qty" required style={{ flex: 1 }}>
                   <input type="number" min="1" step="1" className="input" value={createForm.qty} onChange={e => setCreateForm({...createForm, qty: e.target.value})} required />
@@ -528,7 +555,10 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
           <div style={{ textAlign: 'center', padding: '10px 0' }}>
             <div style={{ fontSize: 48, marginBottom: 10 }}>{createForm.type === 'Buy' ? '' : ''}</div>
             <h3 style={{ margin: '0 0 10px 0' }}>Confirm {createForm.type} Order</h3>
-            <p style={{ color: '#666', marginBottom: 20 }}>Please review your order details before submitting to the exchange.</p>
+            <p style={{ color: '#666', marginBottom: 20 }}>
+              This raises the bid in the desk's own book, where it is approved and then executed.
+              It is not sent to the exchange from here.
+            </p>
             
             <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', marginBottom: 20 }}>
               <tbody>
@@ -561,7 +591,9 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
             
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setShowConfirm(false)}>Back to Edit</button>
-              <button className="btn btn-primary" style={{ flex: 1, background: '#27ae60', borderColor: '#27ae60' }} onClick={confirmAndSaveBid}>Submit Bid</button>
+              <button className="btn btn-primary" style={{ flex: 1, background: '#27ae60', borderColor: '#27ae60' }} disabled={saving} onClick={confirmAndSaveBid}>
+                {saving ? 'Raising…' : 'Raise Bid'}
+              </button>
             </div>
           </div>
         </Modal>
