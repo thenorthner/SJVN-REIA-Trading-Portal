@@ -250,6 +250,10 @@ export const api = {
     generationPerformance: (params) => g('/reports/generation-performance', params),
     // Tenure, commissioning, security and approvals, per contract.
     contractCompliance: (params) => g('/reports/contract-compliance', params),
+    // The technical and commercial checks on developer bills, across the desk.
+    verificationQueue: (params) => g('/reports/verification-queue', params),
+    // Every period that owes CERC a return, including the ones nobody started.
+    cercCompliance: (params) => g('/reports/cerc-compliance', params),
     billingSummary: (params) => g('/reports/billing-summary', params),
     billingSummaryPdf: async (params = {}) => {
       const qs = new URLSearchParams();

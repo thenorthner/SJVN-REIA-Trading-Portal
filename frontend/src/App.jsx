@@ -23,6 +23,8 @@ const Reports = lazy(() => import('./pages/reia/Reports.jsx'));
 const PaymentMonitoring = lazy(() => import('./pages/reia/PaymentMonitoring.jsx'));
 const GenerationPerformance = lazy(() => import('./pages/reia/GenerationPerformance.jsx'));
 const ContractCompliance = lazy(() => import('./pages/reia/ContractCompliance.jsx'));
+const VerificationQueue = lazy(() => import('./pages/reia/VerificationQueue.jsx'));
+const CercCompliance = lazy(() => import('./pages/reia/CercCompliance.jsx'));
 const DeviationSettlements = lazy(() => import('./pages/reia/DeviationSettlements.jsx'));
 const PowerDiversion = lazy(() => import('./pages/reia/PowerDiversion.jsx'));
 const EnergyBanking = lazy(() => import('./pages/reia/EnergyBanking.jsx'));
@@ -244,6 +246,8 @@ export default function App() {
         <Route path="reia/payment-monitoring" element={<ProtectedRoute roles={REIA_ROLES}><PaymentMonitoring /></ProtectedRoute>} />
         <Route path="reia/generation-performance" element={<ProtectedRoute roles={REIA_ROLES}><GenerationPerformance /></ProtectedRoute>} />
         <Route path="reia/contract-compliance" element={<ProtectedRoute roles={REIA_ROLES}><ContractCompliance /></ProtectedRoute>} />
+        <Route path="reia/verification" element={<ProtectedRoute roles={REIA_ROLES}><VerificationQueue /></ProtectedRoute>} />
+        <Route path="reia/cerc-compliance" element={<ProtectedRoute roles={REIA_ROLES}><CercCompliance /></ProtectedRoute>} />
 
         {/* Seller Portal */}
         <Route path="seller" element={<ProtectedRoute roles={SELLER_ROLES}><SellerDashboard /></ProtectedRoute>} />

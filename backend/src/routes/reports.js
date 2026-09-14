@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { paymentMonitoring } from '../services/paymentMonitoring.js';
 import { generationPerformance } from '../services/generationPerformance.js';
 import { contractCompliance } from '../services/contractCompliance.js';
+import { verificationQueue } from '../services/verificationQueue.js';
+import { cercCompliance } from '../services/cercCompliance.js';
 import { receivablesOutstanding, payablesOutstanding, overdueCount } from '../services/outstanding.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
@@ -140,6 +142,45 @@ export function buildBillingSummary({ from, to } = {}) {
     payment_security: security,
   };
 }
+
+/**
+ * GET /api/reports/verification-queue?status=&contract_id=
+ *
+ * Every developer bill waiting to be verified and what each is waiting on — the
+ * same technical and commercial checklist the invoice screen draws, across the
+ * whole desk instead of one bill at a time.
+ */
+router.get('/verification-queue', requireRole(...REPORT_READ), (req, res) => {
+  const status = req.query.status ? String(req.query.status).toUpperCase() : null;
+  if (status && !['PENDING', 'IN_PROGRESS', 'FAILED', 'VERIFIED'].includes(status)) {
+    return res.status(400).json({ error: 'status must be PENDING, IN_PROGRESS, FAILED or VERIFIED' });
+  }
+  try {
+    res.json(verificationQueue({
+      status,
+      contractId: req.query.contract_id || null,
+      includeClosed: String(req.query.include_closed || '') === 'true',
+    }));
+  } catch (err) {
+    console.error('Verification queue error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/reports/cerc-compliance?from=YYYY-MM&to=YYYY-MM
+ *
+ * The filing calendar: every period that owes CERC a return, including the ones
+ * nobody has started — which a register of prepared filings cannot show.
+ */
+router.get('/cerc-compliance', requireRole(...REPORT_READ), (req, res) => {
+  try {
+    res.json(cercCompliance({ from: req.query.from || null, to: req.query.to || null }));
+  } catch (err) {
+    console.error('CERC compliance error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 /**
  * GET /api/reports/contract-compliance?status=&expiry_notice_days=
