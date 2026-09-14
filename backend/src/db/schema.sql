@@ -13,7 +13,11 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN (
     'IT_SUPER_ADMIN','REIA_ADMIN','TRADING_ADMIN','FINANCE_USER',
-    'MANAGEMENT','SELLER_L1','SELLER_L2','SELLER_L3','BUYER_L1','BUYER_L2','BUYER_L3','TRADING_CLIENT','COMPLIANCE_AUDITOR',
+    'MANAGEMENT','SELLER_L1','SELLER_L2','SELLER_L3','BUYER_L1','BUYER_L2','BUYER_L3','COMPLIANCE_AUDITOR',
+    -- A trading client's own logins. TRADING_CLIENT reads its account; the maker
+    -- raises a request to the desk and the checker clears it, so what reaches
+    -- SJVN has already been agreed inside the client's own office.
+    'TRADING_CLIENT','TRADING_CLIENT_MAKER','TRADING_CLIENT_CHECKER',
     'SJVN_ADMIN', 'SELLER', 'BUYER', 'REIA_USER', 'TRADING_USER' -- Legacy roles preserved for existing data
   )),
   linked_entity_id TEXT,
@@ -2856,6 +2860,46 @@ CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications (type, create
 -- id belongs to one client only — two clients sharing one would route one
 -- client's obligations to the other. Compared without regard to case, as the
 -- exchanges issue them in capitals and the desk does not always type them so.
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Bid requests a trading client raises for itself.
+--
+-- The client portal could only read. A client that wanted power bought had to
+-- ask by phone or mail, and nothing on either side recorded who asked, who in
+-- the client's office agreed, or what the desk did about it. A request is raised
+-- by the client's maker, cleared by its checker — never the same person, which is
+-- the point of two roles — and only then is it the desk's to act on. The desk
+-- links the bid it actually placed, so a bid can be read back to the request
+-- that asked for it.
+CREATE TABLE IF NOT EXISTS client_bid_requests (
+  id TEXT PRIMARY KEY,
+  client_id TEXT NOT NULL REFERENCES trading_clients(id),
+  side TEXT NOT NULL CHECK (side IN ('BUY','SELL')),
+  exchange TEXT NOT NULL CHECK (exchange IN ('IEX','PXIL','HPX')),
+  product TEXT NOT NULL,
+  delivery_date TEXT NOT NULL,
+  quantum_mw REAL NOT NULL,
+  -- A buy carries the most the client will pay, a sell the least it will take.
+  price_limit_per_unit REAL,
+  notes TEXT,
+  status TEXT NOT NULL DEFAULT 'PENDING_CHECK' CHECK (status IN (
+    'PENDING_CHECK','APPROVED','REJECTED','WITHDRAWN','PLACED'
+  )),
+  raised_by TEXT,
+  raised_by_name TEXT,
+  raised_at TEXT NOT NULL DEFAULT (datetime('now')),
+  checked_by TEXT,
+  checked_by_name TEXT,
+  checked_at TEXT,
+  check_remarks TEXT,
+  bid_id TEXT REFERENCES bids(id),
+  placed_by TEXT,
+  placed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_client_bid_requests_client ON client_bid_requests(client_id, delivery_date);
+CREATE INDEX IF NOT EXISTS idx_client_bid_requests_status ON client_bid_requests(status, delivery_date);
+
 CREATE TABLE IF NOT EXISTS client_exchange_portfolios (
   id TEXT PRIMARY KEY,
   client_id TEXT NOT NULL REFERENCES trading_clients(id),

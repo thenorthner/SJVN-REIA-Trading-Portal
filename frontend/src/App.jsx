@@ -32,6 +32,8 @@ const TradingClientProfile = lazy(() => import('./pages/trading/TradingClientPro
 const ClientBids = lazy(() => import('./pages/client/ClientBids.jsx'));
 const ClientDeals = lazy(() => import('./pages/client/ClientDeals.jsx'));
 const ClientBills = lazy(() => import('./pages/client/ClientBills.jsx'));
+const ClientBidRequests = lazy(() => import('./pages/client/ClientBidRequests.jsx'));
+const ClientBidRequestQueue = lazy(() => import('./pages/trading/ClientBidRequestQueue.jsx'));
 const Bids = lazy(() => import('./pages/trading/Bids.jsx'));
 const DayAheadMarketEngine = lazy(() => import('./pages/trading/DayAheadMarketEngine.jsx'));
 const PreTradeBoard = lazy(() => import('./pages/trading/PreTradeBoard.jsx'));
@@ -277,6 +279,7 @@ export default function App() {
         <Route path="trading/my-bids" element={<ProtectedRoute roles={TRADING_CLIENT_ROLES}><ClientBids /></ProtectedRoute>} />
         <Route path="trading/my-deals" element={<ProtectedRoute roles={TRADING_CLIENT_ROLES}><ClientDeals /></ProtectedRoute>} />
         <Route path="trading/my-bills" element={<ProtectedRoute roles={TRADING_CLIENT_ROLES}><ClientBills /></ProtectedRoute>} />
+        <Route path="trading/my-requests" element={<ProtectedRoute roles={TRADING_CLIENT_ROLES}><ClientBidRequests /></ProtectedRoute>} />
         <Route path="settings/user-profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
 
         {/* Shared routes between Internal and External */}
@@ -319,6 +322,7 @@ export default function App() {
         <Route path="invoices/trading-margin" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TradingMarginInvoiceSummary /></ProtectedRoute>} />
         <Route path="billing/view-bills" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ViewBills /></ProtectedRoute>} />
         <Route path="billing/generate" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BillGenerationForm /></ProtectedRoute>} />
+        <Route path="trading/client-requests" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ClientBidRequestQueue /></ProtectedRoute>} />
         <Route path="portfolio/update" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><UpdatePortfolioID /></ProtectedRoute>} />
         <Route path="clients/details" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ClientDetails /></ProtectedRoute>} />
         <Route path="market/gdam/participants" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><Top10GDAMParticipantsChart /></ProtectedRoute>} />

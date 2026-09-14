@@ -53,6 +53,9 @@ export const TRADING_MENU = [
   {
     group: 'Exchange',
     items: [
+      // What clients have asked the desk to bid for them, cleared by their own
+      // checker. Listed first because it is the desk's inbox, not a report.
+      { label: 'Client Bid Requests', to: '/trading/client-requests', ours: true },
       { label: 'Create Exchange Contract', to: '/trading/exchange/create' },
       { label: 'Exchange Contracts Summary', to: '/trading/exchange/contracts' },
       { label: 'Exchange Bidding', to: '/trading/exchange/bidding' },

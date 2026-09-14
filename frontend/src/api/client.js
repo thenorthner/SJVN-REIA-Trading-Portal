@@ -799,6 +799,16 @@ export const api = {
     consolidated: () => g('/dashboard/consolidated'),
   },
   sellerDashboard: () => g('/seller-dashboard'),
+  // A client's own requests to the desk: raised by its maker, cleared by its
+  // checker, acted on by the desk.
+  clientBidRequests: {
+    list: (params) => g('/client-bid-requests', params),
+    get: (id) => g(`/client-bid-requests/${id}`),
+    raise: (body) => p('/client-bid-requests', body),
+    check: (id, body) => p(`/client-bid-requests/${id}/check`, body),
+    withdraw: (id, body) => p(`/client-bid-requests/${id}/withdraw`, body),
+    place: (id, body) => p(`/client-bid-requests/${id}/place`, body),
+  },
   tradingClient: {
     summary: (params) => g('/trading-client/summary', params),
   },

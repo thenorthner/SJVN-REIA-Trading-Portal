@@ -80,6 +80,7 @@ import hydroBillingRoutes from './routes/hydroBilling.js';
 import nocUpdationRoutes from './routes/nocUpdation.js';
 import clientPortfoliosRoutes from './routes/clientPortfolios.js';
 import tradingClientPortalRoutes from './routes/tradingClientPortal.js';
+import clientBidRequestRoutes from './routes/clientBidRequests.js';
 import tdsLedgerRoutes from './routes/tdsLedger.js';
 import oaChargesRoutes from './routes/oaCharges.js';
 import importsRoutes from './routes/imports.js';
@@ -246,6 +247,7 @@ app.use('/api/masters/dsm', requireAuth, dsmChargesRoutes);
 app.use('/api/noc-updation', requireAuth, nocUpdationRoutes);
 app.use('/api/client-portfolios', requireAuth, clientPortfoliosRoutes);
 app.use('/api/trading-client', tradingClientPortalRoutes);
+app.use('/api/client-bid-requests', clientBidRequestRoutes);
 app.use('/api/masters', requireAuth, mastersRoutes);
 app.use('/api/reports', requireAuth, reportsRoutes);
 

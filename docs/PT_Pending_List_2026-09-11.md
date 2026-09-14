@@ -122,6 +122,13 @@ recoverable, CERC Form-IV status, developer vs buyer pending split, ageing
 buckets) · contract bulk upload · seller invoice Excel template upload · #22 test
 flake · Tailwind ke liye likhi hui 16 aur screens (unstyled khulti hain).
 
+## I. Faisle jo aa gaye — 14 Sep
+
+| # | Kya | Haalat |
+|---|-----|--------|
+| 42 ✅ | **Trading client ke maker/checker roles** | **Ban gaye, 14 Sep.** `TRADING_CLIENT_MAKER` aur `TRADING_CLIENT_CHECKER` ab `users.role` ke CHECK mein hain (purane DB ke liye migration: table rebuild hota hai, users carry over hote hain — 2-user DB par test kiya), backend `tradingClientScope.js` aur frontend `roles.js` dono mein, aur parity test teeno ko match karta hai. Kaam ka artifact: **bid request** — client ka maker desk se kehta hai "itna MW kharido/becho", client ka apna checker clear karta hai (**wahi aadmi nahi**, chaar aankhein), tab jaake desk ke paas aata hai; desk jo bid lagata hai use request se link karta hai, to bid wapas us request tak padhi ja sakti hai. Client ka screen **My Bid Requests** (maker raise/withdraw, checker review, viewer sirf padhta hai), desk ka screen **Client Bid Requests** (Exchange menu mein). 20 backend + 6 frontend test. |
+| 43 ✅ | **Branch boot hi nahi hoti thi** | **Fix, 14 Sep.** `bids.js`, `exchangeContracts.js`, `bilateral.js` — teeno mein ek hi import line do baar thi. Node seedha `SyntaxError: Identifier 'clientScope' has already been declared` deta hai, yaani `node src/server.js` start hi nahi hota. Poori suite phir bhi green thi, kyunki vitest module transform karke chalati hai. Ab `tests/serverBoots.test.js` asli node process mein server import karke dekhta hai — duplicate wapas daal kar verify bhi kiya ki test fail hota hai. |
+
 ---
 
 ## Seedha agla kadam

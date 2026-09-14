@@ -2292,6 +2292,64 @@ try {
   console.error('PXIL settlement-link migration failed:', e.message);
 }
 
+/**
+ * Widen users.role to the trading client's maker and checker.
+ *
+ * users.role is a CHECK constraint, and SQLite will not alter one — the table has
+ * to be rebuilt. An existing database would otherwise refuse the two new roles
+ * with "CHECK constraint failed", which reads like a bug in the screen that
+ * created the user. Rebuilt only when the constraint is actually the old one.
+ */
+function migrateTradingClientMakerChecker() {
+  const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get()?.sql;
+  if (!ddl || ddl.includes('TRADING_CLIENT_MAKER')) return;
+
+  const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  const rows = db.prepare('SELECT * FROM users').all();
+  db.exec('PRAGMA foreign_keys=OFF');
+  try {
+    db.exec('DROP TABLE IF EXISTS users_role_migration');
+    db.exec(`
+      CREATE TABLE users_role_migration (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN (
+          'IT_SUPER_ADMIN','REIA_ADMIN','TRADING_ADMIN','FINANCE_USER',
+          'MANAGEMENT','SELLER_L1','SELLER_L2','SELLER_L3','BUYER_L1','BUYER_L2','BUYER_L3','COMPLIANCE_AUDITOR',
+          'TRADING_CLIENT','TRADING_CLIENT_MAKER','TRADING_CLIENT_CHECKER',
+          'SJVN_ADMIN', 'SELLER', 'BUYER', 'REIA_USER', 'TRADING_USER'
+        )),
+        linked_entity_id TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    if (rows.length) {
+      const keep = cols.filter((c) => [
+        'id', 'name', 'email', 'password_hash', 'role', 'linked_entity_id', 'is_active', 'created_at',
+      ].includes(c));
+      const ins = db.prepare(`
+        INSERT INTO users_role_migration (${keep.join(',')}) VALUES (${keep.map(() => '?').join(',')})
+      `);
+      const copy = db.transaction(() => { for (const r of rows) ins.run(...keep.map((c) => r[c])); });
+      copy();
+    }
+    db.exec('DROP TABLE users');
+    db.exec('ALTER TABLE users_role_migration RENAME TO users');
+    console.log(`[MIGRATE] users.role widened for trading-client maker/checker (${rows.length} user(s) carried over)`);
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
+try {
+  migrateTradingClientMakerChecker();
+} catch (e) {
+  console.error('Trading-client maker/checker role migration failed:', e.message);
+}
+
 try {
   db.prepare(`UPDATE contracts SET tariff_structure_json = NULL WHERE tariff_structure_json = '{}' OR tariff_structure_json = '"{}"' OR TRIM(tariff_structure_json) = ''`).run();
 } catch (e) {

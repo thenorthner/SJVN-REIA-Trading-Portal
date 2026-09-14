@@ -11,16 +11,22 @@
 import db from '../db/index.js';
 
 /**
- * The portal role a counterparty trading company logs in with.
+ * The portal roles a counterparty trading company logs in with.
  *
- * One role, because that is what exists: the CHECK on users.role accepts
- * 'TRADING_CLIENT' and nothing else on this side. The frontend carried four
- * more — ADMIN, MAKER, CHECKER, VIEWER — that no screen could create and the
- * database would refuse. Giving the client company a maker and a checker, as
- * sellers and buyers have, means adding them here, in frontend roles.js, and
- * to that CHECK together.
+ * Three: the read-only login, and the maker and checker the client's own office
+ * uses to raise a request to the desk and clear it. The frontend once listed four
+ * others — ADMIN, MAKER, CHECKER, VIEWER — that no screen could create because
+ * the CHECK on users.role refused them; the two that were wanted are in that
+ * CHECK now, added here and in frontend roles.js at the same time, and
+ * roleGroupsParity.test.js fails if the three lists ever drift apart again.
  */
-export const TRADING_CLIENT_ROLES = ['TRADING_CLIENT'];
+export const TRADING_CLIENT_ROLES = ['TRADING_CLIENT', 'TRADING_CLIENT_MAKER', 'TRADING_CLIENT_CHECKER'];
+
+// Inside the client's own office: the maker raises a request to the desk, the
+// checker clears it, and the plain login only reads. Same separation the desk
+// has between bidding and approving a bid, on the other side of the table.
+export const TRADING_CLIENT_MAKER_ROLES = ['TRADING_CLIENT_MAKER'];
+export const TRADING_CLIENT_CHECKER_ROLES = ['TRADING_CLIENT_CHECKER'];
 
 export const isTradingClient = (user) => !!user && TRADING_CLIENT_ROLES.includes(user.role);
 

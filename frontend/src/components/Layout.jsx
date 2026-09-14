@@ -204,6 +204,7 @@ const NAV_TRADING_CLIENT = [
       { to: '/trading/my-bids', label: 'My Bids' },
       { to: '/trading/my-deals', label: 'My Deals' },
       { to: '/trading/my-bills', label: 'My Bills & Ledger' },
+      { to: '/trading/my-requests', label: 'My Bid Requests' },
       { to: '/trading/market-analytics', label: 'Market Rates & Analytics' },
     ],
   },
