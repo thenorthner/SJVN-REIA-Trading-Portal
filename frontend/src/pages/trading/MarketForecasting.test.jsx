@@ -19,6 +19,8 @@ vi.mock('../../api/client.js', () => {
         state.calls.push(['create', body]);
         return state.createError ? Promise.reject(state.createError) : Promise.resolve(state.detail);
       },
+      exportRun: (id) => { state.calls.push(['export', id]); return Promise.resolve(new Blob(['xlsx'])); },
+      priceFileTemplate: () => { state.calls.push(['template']); return Promise.resolve(new Blob(['csv'])); },
       uploadPrices: (body) => {
         state.calls.push(['upload', body]);
         return state.uploadError ? Promise.reject(state.uploadError) : Promise.resolve({});
@@ -193,6 +195,22 @@ describe('Market price forecasting', () => {
     const alert = host.ownerDocument.querySelector('.modal .alert-error');
     expect(alert.textContent).toMatch(/nothing was saved/);
     expect(alert.textContent).toMatch(/Row 42/);
+  });
+
+  it('downloads the run as a workbook, and the price file template', async () => {
+    const saved = [];
+    URL.createObjectURL = vi.fn(() => 'blob:x');
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () { saved.push(this.download); });
+    await render();
+    await act(async () => { button('Download Excel').click(); });
+    expect(state.calls).toContainEqual(['export', 'PFR-1']);
+    expect(saved[0]).toBe('SJVN_Price_Forecast_IEX_DAM_2026-03-01_to_2026-03-03.xlsx');
+    await act(async () => { button('Load price file').click(); });
+    await act(async () => { button('Download a blank template').click(); });
+    expect(state.calls).toContainEqual(['template']);
+    expect(saved[1]).toBe('exchange_price_file_template.csv');
+    click.mockRestore();
   });
 
   it('says a series has no prices rather than offering an empty chart', async () => {

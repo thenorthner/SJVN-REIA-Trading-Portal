@@ -4,7 +4,7 @@ import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { secureLogAudit } from '../auditEngine.js';
 import {
   ForecastError, listSeries, actualsFor, createForecastRun, getForecastRun, listForecastRuns,
-  forecastAccuracy, importExchangePriceFile,
+  forecastAccuracy, importExchangePriceFile, forecastForDate, forecastRunWorkbook, priceFileTemplate,
 } from '../services/marketForecast.js';
 
 const router = Router();
@@ -32,6 +32,30 @@ router.get('/series', handle((_req, res) => res.json(listSeries())));
 router.get('/actuals', handle((req, res) => res.json(actualsFor(req.query))));
 
 router.get('/runs', handle((req, res) => res.json({ runs: listForecastRuns(req.query) })));
+
+// The forecast for one delivery date, for the screen a bid is priced on.
+router.get('/for-date', handle((req, res) => res.json(forecastForDate(req.query))));
+
+router.get('/runs/:id/export', handle((req, res) => {
+  const book = forecastRunWorkbook(req.params.id);
+  if (!book) return res.status(404).json({ error: 'Forecast run not found' });
+  secureLogAudit(req, {
+    action: 'DATA_EXPORT',
+    module: 'TRADING',
+    entityType: 'price_forecast_run',
+    entityId: book.run.id,
+    details: { filename: book.filename, exchange: book.run.exchange, product: book.run.product },
+  });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${book.filename}"`);
+  res.send(book.buffer);
+}));
+
+router.get('/actuals/template', (_req, res) => {
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="exchange_price_file_template.csv"');
+  res.send(priceFileTemplate());
+});
 
 router.get('/runs/:id', handle((req, res) => {
   const result = getForecastRun(req.params.id, { blockDate: req.query.block_date });

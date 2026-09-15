@@ -32,6 +32,18 @@ const errorOf = (err, fallback) => err?.response?.data?.error || err?.message ||
 // Two cards side by side only when each can hold its table without scrolling it sideways.
 const PAIR = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(520px, 1fr))', gap: 16 };
 
+/** Save a blob the browser already holds, without a second unauthenticated request. */
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
@@ -148,6 +160,21 @@ function BlockCard({ detail, onDate }) {
 
 function ForecastTab({ detail, labels, onBlockDate }) {
   const { run, points, history } = detail;
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
+
+  async function download() {
+    setExporting(true);
+    setExportError('');
+    try {
+      saveBlob(await api.marketForecast.exportRun(run.id), `SJVN_Price_Forecast_${run.exchange}_${run.product}_${run.first_target_date}_to_${run.last_target_date}.xlsx`);
+    } catch {
+      setExportError('The workbook could not be downloaded. Try again.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const chartRows = useMemo(() => {
     const byDate = new Map(history.map((h) => [h.date, { date: h.date, actual: h.price }]));
     for (const p of points) {
@@ -175,7 +202,16 @@ function ForecastTab({ detail, labels, onBlockDate }) {
 
       <RunSummary detail={detail} />
 
-      <Card title={`${run.exchange} ${run.product} — daily price, ₹/kWh`}>
+      {exportError && <div className="alert alert-error" role="alert">{exportError}</div>}
+
+      <Card
+        title={`${run.exchange} ${run.product} — daily price, ₹/kWh`}
+        actions={(
+          <button type="button" className="btn btn-secondary btn-sm" disabled={exporting} onClick={download}>
+            {exporting ? 'Preparing…' : 'Download Excel'}
+          </button>
+        )}
+      >
         <ForecastChart rows={chartRows} />
         <p className="report-count">
           {run.model_label}{run.selection === 'BEST_BACKTEST' ? ' — the closest of five models on this series\' own recent past' : run.selection === 'FALLBACK' ? ' — too little history to compare models, so the simplest one that fits' : ' — as requested'}.
@@ -413,6 +449,17 @@ function UploadModal({ open, onClose, defaults, onLoaded }) {
         <p className="audit-muted" style={{ marginTop: 0 }}>
           The exchange's own block-wise download — one row per 15-minute block with its clearing price (MCP) and volume
           (MCV). Rs/MWh or Rs/kWh, Excel or CSV. A date in the file replaces whatever is held for that exchange, product and date.
+          {' '}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ padding: 0, textDecoration: 'underline' }}
+            onClick={() => api.marketForecast.priceFileTemplate()
+              .then((blob) => saveBlob(blob, 'exchange_price_file_template.csv'))
+              .catch(() => setFailure({ error: 'The template could not be downloaded.' }))}
+          >
+            Download a blank template
+          </button>
         </p>
         <div className="form-grid">
           <Field label="Exchange" required>

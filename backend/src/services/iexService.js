@@ -636,42 +636,82 @@ export async function placeOrder(bid) {
   };
 }
 
+const periodMinutes = (id) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(id ?? '').trim());
+  if (!m) return null;
+  const v = Number(m[1]) * 60 + Number(m[2]);
+  return v <= 1440 ? v : null;
+};
+
 /**
- * Land a day's market clearing prices into market_rates so analytics runs on
- * real observations rather than seed data. Re-running a date replaces it.
+ * The 15-minute blocks (1–96) a PQ period covers, from its FromPeriodId and
+ * ToPeriodId ("18:00" → "18:15"). A period ending at "00:00" closes the day. A
+ * period wider than one block is spread over every block in it at its price,
+ * so a day's shape is never missing the part a period did not name one by one.
  */
-export async function syncMarketRates(product, deliveryDate, { exchange = 'IEX' } = {}) {
+export function periodBlocks(from, to) {
+  const a = periodMinutes(from);
+  let b = periodMinutes(to);
+  if (a == null || b == null) return [];
+  if (b <= a) b = 1440;
+  if (a % 15 || b % 15) return [];
+  const out = [];
+  for (let m = a; m < b; m += 15) out.push(m / 15 + 1);
+  return out;
+}
+
+const blockStart = (block) => {
+  const mins = (block - 1) * 15;
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+};
+
+/**
+ * Land a delivery date's clearing prices in market_rates, one row per block, so
+ * analytics and price forecasting run on the exchange's own curve. It used to
+ * keep one row with the plain mean of the periods — which lost the intraday
+ * shape a block-wise forecast needs, and weighted a 2 a.m. block the same as the
+ * evening peak. Re-running a date replaces everything held for it.
+ *
+ * The pqresults feed is IEX's, so what it writes is IEX's too.
+ */
+export async function syncMarketRates(product, deliveryDate) {
+  const exchange = 'IEX';
   const res = await fetchMarketPq(product, deliveryDate);
   if (!res.ok) return { ok: false, error: res.error, mode: res.mode };
   if (!res.periods) return { ok: true, mode: 'STUB', rows_written: 0, note: res.note };
 
-  const prices = res.periods.map((p) => p.mcp_rs_per_kwh).filter((n) => Number.isFinite(n));
-  if (!prices.length) return { ok: true, mode: res.mode, rows_written: 0, note: 'No priced periods returned.' };
+  const blocks = new Map();
+  for (const p of res.periods) {
+    if (!Number.isFinite(p.mcp_rs_per_kwh)) continue;
+    for (const b of periodBlocks(p.from_period, p.to_period)) {
+      blocks.set(b, { price: p.mcp_rs_per_kwh, volume: Number.isFinite(p.sell_mw) ? p.sell_mw : null });
+    }
+  }
+  if (!blocks.size) return { ok: true, mode: res.mode, rows_written: 0, note: 'No priced periods returned.' };
 
-  const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-  const volume = res.periods.reduce((a, p) => a + (p.sell_mw || 0), 0);
   const { newId } = await import('../util.js');
-
+  const round4 = (v) => Math.round(v * 10000) / 10000;
   db.transaction(() => {
     db.prepare('DELETE FROM market_rates WHERE exchange = ? AND product = ? AND rate_date = ?')
       .run(exchange, product, deliveryDate);
-    db.prepare(`
-      INSERT INTO market_rates (id, exchange, product, rate_date, mcp_rate, min_rate, max_rate, avg_rate, volume_mw, data_source)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'IEX_API')
-    `).run(
-      newId('MKT'), exchange, product, deliveryDate,
-      Math.round(avg * 100) / 100,
-      Math.round(Math.min(...prices) * 100) / 100,
-      Math.round(Math.max(...prices) * 100) / 100,
-      Math.round(avg * 100) / 100,
-      Math.round(volume),
-    );
+    const insert = db.prepare(`
+      INSERT INTO market_rates (id, exchange, product, rate_date, time_block, mcp_rate, volume_mw, data_source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'IEX_API')
+    `);
+    for (const [b, v] of [...blocks.entries()].sort((x, y) => x[0] - y[0])) {
+      insert.run(newId('MKT'), exchange, product, deliveryDate, blockStart(b), round4(v.price), v.volume == null ? null : round4(v.volume));
+    }
   })();
 
+  const prices = [...blocks.values()];
+  const volume = prices.reduce((a, v) => a + (v.volume > 0 ? v.volume : 0), 0);
+  const avg = volume > 0
+    ? prices.reduce((a, v) => a + v.price * (v.volume > 0 ? v.volume : 0), 0) / volume
+    : prices.reduce((a, v) => a + v.price, 0) / prices.length;
   return {
     ok: true,
     mode: res.mode,
-    rows_written: 1,
+    rows_written: blocks.size,
     periods: res.periods.length,
     avg_rs_per_kwh: Math.round(avg * 100) / 100,
     warning: res.warning,

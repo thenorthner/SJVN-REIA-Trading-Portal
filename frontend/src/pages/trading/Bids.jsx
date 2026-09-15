@@ -5,6 +5,7 @@ import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
+import BidForecastPanel from '../../components/BidForecastPanel.jsx';
 
 const EMPTY_FORM = {
   client_id: '', exchange: 'IEX', product: 'DAM', bid_date: '', delivery_date: '', gate_closure_time: '',
@@ -908,14 +909,10 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                     <option value="IEX">IEX</option>
                     <option value="PXIL">PXIL</option>
                   </select>
-                  {/* Dynamic CERC Price Limit Hint */}
-                  {form.exchange && (
-                    <div style={{ fontSize: 11, marginTop: 4, color: 'var(--sky)', display: 'flex', gap: 12 }}>
-                      <span>Floor: ₹0.00/kWh</span>
-                      <span>Ceiling: {form.exchange === 'IEX' ? '₹12.00' : '₹10.00'}/kWh</span>
-                      <span style={{ color: 'var(--green-strong)' }}>● Gateway Active</span>
-                    </div>
-                  )}
+                  {/* The price ceiling used to be written here — ₹12 for IEX, which the
+                      exchange has not allowed since 2023 — beside a "Gateway Active"
+                      light that was on whether or not anything was connected. The
+                      ceiling now comes from Masters, in the forecast panel below. */}
                 </Field>
                 {/* Segment Tag — Read-only */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1022,6 +1019,15 @@ export default function Bids({ product = 'DAM', externalView = null }) {
                 </div>
               </div>
             </div>
+
+            <BidForecastPanel
+              exchange={form.exchange}
+              product={form.product}
+              deliveryDate={form.delivery_date}
+              // The bulk preview carries a block count, not the blocks, so only
+              // manually entered blocks can be set against the forecast.
+              blocks={blocks}
+            />
 
             {/* ── Row 2: Excel File Upload Zone with Block Granularity ── */}
             <div style={{ border: '1px solid var(--slate-200)', borderRadius: 8, padding: 20, marginBottom: 20, background: '#fafbfc' }}>

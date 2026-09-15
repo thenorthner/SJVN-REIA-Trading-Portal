@@ -9,6 +9,7 @@ import XLSX from 'xlsx';
 import db from '../db/index.js';
 import { newId } from '../util.js';
 import { getParam } from '../mastersService.js';
+import { getIexConfig, syncMarketRates } from './iexService.js';
 import {
   buildForecast, MODELS, MODEL_LABELS, intradayShape, blockForecast, dailyPrice,
   blockLabel, bucketLabel, scoreErrors, toDay, fromDay,
@@ -86,10 +87,14 @@ function requireSeries(exchange, product) {
 
 // ── Actual prices ────────────────────────────────────────────────────────────
 
-/** Block-wise prices the platform observed, one entry per delivery date. */
+/**
+ * Block-wise prices the platform observed, one entry per delivery date, with
+ * the source that wrote it. Loading a date replaces everything held for it, so
+ * a date has one source.
+ */
 export function loadBlockDays(exchange, product) {
   const rows = db.prepare(`
-    SELECT rate_date, time_block, mcp_rate, volume_mw FROM market_rates
+    SELECT rate_date, time_block, mcp_rate, volume_mw, data_source FROM market_rates
     WHERE exchange = ? AND product = ?
       AND data_source IN (${OBSERVED_MARKET_SOURCES.map(() => '?').join(', ')})
       AND time_block IS NOT NULL AND time_block != 'DAILY'
@@ -99,20 +104,22 @@ export function loadBlockDays(exchange, product) {
   for (const r of rows) {
     const block = blockFromLabel(r.time_block);
     if (!block) continue;
-    if (!byDate.has(r.rate_date)) byDate.set(r.rate_date, []);
-    byDate.get(r.rate_date).push({ block, price: r.mcp_rate, volume: r.volume_mw });
+    if (!byDate.has(r.rate_date)) byDate.set(r.rate_date, { source: r.data_source, blocks: [] });
+    byDate.get(r.rate_date).blocks.push({ block, price: r.mcp_rate, volume: r.volume_mw });
   }
-  return [...byDate.entries()].map(([date, blocks]) => ({ date, blocks }));
+  return [...byDate.entries()].map(([date, d]) => ({ date, source: d.source, blocks: d.blocks }));
 }
 
 /**
  * One price per delivery date, from the strongest source that has the day.
  * Weakest first, each later source replacing it:
  *
- *   IEX API       a plain mean of the day's periods (syncMarketRates)
- *   price file    the day's blocks, weighted by cleared volume
- *   CERC report   the exchange's own daily weighted price, as filed with the
- *                 Commission — the figure nobody gets to revise
+ *   IEX API, daily row   a plain mean of the day's periods, as the API sync
+ *                        wrote it before it kept blocks
+ *   blocks               the day's 96 blocks weighted by cleared volume — the
+ *                        API sync now, or a price file the desk loaded
+ *   CERC report          the exchange's own daily weighted price, as filed with
+ *                        the Commission — the figure nobody gets to revise
  */
 export function loadDailyActuals(exchange, product) {
   const byDate = new Map();
@@ -128,7 +135,7 @@ export function loadDailyActuals(exchange, product) {
   `).all(exchange, product)) put(r.rate_date, r.price, 'IEX_API');
 
   for (const d of loadBlockDays(exchange, product)) {
-    if (d.blocks.length >= MIN_BLOCKS_FOR_DAILY_PRICE) put(d.date, dailyPrice(d.blocks), EXCHANGE_FILE_SOURCE);
+    if (d.blocks.length >= MIN_BLOCKS_FOR_DAILY_PRICE) put(d.date, dailyPrice(d.blocks), d.source);
   }
 
   for (const r of db.prepare(`
@@ -510,6 +517,147 @@ export function refreshForecasts({ horizon = 7 } = {}) {
     }
   }
   return { created: created.length, run_ids: created, skipped };
+}
+
+/**
+ * Pull the clearing prices a forecast is waiting on from the IEX API, before the
+ * afternoon refresh: tomorrow's DAM and GDAM (out by 13:00), today's, and
+ * yesterday's RTM, which only completes at midnight. A day already held block by
+ * block is not asked for again. Does nothing while IEX is in stub mode, which is
+ * where it stays until the whitelisted server has it switched on.
+ */
+export async function pullIexPrices({ now = new Date() } = {}) {
+  if (!getIexConfig().live) return { mode: 'STUB', pulled: [] };
+  const today = istToday(now);
+  const shift = (n) => fromDay(toDay(today) + n);
+  const wanted = [['DAM', shift(1)], ['GDAM', shift(1)], ['DAM', today], ['GDAM', today], ['RTM', shift(-1)], ['RTM', today]];
+  const held = (product, date) => (loadBlockDays('IEX', product).find((d) => d.date === date)?.blocks.length || 0) >= MIN_BLOCKS_FOR_DAILY_PRICE;
+
+  const pulled = [];
+  for (const [product, date] of wanted) {
+    if (held(product, date)) continue;
+    try {
+      const r = await syncMarketRates(product, date);
+      pulled.push({ product, date, rows: r.rows_written || 0, error: r.ok ? null : r.error });
+    } catch (err) {
+      pulled.push({ product, date, rows: 0, error: err.message });
+    }
+  }
+  return { mode: 'LIVE', pulled };
+}
+
+// ── For the bidding desk ─────────────────────────────────────────────────────
+
+/**
+ * The forecast for one delivery date that a trader pricing a bid should see:
+ * from the run with the newest prices behind it. Every run's cutoff is before
+ * its targets, so this is always a forecast made without the answer.
+ */
+export function forecastForDate({ exchange, product, date }) {
+  const s = requireSeries(exchange, product);
+  if (!isIsoDate(date)) throw new ForecastError(400, 'date must be a valid YYYY-MM-DD date');
+  const cap = priceCap(s.product);
+  const hit = db.prepare(`
+    SELECT f.run_id, f.horizon, f.forecast_rate, f.lower_rate, f.upper_rate
+    FROM price_forecasts f JOIN price_forecast_runs r ON r.id = f.run_id
+    WHERE f.exchange = ? AND f.product = ? AND f.target_date = ? AND f.time_block = 'DAILY'
+    ORDER BY r.cutoff_date DESC, r.created_at DESC, r.rowid DESC LIMIT 1
+  `).get(s.exchange, s.product, date);
+
+  if (!hit) {
+    const latest = db.prepare(`
+      SELECT last_target_date FROM price_forecast_runs WHERE exchange = ? AND product = ?
+      ORDER BY last_target_date DESC LIMIT 1
+    `).get(s.exchange, s.product);
+    return { ...s, date, price_cap: cap, forecast: null, latest_forecast_date: latest?.last_target_date || null };
+  }
+
+  const { backtest, model_params, sources, ...run } = formatRun(db.prepare(`${RUN_SELECT} WHERE r.id = ?`).get(hit.run_id));
+  const blocks = db.prepare(`
+    SELECT time_block, forecast_rate FROM price_forecasts
+    WHERE run_id = ? AND target_date = ? AND time_block != 'DAILY' ORDER BY time_block
+  `).all(hit.run_id, date).map((b) => ({ block: blockFromLabel(b.time_block), time_block: b.time_block, forecast: b.forecast_rate }));
+
+  return {
+    ...s,
+    date,
+    price_cap: cap,
+    forecast: { horizon: hit.horizon, forecast: hit.forecast_rate, lower: hit.lower_rate, upper: hit.upper_rate },
+    run,
+    blocks,
+  };
+}
+
+/**
+ * A run as a workbook: the daily figures with actuals so far, the 96 blocks in
+ * both Rs/kWh and the Rs/MWh an exchange bid is entered in, and what the run
+ * was made from — so the sheet still says what it is once it has left the
+ * screen.
+ */
+export function forecastRunWorkbook(id) {
+  const detail = getForecastRun(id);
+  if (!detail) return null;
+  const { run, points, realised } = detail;
+  const day = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' });
+
+  const daily = [
+    ['Delivery date', 'Day', 'Days ahead', 'Forecast (Rs/kWh)', '10th percentile (Rs/kWh)', '90th percentile (Rs/kWh)', 'Actual (Rs/kWh)', 'Actual from', 'Absolute error %'],
+    ...points.map((p) => [
+      p.date, day(p.date), p.horizon, p.forecast, p.lower, p.upper, p.actual,
+      p.actual_source ? (SOURCE_LABELS[p.actual_source] || p.actual_source) : null, p.abs_pct_error,
+    ]),
+  ];
+
+  const blockRows = db.prepare(`
+    SELECT target_date, time_block, forecast_rate FROM price_forecasts
+    WHERE run_id = ? AND time_block != 'DAILY' ORDER BY target_date, time_block
+  `).all(id);
+  const blocks = [
+    ['Delivery date', 'Block', 'From', 'To', 'Forecast (Rs/kWh)', 'Forecast (Rs/MWh)'],
+    ...blockRows.map((b) => {
+      const n = blockFromLabel(b.time_block);
+      return [b.target_date, n, b.time_block, blockLabel(n + 1 > BLOCKS_PER_DAY ? 1 : n + 1), b.forecast_rate, round2(b.forecast_rate * 1000)];
+    }),
+  ];
+
+  const about = [
+    ['Exchange', run.exchange],
+    ['Product', run.product],
+    ['Model', run.model_label],
+    ['How it was chosen', { BEST_BACKTEST: 'Lowest backtest MAPE of every model', REQUESTED: 'Chosen by the desk', FALLBACK: 'Too little history to compare; simplest model that fits' }[run.selection] || run.selection],
+    ['Prices up to', run.cutoff_date],
+    ['Trained on', `${run.history_days} days from ${run.history_from}`],
+    ['Sources', Object.entries(run.sources).map(([k, n]) => `${SOURCE_LABELS[k] || k}: ${n}`).join('; ')],
+    ['Backtest MAPE %', run.backtest_mape],
+    ['Backtest cutoffs', run.backtest_origins],
+    ['Backtest actuals inside the 80% range %', run.interval_coverage],
+    ['Days cleared so far', `${realised.scored_days} of ${points.length}`],
+    ['MAPE against what cleared %', realised.mape],
+    ['Made (UTC)', run.created_at],
+    ['Made by', run.trigger_type === 'SCHEDULED' ? 'Scheduled refresh' : (run.created_by_name || run.created_by)],
+    ['Run', run.id],
+    [],
+    ['The model saw no price after "Prices up to". The range is the 10th–90th percentile of its own backtest misses; blocks carry no range because the intraday shape has not been backtested.'],
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(daily), 'Daily');
+  if (blockRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(blocks), 'Blocks');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(about), 'About this run');
+  return {
+    buffer: XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }),
+    filename: `SJVN_Price_Forecast_${run.exchange}_${run.product}_${run.first_target_date}_to_${run.last_target_date}.xlsx`,
+    run,
+  };
+}
+
+/** A blank day in the layout the price file reader is surest of. */
+export function priceFileTemplate() {
+  const lines = ['Date,Time Block,MCV (MW),MCP (Rs/MWh)'];
+  for (let b = 1; b <= BLOCKS_PER_DAY; b += 1) {
+    lines.push(`${b === 1 ? 'DD-MM-YYYY' : ''},${blockLabel(b)} - ${b === BLOCKS_PER_DAY ? '24:00' : blockLabel(b + 1)},,`);
+  }
+  return `${lines.join('\n')}\n`;
 }
 
 // ── Exchange price files ─────────────────────────────────────────────────────

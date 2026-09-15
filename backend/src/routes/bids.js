@@ -161,8 +161,12 @@ router.post('/iex/market-rates/sync', requireRole(...ROLE_GROUPS.TRADING_WRITE),
   const product = String(req.body?.product || 'DAM').trim().toUpperCase();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: 'date (YYYY-MM-DD) is required' });
   if (!PRODUCTS.includes(product)) return res.status(400).json({ error: `product must be one of: ${PRODUCTS.join(', ')}` });
+  // This is IEX's pqresults feed. It used to take `exchange` from the body and
+  // file IEX's prices under whatever it said, PXIL included.
+  const exchange = String(req.body?.exchange || 'IEX').toUpperCase();
+  if (exchange !== 'IEX') return res.status(400).json({ error: 'Market prices are pulled from the IEX API only; load PXIL or HPX prices as an exchange price file.' });
   try {
-    const result = await syncMarketRates(product, date, { exchange: String(req.body?.exchange || 'IEX').toUpperCase() });
+    const result = await syncMarketRates(product, date);
     if (!result.ok) return res.status(502).json(result);
     if (result.rows_written) {
       secureLogAudit(req, { action: 'IEX_MARKET_RATES_SYNC', module: 'TRADING', entityType: 'market_rate', entityId: `${product}:${date}`, details: result });

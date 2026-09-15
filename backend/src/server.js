@@ -44,7 +44,7 @@ import tradingInvoicesRoutes from './routes/tradingInvoices.js';
 import generatorBillingRoutes from './routes/generatorBilling.js';
 import marketAnalyticsRoutes from './routes/marketAnalytics.js';
 import marketForecastRoutes from './routes/marketForecast.js';
-import { refreshForecasts } from './services/marketForecast.js';
+import { refreshForecasts, pullIexPrices } from './services/marketForecast.js';
 import cercMarketDataRoutes from './routes/cercMarketData.js';
 import dashboardRoutes from './routes/dashboard.js';
 import sellerDashboardRoutes from './routes/sellerDashboard.js';
@@ -469,11 +469,15 @@ const server = app.listen(PORT, HOST, () => {
   });
 
   // Price forecasts — daily 14:30 IST (09:00 UTC), after the day-ahead results
-  // are out. Makes a run only for a series whose newest price has none, so a
-  // day with nothing new loaded costs nothing. Off with market_forecast_auto_refresh.
-  cron.schedule('0 9 * * *', () => {
+  // are out. With the IEX API live it first pulls the prices a forecast is
+  // waiting on; then it makes a run only for a series whose newest price has
+  // none, so a day with nothing new costs nothing. Off with market_forecast_auto_refresh.
+  cron.schedule('0 9 * * *', async () => {
     if (String(getParam('market_forecast_auto_refresh', 'true')).toLowerCase() !== 'true') return;
     try {
+      const pull = await pullIexPrices();
+      const failed = pull.pulled.filter((p) => p.error);
+      if (pull.pulled.length) console.log(`[FORECAST] Pulled ${pull.pulled.length - failed.length} IEX price day(s)${failed.length ? `; ${failed.length} failed: ${failed.map((f) => `${f.product} ${f.date} (${f.error})`).join(', ')}` : ''}`);
       const r = refreshForecasts();
       if (r.created) console.log(`[FORECAST] Made ${r.created} forecast run(s) from newly loaded prices`);
     } catch (err) {

@@ -807,6 +807,9 @@ export const api = {
     run: (id, params) => g(`/market-forecast/runs/${id}`, params),
     createRun: (body) => p('/market-forecast/runs', body),
     accuracy: (params) => g('/market-forecast/accuracy', params),
+    forDate: (params) => g('/market-forecast/for-date', params),
+    exportRun: (id) => client.get(`/market-forecast/runs/${id}/export`, { responseType: 'blob' }).then((r) => r.data),
+    priceFileTemplate: () => client.get('/market-forecast/actuals/template', { responseType: 'blob' }).then((r) => r.data),
     uploadPrices: ({ file, exchange, product, date }) => {
       const form = new FormData();
       form.append('file', file);

@@ -4,6 +4,7 @@ import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { pooledForecastAccuracy } from '../services/marketForecast.js';
+import { dailyPrice } from '../services/priceForecastModels.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -198,10 +199,26 @@ router.get('/summary', (req, res) => {
 router.get('/latest-prices', (req, res) => {
   const products = PRODUCTS.map((p) => {
     const row = db.prepare(`
-      SELECT mcp_rate, volume_mw, rate_date, exchange FROM market_rates
+      SELECT rate_date, exchange FROM market_rates
       WHERE product = ? ORDER BY rate_date DESC, created_at DESC LIMIT 1
     `).get(p);
-    return { product: p, mcp_rate: round2(row?.mcp_rate), volume_mw: Math.round(row?.volume_mw || 0), date: row?.rate_date || null, exchange: row?.exchange || null };
+    if (!row) return { product: p, mcp_rate: null, volume_mw: 0, date: null, exchange: null };
+    // A day is one DAILY row, or 96 block rows now that the IEX sync and the
+    // price files keep blocks. "The newest row" of a block day is one block's
+    // price, so the day is read as a day: its daily row, or its volume-weighted
+    // blocks with their average cleared MW.
+    const day = db.prepare(`
+      SELECT time_block, mcp_rate, volume_mw FROM market_rates WHERE product = ? AND exchange = ? AND rate_date = ?
+    `).all(p, row.exchange, row.rate_date);
+    const daily = day.filter((r) => r.time_block == null || r.time_block === 'DAILY');
+    const blocks = day.filter((r) => r.time_block != null && r.time_block !== 'DAILY');
+    const price = daily.length
+      ? daily.reduce((a, r) => a + r.mcp_rate, 0) / daily.length
+      : dailyPrice(blocks.map((b) => ({ price: b.mcp_rate, volume: b.volume_mw })));
+    const volume = daily.length
+      ? daily.reduce((a, r) => a + (r.volume_mw || 0), 0)
+      : blocks.reduce((a, b) => a + (b.volume_mw || 0), 0) / (blocks.length || 1);
+    return { product: p, mcp_rate: round2(price), volume_mw: Math.round(volume), date: row.rate_date, exchange: row.exchange };
   });
   const rec = db.prepare(`
     SELECT sale_rate_per_rec, trade_date FROM rec_ledger
