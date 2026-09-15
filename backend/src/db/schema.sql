@@ -1288,7 +1288,7 @@ CREATE TABLE IF NOT EXISTS market_rates (
   product TEXT NOT NULL,
   rate_date TEXT NOT NULL,
   mcp_rate REAL NOT NULL, -- market clearing price
-  forecast_rate REAL,
+  forecast_rate REAL,     -- unread: forecasts are runs, in price_forecast_runs / price_forecasts
   exchange TEXT,          -- IEX / PXIL / HPX
   volume_mw REAL,         -- cleared volume for the day
   min_rate REAL,
@@ -1311,6 +1311,54 @@ CREATE TABLE IF NOT EXISTS market_events (
   impact_level TEXT NOT NULL DEFAULT 'LOW' CHECK (impact_level IN ('HIGH','MEDIUM','LOW')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Market price forecasting. A run is one model's forecast for one exchange and
+-- product, made from the prices the platform held up to cutoff_date and nothing
+-- after it — which is what lets it be scored honestly once the actuals arrive.
+-- Runs are never edited: a better forecast is a new run.
+CREATE TABLE IF NOT EXISTS price_forecast_runs (
+  id TEXT PRIMARY KEY,
+  exchange TEXT NOT NULL,
+  product TEXT NOT NULL,
+  requested_model TEXT NOT NULL,     -- AUTO, or the model the desk asked for
+  model TEXT NOT NULL,               -- the model that produced the published figures
+  selection TEXT NOT NULL,           -- BEST_BACKTEST / REQUESTED / FALLBACK
+  model_params TEXT,                 -- JSON, e.g. Holt-Winters smoothing constants
+  cutoff_date TEXT NOT NULL,         -- newest actual the model was allowed to see
+  horizon_days INTEGER NOT NULL,
+  first_target_date TEXT NOT NULL,
+  last_target_date TEXT NOT NULL,
+  history_from TEXT NOT NULL,
+  history_days INTEGER NOT NULL,
+  sources TEXT,                      -- JSON: training days by source
+  backtest TEXT,                     -- JSON: every candidate model's backtest
+  backtest_mape REAL,                -- the published model's backtest
+  backtest_mae REAL,
+  backtest_bias REAL,
+  backtest_origins INTEGER,
+  interval_coverage REAL,            -- % of backtest actuals inside their band
+  block_shape_days INTEGER NOT NULL DEFAULT 0, -- block-wise days behind the intraday shape
+  trigger_type TEXT NOT NULL DEFAULT 'MANUAL' CHECK (trigger_type IN ('MANUAL','SCHEDULED')),
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_price_forecast_runs_series ON price_forecast_runs(exchange, product, cutoff_date);
+
+-- ₹/kWh. time_block is DAILY for the day's price, or the block's start (HH:MM).
+CREATE TABLE IF NOT EXISTS price_forecasts (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL REFERENCES price_forecast_runs(id),
+  exchange TEXT NOT NULL,
+  product TEXT NOT NULL,
+  target_date TEXT NOT NULL,
+  time_block TEXT NOT NULL DEFAULT 'DAILY',
+  horizon INTEGER NOT NULL,          -- days after the cutoff
+  forecast_rate REAL NOT NULL,
+  lower_rate REAL,                   -- 10th percentile, from the backtest misses
+  upper_rate REAL,                   -- 90th percentile
+  UNIQUE (run_id, target_date, time_block)
+);
+CREATE INDEX IF NOT EXISTS idx_price_forecasts_target ON price_forecasts(exchange, product, target_date, time_block);
 
 -- Daily external drivers used for price forecasting sanity checks.
 CREATE TABLE IF NOT EXISTS market_factors (

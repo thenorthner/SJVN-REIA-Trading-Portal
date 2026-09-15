@@ -43,6 +43,8 @@ import billingSettlementRoutes from './routes/billingSettlement.js';
 import tradingInvoicesRoutes from './routes/tradingInvoices.js';
 import generatorBillingRoutes from './routes/generatorBilling.js';
 import marketAnalyticsRoutes from './routes/marketAnalytics.js';
+import marketForecastRoutes from './routes/marketForecast.js';
+import { refreshForecasts } from './services/marketForecast.js';
 import cercMarketDataRoutes from './routes/cercMarketData.js';
 import dashboardRoutes from './routes/dashboard.js';
 import sellerDashboardRoutes from './routes/sellerDashboard.js';
@@ -91,7 +93,7 @@ import contractPnlRoutes from './routes/contractPnl.js';
 import marginAssuranceRoutes from './routes/marginAssurance.js';
 import energyBankingRoutes from './routes/energyBanking.js';
 import { settleExpiredBanking } from './services/energyBanking.js';
-import { ensureMasterDefaults } from './mastersService.js';
+import { ensureMasterDefaults, getParam } from './mastersService.js';
 import { repairAuditChainIfBroken, verifyRecentIntegrity } from './auditEngine.js';
 import { db } from './db/index.js';
 import { backupDatabase } from './services/dbBackup.js';
@@ -229,6 +231,7 @@ app.use('/api/energy-banking', requireAuth, energyBankingRoutes);
 app.use('/api/generator-billing', generatorBillingRoutes);
 app.use('/api/hydro-billing', hydroBillingRoutes);
 app.use('/api/market-analytics', marketAnalyticsRoutes);
+app.use('/api/market-forecast', marketForecastRoutes);
 app.use('/api/cerc-market', requireAuth, cercMarketDataRoutes);
 app.use('/api/trading-notes', requireAuth, tradingNotesRoutes);
 app.use('/api/pre-trade', requireAuth, preTradeRoutes);
@@ -462,6 +465,19 @@ const server = app.listen(PORT, HOST, () => {
       if (r.alerted) console.log(`[DEVIATION] Raised ${r.alerted} shortfall alert(s) above ${r.threshold_pct}%`);
     } catch (err) {
       console.error('[DEVIATION] alert sweep failed', err.message);
+    }
+  });
+
+  // Price forecasts — daily 14:30 IST (09:00 UTC), after the day-ahead results
+  // are out. Makes a run only for a series whose newest price has none, so a
+  // day with nothing new loaded costs nothing. Off with market_forecast_auto_refresh.
+  cron.schedule('0 9 * * *', () => {
+    if (String(getParam('market_forecast_auto_refresh', 'true')).toLowerCase() !== 'true') return;
+    try {
+      const r = refreshForecasts();
+      if (r.created) console.log(`[FORECAST] Made ${r.created} forecast run(s) from newly loaded prices`);
+    } catch (err) {
+      console.error('[FORECAST] refresh failed', err.message);
     }
   });
 

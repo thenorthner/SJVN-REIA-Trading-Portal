@@ -75,8 +75,8 @@ function seedMarketAnalytics() {
 
   const insertRate = db.prepare(`
     INSERT OR IGNORE INTO market_rates
-      (id, product, rate_date, mcp_rate, forecast_rate, exchange, volume_mw, min_rate, max_rate, avg_rate, time_block, data_source)
-    VALUES (@id, @product, @rate_date, @mcp_rate, @forecast_rate, @exchange, @volume_mw, @min_rate, @max_rate, @avg_rate, 'DAILY', @data_source)
+      (id, product, rate_date, mcp_rate, exchange, volume_mw, min_rate, max_rate, avg_rate, time_block, data_source)
+    VALUES (@id, @product, @rate_date, @mcp_rate, @exchange, @volume_mw, @min_rate, @max_rate, @avg_rate, 'DAILY', @data_source)
   `);
   const insertEvent = db.prepare(`
     INSERT OR IGNORE INTO market_events (id, event_date, event_type, description, impact_level)
@@ -113,8 +113,6 @@ function seedMarketAnalytics() {
             product,
             rate_date: date,
             mcp_rate: round2(mcp),
-            // Day-ahead forecast published before clearing — deliberately imperfect (±6%).
-            forecast_rate: round2(mcp * (1 + (marketNoise(exchange, product, date, 'fc') - 0.5) * 0.12)),
             exchange,
             volume_mw: Math.round(volumeBase * (0.82 + n * 0.36) * (weekend ? 0.88 : 1)),
             min_rate: round2(Math.max(2.0, mcp * (1 - spread))),

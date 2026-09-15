@@ -4,6 +4,7 @@ import { generationPerformance } from '../services/generationPerformance.js';
 import { contractCompliance } from '../services/contractCompliance.js';
 import { verificationQueue } from '../services/verificationQueue.js';
 import { cercCompliance } from '../services/cercCompliance.js';
+import { pooledForecastAccuracy } from '../services/marketForecast.js';
 import { receivablesOutstanding, payablesOutstanding, overdueCount } from '../services/outstanding.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
@@ -844,10 +845,8 @@ export function buildMarketAnalyticsSummary({ from, to, exchange, product } = {}
            ROUND(COALESCE(SUM(volume_mw),0),0) total_volume_mw
     FROM market_rates ${w} GROUP BY product ORDER BY avg_rate ASC`).all(...params);
 
-  // Forecast accuracy: MAPE over rows that actually carry a forecast.
-  const fc = db.prepare(`
-    SELECT COUNT(*) n, ROUND(AVG(ABS(mcp_rate - forecast_rate) / NULLIF(mcp_rate,0)) * 100, 2) mape
-    FROM market_rates ${w} AND forecast_rate IS NOT NULL AND mcp_rate > 0`).get(...params);
+  // Forecast accuracy: the forecasting module's runs, scored against what cleared.
+  const fc = pooledForecastAccuracy({ from: start, to: end, exchange, product });
 
   const daily = db.prepare(`
     SELECT rate_date, ROUND(AVG(mcp_rate),2) avg_rate,
@@ -877,7 +876,10 @@ export function buildMarketAnalyticsSummary({ from, to, exchange, product } = {}
     previous: { window: { start_date: prevStart, end_date: prevEnd }, ...previous, change_percent: changePct },
     by_exchange: byExchange,
     by_product: byProduct,
-    forecast_accuracy: { observations_with_forecast: fc.n, mape_percent: fc.mape },
+    forecast_accuracy: {
+      observations_with_forecast: fc.observations,
+      mape_percent: fc.mape == null ? null : Math.round(fc.mape * 100) / 100,
+    },
     cheapest_exchange: byExchange[0] || null,
     costliest_exchange: byExchange[byExchange.length - 1] || null,
     daily,

@@ -181,6 +181,7 @@ export const TRADING_MENU = [
       { label: 'Energy Reconciliation', to: '/reconciliation/rea-sea' },
       { label: 'Open-Access Reconciliation', to: '/trading/oa-reconciliation' },
       { label: 'Market Rates & Analytics', to: '/trading/market-analytics', ours: true },
+      { label: 'Market Price Forecasting', to: '/trading/market-forecasting', ours: true },
       { label: 'TDS Register', to: '/trading/tds-register', ours: true },
     ],
   },

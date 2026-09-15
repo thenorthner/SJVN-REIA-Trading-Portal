@@ -801,6 +801,21 @@ export const api = {
     toggleAlert: (id, is_active) => patch(`/market-analytics/alerts/${id}`, { is_active }),
     deleteAlert: (id) => del(`/market-analytics/alerts/${id}`),
   },
+  marketForecast: {
+    series: () => g('/market-forecast/series'),
+    runs: (params) => g('/market-forecast/runs', params),
+    run: (id, params) => g(`/market-forecast/runs/${id}`, params),
+    createRun: (body) => p('/market-forecast/runs', body),
+    accuracy: (params) => g('/market-forecast/accuracy', params),
+    uploadPrices: ({ file, exchange, product, date }) => {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('exchange', exchange);
+      form.append('product', product);
+      if (date) form.append('date', date);
+      return client.post('/market-forecast/actuals/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+    },
+  },
   dashboard: {
     reia: () => g('/dashboard/reia'),
     trading: {

@@ -3,6 +3,7 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
+import { pooledForecastAccuracy } from '../services/marketForecast.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -157,15 +158,10 @@ router.get('/summary', (req, res) => {
 
   const ranked = exchanges.filter((e) => e.avg_rate != null).sort((a, b) => b.avg_rate - a.avg_rate);
 
-  // Forecast quality: MAPE + mean absolute error of the published day-ahead
-  // forecast against the cleared MCP.
-  const acc = db.prepare(`
-    SELECT COUNT(*) observations,
-           AVG(ABS(mcp_rate - forecast_rate)) avg_abs_error,
-           AVG(ABS(mcp_rate - forecast_rate) / mcp_rate) * 100 mape_percent
-    FROM market_rates
-    WHERE forecast_rate IS NOT NULL AND mcp_rate > 0${w.sql}
-  `).get(...w.params);
+  // Forecast quality: the forecasting module's runs against the cleared price.
+  const acc = pooledForecastAccuracy({
+    from: scope.start_date, to: scope.end_date, exchange: scope.exchange, product: scope.product,
+  });
 
   res.json({
     window: win,
@@ -189,10 +185,10 @@ router.get('/summary', (req, res) => {
     best_exchange: ranked[0] || null,
     worst_exchange: ranked.length > 1 ? ranked[ranked.length - 1] : null,
     forecast: {
-      observations: acc?.observations || 0,
-      avg_abs_error: round2(acc?.avg_abs_error),
-      mape_percent: round2(acc?.mape_percent),
-      accuracy_percent: acc?.mape_percent == null ? null : round2(Math.max(0, 100 - acc.mape_percent)),
+      observations: acc.observations,
+      avg_abs_error: round2(acc.mae),
+      mape_percent: round2(acc.mape),
+      accuracy_percent: acc.mape == null ? null : round2(Math.max(0, 100 - acc.mape)),
     },
   });
 });
@@ -245,8 +241,7 @@ router.get('/trend', (req, res) => {
   const scope = { ...f, start_date: win.start_date, end_date: win.end_date };
   const w = whereClause(scope);
   const rows = db.prepare(`
-    SELECT rate_date, exchange, AVG(mcp_rate) mcp_rate, AVG(forecast_rate) forecast_rate,
-           SUM(COALESCE(volume_mw, 0)) volume_mw
+    SELECT rate_date, exchange, AVG(mcp_rate) mcp_rate, SUM(COALESCE(volume_mw, 0)) volume_mw
     FROM market_rates WHERE 1=1${w.sql}
     GROUP BY rate_date, exchange
     ORDER BY rate_date ASC
@@ -260,11 +255,14 @@ router.get('/trend', (req, res) => {
     point.volume_mw = Math.round(point.volume_mw + (r.volume_mw || 0));
   }
 
-  const forecastRows = db.prepare(`
-    SELECT rate_date, AVG(mcp_rate) actual, AVG(forecast_rate) forecast
-    FROM market_rates WHERE forecast_rate IS NOT NULL${w.sql}
-    GROUP BY rate_date ORDER BY rate_date ASC
-  `).all(...w.params);
+  const forecastByDate = new Map();
+  for (const d of pooledForecastAccuracy({
+    from: scope.start_date, to: scope.end_date, exchange: scope.exchange, product: scope.product,
+  }).days) {
+    if (!forecastByDate.has(d.date)) forecastByDate.set(d.date, []);
+    forecastByDate.get(d.date).push(d);
+  }
+  const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
   const present = new Set(rows.map((r) => r.exchange).filter(Boolean));
   res.json({
@@ -272,12 +270,11 @@ router.get('/trend', (req, res) => {
     filters: { exchange: scope.exchange, product: scope.product },
     exchanges: EXCHANGES.filter((e) => present.has(e)),
     points: [...byDate.values()],
-    forecast: forecastRows.map((r) => ({
-      date: r.rate_date,
-      actual: round2(r.actual),
-      forecast: round2(r.forecast),
-      variance: round2(r.actual - r.forecast),
-    })),
+    forecast: [...forecastByDate.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([date, ds]) => {
+      const actual = avg(ds.map((d) => d.actual));
+      const forecast = avg(ds.map((d) => d.forecast));
+      return { date, actual: round2(actual), forecast: round2(forecast), variance: round2(actual - forecast) };
+    }),
   });
 });
 

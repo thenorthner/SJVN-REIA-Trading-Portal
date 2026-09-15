@@ -49,6 +49,7 @@ const BilateralApplications = lazy(() => import('./pages/trading/BilateralApplic
 const BillingSettlement = lazy(() => import('./pages/trading/BillingSettlement.jsx'));
 const GeneratorBilling = lazy(() => import('./pages/trading/GeneratorBilling.jsx'));
 const MarketAnalytics = lazy(() => import('./pages/trading/MarketAnalytics.jsx'));
+const MarketForecasting = lazy(() => import('./pages/trading/MarketForecasting.jsx'));
 const NOARWallet = lazy(() => import('./pages/trading/NOARWallet.jsx'));
 const NOARRegistry = lazy(() => import('./pages/trading/NOARRegistry.jsx'));
 const CERCFormIV = lazy(() => import('./pages/trading/CERCFormIV.jsx'));
@@ -300,7 +301,9 @@ export default function App() {
             spans both, matching the API's own role set for /api/generator-billing. */}
         <Route path="trading/generator-billing" element={<ProtectedRoute roles={GENERATOR_BILLING_ROLES}><GeneratorBilling /></ProtectedRoute>} />
         <Route path="trading/market-analytics" element={<ProtectedRoute roles={TRADING_COMBINED_ROLES}><MarketAnalytics /></ProtectedRoute>} />
-        
+        {/* SJVN's own forecast, not market data: desk only, as the API is. */}
+        <Route path="trading/market-forecasting" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><MarketForecasting /></ProtectedRoute>} />
+
         {/* Internal only */}
         <Route path="trading/margin-assurance" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><MarginAssurance /></ProtectedRoute>} />
         <Route path="trading/oa-reconciliation" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><OAReconciliation /></ProtectedRoute>} />
