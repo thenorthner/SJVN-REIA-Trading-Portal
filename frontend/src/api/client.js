@@ -796,6 +796,7 @@ export const api = {
     getTrend: (params) => g('/market-analytics/trend', params),
     getLatestPrices: () => g('/market-analytics/latest-prices'),
     getBlocks: (params) => g('/market-analytics/blocks', params),
+    bidVsCleared: (params) => g('/market-analytics/bid-vs-cleared', params),
     getContext: (params) => g('/market-analytics/context', params),
     getAlerts: () => g('/market-analytics/alerts'),
     createAlert: (body) => p('/market-analytics/alerts', body),

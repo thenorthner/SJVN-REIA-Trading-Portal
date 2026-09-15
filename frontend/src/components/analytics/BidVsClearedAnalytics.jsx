@@ -1,208 +1,119 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine 
+import React, { useEffect, useState } from 'react';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { Card } from '../ui.jsx';
+import api from '../../api/client.js';
+import { Card, StatCard } from '../ui.jsx';
+import { fmtDate } from '../../datetime.js';
 
-// Generate mock flatline data for a specific date or active mock data
-const generateChartData = (targetDateStr) => {
-  const data = [];
-  // Flatline state triggered for the specific date in the screenshot
-  const isFlatline = targetDateStr === '2026-07-09';
+// What SJVN bid, block by block, against what cleared and what the market
+// cleared at. This used to be Math.random for every date except 9 July 2026,
+// which drew a flat zero line to match a screenshot, with an export menu of five
+// alerts. It reads the bid book and the observed block prices now.
+//
+// Quantity and price are separate charts: one chart with a MW axis on one side
+// and a Rs/MWh axis on the other made every crossing of the lines meaningless.
 
-  for (let i = 0; i < 96; i++) {
-    const hh = String(Math.floor(i * 15 / 60)).padStart(2, '0');
-    const mm = String((i * 15) % 60).padStart(2, '0');
-    const timeStr = `${hh}:${mm}`;
-    
-    if (isFlatline) {
-      data.push({
-        timeBlock: timeStr,
-        bidQty: 0,
-        bidPrice: 0,
-        receivedQty: 0,
-        receivedPrice: 0,
-      });
-    } else {
-      // Mock realistic data
-      const hourVal = Math.floor(i * 15 / 60);
-      const baseQty = 150 + Math.random() * 50;
-      const basePrice = 3000 + (hourVal > 8 && hourVal < 20 ? 1500 : 0) + Math.random() * 500;
-      
-      const receivedPct = Math.random() > 0.3 ? 1.0 : 0.8;
-      
-      data.push({
-        timeBlock: timeStr,
-        bidQty: Math.round(baseQty),
-        bidPrice: Math.round(basePrice + 200),
-        receivedQty: Math.round(baseQty * receivedPct),
-        receivedPrice: Math.round(basePrice),
-      });
-    }
-  }
-  return data;
-};
+const BID = 'var(--amber)';
+const CLEARED = 'var(--primary)';
+const MARKET = 'var(--text-muted)';
+const rs = (v) => (v == null ? '—' : `₹${Number(v).toFixed(2)}`);
 
-// Custom Tooltip with Dark Theme & Delta Volume calculation
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    const p = payload[0].payload;
-    const deltaVolume = p.bidQty - p.receivedQty;
+export default function BidVsClearedAnalytics({ product = 'DAM' }) {
+  const [date, setDate] = useState('');
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let live = true;
+    setError('');
+    api.marketAnalytics.bidVsCleared({ product, ...(date ? { date } : {}) })
+      .then((d) => { if (live) setData(d); })
+      .catch((err) => { if (live) setError(err?.response?.data?.error || 'Could not load the bid book.'); });
+    return () => { live = false; };
+  }, [product, date]);
+
+  if (error) return <div className="alert alert-error" role="alert">{error}</div>;
+  if (!data) return <Card><div className="audit-placeholder">Loading…</div></Card>;
+  if (!data.date) {
     return (
-      <div style={{ background: 'var(--slate-900)', color: 'var(--slate-50)', padding: '12px 16px', borderRadius: 6, border: '1px solid var(--slate-700)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.3)', fontSize: 13, minWidth: 200 }}>
-        <p style={{ fontWeight: 600, color: 'var(--slate-300)', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid var(--slate-700)' }}>
-          Time Block: {label}
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 16px' }}>
-          <span style={{ color: '#f87171' }}>Bid Qty:</span> <span style={{ fontWeight: 'bold' }}>{p.bidQty} MW</span>
-          <span style={{ color: '#fb923c' }}>Bid Price:</span> <span style={{ fontWeight: 'bold' }}>₹{p.bidPrice}</span>
-          <span style={{ color: '#60a5fa' }}>Received Qty:</span> <span style={{ fontWeight: 'bold' }}>{p.receivedQty} MW</span>
-          <span style={{ color: '#4ade80' }}>Received Price:</span> <span style={{ fontWeight: 'bold' }}>₹{p.receivedPrice}</span>
-        </div>
-        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--slate-600)', display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ color: 'var(--text-subtle)', fontWeight: 600 }}>Δ Volume:</span>
-          <span style={{ fontWeight: 'bold', color: deltaVolume > 0 ? '#ef4444' : '#22c55e' }}>{deltaVolume} MW</span>
-        </div>
-      </div>
+      <Card title={`${product} — bid against cleared`}>
+        <div className="audit-placeholder">No {product} bid has been submitted or cleared yet, so there is nothing to compare.</div>
+      </Card>
     );
   }
-  return null;
-};
 
-export default function BidVsClearedAnalytics() {
-  // Use today as default, but allow switching to the flatline target date
-  const [date, setDate] = useState('2026-07-09');
-  
-  const data = useMemo(() => generateChartData(date), [date]);
-
-  const setPresetDate = (offsetDays) => {
-    const d = new Date();
-    d.setDate(d.getDate() + offsetDays);
-    setDate(d.toISOString().split('T')[0]);
-  };
+  const blocks = data.blocks.filter((b) => b.bid_mw > 0 || b.cleared_mw > 0 || b.market_mcp != null);
+  const { totals } = data;
 
   return (
-    <Card style={{ padding: 0, overflow: 'hidden' }}>
-      {/* ── Control Panel ── */}
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--slate-200)', background: 'var(--slate-50)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label style={{ fontSize: 13, fontWeight: 600, color: 'var(--slate-600)' }}>Delivery date:</label>
-            <div style={{ display: 'flex', border: '1px solid var(--slate-300)', borderRadius: 4, overflow: 'hidden', background: '#fff' }}>
-              <input 
-                type="date" 
-                value={date} 
-                onChange={e => setDate(e.target.value)} 
-                style={{ border: 'none', padding: '6px 10px', outline: 'none', fontSize: 14 }}
-              />
-              <button 
-                onClick={() => setDate('')} 
-                style={{ background: 'none', border: 'none', borderLeft: '1px solid var(--slate-300)', padding: '0 8px', cursor: 'pointer', color: '#ef4444' }}
-                title="Clear"
-              >
-                
-              </button>
-            </div>
-            <button className="btn btn-sm btn-outline" style={{ background: '#fff', marginLeft: 4 }}>Display</button>
-          </div>
-          
-          <div style={{ width: 1, height: 24, background: 'var(--slate-300)' }} />
-          
-          {/* Quick Date Pills */}
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn btn-sm btn-ghost" onClick={() => setPresetDate(-1)} style={{ fontSize: 12 }}>-1 Day</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => setPresetDate(0)} style={{ fontSize: 12 }}>Today</button>
-            <button className="btn btn-sm btn-ghost" onClick={() => setPresetDate(1)} style={{ fontSize: 12 }}>Tomorrow</button>
-          </div>
+    <>
+      <Card>
+        <div className="report-criteria">
+          <label className="report-search">
+            Delivery date
+            <select className="input" value={data.date} onChange={(e) => setDate(e.target.value)}>
+              {data.available_dates.map((d) => <option key={d} value={d}>{fmtDate(d)}</option>)}
+            </select>
+          </label>
         </div>
+      </Card>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 16, color: 'var(--slate-800)' }}>Bided And Received Energy</h3>
-          
-          <div style={{ position: 'relative' }}>
-            <button 
-              className="btn btn-sm btn-ghost" 
-              title="Export Chart" 
-              style={{ fontSize: 16, padding: '4px 8px' }}
-              onClick={() => {
-                const el = document.getElementById('bid-vs-cleared-export-menu');
-                if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
-              }}
-            >
-              
-            </button>
-            <div 
-              id="bid-vs-cleared-export-menu"
-              style={{ 
-                display: 'none', position: 'absolute', right: 0, top: '100%', marginTop: 4, width: 160, 
-                background: '#fff', border: '1px solid var(--slate-200)', borderRadius: 6, 
-                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', zIndex: 10 
-              }}
-            >
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Print')}>Print chart</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Download PNG')}>Download PNG image</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Download JPEG')}>Download JPEG image</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => alert('Download PDF')}>Download PDF document</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer' }} onClick={() => alert('Download SVG')}>Download SVG vector image</div>
-            </div>
-          </div>
+      {totals.stub_bids > 0 && (
+        <div className="alert alert-warning" role="status">
+          {totals.stub_bids} of {totals.bids} bid(s) for this day were recorded in stub mode — not sent to the exchange — so what "cleared" on them was entered, not received.
         </div>
+      )}
+
+      <div className="kpi-grid">
+        <StatCard label="Bid" value={`${totals.bid_mwh.toLocaleString('en-IN')} MWh`} hint={`${totals.bids} bid(s)`} />
+        <StatCard label="Cleared" value={`${totals.cleared_mwh.toLocaleString('en-IN')} MWh`} tone="blue" />
+        <StatCard label="Cleared of bid" value={totals.cleared_pct == null ? '—' : `${totals.cleared_pct}%`} />
+        <StatCard
+          label="Market price"
+          value={data.market_loaded ? `${data.market_exchange} loaded` : 'Not loaded'}
+          hint={data.market_loaded ? 'Block prices from the exchange price file or IEX API' : `No block-wise ${data.market_exchange || ''} ${product} prices for this day`}
+        />
       </div>
 
-      {/* ── Chart Rendering ── */}
-      <div style={{ padding: '20px 20px 10px 20px', height: 420 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 20, right: 20, left: 20, bottom: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--slate-200)" />
-            
-            <XAxis 
-              dataKey="timeBlock" 
-              tickFormatter={(val) => val.endsWith(':00') ? parseInt(val.split(':')[0]) : ''}
-              tick={{ fontSize: 12, fill: 'var(--slate-500)' }} 
-              axisLine={{ stroke: 'var(--slate-300)' }}
-              label={{ value: 'Hour', position: 'insideBottom', offset: -15, fill: 'var(--slate-500)', fontSize: 13 }}
-            />
-            
-            {/* Primary Y-Axis (Left) - Price */}
-            <YAxis 
-              yAxisId="left" 
-              orientation="left" 
-              tick={{ fontSize: 12, fill: 'var(--slate-500)' }}
-              axisLine={{ stroke: 'var(--slate-300)' }}
-              label={{ value: 'Price (Rs/MWH)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'var(--slate-600)', fontSize: 13, fontWeight: 500 } }} 
-            />
-            
-            {/* Secondary Y-Axis (Right) - Qty */}
-            <YAxis 
-              yAxisId="right" 
-              orientation="right"
-              domain={[0, 300]}
-              tick={{ fontSize: 12, fill: 'var(--slate-500)' }} 
-              axisLine={{ stroke: 'var(--slate-300)' }}
-              label={{ value: 'QTY (MW)', angle: 90, position: 'insideRight', style: { textAnchor: 'middle', fill: 'var(--slate-600)', fontSize: 13, fontWeight: 500 } }} 
-            />
+      <Card title={`${product} quantity by block — ${fmtDate(data.date)} (MW)`}>
+        <div style={{ width: '100%', height: 260 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={blocks} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="time_block" minTickGap={24} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={48} />
+              <Tooltip formatter={(v, name) => [`${v} MW`, name]} />
+              <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
+              <Line type="stepAfter" dataKey="bid_mw" name="Bid" stroke={BID} strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} />
+              <Line type="stepAfter" dataKey="cleared_mw" name="Cleared" stroke={CLEARED} strokeWidth={2} dot={false} isAnimationActive={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
 
-            <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'var(--slate-300)', strokeWidth: 1, strokeDasharray: '3 3' }} />
-            
-            <Legend 
-              verticalAlign="bottom" 
-              wrapperStyle={{ paddingTop: 20 }}
-              iconType="circle"
-            />
-            
-            <ReferenceLine y={0} yAxisId="left" stroke="var(--slate-400)" strokeWidth={2} />
-            <ReferenceLine y={0} yAxisId="right" stroke="var(--slate-400)" strokeWidth={2} />
+      <Card title={`${product} price by block — ${fmtDate(data.date)} (₹/kWh)`}>
+        <div style={{ width: '100%', height: 260 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={blocks} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="var(--border)" vertical={false} />
+              <XAxis dataKey="time_block" minTickGap={24} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} />
+              <Tooltip formatter={(v, name) => [`${rs(v)}/kWh`, name]} />
+              <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
+              <Line type="stepAfter" dataKey="bid_price" name="Bid price" stroke={BID} strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={false} isAnimationActive={false} />
+              <Line type="stepAfter" dataKey="cleared_price" name="Cleared price" stroke={CLEARED} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} />
+              {data.market_loaded && (
+                <Line type="stepAfter" dataKey="market_mcp" name="Market MCP" stroke={MARKET} strokeWidth={1} dot={false} isAnimationActive={false} />
+              )}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
 
-            {/* Traces based on screenshot legend */}
-            <Line yAxisId="right" type="monotone" dataKey="bidQty" name="Bid Qty" stroke="#ef4444" strokeWidth={2} dot={{ r: 4, fill: '#ef4444' }} activeDot={{ r: 6 }} />
-            <Line yAxisId="left" type="stepAfter" dataKey="bidPrice" name="Bid Price" stroke="#854d0e" strokeWidth={2} dot={{ r: 4, fill: '#854d0e', strokeWidth: 0, shape: 'diamond' }} />
-            
-            <Line yAxisId="right" type="monotone" dataKey="receivedQty" name="Received Energy Qty" stroke="#1e3a8a" strokeWidth={2} dot={{ r: 4, fill: '#1e3a8a', shape: 'square' }} />
-            <Line yAxisId="left" type="stepAfter" dataKey="receivedPrice" name="Received Energy Price" stroke="var(--green-strong)" strokeWidth={2} dot={{ r: 4, fill: 'var(--green-strong)', shape: 'star' }} />
-            
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
-    </Card>
+      {data.unreadable_time_blocks?.length > 0 && (
+        <p className="report-count">Not charted — time blocks that could not be read as quarter-hours: {data.unreadable_time_blocks.join(', ')}.</p>
+      )}
+    </>
   );
 }

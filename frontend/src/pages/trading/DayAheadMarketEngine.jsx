@@ -47,7 +47,7 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
       case 'MCP':
         return (
           <div style={{ marginTop: 20 }}>
-            <BidVsClearedAnalytics />
+            <BidVsClearedAnalytics product={productLabel} />
           </div>
         );
       default:

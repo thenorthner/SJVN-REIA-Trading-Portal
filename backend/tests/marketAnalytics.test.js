@@ -125,3 +125,59 @@ describe('Market analytics reads observed prices only', () => {
     expect(r.body.execution).toEqual([expect.objectContaining({ delivery_date: '2026-09-12', market_mcp: 4, vs_market: 0.4 })]);
   });
 });
+
+describe('Bid against cleared against the market', () => {
+  const client = (name) => {
+    const id = newId('TCL');
+    db.prepare("INSERT INTO trading_clients (id, name, client_type, status) VALUES (?, ?, 'DISCOM', 'ACTIVE')").run(id, name);
+    return id;
+  };
+  const bid = (clientId, { status = 'CLEARED', date = '2026-09-12', mode = 'STUB', blocks }) => {
+    const id = newId('BID');
+    db.prepare(`INSERT INTO bids (id, client_id, exchange, product, bid_date, delivery_date, quantum_mw, price_per_unit, cleared_quantum_mw, status, submission_mode)
+      VALUES (?, ?, 'IEX', 'DAM', ?, ?, 0, 0, 0, ?, ?)`).run(id, clientId, date, date, status, mode);
+    for (const b of blocks) {
+      db.prepare(`INSERT INTO bid_blocks (id, bid_id, time_block, quantum_mw, price_per_unit, cleared_quantum_mw, cleared_price, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'CLEARED')`).run(newId('BLK'), id, b.time_block, b.mw, b.price, b.cleared, b.cleared_price ?? null);
+    }
+    return id;
+  };
+
+  it('adds single blocks and range blocks per quarter-hour, beside the market price for the block', async () => {
+    const a = client('Client A');
+    blockDay('2026-09-12'); // IEX DAM: ₹2 to 12:00, ₹6 after
+    bid(a, { blocks: [{ time_block: '18:00-18:15', mw: 20, price: 7, cleared: 10, cleared_price: 6 }] });
+    bid(a, { mode: 'LIVE', blocks: [{ time_block: '00:00-24:00', mw: 5, price: 3, cleared: 5, cleared_price: 3 }] });
+    bid(a, { status: 'DRAFT', blocks: [{ time_block: '18:00-18:15', mw: 999, price: 1, cleared: 0 }] });
+
+    const r = await get('/api/market-analytics/bid-vs-cleared?product=DAM');
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ date: '2026-09-12', available_dates: ['2026-09-12'], market_exchange: 'IEX', market_loaded: true });
+    const b73 = r.body.blocks[72];
+    // 20 MW at ₹7 plus 5 MW at ₹3: 25 MW at ₹6.20; 10 MW at ₹6 plus 5 MW at ₹3 cleared: 15 MW at ₹5.
+    expect(b73).toEqual({ block: 73, time_block: '18:00', bid_mw: 25, bid_price: 6.2, cleared_mw: 15, cleared_price: 5, market_mcp: 6 });
+    expect(r.body.blocks[0]).toMatchObject({ bid_mw: 5, cleared_mw: 5, market_mcp: 2 });
+    // 5 MW all day (120 MWh) plus 20 MW for a quarter hour (5 MWh) bid; 120 + 2.5 cleared.
+    expect(r.body.totals).toEqual({ bids: 2, stub_bids: 1, bid_mwh: 125, cleared_mwh: 122.5, cleared_pct: 98 });
+  });
+
+  it('shows a trading client its own bids and nobody else\'s', async () => {
+    const a = client('Client A');
+    const b = client('Client B');
+    bid(a, { blocks: [{ time_block: '18:00-18:15', mw: 10, price: 5, cleared: 10, cleared_price: 5 }] });
+    bid(b, { date: '2026-09-13', blocks: [{ time_block: '18:00-18:15', mw: 70, price: 5, cleared: 70, cleared_price: 5 }] });
+    const token = tokenFor('TRADING_CLIENT', { linked_entity_id: a });
+    const r = await request(app).get('/api/market-analytics/bid-vs-cleared?product=DAM').set(auth(token));
+    expect(r.status).toBe(200);
+    expect(r.body.available_dates).toEqual(['2026-09-12']);
+    expect(r.body.totals.bid_mwh).toBe(2.5);
+    const other = await request(app).get('/api/market-analytics/bid-vs-cleared?product=DAM&date=2026-09-13').set(auth(token));
+    expect(other.body.totals.bids).toBe(0);
+  });
+
+  it('says there is nothing when no bid was placed, without a market to compare', async () => {
+    const r = await get('/api/market-analytics/bid-vs-cleared?product=GDAM');
+    expect(r.body).toMatchObject({ date: null, blocks: [], totals: null });
+    expect((await get('/api/market-analytics/bid-vs-cleared?product=DAM&date=tomorrow')).status).toBe(400);
+  });
+});

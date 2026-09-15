@@ -134,3 +134,117 @@ export function blockCurves({ date = null, exchange = 'IEX' } = {}) {
   }
   return { exchange: ex, date: day, available_dates: available, products: byProduct };
 }
+
+// ── SJVN's bids against the market ──────────────────────────────────────────
+
+/**
+ * The 15-minute blocks (1–96) a bid block's label covers: "18:00-18:15",
+ * "00:00-24:00" for a whole-day block bid, "Block-12", or a bare start time.
+ */
+export function blocksCoveredBy(label) {
+  const s = String(label || '').trim();
+  const mins = (h, m) => Number(h) * 60 + Number(m);
+  let m = /^block[-\s]?(\d{1,2})$/i.exec(s) || /^(\d{1,2})$/.exec(s);
+  if (m) {
+    const n = Number(m[1]);
+    return n >= 1 && n <= 96 ? [n] : [];
+  }
+  m = /^(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})$/.exec(s);
+  if (m) {
+    const a = mins(m[1], m[2]);
+    let b = mins(m[3], m[4]);
+    if (b <= a) b = 1440;
+    if (a % 15 || b % 15 || b > 1440) return [];
+    const out = [];
+    for (let t = a; t < b; t += 15) out.push(t / 15 + 1);
+    return out;
+  }
+  m = /^(\d{1,2}):(\d{2})$/.exec(s);
+  if (m) {
+    const a = mins(m[1], m[2]);
+    return a % 15 || a >= 1440 ? [] : [a / 15 + 1];
+  }
+  return [];
+}
+
+const BID_STATUSES = ['SUBMITTED', 'CLEARED', 'PARTIALLY_CLEARED'];
+
+/**
+ * Block by block for a product and delivery date: what SJVN bid (MW, and the
+ * volume-weighted bid price), what cleared (MW, price), and the exchange's own
+ * clearing price for the block where the platform holds it. A block bid over a
+ * range puts its MW in every block it covers. `scope` narrows to one trading
+ * client's bids (see tradingClientScope.clientScope).
+ */
+export function bidVsCleared(db, { product, date = null, exchange = null, scope = { sql: '', params: [] } }) {
+  const exFilter = exchange ? ' AND b.exchange = ?' : '';
+  const exParams = exchange ? [exchange] : [];
+  const dates = db.prepare(`
+    SELECT DISTINCT b.delivery_date AS d FROM bids b
+    WHERE b.product = ? AND b.is_no_bid = 0 AND b.status IN (${BID_STATUSES.map(() => '?').join(', ')})${exFilter}${scope.sql}
+    ORDER BY b.delivery_date DESC LIMIT 90
+  `).all(product, ...BID_STATUSES, ...exParams, ...scope.params).map((r) => r.d);
+  const day = date || dates[0] || null;
+  if (!day) return { product, exchange, date: null, available_dates: dates, blocks: [], totals: null, market_exchange: null };
+
+  const rows = db.prepare(`
+    SELECT b.id AS bid_id, b.exchange, b.submission_mode, blk.time_block, blk.quantum_mw, blk.price_per_unit,
+           blk.cleared_quantum_mw, blk.cleared_price
+    FROM bids b JOIN bid_blocks blk ON blk.bid_id = b.id
+    WHERE b.product = ? AND b.delivery_date = ? AND b.is_no_bid = 0
+      AND b.status IN (${BID_STATUSES.map(() => '?').join(', ')})${exFilter}${scope.sql}
+  `).all(product, day, ...BID_STATUSES, ...exParams, ...scope.params);
+
+  const acc = Array.from({ length: 96 }, () => ({ bid_mw: 0, bid_value: 0, cleared_mw: 0, cleared_value: 0 }));
+  const unreadable = new Set();
+  for (const r of rows) {
+    const covered = blocksCoveredBy(r.time_block);
+    if (!covered.length) { unreadable.add(r.time_block); continue; }
+    for (const n of covered) {
+      const a = acc[n - 1];
+      a.bid_mw += r.quantum_mw || 0;
+      a.bid_value += (r.quantum_mw || 0) * (r.price_per_unit || 0);
+      a.cleared_mw += r.cleared_quantum_mw || 0;
+      a.cleared_value += (r.cleared_quantum_mw || 0) * (r.cleared_price ?? r.price_per_unit ?? 0);
+    }
+  }
+
+  // The market price is one exchange's: the one asked for, or the one the bids sit on.
+  const bidExchanges = [...new Set(rows.map((r) => r.exchange))];
+  const marketExchange = exchange || (bidExchanges.length === 1 ? bidExchanges[0] : null);
+  const market = new Map(
+    marketExchange && MARKET_PRODUCTS.includes(product)
+      ? (loadBlockDays(marketExchange, product, { from: day, to: day })[0]?.blocks || []).map((b) => [b.block, b.price])
+      : [],
+  );
+
+  const blocks = acc.map((a, i) => ({
+    block: i + 1,
+    time_block: blockLabel(i + 1),
+    bid_mw: round2(a.bid_mw),
+    bid_price: a.bid_mw > 0 ? round4(a.bid_value / a.bid_mw) : null,
+    cleared_mw: round2(a.cleared_mw),
+    cleared_price: a.cleared_mw > 0 ? round4(a.cleared_value / a.cleared_mw) : null,
+    market_mcp: market.has(i + 1) ? round4(market.get(i + 1)) : null,
+  }));
+
+  const bidMwh = acc.reduce((s, a) => s + a.bid_mw * BLOCK_HOURS, 0);
+  const clearedMwh = acc.reduce((s, a) => s + a.cleared_mw * BLOCK_HOURS, 0);
+  return {
+    product,
+    exchange,
+    date: day,
+    available_dates: dates,
+    market_exchange: marketExchange,
+    market_loaded: market.size > 0,
+    blocks,
+    totals: {
+      bids: new Set(rows.map((r) => r.bid_id)).size,
+      stub_bids: new Set(rows.filter((r) => r.submission_mode === 'STUB').map((r) => r.bid_id)).size,
+      bid_mwh: round2(bidMwh),
+      cleared_mwh: round2(clearedMwh),
+      cleared_pct: bidMwh > 0 ? round2((clearedMwh / bidMwh) * 100) : null,
+    },
+    unreadable_time_blocks: [...unreadable],
+  };
+}

@@ -5,8 +5,9 @@ import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { pooledForecastAccuracy } from '../services/marketForecast.js';
 import {
-  observedDays, latestObservedDate, summariseDays, summariseBy, blockCurves, SOURCE_LABELS,
+  observedDays, latestObservedDate, summariseDays, summariseBy, blockCurves, bidVsCleared, SOURCE_LABELS,
 } from '../services/marketPrices.js';
+import { clientScope } from '../services/tradingClientScope.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -187,6 +188,17 @@ router.get('/blocks', (req, res) => {
   if (f.error) return res.status(400).json({ error: f.error });
   if (req.query.date && !isIsoDate(req.query.date)) return res.status(400).json({ error: 'date must be a valid YYYY-MM-DD date' });
   res.json(blockCurves({ date: req.query.date || null, exchange: f.exchange || 'IEX' }));
+});
+
+// SJVN's bids against what cleared and against the market, block by block. A
+// trading client sees its own bids only; the market price is the market's.
+router.get('/bid-vs-cleared', (req, res) => {
+  const product = String(req.query.product || 'DAM').toUpperCase();
+  if (!/^[A-Z-]{2,10}$/.test(product)) return res.status(400).json({ error: 'product is required' });
+  const exchange = req.query.exchange ? String(req.query.exchange).toUpperCase() : null;
+  if (exchange && !EXCHANGES.includes(exchange)) return res.status(400).json({ error: `exchange must be one of ${EXCHANGES.join(', ')}` });
+  if (req.query.date && !isIsoDate(req.query.date)) return res.status(400).json({ error: 'date must be a valid YYYY-MM-DD date' });
+  res.json(bidVsCleared(db, { product, exchange, date: req.query.date || null, scope: clientScope(req.user, 'b.client_id') }));
 });
 
 // ── Chart series ─────────────────────────────────────────────────────────────
