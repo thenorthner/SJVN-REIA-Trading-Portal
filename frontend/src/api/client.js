@@ -976,11 +976,15 @@ export const api = {
   },
   cercMarket: {
     getSummary: (period) => g(period ? `/cerc-market/summary/${period}` : '/cerc-market/summary'),
-    getPrices: (params) => g('/cerc-market/prices', { params }),
-    getVolumes: (params) => g('/cerc-market/volumes', { params }),
-    getDailyTrend: (params) => g('/cerc-market/daily-trend', { params }),
-    getDsm: (params) => g('/cerc-market/dsm', { params }),
-    getRec: (params) => g('/cerc-market/rec', { params }),
+    // `g` already wraps its second argument as axios `params`; these used to wrap
+    // it again, so ?period never reached the server and every month showed the latest.
+    getPrices: (params) => g('/cerc-market/prices', params),
+    getVolumes: (params) => g('/cerc-market/volumes', params),
+    getDailyTrend: (params) => g('/cerc-market/daily-trend', params),
+    getDsm: (params) => g('/cerc-market/dsm', params),
+    getRec: (params) => g('/cerc-market/rec', params),
+    marketMonth: (period) => g('/cerc-market/market-month', period ? { period } : undefined),
+    volumeHistory: () => g('/cerc-market/volume-history'),
     getPeriods: () => g('/cerc-market/periods'),
     getFetchLog: () => g('/cerc-market/fetch-log'),
     triggerFetch: (period) => p('/cerc-market/trigger', { period }),

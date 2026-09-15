@@ -1,248 +1,102 @@
 import React from 'react';
-import { 
-  LineChart, Line, ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
-} from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Card } from '../../components/ui.jsx';
+import SourceNote from '../../components/SourceNote.jsx';
+import { useCercMonth, PeriodSelect, NoReport, periodLabel, mu } from './cercMonth.jsx';
 
-const COLLECTIVE_MARKET_DATA = [
-  { segment: 'IEX-DAM', max: 10.00, min: 1.43, weightedAvg: 3.82 },
-  { segment: 'IEX-GDAM', max: 10.00, min: 1.60, weightedAvg: 4.06 },
-  { segment: 'IEX-HPDAM', max: 0, min: 0, weightedAvg: 0 },
-  { segment: 'IEX-RTM', max: 5.92, min: 10.00, weightedAvg: 11.00 },
-  { segment: 'PXIL-DAM', max: 10.00, min: 10.00, weightedAvg: 10.00 },
-  { segment: 'PXIL-GDAM', max: 0, min: 0, weightedAvg: 0 },
-  { segment: 'PXIL-HPDAM', max: 0, min: 0, weightedAvg: 0 },
-  { segment: 'PXIL-RTM', max: 0, min: 10.00, weightedAvg: 0 },
-  { segment: 'HPX-DAM', max: 10.00, min: 10.00, weightedAvg: 10.00 },
-  { segment: 'HPX-GDAM', max: 0, min: 0, weightedAvg: 0 },
-  { segment: 'HPX-HPDAM', max: 0, min: 0, weightedAvg: 0 },
-  { segment: 'HPX-RTM', max: 0, min: 0, weightedAvg: 0 },
-];
+// Prices and volumes across the collective market, by exchange and product, for
+// a month of the CERC report. This used to be a hardcoded table that contradicted
+// itself — an IEX RTM minimum of ₹10.00 above a maximum of ₹5.92, a weighted
+// average of ₹11.00 over a ₹10 ceiling — and a REC chart of "Volume Type 1/2/3".
 
-const REC_DATA = [
-  { exchange: 'IEX', vol1: 2400000, vol2: 2700000, vol3: 5500000, price: 340 },
-  { exchange: 'PXIL', vol1: 1200000, vol2: 1500000, vol3: 4400000, price: 340 },
-  { exchange: 'HPX', vol1: 400000, vol2: 480000, vol3: 1400000, price: 260 },
-  { exchange: 'Bilateral', vol1: 150000, vol2: 0, vol3: 0, price: 350 },
-];
-
-const CustomCollectiveTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)', borderRadius: 6, padding: 12, fontSize: 13, minWidth: 220, zIndex: 50 }}>
-        <div style={{ color: 'var(--text-muted)', fontWeight: 700, borderBottom: '1px solid var(--border)', paddingBottom: 8, marginBottom: 12 }}>{label}</div>
-        
-        {payload.map((entry, index) => (
-          <div key={`item-${index}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-               <span style={{ width: 10, height: 10, borderRadius: 999, backgroundColor: entry.color}}></span>
-               <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{entry.name}</span>
-            </div>
-            <span style={{ fontWeight: 700, color: 'var(--text)', marginLeft: 24 }}>
-               {entry.value !== null && entry.value !== undefined ? entry.value.toFixed(2) : '0.00'}
-            </span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
+const rs = (v) => (v == null ? '—' : Number(v).toFixed(2));
 
 export default function CollectiveMarketAnalyticsWidget() {
+  const { data, error, setPeriod } = useCercMonth();
+  if (error) return <div className="alert alert-error" role="alert">{error}</div>;
+  if (!data) return <Card><div className="audit-placeholder">Loading…</div></Card>;
+  if (!data.period) return <NoReport />;
+
+  const traded = data.segments.filter((s) => s.weighted_avg != null || (s.volume_mu || 0) > 0);
+  const chart = traded.filter((s) => s.weighted_avg != null).map((s) => ({ segment: `${s.exchange} ${s.product}`, weighted_avg: s.weighted_avg }));
+  const rec = data.rec.filter((r) => r.volume_mwh != null || r.price_rs_mwh != null);
+
   return (
-    <div>
-      
-      {/* Min Max & Avg Line Chart */}
-      <div style={{ background: 'var(--surface)', padding: 24, border: '1px solid var(--border)', borderRadius: 2, boxShadow: 'var(--shadow-sm)' }}>
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-           <h3 style={{ fontWeight: 700, color: 'var(--text)', fontSize: 20 }}>Min Max and Weight Avg Price of Collective Market in PX</h3>
+    <>
+      <Card>
+        <div className="report-criteria"><PeriodSelect data={data} onChange={setPeriod} /></div>
+      </Card>
+
+      <Card title={`Collective market prices — ${periodLabel(data.period)}`}>
+        <div className="report-table-wrap">
+          <table className="report-table">
+            <thead>
+              <tr>
+                <th scope="col">Exchange</th>
+                <th scope="col">Product</th>
+                <th scope="col" className="num">Minimum ₹/kWh</th>
+                <th scope="col" className="num">Maximum ₹/kWh</th>
+                <th scope="col" className="num">Weighted average ₹/kWh</th>
+                <th scope="col" className="num">Volume MU</th>
+              </tr>
+            </thead>
+            <tbody>
+              {traded.length === 0 ? (
+                <tr><td className="empty-cell" colSpan={6}>The report for this month carries no exchange prices.</td></tr>
+              ) : traded.map((s) => (
+                <tr key={`${s.exchange}-${s.product}`}>
+                  <td>{s.exchange}</td>
+                  <td>{s.product}</td>
+                  <td className="num">{rs(s.min)}</td>
+                  <td className="num">{rs(s.max)}</td>
+                  <td className="num">{rs(s.weighted_avg)}</td>
+                  <td className="num">{mu(s.volume_mu)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        
-        <div style={{ height: 320, width: '100%', paddingLeft: 16, paddingRight: 16 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={COLLECTIVE_MARKET_DATA} margin={{ top: 20, right: 30, left: 0, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eee" />
-              <XAxis 
-                dataKey="segment" 
-                tick={{fontSize: 11, fill: '#64748b'}} 
-                angle={-30} 
-                textAnchor="end"
-                interval={0}
-                tickMargin={10}
-              />
-              <YAxis 
-                tick={{fontSize: 12, fill: '#64748b'}} 
-                domain={[0, 12]}
-                tickCount={7}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip content={<CustomCollectiveTooltip />} cursor={{ fill: '#f1f5f9' }} />
-              <Legend 
-                verticalAlign="bottom" 
-                height={36} 
-                wrapperStyle={{fontSize: '13px', paddingTop: '40px', paddingBottom: '10px'}}
-                iconType="circle"
-              />
-              <Line type="monotone" dataKey="weightedAvg" name="Weighted Average" stroke="#22c55e" strokeWidth={2.5} dot={{ r: 4, stroke: '#22c55e', fill: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
-              <Line type="monotone" dataKey="min" name="Minimum" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4, stroke: '#3b82f6', fill: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
-              <Line type="monotone" dataKey="max" name="Maximum" stroke="#ef4444" strokeWidth={2.5} dot={{ r: 4, stroke: '#ef4444', fill: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+        {chart.length > 0 && (
+          <div style={{ width: '100%', height: 260, marginTop: 16 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chart} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="segment" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} interval={0} />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={40} tickFormatter={(v) => `₹${v}`} />
+                <Tooltip formatter={(v) => [`₹${Number(v).toFixed(2)}/kWh`, 'Weighted average']} />
+                <Bar dataKey="weighted_avg" name="Weighted average" fill="var(--primary)" maxBarSize={24} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        <p className="report-count">Segments with no trade in the month are left out. Exchanges with no weighted average reported no clearing that month.</p>
+        <SourceNote source="CERC Market Monitoring Report" period={periodLabel(data.period)} />
+      </Card>
 
-      {/* REC Transacted Volume & Price Chart */}
-      <div style={{ background: '#f8f9fa', padding: 24, border: '1px solid var(--border)', borderRadius: 2, boxShadow: 'var(--shadow-sm)' }}>
-        <h3 style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text)', marginBottom: 8, fontSize: 20 }}>Vol & Price Of RECs Transacted Through PX & Traders (Bilateral)</h3>
-        
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-muted)', marginBottom: 16, paddingLeft: 40, paddingRight: 40 }}>
-          <span>Volume (MWh)</span>
-          <span>Price (₹/MWh)</span>
-        </div>
-
-        <div style={{ height: 320, width: '100%' }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={REC_DATA} margin={{ top: 20, right: 20, bottom: 20, left: 40 }}>
-              <CartesianGrid stroke="#e5e7eb" vertical={false} />
-              
-              <XAxis 
-                dataKey="exchange" 
-                tick={{fontSize: 12, fill: '#4b5563', fontWeight: 500}} 
-                axisLine={{ stroke: '#9ca3af' }}
-                tickLine={false}
-                tickMargin={10}
-              />
-              
-              <YAxis 
-                yAxisId="left" 
-                tick={{fontSize: 12, fill: '#6b7280'}} 
-                axisLine={false} 
-                tickLine={false} 
-                domain={[0, 6000000]} 
-                tickFormatter={(val) => val.toLocaleString()}
-                dx={-10}
-              />
-              
-              <YAxis 
-                yAxisId="right" 
-                orientation="right" 
-                tick={{fontSize: 12, fill: '#6b7280'}} 
-                axisLine={false} 
-                tickLine={false} 
-                domain={[0, 400]}
-                dx={10} 
-              />
-              
-              <Tooltip cursor={{fill: 'rgba(0,0,0,0.05)'}} />
-              
-              <Bar yAxisId="left" dataKey="vol1" name="Volume Type 1" fill="#3b82f6" barSize={30} />
-              <Bar yAxisId="left" dataKey="vol2" name="Volume Type 2" fill="#2dd4bf" barSize={30} />
-              <Bar yAxisId="left" dataKey="vol3" name="Volume Type 3" fill="#eab308" barSize={30} />
-              
-              <Line yAxisId="right" type="monotone" dataKey="price" name="Price (₹/MWh)" stroke="#f97316" strokeWidth={2.5} dot={{r: 4, stroke: '#f97316', fill: '#fff', strokeWidth: 2}} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Collective Market Price Metrics Table */}
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 2, boxShadow: 'var(--shadow-sm)', overflow: 'hidden', marginTop: 32 }}>
-        <table className="report-table">
-          <thead>
-            <tr style={{ background: '#4eb1fc', color: '#fff' }}>
-              <th style={{ padding: 12, borderRight: '1px solid var(--border)', borderColor: 'rgba(255,255,255,0.25)', fontWeight: 600, width: 128 }}>PX</th>
-              <th style={{ padding: 12, borderRight: '1px solid var(--border)', borderColor: 'rgba(255,255,255,0.25)', fontWeight: 600, textAlign: 'left' }}>Product</th>
-              <th>Maximum Price<br/>(₹/kWh)</th>
-              <th>Minimum Price<br/>(₹/kWh)</th>
-              <th style={{ padding: 12, fontWeight: 600 }}>Weighted Average<br/>Price (₹/kWh)</th>
-            </tr>
-          </thead>
-          <tbody style={{ color: 'var(--text)' }}>
-            {/* IEX Section */}
-            <tr>
-              <td rowSpan={4}>IEX</td>
-              <td>DAM</td>
-              <td>10.00</td>
-              <td>1.43</td>
-              <td>3.82</td>
-            </tr>
-            <tr>
-              <td>GDAM</td>
-              <td>10.00</td>
-              <td>1.60</td>
-              <td>4.06</td>
-            </tr>
-            <tr>
-              <td>HPDAM</td>
-              <td>0.00</td>
-              <td>0.00</td>
-              <td>0.00</td>
-            </tr>
-            <tr>
-              <td>RTM</td>
-              <td>5.92</td>
-              <td>10.00</td>
-              <td>11.00</td>
-            </tr>
-
-            {/* PXIL Section */}
-            <tr>
-              <td rowSpan={4}>PXIL</td>
-              <td>DAM</td>
-              <td>10.00</td>
-              <td>10.00</td>
-              <td>10.00</td>
-            </tr>
-            <tr>
-              <td>GDAM</td>
-              <td>0.00</td>
-              <td>0.00</td>
-              <td>0.00</td>
-            </tr>
-            <tr>
-              <td>HPDAM</td>
-              <td>0.00</td>
-              <td>0.00</td>
-              <td>0.00</td>
-            </tr>
-            <tr>
-              <td>RTM</td>
-              <td>0.00</td>
-              <td>10.00</td>
-              <td>0.00</td>
-            </tr>
-
-            {/* HPX Section */}
-            <tr>
-              <td rowSpan={4}>HPX</td>
-              <td>DAM</td>
-              <td>10.00</td>
-              <td>10.00</td>
-              <td>10.00</td>
-            </tr>
-            <tr>
-              <td>GDAM</td>
-              <td>0.00</td>
-              <td>0.00</td>
-              <td>0.00</td>
-            </tr>
-            <tr>
-              <td>HPDAM</td>
-              <td>0.00</td>
-              <td>0.00</td>
-              <td>0.00</td>
-            </tr>
-            <tr>
-              <td>RTM</td>
-              <td>0.00</td>
-              <td>0.00</td>
-              <td>0.00</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-    </div>
+      <Card title={`RECs traded on the exchanges — ${periodLabel(data.period)}`}>
+        {rec.length === 0 ? (
+          <div className="audit-placeholder">The report for this month carries no REC trades.</div>
+        ) : (
+          <div className="report-table-wrap">
+            <table className="report-table">
+              <thead>
+                <tr><th scope="col">Exchange</th><th scope="col" className="num">Traded (MWh)</th><th scope="col" className="num">Weighted price ₹/MWh</th></tr>
+              </thead>
+              <tbody>
+                {rec.map((r) => (
+                  <tr key={r.exchange}>
+                    <td>{r.exchange}</td>
+                    <td className="num">{mu(r.volume_mwh)}</td>
+                    <td className="num">{r.price_rs_mwh == null ? '—' : Number(r.price_rs_mwh).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="report-count">Bilateral REC trades through traders, and bid depth, are not in the parsed report.</p>
+        <SourceNote source="CERC Market Monitoring Report" period={periodLabel(data.period)} />
+      </Card>
+    </>
   );
 }

@@ -177,6 +177,80 @@ router.get('/rec', (req, res) => {
   res.json(result);
 });
 
+// ── One month of the report, as every market widget needs it ────────────────
+//
+// The Collective Market, Macro, MMR and Power Market widgets each carried their
+// own hardcoded copy of this report — some of it impossible (an IEX RTM minimum
+// of ₹10 above a maximum of ₹5.92, a weighted average of ₹11 over a ₹10 ceiling),
+// some of it synthesised (the MMR dashboard divided an annual figure across the
+// months by a "seasonal weight"). This is the month as parsed from the report.
+
+const REPORT_EXCHANGES = ['IEX', 'PXIL', 'HPX'];
+const REPORT_PRODUCTS = ['DAM', 'GDAM', 'HP-DAM', 'RTM'];
+
+function reportPeriods() {
+  return db.prepare('SELECT report_period AS period FROM cerc_monthly_summary ORDER BY report_period DESC').all().map((r) => r.period);
+}
+
+function monthOf(period) {
+  const rows = db.prepare(`
+    SELECT data_category, product, exchange, metric_name, metric_value FROM cerc_market_data
+    WHERE report_period = ? AND day_of_month IS NULL
+  `).all(period);
+  const val = (category, product, exchange, metric) => rows.find((r) => r.data_category === category && r.product === product
+    && r.exchange === exchange && r.metric_name === metric)?.metric_value ?? null;
+  const summary = db.prepare('SELECT * FROM cerc_monthly_summary WHERE report_period = ?').get(period);
+
+  const segments = REPORT_EXCHANGES.flatMap((exchange) => REPORT_PRODUCTS.map((product) => ({
+    exchange,
+    product,
+    min: val('PRICE', product, exchange, 'Minimum'),
+    max: val('PRICE', product, exchange, 'Maximum'),
+    weighted_avg: val('PRICE', product, exchange, 'Weighted Average'),
+    volume_mu: val('VOLUME', product, exchange, 'Volume'),
+  })));
+
+  return {
+    period,
+    segments,
+    exchanges: REPORT_EXCHANGES.map((exchange) => {
+      const volumes = REPORT_PRODUCTS.map((product) => ({ product, volume_mu: val('VOLUME', product, exchange, 'Volume') }));
+      return { exchange, volumes, total_mu: volumes.reduce((a, v) => a + (v.volume_mu || 0), 0) };
+    }),
+    rec: REPORT_EXCHANGES.map((exchange) => ({
+      exchange,
+      volume_mwh: val('REC', 'REC', exchange, 'Traded Volume'),
+      price_rs_mwh: val('REC', 'REC', exchange, 'Weighted Avg Price'),
+    })),
+    short_term: {
+      bilateral_mu: val('VOLUME', 'BILATERAL', 'ALL', 'Volume'),
+      exchanges_mu: val('VOLUME', 'PX_TOTAL', 'ALL', 'Volume'),
+      dsm_mu: val('VOLUME', 'DSM', 'GRID', 'Volume'),
+      total_mu: summary?.total_short_term_volume_mu ?? null,
+    },
+    not_in_report: [
+      'Shares of the trading licensees',
+      'REC buy and sell bid volumes (only what traded)',
+      'GTAM and TAM contract-wise volumes and prices',
+    ],
+  };
+}
+
+router.get('/market-month', (req, res) => {
+  const periods = reportPeriods();
+  const period = req.query.period && periods.includes(req.query.period) ? req.query.period : periods[0];
+  if (!period) return res.json({ period: null, periods: [] });
+  res.json({ ...monthOf(period), periods });
+});
+
+// Month by month: bilateral, collective market and DSM volumes, oldest first.
+router.get('/volume-history', (_req, res) => {
+  res.json(reportPeriods().reverse().map((period) => {
+    const m = monthOf(period);
+    return { period, ...m.short_term };
+  }));
+});
+
 router.get('/periods', (req, res) => {
   const rows = db.prepare(`SELECT report_period as period FROM cerc_monthly_summary ORDER BY report_period DESC`).all();
   if (rows.length === 0) {
