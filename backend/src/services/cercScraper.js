@@ -100,6 +100,80 @@ function findSheetByTitle(workbook, titleRegex) {
   return null;
 }
 
+/**
+ * Table-1, "Volume of short-term transactions of electricity and DSM".
+ *
+ * The rows run: Bilateral, Through Power Exchanges, then per exchange "(a) DAM,
+ * (b) RTM, (c) GDAM, (d) HP-DAM", then Through DSM and the totals, then footnotes.
+ * Two things went wrong before this was pulled out. Products were matched with
+ * label.includes('DAM') first, which "GDAM" and "HP-DAM" both contain — so every
+ * exchange's GDAM and HP-DAM volumes were stored as more DAM rows and the GDAM
+ * and HP-DAM branches never ran. And a footnote reading "* includes bilateral
+ * short-term transactions under GNA" matched "bilateral" too and overwrote the
+ * month's bilateral volume with nothing, which is why half the months showed 0.
+ * Products are matched exactly now, and reading stops at the source line.
+ */
+export function parseVolumeTable(rows) {
+  const out = { marketData: [], bilateral_volume_mu: 0, total_short_term_volume_mu: 0, total_generation_mu: null };
+  let exchange = null;
+  for (const r of rows) {
+    const c0 = String(r?.[0] ?? '').trim();
+    const c1 = String(r?.[1] ?? '').trim();
+    const label = c1 || c0;
+    if (/^source\b/i.test(c0) || /^\*/.test(c0)) break;
+    const val = num(r?.[2]);
+    const push = (product, ex = 'ALL') => out.marketData.push({ category: 'VOLUME', product, exchange: ex, metric: 'Volume', val, unit: 'MU' });
+
+    let m;
+    if (/^total short.?-?\s*term/i.test(label)) {
+      out.total_short_term_volume_mu = val || 0;
+    } else if (/^total generation/i.test(label)) {
+      out.total_generation_mu = val;
+    } else if (/^bilateral/i.test(label)) {
+      out.bilateral_volume_mu = val || 0;
+      push('BILATERAL');
+    } else if (/power exchanges/i.test(label)) {
+      push('PX_TOTAL');
+    } else if (/through dsm|^dsm volume/i.test(label)) {
+      push('DSM', 'GRID');
+    } else if ((m = /^\(i{1,3}\)\s*(IEX|PXIL|HPX)\b/i.exec(label))) {
+      exchange = m[1].toUpperCase();
+    } else if (exchange && (m = /^\([a-d]\)\s*(HP-?DAM|GDAM|DAM|RTM)\b/i.exec(label))) {
+      const product = m[1].toUpperCase().replace('HPDAM', 'HP-DAM');
+      push(product, exchange);
+    }
+  }
+  return out;
+}
+
+/**
+ * Periods seeded before parseVolumeTable carry the mislabelled volume rows. A
+ * period whose local report is on disk and whose volumes have no GDAM row is
+ * parsed again from that file — the same file, so only the volumes change.
+ */
+function repairLocalVolumes() {
+  if (!fs.existsSync(CERC_DOWNLOAD_DIR)) return 0;
+  let repaired = 0;
+  for (const d of fs.readdirSync(CERC_DOWNLOAD_DIR).sort()) {
+    if (!/^\d{4}-\d{2}$/.test(d)) continue;
+    const summaryRow = db.prepare('SELECT fetch_log_id FROM cerc_monthly_summary WHERE report_period = ?').get(d);
+    if (!summaryRow) continue;
+    const excelPath = path.join(CERC_DOWNLOAD_DIR, d, `MMC_Report_${d}.xlsx`);
+    if (!fs.existsSync(excelPath)) continue;
+    const labelled = db.prepare(`
+      SELECT COUNT(*) AS n FROM cerc_market_data WHERE report_period = ? AND data_category = 'VOLUME' AND product IN ('GDAM', 'PX_TOTAL')
+    `).get(d).n;
+    if (labelled) continue;
+    try {
+      parseAndSaveExcel(excelPath, d, summaryRow.fetch_log_id);
+      repaired += 1;
+    } catch (e) {
+      console.warn(`[CERC Scraper] Volume repair failed for ${d}:`, e.message);
+    }
+  }
+  return repaired;
+}
+
 function parseAndSaveExcel(excelPath, period, logId) {
   const workbook = XLSX.readFile(excelPath);
   let records = 0;
@@ -135,37 +209,10 @@ function parseAndSaveExcel(excelPath, period, logId) {
   // 1. Sheet "Table-1": Volumes
   const t1Sheet = findSheet(workbook, ['Table-1', 'Table 1', 'Summary Table-1 (N)', 'Summary Table-1', /^table[- ]*1$/i, /^summary table/i]);
   if (t1Sheet) {
-    const rows = XLSX.utils.sheet_to_json(t1Sheet, { header: 1 });
-    let currentExchange = null;
-    for (const r of rows) {
-      const col0 = String(r[0] || '').trim();
-      const col1 = String(r[1] || '').trim();
-      const label = `${col0} ${col1}`.trim();
-      const val = num(r[2]) !== null ? num(r[2]) : (num(r[1]) !== null ? num(r[1]) : null);
-
-      if (label.toLowerCase().includes('bilateral')) {
-        summary.bilateral_volume_mu = val || 0;
-        marketData.push({ category: 'VOLUME', product: 'BILATERAL', exchange: 'ALL', metric: 'Volume', val, unit: 'MU' });
-      } else if (label.toLowerCase().includes('total short-term') || label.toLowerCase().includes('total short -term')) {
-        summary.total_short_term_volume_mu = val || 0;
-      } else if (label.toLowerCase().includes('(i) iex') || label.toLowerCase().includes('iex')) {
-        currentExchange = 'IEX';
-      } else if (label.toLowerCase().includes('(ii)pxil') || label.toLowerCase().includes('pxil')) {
-        currentExchange = 'PXIL';
-      } else if (label.toLowerCase().includes('(iii)hpx') || label.toLowerCase().includes('hpx')) {
-        currentExchange = 'HPX';
-      } else if (label.includes('DAM') && currentExchange) {
-        marketData.push({ category: 'VOLUME', product: 'DAM', exchange: currentExchange, metric: 'Volume', val, unit: 'MU' });
-      } else if (label.includes('RTM') && currentExchange) {
-        marketData.push({ category: 'VOLUME', product: 'RTM', exchange: currentExchange, metric: 'Volume', val, unit: 'MU' });
-      } else if (label.includes('GDAM') && currentExchange) {
-        marketData.push({ category: 'VOLUME', product: 'GDAM', exchange: currentExchange, metric: 'Volume', val, unit: 'MU' });
-      } else if (label.includes('HP-DAM') && currentExchange) {
-        marketData.push({ category: 'VOLUME', product: 'HP-DAM', exchange: currentExchange, metric: 'Volume', val, unit: 'MU' });
-      } else if (label.toLowerCase().includes('through dsm')) {
-        marketData.push({ category: 'VOLUME', product: 'DSM', exchange: 'GRID', metric: 'Volume', val, unit: 'MU' });
-      }
-    }
+    const volumes = parseVolumeTable(XLSX.utils.sheet_to_json(t1Sheet, { header: 1 }));
+    summary.bilateral_volume_mu = volumes.bilateral_volume_mu;
+    summary.total_short_term_volume_mu = volumes.total_short_term_volume_mu;
+    marketData.push(...volumes.marketData);
   }
 
   // 2. Sheet "Table-3 to 26" or "Table-3 to 17": Exchange Prices
@@ -623,6 +670,8 @@ async function autoSeedLocalReports() {
       }
     }
     if (skipped) console.log(`[CERC Scraper] ${skipped} period(s) in retry cooldown`);
+    const repaired = repairLocalVolumes();
+    if (repaired) console.log(`[CERC Scraper] Re-read Table-1 volumes for ${repaired} period(s) seeded with GDAM/HP-DAM filed as DAM`);
   } catch (err) {
     console.warn(`[CERC Scraper] autoSeedLocalReports error:`, err.message);
   }
@@ -637,4 +686,6 @@ export const cercScraper = {
   getCercFetchLog,
   getCercStatus,
   autoSeedLocalReports,
+  repairLocalVolumes,
+  parseVolumeTable,
 };
