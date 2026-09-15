@@ -31,14 +31,14 @@ import viewBillInvoicesRoutes, { seedViewBillInvoices } from './routes/viewBillI
 import csvUploadsRoutes from './routes/csvUploads.js';
 import exchangeBiddingLatestRoutes from './routes/exchangeBiddingLatest.js';
 import iexBidBookRoutes from './routes/iexBidBook.js';
-import exchangeApplicationsRoutes, { seedExchangeApplications } from './routes/exchangeApplications.js';
+import exchangeApplicationsRoutes from './routes/exchangeApplications.js';
 import exchangeUpdateChargesRoutes from './routes/exchangeUpdateCharges.js';
 import escertOrdersRoutes from './routes/escertOrders.js';
-import pxilOrdersRoutes, { seedPxilOrders } from './routes/pxilOrders.js';
+import pxilOrdersRoutes from './routes/pxilOrders.js';
 import pxilRoutes from './routes/pxil.js';
 import iexRoutes from './routes/iex.js';
 import isetReportsRoutes, { seedIsetReports } from './routes/isetReports.js';
-import recOrdersRoutes, { seedRecOrders } from './routes/recOrders.js';
+import recOrdersRoutes from './routes/recOrders.js';
 import billingSettlementRoutes from './routes/billingSettlement.js';
 import tradingInvoicesRoutes from './routes/tradingInvoices.js';
 import generatorBillingRoutes from './routes/generatorBilling.js';
@@ -379,9 +379,10 @@ const server = app.listen(PORT, HOST, () => {
   console.log(mail.configured
     ? `[MAIL] SMTP ${mail.host}:${mail.port} from ${mail.from}`
     : '[MAIL] SMTP not configured — messages written to backend/outbox/');
-  try { seedExchangeApplications(); } catch (err) { console.warn('[Exchange Applications] seed failed:', err.message); }
-  try { seedRecOrders(); } catch (err) { console.warn('[REC Orders] seed failed:', err.message); }
-  try { seedPxilOrders(); } catch (err) { console.warn('[PXIL Orders] seed failed:', err.message); }
+  // Exchange applications, PXIL orders and REC orders used to be seeded here with
+  // invented rows (a portfolio "1234578901", a trader "sjvn.trader", ten REC sales
+  // to "State DISCOM") whenever the table was empty — which on a fresh production
+  // install is exactly when it would have happened. An empty register is the truth.
   try { seedIsetReports(); } catch (err) { console.warn('[ISET Reports] seed failed:', err.message); }
   try { seedBilateralContractSummary(); } catch (err) { console.warn('[Bilateral Summary] seed failed:', err.message); }
   try { seedBilateralApplications(); } catch (err) { console.warn('[Bilateral Applications] seed failed:', err.message); }

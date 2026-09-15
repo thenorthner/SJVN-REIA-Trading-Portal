@@ -1017,13 +1017,18 @@ export function seedBilateralContractSummary() {
   if (!samples.length) return;
 
   const exists = db.prepare('SELECT 1 FROM bilateral_transactions WHERE loa_no = ?');
+  // The ISET list gives a contract's number and when it was created — not its
+  // quantum, its rates or its term. Those were filled in as 25 MW at ₹4.00/₹4.03
+  // for a year, ACTIVE, on every row; they stay unknown now (quantum and tariff
+  // are NOT NULL, so 0, the same as a report row with no figures) and a contract
+  // whose assumed year has passed is not called live.
   const insert = db.prepare(`
     INSERT INTO bilateral_transactions (
       id, counterparty, quantum_mw, tariff_per_unit, purchase_rate_per_unit, sale_rate_per_unit,
-      trading_margin_per_unit, start_date, end_date, status, contract_type, loa_no, ppa_no,
-      loi_contract_ref, created_at
-    ) VALUES (?, ?, 25, 4.03, 4.00, 4.03, 0.03, ?, ?, 'ACTIVE', 'Bilateral', ?, ?, ?, ?)
+      start_date, end_date, status, contract_type, loa_no, ppa_no, loi_contract_ref, created_at
+    ) VALUES (?, ?, 0, 0, NULL, NULL, ?, ?, ?, 'Bilateral', ?, ?, ?, ?)
   `);
+  const today = new Date().toISOString().slice(0, 10);
 
   const tx = db.transaction(() => {
     for (const s of samples) {
@@ -1036,6 +1041,7 @@ export function seedBilateralContractSummary() {
         s.loa_no.split(/[\s/]/)[0] || 'Counterparty',
         start,
         end,
+        end < today ? 'COMPLETED' : 'ACTIVE',
         s.loa_no,
         ppa,
         s.loa_no,
@@ -1072,8 +1078,9 @@ function seedBilateralContractReportFields() {
       id, counterparty, quantum_mw, tariff_per_unit, purchase_rate_per_unit, sale_rate_per_unit,
       trading_margin_per_unit, start_date, end_date, status, contract_type, loa_no, ppa_no,
       loi_contract_ref, supplier_name, supplier_sldc, procurer_name, procurer_sldc
-    ) VALUES (?, ?, 0, 0, 0, ?, ?, ?, ?, 'ACTIVE', 'Bilateral', ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, 0, 0, NULL, NULL, ?, ?, ?, ?, 'Bilateral', ?, ?, ?, ?, ?, ?, ?)
   `);
+  const today = new Date().toISOString().slice(0, 10);
 
   const run = db.transaction(() => {
     for (const r of reportRows) {
@@ -1088,8 +1095,10 @@ function seedBilateralContractReportFields() {
           start, end, margin, margin, counterparty, existing.id,
         );
       } else {
+        // The report gives the margin, not the rates: the sale rate was being set
+        // to the margin itself (₹0.03/kWh).
         insert.run(
-          newId('BIL'), counterparty, margin, margin, start, end,
+          newId('BIL'), counterparty, margin, start, end, end && end < today ? 'COMPLETED' : 'ACTIVE',
           r.loa_no, r.loa_no, r.loa_no,
           r.seller_name, r.seller_state, r.buyer_name, r.buyer_state,
         );

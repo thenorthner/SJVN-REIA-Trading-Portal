@@ -15,50 +15,6 @@ const ACTION_FIELDS = {
   exchange_approval: 'exchange_approval_status',
 };
 
-/** Seed ISET-style sample applications once. */
-export function seedExchangeApplications() {
-  const n = db.prepare('SELECT COUNT(*) AS n FROM exchange_applications').get().n;
-  if (n > 0) return;
-
-  const samples = [
-    {
-      application_id: 'PX20250527A1018',
-      application_date: '2025-05-27 05:29:00',
-      portfolio_id: 'IEXNDMC123',
-      exchange: 'IEX',
-      product: 'DAM',
-      bid_type: 'Single Bid',
-    },
-    {
-      application_id: 'PX20250527A1017',
-      application_date: '2025-05-27 12:16:00',
-      portfolio_id: 'IEXNDMC123',
-      exchange: 'IEX',
-      product: 'DAM',
-      bid_type: 'Single Bid',
-    },
-    {
-      application_id: 'PX20251126A1022',
-      application_date: '2025-11-26 07:15:00',
-      portfolio_id: '1234578901',
-      exchange: 'IEX',
-      product: 'DAM',
-      bid_type: 'Single Bid',
-    },
-  ];
-
-  const insert = db.prepare(`
-    INSERT INTO exchange_applications (
-      id, application_id, application_date, portfolio_id, exchange, product, bid_type
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-  const tx = db.transaction((rows) => {
-    for (const r of rows) {
-      insert.run(newId('PXA'), r.application_id, r.application_date, r.portfolio_id, r.exchange, r.product, r.bid_type);
-    }
-  });
-  tx(samples);
-}
 
 router.get('/', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
   const { q } = req.query;

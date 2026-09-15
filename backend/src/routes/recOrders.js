@@ -51,68 +51,6 @@ function deriveSettlement(b) {
   };
 }
 
-/** Sample trade dates + volumes matching the ISET REC Order Report screenshot KPIs. */
-export function seedRecOrders() {
-  const count = db.prepare('SELECT COUNT(*) AS c FROM rec_orders').get().c;
-  if (count > 0) return;
-
-  const samples = [
-    { trade_date: '2026-04-08', total_recs_sold: 18500, discovered_rate: 2400, bid_rate: 2200, buyer_name: 'State DISCOM', invoice_no: 'REC/INV/2604/01' },
-    { trade_date: '2026-02-25', total_recs_sold: 9200, discovered_rate: 1850, bid_rate: 1700, buyer_name: 'Green Buyer Co', invoice_no: 'REC/INV/2602/08' },
-    { trade_date: '2025-12-31', total_recs_sold: 11200, discovered_rate: 980, bid_rate: 900, buyer_name: 'Northern Utility', invoice_no: 'REC/INV/2512/22' },
-    { trade_date: '2025-11-12', total_recs_sold: 6400, discovered_rate: 115, bid_rate: 100, buyer_name: 'RPO Obligated Entity', invoice_no: 'REC/INV/2511/05' },
-    { trade_date: '2025-08-28', total_recs_sold: 5100, discovered_rate: 450, bid_rate: 420, buyer_name: 'Industrial Captive', invoice_no: 'REC/INV/2508/14' },
-    { trade_date: '2025-07-09', total_recs_sold: 4800, discovered_rate: 620, bid_rate: 580, buyer_name: 'Open Access Consumer', invoice_no: 'REC/INV/2507/03' },
-    { trade_date: '2025-05-28', total_recs_sold: 3900, discovered_rate: 710, bid_rate: 650, buyer_name: 'State DISCOM', invoice_no: 'REC/INV/2505/19' },
-    { trade_date: '2025-03-12', total_recs_sold: 2800, discovered_rate: 890, bid_rate: 850, buyer_name: 'Trading Client A', invoice_no: 'REC/INV/2503/11' },
-    { trade_date: '2025-02-12', total_recs_sold: 2267, discovered_rate: 1050, bid_rate: 1000, buyer_name: 'Trading Client B', invoice_no: 'REC/INV/2502/07' },
-    { trade_date: '2025-01-08', total_recs_sold: 2000, discovered_rate: 1200, bid_rate: 1100, buyer_name: 'State DISCOM', invoice_no: 'REC/INV/2501/02' },
-  ];
-
-  const insert = db.prepare(`
-    INSERT INTO rec_orders (
-      id, trade_date, rec_placed_for_sale, bid_rate, total_recs_sold, discovered_rate,
-      trade_obligation, gst_on_trade_obligation, exchange_fees, gst_on_exchange_fees, net_revenue,
-      buyer_name, invoice_no, recs_bought, base_amount, tax_amount, total_amount, status, created_by
-    ) VALUES (
-      @id, @trade_date, @rec_placed_for_sale, @bid_rate, @total_recs_sold, @discovered_rate,
-      @trade_obligation, @gst_on_trade_obligation, @exchange_fees, @gst_on_exchange_fees, @net_revenue,
-      @buyer_name, @invoice_no, @recs_bought, @base_amount, @tax_amount, @total_amount, 'SUBMITTED', NULL
-    )
-  `);
-
-  const tx = db.transaction(() => {
-    for (const s of samples) {
-      const tradeObligation = Number((s.total_recs_sold * s.discovered_rate).toFixed(2));
-      const exchangeFees = Number((tradeObligation * 0.002).toFixed(2));
-      const gstFees = Number((exchangeFees * 0.18).toFixed(2));
-      const gstTrade = 0;
-      const netRevenue = Number((tradeObligation - gstTrade - exchangeFees - gstFees).toFixed(2));
-      const base = tradeObligation;
-      const tax = Number((base * 0.18).toFixed(2));
-      insert.run({
-        id: newId('RCO'),
-        trade_date: s.trade_date,
-        rec_placed_for_sale: s.total_recs_sold,
-        bid_rate: s.bid_rate,
-        total_recs_sold: s.total_recs_sold,
-        discovered_rate: s.discovered_rate,
-        trade_obligation: tradeObligation,
-        gst_on_trade_obligation: gstTrade,
-        exchange_fees: exchangeFees,
-        gst_on_exchange_fees: gstFees,
-        net_revenue: netRevenue,
-        buyer_name: s.buyer_name,
-        invoice_no: s.invoice_no,
-        recs_bought: s.total_recs_sold,
-        base_amount: base,
-        tax_amount: tax,
-        total_amount: Number((base + tax).toFixed(2)),
-      });
-    }
-  });
-  tx();
-}
 
 // ─── REC Order (settlement) ─────────────────────────────────────────────────
 
