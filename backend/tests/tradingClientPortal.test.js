@@ -179,7 +179,7 @@ describe('trading client — the screens its menu opens', () => {
   it("cannot read another client's ledger or post netting", async () => {
     expect((await get(`/api/billing-settlement/ledger/${clientB}`, t.byClientId)).status).toBe(403);
     const netting = await post('/api/billing-settlement/netting', t.byClientId, {
-      client_id: clientB, receivables_amount: 10, payables_amount: 5, period: '2026-09',
+      client_id: clientB, period: '2026-09',
     });
     expect(netting.status).toBe(403);
     expect(db.prepare("SELECT COUNT(*) AS n FROM client_ledgers WHERE transaction_type = 'SET_OFF'").get().n).toBe(0);

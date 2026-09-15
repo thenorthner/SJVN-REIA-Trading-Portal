@@ -3,6 +3,7 @@ import { PortfolioSelect, usePortfolios } from '../../context/PortfolioContext.j
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
+import NettingModal from './NettingModal.jsx';
 
 const iso = (d) => d.toISOString().slice(0, 10);
 
@@ -66,7 +67,6 @@ export default function BillingSettlement() {
     transmission_charges: '', dsm_charges: '', gst_applicable: true
   });
   
-  const [netForm, setNetForm] = useState({ client_id: '', receivables_amount: '', payables_amount: '', period: '' });
 
   useEffect(() => {
     api.tradingClients.list({ status: 'ACTIVE' }).then(setClients).catch(() => {});
@@ -179,16 +179,11 @@ export default function BillingSettlement() {
     }
   }
 
-  async function handleNetting(e) {
-    e.preventDefault();
-    try {
-      await api.billingSettlement.applyNetting(netForm);
-      setShowNetting(false);
-      setTab('LEDGER');
-      setSelectedClient(netForm.client_id);
-    } catch (err) {
-      alert("Failed to apply netting");
-    }
+  function handleNettingApplied(result) {
+    setShowNetting(false);
+    setTab('LEDGER');
+    setSelectedClient(result.client_id);
+    loadInvoices();
   }
 
   // trading_invoices has no trade_date column; created_at is the invoice date.
@@ -614,34 +609,12 @@ export default function BillingSettlement() {
         </Modal>
       )}
 
-      {showNetting && (
-        <Modal open={true} onClose={() => setShowNetting(false)} title="Apply Set-Off / Netting" width={500}>
-          <form onSubmit={handleNetting}>
-            <p style={{ marginBottom: 15, fontSize: 13, color: '#555' }}>Offset payables against receivables for a client to calculate net settlement.</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 15, marginBottom: 20 }}>
-              <Field label="Client" required>
-                <select className="input" value={netForm.client_id} onChange={e => setNetForm({...netForm, client_id: e.target.value})} required>
-                  <option value="">Select Client</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </Field>
-              <Field label="Period (e.g. 2025-06)" required>
-                <input type="month" className="input" value={netForm.period} onChange={e => setNetForm({...netForm, period: e.target.value})} required />
-              </Field>
-              <Field label="Total Receivables (₹)" required>
-                <input type="number" className="input" value={netForm.receivables_amount} onChange={e => setNetForm({...netForm, receivables_amount: e.target.value})} required />
-              </Field>
-              <Field label="Total Payables (₹)" required>
-                <input type="number" className="input" value={netForm.payables_amount} onChange={e => setNetForm({...netForm, payables_amount: e.target.value})} required />
-              </Field>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button type="button" className="btn btn-outline" onClick={() => setShowNetting(false)}>Cancel</button>
-              <button type="submit" className="btn btn-primary">Execute Netting</button>
-            </div>
-          </form>
-        </Modal>
-      )}
+      <NettingModal
+        open={showNetting}
+        clients={clients}
+        onClose={() => setShowNetting(false)}
+        onApplied={handleNettingApplied}
+      />
 
       {/* Raise Trading Debit / Credit Note Modal */}
       {showCreateNote && (

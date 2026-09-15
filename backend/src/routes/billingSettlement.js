@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { secureLogAudit } from '../auditEngine.js';
 import { seedInvoiceCounters } from '../util.js';
 import { createTradingInvoice } from '../services/tradingInvoice.js';
+import { nettingPosition, applyNetting, NettingError } from '../services/tradingNetting.js';
 import { clientScope, isTradingClient, mayUseClient, tradingClientIdFor } from '../services/tradingClientScope.js';
 
 seedInvoiceCounters();
@@ -103,34 +104,40 @@ router.get('/soa', (req, res) => {
   res.json(rows);
 });
 
+// What a set-off would do for a client and month, read from its bills and its
+// Seller exchange contracts — before anything is written.
+router.get('/netting/preview', (req, res) => {
+  if (isTradingClient(req.user)) return res.status(403).json({ error: 'Clients cannot net their own account' });
+  try {
+    res.json(nettingPosition({ client_id: req.query.client_id, period: req.query.period }));
+  } catch (err) {
+    if (err instanceof NettingError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+// Netting writes a set-off against a client's bills, so it belongs to the desk.
+// A client could post entries against its own account — or, since client_id came
+// from the body, against another's. The amounts are no longer taken from the
+// request at all: see services/tradingNetting.js.
 router.post('/netting', (req, res) => {
-  // Netting writes a set-off straight into a client's ledger, so it belongs to
-  // the desk. A client could post entries against its own account — or, since
-  // client_id came from the body, against another's.
   if (isTradingClient(req.user)) return res.status(403).json({ error: 'Clients cannot post netting entries' });
-  const { client_id, receivables_amount, payables_amount, period } = req.body;
+  const { client_id, period } = req.body || {};
   if (!client_id) return res.status(400).json({ error: 'client_id is required' });
-  // This is a simplified netting for demo purposes. In real-life it would tie specific invoices.
-  
-  const netAmount = Math.abs(receivables_amount - payables_amount);
-  const type = receivables_amount > payables_amount ? 'NET_RECEIVABLE' : 'NET_PAYABLE';
-
-  db.prepare(`
-    INSERT INTO client_ledgers (id, client_id, transaction_type, reference_id, credit, debit, running_balance, description, timestamp)
-    VALUES (?, ?, 'SET_OFF', ?, ?, ?,
-      COALESCE((SELECT running_balance FROM client_ledgers WHERE client_id = ? ORDER BY timestamp DESC LIMIT 1), 0) + ?,
-      ?, datetime('now'))
-  `).run(
-    newId('CLG'), client_id, `NET-${period}`, 
-    type === 'NET_PAYABLE' ? netAmount : 0, 
-    type === 'NET_RECEIVABLE' ? netAmount : 0, 
-    client_id, 
-    type === 'NET_RECEIVABLE' ? netAmount : -netAmount, 
-    `Netting for ${period}`
-  );
-
-  secureLogAudit(req, { action: 'NETTING_APPLIED', module: 'TRADING', entityType: 'client_ledgers', entityId: client_id, details: { netAmount, type } });
-  res.json({ success: true, netAmount, type });
+  try {
+    const result = applyNetting({ client_id, period });
+    secureLogAudit(req, {
+      action: 'NETTING_APPLIED', module: 'TRADING', entityType: 'client_ledgers', entityId: client_id,
+      details: {
+        period, reference: result.reference, receivable: result.receivable.total, payable: result.payable.total,
+        set_off: result.set_off, allocations: result.allocations.map((a) => ({ invoice_no: a.invoice_no, amount: a.amount })),
+      },
+    });
+    res.json(result);
+  } catch (err) {
+    if (err instanceof NettingError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
 export default router;

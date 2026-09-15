@@ -754,6 +754,7 @@ export const api = {
     generateInvoice: (body) => p('/billing-settlement/invoices/generate', body),
     getLedger: (clientId) => g(`/billing-settlement/ledger/${clientId}`),
     getSoa: () => g('/billing-settlement/soa'),
+    nettingPreview: (params) => g('/billing-settlement/netting/preview', params),
     applyNetting: (body) => p('/billing-settlement/netting', body),
   },
   generatorBilling: {
