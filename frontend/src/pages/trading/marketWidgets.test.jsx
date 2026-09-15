@@ -135,3 +135,14 @@ describe('GTAM and TAM', () => {
     expect(host.textContent).toMatch(/TAM volume and price by contract type/);
   });
 });
+
+describe('CEA reports dashboard', () => {
+  it('says the platform holds no CEA data instead of drawing typed-in figures as CEA\'s', async () => {
+    const { MemoryRouter } = await import('react-router-dom');
+    const CEA = (await import('./CEAReportsDashboard.jsx')).default;
+    await render(<MemoryRouter><CEA /></MemoryRouter>);
+    expect(host.textContent).toMatch(/holds no CEA data/);
+    expect(host.textContent).toMatch(/Installed capacity by category/);
+    expect(host.textContent).not.toMatch(/243,?000|THERMAL|Jan-2024/);
+  });
+});
