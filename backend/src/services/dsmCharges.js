@@ -1,5 +1,6 @@
 import db from '../db/index.js';
 import { newId } from '../util.js';
+import { loadBlockDays, loadDailyActuals, parseBlockCell } from './marketForecast.js';
 
 // Frequency-linked deviation (DSM) charges.
 //
@@ -98,23 +99,58 @@ export function getEffectiveSlab({ side, frequencyHz, onDate } = {}) {
   return rows.find((r) => r.deviation_side === side) || rows[0];
 }
 
+const ACP_EXCHANGES = ['IEX', 'PXIL', 'HPX'];
+
+/** Weighted by cleared volume when every price carries one, a plain mean otherwise. */
+function weightedPrice(hits) {
+  if (!hits.length) return null;
+  const weighted = hits.every((h) => h.volume > 0);
+  return weighted
+    ? hits.reduce((a, h) => a + h.price * h.volume, 0) / hits.reduce((a, h) => a + h.volume, 0)
+    : hits.reduce((a, h) => a + h.price, 0) / hits.length;
+}
+
 /**
  * The reference price a PCT_OF_REFERENCE slab is priced off, in paise/kWh.
  *
- * DAM_ACP reads the day's day-ahead clearing price out of market_rates, which
- * holds it in Rs/kWh. An unknown key, or a date the exchange price has not been
- * loaded for, returns null — the block then goes unpriced rather than being
- * charged off a stale or guessed price.
+ * DAM_ACP is the day-ahead clearing price, read only from prices the platform
+ * actually observed: an exchange price file, the IEX API, or the CERC monthly
+ * report. It used to average every DAM row market_rates held for the date —
+ * which includes the demo seed's invented rows, and a day holding one daily row
+ * beside 96 block rows averaged 97 numbers of two kinds — so a deviation could
+ * be billed off a price nobody cleared.
+ *
+ * With a time block, it is that block's price across every exchange holding the
+ * block, weighted by cleared volume; otherwise, or when no exchange has the
+ * block, the day's price the same way. Check the basis against the DSM
+ * notification when its rates are entered (the slabs are unverified until
+ * then). No observed price for the date returns null, and the block goes
+ * unpriced rather than being charged off a stale or guessed figure.
  */
-export function getReferencePrice(key, onDate) {
-  if (!key) return null;
-  if (key !== 'DAM_ACP') return null;
-  const row = db.prepare(`
-    SELECT AVG(mcp_rate) AS rate FROM market_rates
-    WHERE product = 'DAM' AND rate_date = ?
-  `).get(onDate);
-  const rate = row?.rate;
-  return Number.isFinite(rate) && rate > 0 ? rate * PAISE_PER_RUPEE : null;
+export function getReferencePrice(key, onDate, { timeBlock = null } = {}) {
+  if (key !== 'DAM_ACP' || !onDate) return null;
+  const range = { from: onDate, to: onDate };
+
+  let rupees = null;
+  const block = timeBlock == null ? null : parseBlockCell(String(timeBlock));
+  if (block) {
+    const hits = ACP_EXCHANGES
+      .map((ex) => loadBlockDays(ex, 'DAM', range)[0]?.blocks.find((b) => b.block === block))
+      .filter((b) => b && Number.isFinite(b.price));
+    rupees = weightedPrice(hits);
+  }
+  if (rupees == null) {
+    const hits = [];
+    for (const ex of ACP_EXCHANGES) {
+      const day = loadDailyActuals(ex, 'DAM', range)[0];
+      if (!day) continue;
+      const blocks = loadBlockDays(ex, 'DAM', range)[0]?.blocks || [];
+      const mw = blocks.reduce((a, b) => a + (b.volume > 0 ? b.volume : 0), 0) / (blocks.length || 1);
+      hits.push({ price: day.price, volume: mw });
+    }
+    rupees = weightedPrice(hits);
+  }
+  return Number.isFinite(rupees) && rupees > 0 ? Number((rupees * PAISE_PER_RUPEE).toFixed(4)) : null;
 }
 
 /**
@@ -132,7 +168,7 @@ export function getReferencePrice(key, onDate) {
  *
  * Everything but CERC_SLAB and NO_DEVIATION carries a warning and a zero amount.
  */
-export function computeDsmCharge({ deviationMwh, frequencyHz = null, onDate = null, referencePricePaisePerKwh = null } = {}) {
+export function computeDsmCharge({ deviationMwh, frequencyHz = null, onDate = null, timeBlock = null, referencePricePaisePerKwh = null } = {}) {
   const deviation = num(deviationMwh);
   const unpriced = (basis, warning) => ({
     amount: 0,
@@ -164,7 +200,7 @@ export function computeDsmCharge({ deviationMwh, frequencyHz = null, onDate = nu
   } else {
     const reference = referencePricePaisePerKwh != null
       ? num(referencePricePaisePerKwh)
-      : getReferencePrice(slab.reference_price_key, onDate);
+      : getReferencePrice(slab.reference_price_key, onDate, { timeBlock });
     if (!reference) {
       return unpriced('NO_REFERENCE_PRICE', `Slab '${slab.slab_name}' prices off ${slab.reference_price_key || 'a reference price'}, which is unavailable for ${onDate || 'today'}`);
     }

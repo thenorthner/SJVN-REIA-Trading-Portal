@@ -641,6 +641,7 @@ router.post('/schedules/:id/actuals', requireRole(...ROLE_GROUPS.TRADING_WRITE),
     deviationMw: deviation,
     frequencyHz: frequency ?? null,
     onDate: sched.schedule_date,
+    timeBlock: sched.time_block,
   });
   const dsm_penalty = dsmCalc.amount;
 

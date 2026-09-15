@@ -92,14 +92,15 @@ function requireSeries(exchange, product) {
  * the source that wrote it. Loading a date replaces everything held for it, so
  * a date has one source.
  */
-export function loadBlockDays(exchange, product) {
+export function loadBlockDays(exchange, product, { from = null, to = null } = {}) {
   const rows = db.prepare(`
     SELECT rate_date, time_block, mcp_rate, volume_mw, data_source FROM market_rates
     WHERE exchange = ? AND product = ?
       AND data_source IN (${OBSERVED_MARKET_SOURCES.map(() => '?').join(', ')})
       AND time_block IS NOT NULL AND time_block != 'DAILY'
+      AND (? IS NULL OR rate_date >= ?) AND (? IS NULL OR rate_date <= ?)
     ORDER BY rate_date, time_block
-  `).all(exchange, product, ...OBSERVED_MARKET_SOURCES);
+  `).all(exchange, product, ...OBSERVED_MARKET_SOURCES, from, from, to, to);
   const byDate = new Map();
   for (const r of rows) {
     const block = blockFromLabel(r.time_block);
@@ -121,20 +122,22 @@ export function loadBlockDays(exchange, product) {
  *   CERC report          the exchange's own daily weighted price, as filed with
  *                        the Commission — the figure nobody gets to revise
  */
-export function loadDailyActuals(exchange, product) {
+export function loadDailyActuals(exchange, product, { from = null, to = null } = {}) {
   const byDate = new Map();
   const put = (date, price, source) => {
-    if (isIsoDate(date) && Number.isFinite(price) && price >= 0) byDate.set(date, { date, price: round4(price), source });
+    if (!isIsoDate(date) || (from && date < from) || (to && date > to)) return;
+    if (Number.isFinite(price) && price >= 0) byDate.set(date, { date, price: round4(price), source });
   };
 
   for (const r of db.prepare(`
     SELECT rate_date, AVG(mcp_rate) price FROM market_rates
     WHERE exchange = ? AND product = ? AND data_source = 'IEX_API'
       AND (time_block IS NULL OR time_block = 'DAILY')
+      AND (? IS NULL OR rate_date >= ?) AND (? IS NULL OR rate_date <= ?)
     GROUP BY rate_date
-  `).all(exchange, product)) put(r.rate_date, r.price, 'IEX_API');
+  `).all(exchange, product, from, from, to, to)) put(r.rate_date, r.price, 'IEX_API');
 
-  for (const d of loadBlockDays(exchange, product)) {
+  for (const d of loadBlockDays(exchange, product, { from, to })) {
     if (d.blocks.length >= MIN_BLOCKS_FOR_DAILY_PRICE) put(d.date, dailyPrice(d.blocks), d.source);
   }
 
@@ -142,7 +145,8 @@ export function loadDailyActuals(exchange, product) {
     SELECT report_period, day_of_month, metric_value FROM cerc_market_data
     WHERE data_category = 'PRICE' AND metric_name = 'Daily Price'
       AND product = ? AND exchange = ? AND day_of_month IS NOT NULL
-  `).all(product, exchange)) {
+      AND (? IS NULL OR report_period >= ?) AND (? IS NULL OR report_period <= ?)
+  `).all(product, exchange, from && from.slice(0, 7), from && from.slice(0, 7), to && to.slice(0, 7), to && to.slice(0, 7))) {
     put(`${r.report_period}-${String(r.day_of_month).padStart(2, '0')}`, r.metric_value, 'CERC_MMR');
   }
 
@@ -531,7 +535,7 @@ export async function pullIexPrices({ now = new Date() } = {}) {
   const today = istToday(now);
   const shift = (n) => fromDay(toDay(today) + n);
   const wanted = [['DAM', shift(1)], ['GDAM', shift(1)], ['DAM', today], ['GDAM', today], ['RTM', shift(-1)], ['RTM', today]];
-  const held = (product, date) => (loadBlockDays('IEX', product).find((d) => d.date === date)?.blocks.length || 0) >= MIN_BLOCKS_FOR_DAILY_PRICE;
+  const held = (product, date) => (loadBlockDays('IEX', product, { from: date, to: date })[0]?.blocks.length || 0) >= MIN_BLOCKS_FOR_DAILY_PRICE;
 
   const pulled = [];
   for (const [product, date] of wanted) {

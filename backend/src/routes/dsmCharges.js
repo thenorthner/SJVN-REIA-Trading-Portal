@@ -130,7 +130,7 @@ router.patch('/slabs/:id', requireRole(...DSM_WRITE), (req, res) => {
 // Price a deviation without recording anything — what the desk sees before it
 // accepts a block's actuals, and how an unpriced block explains itself.
 router.post('/preview', requireRole(...DSM_READ), (req, res) => {
-  const { deviation_mwh, deviation_mw, frequency_hz, date, reference_price_paise_per_kwh } = req.body || {};
+  const { deviation_mwh, deviation_mw, frequency_hz, date, time_block, reference_price_paise_per_kwh } = req.body || {};
   if (deviation_mwh == null && deviation_mw == null) {
     return res.status(400).json({ error: 'deviation_mwh or deviation_mw is required' });
   }
@@ -139,6 +139,7 @@ router.post('/preview', requireRole(...DSM_READ), (req, res) => {
     deviationMwh: mwh,
     frequencyHz: frequency_hz == null ? null : Number(frequency_hz),
     onDate: date || null,
+    timeBlock: time_block || null,
     referencePricePaisePerKwh: reference_price_paise_per_kwh == null ? null : Number(reference_price_paise_per_kwh),
   });
   res.json({ ...result, deviation_side: deviationSide(mwh) });

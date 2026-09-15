@@ -125,12 +125,56 @@ describe('pricing a block', () => {
     expect(r.basis).toBe('NO_REFERENCE_PRICE');
   });
 
-  it('reads DAM_ACP out of market_rates in paise', () => {
-    db.prepare(`INSERT INTO market_rates (id, product, rate_date, mcp_rate, time_block, data_source)
-      VALUES (?, 'DAM', ?, 4.25, 'DAILY', 'MANUAL')`).run(newId('MRT'), '2026-09-02');
-    expect(getReferencePrice('DAM_ACP', '2026-09-02')).toBe(425);
-    expect(getReferencePrice('DAM_ACP', '2026-09-03')).toBeNull();
-    expect(getReferencePrice('UNKNOWN_KEY', '2026-09-02')).toBeNull();
+  describe('DAM_ACP reference price', () => {
+    const putBlocks = (exchange, date, price, volume = 1000, source = 'EXCHANGE_FILE') => {
+      const insert = db.prepare(`INSERT INTO market_rates (id, exchange, product, rate_date, time_block, mcp_rate, volume_mw, data_source)
+        VALUES (?, ?, 'DAM', ?, ?, ?, ?, ?)`);
+      for (let b = 1; b <= 96; b += 1) {
+        const m = (b - 1) * 15;
+        const label = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+        insert.run(newId('MKT'), exchange, date, label, typeof price === 'function' ? price(b) : price, volume, source);
+      }
+    };
+    beforeEach(() => {
+      db.prepare('DELETE FROM market_rates').run();
+      db.prepare('DELETE FROM cerc_market_data').run();
+    });
+
+    it('ignores rows nothing real wrote — the demo seed and hand-typed daily rows', () => {
+      db.prepare(`INSERT INTO market_rates (id, exchange, product, rate_date, mcp_rate, time_block, data_source)
+        VALUES (?, 'IEX', 'DAM', '2026-09-02', 9.5, 'DAILY', 'IEX_PORTAL'), (?, NULL, 'DAM', '2026-09-02', 4.25, 'DAILY', 'MANUAL')`)
+        .run(newId('MRT'), newId('MRT'));
+      expect(getReferencePrice('DAM_ACP', '2026-09-02')).toBeNull();
+      expect(getReferencePrice('UNKNOWN_KEY', '2026-09-02')).toBeNull();
+    });
+
+    it('prices a block off that block, across exchanges by cleared volume', () => {
+      // IEX clears 3,000 MW at ₹8 in the evening block, PXIL 1,000 MW at ₹6; ₹3 the rest of the day.
+      putBlocks('IEX', '2026-09-02', (b) => (b === 73 ? 8 : 3), 3000);
+      putBlocks('PXIL', '2026-09-02', (b) => (b === 73 ? 6 : 3), 1000);
+      expect(getReferencePrice('DAM_ACP', '2026-09-02', { timeBlock: '18:00-18:15' })).toBe(750);
+      expect(getReferencePrice('DAM_ACP', '2026-09-02', { timeBlock: '02:00-02:15' })).toBe(300);
+    });
+
+    it('takes the day when no block is given, and the CERC figure where that is all there is', () => {
+      putBlocks('IEX', '2026-09-02', (b) => (b <= 48 ? 2 : 6));
+      expect(getReferencePrice('DAM_ACP', '2026-09-02')).toBe(400);
+      db.prepare(`INSERT INTO cerc_market_data (id, report_period, data_category, product, exchange, metric_name, metric_value, metric_unit, day_of_month, source_table)
+        VALUES (?, '2026-02', 'PRICE', 'DAM', 'IEX', 'Daily Price', 3.559, 'Rs/kWh', 14, 'EXCEL')`).run(newId('CMD'));
+      expect(getReferencePrice('DAM_ACP', '2026-02-14', { timeBlock: '18:00-18:15' })).toBe(355.9);
+      expect(getReferencePrice('DAM_ACP', '2026-02-15')).toBeNull();
+    });
+
+    it('bills a percentage slab off the block the deviation happened in', () => {
+      verifySlab('Under-injection, frequency below normal band', {
+        charge_value: 100, charge_basis: 'PCT_OF_REFERENCE', reference_price_key: 'DAM_ACP',
+      });
+      putBlocks('IEX', DATE, (b) => (b === 73 ? 8 : 3));
+      const peak = computeDsmCharge({ deviationMwh: -1, frequencyHz: 49.9, onDate: DATE, timeBlock: '18:00-18:15' });
+      const night = computeDsmCharge({ deviationMwh: -1, frequencyHz: 49.9, onDate: DATE, timeBlock: '02:00-02:15' });
+      expect(peak.amount).toBe(8000);
+      expect(night.amount).toBe(3000);
+    });
   });
 
   it('says why it could not price, instead of returning a plausible zero', () => {
