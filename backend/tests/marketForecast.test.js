@@ -515,6 +515,7 @@ describe('Forecasts for the bidding desk', () => {
     blockRows('2026-09-14', { price: (b) => (b <= 48 ? 2 : 6) });
     const r = await request(app).get('/api/market-analytics/latest-prices').set(auth(trader));
     const dam = r.body.products.find((p) => p.product === 'DAM');
-    expect(dam).toMatchObject({ date: '2026-09-14', exchange: 'IEX', mcp_rate: 4, volume_mw: 1000 });
+    // 96 blocks at 1,000 MW for a quarter-hour each: 24,000 MWh.
+    expect(dam).toMatchObject({ date: '2026-09-14', exchange: 'IEX', mcp_rate: 4, energy_mwh: 24000, source: 'EXCHANGE_FILE' });
   });
 });

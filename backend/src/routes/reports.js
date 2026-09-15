@@ -5,6 +5,7 @@ import { contractCompliance } from '../services/contractCompliance.js';
 import { verificationQueue } from '../services/verificationQueue.js';
 import { cercCompliance } from '../services/cercCompliance.js';
 import { pooledForecastAccuracy } from '../services/marketForecast.js';
+import { observedDays, latestObservedDate, summariseDays, summariseBy, MARKET_EXCHANGES, MARKET_PRODUCTS } from '../services/marketPrices.js';
 import { receivablesOutstanding, payablesOutstanding, overdueCount } from '../services/outstanding.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
@@ -808,70 +809,64 @@ export default router;
  * compared with the market clearing price on the same day.
  */
 export function buildMarketAnalyticsSummary({ from, to, exchange, product } = {}) {
-  const latest = db.prepare('SELECT MAX(rate_date) d FROM market_rates').get()?.d;
+  // Observed prices only (CERC report, exchange price files, IEX API) — the same
+  // figures the forecasting and DSM code read. This used to aggregate market_rates
+  // directly, which is mostly the demo seed's invented prices, and the MIS pack
+  // printed them.
+  const scope = { exchange: exchange || null, product: product || null };
+  const latest = latestObservedDate(scope);
   const end = to || latest;
   const start = from || (end ? new Date(new Date(end) - 29 * 864e5).toISOString().slice(0, 10) : null);
+  const days = start && end ? Math.max(1, Math.round((new Date(end) - new Date(start)) / 864e5) + 1) : 0;
+  const prevEnd = start ? new Date(new Date(start) - 864e5).toISOString().slice(0, 10) : null;
+  const prevStart = prevEnd ? new Date(new Date(prevEnd) - (days - 1) * 864e5).toISOString().slice(0, 10) : null;
 
-  const where = ['rate_date BETWEEN ? AND ?'];
-  const params = [start, end];
-  if (exchange) { where.push('exchange = ?'); params.push(exchange); }
-  if (product) { where.push('product = ?'); params.push(product); }
-  const w = `WHERE ${where.join(' AND ')}`;
-
-  const stats = (extraCols = '') => `
-    SELECT COUNT(*) observations, ROUND(AVG(mcp_rate),2) avg_rate,
-           ROUND(MIN(mcp_rate),2) min_rate, ROUND(MAX(mcp_rate),2) max_rate,
-           ROUND(COALESCE(SUM(volume_mw),0),0) total_volume_mw ${extraCols}
-    FROM market_rates ${w}`;
-
-  const overall = db.prepare(stats()).get(...params);
-
-  // Same-length window immediately before, for a like-for-like comparison.
-  const days = Math.max(1, Math.round((new Date(end) - new Date(start)) / 864e5) + 1);
-  const prevEnd = new Date(new Date(start) - 864e5).toISOString().slice(0, 10);
-  const prevStart = new Date(new Date(prevEnd) - (days - 1) * 864e5).toISOString().slice(0, 10);
-  const prevParams = [prevStart, prevEnd, ...params.slice(2)];
-  const previous = db.prepare(stats()).get(...prevParams);
-
-  const byExchange = db.prepare(`
-    SELECT exchange, COUNT(*) observations, ROUND(AVG(mcp_rate),2) avg_rate,
-           ROUND(MIN(mcp_rate),2) min_rate, ROUND(MAX(mcp_rate),2) max_rate,
-           ROUND(COALESCE(SUM(volume_mw),0),0) total_volume_mw
-    FROM market_rates ${w} GROUP BY exchange ORDER BY avg_rate ASC`).all(...params);
-
-  const byProduct = db.prepare(`
-    SELECT product, COUNT(*) observations, ROUND(AVG(mcp_rate),2) avg_rate,
-           ROUND(MIN(mcp_rate),2) min_rate, ROUND(MAX(mcp_rate),2) max_rate,
-           ROUND(COALESCE(SUM(volume_mw),0),0) total_volume_mw
-    FROM market_rates ${w} GROUP BY product ORDER BY avg_rate ASC`).all(...params);
+  const rows = end ? observedDays({ from: start, to: end, ...scope }) : [];
+  const overall = summariseDays(rows);
+  const previous = prevEnd ? summariseDays(observedDays({ from: prevStart, to: prevEnd, ...scope })) : summariseDays([]);
+  const byExchange = summariseBy(rows, 'exchange', MARKET_EXCHANGES).sort((a, b) => a.avg_rate - b.avg_rate);
+  const byProduct = summariseBy(rows, 'product', MARKET_PRODUCTS).sort((a, b) => a.avg_rate - b.avg_rate);
 
   // Forecast accuracy: the forecasting module's runs, scored against what cleared.
   const fc = pooledForecastAccuracy({ from: start, to: end, exchange, product });
 
-  const daily = db.prepare(`
-    SELECT rate_date, ROUND(AVG(mcp_rate),2) avg_rate,
-           ROUND(MIN(mcp_rate),2) min_rate, ROUND(MAX(mcp_rate),2) max_rate,
-           ROUND(COALESCE(SUM(volume_mw),0),0) volume_mw
-    FROM market_rates ${w} GROUP BY rate_date ORDER BY rate_date DESC LIMIT 40`).all(...params);
+  // Across exchanges and products in scope, newest first.
+  const dailyMap = new Map();
+  for (const r of rows) {
+    if (!dailyMap.has(r.date)) dailyMap.set(r.date, []);
+    dailyMap.get(r.date).push(r);
+  }
+  const daily = [...dailyMap.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 40)
+    .map(([date, ds]) => ({ rate_date: date, ...summariseDays(ds) }));
 
   // SJVN's own execution against the market on the same delivery date.
+  const marketFor = new Map();
   const execution = db.prepare(`
     SELECT b.exchange, b.product, b.delivery_date,
            ROUND(SUM(blk.cleared_quantum_mw),2) cleared_mw,
-           ROUND(SUM(blk.cleared_quantum_mw * blk.cleared_price) / NULLIF(SUM(blk.cleared_quantum_mw),0), 2) avg_cleared_price,
-           (SELECT ROUND(AVG(mr.mcp_rate),2) FROM market_rates mr
-             WHERE mr.exchange = b.exchange AND mr.product = b.product AND mr.rate_date = b.delivery_date) market_mcp
+           ROUND(SUM(blk.cleared_quantum_mw * blk.cleared_price) / NULLIF(SUM(blk.cleared_quantum_mw),0), 2) avg_cleared_price
     FROM bids b JOIN bid_blocks blk ON b.id = blk.bid_id
     WHERE blk.cleared_quantum_mw > 0
     GROUP BY b.exchange, b.product, b.delivery_date
     ORDER BY b.delivery_date DESC LIMIT 25`).all()
-    .map((r) => ({ ...r, vs_market: r.market_mcp ? Math.round((r.avg_cleared_price - r.market_mcp) * 100) / 100 : null }));
+    .map((r) => {
+      const key = `${r.exchange}|${r.product}|${r.delivery_date}`;
+      if (!marketFor.has(key)) {
+        const known = MARKET_EXCHANGES.includes(r.exchange) && MARKET_PRODUCTS.includes(r.product);
+        const hit = known ? observedDays({ exchange: r.exchange, product: r.product, from: r.delivery_date, to: r.delivery_date })[0] : null;
+        marketFor.set(key, hit ? Math.round(hit.price * 100) / 100 : null);
+      }
+      const marketMcp = marketFor.get(key);
+      return { ...r, market_mcp: marketMcp, vs_market: marketMcp ? Math.round((r.avg_cleared_price - marketMcp) * 100) / 100 : null };
+    });
 
-  const changePct = previous.avg_rate ? Math.round(((overall.avg_rate - previous.avg_rate) / previous.avg_rate) * 10000) / 100 : null;
+  const changePct = previous.avg_rate && overall.avg_rate != null
+    ? Math.round(((overall.avg_rate - previous.avg_rate) / previous.avg_rate) * 10000) / 100
+    : null;
 
   return {
     window: { start_date: start, end_date: end, days },
-    filters: { exchange: exchange || null, product: product || null },
+    filters: scope,
     overall,
     previous: { window: { start_date: prevStart, end_date: prevEnd }, ...previous, change_percent: changePct },
     by_exchange: byExchange,

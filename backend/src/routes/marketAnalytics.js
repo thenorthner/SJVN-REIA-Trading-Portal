@@ -4,7 +4,9 @@ import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { pooledForecastAccuracy } from '../services/marketForecast.js';
-import { dailyPrice } from '../services/priceForecastModels.js';
+import {
+  observedDays, latestObservedDate, summariseDays, summariseBy, blockCurves, SOURCE_LABELS,
+} from '../services/marketPrices.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -51,23 +53,17 @@ function parseFilters(query) {
   return { start_date: start_date || null, end_date: end_date || null, exchange: exchange || null, product: product || null };
 }
 
-function whereClause(f) {
-  const sql = [];
-  const params = [];
-  if (f.start_date) { sql.push('rate_date >= ?'); params.push(f.start_date); }
-  if (f.end_date) { sql.push('rate_date <= ?'); params.push(f.end_date); }
-  if (f.exchange) { sql.push('exchange = ?'); params.push(f.exchange); }
-  if (f.product) { sql.push('product = ?'); params.push(f.product); }
-  return { sql: sql.length ? ` AND ${sql.join(' AND ')}` : '', params };
-}
-
 /**
  * Resolves the effective analysis window. When the caller gives no dates we
- * anchor on the newest rate we actually hold (demo data is historical, so
- * anchoring on "today" would return an empty window).
+ * anchor on the newest price the platform observed — the CERC report runs a
+ * month or two behind, so anchoring on "today" would often return nothing.
+ *
+ * Every figure below comes from services/marketPrices.js, not from market_rates
+ * directly: that table is mostly the demo seed's sine-wave prices, and every
+ * number these endpoints returned used to be those.
  */
 function resolveWindow(f) {
-  const latest = db.prepare('SELECT MAX(rate_date) d FROM market_rates').get()?.d;
+  const latest = latestObservedDate({ exchange: f.exchange, product: f.product });
   if (!latest) return null;
   const end = f.end_date || latest;
   const start = f.start_date || shiftDate(end, -(DEFAULT_WINDOW_DAYS - 1));
@@ -87,12 +83,15 @@ router.get('/rates', (req, res) => {
   // With no explicit dates, fall back to the same default window /summary and
   // /trend use, so the rates table always matches the charts above it.
   const win = resolveWindow(f);
-  const w = whereClause(win ? { ...f, start_date: win.start_date, end_date: win.end_date } : f);
-  const rows = db.prepare(`
-    SELECT * FROM market_rates WHERE 1=1${w.sql}
-    ORDER BY rate_date DESC, exchange ASC, product ASC
-    LIMIT ?
-  `).all(...w.params, limit);
+  if (!win) return res.json([]);
+  const rows = observedDays({ from: win.start_date, to: win.end_date, exchange: f.exchange, product: f.product })
+    .reverse()
+    .slice(0, limit)
+    .map((r) => ({
+      rate_date: r.date, exchange: r.exchange, product: r.product,
+      mcp_rate: round2(r.price), min_rate: round2(r.min), max_rate: round2(r.max),
+      energy_mwh: r.energy_mwh, blocks: r.blocks, data_source: r.source, source_label: SOURCE_LABELS[r.source] || r.source,
+    }));
   res.json(rows);
 });
 
@@ -111,52 +110,21 @@ router.get('/summary', (req, res) => {
   }
 
   const scope = { ...f, start_date: win.start_date, end_date: win.end_date };
-  const w = whereClause(scope);
-
-  const overall = db.prepare(`
-    SELECT COUNT(*) observations, AVG(mcp_rate) avg_rate, MIN(mcp_rate) min_rate, MAX(mcp_rate) max_rate,
-           SUM(COALESCE(volume_mw, 0)) total_volume_mw, MAX(rate_date) latest_date
-    FROM market_rates WHERE 1=1${w.sql}
-  `).get(...w.params);
+  const rows = observedDays({ from: scope.start_date, to: scope.end_date, exchange: scope.exchange, product: scope.product });
+  const overall = summariseDays(rows);
 
   // Previous window of identical length, immediately before the current one.
   const prevEnd = shiftDate(win.start_date, -1);
   const prevStart = shiftDate(prevEnd, -(win.days - 1));
-  const pw = whereClause({ ...scope, start_date: prevStart, end_date: prevEnd });
-  const previous = db.prepare(`
-    SELECT COUNT(*) observations, AVG(mcp_rate) avg_rate
-    FROM market_rates WHERE 1=1${pw.sql}
-  `).get(...pw.params);
-
-  const changePercent = previous?.avg_rate
+  const previous = summariseDays(observedDays({ from: prevStart, to: prevEnd, exchange: scope.exchange, product: scope.product }));
+  const changePercent = previous.avg_rate && overall.avg_rate != null
     ? ((overall.avg_rate - previous.avg_rate) / previous.avg_rate) * 100
     : null;
 
-  const perExchange = db.prepare(`
-    SELECT exchange, COUNT(*) observations, AVG(mcp_rate) avg_rate, MIN(mcp_rate) min_rate,
-           MAX(mcp_rate) max_rate, SUM(COALESCE(volume_mw, 0)) total_volume_mw, MAX(rate_date) latest_date
-    FROM market_rates WHERE exchange IS NOT NULL${w.sql}
-    GROUP BY exchange ORDER BY exchange ASC
-  `).all(...w.params);
-
-  const latestStmt = db.prepare(`
-    SELECT AVG(mcp_rate) mcp_rate FROM market_rates
-    WHERE exchange = ? AND rate_date = ?${scope.product ? ' AND product = ?' : ''}
-  `);
-
-  const exchanges = perExchange.map((r) => ({
-    exchange: r.exchange,
-    observations: r.observations,
-    avg_rate: round2(r.avg_rate),
-    min_rate: round2(r.min_rate),
-    max_rate: round2(r.max_rate),
-    total_volume_mw: Math.round(r.total_volume_mw || 0),
-    latest_date: r.latest_date,
-    latest_mcp: round2(
-      latestStmt.get(...[r.exchange, r.latest_date, ...(scope.product ? [scope.product] : [])])?.mcp_rate
-    ),
-  }));
-
+  const exchanges = summariseBy(rows, 'exchange', EXCHANGES).map((e) => {
+    const latest = rows.filter((r) => r.exchange === e.exchange && r.date === e.latest_date);
+    return { ...e, latest_mcp: round2(latest.reduce((a, r) => a + r.price, 0) / (latest.length || 1)) };
+  });
   const ranked = exchanges.filter((e) => e.avg_rate != null).sort((a, b) => b.avg_rate - a.avg_rate);
 
   // Forecast quality: the forecasting module's runs against the cleared price.
@@ -167,18 +135,12 @@ router.get('/summary', (req, res) => {
   res.json({
     window: win,
     filters: { exchange: scope.exchange, product: scope.product },
-    overall: {
-      observations: overall.observations,
-      avg_rate: round2(overall.avg_rate),
-      min_rate: round2(overall.min_rate),
-      max_rate: round2(overall.max_rate),
-      total_volume_mw: Math.round(overall.total_volume_mw || 0),
-      latest_date: overall.latest_date,
-    },
+    overall,
+    sources: rows.reduce((acc2, r) => ({ ...acc2, [r.source]: (acc2[r.source] || 0) + 1 }), {}),
     previous: {
       window: { start_date: prevStart, end_date: prevEnd },
-      observations: previous?.observations || 0,
-      avg_rate: round2(previous?.avg_rate),
+      observations: previous.observations,
+      avg_rate: previous.avg_rate,
       change_percent: round2(changePercent),
     },
     exchanges,
@@ -198,27 +160,16 @@ router.get('/summary', (req, res) => {
 // the "Exchange Price Dashboard" header per the Power Trading Dashboard doc.
 router.get('/latest-prices', (req, res) => {
   const products = PRODUCTS.map((p) => {
-    const row = db.prepare(`
-      SELECT rate_date, exchange FROM market_rates
-      WHERE product = ? ORDER BY rate_date DESC, created_at DESC LIMIT 1
-    `).get(p);
-    if (!row) return { product: p, mcp_rate: null, volume_mw: 0, date: null, exchange: null };
-    // A day is one DAILY row, or 96 block rows now that the IEX sync and the
-    // price files keep blocks. "The newest row" of a block day is one block's
-    // price, so the day is read as a day: its daily row, or its volume-weighted
-    // blocks with their average cleared MW.
-    const day = db.prepare(`
-      SELECT time_block, mcp_rate, volume_mw FROM market_rates WHERE product = ? AND exchange = ? AND rate_date = ?
-    `).all(p, row.exchange, row.rate_date);
-    const daily = day.filter((r) => r.time_block == null || r.time_block === 'DAILY');
-    const blocks = day.filter((r) => r.time_block != null && r.time_block !== 'DAILY');
-    const price = daily.length
-      ? daily.reduce((a, r) => a + r.mcp_rate, 0) / daily.length
-      : dailyPrice(blocks.map((b) => ({ price: b.mcp_rate, volume: b.volume_mw })));
-    const volume = daily.length
-      ? daily.reduce((a, r) => a + (r.volume_mw || 0), 0)
-      : blocks.reduce((a, b) => a + (b.volume_mw || 0), 0) / (blocks.length || 1);
-    return { product: p, mcp_rate: round2(price), volume_mw: Math.round(volume), date: row.rate_date, exchange: row.exchange };
+    // The newest observed day for the product; IEX first when exchanges tie,
+    // being where most of the volume clears.
+    const days = EXCHANGES
+      .map((ex) => observedDays({ exchange: ex, product: p, from: latestObservedDate({ exchange: ex, product: p }) }).pop())
+      .filter(Boolean)
+      .sort((a, b) => (a.date === b.date ? EXCHANGES.indexOf(a.exchange) - EXCHANGES.indexOf(b.exchange) : (a.date < b.date ? 1 : -1)));
+    const d = days[0];
+    return d
+      ? { product: p, mcp_rate: round2(d.price), energy_mwh: d.energy_mwh, date: d.date, exchange: d.exchange, source: d.source }
+      : { product: p, mcp_rate: null, energy_mwh: null, date: null, exchange: null, source: null };
   });
   const rec = db.prepare(`
     SELECT sale_rate_per_rec, trade_date FROM rec_ledger
@@ -228,22 +179,14 @@ router.get('/latest-prices', (req, res) => {
   res.json({ products, rec: { price: round2(rec?.sale_rate_per_rec), date: rec?.trade_date || null } });
 });
 
-// Time-block-wise MCP vs MCV (cleared volume) for a day — intraday comparison.
+// Time-block-wise MCP and MCV for a delivery date, per product, for one exchange —
+// from block-wise prices only (exchange price files, the IEX API). Lists the
+// dates that have any, so the screen offers days that exist.
 router.get('/blocks', (req, res) => {
   const f = parseFilters(req.query);
   if (f.error) return res.status(400).json({ error: f.error });
-  const date = (req.query.date && isIsoDate(req.query.date))
-    ? req.query.date
-    : db.prepare("SELECT MAX(rate_date) d FROM market_rates WHERE time_block IS NOT NULL AND time_block != 'DAILY'").get()?.d;
-  if (!date) return res.json({ date: null, blocks: [] });
-  let sql = `SELECT time_block, AVG(mcp_rate) mcp, SUM(COALESCE(volume_mw,0)) mcv
-    FROM market_rates WHERE rate_date = ? AND time_block IS NOT NULL AND time_block != 'DAILY'`;
-  const params = [date];
-  if (f.exchange) { sql += ' AND exchange = ?'; params.push(f.exchange); }
-  if (f.product) { sql += ' AND product = ?'; params.push(f.product); }
-  sql += ' GROUP BY time_block ORDER BY time_block ASC';
-  const blocks = db.prepare(sql).all(...params).map((b) => ({ time_block: b.time_block, mcp: round2(b.mcp), mcv: Math.round(b.mcv || 0) }));
-  res.json({ date, blocks });
+  if (req.query.date && !isIsoDate(req.query.date)) return res.status(400).json({ error: 'date must be a valid YYYY-MM-DD date' });
+  res.json(blockCurves({ date: req.query.date || null, exchange: f.exchange || 'IEX' }));
 });
 
 // ── Chart series ─────────────────────────────────────────────────────────────
@@ -256,21 +199,20 @@ router.get('/trend', (req, res) => {
   if (!win) return res.json({ window: null, exchanges: [], points: [], forecast: [] });
 
   const scope = { ...f, start_date: win.start_date, end_date: win.end_date };
-  const w = whereClause(scope);
-  const rows = db.prepare(`
-    SELECT rate_date, exchange, AVG(mcp_rate) mcp_rate, SUM(COALESCE(volume_mw, 0)) volume_mw
-    FROM market_rates WHERE 1=1${w.sql}
-    GROUP BY rate_date, exchange
-    ORDER BY rate_date ASC
-  `).all(...w.params);
+  const rows = observedDays({ from: scope.start_date, to: scope.end_date, exchange: scope.exchange, product: scope.product });
 
+  // One point per date: each exchange's price (the mean of its products when no
+  // product is chosen) and the energy that cleared where blocks say.
   const byDate = new Map();
   for (const r of rows) {
-    if (!byDate.has(r.rate_date)) byDate.set(r.rate_date, { date: r.rate_date, volume_mw: 0 });
-    const point = byDate.get(r.rate_date);
-    if (r.exchange) point[r.exchange] = round2(r.mcp_rate);
-    point.volume_mw = Math.round(point.volume_mw + (r.volume_mw || 0));
+    if (!byDate.has(r.date)) byDate.set(r.date, { date: r.date, energy_mwh: null, _n: {} });
+    const point = byDate.get(r.date);
+    const n = point._n[r.exchange] || 0;
+    point[r.exchange] = round2(((point[r.exchange] || 0) * n + r.price) / (n + 1));
+    point._n[r.exchange] = n + 1;
+    if (r.energy_mwh != null) point.energy_mwh = Math.round((point.energy_mwh || 0) + r.energy_mwh);
   }
+  for (const point of byDate.values()) delete point._n;
 
   const forecastByDate = new Map();
   for (const d of pooledForecastAccuracy({
@@ -281,7 +223,7 @@ router.get('/trend', (req, res) => {
   }
   const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-  const present = new Set(rows.map((r) => r.exchange).filter(Boolean));
+  const present = new Set(rows.map((r) => r.exchange));
   res.json({
     window: win,
     filters: { exchange: scope.exchange, product: scope.product },
@@ -297,6 +239,9 @@ router.get('/trend', (req, res) => {
 
 // ── Events & external factors ────────────────────────────────────────────────
 
+// Events and external factors have no ingestion path — only the demo seed ever
+// wrote them, and it no longer does. Until one exists this answers with whatever
+// the desk's database holds, which on a fresh install is nothing.
 router.get('/context', (req, res) => {
   const f = parseFilters(req.query);
   if (f.error) return res.status(400).json({ error: f.error });
@@ -336,15 +281,12 @@ router.get('/context', (req, res) => {
  * against this snapshot — no background scheduler is involved.
  */
 function latestRatesByProduct() {
-  const rows = db.prepare(`
-    SELECT r.product, r.exchange, r.rate_date, r.mcp_rate
-    FROM market_rates r
-    WHERE r.rate_date = (SELECT MAX(m.rate_date) FROM market_rates m WHERE m.product = r.product)
-  `).all();
   const map = new Map();
-  for (const r of rows) {
-    if (!map.has(r.product)) map.set(r.product, []);
-    map.get(r.product).push(r);
+  for (const product of PRODUCTS) {
+    const latest = latestObservedDate({ product });
+    if (!latest) continue;
+    map.set(product, observedDays({ product, from: latest, to: latest })
+      .map((r) => ({ product, exchange: r.exchange, rate_date: r.date, mcp_rate: r.price })));
   }
   return map;
 }

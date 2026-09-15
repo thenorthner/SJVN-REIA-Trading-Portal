@@ -161,7 +161,7 @@ export function generateMarketAnalyticsPdf(r, meta, res) {
     { label: 'Avg Rs/kWh', w: 80, align: 'right', value: (x) => x.avg_rate },
     { label: 'Min', w: 60, align: 'right', value: (x) => x.min_rate },
     { label: 'Max', w: 60, align: 'right', value: (x) => x.max_rate },
-    { label: 'Volume MW', w: 84, align: 'right', value: (x) => Number(x.total_volume_mw).toLocaleString('en-IN') },
+    { label: 'Cleared MWh', w: 84, align: 'right', value: (x) => (x.total_energy_mwh == null ? '—' : Number(x.total_energy_mwh).toLocaleString('en-IN')) },
   ], r.by_exchange, ctx);
   y += 18;
 
@@ -172,7 +172,7 @@ export function generateMarketAnalyticsPdf(r, meta, res) {
     { label: 'Avg Rs/kWh', w: 80, align: 'right', value: (x) => x.avg_rate },
     { label: 'Min', w: 60, align: 'right', value: (x) => x.min_rate },
     { label: 'Max', w: 60, align: 'right', value: (x) => x.max_rate },
-    { label: 'Volume MW', w: 84, align: 'right', value: (x) => Number(x.total_volume_mw).toLocaleString('en-IN') },
+    { label: 'Cleared MWh', w: 84, align: 'right', value: (x) => (x.total_energy_mwh == null ? '—' : Number(x.total_energy_mwh).toLocaleString('en-IN')) },
   ], r.by_product, ctx);
   y += 18;
 
@@ -198,7 +198,7 @@ export function generateMarketAnalyticsPdf(r, meta, res) {
     { label: 'Avg Rs/kWh', w: 92, align: 'right', value: (x) => x.avg_rate },
     { label: 'Min', w: 78, align: 'right', value: (x) => x.min_rate },
     { label: 'Max', w: 78, align: 'right', value: (x) => x.max_rate },
-    { label: 'Volume MW', w: 80, align: 'right', value: (x) => Number(x.volume_mw).toLocaleString('en-IN') },
+    { label: 'Cleared MWh', w: 80, align: 'right', value: (x) => (x.total_energy_mwh == null ? '—' : Number(x.total_energy_mwh).toLocaleString('en-IN')) },
   ], r.daily, ctx);
 
   pageNumbers(doc);

@@ -1,127 +1,59 @@
-import React, { useState } from 'react';
-import { 
-  ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceArea 
+import React, { useEffect, useState } from 'react';
+import {
+  ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
+import api from '../../api/client.js';
 import { Card } from '../ui.jsx';
 
-const mockAcpData = [
-  { day: '30', min: 0.1, avg: 6.2, max: 10.0 },
-  { day: '1', min: 0.2, avg: 5.8, max: 10.0 },
-  { day: '2', min: 0.1, avg: 5.5, max: 10.0 },
-  { day: '3', min: 0.0, avg: 4.8, max: 10.0 },
-  { day: '4', min: 0.3, avg: 4.2, max: 10.0 },
-  { day: '5', min: 0.5, avg: 3.5, max: 10.0 },
-  { day: '6', min: 0.2, avg: 3.8, max: 10.0 },
-  { day: '7', min: 0.4, avg: 4.1, max: 10.0 },
-  { day: '8', min: 0.6, avg: 4.5, max: 10.0 },
-  { day: '9', min: 0.5, avg: 4.9, max: 10.0 },
-];
+// The day-ahead clearing price, day by day, with the day's lowest and highest
+// block where the day was loaded block by block. This used to be ten hardcoded
+// days labelled "N1 Region Trend", with an export menu that apologised for itself.
+// A CERC day has a price and no range; the chart shows it without inventing one.
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div style={{ background: '#fff', border: '1px solid var(--slate-200)', borderRadius: 6, padding: '10px 14px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-        <div style={{ fontWeight: 600, color: 'var(--slate-800)', marginBottom: 4 }}>Delivery Day: {label}</div>
-        {payload.map(p => {
-          let name = 'Avg';
-          if (p.dataKey === 'max') name = 'Max';
-          if (p.dataKey === 'min') name = 'Min';
-          return (
-            <div key={p.dataKey} style={{ fontSize: 14, color: p.color, fontWeight: 500, margin: '2px 0' }}>
-              {name} {label}: {p.value.toFixed(2)} Rs
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-  return null;
-};
+const shortDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const rs = (v) => `₹${Number(v).toFixed(2)}`;
 
-export default function ACPTrendWidget() {
-  const [showExportMenu, setShowExportMenu] = useState(false);
+export default function ACPTrendWidget({ exchange = 'IEX', product = 'DAM' }) {
+  const [rows, setRows] = useState(null);
 
-  const handleExport = (format) => {
-    setShowExportMenu(false);
-    // In a real implementation, we would use html2canvas or native recharts SVG export
-    window.alert(`Not available yet — chart export as ${format} is not built, and this widget is drawing placeholder prices.`);
-  };
+  useEffect(() => {
+    let live = true;
+    api.marketAnalytics.getRates({ exchange, product })
+      .then((r) => { if (live) setRows([...r].reverse()); })
+      .catch(() => { if (live) setRows([]); });
+    return () => { live = false; };
+  }, [exchange, product]);
+
+  const hasRange = rows?.some((r) => r.min_rate != null);
 
   return (
-    <Card style={{ padding: 0, overflow: 'hidden', marginBottom: 20 }}>
-      {/* ── Widget Header & Export Menu ── */}
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--slate-200)', background: 'var(--slate-50)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ margin: 0, fontSize: 16, color: 'var(--slate-800)' }}>Area Clearing Price (N1 Region Trend)</h3>
-        
-        <div style={{ position: 'relative' }}>
-          <button 
-            className="btn btn-sm btn-ghost" 
-            title="Export Chart" 
-            style={{ fontSize: 16, padding: '4px 8px' }}
-            onClick={() => setShowExportMenu(!showExportMenu)}
-          >
-            
-          </button>
-          
-          {showExportMenu && (
-            <div style={{ 
-              position: 'absolute', right: 0, top: '100%', marginTop: 4, width: 160, 
-              background: '#fff', border: '1px solid var(--slate-200)', borderRadius: 6, 
-              boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', zIndex: 10 
-            }}>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => handleExport('Print')}>Print chart</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => handleExport('PNG')}>Download PNG image</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => handleExport('JPEG')}>Download JPEG image</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer', borderBottom: '1px solid var(--slate-100)' }} onClick={() => handleExport('PDF')}>Download PDF document</div>
-              <div style={{ padding: '6px 12px', fontSize: 13, cursor: 'pointer' }} onClick={() => handleExport('SVG')}>Download SVG vector image</div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Chart Rendering ── */}
-      <div style={{ padding: '20px', height: 350 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={mockAcpData} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--slate-200)" />
-            
-            <XAxis 
-              dataKey="day" 
-              tick={{ fontSize: 12, fill: 'var(--slate-500)' }} 
-              axisLine={{ stroke: 'var(--slate-300)' }}
-              label={{ value: 'Delivery days', position: 'insideBottom', offset: -15, fill: 'var(--slate-500)', fontSize: 13 }}
-            />
-            
-            <YAxis 
-              domain={[ -5, 15 ]}
-              ticks={[-5, 0, 5, 10, 15]}
-              tick={{ fontSize: 12, fill: 'var(--slate-500)' }}
-              axisLine={{ stroke: 'var(--slate-300)' }}
-              label={{ value: 'Price (Rs / KWH)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: 'var(--slate-600)', fontSize: 13, fontWeight: 500 } }} 
-            />
-
-            <Tooltip content={<CustomTooltip />} />
-            
-            <Legend 
-              verticalAlign="bottom" 
-              wrapperStyle={{ paddingTop: 20 }}
-              iconType="circle"
-            />
-
-            {/* Regulatory Cap Highlight Band */}
-            <ReferenceArea y1={10} y2={15} fill="#fef08a" fillOpacity={0.3} />
-            
-            {/* Base line at 0 */}
-            <ReferenceArea y1={-5} y2={0} fill="var(--slate-100)" fillOpacity={0.5} />
-
-            {/* Traces mapped precisely to legacy visual scheme */}
-            <Line type="monotone" dataKey="max" name="Max" stroke="var(--green-strong)" strokeWidth={3} dot={{ r: 5, fill: 'var(--green-strong)', shape: 'square' }} activeDot={{ r: 7 }} />
-            <Line type="monotone" dataKey="avg" name="Avg" stroke="var(--slate-800)" strokeWidth={3} dot={{ r: 5, fill: 'var(--slate-800)', shape: 'diamond' }} activeDot={{ r: 7 }} />
-            <Line type="monotone" dataKey="min" name="Min" stroke="#3b82f6" strokeWidth={3} dot={{ r: 5, fill: '#3b82f6' }} activeDot={{ r: 7 }} />
-            
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
+    <Card title={`${exchange} ${product} clearing price — last 30 days held (₹/kWh)`} style={{ marginBottom: 20 }}>
+      {!rows ? (
+        <div className="audit-placeholder">Loading…</div>
+      ) : !rows.length ? (
+        <div className="audit-placeholder">The platform holds no {exchange} {product} prices.</div>
+      ) : (
+        <>
+          <div style={{ width: '100%', height: 280 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="rate_date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} />
+                <Tooltip labelFormatter={shortDate} formatter={(v, name) => [v == null ? '—' : `${rs(v)}/kWh`, name]} />
+                <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
+                <Line dataKey="mcp_rate" name="Day price" stroke="var(--primary)" strokeWidth={2} dot={false} isAnimationActive={false} />
+                {hasRange && <Line dataKey="max_rate" name="Highest block" stroke="var(--text-muted)" strokeWidth={1} strokeDasharray="4 3" dot={false} connectNulls={false} isAnimationActive={false} />}
+                {hasRange && <Line dataKey="min_rate" name="Lowest block" stroke="var(--text-muted)" strokeWidth={1} strokeDasharray="1 3" dot={false} connectNulls={false} isAnimationActive={false} />}
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="report-count">
+            {rows.length} day(s), {rows[0].rate_date} to {rows[rows.length - 1].rate_date}.
+            {hasRange ? ' The block range shows only on days loaded block by block.' : ' No day in this window was loaded block by block, so there is no range to show.'}
+          </p>
+        </>
+      )}
     </Card>
   );
 }

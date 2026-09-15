@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import db from '../db/index.js';
+import { observedDays, latestObservedDate } from '../services/marketPrices.js';
 import {
   receivablesOutstanding, payablesOutstanding, overdueReceivable, overdueCount,
   ageingBuckets, openPosition,
@@ -209,12 +210,16 @@ export function buildTradingRealtime() {
   // Latest recorded market clearing price per exchange. This used to be three
   // hardcoded numbers, which is fine on a demo screen but cannot go into a
   // report — a stated rate has to be traceable to a record.
-  const latestRates = db.prepare(`
-    SELECT exchange, ROUND(AVG(mcp_rate), 2) rate, MAX(rate_date) as_of
-    FROM market_rates
-    WHERE rate_date = (SELECT MAX(rate_date) FROM market_rates)
-    GROUP BY exchange
-  `).all();
+  // Observed prices only; market_rates on its own is mostly the demo seed.
+  const asOf = latestObservedDate();
+  const latestByExchange = new Map();
+  for (const r of asOf ? observedDays({ from: asOf, to: asOf }) : []) {
+    if (!latestByExchange.has(r.exchange)) latestByExchange.set(r.exchange, []);
+    latestByExchange.get(r.exchange).push(r.price);
+  }
+  const latestRates = [...latestByExchange.entries()].map(([exchange, prices]) => ({
+    exchange, rate: Math.round((prices.reduce((a, v) => a + v, 0) / prices.length) * 100) / 100, as_of: asOf,
+  }));
 
   return {
     open_positions: { count: openBids.c, quantum_mw: openBids.q },
