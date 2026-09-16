@@ -133,6 +133,13 @@ try {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+// Under test only: every response names the process that served it. The suite's
+// intermittent failure (a response that does not belong to its request) is
+// suspected to be a response from another test process; this lets the test
+// setup prove or rule that out when it next happens.
+if (process.env.VITEST) {
+  app.use((_req, res, next) => { res.setHeader('X-Served-By-Pid', String(process.pid)); next(); });
+}
 // Same-origin in production (the API and the UI are served by this process),
 // so no cross-origin access is needed. CORS_ORIGIN opens it only where a
 // separate front end genuinely has to reach the API.
