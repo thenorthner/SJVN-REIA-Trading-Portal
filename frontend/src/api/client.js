@@ -176,6 +176,18 @@ export const api = {
     addTxn: (id, body) => p(`/rec/${id}/transactions`, body),
     reverseTxn: (txnId, reason) => p(`/rec/transactions/${txnId}/reverse`, { reason }),
     remove: (id) => del(`/rec/${id}`),
+    // The NLDC REC Registry application behind a lot, before the certificates exist.
+    followUps: () => g('/rec/follow-ups'),
+    registryStep: (id, body) => p(`/rec/${id}/registry`, body),
+    uploadDocument: (id, file, docType) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('doc_type', docType);
+      return client.post(`/rec/${id}/documents`, fd).then((r) => r.data);
+    },
+    // Fetched through the client rather than linked to, so the download carries
+    // the bearer token a plain <a href> would not.
+    downloadDocument: (docId) => client.get(`/rec/documents/${docId}/download`, { responseType: 'blob' }).then((r) => r.data),
   },
   noarApi: {
     status: () => g('/noar-api/status'),

@@ -4,8 +4,36 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { fmtDateTime } from '../../datetime.js';
 
 const STATUSES = ['APPLIED', 'ISSUED', 'LISTED', 'SOLD', 'REDEEMED', 'CANCELLED'];
+
+// CP-83-85 §5, steps 1–3: what happens to a lot between the CSPP's joint meter
+// reading and the Central Agency issuing the certificates. The lot used to jump
+// from APPLIED straight to ISSUED, so an application sitting unanswered for a
+// month looked exactly like one filed yesterday.
+const REGISTRY_STAGES = [
+  ['JMR_RECEIVED', 'JMR received from CSPP'],
+  ['SUBMITTED', 'Application submitted on the NLDC REC Registry'],
+  ['UNDER_VERIFICATION', 'Under SLDC / NLDC verification'],
+  ['QUERY_RAISED', 'Query raised by SLDC / NLDC'],
+  ['APPROVED', 'Approved, awaiting issuance'],
+  ['FOLLOW_UP', 'Follow-up (no change of stage)'],
+];
+const DOC_TYPES = [
+  ['JMR', 'Joint meter reading'],
+  ['APPLICATION', 'Registry application'],
+  ['SLDC_VERIFICATION', 'SLDC verification'],
+  ['QUERY_REPLY', 'Reply to a query'],
+  ['ISSUANCE_CERTIFICATE', 'Issuance certificate'],
+  ['OTHER', 'Other'],
+];
+const FOLLOW_UP_TONE = { OVERDUE: 'danger', DUE: 'warning', NO_FOLLOW_UP_SET: 'neutral' };
+const FOLLOW_UP_LABEL = {
+  OVERDUE: 'Follow-up date has passed',
+  DUE: 'Due this week',
+  NO_FOLLOW_UP_SET: 'No follow-up set',
+};
 const POSITIONS = ['HELD', 'PARTIALLY_SOLD', 'FULLY_DISPOSED', 'NOT_ISSUED'];
 const TECHNOLOGIES = ['Solar', 'Wind', 'Hydro', 'Hybrid', 'MSW', 'Cogeneration', 'Biomass', 'Biofuel'];
 
@@ -19,6 +47,10 @@ const EMPTY_LOT = {
 const EMPTY_TXN = {
   txn_type: 'SALE', quantity: '', rate_per_rec: '', trade_date: '',
   platform: 'IEX', buyer: '', obligated_entity: '', reference: '', notes: '',
+};
+const EMPTY_STEP = {
+  stage: 'JMR_RECEIVED', jmr_reference: '', jmr_date: '', application_no: '',
+  next_follow_up_date: '', note: '',
 };
 
 const today = () => new Date().toISOString().split('T')[0];
@@ -47,6 +79,12 @@ export default function RECManagement() {
   const [txnForm, setTxnForm] = useState(EMPTY_TXN);
   const [txnError, setTxnError] = useState('');
 
+  const [followUps, setFollowUps] = useState([]);
+  const [showStep, setShowStep] = useState(false);
+  const [stepForm, setStepForm] = useState(EMPTY_STEP);
+  const [stepError, setStepError] = useState('');
+  const [docType, setDocType] = useState('JMR');
+
   const load = useCallback(() => {
     setLoading(true);
     setError('');
@@ -54,13 +92,14 @@ export default function RECManagement() {
     Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
 
     Promise.allSettled([
-      api.rec.list(params), api.rec.summary(), api.rec.reference(), api.rec.issuable(),
-    ]).then(([l, s, r, i]) => {
+      api.rec.list(params), api.rec.summary(), api.rec.reference(), api.rec.issuable(), api.rec.followUps(),
+    ]).then(([l, s, r, i, f]) => {
       if (l.status === 'fulfilled') setRows(l.value || []);
       if (s.status === 'fulfilled') setSummary(s.value || {});
       if (r.status === 'fulfilled') setReference(r.value || { multipliers: {}, next_sessions: [] });
       if (i.status === 'fulfilled') setIssuable(i.value || []);
-      const first = [l, s, r, i].find((x) => x.status === 'rejected');
+      if (f.status === 'fulfilled') setFollowUps(f.value || []);
+      const first = [l, s, r, i, f].find((x) => x.status === 'rejected');
       if (first) setError(first.reason?.response?.data?.error || 'Could not load the REC ledger.');
     }).finally(() => setLoading(false));
   }, [filters]);
@@ -151,6 +190,64 @@ export default function RECManagement() {
       applyResult(updated);
     } catch (err) {
       setTxnError(err.response?.data?.error || 'Failed to record the transaction.');
+    }
+  }
+
+  function openStep(stage) {
+    setStepError('');
+    setStepForm({
+      ...EMPTY_STEP,
+      stage: stage || (detail?.registry_stage ? 'FOLLOW_UP' : 'JMR_RECEIVED'),
+      jmr_reference: detail?.jmr_reference || '',
+      jmr_date: detail?.jmr_date || '',
+      application_no: detail?.application_no || '',
+    });
+    setShowStep(true);
+  }
+
+  async function saveStep(e) {
+    e.preventDefault();
+    setStepError('');
+    // Only what this step is about: re-sending the JMR reference on a follow-up
+    // would rewrite it from a form the user was not editing it in.
+    const keep = stepForm.stage === 'JMR_RECEIVED'
+      ? ['stage', 'jmr_reference', 'jmr_date', 'next_follow_up_date', 'note']
+      : stepForm.stage === 'FOLLOW_UP'
+        ? ['stage', 'next_follow_up_date', 'note']
+        : ['stage', 'application_no', 'next_follow_up_date', 'note'];
+    const body = Object.fromEntries(
+      Object.entries(stepForm).filter(([k, v]) => keep.includes(k) && v !== ''),
+    );
+    try {
+      applyResult(await api.rec.registryStep(detail.id, body));
+      setShowStep(false);
+    } catch (err) {
+      setStepError(err.response?.data?.error || 'Failed to record the registry step.');
+    }
+  }
+
+  async function uploadDoc(file) {
+    if (!file) return;
+    setDetailError('');
+    try {
+      await api.rec.uploadDocument(detail.id, file, docType);
+      applyResult(await api.rec.get(detail.id));
+    } catch (err) {
+      setDetailError(err.response?.data?.error || 'Failed to attach the document.');
+    }
+  }
+
+  async function openDoc(doc) {
+    try {
+      const blob = await api.rec.downloadDocument(doc.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.file_name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setDetailError('Could not fetch that document.');
     }
   }
 
@@ -262,6 +359,37 @@ export default function RECManagement() {
           hint={summary.next_sessions?.length > 1 ? `Then ${summary.next_sessions[1]}` : '2nd & last Wednesday'}
         />
       </div>
+
+      {followUps.length > 0 && (
+        <Card
+          title="Registry applications needing a follow-up"
+          actions={<span className="inline-note" style={{ marginTop: 0 }}>{followUps.length} application(s)</span>}
+        >
+          <Table
+            columns={[
+              { key: 'rec_no', header: 'REC No.' },
+              { key: 'source', header: 'Station', render: (r) => r.source || '—' },
+              { key: 'vintage_month', header: 'Vintage' },
+              { key: 'application_no', header: 'Application No.', render: (r) => r.application_no || <span style={{ color: 'var(--text-light)' }}>Not filed yet</span> },
+              { key: 'stage_label', header: 'Stage' },
+              {
+                key: 'next_follow_up_date',
+                header: 'Follow up by',
+                render: (r) => (r.next_follow_up_date
+                  ? `${r.next_follow_up_date}${r.due_in_days < 0 ? ` (${-r.due_in_days}d late)` : ''}`
+                  : `Untouched ${r.idle_days}d`),
+              },
+              { key: 'reason', header: '', render: (r) => <Badge type={FOLLOW_UP_TONE[r.reason]}>{FOLLOW_UP_LABEL[r.reason] || r.reason}</Badge> },
+            ]}
+            rows={followUps}
+            onRowClick={(r) => openDetail({ id: r.lot_id })}
+          />
+          <p className="inline-note">
+            Applications still with the SLDC or NLDC: those whose follow-up date has come, and those
+            nobody has touched for a fortnight with no date set at all.
+          </p>
+        </Card>
+      )}
 
       {issuable.length > 0 && (
         <Card
@@ -459,6 +587,73 @@ export default function RECManagement() {
               </div>
             )}
 
+            {!detail.issuance_date && detail.status !== 'CANCELLED' && (
+              <Card
+                title="NLDC REC Registry application"
+                actions={canWrite && (
+                  <button className="btn btn-sm btn-outline" onClick={() => openStep()}>
+                    {detail.registry_stage ? 'Record a step / follow-up' : 'Record the JMR'}
+                  </button>
+                )}
+              >
+                <div className="form-grid" style={{ marginBottom: 8 }}>
+                  <div>
+                    <span className="inline-note" style={{ marginTop: 0 }}>Stage</span>
+                    <div><strong>{REGISTRY_STAGES.find(([s]) => s === detail.registry_stage)?.[1] || 'Not started'}</strong></div>
+                  </div>
+                  <div>
+                    <span className="inline-note" style={{ marginTop: 0 }}>Application No.</span>
+                    {/* The date only means something once there is an application it belongs to. */}
+                    <div><strong>{detail.application_no || 'Not filed yet'}</strong>{detail.application_no && detail.application_date ? ` · filed ${detail.application_date}` : ''}</div>
+                  </div>
+                  <div>
+                    <span className="inline-note" style={{ marginTop: 0 }}>JMR</span>
+                    <div>{detail.jmr_reference || '—'}{detail.jmr_date ? ` · ${detail.jmr_date}` : ''}</div>
+                  </div>
+                  <div>
+                    <span className="inline-note" style={{ marginTop: 0 }}>Next follow-up</span>
+                    <div>{detail.next_follow_up_date || 'None set'}</div>
+                  </div>
+                </div>
+
+                <Table
+                  columns={[
+                    { key: 'created_at', header: 'Recorded', render: (e) => fmtDateTime(e.created_at) },
+                    { key: 'label', header: 'Step' },
+                    { key: 'note', header: 'Note', render: (e) => e.note || '—' },
+                    { key: 'next_follow_up_date', header: 'Follow up by', render: (e) => e.next_follow_up_date || '—' },
+                    { key: 'actor', header: 'By', render: (e) => e.actor || '—' },
+                  ]}
+                  rows={detail.registry_events || []}
+                  emptyMessage="Nothing recorded yet — the JMR and the registry application have not been logged against this lot."
+                />
+              </Card>
+            )}
+
+            <Card
+              title="Documents"
+              actions={canWrite && (
+                <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <select value={docType} onChange={(e) => setDocType(e.target.value)}>
+                    {DOC_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  <input type="file" aria-label="Attach a document" onChange={(e) => { uploadDoc(e.target.files?.[0]); e.target.value = ''; }} />
+                </span>
+              )}
+            >
+              <Table
+                columns={[
+                  { key: 'created_at', header: 'Uploaded', render: (d) => fmtDateTime(d.created_at) },
+                  { key: 'doc_type', header: 'Type', render: (d) => DOC_TYPES.find(([v]) => v === d.doc_type)?.[1] || d.doc_type },
+                  { key: 'file_name', header: 'File', render: (d) => <button type="button" className="btn btn-xs btn-ghost" onClick={() => openDoc(d)}>{d.file_name}</button> },
+                  { key: 'size_bytes', header: 'Size', render: (d) => (d.size_bytes ? `${Math.max(1, Math.round(d.size_bytes / 1024))} KB` : '—') },
+                  { key: 'uploaded_by', header: 'By', render: (d) => d.uploaded_by || '—' },
+                ]}
+                rows={detail.documents || []}
+                emptyMessage="No papers attached to this lot."
+              />
+            </Card>
+
             <Card title="Disposals">
               <Table columns={txnColumns} rows={detail.transactions || []} emptyMessage="Nothing sold or redeemed from this lot yet." />
               <p className="inline-note">
@@ -468,6 +663,56 @@ export default function RECManagement() {
             </Card>
           </>
         )}
+      </Modal>
+
+      <Modal open={showStep} onClose={() => setShowStep(false)} title="Registry application — record a step" width={560}>
+        {stepError && <div className="form-error">{stepError}</div>}
+        <form onSubmit={saveStep}>
+          <Field label="What happened">
+            <select value={stepForm.stage} onChange={(e) => setStepForm({ ...stepForm, stage: e.target.value })}>
+              {REGISTRY_STAGES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </Field>
+
+          {stepForm.stage === 'JMR_RECEIVED' && (
+            <div className="form-grid">
+              <Field label="JMR Reference">
+                <input required value={stepForm.jmr_reference} placeholder="e.g. JMR/CSPP/2026-08" onChange={(e) => setStepForm({ ...stepForm, jmr_reference: e.target.value })} />
+              </Field>
+              <Field label="JMR Date">
+                <input type="date" value={stepForm.jmr_date} onChange={(e) => setStepForm({ ...stepForm, jmr_date: e.target.value })} />
+              </Field>
+            </div>
+          )}
+
+          {stepForm.stage !== 'JMR_RECEIVED' && stepForm.stage !== 'FOLLOW_UP' && (
+            <Field label="NLDC REC Registry Application No.">
+              <input required value={stepForm.application_no} placeholder="e.g. NLDC/REC/2026/1142" onChange={(e) => setStepForm({ ...stepForm, application_no: e.target.value })} />
+            </Field>
+          )}
+
+          <Field label={stepForm.stage === 'QUERY_RAISED' ? 'What the query is' : stepForm.stage === 'FOLLOW_UP' ? 'What the follow-up was' : 'Note (optional)'}>
+            <input
+              required={stepForm.stage === 'QUERY_RAISED' || stepForm.stage === 'FOLLOW_UP'}
+              value={stepForm.note}
+              onChange={(e) => setStepForm({ ...stepForm, note: e.target.value })}
+            />
+          </Field>
+
+          <Field label="Follow up by (optional)">
+            <input type="date" min={today()} value={stepForm.next_follow_up_date} onChange={(e) => setStepForm({ ...stepForm, next_follow_up_date: e.target.value })} />
+          </Field>
+
+          <p className="inline-note">
+            A follow-up records the chase without moving the stage. Set a date here and the lot appears
+            in the follow-up queue when it comes.
+          </p>
+
+          <div className="form-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setShowStep(false)}>Cancel</button>
+            <button type="submit" className="btn btn-primary">Record</button>
+          </div>
+        </form>
       </Modal>
 
       <Modal

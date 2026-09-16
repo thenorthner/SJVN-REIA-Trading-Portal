@@ -1415,6 +1415,11 @@ function migrateRecSchema() {
   add('registry_ref', 'ALTER TABLE rec_ledger ADD COLUMN registry_ref TEXT');
   add('sold_qty', 'ALTER TABLE rec_ledger ADD COLUMN sold_qty INTEGER NOT NULL DEFAULT 0');
   add('redeemed_qty', 'ALTER TABLE rec_ledger ADD COLUMN redeemed_qty INTEGER NOT NULL DEFAULT 0');
+  add('jmr_reference', 'ALTER TABLE rec_ledger ADD COLUMN jmr_reference TEXT');
+  add('jmr_date', 'ALTER TABLE rec_ledger ADD COLUMN jmr_date TEXT');
+  add('application_no', 'ALTER TABLE rec_ledger ADD COLUMN application_no TEXT');
+  add('registry_stage', 'ALTER TABLE rec_ledger ADD COLUMN registry_stage TEXT');
+  add('next_follow_up_date', 'ALTER TABLE rec_ledger ADD COLUMN next_follow_up_date TEXT');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS rec_transactions (

@@ -61,6 +61,7 @@ const EscertBidEntry = lazy(() => import('./pages/trading/EscertBidEntry.jsx'));
 const RecOrder = lazy(() => import('./pages/trading/RecOrder.jsx'));
 const RecOrderReport = lazy(() => import('./pages/trading/RecOrderReport.jsx'));
 const RecBidEntry = lazy(() => import('./pages/trading/RecBidEntry.jsx'));
+const RECManagement = lazy(() => import('./pages/trading/RECManagement.jsx'));
 const TAMManagement = lazy(() => import('./pages/trading/TAMManagement.jsx'));
 const BankTransactionsList = lazy(() => import('./pages/trading/BankTransactionsList.jsx'));
 const EnergySchedule = lazy(() => import('./pages/trading/EnergySchedule.jsx'));
@@ -320,6 +321,7 @@ export default function App() {
         <Route path="trading/rec/hub" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CertificateOperationsHub defaultTab="REC" /></ProtectedRoute>} />
         <Route path="trading/rec/order-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RecOrderReport /></ProtectedRoute>} />
         <Route path="trading/rec/bid-entry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RecBidEntry /></ProtectedRoute>} />
+        <Route path="trading/rec/ledger" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RECManagement /></ProtectedRoute>} />
         <Route path="trading/noar" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARWallet /></ProtectedRoute>} />
         <Route path="trading/noar-registry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARRegistry /></ProtectedRoute>} />
         <Route path="trading/noar-api" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARApiReconciliation /></ProtectedRoute>} />

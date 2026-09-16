@@ -1397,10 +1397,45 @@ CREATE TABLE IF NOT EXISTS rec_ledger (
   registry_ref TEXT,                   -- Central Agency (Grid India) registry reference
   sold_qty INTEGER NOT NULL DEFAULT 0,
   redeemed_qty INTEGER NOT NULL DEFAULT 0,
+  -- CP-83-85 §5, before issuance: the CSPP's joint meter reading the claim rests
+  -- on, the NLDC REC Registry application, and where that application stands.
+  jmr_reference TEXT,
+  jmr_date TEXT,
+  application_no TEXT,
+  registry_stage TEXT,                 -- JMR_RECEIVED / SUBMITTED / UNDER_VERIFICATION / QUERY_RAISED / APPROVED
+  next_follow_up_date TEXT,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Every step a lot's registry application took, and every follow-up with the
+-- SLDC or NLDC, in order. The lot row carries only the latest.
+CREATE TABLE IF NOT EXISTS rec_lot_events (
+  id TEXT PRIMARY KEY,
+  lot_id TEXT NOT NULL REFERENCES rec_ledger(id),
+  stage TEXT NOT NULL,
+  note TEXT,
+  next_follow_up_date TEXT,
+  actor TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rec_lot_events_lot ON rec_lot_events(lot_id, created_at);
+
+-- Papers behind a lot: the JMR, the registry application, the SLDC's
+-- verification, replies to NLDC queries, the issuance certificate.
+CREATE TABLE IF NOT EXISTS rec_lot_documents (
+  id TEXT PRIMARY KEY,
+  lot_id TEXT NOT NULL REFERENCES rec_ledger(id),
+  doc_type TEXT NOT NULL CHECK (doc_type IN ('JMR','APPLICATION','SLDC_VERIFICATION','QUERY_REPLY','ISSUANCE_CERTIFICATE','OTHER')),
+  file_name TEXT NOT NULL,
+  stored_path TEXT NOT NULL,
+  mime_type TEXT,
+  size_bytes INTEGER,
+  uploaded_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rec_lot_documents_lot ON rec_lot_documents(lot_id);
 
 -- Disposals against a REC lot. A lot is rarely cleared in one go — it is sold
 -- across several exchange trading sessions at different discovered prices — so

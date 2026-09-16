@@ -8,9 +8,36 @@ import {
   multiplierFor, multiplierTable, issuanceFeePerRec, tradingSessions,
 } from '../services/recLedger.js';
 import { restateBidFromTransactions } from '../services/recTrading.js';
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
+import {
+  recordRegistryStep, followUpQueue, lotEvents, lotDocuments, addLotDocument, getLotDocument,
+  RegistryError, REC_DOC_DIR,
+} from '../services/recRegistry.js';
 
 const router = Router();
 router.use(requireAuth);
+
+fs.mkdirSync(REC_DOC_DIR, { recursive: true });
+const recDocUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, _file, cb) => {
+      const dir = path.join(REC_DOC_DIR, String(req.params.id).replace(/[^A-Za-z0-9_-]/g, ''));
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
+    filename: (_req, file, cb) => cb(null, `${newId('DOC')}${path.extname(file.originalname).slice(0, 10)}`),
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+const lotDetail = (row) => ({
+  ...withPosition(row),
+  transactions: getTransactions(row.id),
+  registry_events: lotEvents(row.id),
+  documents: lotDocuments(row.id),
+});
 
 const READ = [...new Set([...ROLE_GROUPS.TRADING_ALL, 'COMPLIANCE_AUDITOR'])];
 const WRITE = ROLE_GROUPS.TRADING_WRITE;
@@ -114,10 +141,48 @@ router.get('/issuable', requireRole(...READ), (req, res) => {
   res.json(issuableEnergy(req.query.vintage_month));
 });
 
+// Registry applications due a follow-up with the SLDC / NLDC.
+router.get('/follow-ups', requireRole(...READ), (req, res) => {
+  res.json(followUpQueue());
+});
+
+router.get('/documents/:docId/download', requireRole(...READ), (req, res) => {
+  const doc = getLotDocument(req.params.docId);
+  if (!doc || !fs.existsSync(doc.stored_path)) return res.status(404).json({ error: 'Document not found' });
+  logAudit({ req, user: req.user, action: 'DOWNLOAD', module: 'TRADING', entityType: 'rec_lot_document', entityId: doc.id, details: { lot_id: doc.lot_id, file_name: doc.file_name } });
+  res.download(doc.stored_path, doc.file_name);
+});
+
 router.get('/:id', requireRole(...READ), (req, res) => {
   const row = db.prepare('SELECT * FROM rec_ledger WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'REC lot not found' });
-  res.json({ ...withPosition(row), transactions: getTransactions(row.id) });
+  res.json(lotDetail(row));
+});
+
+// Where the lot's NLDC REC Registry application stands, or a follow-up on it.
+router.post('/:id/registry', requireRole(...WRITE), (req, res) => {
+  try {
+    const lot = recordRegistryStep(req.params.id, req.body || {}, req.user.name);
+    logAudit({ req, user: req.user, action: 'REC_REGISTRY_STEP', module: 'TRADING', entityType: 'rec_lot', entityId: lot.id, details: req.body });
+    res.json(lotDetail(lot));
+  } catch (err) {
+    if (err instanceof RegistryError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+router.post('/:id/documents', requireRole(...WRITE), (req, res, next) => recDocUpload.single('file')(req, res, (err) => {
+  if (!err) return next();
+  res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'The file is larger than 10 MB.' : err.message });
+}), (req, res) => {
+  try {
+    const doc = addLotDocument(req.params.id, req.file, req.body?.doc_type, req.user.name);
+    logAudit({ req, user: req.user, action: 'UPLOAD', module: 'TRADING', entityType: 'rec_lot_document', entityId: doc.id, details: { lot_id: doc.lot_id, doc_type: doc.doc_type, file_name: doc.file_name } });
+    res.status(201).json(doc);
+  } catch (err) {
+    if (err instanceof RegistryError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
 });
 
 router.post('/', requireRole(...WRITE), (req, res) => {
@@ -203,7 +268,7 @@ router.post('/:id/issue', requireRole(...WRITE), (req, res) => {
   );
 
   logAudit({ req, user: req.user, action: 'ISSUE', module: 'TRADING', entityType: 'rec_lot', entityId: lot.id, details: b });
-  res.json({ ...refreshLot(lot.id), transactions: getTransactions(lot.id) });
+  res.json({ ...refreshLot(lot.id), transactions: getTransactions(lot.id), registry_events: lotEvents(lot.id), documents: lotDocuments(lot.id) });
 });
 
 /** Record a sale tranche or an RPO redemption against the held position. */
@@ -250,7 +315,7 @@ router.post('/:id/transactions', requireRole(...WRITE), (req, res) => {
   });
 
   logAudit({ req, user: req.user, action: txn_type, module: 'TRADING', entityType: 'rec_lot', entityId: lot.id, details: b });
-  res.status(201).json({ ...refreshLot(lot.id), transactions: getTransactions(lot.id) });
+  res.status(201).json({ ...refreshLot(lot.id), transactions: getTransactions(lot.id), registry_events: lotEvents(lot.id), documents: lotDocuments(lot.id) });
 });
 
 /**
@@ -303,7 +368,7 @@ router.post('/transactions/:txnId/reverse', requireRole(...WRITE), (req, res) =>
   const restated = txn.bid_id ? restateBidFromTransactions(txn.bid_id) : null;
 
   logAudit({ req, user: req.user, action: 'REVERSE_TXN', module: 'TRADING', entityType: 'rec_lot', entityId: txn.lot_id, details: { reversal_id: id, reversed: txn.id, reason: req.body?.reason, restated } });
-  res.status(201).json({ ...refreshLot(txn.lot_id), transactions: getTransactions(txn.lot_id), restated });
+  res.status(201).json({ ...refreshLot(txn.lot_id), transactions: getTransactions(txn.lot_id), registry_events: lotEvents(txn.lot_id), documents: lotDocuments(txn.lot_id), restated });
 });
 
 router.put('/:id', requireRole(...WRITE), (req, res) => {
@@ -339,7 +404,7 @@ router.put('/:id', requireRole(...WRITE), (req, res) => {
   );
 
   logAudit({ req, user: req.user, action: 'UPDATE', module: 'TRADING', entityType: 'rec_lot', entityId: lot.id, details: b });
-  res.json({ ...refreshLot(lot.id), transactions: getTransactions(lot.id) });
+  res.json({ ...refreshLot(lot.id), transactions: getTransactions(lot.id), registry_events: lotEvents(lot.id), documents: lotDocuments(lot.id) });
 });
 
 router.delete('/:id', requireRole(...WRITE), (req, res) => {
