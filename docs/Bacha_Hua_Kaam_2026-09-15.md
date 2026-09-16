@@ -37,7 +37,7 @@ bahar se ya faisle par atka hai (sirf yaad rakhne ke liye).
 
 ## B. Bahar se ya faisle par atka (abhi kuch nahi kar sakte)
 
-- **Exchanges / grid:** IEX live + connectivity (whitelisted server `49.50.97.173`), IEX REC production host, PXIL clarifications, WBES API key, **NOAR Trader API — code ban gaya (16 Sep), ab sirf key/secret + IP whitelist ka intezaar** (`docs/NOAR_Trader_API_Clarifications_Email_Draft.md`), grid frequency feed, exchange ko bid bhejna (paisa hilaane wala — controlled rollout ka faisla).
+- **Exchanges / grid:** IEX live + connectivity (whitelisted server `49.50.97.173`), IEX REC production host, PXIL clarifications, WBES API key, **NOAR Trader API — code ban gaya (16 Sep).** API docs + base URL PwC ke mail (15 Sep) se mil gaye. Key/secret kisi se aata nahi — SJVN khud NOAR login → API Integration → Add se banata hai (guide §1.1), phir env mein daalna. Bacha: IP whitelisting (§1.5) confirm karna, aur status codes ki list (`docs/NOAR_Trader_API_Clarifications_Email_Draft.md`), grid frequency feed, exchange ko bid bhejna (paisa hilaane wala — controlled rollout ka faisla).
 - **Regulator:** DSM slab rates (0 verified), ceiling revision aane par `market_price_cap`.
 - **CEA data:** `cea.nic.in/api/*` yahan se timeout — deploy server se reach hota hai ya nahi dekhna; nahi to CEA ki monthly Excel ka upload format tay karna.
 - **SJVN IT / infra:** SAP interface (aur SAP upload files ke liye company code, vendor/customer numbers, GL mapping), DSC + e-invoice (GSP/IRP), SMS DLT registration, SMTP relay on server, SSO/AD, encryption at rest, HTTPS confirm, backup ke liye doosri disk (`SJVN_BACKUP_DIR`), VAPT / CERT-In, bank collection API, ERP push contract.
