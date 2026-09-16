@@ -9,7 +9,7 @@ import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { secureLogAudit } from '../auditEngine.js';
 import {
   importObligationReport, obligationLedger, obligationSummary, reconcile,
-  hydrateLine, ObligationImportError,
+  hydrateLine, settlementDraft, ObligationImportError,
 } from '../services/recObligationImport.js';
 
 const router = Router();
@@ -84,6 +84,24 @@ router.post('/upload', requireRole(...WRITE), upload.single('file'), (req, res) 
     if (err instanceof ObligationImportError) return res.status(400).json({ error: err.message });
     console.error('REC obligation import failed:', err);
     res.status(500).json({ error: err.message || 'The obligation report could not be imported.' });
+  }
+});
+
+/**
+ * The figures for one session's sale, as the uploaded reports state them, for
+ * the REC Order screen to post instead of typing them in.
+ */
+router.get('/settlement-draft', requireRole(...READ), (req, res) => {
+  const platform = String(req.query.platform || 'IEX').toUpperCase();
+  if (!PLATFORMS.includes(platform)) {
+    return res.status(400).json({ error: `platform must be one of: ${PLATFORMS.join(', ')}` });
+  }
+  try {
+    const draft = settlementDraft({ tradeDate: req.query.trade_date, platform });
+    res.status(draft.found ? 200 : 404).json(draft);
+  } catch (err) {
+    if (err instanceof ObligationImportError) return res.status(400).json({ error: err.message });
+    throw err;
   }
 });
 

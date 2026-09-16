@@ -190,6 +190,13 @@ export const api = {
       return client.post('/rec-obligations/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
     },
     withdraw: (id) => del(`/rec-obligations/uploads/${id}`),
+    // One session's sale as the uploaded reports state it, for REC Order. A
+    // session with no sale in any report answers 404 with a message, not an
+    // error to show as a failure.
+    settlementDraft: (tradeDate, platform = 'IEX') => client.get('/rec-obligations/settlement-draft', {
+      params: { trade_date: tradeDate, platform },
+      validateStatus: (s) => s === 200 || s === 404,
+    }).then((r) => r.data),
   },
   rec: {
     list: (params) => g('/rec', params),

@@ -22,6 +22,17 @@ const EMPTY = {
   total_amount: '',
 };
 
+const FIELD_LABELS = {
+  total_recs_sold: 'Total RECs Sold',
+  discovered_rate: 'Discovered Rate',
+  trade_obligation: 'Trade Obligation',
+  gst_on_trade_obligation: 'GST on Trade Obligation',
+  exchange_fees: 'Exchange Fees',
+  gst_on_exchange_fees: 'GST on Exchange Fees',
+  net_revenue: 'Net Revenue',
+  buyer_name: 'Buyer Name',
+};
+
 /**
  * ISET REC Order — post-trade settlement capture with auto-derived
  * obligation / GST / net revenue and buyer invoice totals.
@@ -32,6 +43,33 @@ export default function RecOrder() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [platform, setPlatform] = useState('IEX');
+  const [fromReport, setFromReport] = useState(null);
+  const [filling, setFilling] = useState(false);
+
+  // The same figures used to be read off the exchange's obligation report and
+  // typed in here. Where that report has been uploaded, take them from it —
+  // only the fields the report states; the rest stay for the desk.
+  async function fillFromReport() {
+    if (!form.trade_date) { setError('Choose the trade date first.'); return; }
+    setError('');
+    setFilling(true);
+    try {
+      const draft = await api.recObligations.settlementDraft(form.trade_date, platform);
+      setFromReport(draft);
+      if (draft.found) {
+        setForm((prev) => {
+          const next = { ...prev };
+          for (const [k, v] of Object.entries(draft.fields)) if (v != null) next[k] = String(v);
+          return next;
+        });
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not read the uploaded obligation report.');
+    } finally {
+      setFilling(false);
+    }
+  }
 
   function set(field, value) {
     setForm((prev) => {
@@ -114,9 +152,42 @@ export default function RecOrder() {
           <div className="form-section-header" style={{ marginTop: 0 }}>REC Order</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, maxWidth: 420 }}>
             <Field label="Trade Date" required>
-              <input type="date" className="input" value={form.trade_date} onChange={(e) => set('trade_date', e.target.value)} required />
+              <input type="date" className="input" value={form.trade_date} onChange={(e) => { set('trade_date', e.target.value); setFromReport(null); }} required />
+            </Field>
+            <Field label="Exchange">
+              <select className="input" value={platform} onChange={(e) => { setPlatform(e.target.value); setFromReport(null); }}>
+                {['IEX', 'PXIL', 'HPX'].map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
             </Field>
           </div>
+          <div style={{ marginTop: 10, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button type="button" className="btn btn-outline btn-sm" onClick={fillFromReport} disabled={filling || !form.trade_date}>
+              {filling ? 'Reading report…' : 'Fill from uploaded obligation report'}
+            </button>
+            <Link to="/trading/rec/obligations" style={{ fontSize: 12, color: '#1d4ed8' }}>Upload a report →</Link>
+          </div>
+          {fromReport && (
+            <div
+              role="status"
+              style={{
+                marginTop: 10, fontSize: 13, padding: 10, borderRadius: 4,
+                background: fromReport.found ? '#eff6ff' : '#fef9c3',
+                color: fromReport.found ? '#1e3a8a' : '#854d0e',
+              }}
+            >
+              {fromReport.found ? (
+                <>
+                  Filled from {fromReport.files.join(', ')} ({fromReport.lines} sale line{fromReport.lines === 1 ? '' : 's'}).
+                  {fromReport.not_stated.length > 0 && (
+                    <> The report does not state: <strong>{fromReport.not_stated.map((k) => FIELD_LABELS[k] || k).join(', ')}</strong> — enter these.</>
+                  )}
+                  {fromReport.notes.length > 0 && (
+                    <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{fromReport.notes.map((n) => <li key={n}>{n}</li>)}</ul>
+                  )}
+                </>
+              ) : fromReport.message}
+            </div>
+          )}
 
           <div className="form-section-header">Trade Details</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>

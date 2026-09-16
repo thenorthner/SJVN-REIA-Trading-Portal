@@ -553,3 +553,92 @@ export function obligationSummary(filters = {}) {
     by_instrument: instruments,
   };
 }
+
+const sumOrNull = (lines, key) => (lines.some((l) => l[key] != null)
+  ? Math.round(lines.reduce((s, l) => s + (Number(l[key]) || 0), 0) * 100) / 100
+  : null);
+
+/**
+ * One session's sale, as the uploaded reports state it — the figures the REC
+ * Order screen was typed with. Handed to the desk to post; nothing is written.
+ *
+ * Only what the report itself states is filled. The report carries one GST
+ * figure where REC Order asks for two — on the trade obligation and on the
+ * exchange's fee — and nothing in the report says how it divides. Its
+ * arithmetic cannot say either: value less fee less GST equals the net whether
+ * the GST was all on the fee or mostly on the obligation. So both GST fields are
+ * left for the desk, with the report's figure quoted beside them.
+ */
+export function settlementDraft({ tradeDate, platform = 'IEX' } = {}) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(tradeDate || ''))) {
+    throw new ObligationImportError('trade_date must be YYYY-MM-DD');
+  }
+  const all = db.prepare(`
+    SELECT l.*, u.file_name FROM rec_obligation_lines l
+    JOIN rec_obligation_uploads u ON u.id = l.upload_id
+    WHERE l.trade_date = ? AND l.platform = ?
+    ORDER BY l.row_no
+  `).all(tradeDate, platform).map(hydrateLine);
+  const sells = all.filter((l) => l.side === 'SELL');
+  if (!sells.length) {
+    return {
+      found: false,
+      trade_date: tradeDate,
+      platform,
+      message: all.length
+        ? `The ${platform} report for ${tradeDate} carries only purchases — there is no sale to settle.`
+        : `No ${platform} obligation report uploaded so far covers ${tradeDate}.`,
+    };
+  }
+
+  const qty = sumOrNull(sells, 'quantity');
+  const value = sumOrNull(sells, 'trade_value');
+  const fee = sumOrNull(sells, 'exchange_fee');
+  const gst = sumOrNull(sells, 'gst');
+  const net = sumOrNull(sells, 'net_amount');
+  const prices = new Set(sells.map((l) => l.price_per_rec).filter((p) => p != null));
+  const counterparties = [...new Set(sells.map((l) => l.counterparty).filter(Boolean))];
+
+  const fields = {
+    total_recs_sold: qty,
+    discovered_rate: value != null && qty ? Math.round((value / qty) * 100) / 100 : null,
+    trade_obligation: value,
+    exchange_fees: fee,
+    net_revenue: net,
+    gst_on_trade_obligation: null,
+    gst_on_exchange_fees: null,
+    buyer_name: counterparties.length === 1 ? counterparties[0] : null,
+  };
+  const notes = [];
+
+  if (gst != null) {
+    // Whether the GST came off the sale can be read from a net the exchange
+    // stated; a net worked out on upload was computed that way and shows nothing.
+    const netStated = sells.every((l) => !(l.derived_fields || []).includes('net_amount'));
+    const deducted = netStated && value != null && fee != null && net != null && Math.abs(value - fee - gst - net) <= 1;
+    notes.push(`The report states GST of ₹${gst}${deducted ? ', taken off the sale with the fee' : ''}, without saying how much is on the obligation and how much on the fee — enter the split.`);
+  }
+  if (prices.size > 1) {
+    notes.push(`The session cleared at ${prices.size} prices; the discovered rate is the value-weighted average.`);
+  }
+  if (counterparties.length > 1) {
+    notes.push(`The sale went to ${counterparties.length} buyers (${counterparties.join(', ')}) — REC Order takes one.`);
+  }
+
+  const derived = [...new Set(sells.flatMap((l) => l.derived_fields || []))];
+  if (derived.length) {
+    notes.push(`Worked out on upload rather than stated by the exchange: ${derived.join(', ')}.`);
+  }
+
+  return {
+    found: true,
+    trade_date: tradeDate,
+    platform,
+    fields,
+    // What REC Order asks for that the report did not give.
+    not_stated: Object.entries(fields).filter(([, v]) => v == null).map(([k]) => k),
+    notes,
+    lines: sells.length,
+    files: [...new Set(sells.map((l) => l.file_name))],
+  };
+}
