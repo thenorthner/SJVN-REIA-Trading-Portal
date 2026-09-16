@@ -2375,6 +2375,44 @@ try {
   console.error('Peak availability migration failed:', e.message);
 }
 
+/**
+ * REC obligation upload: replace an earlier shape of the table.
+ *
+ * A database created while the obligation report was being designed can carry a
+ * `rec_obligation_uploads` keyed on `file_hash` with a `rec_obligation_rows`
+ * beside it. `CREATE TABLE IF NOT EXISTS` leaves such a table alone, so the
+ * current code would query columns that are not there. The old tables are
+ * replaced only while they are empty — with anything in them, the shapes are
+ * left as they are and the mismatch is reported rather than data thrown away.
+ */
+function migrateRecObligationSchema() {
+  const has = (t) => !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(t);
+  if (!has('rec_obligation_uploads')) return;
+  const cols = db.prepare('PRAGMA table_info(rec_obligation_uploads)').all().map((c) => c.name);
+  if (cols.includes('content_sha256')) return;
+
+  const count = (t) => (has(t) ? db.prepare(`SELECT COUNT(*) c FROM ${t}`).get().c : 0);
+  const held = count('rec_obligation_uploads') + count('rec_obligation_rows') + count('rec_obligation_lines');
+  if (held > 0) {
+    console.error('[MIGRATE] rec_obligation_uploads is in an older shape and holds rows — leaving it alone. The REC obligation upload will fail until it is migrated by hand.');
+    return;
+  }
+
+  db.exec(`
+    DROP TABLE IF EXISTS rec_obligation_rows;
+    DROP TABLE IF EXISTS rec_obligation_lines;
+    DROP TABLE IF EXISTS rec_obligation_uploads;
+  `);
+  db.exec(schema);
+  console.log('[MIGRATE] rec_obligation_uploads: replaced an empty table of the earlier shape');
+}
+
+try {
+  migrateRecObligationSchema();
+} catch (e) {
+  console.error('REC obligation migration failed:', e.message);
+}
+
 try {
   db.prepare(`UPDATE contracts SET tariff_structure_json = NULL WHERE tariff_structure_json = '{}' OR tariff_structure_json = '"{}"' OR TRIM(tariff_structure_json) = ''`).run();
 } catch (e) {

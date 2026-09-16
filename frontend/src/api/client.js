@@ -164,6 +164,22 @@ export const api = {
     linkInvoice: (id, body) => p(`/deviation/${id}/link-invoice`, body),
     remove: (id) => del(`/deviation/${id}`),
   },
+  // The exchange's obligation report, and the REC purchase/sale ledger built
+  // from it. `upload_` takes the File itself — the report is parsed server-side,
+  // so the browser never has to understand the exchange's layout.
+  recObligations: {
+    ledger: (params) => g('/rec-obligations/ledger', params),
+    uploads: () => g('/rec-obligations/uploads'),
+    upload: (id) => g(`/rec-obligations/uploads/${id}`),
+    upload_: (file, { platform = 'IEX', dry_run = false } = {}) => {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('platform', platform);
+      form.append('dry_run', String(!!dry_run));
+      return client.post('/rec-obligations/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+    },
+    withdraw: (id) => del(`/rec-obligations/uploads/${id}`),
+  },
   rec: {
     list: (params) => g('/rec', params),
     summary: (params) => g('/rec/summary', params),

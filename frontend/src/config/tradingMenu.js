@@ -98,6 +98,7 @@ export const TRADING_MENU = [
       { label: 'REC Order Details Report', to: '/trading/rec/order-report' },
       { label: 'REC Bid Entry', to: '/trading/rec/bid-entry' },
       { label: 'REC Ledger & Registry', to: '/trading/rec/ledger' },
+      { label: 'REC Purchase & Sale Ledger', to: '/trading/rec/obligations' },
     ],
   },
   {

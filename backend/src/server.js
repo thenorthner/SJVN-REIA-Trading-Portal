@@ -39,6 +39,7 @@ import pxilRoutes from './routes/pxil.js';
 import iexRoutes from './routes/iex.js';
 import isetReportsRoutes, { seedIsetReports } from './routes/isetReports.js';
 import recOrdersRoutes from './routes/recOrders.js';
+import recObligationRoutes from './routes/recObligations.js';
 import billingSettlementRoutes from './routes/billingSettlement.js';
 import tradingInvoicesRoutes from './routes/tradingInvoices.js';
 import generatorBillingRoutes from './routes/generatorBilling.js';
@@ -195,6 +196,7 @@ app.use('/api/users', usersRoutes);
 // 3B. Power Trading Management System
 app.use('/api/trading-clients', tradingClientsRoutes);
 app.use('/api/rec', requireAuth, recRoutes);
+app.use('/api/rec-obligations', requireAuth, recObligationRoutes);
 app.use('/api/noar', requireAuth, noarRoutes);
 app.use('/api/noar-api', requireAuth, noarApiRoutes);
 app.use('/api/form-iv', requireAuth, formIvRoutes);

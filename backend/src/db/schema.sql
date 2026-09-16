@@ -2136,6 +2136,60 @@ CREATE TABLE IF NOT EXISTS escert_orders (
 CREATE INDEX IF NOT EXISTS idx_escert_orders_created ON escert_orders(created_at DESC);
 
 -- REC sell-side trade settlement (ISET REC Order form).
+-- CP-83-85 §5 step 6: the IEX obligation report, as uploaded, and the REC
+-- purchase and sale ledger built from it. The exchange's file is the record of
+-- what a session obliged SJVN to pay or receive; rec_orders beside it is what
+-- the desk keyed in, and the two are meant to agree.
+CREATE TABLE IF NOT EXISTS rec_obligation_uploads (
+  id TEXT PRIMARY KEY,
+  file_name TEXT NOT NULL,
+  -- The same bytes twice is the same upload, not a second session.
+  content_sha256 TEXT NOT NULL UNIQUE,
+  platform TEXT NOT NULL DEFAULT 'IEX',
+  sheet_name TEXT,
+  session_from TEXT,
+  session_to TEXT,
+  line_count INTEGER NOT NULL DEFAULT 0,
+  bought_qty REAL NOT NULL DEFAULT 0,
+  sold_qty REAL NOT NULL DEFAULT 0,
+  net_amount REAL NOT NULL DEFAULT 0,
+  columns_mapped_json TEXT,             -- which column fed which field
+  columns_ignored_json TEXT,            -- headings the parser did not recognise
+  warnings_json TEXT,
+  skipped_json TEXT,                    -- rows under the header that were not trades
+  uploaded_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS rec_obligation_lines (
+  id TEXT PRIMARY KEY,
+  upload_id TEXT NOT NULL REFERENCES rec_obligation_uploads(id) ON DELETE CASCADE,
+  row_no INTEGER,
+  trade_date TEXT NOT NULL,
+  settlement_date TEXT,
+  platform TEXT NOT NULL DEFAULT 'IEX',
+  instrument TEXT,                      -- SOLAR / NON_SOLAR / as printed
+  side TEXT NOT NULL CHECK (side IN ('BUY','SELL')),
+  quantity REAL NOT NULL,
+  price_per_rec REAL,
+  trade_value REAL,
+  exchange_fee REAL,
+  gst REAL,
+  net_amount REAL,
+  member_code TEXT,
+  counterparty TEXT,
+  reference_no TEXT,
+  -- Which of the amounts above this platform computed rather than read, so a
+  -- derived figure is never shown as one the exchange stated.
+  derived_fields_json TEXT,
+  raw_json TEXT,                        -- the row exactly as the sheet held it
+  -- A corrected report updates the trade it corrects instead of duplicating it.
+  line_key TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rec_obligation_lines_date ON rec_obligation_lines(trade_date, side);
+CREATE INDEX IF NOT EXISTS idx_rec_obligation_lines_upload ON rec_obligation_lines(upload_id);
+
 CREATE TABLE IF NOT EXISTS rec_orders (
   id TEXT PRIMARY KEY,
   trade_date TEXT NOT NULL,
