@@ -177,6 +177,13 @@ export const api = {
     reverseTxn: (txnId, reason) => p(`/rec/transactions/${txnId}/reverse`, { reason }),
     remove: (id) => del(`/rec/${id}`),
   },
+  noarApi: {
+    status: () => g('/noar-api/status'),
+    sync: (body) => p('/noar-api/sync', body),
+    applications: (params) => g('/noar-api/applications', params),
+    application: (applicationNo) => g(`/noar-api/applications/${encodeURIComponent(applicationNo)}`),
+    reconciliation: () => g('/noar-api/reconciliation'),
+  },
   noar: {
     list: (params) => g('/noar', params),
     summary: () => g('/noar/summary'),

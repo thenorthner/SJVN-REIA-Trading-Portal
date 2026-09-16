@@ -2400,6 +2400,57 @@ CREATE TABLE IF NOT EXISTS noar_approval_entries (
 );
 CREATE INDEX IF NOT EXISTS idx_noar_approval_app ON noar_approval_entries(application_no);
 
+-- What the NOAR registry itself says about SJVN's bilateral open-access
+-- applications, pulled from the Trader API (ApplicantBilateralApplicationData).
+-- Kept apart from bilateral_transactions on purpose: this is the registry's
+-- record, ours is the desk's, and the point of holding both is to see where
+-- they disagree. One row per application revision — NOAR re-issues an
+-- application under a new RevisionNo rather than editing it in place.
+CREATE TABLE IF NOT EXISTS noar_api_applications (
+  id TEXT PRIMARY KEY,
+  noar_app_id INTEGER,                  -- NOAR's own Id for the application
+  application_no TEXT NOT NULL,
+  revision_no INTEGER NOT NULL DEFAULT 0,
+  applicant_id TEXT,
+  applicant_name TEXT,
+  seller_id TEXT,
+  seller_name TEXT,
+  seller_state_id INTEGER,
+  buyer_id TEXT,
+  buyer_name TEXT,
+  buyer_state_id INTEGER,
+  from_date TEXT,
+  to_date TEXT,
+  primary_route TEXT,
+  alternate_route TEXT,
+  is_alternate_route_enabled INTEGER NOT NULL DEFAULT 0,
+  re_type_id INTEGER,
+  created_on TEXT,
+  applied_mwh REAL,
+  approved_mwh REAL,
+  scheduled_mwh REAL,
+  -- NOAR returns these as bare integers and the trader API guide defines no
+  -- enumeration for them, so they are stored as received and not interpreted.
+  bid_status INTEGER,
+  congestion_status INTEGER,
+  status_code INTEGER,
+  payment_status INTEGER,
+  approval_no TEXT,
+  is_rejected INTEGER NOT NULL DEFAULT 0,
+  -- The bilateral transaction this was matched to, NULL when NOAR holds an
+  -- application the platform has no record of.
+  transaction_id TEXT REFERENCES bilateral_transactions(id),
+  approved_summary_json TEXT,           -- block-wise approved quantum
+  applied_summary_json TEXT,            -- block-wise applied quantum
+  raw_json TEXT,                        -- the element exactly as NOAR sent it
+  source_env TEXT,                      -- PRODUCTION / TEST / STUB
+  synced_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (application_no, revision_no)
+);
+CREATE INDEX IF NOT EXISTS idx_noar_api_app_no ON noar_api_applications(application_no);
+CREATE INDEX IF NOT EXISTS idx_noar_api_txn ON noar_api_applications(transaction_id);
+CREATE INDEX IF NOT EXISTS idx_noar_api_dates ON noar_api_applications(from_date, to_date);
+
 CREATE TABLE IF NOT EXISTS nrldc_refunds (
   id TEXT PRIMARY KEY,
   application_id TEXT NOT NULL,

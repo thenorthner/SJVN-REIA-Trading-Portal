@@ -52,6 +52,7 @@ const MarketAnalytics = lazy(() => import('./pages/trading/MarketAnalytics.jsx')
 const MarketForecasting = lazy(() => import('./pages/trading/MarketForecasting.jsx'));
 const NOARWallet = lazy(() => import('./pages/trading/NOARWallet.jsx'));
 const NOARRegistry = lazy(() => import('./pages/trading/NOARRegistry.jsx'));
+const NOARApiReconciliation = lazy(() => import('./pages/trading/NOARApiReconciliation.jsx'));
 const CERCFormIV = lazy(() => import('./pages/trading/CERCFormIV.jsx'));
 const BulkCommunications = lazy(() => import('./pages/trading/BulkCommunications.jsx'));
 const InboxMailList = lazy(() => import('./pages/trading/InboxMailList.jsx'));
@@ -321,6 +322,7 @@ export default function App() {
         <Route path="trading/rec/bid-entry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RecBidEntry /></ProtectedRoute>} />
         <Route path="trading/noar" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARWallet /></ProtectedRoute>} />
         <Route path="trading/noar-registry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARRegistry /></ProtectedRoute>} />
+        <Route path="trading/noar-api" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARApiReconciliation /></ProtectedRoute>} />
         <Route path="compliance/noar/:id" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NOARDetailCard /></ProtectedRoute>} />
         <Route path="erp/receivables" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CustomerReceivablesTable /></ProtectedRoute>} />
         <Route path="billing/bill-of-supply/new" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><BillOfSupplyForm /></ProtectedRoute>} />

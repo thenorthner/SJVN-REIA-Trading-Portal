@@ -150,6 +150,7 @@ export const TRADING_MENU = [
     ours: true,
     items: [
       { label: 'NOAR Registry & Clearances', to: '/trading/noar-registry' },
+      { label: 'NOAR Registry Pull (API)', to: '/trading/noar-api' },
       { label: 'NOAR Wallet (Open Access)', to: '/trading/noar' },
       { label: 'OA Charge Calculator', to: '/trading/oa-calculator' },
       { label: 'OA Reconciliation', to: '/trading/oa-reconciliation' },
