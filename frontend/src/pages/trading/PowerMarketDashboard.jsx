@@ -6,7 +6,8 @@ import api from '../../api/client.js';
 import { PageHeader, Card } from '../../components/ui.jsx';
 import SourceNote from '../../components/SourceNote.jsx';
 import IntradayMarketTab from './IntradayMarketTab.jsx';
-import { useCercMonth, PeriodSelect, NotHeld, periodLabel, mu } from './cercMonth.jsx';
+import { useCercMonth, PeriodSelect, periodLabel, mu } from './cercMonth.jsx';
+import { ParticipantsCard } from './cercParticipants.jsx';
 
 // The Power Market Dashboard (CP-86 §3). Every chart on it was a hardcoded array
 // — "Data Mocks based on the screenshot analysis", with the last 34 intraday
@@ -91,6 +92,7 @@ function MonthlyMarket() {
   if (error) return <div className="alert alert-error" role="alert">{error}</div>;
   if (!data?.period) return null;
   return (
+    <>
     <Card title={`Exchanges and RECs — ${periodLabel(data.period)}`} actions={<PeriodSelect data={data} onChange={setPeriod} />}>
       <div className="report-table-wrap">
         <table className="report-table">
@@ -126,6 +128,8 @@ function MonthlyMarket() {
       </div>
       <SourceNote source="CERC Market Monitoring Report" period={periodLabel(data.period)} />
     </Card>
+    <ParticipantsCard period={data.period} segment="TRADING_LICENSEE" side="ALL" title="Share of electricity transacted by the top 10 trading licensees" />
+    </>
   );
 }
 
@@ -135,10 +139,6 @@ export default function PowerMarketDashboard() {
       <PageHeader title="Power Market Dashboard" subtitle="Exchange clearing prices and volumes, as observed and as reported to CERC" />
       <DailyMarket />
       <MonthlyMarket />
-      <NotHeld title="Share of electricity transacted by the trading licensees">
-        The CERC report's licensee-wise table is not among the tables the platform reads, so there are no shares to show.
-        The seven licensees and percentages that used to be here were typed in.
-      </NotHeld>
       <h3 style={{ margin: '24px 0 12px', fontSize: 16 }}>Time-block prices</h3>
       <IntradayMarketTab />
     </div>

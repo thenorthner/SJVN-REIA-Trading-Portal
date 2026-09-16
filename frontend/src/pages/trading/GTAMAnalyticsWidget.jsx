@@ -1,26 +1,28 @@
 import React from 'react';
-import { NotHeld } from './cercMonth.jsx';
+import { Card } from '../../components/ui.jsx';
+import { useCercMonth, PeriodSelect, NoReport } from './cercMonth.jsx';
+import { ParticipantsCard, TermAheadCard } from './cercParticipants.jsx';
 
-// GTAM performance: top bilateral and DAM participants by state, and GTAM
-// contract-wise volume and price on the exchanges. Every figure here was typed in,
-// and the "top 10" lists were padded with placeholder names — "State2" through
-// "State20" — that read as states. The platform reads none of this: the CERC
-// report's participant and GTAM tables are not among those it parses, and no
-// exchange feed carries them. The screen says so rather than drawing invented bars.
+// GTAM performance: the largest bilateral and DAM participants, and the green
+// term-ahead market contract by contract on each exchange. Every figure here was
+// once typed in, with "top 10" lists padded by placeholder names — "State2"
+// through "State20". All of it is in the CERC monthly report and is read from it.
 
 export default function GTAMAnalyticsWidget() {
+  const { data, error, setPeriod } = useCercMonth();
+  if (error) return <div className="alert alert-error" role="alert">{error}</div>;
+  if (!data) return <Card><div className="audit-placeholder">Loading…</div></Card>;
+  if (!data.period) return <NoReport />;
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16 }}>
-      <NotHeld title="Top 10 bilateral participants">
-        The CERC report's state-wise bilateral purchase and sale table is not among the tables the platform reads.
-      </NotHeld>
-      <NotHeld title="Top 10 DAM participants">
-        The CERC report's state-wise DAM purchase and sale table is not among the tables the platform reads.
-      </NotHeld>
-      <NotHeld title="GTAM volume and price by contract type">
-        GTAM contract-wise volume and price (any-day single-sided, daily, weekly, monthly, intraday) are not in the parsed
-        report and no exchange feed carries them.
-      </NotHeld>
-    </div>
+    <>
+      <Card><div className="report-criteria"><PeriodSelect data={data} onChange={setPeriod} /></div></Card>
+      <TermAheadCard period={data.period} market="GTAM" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 16, marginTop: 16 }}>
+        <ParticipantsCard period={data.period} segment="BILATERAL" side="SELL" />
+        <ParticipantsCard period={data.period} segment="BILATERAL" side="BUY" />
+        <ParticipantsCard period={data.period} segment="DAM" side="SELL" />
+        <ParticipantsCard period={data.period} segment="DAM" side="BUY" />
+      </div>
+    </>
   );
 }

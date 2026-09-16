@@ -1038,6 +1038,11 @@ export const api = {
     getRec: (params) => g('/cerc-market/rec', params),
     marketMonth: (period) => g('/cerc-market/market-month', period ? { period } : undefined),
     volumeHistory: () => g('/cerc-market/volume-history'),
+    // Who traded: segment is TRADING_LICENSEE / BILATERAL / DAM / GDAM / HP-DAM / RTM,
+    // side SELL / BUY (ALL for licensees). Term-ahead market is TAM / GTAM / HP-TAM.
+    participants: (params) => g('/cerc-market/participants', params),
+    concentrationHistory: (params) => g('/cerc-market/concentration-history', params),
+    termAhead: (params) => g('/cerc-market/term-ahead', params),
     getPeriods: () => g('/cerc-market/periods'),
     getFetchLog: () => g('/cerc-market/fetch-log'),
     triggerFetch: (period) => p('/cerc-market/trigger', { period }),

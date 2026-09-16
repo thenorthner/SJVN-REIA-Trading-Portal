@@ -2,12 +2,14 @@ import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card } from '../../components/ui.jsx';
 import SourceNote from '../../components/SourceNote.jsx';
-import { useCercMonth, PeriodSelect, NoReport, NotHeld, periodLabel, mu } from './cercMonth.jsx';
+import { useCercMonth, PeriodSelect, NoReport, periodLabel, mu } from './cercMonth.jsx';
+import { ParticipantsCard, RecBidDepthCard } from './cercParticipants.jsx';
 
 // The market at large for a month: how volume split across each exchange's
-// products, and the RECs that traded. It used to be four hardcoded arrays — a
-// "top 7 trading licensees" pie, REC bid depth, and PXIL and HPX product splits
-// given as percentages with nothing to say which month they were.
+// products, the trading licensees' shares, and the REC bid book. It used to be
+// four hardcoded arrays — a "top 7 trading licensees" pie, REC bid depth, and
+// PXIL and HPX product splits given as percentages with nothing to say which
+// month they were. All four are in the CERC report and are read from it.
 
 function ExchangeVolumes({ exchange, month }) {
   const ex = month.exchanges.find((e) => e.exchange === exchange);
@@ -62,10 +64,10 @@ export default function MacroTradingIntelligenceWidget() {
         <ExchangeVolumes exchange="IEX" month={data} />
         <ExchangeVolumes exchange="PXIL" month={data} />
         <ExchangeVolumes exchange="HPX" month={data} />
-        <NotHeld title="Share of the trading licensees">
-          The report's table of electricity traded by each trading licensee is not among the tables the platform reads,
-          so there are no licensee shares to show. The figures that used to be here were typed in.
-        </NotHeld>
+        <ParticipantsCard period={data.period} segment="TRADING_LICENSEE" side="ALL" title="Share of the top 10 trading licensees" />
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <RecBidDepthCard month={data} />
       </div>
     </>
   );
