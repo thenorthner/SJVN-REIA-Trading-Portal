@@ -1156,6 +1156,40 @@ CREATE TABLE IF NOT EXISTS dsm_charge_slabs (
 );
 
 -- 15-minute block-wise schedules for a bilateral transaction (Format-D source).
+-- A bilateral deal's rates revised partway through its term. Each row applies
+-- from its date until the next; the transaction's own rates apply before the
+-- first. All three rates are stated, and sale - purchase = margin holds.
+CREATE TABLE IF NOT EXISTS bilateral_rate_revisions (
+  id TEXT PRIMARY KEY,
+  transaction_id TEXT NOT NULL REFERENCES bilateral_transactions(id),
+  effective_from TEXT NOT NULL,
+  sale_rate_per_unit REAL NOT NULL,
+  purchase_rate_per_unit REAL NOT NULL,
+  trading_margin_per_unit REAL NOT NULL,
+  reason TEXT NOT NULL,                -- the amendment, letter or order behind it
+  reference TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (transaction_id, effective_from)
+);
+
+-- A bilateral deal's power split between buyers. The rows sharing an
+-- effective_from are one split, summing to 100%, and apply until a later split
+-- replaces them. A transaction with no split is billed to its one buyer.
+CREATE TABLE IF NOT EXISTS bilateral_buyer_splits (
+  id TEXT PRIMARY KEY,
+  transaction_id TEXT NOT NULL REFERENCES bilateral_transactions(id),
+  effective_from TEXT NOT NULL,
+  buyer_name TEXT NOT NULL,
+  client_id TEXT REFERENCES trading_clients(id),
+  drawal_state TEXT,                   -- the buyer's own drawal state, for its open-access legs
+  share_percent REAL NOT NULL CHECK (share_percent > 0 AND share_percent <= 100),
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (transaction_id, effective_from, buyer_name)
+);
+CREATE INDEX IF NOT EXISTS idx_bilateral_buyer_splits_tx ON bilateral_buyer_splits(transaction_id, effective_from);
+
 CREATE TABLE IF NOT EXISTS bilateral_schedules (
   id TEXT PRIMARY KEY,
   transaction_id TEXT NOT NULL REFERENCES bilateral_transactions(id),
@@ -2404,6 +2438,10 @@ CREATE TABLE IF NOT EXISTS view_bill_invoices (
   supersedes_invoice_id TEXT REFERENCES view_bill_invoices(id),
   superseded_by_invoice_id TEXT REFERENCES view_bill_invoices(id),
   cancel_reason TEXT,
+  -- The buyer this bill is for, where a bilateral transaction's power is split
+  -- between buyers; NULL for a transaction billed to its one buyer. Part of what
+  -- makes a bill a duplicate, so two buyers can each be billed for one period.
+  bilateral_buyer TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_view_bill_type_date ON view_bill_invoices(bill_type, invoice_date DESC);

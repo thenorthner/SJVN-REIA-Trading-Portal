@@ -756,6 +756,13 @@ export const api = {
     settlement: (id, params) => g(`/bilateral/${id}/settlement`, params),
     invoices: (id) => g(`/bilateral/${id}/invoices`),
     generateInvoice: (id, body) => p(`/bilateral/${id}/invoices`, body),
+    // A rate revised from a date, and power split between buyers.
+    rateRevisions: (id) => g(`/bilateral/${id}/rate-revisions`),
+    addRateRevision: (id, body) => p(`/bilateral/${id}/rate-revisions`, body),
+    removeRateRevision: (id, revisionId) => del(`/bilateral/${id}/rate-revisions/${revisionId}`),
+    buyerSplits: (id) => g(`/bilateral/${id}/buyer-splits`),
+    setBuyerSplit: (id, body) => put(`/bilateral/${id}/buyer-splits`, body),
+    removeBuyerSplit: (id, effectiveFrom) => del(`/bilateral/${id}/buyer-splits/${effectiveFrom}`),
   },
   bilateralBidding: {
     list: (params) => g('/bilateral-bidding', params),

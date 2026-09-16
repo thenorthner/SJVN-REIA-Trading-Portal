@@ -136,6 +136,8 @@ function billRequest(b) {
       injection_state: b.injection_state,
       drawal_state: b.drawal_state,
       ists_rate: b.ists_rate,
+      // The buyer the bill is for, on a bilateral transaction split between buyers.
+      buyer: b.buyer,
       // The form's "Whether LPS" switch. Off means the contract's late payment
       // surcharge is left off this bill rather than silently carried onto it.
       include_lps: b.lps === 'Yes' || b.include_lps === true,

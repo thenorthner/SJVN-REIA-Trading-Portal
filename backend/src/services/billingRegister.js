@@ -74,10 +74,11 @@ export function raiseInvoice({
         AND IFNULL(supply_from_date, '') = IFNULL(?, '')
         AND IFNULL(supply_to_date, '') = IFNULL(?, '')
         AND IFNULL(settlement_basis, '') = IFNULL(?, '')
+        AND IFNULL(bilateral_buyer, '') = IFNULL(?, '')
         AND status = 'ACTIVE'
       ORDER BY created_at DESC
       LIMIT 1
-    `).get(sourceId, bill_type, priced.supply_from_date || null, priced.supply_to_date || null, basis);
+    `).get(sourceId, bill_type, priced.supply_from_date || null, priced.supply_to_date || null, basis, priced.buyer || null);
     if (duplicate) {
       throw new Error(`${duplicate.invoice_no} already bills this ${bill_type} period as ${basis}`);
     }
@@ -91,10 +92,11 @@ export function raiseInvoice({
         AND IFNULL(supply_from_date, '') = IFNULL(?, '')
         AND IFNULL(supply_to_date, '') = IFNULL(?, '')
         AND settlement_basis = 'PROVISIONAL'
+        AND IFNULL(bilateral_buyer, '') = IFNULL(?, '')
         AND status = 'ACTIVE'
       ORDER BY created_at DESC
       LIMIT 1
-    `).get(sourceId, bill_type, priced.supply_from_date || null, priced.supply_to_date || null);
+    `).get(sourceId, bill_type, priced.supply_from_date || null, priced.supply_to_date || null, priced.buyer || null);
   }
 
   db.prepare(`
@@ -103,8 +105,8 @@ export function raiseInvoice({
       supply_from_date, supply_to_date, invoice_generated_on,
       tds_rate, tds_deducted, remarks, status,
       bilateral_id, exchange_contract_id, quantum_mwh, rate_per_unit, gst_amount, breakup_json,
-      settlement_basis, generated_from, supersedes_invoice_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?, ?, 'SETTLEMENT', ?)
+      settlement_basis, generated_from, supersedes_invoice_id, bilateral_buyer
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?, ?, 'SETTLEMENT', ?, ?)
   `).run(
     id,
     bill_type,
@@ -127,6 +129,7 @@ export function raiseInvoice({
     JSON.stringify({ line_items: priced.line_items, settlement: priced.settlement, warnings: priced.warnings }),
     basis,
     supersedes?.id || null,
+    priced.buyer || null,
   );
 
   if (supersedes) {

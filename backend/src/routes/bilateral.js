@@ -32,6 +32,10 @@ import {
   BILATERAL_BILL_TYPES,
 } from '../services/bilateralSettlement.js';
 import { raiseInvoice, billingObjection } from '../services/billingRegister.js';
+import {
+  rateRevisions, addRateRevision, removeRateRevision,
+  splitSets, setBuyerSplit, removeBuyerSplit, RevisionError,
+} from '../services/bilateralRevisions.js';
 
 const router = Router();
 
@@ -1115,6 +1119,73 @@ function seedBilateralContractReportFields() {
  * preview shows is what the invoice bills.
  */
 
+/* ─────────── Rate revisions and buyer splits ───────────
+ *
+ * A rate revised from a date partway through the term, and power split between
+ * buyers. Settlement reads both; see services/bilateralRevisions.js.
+ */
+
+const revisionFailure = (res, err) => {
+  if (err instanceof RevisionError) return res.status(err.status).json({ error: err.message });
+  throw err;
+};
+const txExists = (id) => db.prepare('SELECT 1 FROM bilateral_transactions WHERE id = ?').get(id);
+
+router.get('/:id/rate-revisions', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
+  if (!txExists(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  res.json(rateRevisions(req.params.id));
+});
+
+router.post('/:id/rate-revisions', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+  try {
+    const row = addRateRevision(req.params.id, req.body || {}, req.user?.name || req.user?.id || null);
+    secureLogAudit(req, {
+      action: 'BILATERAL_RATE_REVISION', module: 'TRADING', entityType: 'bilateral_transaction', entityId: req.params.id,
+      details: { effective_from: row.effective_from, sale_rate_per_unit: row.sale_rate_per_unit, purchase_rate_per_unit: row.purchase_rate_per_unit, trading_margin_per_unit: row.trading_margin_per_unit, reason: row.reason },
+    });
+    res.status(201).json(row);
+  } catch (err) { revisionFailure(res, err); }
+});
+
+router.delete('/:id/rate-revisions/:revisionId', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+  try {
+    const row = removeRateRevision(req.params.id, req.params.revisionId);
+    secureLogAudit(req, {
+      action: 'BILATERAL_RATE_REVISION_REMOVED', module: 'TRADING', entityType: 'bilateral_transaction', entityId: req.params.id,
+      details: { effective_from: row.effective_from, reason: row.reason },
+    });
+    res.json({ removed: row.id });
+  } catch (err) { revisionFailure(res, err); }
+});
+
+router.get('/:id/buyer-splits', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
+  if (!txExists(req.params.id)) return res.status(404).json({ error: 'Not found' });
+  res.json(splitSets(req.params.id));
+});
+
+/** Record the split that applies from a date, replacing any split from that same date. */
+router.put('/:id/buyer-splits', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+  try {
+    const set = setBuyerSplit(req.params.id, req.body || {}, req.user?.name || req.user?.id || null);
+    secureLogAudit(req, {
+      action: 'BILATERAL_BUYER_SPLIT', module: 'TRADING', entityType: 'bilateral_transaction', entityId: req.params.id,
+      details: set,
+    });
+    res.json(set);
+  } catch (err) { revisionFailure(res, err); }
+});
+
+router.delete('/:id/buyer-splits/:effectiveFrom', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+  try {
+    const out = removeBuyerSplit(req.params.id, req.params.effectiveFrom);
+    secureLogAudit(req, {
+      action: 'BILATERAL_BUYER_SPLIT_REMOVED', module: 'TRADING', entityType: 'bilateral_transaction', entityId: req.params.id,
+      details: out,
+    });
+    res.json(out);
+  } catch (err) { revisionFailure(res, err); }
+});
+
 /** Settlement position for a supply period — preview only, writes nothing. */
 router.get('/:id/settlement', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
   const { from, to, bill_type } = req.query;
@@ -1131,10 +1202,11 @@ router.get('/:id/settlement', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res
         options: {
           gst_applicable: req.query.gst_applicable === 'true',
           bearer: req.query.bearer,
+          buyer: req.query.buyer || null,
         },
       }));
     }
-    res.json(computeBilateralSettlement({ transaction_id: req.params.id, from: from || null, to: to || null }));
+    res.json(computeBilateralSettlement({ transaction_id: req.params.id, from: from || null, to: to || null, buyer: req.query.buyer || null }));
   } catch (err) {
     res.status(/not found/i.test(err.message) ? 404 : 400).json({ error: err.message });
   }
@@ -1194,6 +1266,7 @@ router.post('/:id/invoices', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, re
         injection_state: b.injection_state,
         drawal_state: b.drawal_state,
         ists_rate: b.ists_rate,
+        buyer: b.buyer || null,
       },
     });
   } catch (err) {
@@ -1214,9 +1287,13 @@ router.post('/:id/invoices', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, re
     remarks: b.remarks,
   });
 
-  // The contracted volume basis for this buyer is what has actually been settled.
-  db.prepare('UPDATE bilateral_transactions SET contracted_mwh = ? WHERE id = ?')
-    .run(priced.settlement.energy.delivered_mwh, tx.id);
+  // The contracted volume basis for this buyer is what has actually been settled —
+  // the whole transaction's, so a bill for one buyer in a split does not shrink it
+  // to that buyer's share.
+  if (!priced.buyer) {
+    db.prepare('UPDATE bilateral_transactions SET contracted_mwh = ? WHERE id = ?')
+      .run(priced.settlement.energy.delivered_mwh, tx.id);
+  }
 
   secureLogAudit(req, {
     action: 'GENERATE_BILATERAL_INVOICE',
@@ -1230,6 +1307,7 @@ router.post('/:id/invoices', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, re
       invoice_amount: invoice.invoice_amount,
       quantum_mwh: invoice.quantum_mwh,
       basis: invoice.settlement_basis,
+      buyer: priced.buyer || null,
     },
   });
 

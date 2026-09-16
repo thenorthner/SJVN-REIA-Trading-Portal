@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { ScheduleGridModal } from './ScheduleGridModal.jsx';
+import BilateralRevisionsPanel from '../../components/BilateralRevisionsPanel.jsx';
 
 // Why a deviating block carries no DSM charge. Spelled out in the tracker so an
 // unpriced block reads as an open item rather than as a block that cost nothing.
@@ -145,6 +146,8 @@ export default function Bilateral() {
   const [settleBusy, setSettleBusy] = useState(false);
   const [txInvoices, setTxInvoices] = useState([]);
   const [billPeriod, setBillPeriod] = useState({ from: '', to: '' });
+  // The buyer a split transaction is settled and billed for; '' is the whole transaction.
+  const [billBuyer, setBillBuyer] = useState('');
   const [billBusy, setBillBusy] = useState('');
   const [billMsg, setBillMsg] = useState(null);
 
@@ -391,12 +394,13 @@ export default function Bilateral() {
    * whenever the blocks underneath it change.
    */
 
-  function refreshSettlement(txId, period = billPeriod) {
+  function refreshSettlement(txId, period = billPeriod, buyer = billBuyer) {
     if (!txId) return;
     setSettleBusy(true);
     const params = {};
     if (period.from) params.from = period.from;
     if (period.to) params.to = period.to;
+    if (buyer) params.buyer = buyer;
     api.bilateral.settlement(txId, params)
       .then(setSettlement)
       .catch(() => setSettlement(null))
@@ -412,9 +416,11 @@ export default function Bilateral() {
       setTxInvoices([]);
       setBillMsg(null);
       setBillPeriod({ from: '', to: '' });
+      setBillBuyer('');
       return;
     }
-    refreshSettlement(selectedTx.id, { from: '', to: '' });
+    setBillBuyer('');
+    refreshSettlement(selectedTx.id, { from: '', to: '' }, '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTx?.id]);
 
@@ -426,6 +432,7 @@ export default function Bilateral() {
       const body = { bill_type: billType };
       if (billPeriod.from) body.from = billPeriod.from;
       if (billPeriod.to) body.to = billPeriod.to;
+      if (billBuyer) body.buyer = billBuyer;
       const inv = await api.bilateral.generateInvoice(selectedTx.id, body);
       setBillMsg({
         ok: true,
@@ -1009,6 +1016,11 @@ export default function Bilateral() {
               Settlement &amp; Billing
             </h4>
 
+            <BilateralRevisionsPanel
+              transaction={selectedTx}
+              onChanged={() => { setBillBuyer(''); refreshSettlement(selectedTx.id, billPeriod, ''); }}
+            />
+
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 14 }}>
               <Field label="Supply from">
                 <input type="date" className="input" value={billPeriod.from}
@@ -1040,8 +1052,12 @@ export default function Bilateral() {
                   {[
                     ['Delivered', `${fmtNumber(settlement.energy.delivered_mwh)} MWh`, `scheduled ${fmtNumber(settlement.energy.scheduled_mwh)}`],
                     ['Injected', `${fmtNumber(settlement.losses.injected_mwh)} MWh`, `losses ${fmtNumber(settlement.losses.loss_mwh)} MWh`],
-                    ['Energy value', `₹${fmtNumber(settlement.money.sale_value)}`, `@ ₹${settlement.rates.sale_rate_per_unit}/kWh`],
-                    ['Trading margin', `₹${fmtNumber(settlement.money.trading_margin)}`, `@ ₹${settlement.rates.trading_margin_per_unit}/kWh`],
+                    ['Energy value', `₹${fmtNumber(settlement.money.sale_value)}`, settlement.rates.is_average
+                      ? `at ${settlement.rate_segments.length} rates, avg ₹${settlement.rates.sale_rate_per_unit}/kWh`
+                      : `@ ₹${settlement.rates.sale_rate_per_unit}/kWh`],
+                    ['Trading margin', `₹${fmtNumber(settlement.money.trading_margin)}`, settlement.rates.is_average
+                      ? `avg ₹${settlement.rates.trading_margin_per_unit}/kWh`
+                      : `@ ₹${settlement.rates.trading_margin_per_unit}/kWh`],
                     ['DSM charges', `₹${fmtNumber(settlement.money.dsm_penalty_amount)}`, `deviation ${fmtNumber(settlement.energy.deviation_mwh)} MWh`],
                   ].map(([label, value, sub]) => (
                     <div key={label} style={{ padding: '10px 12px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8 }}>
@@ -1051,6 +1067,42 @@ export default function Bilateral() {
                     </div>
                   ))}
                 </div>
+
+                {settlement.split && (
+                  <div style={{ marginBottom: 12, padding: '10px 12px', border: '1px solid var(--slate-200)', borderRadius: 8 }}>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+                      <strong style={{ fontSize: 13 }}>Split between buyers</strong>
+                      <label style={{ fontSize: 12 }}>
+                        Settle and bill for{' '}
+                        <select className="input" value={billBuyer} aria-label="Buyer"
+                          onChange={(e) => { setBillBuyer(e.target.value); refreshSettlement(selectedTx.id, billPeriod, e.target.value); }}>
+                          <option value="">The whole transaction</option>
+                          {settlement.split.buyers.map((b) => <option key={b.buyer_name} value={b.buyer_name}>{b.buyer_name}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                    {/* Listed only on the whole view: a buyer's own settlement carries no split of its own. */}
+                    {!billBuyer && (
+                      <Table
+                        columns={[
+                          { key: 'buyer_name', label: 'Buyer' },
+                          { key: 'delivered_mwh', label: 'MWh', render: (r) => fmtNumber(r.delivered_mwh) },
+                          { key: 'share_of_energy_percent', label: 'Share of energy', render: (r) => (r.share_of_energy_percent == null ? '-' : `${fmtNumber(r.share_of_energy_percent)}%`) },
+                          { key: 'sale_value', label: 'Energy value', render: (r) => `₹${fmtNumber(r.sale_value)}` },
+                          { key: 'drawal_state', label: 'Drawal state', render: (r) => r.drawal_state || '-' },
+                        ]}
+                        data={settlement.split.buyers.map((b) => ({ ...b, id: b.buyer_name }))}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {settlement.rate_segments?.length > 1 && (
+                  <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--slate-600)' }}>
+                    <strong>Rate revised in this period.</strong>{' '}
+                    {settlement.rate_segments.map((g) => `${g.from} to ${g.to}: ${fmtNumber(g.delivered_mwh)} MWh @ ₹${g.sale_rate_per_unit}`).join(' · ')}
+                  </div>
+                )}
 
                 {settlement.energy.unpriced_deviation_blocks > 0 && (
                   <div style={{
@@ -1081,6 +1133,12 @@ export default function Bilateral() {
                   </div>
                 )}
 
+                {settlement.split && !billBuyer && (
+                  <div style={{ marginBottom: 12, padding: '8px 12px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, fontSize: 12, color: '#9a3412' }}>
+                    Each buyer is billed its own energy and open access — choose the buyer above to raise them.
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {[
                     ['BILATERAL_ENERGY', 'Raise Energy Bill'],
@@ -1088,7 +1146,9 @@ export default function Bilateral() {
                     ['BILATERAL_SLDC', 'Raise SLDC Consent Bill'],
                   ].map(([type, label]) => (
                     <button key={type} type="button" className="btn btn-primary"
-                      disabled={billBusy === type || (type === 'BILATERAL_ENERGY' && !['APPROVED', 'PARTIAL'].includes(selectedTx.open_access_status))}
+                      disabled={billBusy === type
+                        || (type === 'BILATERAL_ENERGY' && !['APPROVED', 'PARTIAL'].includes(selectedTx.open_access_status))
+                        || (settlement.split && !billBuyer && type !== 'BILATERAL_SLDC')}
                       onClick={() => handleRaiseBill(type)}>
                       {billBusy === type ? 'Raising…' : label}
                     </button>
@@ -1121,6 +1181,7 @@ export default function Bilateral() {
                         columns={[
                           { key: 'invoice_no', label: 'Invoice No' },
                           { key: 'bill_type', label: 'Type', render: (r) => r.bill_type.replace('BILATERAL_', '') },
+                          ...(txInvoices.some((r) => r.bilateral_buyer) ? [{ key: 'bilateral_buyer', label: 'Buyer', render: (r) => r.bilateral_buyer || '-' }] : []),
                           { key: 'invoice_amount', label: 'Amount', render: (r) => `₹${fmtNumber(r.invoice_amount)}` },
                           { key: 'quantum_mwh', label: 'MWh', render: (r) => (r.quantum_mwh == null ? '-' : fmtNumber(r.quantum_mwh)) },
                           { key: 'supply_from_date', label: 'Supply', render: (r) => (r.supply_from_date ? `${r.supply_from_date} → ${r.supply_to_date}` : '-') },

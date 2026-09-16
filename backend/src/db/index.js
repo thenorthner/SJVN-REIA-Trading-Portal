@@ -2138,6 +2138,7 @@ function migrateViewBillSettlementColumns() {
     ['supersedes_invoice_id', 'TEXT'],
     ['superseded_by_invoice_id', 'TEXT'],
     ['cancel_reason', 'TEXT'],
+    ['bilateral_buyer', 'TEXT'],
   ];
   for (const [name, type] of additions) {
     if (!cols.includes(name)) {

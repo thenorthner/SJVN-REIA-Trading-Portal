@@ -56,7 +56,7 @@ part API se live hai; wo theek hai.
 | # | Kya | Haalat |
 |---|-----|--------|
 | 18 ❌ | ~~CERC files git se hatana (roadmap #2)~~ | **Galat nikla.** `.gitignore` ka comment saaf kehta hai ki 16 `.xlsx` (~3 MB) **jaan-boojh ke tracked** hain — fresh deploy pe `autoSeedLocalReports` inhi se market-intelligence seed karta hai, bina internet ke. PDFs pehle se ignored hain. Kuch karna nahi. (Dhyan rahe: deploy `git reset --hard origin/main` hai, to inhe untrack karna server se delete kar deta.) |
-| 19 🟡 | Mid-period revisions / multi-buyer splits | 16 Aug worklog mein jaan-boojh ke scope se bahar rakha tha. |
+| 19 ✅ | Mid-period revisions / multi-buyer splits | **16 Sep: ho gaya.** Rate revision taareekh se (har rate ki alag bill line), buyer split taareekh se (har buyer ka apna energy/OA bill, register duplicate-guard mein buyer). FINAL bill wale period ko nahi chhoota. Quantum revision pehle se block-wise aata hai. Poori jaankari `Bacha_Hua_Kaam` #17 mein. |
 | 20 🟡 | Exchange contract detail pe settlement panel | "Optional polish" — billing hub primary path hai. |
 
 ## D. Committee se jawab chahiye (Delhi checklist)
