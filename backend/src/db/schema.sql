@@ -1700,6 +1700,66 @@ CREATE TABLE IF NOT EXISTS cerc_monthly_summary (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Who traded, from the CERC monthly report: each trading licensee's share of
+-- what licensees transacted (Table 2), and every entity's sale and purchase in
+-- bilateral, DAM, GDAM, HP-DAM and RTM (the entity-wise volume tables). The
+-- tables are renumbered every year, so they are found by their titles.
+CREATE TABLE IF NOT EXISTS cerc_participants (
+  id TEXT PRIMARY KEY,
+  report_period TEXT NOT NULL,
+  segment TEXT NOT NULL,               -- TRADING_LICENSEE / BILATERAL / DAM / GDAM / HP-DAM / RTM
+  side TEXT NOT NULL,                  -- SELL / BUY; ALL for a licensee's share of all it transacted
+  rank INTEGER NOT NULL,               -- position in the table as CERC printed it
+  entity_name TEXT NOT NULL,
+  volume_mu REAL,                      -- NULL for licensees: CERC prints only the share
+  share_percent REAL,
+  source_table TEXT,                   -- the table's number in that month's report, e.g. Table-31
+  fetch_log_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_cerc_participants_lookup
+  ON cerc_participants(report_period, segment, side, rank);
+CREATE INDEX IF NOT EXISTS idx_cerc_participants_entity ON cerc_participants(entity_name);
+
+-- Term-ahead markets on each exchange, contract type by contract type: TAM,
+-- green TAM and high-price TAM. Until April 2025 CERC printed one table per
+-- market and exchange; from May 2025 it splits each into "intraday and
+-- contingency" and "term ahead". The contract type says which it is either way,
+-- so months on both sides of the split compare.
+CREATE TABLE IF NOT EXISTS cerc_term_ahead (
+  id TEXT PRIMARY KEY,
+  report_period TEXT NOT NULL,
+  market TEXT NOT NULL,                -- TAM / GTAM / HP-TAM
+  exchange TEXT NOT NULL,              -- IEX / PXIL / HPX
+  contract_type TEXT NOT NULL,         -- INTRADAY / DAY_AHEAD_CONTINGENCY / DAILY / WEEKLY / MONTHLY / ANY_DAY_SINGLE_SIDED / OTHER
+  contract_label TEXT NOT NULL,        -- as CERC printed it
+  volume_mu REAL,
+  -- NULL where nothing was scheduled: the report prints 0 there, and a zero
+  -- price would chart as electricity given away.
+  price_rs_kwh REAL,
+  source_table TEXT,
+  fetch_log_id TEXT,
+  UNIQUE (report_period, market, exchange, contract_type, contract_label)
+);
+CREATE INDEX IF NOT EXISTS idx_cerc_term_ahead_lookup ON cerc_term_ahead(report_period, market, exchange);
+
+-- The same tables' footers: how much the top five took and the
+-- Herfindahl-Hirschman index CERC computes for the segment.
+CREATE TABLE IF NOT EXISTS cerc_market_concentration (
+  id TEXT PRIMARY KEY,
+  report_period TEXT NOT NULL,
+  segment TEXT NOT NULL,
+  side TEXT NOT NULL,
+  entity_count INTEGER,
+  total_volume_mu REAL,
+  top5_volume_mu REAL,
+  top5_share_percent REAL,             -- percent, whichever scale the table printed it in
+  hhi REAL,                            -- 0 to 1, as CERC prints it
+  source_table TEXT,
+  fetch_log_id TEXT,
+  UNIQUE (report_period, segment, side)
+);
+
 -- Effective-dated open-access charge rates. The ISET ledger shows these are not
 -- constant — ISTS tariffs are revised periodically and STU charges differ by
 -- state — so a rate is looked up by charge_name for a given date rather than

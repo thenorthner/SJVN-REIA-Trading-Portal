@@ -217,10 +217,14 @@ function monthOf(period) {
       const volumes = REPORT_PRODUCTS.map((product) => ({ product, volume_mu: val('VOLUME', product, exchange, 'Volume') }));
       return { exchange, volumes, total_mu: volumes.reduce((a, v) => a + (v.volume_mu || 0), 0) };
     }),
-    rec: REPORT_EXCHANGES.map((exchange) => ({
+    rec: [...REPORT_EXCHANGES, 'TRADERS'].map((exchange) => ({
       exchange,
       volume_mwh: val('REC', 'REC', exchange, 'Traded Volume'),
       price_rs_mwh: val('REC', 'REC', exchange, 'Weighted Avg Price'),
+      // Bids are an exchange's order book; RECs sold through traders have none.
+      buy_bid_mwh: val('REC', 'REC', exchange, 'Buy Bid Volume'),
+      sell_bid_mwh: val('REC', 'REC', exchange, 'Sell Bid Volume'),
+      buy_sell_ratio: val('REC', 'REC', exchange, 'Buy/Sell Bid Ratio'),
     })),
     short_term: {
       bilateral_mu: val('VOLUME', 'BILATERAL', 'ALL', 'Volume'),
@@ -228,13 +232,110 @@ function monthOf(period) {
       dsm_mu: val('VOLUME', 'DSM', 'GRID', 'Volume'),
       total_mu: summary?.total_short_term_volume_mu ?? null,
     },
-    not_in_report: [
-      'Shares of the trading licensees',
-      'REC buy and sell bid volumes (only what traded)',
-      'GTAM and TAM contract-wise volumes and prices',
-    ],
+    licensees: concentrationOf(period, 'TRADING_LICENSEE', 'ALL'),
   };
 }
+
+const SEGMENTS = ['TRADING_LICENSEE', 'BILATERAL', 'DAM', 'GDAM', 'HP-DAM', 'RTM'];
+const SIDES = ['SELL', 'BUY', 'ALL'];
+const TERM_MARKETS = ['TAM', 'GTAM', 'HP-TAM'];
+
+function concentrationOf(period, segment, side) {
+  return db.prepare(`
+    SELECT entity_count, total_volume_mu, top5_volume_mu, top5_share_percent, hhi, source_table
+    FROM cerc_market_concentration WHERE report_period = ? AND segment = ? AND side = ?
+  `).get(period, segment, side) || null;
+}
+
+const pickPeriod = (requested) => {
+  const periods = reportPeriods();
+  return { periods, period: requested && periods.includes(requested) ? requested : periods[0] || null };
+};
+
+/**
+ * Who traded in a segment in a month, as CERC's entity-wise tables list them:
+ * the largest first, with the segment's concentration. For the trading
+ * licensees it is each licensee's share of what licensees transacted.
+ *
+ * The entities are the report's regional entities — states, generators, open
+ * access consumers and their individual connections — named as the report
+ * names them.
+ */
+router.get('/participants', (req, res) => {
+  const segment = String(req.query.segment || 'GDAM').toUpperCase();
+  const side = String(req.query.side || (segment === 'TRADING_LICENSEE' ? 'ALL' : 'SELL')).toUpperCase();
+  if (!SEGMENTS.includes(segment)) return res.status(400).json({ error: `segment must be one of ${SEGMENTS.join(', ')}` });
+  if (!SIDES.includes(side)) return res.status(400).json({ error: `side must be one of ${SIDES.join(', ')}` });
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 500);
+  const { periods, period } = pickPeriod(req.query.period);
+  if (!period) return res.json({ period: null, periods: [], segment, side, participants: [], concentration: null });
+
+  const q = String(req.query.q || '').trim();
+  const where = 'report_period = ? AND segment = ? AND side = ?';
+  const params = [period, segment, side];
+  const all = db.prepare(`SELECT COUNT(*) AS n FROM cerc_participants WHERE ${where}`).get(...params).n;
+  const rows = q
+    ? db.prepare(`SELECT * FROM cerc_participants WHERE ${where} AND entity_name LIKE ? ORDER BY rank LIMIT ?`).all(...params, `%${q}%`, limit)
+    : db.prepare(`SELECT * FROM cerc_participants WHERE ${where} ORDER BY rank LIMIT ?`).all(...params, limit);
+
+  res.json({
+    period,
+    periods,
+    segment,
+    side,
+    entities_in_table: all,
+    // No table for this segment and side in that month's report — HP-DAM began
+    // in 2024 and bilateral entity tables in August 2024.
+    in_report: all > 0,
+    concentration: concentrationOf(period, segment, side),
+    participants: rows.map((r) => ({
+      rank: r.rank, entity_name: r.entity_name, volume_mu: r.volume_mu, share_percent: r.share_percent,
+    })),
+  });
+});
+
+/** How concentrated a segment has been, month by month, oldest first. */
+router.get('/concentration-history', (req, res) => {
+  const segment = String(req.query.segment || 'TRADING_LICENSEE').toUpperCase();
+  const side = String(req.query.side || (segment === 'TRADING_LICENSEE' ? 'ALL' : 'SELL')).toUpperCase();
+  if (!SEGMENTS.includes(segment)) return res.status(400).json({ error: `segment must be one of ${SEGMENTS.join(', ')}` });
+  if (!SIDES.includes(side)) return res.status(400).json({ error: `side must be one of ${SIDES.join(', ')}` });
+  res.json(db.prepare(`
+    SELECT report_period AS period, entity_count, total_volume_mu, top5_volume_mu, top5_share_percent, hhi
+    FROM cerc_market_concentration WHERE segment = ? AND side = ? ORDER BY report_period
+  `).all(segment, side));
+});
+
+/**
+ * Term-ahead markets in a month: each exchange's volume and weighted price by
+ * contract type. The exchange totals are added up from the contracts, and the
+ * weighted price is weighted by those volumes.
+ */
+router.get('/term-ahead', (req, res) => {
+  const market = String(req.query.market || 'TAM').toUpperCase();
+  if (!TERM_MARKETS.includes(market)) return res.status(400).json({ error: `market must be one of ${TERM_MARKETS.join(', ')}` });
+  const { periods, period } = pickPeriod(req.query.period);
+  if (!period) return res.json({ period: null, periods: [], market, exchanges: [] });
+
+  const rows = db.prepare(`
+    SELECT * FROM cerc_term_ahead WHERE report_period = ? AND market = ? ORDER BY exchange, rowid
+  `).all(period, market);
+  const exchanges = REPORT_EXCHANGES.map((exchange) => {
+    const contracts = rows.filter((r) => r.exchange === exchange).map((r) => ({
+      contract_type: r.contract_type, contract_label: r.contract_label, volume_mu: r.volume_mu, price_rs_kwh: r.price_rs_kwh,
+    }));
+    const volume = contracts.reduce((a, c) => a + (c.volume_mu || 0), 0);
+    const priced = contracts.filter((c) => c.price_rs_kwh != null && c.volume_mu > 0);
+    const pricedVolume = priced.reduce((a, c) => a + c.volume_mu, 0);
+    return {
+      exchange,
+      contracts,
+      volume_mu: contracts.length ? volume : null,
+      weighted_price_rs_kwh: pricedVolume ? priced.reduce((a, c) => a + c.volume_mu * c.price_rs_kwh, 0) / pricedVolume : null,
+    };
+  });
+  res.json({ period, periods, market, in_report: rows.length > 0, exchanges });
+});
 
 router.get('/market-month', (req, res) => {
   const periods = reportPeriods();

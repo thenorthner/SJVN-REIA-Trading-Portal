@@ -52,8 +52,9 @@ describe('CERC market month', () => {
     const iex = body.exchanges.find((e) => e.exchange === 'IEX');
     expect(iex.volumes.find((v) => v.product === 'GDAM').volume_mu).toBe(756);
     expect(iex.total_mu).toBe(7326);
-    expect(body.rec.find((x) => x.exchange === 'IEX')).toEqual({ exchange: 'IEX', volume_mwh: 2391262, price_rs_mwh: 336.68 });
-    expect(body.not_in_report).toContain('Shares of the trading licensees');
+    expect(body.rec.find((x) => x.exchange === 'IEX')).toEqual({
+      exchange: 'IEX', volume_mwh: 2391262, price_rs_mwh: 336.68, buy_bid_mwh: null, sell_bid_mwh: null, buy_sell_ratio: null,
+    });
   });
 
   it('falls back to the newest month for a month the report does not have, and runs month by month', async () => {

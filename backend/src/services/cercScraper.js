@@ -146,10 +146,263 @@ export function parseVolumeTable(rows) {
   return out;
 }
 
+/** "Table-31: VOLUME OF ..." → "Table-31". The number moves between years. */
+export function tableNumber(title) {
+  const m = /^\s*table[-\s]*(\d+(?:\s*\([a-z,\s]+\))?)/i.exec(String(title || ''));
+  return m ? `Table-${m[1].replace(/\s+/g, '')}` : null;
+}
+
+// Top-five shares are printed as a fraction in Table 2 (0.812) and as a percent
+// in the entity tables (46.78); an index is always 0–1 in these reports, but a
+// month printing it in points (1862) is read on the same scale.
+const asPercent = (v) => (v == null ? null : (v <= 1 ? v * 100 : v));
+const asIndex = (v) => (v == null ? null : (v > 1 ? v / 10000 : v));
+
 /**
- * Periods seeded before parseVolumeTable carry the mislabelled volume rows. A
- * period whose local report is on disk and whose volumes have no GDAM row is
- * parsed again from that file — the same file, so only the volumes change.
+ * An entity-wise volume table — who sold, or bought, how much in one segment —
+ * or Table 2, each trading licensee's share of what licensees transacted.
+ *
+ * Rows run: a title, a header, one row per entity in CERC's order, then "Total",
+ * the top five, the Herfindahl-Hirschman index, and a source line. Entities are
+ * read until the footer; the footer gives the concentration, and nothing below
+ * the source line is read.
+ */
+export function parseParticipantTable(rows, { licensee = false } = {}) {
+  const out = {
+    source_table: tableNumber(rows?.[0]?.find?.((c) => c)),
+    participants: [],
+    concentration: { entity_count: 0, total_volume_mu: null, top5_volume_mu: null, top5_share_percent: null, hhi: null },
+  };
+  const headerIdx = (rows || []).findIndex((r) => (r || []).some((c) => /name of the (entity|trading licensee)/i.test(String(c ?? ''))));
+  if (headerIdx < 0) return out;
+
+  for (const r of rows.slice(headerIdx + 1)) {
+    if (!r || r.every((c) => c == null || c === '')) continue;
+    const c0 = String(r[0] ?? '').trim();
+    const name = licensee ? String(r[1] ?? '').trim() : c0;
+    const label = c0 || name;
+
+    if (/^(source\b|nldc\b|note\b|\*)/i.test(label)) break;
+    if (/^total$/i.test(label)) {
+      // Table 2's TOTAL is the shares summing to 1, not a volume.
+      if (!licensee) out.concentration.total_volume_mu = num(r[1]);
+      continue;
+    }
+    if (/top\s*5|top five/i.test(label)) {
+      if (licensee) {
+        out.concentration.top5_share_percent = asPercent(num(r[2]));
+      } else {
+        out.concentration.top5_volume_mu = num(r[1]);
+        out.concentration.top5_share_percent = asPercent(num(r[2]));
+      }
+      continue;
+    }
+    if (/herfindahl/i.test(label)) {
+      out.concentration.hhi = asIndex(num(r[2]) ?? num(r[1]));
+      continue;
+    }
+
+    if (licensee) {
+      const share = num(r[2]);
+      if (!name || share == null) continue;
+      out.participants.push({
+        rank: num(r[0]) ?? out.participants.length + 1,
+        entity_name: name,
+        volume_mu: null,
+        share_percent: share,
+      });
+    } else {
+      const volume = num(r[1]);
+      if (!name || volume == null) continue;
+      out.participants.push({
+        rank: out.participants.length + 1,
+        entity_name: name,
+        volume_mu: volume,
+        share_percent: num(r[2]),
+      });
+    }
+  }
+  out.concentration.entity_count = out.participants.length;
+  return out;
+}
+
+/**
+ * The REC table: for each exchange, the volume bid to buy, bid to sell, their
+ * ratio, what traded and at what weighted price — and the same traded volume
+ * and price for RECs sold bilaterally through traders.
+ *
+ * Only the traded volume and price were read before. The bid volumes are the
+ * depth of the market: a session where sellers offered six times what buyers
+ * wanted clears very differently from one where the two were level.
+ */
+export function parseRecTable(rows) {
+  const out = { marketData: [], volume: {}, price: {} };
+  // The exchange names sit on the row under the "Through Power Exchange" band;
+  // the traders' column is the one under "Through Traders".
+  const namesIdx = (rows || []).findIndex((r) => (r || []).some((c) => /^\s*iex\s*$/i.test(String(c ?? ''))));
+  if (namesIdx < 0) return out;
+  const columns = [];
+  (rows[namesIdx] || []).forEach((c, i) => {
+    const name = String(c ?? '').trim().toUpperCase();
+    if (['IEX', 'PXIL', 'HPX'].includes(name)) columns.push([i, name]);
+  });
+  const band = rows[namesIdx - 1] || [];
+  const tradersCol = band.findIndex((c) => /trader/i.test(String(c ?? '')));
+  if (tradersCol >= 0) columns.push([tradersCol, 'TRADERS']);
+
+  const metricOf = (label) => {
+    if (/ratio/i.test(label)) return ['Buy/Sell Bid Ratio', 'ratio'];
+    if (/buy\s*bid/i.test(label)) return ['Buy Bid Volume', 'MWh'];
+    if (/sell\s*bid/i.test(label)) return ['Sell Bid Volume', 'MWh'];
+    if (/traded\s*volume/i.test(label)) return ['Traded Volume', 'MWh'];
+    if (/price/i.test(label)) return ['Weighted Avg Price', 'Rs/MWh'];
+    return null;
+  };
+
+  for (const r of rows.slice(namesIdx + 1)) {
+    const c0 = String(r?.[0] ?? '').trim();
+    if (/^(source\b|note\b)/i.test(c0)) break;
+    const metric = metricOf(String(r?.[1] ?? ''));
+    if (!metric) continue;
+    for (const [i, exchange] of columns) {
+      const val = num(r[i]);
+      if (val === null) continue;
+      out.marketData.push({ category: 'REC', product: 'REC', exchange, metric: metric[0], val, unit: metric[1] });
+      if (metric[0] === 'Traded Volume') out.volume[exchange] = val;
+      if (metric[0] === 'Weighted Avg Price') out.price[exchange] = val;
+    }
+  }
+  return out;
+}
+
+const CONTRACT_TYPES = [
+  [/intra-?\s*day/i, 'INTRADAY'],
+  [/day\s*ahead\s*contingency/i, 'DAY_AHEAD_CONTINGENCY'],
+  [/any\s*day/i, 'ANY_DAY_SINGLE_SIDED'],
+  [/daily/i, 'DAILY'],
+  [/weekly/i, 'WEEKLY'],
+  [/monthly/i, 'MONTHLY'],
+];
+
+/**
+ * The term-ahead tables inside the combined price sheet ("Table-3 to 26"): for
+ * each exchange, TAM, green TAM and high-price TAM volume and weighted price by
+ * contract type.
+ *
+ * A table starts at its title and ends at its source line. The title names the
+ * market and the exchange; each contract row gives the scheduled volume and the
+ * price; the Total row is kept only to check the contracts against. A contract
+ * that scheduled nothing is printed at a price of 0, which is read as no price.
+ */
+export function parseTermAheadTables(rows) {
+  const out = { contracts: [], printed_totals: [] };
+  let current = null;
+  for (const r of rows || []) {
+    const c0 = String(r?.[0] ?? '').replace(/\s+/g, ' ').trim();
+    const m = /^table[-\s]*\d+\s*:.*?\b(high price |green )?(term ahead market|intraday and contingency) of (iex|pxil|hpx)\b/i.exec(c0);
+    if (m) {
+      const kind = (m[1] || '').trim().toLowerCase();
+      current = {
+        market: kind === 'green' ? 'GTAM' : kind === 'high price' ? 'HP-TAM' : 'TAM',
+        exchange: m[3].toUpperCase(),
+        source_table: tableNumber(c0),
+      };
+      continue;
+    }
+    if (/^table/i.test(c0)) { current = null; continue; }
+    if (!current) continue;
+    if (/^source\b/i.test(c0)) { current = null; continue; }
+
+    const label = String(r?.[1] ?? '').replace(/\s+/g, ' ').trim();
+    const volume = num(r?.[2]);
+    if (/^total$/i.test(label)) {
+      out.printed_totals.push({ ...current, volume_mu: volume });
+      continue;
+    }
+    // A contract row is numbered, or names a contract type. The label is not
+    // always "... Contracts": some months print plain "Monthly".
+    const isContract = num(r?.[0]) !== null || CONTRACT_TYPES.some(([re]) => re.test(label));
+    if (!label || !isContract || volume === null) continue;
+    const price = num(r?.[3]);
+    out.contracts.push({
+      ...current,
+      contract_type: (CONTRACT_TYPES.find(([re]) => re.test(label)) || [null, 'OTHER'])[1],
+      contract_label: label,
+      volume_mu: volume,
+      price_rs_kwh: volume > 0 && price !== null && price > 0 ? price : null,
+    });
+  }
+  return out;
+}
+
+function saveTermAhead(workbook, period, logId) {
+  const sheet = findSheet(workbook, ['Table-3 to 26', 'Table-3 to 17', 'Table 3 to 17', 'Table 3 to 26', /^table[- ]*3\s*to/i]);
+  const parsed = sheet ? parseTermAheadTables(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null })) : { contracts: [] };
+  db.transaction(() => {
+    db.prepare('DELETE FROM cerc_term_ahead WHERE report_period = ?').run(period);
+    const insert = db.prepare(`
+      INSERT OR REPLACE INTO cerc_term_ahead (id, report_period, market, exchange, contract_type, contract_label, volume_mu, price_rs_kwh, source_table, fetch_log_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const c of parsed.contracts) {
+      insert.run(newId('CTA'), period, c.market, c.exchange, c.contract_type, c.contract_label, c.volume_mu, c.price_rs_kwh, c.source_table, logId);
+    }
+  })();
+  return parsed.contracts.length;
+}
+
+/** The entity-wise tables, by title. Each is present from the month it began. */
+export const PARTICIPANT_TABLES = [
+  { segment: 'TRADING_LICENSEE', side: 'ALL', title: /PERCENTAGE SHARE OF ELECTRICITY TRANSACTED BY TRADING LICENSEES/i, licensee: true },
+  { segment: 'BILATERAL', side: 'SELL', title: /VOLUME OF ELECTRICITY SOLD THROUGH BILATERAL/i },
+  { segment: 'BILATERAL', side: 'BUY', title: /VOLUME OF ELECTRICITY PURCHASED THROUGH BILATERAL/i },
+  { segment: 'DAM', side: 'SELL', title: /VOLUME OF ELECTRICITY SOLD IN DAY AHEAD MARKET/i },
+  { segment: 'DAM', side: 'BUY', title: /VOLUME OF ELECTRICITY PURCHASED IN DAY AHEAD MARKET/i },
+  { segment: 'GDAM', side: 'SELL', title: /VOLUME OF ELECTRICITY SOLD IN GREEN DAY AHEAD MARKET/i },
+  { segment: 'GDAM', side: 'BUY', title: /VOLUME OF ELECTRICITY PURCHASED IN GREEN DAY AHEAD MARKET/i },
+  { segment: 'HP-DAM', side: 'SELL', title: /VOLUME OF ELECTRICITY SOLD IN HIGH PRICE DAY AHEAD MARKET/i },
+  { segment: 'HP-DAM', side: 'BUY', title: /VOLUME OF ELECTRICITY PURCHASED IN HIGH PRICE DAY AHEAD MARKET/i },
+  { segment: 'RTM', side: 'SELL', title: /VOLUME OF ELECTRICITY SOLD IN REAL TIME MARKET/i },
+  { segment: 'RTM', side: 'BUY', title: /VOLUME OF ELECTRICITY PURCHASED IN REAL TIME MARKET/i },
+];
+
+/** Write one report's participant tables, replacing whatever that period held. */
+function saveParticipants(workbook, period, logId) {
+  let written = 0;
+  db.transaction(() => {
+    db.prepare('DELETE FROM cerc_participants WHERE report_period = ?').run(period);
+    db.prepare('DELETE FROM cerc_market_concentration WHERE report_period = ?').run(period);
+    const insertRow = db.prepare(`
+      INSERT INTO cerc_participants (id, report_period, segment, side, rank, entity_name, volume_mu, share_percent, source_table, fetch_log_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insertConc = db.prepare(`
+      INSERT INTO cerc_market_concentration (id, report_period, segment, side, entity_count, total_volume_mu,
+        top5_volume_mu, top5_share_percent, hhi, source_table, fetch_log_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const spec of PARTICIPANT_TABLES) {
+      const sheet = findSheetByTitle(workbook, spec.title);
+      if (!sheet) continue;
+      const parsed = parseParticipantTable(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null }), { licensee: !!spec.licensee });
+      if (!parsed.participants.length) continue;
+      for (const p of parsed.participants) {
+        insertRow.run(newId('CPT'), period, spec.segment, spec.side, p.rank, p.entity_name, p.volume_mu, p.share_percent, parsed.source_table, logId);
+        written += 1;
+      }
+      const c = parsed.concentration;
+      insertConc.run(newId('CMC'), period, spec.segment, spec.side, c.entity_count, c.total_volume_mu,
+        c.top5_volume_mu, c.top5_share_percent, c.hhi, parsed.source_table, logId);
+    }
+  })();
+  return written;
+}
+
+/**
+ * Periods seeded before parseVolumeTable carry the mislabelled volume rows, and
+ * periods seeded before the participant tables were read carry none of them. A
+ * period whose local report is on disk and that lacks either is parsed again
+ * from that file — the same file, so only what was misread or skipped changes.
  */
 function repairLocalVolumes() {
   if (!fs.existsSync(CERC_DOWNLOAD_DIR)) return 0;
@@ -163,7 +416,10 @@ function repairLocalVolumes() {
     const labelled = db.prepare(`
       SELECT COUNT(*) AS n FROM cerc_market_data WHERE report_period = ? AND data_category = 'VOLUME' AND product IN ('GDAM', 'PX_TOTAL')
     `).get(d).n;
-    if (labelled) continue;
+    // Seeded before the participant tables and REC bid depth were read.
+    const participants = db.prepare('SELECT COUNT(*) AS n FROM cerc_participants WHERE report_period = ?').get(d).n;
+    const termAhead = db.prepare('SELECT COUNT(*) AS n FROM cerc_term_ahead WHERE report_period = ?').get(d).n;
+    if (labelled && participants && termAhead) continue;
     try {
       parseAndSaveExcel(excelPath, d, summaryRow.fetch_log_id);
       repaired += 1;
@@ -355,29 +611,26 @@ function parseAndSaveExcel(excelPath, period, logId) {
     }
   }
 
-  // 7. REC (title is constant across years; table number is not)
+  // 7. REC (title is constant across years; table number is not): bid depth,
+  // what traded and at what price, on each exchange and through traders.
   const t45 = findSheetByTitle(workbook, /RENEWABLE ENERGY CERTIFICATES/i);
   if (t45) {
-    const rows = XLSX.utils.sheet_to_json(t45, { header: 1 });
-    for (const r of rows) {
-      const label = String(r[1] || '').trim();
-      if (label.includes('Traded Volume')) {
-        summary.rec_iex_volume = num(r[2]) || 0;
-        summary.rec_pxil_volume = num(r[3]) || 0;
-        summary.rec_hpx_volume = num(r[4]) || 0;
-        marketData.push({ category: 'REC', product: 'REC', exchange: 'IEX', metric: 'Traded Volume', val: summary.rec_iex_volume, unit: 'MWh' });
-        marketData.push({ category: 'REC', product: 'REC', exchange: 'PXIL', metric: 'Traded Volume', val: summary.rec_pxil_volume, unit: 'MWh' });
-        marketData.push({ category: 'REC', product: 'REC', exchange: 'HPX', metric: 'Traded Volume', val: summary.rec_hpx_volume, unit: 'MWh' });
-      } else if (label.includes('Weighted average Price') || label.includes('Price')) {
-        summary.rec_iex_avg_price = num(r[2]);
-        summary.rec_pxil_avg_price = num(r[3]);
-        summary.rec_hpx_avg_price = num(r[4]);
-        if (summary.rec_iex_avg_price !== null) marketData.push({ category: 'REC', product: 'REC', exchange: 'IEX', metric: 'Weighted Avg Price', val: summary.rec_iex_avg_price, unit: 'Rs/MWh' });
-        if (summary.rec_pxil_avg_price !== null) marketData.push({ category: 'REC', product: 'REC', exchange: 'PXIL', metric: 'Weighted Avg Price', val: summary.rec_pxil_avg_price, unit: 'Rs/MWh' });
-        if (summary.rec_hpx_avg_price !== null) marketData.push({ category: 'REC', product: 'REC', exchange: 'HPX', metric: 'Weighted Avg Price', val: summary.rec_hpx_avg_price, unit: 'Rs/MWh' });
-      }
-    }
+    const rec = parseRecTable(XLSX.utils.sheet_to_json(t45, { header: 1, defval: null }));
+    marketData.push(...rec.marketData);
+    summary.rec_iex_volume = rec.volume.IEX || 0;
+    summary.rec_pxil_volume = rec.volume.PXIL || 0;
+    summary.rec_hpx_volume = rec.volume.HPX || 0;
+    summary.rec_iex_avg_price = rec.price.IEX ?? null;
+    summary.rec_pxil_avg_price = rec.price.PXIL ?? null;
+    summary.rec_hpx_avg_price = rec.price.HPX ?? null;
   }
+
+  // 8. Who traded: licensee shares and the entity-wise volume tables.
+  const participants = saveParticipants(workbook, period, logId);
+  records += participants;
+
+  // 9. Term-ahead markets by contract type, on each exchange.
+  records += saveTermAhead(workbook, period, logId);
 
   // Insert market data records
   const insertStmt = db.prepare(`
@@ -671,7 +924,7 @@ async function autoSeedLocalReports() {
     }
     if (skipped) console.log(`[CERC Scraper] ${skipped} period(s) in retry cooldown`);
     const repaired = repairLocalVolumes();
-    if (repaired) console.log(`[CERC Scraper] Re-read Table-1 volumes for ${repaired} period(s) seeded with GDAM/HP-DAM filed as DAM`);
+    if (repaired) console.log(`[CERC Scraper] Re-read ${repaired} local report(s) seeded before their volumes, participants, term-ahead markets or REC bid depth were read`);
   } catch (err) {
     console.warn(`[CERC Scraper] autoSeedLocalReports error:`, err.message);
   }
