@@ -100,6 +100,17 @@ export const api = {
     reaLog: (params) => g('/energy-data/rea-log', params),
     reaTrigger: (body) => p('/energy-data/rea-trigger', body),
     reaScan: (body) => p('/energy-data/rea-scan', body),
+    // A JMR, a state energy account or an RLDC statement, from the document's
+    // own table. dry_run reads and matches without writing.
+    accountTypes: () => g('/energy-data/account-types'),
+    accountTemplate: (accountType) => client.get('/energy-data/account-template', { params: { account_type: accountType }, responseType: 'blob' }).then((r) => r.data),
+    uploadAccount: (file, fields = {}, dryRun = false) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      for (const [k, v] of Object.entries(fields)) if (v) fd.append(k, v);
+      fd.append('dry_run', dryRun ? 'true' : 'false');
+      return client.post('/energy-data/upload-account', fd).then((r) => r.data);
+    },
   },
   invoices: {
     // A month of bills from the seller's own sheet: dry_run checks and reports

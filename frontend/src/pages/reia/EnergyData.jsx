@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
 import ReaAutomationPipeline from '../../components/ReaAutomationPipeline.jsx';
+import EnergyAccountUpload from '../../components/EnergyAccountUpload.jsx';
 import { fmtDateTime } from '../../datetime.js';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
@@ -25,6 +26,8 @@ export default function EnergyData() {
   const [parsedData, setParsedData] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [reaPeriod, setReaPeriod] = useState('');
+  const [showAccountUpload, setShowAccountUpload] = useState(false);
+  const [accountResult, setAccountResult] = useState(null);
 
   // REA Automation state
   const [reaStatus, setReaStatus] = useState(null);
@@ -213,12 +216,20 @@ export default function EnergyData() {
             {CAN_WRITE.includes(user?.role) && (
               <>
                 <button className="btn btn-secondary" onClick={() => setShowUploadREA(true)}>Upload REA PDF</button>
+                <button className="btn btn-secondary" onClick={() => { setAccountResult(null); setShowAccountUpload(true); }}>Upload JMR / SEA</button>
                 <button className="btn btn-secondary" onClick={() => setShowCreate(true)}>+ Record Energy Data</button>
               </>
             )}
           </div>
         }
       />
+
+      {accountResult && (
+        <div className="alert alert-success" role="status">
+          {accountResult.account_label} {accountResult.file_name ? `(${accountResult.file_name}) ` : ''}imported:
+          {' '}{accountResult.created} new, {accountResult.replaced} replacing a draft, {accountResult.skipped} left alone — all as DRAFT, to validate before locking.
+        </div>
+      )}
 
       <div className="filters-bar">
         <select value={filters.contract_id} onChange={(e) => setFilters({ ...filters, contract_id: e.target.value })}>
@@ -614,6 +625,15 @@ export default function EnergyData() {
               </button>
             </div>
           </div>
+        )}
+      </Modal>
+
+      <Modal open={showAccountUpload} onClose={() => setShowAccountUpload(false)} title="Upload JMR / State Energy Account" width={960}>
+        {showAccountUpload && (
+          <EnergyAccountUpload
+            onCancel={() => setShowAccountUpload(false)}
+            onDone={(result) => { setShowAccountUpload(false); setAccountResult(result); load(); }}
+          />
         )}
       </Modal>
 

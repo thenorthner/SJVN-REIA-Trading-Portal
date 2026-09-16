@@ -44,6 +44,18 @@ Ye script poora cycle khud sambhaalti hai:
 
 Service ka naam alag ho to `SJVN_SERVICE=my-service ./update.sh`.
 
+### Python — REA PDF padhne ke liye
+
+REA upload aur REA auto-scan `backend/src/scripts/parse_rea.py` chalate hain, jise
+`pypdf` chahiye. Ye `deploy.sh` install **nahi** karti — server pe ek baar:
+
+```bash
+python3 -m pip install -r backend/requirements.txt
+```
+
+Ye na ho to har REA upload "Failed to parse REA PDF" deta hai. JMR / State Energy
+Account ka table upload (CSV/Excel) Python ke bina chalta hai.
+
 ---
 
 Phir service chalu karo:

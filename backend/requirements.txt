@@ -1,0 +1,7 @@
+# Python packages the backend shells out to.
+#
+# backend/src/scripts/parse_rea.py reads the NRPC regional energy account PDF
+# (the "Upload REA" button and the scheduled REA scan). Without pypdf every REA
+# upload fails with "Failed to parse REA PDF". Install on the server with:
+#   python3 -m pip install -r backend/requirements.txt
+pypdf>=4

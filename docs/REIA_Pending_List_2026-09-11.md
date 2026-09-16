@@ -43,7 +43,7 @@ judna** (SAP, DSC/e-invoice, SMS), **CP-58-61 ke dashboards aur reports**, aur
 | 2 🔴 | **Digital signature (DSC) + e-invoicing (GST IRN)** | §3, 4.2, 4.4, deliverables mein baar-baar | Na IRN / ack no. / signed QR ka column, na PDF pe DSC signing. GSP/IRP access aur DSC (USB token ya HSM) ka faisla chahiye. |
 | 3 🟠 | **SMS** | G, L | TextGuru ka code ready hai, par `sms_enabled=false` aur API key / sender id khaali — har SMS `outbox/` mein likha jaata hai, jaata nahi. Credentials + TRAI DLT pe sender id aur templates registered chahiye. |
 | 4 🟠 | **Email, server pe** | G | `mailService` ready; local `.env` mein SMTP set hai, DB param `smtp_host` khaali. Deploy server pe SJVN ka SMTP relay confirm karna — ab MIS pack (#8) bhi isi pe jaata hai. |
-| 5 🟠 | **SEA / RLDC / SLDC / JMR feed** | D | REA ka parse + auto-scan hai; baaki sources ka koi feed ya route nahi. |
+| 5 ✅ | **SEA / RLDC / SLDC / JMR feed** | D | **Upload ho gaya, 16 Sep** (feed nahi — kisi SLDC/RLDC ka API nahi). Energy Data par JMR / State Energy Account / RLDC statement ka table upload: preview, contract matching, unit explicit (MU vs MWh), locked mahina safe. REA PDF parser ka SEA mode % ko energy padhta tha — ab route use mana karta hai. REA parse ke liye server par `pip install -r backend/requirements.txt` (pypdf) zaroori — pehle kahin likha nahi tha. |
 | 6 🟠 | **Bank / virtual-account collection** | 4.4, assumptions | Kisi bank ka API integration code mein nahi mila. |
 
 ## B. Scope mein hai, bana nahi / adhoora

@@ -4,6 +4,9 @@ import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../midd
 import { newId, logAudit, pushNotification, buildBillingFamilyRef, directionForContract, billableCapacityMw } from '../util.js';
 import { getParamNumber, baselineCufFor } from '../mastersService.js';
 import { runFinalDataRecon } from './reconciliation.js';
+import {
+  importEnergyAccount, accountTemplate, ACCOUNT_TYPES, UNITS, AccountImportError,
+} from '../services/energyAccountImport.js';
 import multer from 'multer';
 import { exec } from 'child_process';
 import path from 'path';
@@ -15,6 +18,9 @@ const __dirname = path.dirname(__filename);
 // The uploaded workbook is parsed into memory in one go, so an unbounded file
 // is an out-of-memory kill of the whole server, not just a failed import.
 const upload = multer({ dest: 'temp/', limits: { fileSize: 15 * 1024 * 1024 } });
+// The account tables are a page of stations, and nothing needs the bytes once
+// the rows are read, so they never touch the disk.
+const accountUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const router = Router();
 router.use(requireAuth);
@@ -78,6 +84,20 @@ router.post('/parse-rea', requireRole(...ROLE_GROUPS.REIA_WRITE), upload.single(
       if (!result.success) {
         return res.status(400).json({ error: result.error || 'Failed to parse REA PDF' });
       }
+      // The script's state-energy-account mode takes the first line naming a
+      // station, which in Delhi SLDC's account is Annexure-2's entitlement
+      // share, and reports those percentages as energy: Nathpa Jhakri's 5.85%
+      // share to BRPL came back as 585 MWh against the 42,786 MWh Annexure-3
+      // schedules. Its output is not energy, so it is refused here and the
+      // account's own table is taken through /upload-account instead.
+      if (result.mode === 'sldc') {
+        return res.status(422).json({
+          error: 'This looks like a state energy account, not a regional one. Its figures cannot be read reliably from '
+            + 'the PDF — upload the account\'s energy table (station, period, energy and its unit) as a State Energy '
+            + 'Account instead.',
+          use: '/api/energy-data/upload-account',
+        });
+      }
       res.json(result.data);
     } catch (parseErr) {
       console.error('Invalid JSON from script:', stdout);
@@ -85,6 +105,71 @@ router.post('/parse-rea', requireRole(...ROLE_GROUPS.REIA_WRITE), upload.single(
     }
   });
 });
+
+/**
+ * Energy for a month from the account that states it — the joint meter reading,
+ * the SLDC's state energy account, an RLDC statement — read from the document's
+ * own table. See services/energyAccountImport.js for why the unit is never
+ * guessed.
+ */
+router.get('/account-types', requireRole(...ROLE_GROUPS.REIA_ALL), (_req, res) => {
+  res.json({
+    account_types: Object.entries(ACCOUNT_TYPES).map(([key, label]) => ({ key, label })),
+    units: Object.entries(UNITS).map(([key, u]) => ({ key, label: u.label, mwh_per_unit: u.factor })),
+  });
+});
+
+router.get('/account-template', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const type = String(req.query.account_type || 'JMR').toUpperCase();
+  try {
+    const csv = accountTemplate(type);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${type.toLowerCase()}_energy_template.csv"`);
+    res.send(csv);
+  } catch (err) {
+    if (err instanceof AccountImportError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+});
+
+router.post(
+  '/upload-account',
+  requireRole(...ROLE_GROUPS.REIA_WRITE),
+  (req, res, next) => accountUpload.single('file')(req, res, (err) => {
+    if (!err) return next();
+    res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'The file is larger than 10 MB.' : err.message });
+  }),
+  (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'Attach the energy account file.' });
+    const dryRun = req.body?.dry_run === 'true' || req.body?.dry_run === true;
+    try {
+      const result = importEnergyAccount(req.file.buffer, {
+        accountType: String(req.body?.account_type || 'JMR').toUpperCase(),
+        unit: req.body?.unit || null,
+        periodMonth: req.body?.period_month || null,
+        dataType: String(req.body?.data_type || 'PROVISIONAL').toUpperCase(),
+        fileName: req.file.originalname,
+        actor: req.user?.name || req.user?.id || null,
+        dryRun,
+      });
+      if (!result.ok) return res.status(400).json(result);
+      if (!dryRun) {
+        logAudit({
+          req, user: req.user, action: 'IMPORT_ENERGY_ACCOUNT', module: 'REIA',
+          entityType: 'energy_data', entityId: result.rows.find((r) => r.energy_data_id)?.energy_data_id || null,
+          details: {
+            file: req.file.originalname, account_type: result.account_type, unit: result.unit_used,
+            created: result.created, replaced: result.replaced, skipped: result.skipped,
+          },
+        });
+      }
+      res.status(dryRun ? 200 : 201).json(result);
+    } catch (err) {
+      if (err instanceof AccountImportError) return res.status(err.status).json({ error: err.message });
+      throw err;
+    }
+  },
+);
 
 router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const b = req.body;
