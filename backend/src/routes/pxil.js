@@ -2,8 +2,8 @@
  * PXIL member report APIs — read-only HTTP surface over pxilService.
  *
  * Every route is a GET that fetches and normalises; nothing here writes to the
- * database. Persistence waits until the shapes are validated against PXIL's
- * environment (see docs/PXIL_API_Clarifications_Email_Draft.md), because tables
+ * database. Persistence waits until the shapes are validated against live PXIL
+ * data (see docs/PXIL_API_Clarifications_Email_Draft.md), because tables
  * built around an unconfirmed Total composition or an unconfirmed slot
  * numbering would only have to be rebuilt.
  *
@@ -80,9 +80,10 @@ router.get('/status', requireRole(...PXIL_READ), (req, res) => {
     token_present: !!cfg.token,
     base_url: cfg.baseUrl,
     portfolio_id: cfg.portfolioId || null,
-    // Unconfirmed with PXIL — their daily document prints the slot-wise path.
-    tam_gtam_path: cfg.tamGtamPath,
-    tam_gtam_path_confirmed: false,
+    // PXIL's first daily document printed the slot-wise path; they have since
+    // confirmed this one in writing.
+    tam_gtam_path: 'tam-gtam',
+    tam_gtam_path_confirmed: true,
     endpoints: [
       { key: 'tam-gtam', label: 'Billing — TAM/GTAM (daily)', ranged: true },
       { key: 'tam-gtam-slot-wise', label: 'Billing — TAM/GTAM (15-min slots)', ranged: true },

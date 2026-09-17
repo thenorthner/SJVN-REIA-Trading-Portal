@@ -4,16 +4,15 @@
  *
  *   node backend/scripts/pxilProbe.js [fromdate] [todate]
  *
- * Six of the nine questions we raised with PXIL can be answered from their own
- * live responses instead of waiting for a reply. This probe asks them:
+ * PXIL has answered A1–A5 (path, auth, production, IP whitelist, trailing
+ * slash). Point PXIL_BASE_URL/PXIL_API_TOKEN at staging or production; each has
+ * its own token and its own IP whitelist. Staging data is stale, so pass a date
+ * range PXIL says it holds. What is left can be read off their responses:
  *
- *   Q1  Which path serves the daily TAM-GTAM report? Their daily document
- *       prints the slot-wise URL, so both candidates are tried and the one that
- *       answers wins.
- *   Q2  Does the Bearer header work on all six endpoints, or do Member DOR and
- *       Reverse Auction really require the token in the query string? Every
- *       endpoint is tried both ways. If the header works everywhere we can stop
- *       putting a credential in a URL.
+ *   Q2  PXIL says Member DOR and Reverse Auction take the token only in the
+ *       query string, and the other four only as a Bearer header. Every
+ *       endpoint is still tried both ways, so the day they upgrade the two
+ *       Version 1 APIs shows up here.
  *   Q4  Does Member DOR's Total equal the sum of its Category in live data, or
  *       is the gap in their sample real?
  *   Q6  Which Format-D fields are actually populated, and how do TransactionPrice
@@ -22,12 +21,15 @@
  *       it; the probe reports "unproven" rather than assuming.
  *   Q9  Do slots start at 00:00 or 00:15, and does a full day carry 95 or 96?
  *
- * Read-only throughout: six GETs, no writes, nothing persisted.
+ * Read-only throughout: GETs only, no writes, nothing persisted. Run it from the
+ * server whose public IP PXIL whitelisted — from anywhere else every endpoint
+ * reports IP_NOT_WHITELISTED, with the IP PXIL saw.
  *
  * The token is never printed, and neither is any URL — under query auth a URL
  * contains the credential, and this report is meant to be pasteable into an
  * email to PXIL.
  */
+import '../src/loadEnv.js';
 import {
   getPxilConfig,
   probeRequest,
@@ -56,7 +58,7 @@ const [fromdate, todate] = argFrom && argTo ? [argFrom, argTo] : defaultRange();
 
 const line = (s = '') => console.log(s);
 const rule = (t) => { line(); line(`── ${t} ${'─'.repeat(Math.max(0, 62 - t.length))}`); };
-const mark = { DATA: '✓', EMPTY: '○', AUTH_REJECTED: '✗', NOT_FOUND: '✗', UNREACHABLE: '✗', NOT_JSON: '✗', ERROR_ENVELOPE: '!', NO_RESULT: '✗' };
+const mark = { IP_NOT_WHITELISTED: '✗', DATA: '✓', EMPTY: '○', AUTH_REJECTED: '✗', NOT_FOUND: '✗', UNREACHABLE: '✗', NOT_JSON: '✗', ERROR_ENVELOPE: '!', NO_RESULT: '✗' };
 
 const cfg = getPxilConfig();
 if (!cfg.token) {
@@ -70,7 +72,7 @@ if (cfg.portfolioId) ranged.portfolioId = cfg.portfolioId;
 // path, params, the ResponseBody key its rows live under, and the auth style
 // PXIL's document specifies for it.
 const ENDPOINTS = [
-  { key: 'tam-gtam (daily, guessed)', path: cfg.tamGtamPath, params: ranged, bodyKey: 'TAMGTAM', documented: 'header' },
+  { key: 'tam-gtam', path: 'tam-gtam', params: ranged, bodyKey: 'TAMGTAM', documented: 'header' },
   { key: 'tam-gtam-slot-wise', path: 'tam-gtam-slot-wise', params: ranged, bodyKey: 'TAMGTAM', documented: 'header' },
   { key: 'format-d', path: 'format-d', params: ranged, bodyKey: 'Trades', documented: 'header' },
   { key: 'trade-margin', path: 'trade-margin', params: ranged, bodyKey: 'TradeMargin', documented: 'header' },
@@ -115,35 +117,34 @@ for (const ep of ENDPOINTS) {
   };
 }
 
-const headerEverywhere = Object.values(best).every((b) => b.header.verdict === 'DATA' || b.header.verdict === 'EMPTY');
+const works = (c) => c.verdict === 'DATA' || c.verdict === 'EMPTY';
+const results = Object.values(best);
 line();
-line(headerEverywhere
-  ? '→ The Bearer header is accepted on every endpoint. Ask PXIL to confirm we may'
-  : '→ The Bearer header is NOT accepted everywhere. The query-string endpoints must');
-line(headerEverywhere
-  ? '  standardise on it and drop the query-string token entirely.'
-  : '  keep their token in the URL, and those requests must stay out of all logs.');
+const refusedIp = results.find((b) => b.header.verdict === 'IP_NOT_WHITELISTED');
+if (refusedIp) {
+  line(`→ PXIL refused our source IP (${refusedIp.header.detail.replace('PXIL saw our IP as ', '')}). Nothing else`);
+  line('  can be tested until PXIL whitelists that IP for this environment.');
+} else if (results.every((b) => b.header.verdict === 'UNREACHABLE' && b.query.verdict === 'UNREACHABLE')) {
+  line('→ Nothing answered at all — check the base URL and outbound network.');
+} else if (results.every((b) => works(b.ep.documented === 'header' ? b.header : b.query))) {
+  line('→ Every endpoint answers with the auth style PXIL confirmed.');
+  const upgraded = results.filter((b) => b.ep.documented === 'query' && works(b.header));
+  if (upgraded.length) {
+    line(`  ${upgraded.map((b) => b.ep.key).join(' and ')} now also accept the Bearer header —`);
+    line('  PXIL may have upgraded them; move them off the query string once they confirm.');
+  }
+} else {
+  line('→ At least one endpoint rejects the auth style PXIL confirmed. That contradicts');
+  line('  their reply and goes back to them with the row above.');
+}
 
-/* --------------------------------------------- Q1: the daily TAM-GTAM path */
-
-rule('Q1  Daily TAM-GTAM path');
-const daily = best['tam-gtam (daily, guessed)'];
 const slot = best['tam-gtam-slot-wise'];
-const dailyOk = ['DATA', 'EMPTY'].includes(daily.header.verdict) || ['DATA', 'EMPTY'].includes(daily.query.verdict);
-line(`Guessed path  /PXILPublish/api/${cfg.tamGtamPath}/   → ${dailyOk ? 'responds' : 'does not respond'}`);
-line(`Slot-wise     /PXILPublish/api/tam-gtam-slot-wise/   → ${['DATA', 'EMPTY'].includes(slot.header.verdict) ? 'responds' : 'does not respond'}`);
-line(dailyOk
-  ? '→ The guessed daily path is live. Their daily document printing the slot-wise'
-  : '→ The guessed daily path does not answer. The daily report is only reachable at');
-line(dailyOk
-  ? '  URL was a copy-paste error, as we suspected.'
-  : '  some other path — this stays a blocking question for PXIL.');
 
 /* --------------------------------------------------- Q7: response date order */
 
 rule('Q7  Response date order (DD-MM-YYYY vs MM-DD-YYYY)');
 const dateSamples = [];
-for (const key of ['tam-gtam (daily, guessed)', 'trade-margin']) {
+for (const key of ['tam-gtam', 'trade-margin']) {
   const b = best[key];
   const env = b.result?.json ? normaliseEnvelope(b.result.json) : null;
   if (!env?.ok) continue;

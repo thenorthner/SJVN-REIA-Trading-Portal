@@ -48,9 +48,10 @@ describe('status', () => {
     expect(JSON.stringify(r.body)).not.toMatch(/APITokenNo/);
   });
 
-  it('flags the daily TAM-GTAM path as unconfirmed', async () => {
+  it('reports the daily TAM-GTAM path PXIL confirmed', async () => {
     const r = await request(app).get('/api/pxil/status').set(auth(trader));
-    expect(r.body.tam_gtam_path_confirmed).toBe(false);
+    expect(r.body.tam_gtam_path).toBe('tam-gtam');
+    expect(r.body.tam_gtam_path_confirmed).toBe(true);
     expect(r.body.endpoints).toHaveLength(6);
     expect(r.body.endpoints.map(e => e.key)).toContain('trade-margin');
   });

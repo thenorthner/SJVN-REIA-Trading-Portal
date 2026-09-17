@@ -8,6 +8,7 @@ import {
   extractTradeMargin,
   fetchTradeMargin,
   classifyProbe,
+  ipNotAllowed,
   summariseSlotLabelling,
   summariseDorReconciliation,
   summariseFormatDFields,
@@ -476,6 +477,21 @@ describe('probe classification', () => {
     expect(classifyProbe({ status: 401 }).verdict).toBe('AUTH_REJECTED');
     expect(classifyProbe({ status: 404 }).verdict).toBe('NOT_FOUND');
     expect(classifyProbe({ status: 200, content_type: 'text/html' }).verdict).toBe('NOT_JSON');
+  });
+
+  // Captured from staging, 17 Sep 2026, from a machine PXIL had not whitelisted.
+  // It is a 403, so without this it would read as a rejected token.
+  it('tells an unlisted source IP apart from a rejected token', () => {
+    const body = '{"status": "error", "message": "Access denied. Your IP is not allowed.", "your_ip": "203.0.113.7"}';
+    expect(ipNotAllowed(403, body)).toBe('203.0.113.7');
+    expect(ipNotAllowed(403, '{"message": "Forbidden"}')).toBeNull();
+    expect(ipNotAllowed(401, body)).toBeNull();
+    expect(ipNotAllowed(403, '<html>Forbidden</html>')).toBeNull();
+
+    const c = classifyProbe({ status: 403, ip_not_allowed: '203.0.113.7' });
+    expect(c.verdict).toBe('IP_NOT_WHITELISTED');
+    expect(c.detail).toContain('203.0.113.7');
+    expect(classifyProbe({ status: 403 }).verdict).toBe('AUTH_REJECTED');
   });
 
   // A 200 with no rows is a non-trading day, not a failure. Collapsing the two

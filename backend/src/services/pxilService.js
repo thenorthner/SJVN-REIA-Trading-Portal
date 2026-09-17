@@ -17,24 +17,37 @@
  * is a different transport with a different lifecycle and belongs in its own
  * module once Phase 1 is signed off.
  *
- * Nothing here writes to the database. The documented samples leave four
+ * Nothing here writes to the database. The documented samples leave two
  * questions open (see UNRESOLVED below) and inventing tables around answers we
  * do not have yet would only have to be undone. This module fetches,
- * normalises, and reports — persistence lands after validation against PXIL's
- * staging environment.
+ * normalises, and reports — persistence lands after validation against live
+ * PXIL data.
  *
  * Without a token every call runs in stub mode against a recorded-shape sample,
  * so the mapping and its tests can be built before credentials are confirmed.
  *
- * UNRESOLVED — raised with PXIL, see docs/PXIL_API_Clarifications_Email_Draft.md:
- *   1. The daily TAM-GTAM document prints the *slot-wise* URL. The real daily
- *      path is a guess (`tam-gtam`) and is overridable by parameter.
- *   2. Two auth styles are documented. Both are implemented, chosen per
- *      endpoint from the document that describes it.
- *   3. Member DOR's sample Total exceeds the sum of its own Category by
- *      115386.32. Every row is checked and the gap reported, never silently
- *      absorbed.
- *   4. Slot boundaries are echoed as received. The sample's first slot starts
+ * CONFIRMED by PXIL (Gaurav Tiwari, reply to A1–A5, Sep 2026):
+ *   - The daily report is at /PXILPublish/api/tam-gtam/. Every path ends in a
+ *     trailing slash, exactly as the revised documents print it.
+ *   - Bearer header on TAM-GTAM, TAM-GTAM slot-wise, Format-D and Trade Margin.
+ *     Member DOR and Reverse Auction are still "Version 1" and take the token
+ *     only as the APITokenNo query parameter, until PXIL upgrades them. The
+ *     revised documents still print "Bearer Token" for those two — the email
+ *     overrides them.
+ *   - Production is https://dashboard.pxil.in. On a call afterwards PXIL asked
+ *     for everything to be done on staging first
+ *     (https://stagingmypratyaydashboard.pxil.in, same paths, its own token).
+ *     Staging data is stale, so it proves connectivity and shapes, not figures.
+ *   - Both environments filter by source IP, separately. A caller that is not
+ *     whitelisted gets HTTP 403 {"message": "Access denied. Your IP is not
+ *     allowed.", "your_ip": ...} — not a 401, so it must not be read as a bad
+ *     token.
+ *
+ * UNRESOLVED — see docs/PXIL_API_Clarifications_Email_Draft.md:
+ *   1. Member DOR's sample Total exceeds the sum of its own Category by
+ *      115386.32 (B1). Every row is checked and the gap reported, never
+ *      silently absorbed.
+ *   2. Slot boundaries are echoed as received. The sample's first slot starts
  *      at 00:15, so we do not know whether a day is 95 or 96 slots, nor whether
  *      a slot is labelled by its start or its end. Renumbering on a guess would
  *      shift every block by fifteen minutes.
@@ -54,13 +67,11 @@ export function getPxilConfig() {
   const token = envOrParam('PXIL_API_TOKEN', 'pxil_api_token', '');
   const baseUrl = envOrParam('PXIL_BASE_URL', 'pxil_base_url', 'https://dashboard.pxil.in');
   const portfolioId = envOrParam('PXIL_PORTFOLIO_ID', 'pxil_portfolio_id', '');
-  // See UNRESOLVED #1 — the daily TAM-GTAM path is not reliably documented.
-  const tamGtamPath = envOrParam('PXIL_TAM_GTAM_PATH', 'pxil_tam_gtam_path', 'tam-gtam');
   const enabled = String(envOrParam('PXIL_ENABLED', 'pxil_enabled', 'false')) === 'true';
   return {
     enabled,
     live: enabled && !!token && !!baseUrl,
-    token, baseUrl, portfolioId, tamGtamPath,
+    token, baseUrl, portfolioId,
   };
 }
 
@@ -182,17 +193,18 @@ const num = (v) => {
 /**
  * Endpoints and how each authenticates.
  *
- * `auth: 'query'` puts the token in the query string. That is documented for
- * two endpoints and we have asked PXIL to move them to the header — a token in
- * a URL lands in access logs and proxy logs on both sides. Until they confirm,
- * we follow the document, and callers must keep these URLs out of logs.
+ * `auth: 'query'` puts the token in the query string. PXIL has confirmed that
+ * Member DOR and Reverse Auction accept nothing else until their Version 1 APIs
+ * are upgraded. A token in a URL lands in access logs and proxy logs, so
+ * callers must keep these URLs out of logs; move both to the header once PXIL
+ * says the upgrade is live.
  */
 const AUTH_HEADER = 'header';
 const AUTH_QUERY = 'query';
 
-function endpointPath(name, cfg) {
+function endpointPath(name) {
   switch (name) {
-    case 'tam-gtam': return cfg.tamGtamPath;
+    case 'tam-gtam': return 'tam-gtam';
     case 'tam-gtam-slot-wise': return 'tam-gtam-slot-wise';
     case 'format-d': return 'format-d';
     case 'member-dor': return 'member-dor';
@@ -213,12 +225,28 @@ async function pxilGet(name, params, authStyle) {
   if (authStyle === AUTH_QUERY) search.set('APITokenNo', cfg.token);
   else headers.Authorization = `Bearer ${cfg.token}`;
 
-  const path = endpointPath(name, cfg);
+  const path = endpointPath(name);
   const url = `${cfg.baseUrl.replace(/\/$/, '')}/PXILPublish/api/${path}/?${search.toString()}`;
 
-  const resp = await fetch(url, { method: 'GET', headers });
-  const text = await resp.text();
+  // Bound the call: a desk screen should not wait on PXIL indefinitely.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  let resp;
+  let text;
+  try {
+    resp = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+    text = await resp.text();
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`PXIL ${name}: no response in 30s`);
+    }
+    throw new Error(`PXIL ${name}: ${err.message}`);
+  } finally {
+    clearTimeout(timer);
+  }
   if (!resp.ok) {
+    const ip = ipNotAllowed(resp.status, text);
+    if (ip) throw new Error(`PXIL ${name}: this server's IP (${ip}) is not whitelisted with PXIL`);
     // The token may be in the query string; never echo the URL into an error.
     throw new Error(`PXIL ${name} HTTP ${resp.status}: ${text.slice(0, 300)}`);
   }
@@ -227,6 +255,19 @@ async function pxilGet(name, params, authStyle) {
   } catch {
     throw new Error(`PXIL ${name}: response was not JSON: ${text.slice(0, 200)}`);
   }
+}
+
+/**
+ * PXIL's gateway refuses an unlisted source IP with a 403 that names the IP it
+ * saw. Returns that IP (or 'unknown'), or null when this is some other error.
+ */
+export function ipNotAllowed(status, text) {
+  if (status !== 403) return null;
+  try {
+    const body = JSON.parse(text);
+    if (/IP is not allowed/i.test(String(body?.message || ''))) return body.your_ip || 'unknown';
+  } catch { /* not the gateway's JSON */ }
+  return null;
 }
 
 /** Run a live call or fall back to the recorded sample, uniformly. */
@@ -368,7 +409,7 @@ export function extractTamGtamSlotWise(body) {
         final_scheduled_qty_mwh: num(app.FinalscheduledQtyMWH),
         trade_slots: trade,
         scheduled_slots: scheduled,
-        // See UNRESOLVED #4: the sample's first slot starts at 00:15, so we
+        // See UNRESOLVED #2: the sample's first slot starts at 00:15, so we
         // report the count instead of asserting a 96-block day.
         trade_slot_count: trade.length,
         scheduled_slot_count: scheduled.length,
@@ -447,7 +488,7 @@ export async function fetchFormatD(fromdate, todate) {
  * Day-wise obligations.
  *
  * The document's own sample has Total exceeding the sum of Category by
- * 115386.32 (UNRESOLVED #3). Rather than trust one number over the other, every
+ * 115386.32 (UNRESOLVED #1). Rather than trust one number over the other, every
  * row carries both and the gap between them. A caller reconciling against our
  * books must decide what to do with a row where `total_reconciles` is false —
  * it must never be silently posted.
@@ -760,6 +801,7 @@ export async function probeRequest({ path, params = {}, authStyle = AUTH_HEADER,
       status: resp.status,
       ok: resp.ok,
       content_type: resp.headers.get('content-type'),
+      ip_not_allowed: ipNotAllowed(resp.status, text),
       json,
       snippet: json ? null : text.slice(0, 200),
       ms: Date.now() - started,
@@ -788,6 +830,9 @@ export async function probeRequest({ path, params = {}, authStyle = AUTH_HEADER,
 export function classifyProbe(result, bodyKey) {
   if (!result) return { verdict: 'NO_RESULT', detail: 'No response recorded' };
   if (result.error) return { verdict: 'UNREACHABLE', detail: result.error };
+  if (result.ip_not_allowed) {
+    return { verdict: 'IP_NOT_WHITELISTED', detail: `PXIL saw our IP as ${result.ip_not_allowed}` };
+  }
   if (result.status === 401 || result.status === 403) {
     return { verdict: 'AUTH_REJECTED', detail: `HTTP ${result.status}` };
   }
