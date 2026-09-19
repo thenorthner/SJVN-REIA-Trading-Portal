@@ -9,7 +9,10 @@ import { v4 as uuidv4 } from 'uuid';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const CERC_DOWNLOAD_DIR = path.join(__dirname, '../../cerc_downloads');
+// Overridable so a server started on a throwaway database (the browser suite)
+// can be given its own folder. The tracked reports here are what a fresh deploy
+// seeds from; nothing in this module writes over one of them.
+const CERC_DOWNLOAD_DIR = process.env.SJVN_CERC_DIR || path.join(__dirname, '../../cerc_downloads');
 
 if (!fs.existsSync(CERC_DOWNLOAD_DIR)) {
   fs.mkdirSync(CERC_DOWNLOAD_DIR, { recursive: true });
@@ -35,29 +38,25 @@ function buildCercUrls(year, month) {
   return { excelUrl, pdfUrl };
 }
 
+function reportPaths(period) {
+  const dir = path.join(CERC_DOWNLOAD_DIR, period);
+  return {
+    excelPath: path.join(dir, `MMC_Report_${period}.xlsx`),
+    pdfPath: path.join(dir, `MMC_Report_${period}.pdf`),
+  };
+}
+
+// Returns the bytes written, or false when CERC has no such file. Never replaces
+// a file already on disk: CERC revises its reports in place, and the copy here is
+// the one the platform was seeded from.
 async function downloadFile(url, destPath) {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      if (response.status === 404) {
-        if (fs.existsSync(destPath) && fs.statSync(destPath).size > 1000) {
-          console.log(`[CERC Scraper] Remote returned 404, but found cached local file: ${destPath}`);
-          return fs.statSync(destPath).size;
-        }
-        return false;
-      }
-      throw new Error(`Download failed: HTTP ${response.status} for ${url}`);
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    fs.writeFileSync(destPath, buffer);
-    return buffer.length;
-  } catch (err) {
-    if (fs.existsSync(destPath) && fs.statSync(destPath).size > 1000) {
-      console.log(`[CERC Scraper] Network fetch failed (${err.message}), using cached local file: ${destPath}`);
-      return fs.statSync(destPath).size;
-    }
-    throw err;
-  }
+  const response = await fetch(url);
+  if (response.status === 404) return false;
+  if (!response.ok) throw new Error(`Download failed: HTTP ${response.status} for ${url}`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  fs.mkdirSync(path.dirname(destPath), { recursive: true });
+  fs.writeFileSync(destPath, buffer, { flag: 'wx' });
+  return buffer.length;
 }
 
 function num(val) {
@@ -411,7 +410,7 @@ function repairLocalVolumes() {
     if (!/^\d{4}-\d{2}$/.test(d)) continue;
     const summaryRow = db.prepare('SELECT fetch_log_id FROM cerc_monthly_summary WHERE report_period = ?').get(d);
     if (!summaryRow) continue;
-    const excelPath = path.join(CERC_DOWNLOAD_DIR, d, `MMC_Report_${d}.xlsx`);
+    const { excelPath } = reportPaths(d);
     if (!fs.existsSync(excelPath)) continue;
     const labelled = db.prepare(`
       SELECT COUNT(*) AS n FROM cerc_market_data WHERE report_period = ? AND data_category = 'VOLUME' AND product IN ('GDAM', 'PX_TOTAL')
@@ -724,44 +723,60 @@ function parseAndSaveExcel(excelPath, period, logId) {
   return records;
 }
 
-async function fetchCercReport(period) {
+// Every attempt at a period is logged, found or not; autoSeedDecision counts them.
+function openFetchLog(period) {
   const [yearStr, monthStr] = period.split('-');
-  const year = parseInt(yearStr, 10);
-  const month = parseInt(monthStr, 10);
-  
   const { excelUrl, pdfUrl } = buildCercUrls(yearStr, monthStr);
-  
-  const dir = path.join(CERC_DOWNLOAD_DIR, period);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  
-  const excelPath = path.join(dir, `MMC_Report_${period}.xlsx`);
-  const pdfPath = path.join(dir, `MMC_Report_${period}.pdf`);
-  
   const logId = newId('CERC');
   db.prepare(`
     INSERT INTO cerc_fetch_log (id, report_period, report_year, report_month, excel_url, pdf_url, status, fetched_at)
     VALUES (?, ?, ?, ?, ?, ?, 'PENDING', datetime('now'))
-  `).run(logId, period, year, month, excelUrl, pdfUrl);
+  `).run(logId, period, parseInt(yearStr, 10), parseInt(monthStr, 10), excelUrl, pdfUrl);
+  return logId;
+}
 
-  try {
-    const excelSize = await downloadFile(excelUrl, excelPath);
-    if (!excelSize) {
-      console.log(`[CERC Scraper] Excel file not found (404) for ${period}`);
-      db.prepare(`UPDATE cerc_fetch_log SET status = 'FAILED', error_message = 'Excel file not found (404)' WHERE id = ?`).run(logId);
-      return { logId, status: 'NOT_FOUND' };
-    }
-    
-    let pdfSize = 0;
+function failFetchLog(logId, period, err) {
+  db.prepare(`UPDATE cerc_fetch_log SET status = 'FAILED', error_message = ? WHERE id = ?`).run(err.message, logId);
+  pushNotification({
+    role: 'SJVN_ADMIN',
+    type: 'CERC_SCRAPER',
+    message: `CERC Scraper FAILED for ${period}: ${err.message}.`,
+  });
+}
+
+/**
+ * Download step: brings a month CERC has published into the local folder. Only
+ * for a month with no report on disk. False when CERC has not published it yet.
+ */
+async function downloadCercReport(period) {
+  const [yearStr, monthStr] = period.split('-');
+  const { excelUrl, pdfUrl } = buildCercUrls(yearStr, monthStr);
+  const { excelPath, pdfPath } = reportPaths(period);
+  if (!(await downloadFile(excelUrl, excelPath))) return false;
+  if (!fs.existsSync(pdfPath)) {
     try {
-      pdfSize = await downloadFile(pdfUrl, pdfPath);
+      await downloadFile(pdfUrl, pdfPath);
     } catch (e) {
       console.warn(`[CERC Scraper] Could not download PDF for ${period}`);
     }
-    
+  }
+  return true;
+}
+
+/**
+ * Parse-and-store step: reads the month's report on disk into the market tables.
+ * Touches the database only — never the network, never the file.
+ */
+function storeCercReport(period, logId = openFetchLog(period)) {
+  const { excelPath, pdfPath } = reportPaths(period);
+  try {
+    if (!fs.existsSync(excelPath)) throw new Error(`No report on disk at ${excelPath}`);
+    const excelSize = fs.statSync(excelPath).size;
+
     db.prepare(`
       UPDATE cerc_fetch_log SET status = 'DOWNLOADED', local_excel_path = ?, local_pdf_path = ? WHERE id = ?
-    `).run(excelPath, pdfSize ? pdfPath : null, logId);
-    
+    `).run(excelPath, fs.existsSync(pdfPath) ? pdfPath : null, logId);
+
     // Store in documents table safely (created_by NULL to avoid foreign key errors)
     try {
       const docId = uuidv4();
@@ -780,30 +795,46 @@ async function fetchCercReport(period) {
     } catch (docErr) {
       console.warn(`[CERC Scraper] Warning inserting doc record:`, docErr.message);
     }
-    
+
     const recordsCreated = parseAndSaveExcel(excelPath, period, logId);
-    
+
     db.prepare(`
       UPDATE cerc_fetch_log SET status = 'PROCESSED', records_created = ?, processed_at = datetime('now') WHERE id = ?
     `).run(recordsCreated, logId);
-    
+
     pushNotification({
       role: 'TRADING_USER',
       type: 'CERC_SCRAPER',
       message: `CERC MMC Report processed for ${period} (${recordsCreated} records imported)`,
     });
-    
-    return { logId, status: 'PROCESSED', recordsCreated, fetched: 1 };
+
+    return { logId, status: 'PROCESSED', recordsCreated };
   } catch (err) {
-    db.prepare(`UPDATE cerc_fetch_log SET status = 'FAILED', error_message = ? WHERE id = ?`).run(err.message, logId);
-    
-    pushNotification({
-      role: 'SJVN_ADMIN',
-      type: 'CERC_SCRAPER',
-      message: `CERC Scraper FAILED for ${period}: ${err.message}.`,
-    });
+    failFetchLog(logId, period, err);
     throw err;
   }
+}
+
+// Reads a month into the market tables, first downloading it from CERC only when
+// there is no report for it on disk. To take up a revised report, replace the
+// file on disk and fetch the month again.
+async function fetchCercReport(period) {
+  if (fs.existsSync(reportPaths(period).excelPath)) return storeCercReport(period);
+
+  const logId = openFetchLog(period);
+  let found;
+  try {
+    found = await downloadCercReport(period);
+  } catch (err) {
+    failFetchLog(logId, period, err);
+    throw err;
+  }
+  if (!found) {
+    console.log(`[CERC Scraper] Excel file not found (404) for ${period}`);
+    db.prepare(`UPDATE cerc_fetch_log SET status = 'FAILED', error_message = 'Excel file not found (404)' WHERE id = ?`).run(logId);
+    return { logId, status: 'NOT_FOUND' };
+  }
+  return { ...storeCercReport(period, logId), fetched: 1 };
 }
 
 async function scanForNewReports() {
@@ -868,10 +899,10 @@ function getCercStatus() {
 }
 
 // A period that keeps failing to produce a summary would otherwise be retried on
-// every boot, and each retry reaches for the network first. After this many
-// attempts it is left alone until the cooldown passes — some CERC months simply
-// do not carry the tables this parser needs, and hammering them on every restart
-// buys nothing.
+// every boot, and each retry logs a failure and notifies the admins. After this
+// many attempts it is left alone until the cooldown passes — some CERC months
+// simply do not carry the tables this parser needs, and re-reading them on every
+// restart buys nothing.
 const AUTOSEED_MAX_ATTEMPTS = 3;
 const AUTOSEED_COOLDOWN_HOURS = 24 * 7;
 
@@ -898,6 +929,8 @@ function autoSeedDecision(period) {
   return { seed: true };
 }
 
+// Seeds from the reports on disk and nothing else: boot never reaches
+// cercind.gov.in. Months with no report on disk are the scheduled scan's job.
 async function autoSeedLocalReports() {
   try {
     console.log('[CERC Scraper] Checking for local reports to auto-seed...');
@@ -906,6 +939,7 @@ async function autoSeedLocalReports() {
     let skipped = 0;
     for (const d of dirs) {
       if (!/^\d{4}-\d{2}$/.test(d)) continue;
+      if (!fs.existsSync(reportPaths(d).excelPath)) continue;
       const decision = autoSeedDecision(d);
       if (!decision.seed) {
         if (decision.reason !== 'already seeded') {
@@ -916,7 +950,7 @@ async function autoSeedLocalReports() {
       }
       console.log(`[CERC Scraper] Auto-seeding local report for ${d}...`);
       try {
-        await fetchCercReport(d);
+        storeCercReport(d);
         console.log(`[CERC Scraper] Auto-seeded local report for ${d}`);
       } catch (e) {
         console.warn(`[CERC Scraper] Auto-seed failed for ${d}:`, e.message);
@@ -934,6 +968,8 @@ export const cercScraper = {
   buildCercUrls,
   autoSeedDecision,
   fetchCercReport,
+  downloadCercReport,
+  storeCercReport,
   parseAndSaveExcel,
   scanForNewReports,
   getCercFetchLog,
