@@ -6,12 +6,10 @@ import { tokenFor, auth, makeContract, makeInvoice, resetReia } from './helpers/
 import { invalidateParamCache } from '../src/mastersService.js';
 import { invoiceLpsAsOf } from '../src/services/invoiceLps.js';
 
-// Three ways an invoice's money came out wrong, each pinned to the figure it
+// Two ways an invoice's money came out wrong, each pinned to the figure it
 // should have been:
 //   1. a late part payment lost the surcharge the paid part earned while late;
 //   2. a token payment inside the rebate window bought rebate on the whole bill;
-//   3. a debit note was surcharged from the original bill's due date, and did
-//      not reopen a bill that had been paid.
 // Day counts are calendar days here so the arithmetic can be checked by hand.
 
 let reia, contract;
@@ -84,40 +82,4 @@ describe('early-payment rebate is earned per payment', () => {
   });
 });
 
-describe('debit and credit notes', () => {
-  const note = (body) => request(app).post('/api/notes').set(auth(reia)).send(body);
-
-  it('reopens a paid bill when a debit note adds to it', async () => {
-    const inv = makeInvoice({ contract_id: contract.id, direction: 'SJVN_TO_BUYER', status: 'SENT', total_amount: 100000, due_date: '2026-01-01' });
-    await pay(inv.id, 100000, '2026-01-01');
-    expect(row(inv.id).status).toBe('PAID');
-    const r = await note({ invoice_id: inv.id, note_type: 'DEBIT', amount: 10000, reason_code: 'REVISED_REA', issued_date: '2026-03-01' });
-    expect(r.status).toBe(201);
-    expect(row(inv.id).status).toBe('PARTIALLY_PAID');
-  });
-
-  it('surcharges a debit note from its own due date, not the old bill\'s', async () => {
-    const inv = makeInvoice({ contract_id: contract.id, direction: 'SJVN_TO_BUYER', status: 'SENT', total_amount: 100000, due_date: '2026-01-01' });
-    await pay(inv.id, 100000, '2026-01-01');
-    await note({ invoice_id: inv.id, note_type: 'DEBIT', amount: 10000, reason_code: 'REVISED_REA', issued_date: '2026-03-01' });
-    // The bill was paid on time and the note is not yet due on 15 March:
-    // nothing is late. The old engine charged the 10,000 from 1 January.
-    expect(invoiceLpsAsOf(row(inv.id), new Date('2026-03-15')).lps).toBe(0);
-    expect(invoiceLpsAsOf(row(inv.id), new Date('2026-09-30')).lps).toBeGreaterThan(0);
-  });
-
-  it('finishes a part-paid bill when a credit note covers the rest', async () => {
-    const inv = makeInvoice({ contract_id: contract.id, direction: 'SJVN_TO_BUYER', status: 'SENT', total_amount: 100000, due_date: '2026-12-31' });
-    await pay(inv.id, 90000, '2026-06-01');
-    expect(row(inv.id).status).toBe('PARTIALLY_PAID');
-    await note({ invoice_id: inv.id, note_type: 'CREDIT', amount: 10000, reason_code: 'REVISED_REA' });
-    expect(row(inv.id).status).toBe('PAID');
-  });
-
-  it('refuses a credit note larger than the bill', async () => {
-    const inv = makeInvoice({ contract_id: contract.id, direction: 'SJVN_TO_BUYER', status: 'SENT', total_amount: 100000 });
-    const r = await note({ invoice_id: inv.id, note_type: 'CREDIT', amount: 150000, reason_code: 'REVISED_REA' });
-    expect(r.status).toBe(400);
-    expect(row(inv.id).total_amount).toBe(100000);
-  });
-});
+// Debit and credit notes have their own suite: debitCreditNotesV2.test.js.

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import NotesPanel from './NotesPanel.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
@@ -58,10 +59,6 @@ export default function Invoices() {
   const [ocRows, setOcRows] = useState([]);
   const [showOC, setShowOC] = useState(false);
   const [ocError, setOcError] = useState('');
-  const [invoiceNotes, setInvoiceNotes] = useState([]);
-  const [noteForm, setNoteForm] = useState({ note_type: 'DEBIT', amount: '', reason_code: 'REVISED_REA', reason: '' });
-  const [noteError, setNoteError] = useState('');
-  const [showNoteForm, setShowNoteForm] = useState(false);
   const [approveComments, setApproveComments] = useState({}); // changed to object
   const [trailBfr, setTrailBfr] = useState(null);
   const [contractDetail, setContractDetail] = useState(null);
@@ -98,13 +95,8 @@ export default function Invoices() {
   useEffect(load, [filters.status, filters.direction, filters.billing_period]);
   useEffect(() => { api.contracts.list().then(setContracts).catch(() => {}); }, []);
 
-  function loadNotes(invoiceId) {
-    api.notes.list({ invoice_id: invoiceId }).then(setInvoiceNotes).catch(() => setInvoiceNotes([]));
-  }
-
   function openDetail(row) {
     api.invoices.get(row.id).then(setSelected);
-    loadNotes(row.id);
     setPayForm(PAY_FORM);
     setApproveComments({});
     setShowCancel(false);
@@ -113,16 +105,12 @@ export default function Invoices() {
     setShowValidation(false);
     setValidationResult(null);
     setShowWaive(false);
-    setShowNoteForm(false);
-    setNoteError('');
-    setNoteForm({ note_type: 'DEBIT', amount: '', reason_code: 'REVISED_REA', reason: '' });
     setWaiveReason('');
   }
 
   async function refreshSelected(id) {
     const fresh = await api.invoices.get(id);
     setSelected(fresh);
-    loadNotes(id);
     load();
   }
 
@@ -173,25 +161,6 @@ export default function Invoices() {
     } catch (err) {
       setOcError(err.response?.data?.error || 'Failed to save charges.');
     }
-  }
-
-  async function handleRaiseNote(e) {
-    e.preventDefault();
-    setNoteError('');
-    try {
-      await api.notes.create({ ...noteForm, invoice_id: selected.id, amount: Number(noteForm.amount) });
-      setShowNoteForm(false);
-      setNoteForm({ note_type: 'DEBIT', amount: '', reason_code: 'REVISED_REA', reason: '' });
-      await refreshSelected(selected.id);
-    } catch (err) {
-      setNoteError(err.response?.data?.error || 'Failed to raise note.');
-    }
-  }
-
-  async function handleCancelNote(id) {
-    if (!window.confirm('Cancel this note? Its adjustment will be reversed on the invoice.')) return;
-    await api.notes.cancel(id).catch(() => {});
-    await refreshSelected(selected.id);
   }
 
   async function handleCancel(e) {
@@ -956,69 +925,14 @@ export default function Invoices() {
               </>
             )}
 
-            {/* Debit / Credit Notes — final/amended REA adjustments */}
-            {!isCancelled && (
-              <>
-                <div className="section-title" style={{ marginTop: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Debit / Credit Notes</span>
-                  {CAN_WRITE.includes(user?.role) && (
-                    <button type="button" className="btn btn-xs btn-outline" onClick={() => { setShowNoteForm((s) => !s); setNoteError(''); }}>
-                      {showNoteForm ? 'Close' : '+ Raise Note'}
-                    </button>
-                  )}
-                </div>
-
-                {invoiceNotes.length > 0 ? (
-                  <table className="data-table" style={{ width: '100%', fontSize: 13, marginBottom: 8 }}>
-                    <tbody>
-                      {invoiceNotes.map((n) => (
-                        <tr key={n.id} style={{ opacity: n.status === 'CANCELLED' ? 0.5 : 1 }}>
-                          <td><strong>{n.note_no}</strong></td>
-                          <td><Badge status={n.note_type === 'DEBIT' ? 'PENDING' : 'ACTIVE'} label={n.note_type} /></td>
-                          <td>{n.reason_code?.replace(/_/g, ' ')}</td>
-                          <td className="text-right mono" style={{ color: n.note_type === 'DEBIT' ? 'var(--red)' : 'var(--green)' }}>
-                            {n.note_type === 'DEBIT' ? '+' : '−'}{fmtCurrency(n.amount)}
-                          </td>
-                          <td>{n.status === 'CANCELLED' ? 'CANCELLED' : (CAN_WRITE.includes(user?.role) && (
-                            <button type="button" className="btn btn-xs btn-ghost" onClick={() => handleCancelNote(n.id)}>Cancel</button>
-                          ))}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : <p className="inline-note" style={{ marginTop: 4 }}>No debit/credit notes on this invoice.</p>}
-
-                {showNoteForm && (
-                  <>
-                    {noteError && <div className="form-error">{noteError}</div>}
-                    <form onSubmit={handleRaiseNote}>
-                      <div className="form-grid">
-                        <Field label="Type">
-                          <select value={noteForm.note_type} onChange={(e) => setNoteForm({ ...noteForm, note_type: e.target.value })}>
-                            <option value="DEBIT">Debit Note (amount increases)</option>
-                            <option value="CREDIT">Credit Note (amount decreases)</option>
-                          </select>
-                        </Field>
-                        <Field label="Amount (₹)">
-                          <input required type="number" step="0.01" value={noteForm.amount} onChange={(e) => setNoteForm({ ...noteForm, amount: e.target.value })} />
-                        </Field>
-                        <Field label="Reason Code">
-                          <select value={noteForm.reason_code} onChange={(e) => setNoteForm({ ...noteForm, reason_code: e.target.value })}>
-                            {['REVISED_REA', 'CHANGE_IN_LAW', 'TRANSMISSION_CHARGES', 'LPS', 'COMPENSATION_EVENT', 'LIQUIDATED_DAMAGES', 'OTHER'].map((r) => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
-                          </select>
-                        </Field>
-                        <Field label="Reason / Remarks">
-                          <input value={noteForm.reason} onChange={(e) => setNoteForm({ ...noteForm, reason: e.target.value })} />
-                        </Field>
-                      </div>
-                      <p className="inline-note">A Debit Note adds to the invoice's net amount; a Credit Note reduces it. Typically raised on final/amended REA true-up.</p>
-                      <div className="form-actions">
-                        <button type="submit" className="btn btn-primary">Issue Note</button>
-                      </div>
-                    </form>
-                  </>
-                )}
-              </>
+            {/* Debit / Credit Notes — drafted, approved by a second person, issued as their own documents */}
+            {!isCancelled && selected.status !== 'DRAFT' && (
+              <NotesPanel
+                invoice={selected}
+                user={user}
+                canWrite={CAN_APPROVE.includes(user?.role)}
+                onChanged={() => refreshSelected(selected.id)}
+              />
             )}
           </div>
         )}

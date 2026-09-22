@@ -160,7 +160,11 @@ export const api = {
     list: (params) => g('/notes', params),
     summary: () => g('/notes/summary'),
     create: (body) => p('/notes', body),
-    cancel: (id) => p(`/notes/${id}/cancel`),
+    approve: (id, body) => p(`/notes/${id}/approve`, body || {}),
+    reject: (id, reason) => p(`/notes/${id}/reject`, { reason }),
+    apply: (id, invoiceId) => p(`/notes/${id}/apply`, { invoice_id: invoiceId }),
+    cancel: (id, reason) => p(`/notes/${id}/cancel`, { reason }),
+    downloadPdf: (id) => client.get(`/notes/${id}/pdf`, { responseType: 'blob' }).then((res) => res.data),
   },
   billingTrail: {
     get: (params) => g('/billing-trail', params),

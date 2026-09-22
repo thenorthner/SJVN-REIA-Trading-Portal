@@ -43,7 +43,7 @@ router.get('/', requireRole(...BUYER_ROLES, 'SJVN_ADMIN'), (req, res) => {
   // Payment stats (payments made BY the buyer TO SJVN against these invoices)
   const payStats = db.prepare(`SELECT COALESCE(SUM(p.amount), 0) as total_paid FROM payments p JOIN invoices i ON p.invoice_id = i.id WHERE i.contract_id IN (${ph}) AND i.direction = 'SJVN_TO_BUYER'`).get(...contractIds);
   
-  const lastPayment = db.prepare(`SELECT p.amount, p.payment_date, p.reference, p.mode FROM payments p JOIN invoices i ON p.invoice_id = i.id WHERE i.contract_id IN (${ph}) AND i.direction = 'SJVN_TO_BUYER' ORDER BY p.payment_date DESC LIMIT 1`).get(...contractIds) || null;
+  const lastPayment = db.prepare(`SELECT p.amount, p.payment_date, p.reference, p.mode FROM payments p JOIN invoices i ON p.invoice_id = i.id WHERE i.contract_id IN (${ph}) AND i.direction = 'SJVN_TO_BUYER' AND COALESCE(p.mode, '') <> 'CREDIT_NOTE' ORDER BY p.payment_date DESC LIMIT 1`).get(...contractIds) || null;
   
   // Disputes
   const disputes = db.prepare(`SELECT COUNT(*) as count FROM disputes d JOIN invoices i ON d.invoice_id = i.id WHERE i.contract_id IN (${ph}) AND d.status IN (${OPEN_STATUSES.map(() => '?').join(',')})`).get(...contractIds, ...OPEN_STATUSES);

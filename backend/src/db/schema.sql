@@ -526,13 +526,32 @@ CREATE TABLE IF NOT EXISTS debit_credit_notes (
   contract_id TEXT REFERENCES contracts(id),
   period_month TEXT,
   reason_code TEXT NOT NULL DEFAULT 'REVISED_REA' CHECK (reason_code IN
-    ('REVISED_REA','CHANGE_IN_LAW','TRANSMISSION_CHARGES','LPS','COMPENSATION_EVENT','LIQUIDATED_DAMAGES','OTHER')),
-  amount REAL NOT NULL,                 -- always positive; sign comes from note_type
+    ('REVISED_REA','CHANGE_IN_LAW','TRANSMISSION_CHARGES','LPS','COMPENSATION_EVENT',
+     'LIQUIDATED_DAMAGES','SCHEDULE_SHORTFALL_PURCHASE','SCHEDULE_EXCESS_RETURN','OTHER')),
+  amount REAL NOT NULL,                 -- total = taxable + tax; always positive, sign from note_type
+  taxable_amount REAL,                  -- value before tax
+  tax_amount REAL NOT NULL DEFAULT 0,   -- GST / tax on the note, if any
+  tax_label TEXT,                       -- e.g. 'IGST 18%'
   reason TEXT,
-  status TEXT NOT NULL DEFAULT 'ISSUED' CHECK (status IN ('ISSUED','SETTLED','CANCELLED')),
+  -- DRAFT until a second person approves it; only then does it touch money.
+  status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','ISSUED','SETTLED','CANCELLED','REJECTED')),
+  -- LEGACY notes (before 23-Sep-2026) were folded into the invoice's total.
+  -- V2 notes are documents of their own: a debit note is its own supplementary
+  -- invoice (supp_invoice_id), a credit note is applied to the bill as a
+  -- deduction (applied_amount), and the invoice as issued is never rewritten.
+  model TEXT NOT NULL DEFAULT 'V2' CHECK (model IN ('LEGACY','V2')),
+  supp_invoice_id TEXT REFERENCES invoices(id),
+  applied_amount REAL NOT NULL DEFAULT 0,
+  due_date TEXT,
   issued_date TEXT,
   settled_date TEXT,
   created_by TEXT,
+  created_by_id TEXT,
+  approved_by TEXT,
+  approved_by_id TEXT,
+  approved_at TEXT,
+  rejected_reason TEXT,
+  cancel_reason TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

@@ -62,8 +62,10 @@ export function buildBillingSummary({ from, to } = {}) {
   if (to) { payWhere.push('i.billing_period <= ?'); payParams.push(to); }
   const payRows = db.prepare(`
     SELECT i.billing_period,
-      SUM(CASE WHEN i.direction = 'SJVN_TO_BUYER' THEN p.amount + COALESCE(p.deduction, 0) ELSE 0 END) AS collected,
-      SUM(CASE WHEN i.direction = 'SELLER_TO_SJVN' THEN p.amount + COALESCE(p.deduction, 0) ELSE 0 END) AS paid_out
+      -- A credit note is set against a bill as a deduction, but it is not money
+      -- collected or paid out, so it stays out of these two columns.
+      SUM(CASE WHEN i.direction = 'SJVN_TO_BUYER' AND COALESCE(p.mode, '') <> 'CREDIT_NOTE' THEN p.amount + COALESCE(p.deduction, 0) ELSE 0 END) AS collected,
+      SUM(CASE WHEN i.direction = 'SELLER_TO_SJVN' AND COALESCE(p.mode, '') <> 'CREDIT_NOTE' THEN p.amount + COALESCE(p.deduction, 0) ELSE 0 END) AS paid_out
     FROM payments p
     JOIN invoices i ON i.id = p.invoice_id
     WHERE ${payWhere.join(' AND ')}

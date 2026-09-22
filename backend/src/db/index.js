@@ -2127,6 +2127,76 @@ try {
 }
 
 /**
+ * Debit / credit notes as documents of their own (V2).
+ *
+ * A note used to be folded straight into the invoice's total the moment it was
+ * raised: no approval, no tax, the issued bill rewritten, and a debit note
+ * surcharged from the old bill's due date. V2 adds a DRAFT state that needs a
+ * second person to issue, the tax on the note, and links to what the note
+ * became (its own supplementary invoice, or the amount applied as a credit).
+ * Rows already on file are kept as LEGACY and behave exactly as before.
+ */
+function migrateNotesV2() {
+  const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='debit_credit_notes'").get()?.sql || '';
+  if (!ddl || ddl.includes("'REJECTED'")) return;
+  const oldCols = db.prepare('PRAGMA table_info(debit_credit_notes)').all().map((c) => c.name);
+  const keep = ['id', 'note_no', 'note_type', 'invoice_id', 'contract_id', 'period_month', 'reason_code',
+    'amount', 'reason', 'status', 'issued_date', 'settled_date', 'created_by', 'created_at', 'updated_at']
+    .filter((c) => oldCols.includes(c));
+  db.exec('PRAGMA foreign_keys=OFF');
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE debit_credit_notes_v2 (
+        id TEXT PRIMARY KEY,
+        note_no TEXT UNIQUE NOT NULL,
+        note_type TEXT NOT NULL CHECK (note_type IN ('DEBIT','CREDIT')),
+        invoice_id TEXT NOT NULL REFERENCES invoices(id),
+        contract_id TEXT REFERENCES contracts(id),
+        period_month TEXT,
+        reason_code TEXT NOT NULL DEFAULT 'REVISED_REA' CHECK (reason_code IN
+          ('REVISED_REA','CHANGE_IN_LAW','TRANSMISSION_CHARGES','LPS','COMPENSATION_EVENT',
+           'LIQUIDATED_DAMAGES','SCHEDULE_SHORTFALL_PURCHASE','SCHEDULE_EXCESS_RETURN','OTHER')),
+        amount REAL NOT NULL,
+        taxable_amount REAL,
+        tax_amount REAL NOT NULL DEFAULT 0,
+        tax_label TEXT,
+        reason TEXT,
+        status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','ISSUED','SETTLED','CANCELLED','REJECTED')),
+        model TEXT NOT NULL DEFAULT 'V2' CHECK (model IN ('LEGACY','V2')),
+        supp_invoice_id TEXT REFERENCES invoices(id),
+        applied_amount REAL NOT NULL DEFAULT 0,
+        due_date TEXT,
+        issued_date TEXT,
+        settled_date TEXT,
+        created_by TEXT,
+        created_by_id TEXT,
+        approved_by TEXT,
+        approved_by_id TEXT,
+        approved_at TEXT,
+        rejected_reason TEXT,
+        cancel_reason TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    db.exec(`
+      INSERT INTO debit_credit_notes_v2 (${keep.join(', ')}, taxable_amount, model)
+      SELECT ${keep.join(', ')}, amount, 'LEGACY' FROM debit_credit_notes;
+      DROP TABLE debit_credit_notes;
+      ALTER TABLE debit_credit_notes_v2 RENAME TO debit_credit_notes;
+    `);
+  })();
+  db.exec('PRAGMA foreign_keys=ON');
+  console.log('[MIGRATE] debit_credit_notes: V2 (draft/approval, tax, own documents); existing notes kept as LEGACY');
+}
+
+try {
+  migrateNotesV2();
+} catch (e) {
+  console.error('Debit/credit note V2 migration failed:', e.message);
+}
+
+/**
  * REA Scraper fetch log table.
  */
 function migrateReaFetchLogSchema() {
