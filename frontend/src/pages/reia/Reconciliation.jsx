@@ -517,6 +517,7 @@ export default function Reconciliation() {
             </div>
 
             <div className="section-title" style={{ marginTop: 16 }}>Three-way / check items</div>
+            <div className="table-wrap">
             <table className="data-table" style={{ width: '100%', fontSize: 13 }}>
               <thead>
                 <tr>
@@ -526,7 +527,7 @@ export default function Reconciliation() {
               <tbody>
                 {(detail.items || []).map((it) => (
                   <tr key={it.id}>
-                    <td>
+                    <td style={{ whiteSpace: 'normal', minWidth: 200 }}>
                       {it.label}
                       {!!it.pattern_flag && <div style={{ color: 'var(--error)', fontSize: 11 }}>Pattern flag — systemic?</div>}
                       {it.notes && <div style={{ opacity: 0.6, fontSize: 11 }}>{it.notes}</div>}
@@ -549,6 +550,7 @@ export default function Reconciliation() {
                 ))}
               </tbody>
             </table>
+            </div>
             {CAN_WRITE.includes(user?.role) && (
               <Field label="Override reason (required before Override)">
                 <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Why accepting variance..." />

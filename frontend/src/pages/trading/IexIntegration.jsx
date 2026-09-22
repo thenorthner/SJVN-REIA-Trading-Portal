@@ -11,9 +11,10 @@ import { PageHeader, Card, Table, Tabs, Tab, Field, StatCard, SampleDataNotice, 
 //   1. STUB vs live. Until a base URL and a valid token are configured the
 //      server answers in stub mode, and a stub schedule must never be read as
 //      a cleared position.
-//   2. The token's expiry. IEX issues a one-hour token and documents no
-//      refresh call, so the credential lapses during a working session. Better
-//      to show the clock than to let the desk discover it as a wall of 401s.
+//   2. The token. Its JWT exp claim is known to be wrong (IEX: a typo, the
+//      token lasts six months, and it does work past the claim), so the claim
+//      is only surfaced when iex_enforce_token_expiry is on. A real rejection
+//      shows up as a 401 that names the token.
 //   3. The scaling factor and the delivery-date source behind every figure.
 //      A wrong decimal factor is a power-of-ten error and a wrong delivery
 //      epoch silently reads the neighbouring trading day.
@@ -178,12 +179,12 @@ export default function IexIntegration() {
         <SampleDataNotice detail="The server is not configured to call IEX, so no figures here come from the exchange. Set iex_enabled=true with a current iex_api_token and iex_login_user_id — the segment hosts are already built in. Requests must also originate from the IP whitelisted with IEX." />
       )}
 
-      {status?.token_expired && (
+      {/* The token's own exp claim is known to be wrong (IEX: a typo; the token
+          works), so it is only raised when the desk has chosen to enforce it. */}
+      {status?.token_expired && status.token_expiry_enforced && (
         <Caveat>
           <strong>The configured token's own expiry claim passed on {new Date(status.token_expires_at).toLocaleString()}.</strong>{' '}
-          {status.token_expiry_enforced
-            ? 'Requests are being refused before they are sent, so this is not an exchange outage.'
-            : 'Requests are still being sent — IEX puts token life at six months and confirmed this claim was a typo. If a call comes back 401, this is the first thing to check.'}{' '}
+          Requests are being refused before they are sent (iex_enforce_token_expiry is on), so this is not an exchange outage.
           There is no refresh endpoint; IEX mails a replacement 15 days before a token genuinely lapses.
         </Caveat>
       )}
@@ -203,9 +204,9 @@ export default function IexIntegration() {
           />
           <StatCard
             label="Token"
-            value={!status.token_present ? 'Not set' : status.token_expired ? 'Claim lapsed' : 'Valid'}
-            tone={status.token_present && !status.token_expired ? 'success' : 'warning'}
-            hint={status.token_expires_at ? `Claim expires ${new Date(status.token_expires_at).toLocaleString()}` : 'Six months from issue'}
+            value={!status.token_present ? 'Not set' : (status.token_expired && status.token_expiry_enforced) ? 'Expired' : 'Set'}
+            tone={status.token_present && !(status.token_expired && status.token_expiry_enforced) ? 'success' : 'warning'}
+            hint="Six months from issue; IEX mails a replacement"
           />
           <StatCard
             label="Participant"
@@ -279,7 +280,7 @@ export default function IexIntegration() {
           <p style={{ fontSize: 12, color: 'var(--text-muted, #64748b)' }}>
             Quantities divided by {report.scaling.qty_factor}, prices by {report.scaling.price_factor}{' '}
             ({report.scaling.source === 'ASSET_MASTER' ? 'from the Asset Master' : 'default — not read from the exchange'}).
-            {report.delivery_date_source && <> Delivery date {report.delivery_date_source === 'EXCHANGE' ? 'taken from the exchange' : 'computed locally as IST midnight'}.</>}
+            {report.delivery_date_source && <> Delivery date {report.delivery_date_source === 'EXCHANGE' ? 'taken from the exchange' : 'computed locally as UTC midnight'}.</>}
           </p>
         )}
 
@@ -299,6 +300,7 @@ export default function IexIntegration() {
           <li><strong>Bid submission</strong> — two-way and money-moving. It stays manual until a controlled test window; the server refuses to place live orders rather than pretending to.</li>
           <li><strong>REC/EC order entry</strong> — read-only for now. The order book, trade book and product master are live; placing and cancelling orders needs the same controlled rollout as FO bid submission.</li>
           <li><strong>REC in production</strong> — IEX left the live REC host blank in their table, so only UAT is reachable.</li>
+          <li><strong>TAM (Term-Ahead Market)</strong> — IEX has not issued a TAM API document or enabled TAM on UAT for SJVN (UAT covers DAM, GDAM, HPDAM, RTM and REC), so there is nothing to call yet. PXIL&apos;s TAM-GTAM report is built under PXIL Reports, and the CERC monthly report&apos;s TAM figures are on the market dashboards.</li>
         </ul>
       </Card>
     </div>

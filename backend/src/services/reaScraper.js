@@ -92,13 +92,31 @@ function findNewMonths(rpcKey, availableMonths, dataType = 'PROVISIONAL') {
 // ──────────────────────────────────────────────
 // Step 3: Download PDF
 // ──────────────────────────────────────────────
-async function downloadPdf(rpcKey, period, dataType = 'PROVISIONAL') {
+/**
+ * NRPC's current site files each account under a timestamped name
+ * (allfile/090920261230385307REA0826_P.pdf) that cannot be built from the
+ * month, so a link copied off the site can be given instead. Only the RPC's own
+ * host is fetched — this is not a general URL downloader.
+ */
+function checkOverrideUrl(rpcKey, url) {
+  const config = RPC_SOURCES[rpcKey];
+  let u;
+  try { u = new URL(url); } catch { throw new Error(`Not a valid link: ${url}`); }
+  const allowed = new URL(config.listing_url).hostname;
+  if (u.protocol !== 'https:' || u.hostname !== allowed) {
+    throw new Error(`REA link must be an https link on ${allowed}, got ${u.hostname}`);
+  }
+  if (!/\.pdf$/i.test(u.pathname)) throw new Error('REA link must point to the PDF');
+  return u.toString();
+}
+
+async function downloadPdf(rpcKey, period, dataType = 'PROVISIONAL', urlOverride = null) {
   const config = RPC_SOURCES[rpcKey];
   const mmyy = yyyymmToMMYY(period);
-  
-  const pdfUrl = dataType === 'PROVISIONAL' 
-    ? config.provisional_url(mmyy) 
-    : config.final_url(mmyy);
+
+  const pdfUrl = urlOverride
+    ? checkOverrideUrl(rpcKey, urlOverride)
+    : (dataType === 'PROVISIONAL' ? config.provisional_url(mmyy) : config.final_url(mmyy));
 
   // Create directory for this RPC+month
   const dir = path.join(REA_DOWNLOAD_DIR, rpcKey, period);
@@ -158,31 +176,52 @@ async function downloadPdf(rpcKey, period, dataType = 'PROVISIONAL') {
 // ──────────────────────────────────────────────
 // Step 4: Parse PDF using Python script
 // ──────────────────────────────────────────────
-function parsePdf(filePath, rpcKey) {
-  return new Promise((resolve, reject) => {
-    const config = RPC_SOURCES[rpcKey];
-    const scriptPath = path.join(SCRIPTS_DIR, config.parser_script);
+/**
+ * The Python that can run the parser. `python3` is a Unix name — on the
+ * Windows server it is `python` or the `py -3` launcher — so the first one
+ * that can import pypdf wins, and is remembered. PYTHON_BIN overrides.
+ */
+let pythonCmd = null;
+function execP(cmd) {
+  return new Promise((resolve) => exec(cmd, { timeout: 20000 }, (error, stdout, stderr) => resolve({ error, stdout, stderr })));
+}
+async function resolvePython() {
+  if (pythonCmd) return pythonCmd;
+  const candidates = process.env.PYTHON_BIN
+    ? [process.env.PYTHON_BIN]
+    : (process.platform === 'win32' ? ['py -3', 'python', 'python3'] : ['python3', 'python']);
+  for (const c of candidates) {
+    const { error } = await execP(`${c} -c "import pypdf"`);
+    if (!error) { pythonCmd = c; return c; }
+  }
+  throw new Error(
+    `No Python with pypdf found (tried ${candidates.join(', ')}). Install Python 3 and run `
+    + '"python -m pip install -r backend/requirements.txt", or set PYTHON_BIN.',
+  );
+}
 
-    exec(`python3 "${scriptPath}" "${filePath}"`, (error, stdout, stderr) => {
-      if (error) {
-        console.error('[REA Scraper] Parser error:', stderr || error.message);
-        reject(new Error(`Parser failed: ${stderr || error.message}`));
-        return;
-      }
-
-      try {
-        const result = JSON.parse(stdout);
-        if (!result.success) {
-          reject(new Error(result.error || 'Parser returned failure'));
-          return;
-        }
-        resolve(result.data);
-      } catch (parseErr) {
-        console.error('[REA Scraper] Invalid JSON from parser:', stdout?.slice(0, 200));
-        reject(new Error('Parser returned invalid JSON'));
-      }
-    });
-  });
+async function parsePdf(filePath, rpcKey) {
+  const config = RPC_SOURCES[rpcKey];
+  const scriptPath = path.join(SCRIPTS_DIR, config.parser_script);
+  const py = await resolvePython();
+  const { error, stdout, stderr } = await new Promise((resolve) => exec(
+    `${py} "${scriptPath}" "${filePath}"`,
+    { maxBuffer: 16 * 1024 * 1024 },
+    (e, out, err) => resolve({ error: e, stdout: out, stderr: err }),
+  ));
+  if (error) {
+    console.error('[REA Scraper] Parser error:', stderr || error.message);
+    throw new Error(`Parser failed: ${stderr || error.message}`);
+  }
+  let result;
+  try {
+    result = JSON.parse(stdout);
+  } catch {
+    console.error('[REA Scraper] Invalid JSON from parser:', stdout?.slice(0, 200));
+    throw new Error('Parser returned invalid JSON');
+  }
+  if (!result.success) throw new Error(result.error || 'Parser returned failure');
+  return result;
 }
 
 // ──────────────────────────────────────────────
@@ -254,9 +293,9 @@ function processAndSave(logId, parsedData, rpcKey, period, dataType) {
       if (prov) supersedesId = prov.id;
     }
     db.prepare(`
-      INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, cuf_percent, availability_percent, status, billing_family_ref, supersedes_energy_id)
-      VALUES (?, ?, ?, ?, 'REA', ?, NULL, ?, 'DRAFT', ?, ?)
-    `).run(edId, contract.id, period, dataType, station.energy_mwh, station.availability_percent, bfr, supersedesId);
+      INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, cuf_percent, availability_percent, free_energy_mwh, status, billing_family_ref, supersedes_energy_id)
+      VALUES (?, ?, ?, ?, 'REA', ?, NULL, ?, ?, 'DRAFT', ?, ?)
+    `).run(edId, contract.id, period, dataType, station.energy_mwh, station.availability_percent, station.free_energy_mwh ?? null, bfr, supersedesId);
 
     logAudit({ req: null, user: { id: 'SYSTEM', name: 'REA Scraper' }, action: 'CREATE', module: 'REIA', entityType: 'energy_data', entityId: edId, details: { source: 'REA_SCRAPER', rpc: rpcKey, station: station.station_name } });
 
@@ -327,7 +366,7 @@ async function runFullCycle(rpcKey) {
         results.downloaded++;
 
         // Step 4: Parse PDF
-        const parsedData = await parsePdf(download.filePath, rpcKey);
+        const { data: parsedData } = await parsePdf(download.filePath, rpcKey);
         db.prepare(`UPDATE rea_fetch_log SET status = 'PARSED' WHERE id = ?`).run(download.logId);
         results.parsed++;
 
@@ -396,7 +435,7 @@ async function runAllSources() {
 // ──────────────────────────────────────────────
 // Manual trigger for a specific RPC + month
 // ──────────────────────────────────────────────
-async function triggerManual(rpcKey, periodMonth, dataType = 'PROVISIONAL') {
+async function triggerManual(rpcKey, periodMonth, dataType = 'PROVISIONAL', { url = null } = {}) {
   const config = RPC_SOURCES[rpcKey];
   if (!config) throw new Error(`Unknown RPC source: ${rpcKey}`);
 
@@ -415,15 +454,27 @@ async function triggerManual(rpcKey, periodMonth, dataType = 'PROVISIONAL') {
   `).run(rpcKey, periodMonth, dataType);
 
   // Download
-  const download = await downloadPdf(rpcKey, periodMonth, dataType);
+  const download = await downloadPdf(rpcKey, periodMonth, dataType, url);
   if (!download) throw new Error(`PDF not found (404) for ${rpcKey}/${periodMonth}`);
 
-  // Parse
-  const parsedData = await parsePdf(download.filePath, rpcKey);
-  db.prepare(`UPDATE rea_fetch_log SET status = 'PARSED' WHERE id = ?`).run(download.logId);
-
-  // Save
-  const count = processAndSave(download.logId, parsedData, rpcKey, periodMonth, dataType);
+  // Parse and save. A failure is logged as FAILED so a retry is not blocked
+  // by a half-finished attempt.
+  let parsedData;
+  let count;
+  try {
+    const parsed = await parsePdf(download.filePath, rpcKey);
+    // The account names its own month. Saving April's figures as August's is
+    // the mistake a pasted link makes possible, so a mismatch is refused.
+    if (parsed.period && parsed.period !== periodMonth) {
+      throw new Error(`This REA is for ${parsed.period}, not ${periodMonth} — check the link`);
+    }
+    parsedData = parsed.data;
+    db.prepare(`UPDATE rea_fetch_log SET status = 'PARSED' WHERE id = ?`).run(download.logId);
+    count = processAndSave(download.logId, parsedData, rpcKey, periodMonth, dataType);
+  } catch (err) {
+    db.prepare(`UPDATE rea_fetch_log SET status = 'FAILED', error_message = ? WHERE id = ?`).run(err.message, download.logId);
+    throw err;
+  }
 
   pushNotification({
     role: 'REIA_USER',
@@ -479,6 +530,7 @@ export const reaScraper = {
   discoverAvailableMonths,
   findNewMonths,
   downloadPdf,
+  checkOverrideUrl,
   parsePdf,
   processAndSave,
   runFullCycle,

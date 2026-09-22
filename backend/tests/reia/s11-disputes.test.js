@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../../src/server.js';
 import db from '../../src/db/index.js';
-import { tokenFor, auth, makeContract, makeInvoice, columnsOf, hasTable, resetReia } from '../helpers/reia.js';
+import { tokenFor, auth, makeContract, makeInvoice, makeEntity, columnsOf, hasTable, resetReia } from '../helpers/reia.js';
 import { readFileSync } from 'fs';
 
 let reia, contract, invoice;
@@ -73,5 +73,34 @@ describe('S11 Dispute management', () => {
     await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/comments`).set(auth(reia)).send({ body: 'evidence attached' });
     expect(db.prepare('SELECT COUNT(*) c FROM dispute_comments WHERE dispute_id = ?').get(r.body.id || latestDisputeId()).c).toBeGreaterThan(0);
     expect(db.prepare('SELECT COUNT(*) c FROM dispute_events WHERE dispute_id = ?').get(r.body.id || latestDisputeId()).c).toBeGreaterThan(0);
+  });
+
+  // The dispute screen lists this dispute's own evidence and opens it through
+  // the dispute's access check — the uploads folder itself is not the way in.
+  it('serves a dispute its own evidence, and only to someone who may see the dispute', async () => {
+    const r = await raise();
+    const id = r.body.id || latestDisputeId();
+    const up = await request(app).post(`/api/disputes/${id}/evidence`).set(auth(reia))
+      .attach('file', Buffer.from('meter reading sheet'), 'meter sheet.pdf');
+    expect(up.status).toBe(201);
+    const [doc] = up.body.supporting_docs;
+    const detail = await request(app).get(`/api/disputes/${id}`).set(auth(reia));
+    expect(detail.body.supporting_docs.map((d) => d.original_name)).toEqual(['meter sheet.pdf']);
+
+    const got = await request(app).get(`/api/disputes/${id}/evidence/${encodeURIComponent(doc.filename)}`).set(auth(reia))
+      .buffer(true).parse((res, cb) => { const c = []; res.on('data', (x) => c.push(x)); res.on('end', () => cb(null, Buffer.concat(c))); });
+    expect(got.status).toBe(200);
+    expect(got.body.toString()).toBe('meter reading sheet');
+    expect(got.headers['content-disposition']).toContain('meter sheet.pdf');
+
+    // A name the dispute does not list is refused, including one reaching out of the folder.
+    const other = await request(app).get(`/api/disputes/${id}/evidence/${encodeURIComponent('../../package.json')}`).set(auth(reia));
+    expect(other.status).toBe(404);
+
+    // A seller with no part in the invoice cannot read it.
+    const stranger = makeEntity('SELLER');
+    const outsider = tokenFor('SELLER', { linked_entity_id: stranger.id });
+    const denied = await request(app).get(`/api/disputes/${id}/evidence/${encodeURIComponent(doc.filename)}`).set(auth(outsider));
+    expect(denied.status).toBe(403);
   });
 });

@@ -33,11 +33,12 @@ describe('S18 Outstanding is what is still owed, not what was billed', () => {
   it('drops a part payment out of payables', async () => {
     const inv = makeInvoice({ contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'SENT', total_amount: 100000 });
     await pay(inv.id, 25000);
-    // Paying a seller bill early also earns the 1.5% rebate, so what is still
-    // owed is the bill less the rebate less the payment — which is the point:
-    // the figure tracks the invoice rather than restating its face value.
+    // Paying a seller bill early also earns the 1.5% rebate — on the part this
+    // payment settles (25,000 settles 25,000 / 0.985 of the bill), not on the
+    // whole bill. What is still owed is the bill less the rebate less the
+    // payment: the figure tracks the invoice rather than restating its face value.
     const { rebate } = db.prepare('SELECT rebate FROM invoices WHERE id = ?').get(inv.id);
-    expect(rebate, 'expected the early-payment rebate to have been applied').toBe(1500);
+    expect(rebate, 'expected the early-payment rebate to have been applied').toBe(Math.round(25000 / 0.985 * 0.015));
     expect(payablesOutstanding()).toBe(100000 - rebate - 25000);
   });
 

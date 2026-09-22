@@ -372,6 +372,7 @@ export default function Contracts() {
                   <option value="Hybrid">Hybrid</option>
                   <option value="FDRE">FDRE</option>
                   <option value="PeakPower">Peak Power</option>
+                  <option value="Hydro">Hydro</option>
                   <option value="PSP">Pumped Storage (PSP)</option>
                   <option value="Storage">BESS / Storage</option>
                 </select>
@@ -680,7 +681,7 @@ export default function Contracts() {
                     termination_reason: '',
                   });
                 }}>Update Lifecycle Stage</button>
-                <button className="btn btn-outline" onClick={() => setAmendForm(selected)}>Amend Contract</button>
+                <button className="btn btn-outline" onClick={() => setAmendForm({ ...selected, effective_from: '' })}>Amend Contract</button>
               </>
             )}
           </div>
@@ -742,6 +743,24 @@ export default function Contracts() {
               </div>
             )}
             <div className="form-grid">
+              {/* The server dates every amendment and refuses one without a date,
+                  so the form has to ask. Starts blank on purpose: pre-filling it
+                  from the last amendment would quietly re-use that one's date. */}
+              <Field label="Effective From" required>
+                <input
+                  required
+                  type="date"
+                  min={amendForm.tenure_start || undefined}
+                  max={amendForm.tenure_end || undefined}
+                  value={amendForm.effective_from || ''}
+                  onChange={(e) => setAmendForm({ ...amendForm, effective_from: e.target.value })}
+                />
+                {(amendForm.tenure_start || amendForm.tenure_end) && (
+                  <span style={{ fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
+                    Date the revised terms apply from — within the tenure {amendForm.tenure_start || '…'} to {amendForm.tenure_end || '…'}
+                  </span>
+                )}
+              </Field>
               <Field label="Capacity (MW)"><input type="number" step="0.01" value={amendForm.capacity_mw} onChange={(e) => setAmendForm({ ...amendForm, capacity_mw: e.target.value })} /></Field>
               <Field label="Commissioned (MW)"><input type="number" step="0.01" value={amendForm.commissioned_capacity_mw} onChange={(e) => setAmendForm({ ...amendForm, commissioned_capacity_mw: e.target.value })} /></Field>
               <Field label="COD Date"><input type="date" value={amendForm.cod_date || ''} onChange={(e) => setAmendForm({ ...amendForm, cod_date: e.target.value })} /></Field>

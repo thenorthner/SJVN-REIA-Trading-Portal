@@ -183,7 +183,7 @@ export default function SellerDisputes() {
             ))}
             <form onSubmit={postComment}>
               <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)} />
-              <div className="form-actions"><button type="submit" className="btn btn-secondary">Send</button></div>
+              <div className="form-actions"><button type="submit" className="btn btn-secondary" disabled={!comment.trim()}>Send</button></div>
             </form>
           </div>
         )}

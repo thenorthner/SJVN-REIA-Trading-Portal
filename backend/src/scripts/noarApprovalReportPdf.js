@@ -6,6 +6,7 @@ import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { eachPage } from './reportPdfKit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOGO_PATH = path.join(__dirname, '../assets/sjvn_logo.jpg');
@@ -195,12 +196,10 @@ export function generateNoarApprovalReportPdf(summary, decided, res) {
   }
 
   // Page numbers last, once the total is known.
-  const range = doc.bufferedPageRange();
-  for (let i = 0; i < range.count; i += 1) {
-    doc.switchToPage(range.start + i);
+  eachPage(doc, (i, count) => {
     doc.fillColor(MUTED).font('Helvetica').fontSize(7)
-      .text(`Page ${i + 1} of ${range.count}`, M, PAGE_H - M + 6, { width: CONTENT_W, align: 'right', lineBreak: false });
-  }
+      .text(`Page ${i + 1} of ${count}`, M, PAGE_H - M + 6, { width: CONTENT_W, align: 'right', lineBreak: false });
+  });
 
   doc.end();
 }

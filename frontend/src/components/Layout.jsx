@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../api/client.js';
@@ -125,6 +125,9 @@ const NAV_INTERNAL = [
       { to: '/reia/generation-performance', label: 'Generation Performance' },
       { to: '/reia/hydro-billing', label: 'Hydro Billing (Station-wise)' },
       { to: '/reia/hydro-ledger', label: 'Hydro Account Display' },
+      { to: '/reia/hydro-claims', label: 'Additional Charges & TCS' },
+      { to: '/reia/hydro-finance', label: 'Finance Posting (FI)' },
+      { to: '/reia/hydro-ptc', label: 'Power Trading (PTC)' },
       { to: '/reia/disputes', label: 'Dispute Management' },
       { to: '/reia/payment-security', label: 'Payment Security' },
       { to: '/reia/power-diversion', label: 'Power Diversion' },
@@ -135,9 +138,7 @@ const NAV_INTERNAL = [
       // so nobody sees the same link twice.
       { to: '/trading/generator-billing', label: 'Generator Billing & Settlement', roles: ['REIA_USER', 'REIA_ADMIN'] },
       { to: '/reia/reconciliation', label: 'Reconciliation' },
-      // Hidden for solar-focused scope (DSM is hydro/scheduling). Route still
-      // exists in App.jsx — uncomment to restore for hydro/thermal.
-      // { to: '/reia/deviation', label: 'Deviation Settlement (DSM)' },
+      { to: '/reia/deviation', label: 'Deviation Settlement (DSA)' },
     ],
   },
     {
@@ -321,6 +322,36 @@ export default function Layout() {
   const [notifications, setNotifications] = useState([]);
   const [showNotif, setShowNotif] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const notifRef = useRef(null);
+  const profileRef = useRef(null);
+
+  // A dropdown closes when the user clicks anywhere outside it or presses
+  // Escape. Each menu's wrapper holds both its toggle and its panel, so a click
+  // on the toggle is "inside" and keeps working as the open/close switch.
+  useEffect(() => {
+    if (!showNotif && !showProfile) return undefined;
+    function onPointerDown(e) {
+      if (showNotif && notifRef.current && !notifRef.current.contains(e.target)) setShowNotif(false);
+      if (showProfile && profileRef.current && !profileRef.current.contains(e.target)) setShowProfile(false);
+    }
+    function onKeyDown(e) {
+      if (e.key === 'Escape') { setShowNotif(false); setShowProfile(false); }
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [showNotif, showProfile]);
+
+  // Moving to another screen closes whichever menu took the user there.
+  useEffect(() => {
+    setShowNotif(false);
+    setShowProfile(false);
+  }, [location.pathname]);
 
   // Auto-redirect counterparties to their own portals on first load. This must
   // cover the L1/L2/L3 sub-users too, not just the company admin role.
@@ -332,12 +363,12 @@ export default function Layout() {
   }, [user, location.pathname, navigate]);
 
   useEffect(() => {
-    api.notifications.list().then(setNotifications).catch(() => {});
+    api.notifications.list(user?.role).then(setNotifications).catch(() => {});
     const interval = setInterval(() => {
-      api.notifications.list().then(setNotifications).catch(() => {});
+      api.notifications.list(user?.role).then(setNotifications).catch(() => {});
     }, 20000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user?.role]);
 
   const unread = (Array.isArray(notifications) ? notifications : []).filter((n) => !n.is_read).length;
 
@@ -355,6 +386,12 @@ export default function Layout() {
   // White-label the shell for counterparties: show their own logo + name in
   // place of the SJVN brand. Internal SJVN staff keep the platform branding.
   const isCounterparty = isSellerRole(user?.role) || isBuyerRole(user?.role) || isTradingClientRole(user?.role);
+  // "Manage Portfolio" went to the trading desk's client list for everyone, and
+  // for a REIA user, a seller or a buyer that screen answers "Access restricted".
+  // It now leads where the role's portfolio actually lives, or is not offered.
+  const portfolioPath = ROLE_GROUPS.TRADING_ALL.includes(user?.role)
+    ? '/trading/clients'
+    : isTradingClientRole(user?.role) ? '/trading/my-profile' : null;
   const entity = user?.entity;
   const branded = isCounterparty && entity;
   const portalKind = isSellerRole(user?.role) 
@@ -419,8 +456,8 @@ export default function Layout() {
           </div>
           <div className="topbar-actions">
 
-            <div className="notif-wrap">
-              <button className="icon-btn" onClick={() => setShowNotif((s) => !s)} aria-label="Notifications">
+            <div className="notif-wrap" ref={notifRef}>
+              <button className="icon-btn" onClick={() => { setShowNotif((s) => !s); setShowProfile(false); }} aria-label="Notifications" aria-expanded={showNotif}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                   <path d="M13.73 21a2 2 0 0 1-3.46 0" />
@@ -433,7 +470,7 @@ export default function Layout() {
                     <span style={{ fontWeight: 600 }}>Inbox & System Alerts</span>
                     <div style={{ display: 'flex', gap: 10 }}>
                       <button className="link-btn" onClick={() => alert('Compose Mail modal opened!')} style={{ color: '#0052cc', fontWeight: 600 }}>+ Compose Mail</button>
-                      <button className="link-btn" onClick={() => api.notifications.markAllRead().then(() => api.notifications.list().then(setNotifications))}>Mark all read</button>
+                      <button className="link-btn" onClick={() => api.notifications.markAllRead().then(() => api.notifications.list(user?.role).then(setNotifications))}>Mark all read</button>
                     </div>
                   </div>
                   {notifications.length === 0 && <div className="notif-empty">No unread alerts. All clear.</div>}
@@ -446,11 +483,12 @@ export default function Layout() {
                 </div>
               )}
             </div>
-            <div className="notif-wrap" style={{ position: 'relative' }}>
+            <div className="notif-wrap" style={{ position: 'relative' }} ref={profileRef}>
               <div 
                 className="user-chip" 
                 style={{ cursor: 'pointer' }}
-                onClick={() => setShowProfile((s) => !s)}
+                onClick={() => { setShowProfile((s) => !s); setShowNotif(false); }}
+                aria-expanded={showProfile}
               >
                 <div className="user-avatar">{user?.name?.[0] ?? '?'}</div>
                 <div className="user-meta">
@@ -465,9 +503,11 @@ export default function Layout() {
                   <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => { navigate('/settings/user-profile'); setShowProfile(false); }}>
                     My Account
                   </div>
-                  <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => { navigate('/trading/clients'); setShowProfile(false); }}>
-                    Manage Portfolio
-                  </div>
+                  {portfolioPath && (
+                    <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => { navigate(portfolioPath); setShowProfile(false); }}>
+                      Manage Portfolio
+                    </div>
+                  )}
                   <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => setShowProfile(false)}>
                     Change Password
                   </div>

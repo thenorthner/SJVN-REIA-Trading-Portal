@@ -26,7 +26,9 @@ import { invoicePresentedTo, billPresentedOn } from '../services/counterpartySco
 import { asOfFrom } from '../services/clock.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uploadDir = path.join(__dirname, '../../uploads/disputes');
+// Overridable so a test run or the browser suite files its evidence beside its
+// throwaway database instead of among the real disputes' documents.
+const uploadDir = process.env.SJVN_DISPUTE_DOC_DIR || path.join(__dirname, '../../uploads/disputes');
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -822,6 +824,23 @@ router.post('/:id/evidence', upload.single('file'), (req, res) => {
   recordEvent(dispute.id, req.user, 'EVIDENCE_UPLOADED', dispute.status, dispute.status, { filename: entry.filename });
 
   res.status(201).json({ supporting_docs: docs });
+});
+
+// ---------- evidence download ----------
+// Evidence is a party's own filing, so it is served through the same access
+// check as the dispute rather than from the public /uploads directory. Only a
+// file this dispute lists can be fetched, which also keeps the name from
+// reaching outside the evidence folder.
+router.get('/:id/evidence/:filename', (req, res) => {
+  const dispute = db.prepare('SELECT * FROM disputes WHERE id = ?').get(req.params.id);
+  if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
+  if (!canAccessDispute(req.user, dispute)) return res.status(403).json({ error: 'Not authorized' });
+
+  const entry = parseDocs(dispute.supporting_docs).find((d) => d.filename === req.params.filename);
+  if (!entry) return res.status(404).json({ error: 'This dispute has no such evidence file' });
+  const file = path.join(uploadDir, path.basename(entry.filename));
+  if (!fs.existsSync(file)) return res.status(404).json({ error: 'The evidence file is no longer on the server' });
+  res.download(file, entry.original_name || entry.filename);
 });
 
 // ---------- assign / reassign ----------

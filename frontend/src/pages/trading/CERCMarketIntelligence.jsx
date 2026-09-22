@@ -90,7 +90,10 @@ export default function CERCMarketIntelligence() {
     try {
       setLoading(true);
       setError('');
-      await api.cercMarket.triggerFetch(selectedPeriod || '2026-01');
+      // With no month picked, "Fetch Latest" looks for any new month (the
+      // server checks the last six) rather than re-fetching January 2026.
+      if (selectedPeriod) await api.cercMarket.triggerFetch(selectedPeriod);
+      else await api.cercMarket.triggerScan();
       await fetchPeriods();
       await fetchData();
     } catch (err) {

@@ -19,6 +19,7 @@ const DOC_TONE = {
   LPS: { label: 'Surcharge', color: 'var(--amber, #b7791f)' },
   PMT: { label: 'Payment', color: 'var(--green, #276749)' },
   ADV: { label: 'Advance', color: 'var(--blue, #2b6cb0)' },
+  RBT: { label: 'Rebate', color: 'var(--green, #276749)' },
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -111,8 +112,10 @@ export default function HydroLedger() {
         mode: payForm.mode || null,
         reference: payForm.reference || null,
         info: payForm.info || null,
+        rebate: payForm.rebate !== false,
       }),
-      (res) => `Payment ${res.doc.doc_no} recorded${res.note ? ` — ${res.note}` : `, clearing ${res.clearings.length} bill(s)`}.`,
+      (res) => `Payment ${res.doc.doc_no} recorded${res.note ? ` — ${res.note}` : `, clearing ${res.clearings.length} bill(s)`}`
+        + `${res.rebate > 0 ? `; rebate of ${fmtCurrency(res.rebate)} allowed for prompt payment` : ''}.`,
     );
     if (r) setPayForm(null);
   }
@@ -223,6 +226,9 @@ export default function HydroLedger() {
           <div className="stat-grid">
             <StatCard label="Billed" value={fmtCurrency(totals.billed)} hint="periodic bills raised" />
             <StatCard label="Received" value={fmtCurrency(totals.received)} hint="payments on the account" />
+            {totals.rebate > 0 && (
+              <StatCard label="Rebate allowed" value={fmtCurrency(totals.rebate)} hint="early-payment rebate (1.5% within 5 days, 1% within 30)" />
+            )}
             <StatCard
               label="Outstanding"
               value={fmtCurrency(totals.outstanding)}
@@ -313,6 +319,13 @@ export default function HydroLedger() {
                   value={payForm.reference} onChange={(e) => setPayForm({ ...payForm, reference: e.target.value })} />
               </Field>
             </div>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+              <input
+                type="checkbox" checked={payForm.rebate !== false}
+                onChange={(e) => setPayForm({ ...payForm, rebate: e.target.checked })}
+              />
+              Allow the early-payment rebate if this payment is within the rebate window
+            </label>
             {Number(payForm.amount) > (totals.outstanding || 0) && (
               <div className="alert alert-warning" role="status">
                 This is {fmtCurrency(Number(payForm.amount) - (totals.outstanding || 0))} more than

@@ -17,6 +17,7 @@ import {
   getIexConfig,
   getDecimals,
   clearDecimalsCache,
+  clearBidAreaCache,
   fetchMarketPq,
   fetchClearedResults,
   checkConnectivity,
@@ -74,6 +75,7 @@ function stubFetch(routes) {
 
 beforeEach(() => {
   clearDecimalsCache();
+  clearBidAreaCache();
   IEX_ENV_KEYS.forEach((k) => delete process.env[k]);
 });
 
@@ -119,7 +121,7 @@ describe('token expiry', () => {
     expect(cfg.tokenExpiresAtIso).toBe('2026-07-26T09:51:28.000Z');
   });
 
-  it('still sends on a stale expiry claim, but says so in the payload', async () => {
+  it('still sends on a stale expiry claim, and does not nag about it', async () => {
     // IEX put token life at six months and called the one-hour expiry on the
     // first UAT token a typo, so their gateway is the authority, not the claim.
     liveConfig({ token: jwtWithExp(1785059488) });
@@ -131,7 +133,8 @@ describe('token expiry', () => {
     const res = await fetchMarketPq('DAM', '2026-09-08');
     expect(res.ok).toBe(true);
     expect(calls.length).toBeGreaterThan(0);
-    expect(res.warning).toMatch(/expiry claim passed at 2026-07-26/i);
+    // The token is confirmed working despite the claim; a 401 names the token itself.
+    expect(res.warning).toBeUndefined();
   });
 
   it('re-arms the hard refusal when the desk asks for it', async () => {
@@ -194,6 +197,40 @@ describe('delivery dates', () => {
     const res = await fetchDeliveryDates('DAM');
     expect(res.ok).toBe(true);
     expect(res.dates).toEqual([{ delivery_date_id: 'T + 1', epoch_seconds: utcMidnightEpoch('2026-09-08'), iso_date: '2026-09-08' }]);
+  });
+
+  // Both shapes below are verbatim from the UAT gateway, 22-Sep-2026.
+  it('reads the single bare object DAM/GDAM/HPDAM return', async () => {
+    liveConfig();
+    stubFetch({ '/deliverydates/': { DeliveryDateId: 'T+1', DeliveryDate: 1790121600 } });
+    const res = await fetchDeliveryDates('DAM');
+    expect(res.dates).toEqual([{ delivery_date_id: 'T+1', epoch_seconds: 1790121600, iso_date: '2026-09-23' }]);
+  });
+
+  it('reads the T-1 / T / T+1 list RTM returns', async () => {
+    liveConfig();
+    stubFetch({ '/deliverydates/': { DeliveryDates: [
+      { DeliveryDateId: 'T', DeliveryDate: 1790035200 },
+      { DeliveryDateId: 'T+1', DeliveryDate: 1790121600 },
+      { DeliveryDateId: 'T-1', DeliveryDate: 1789948800 },
+    ] } });
+    const res = await fetchDeliveryDates('RTM');
+    expect(res.dates.map((d) => [d.delivery_date_id, d.iso_date])).toEqual([
+      ['T', '2026-09-22'], ['T+1', '2026-09-23'], ['T-1', '2026-09-21'],
+    ]);
+    // The exchange's epochs are UTC midnights, as the computed fallback assumes.
+    expect(res.dates.every((d) => d.epoch_seconds === utcMidnightEpoch(d.iso_date))).toBe(true);
+  });
+
+  it('resolves a DAM delivery date from the bare object as EXCHANGE-sourced', async () => {
+    liveConfig();
+    stubFetch({
+      '/deliverydates/': { DeliveryDateId: 'T+1', DeliveryDate: 1790121600 },
+      '/pqresults/': { PQDetails: [] },
+      '/master/assets/': { AssetDetails: [{ TradeQtyDecimal: 100, TradePriceDecimal: 100 }] },
+    });
+    const res = await fetchMarketPq('DAM', '2026-09-23');
+    expect(res.delivery_date_source).toBe('EXCHANGE');
   });
 });
 
@@ -300,9 +337,40 @@ describe('portfolio schedule report', () => {
     return stubFetch({
       '/master/assets': ASSET_MASTER,
       '/deliverydates/': { DeliveryDates: [{ DeliveryDate: utcMidnightEpoch('2026-09-08') }] },
+      '/master/bidareas/': { BidAreaDetails: [{ BidAreaId: 'A1' }] },
       '/portfolioschedulereport/': REPORT,
     });
   }
+
+  // Verbatim from the UAT gateway, 22-Sep-2026: 'ALL' is not a bid area.
+  it('asks every bid area in the master when ALL is configured, never the literal ALL', async () => {
+    liveConfig({ bidArea: 'ALL' });
+    const calls = stubFetch({
+      '/master/assets': ASSET_MASTER,
+      '/deliverydates/': { DeliveryDateId: 'T+1', DeliveryDate: utcMidnightEpoch('2026-09-08') },
+      '/master/bidareas/': { BidAreaDetails: [{ BidAreaId: 'A1' }, { BidAreaId: 'E1' }, { BidAreaId: 'N2' }] },
+      '/portfolioschedulereport/': REPORT,
+    });
+    const res = await fetchClearedResults('DAM', '2026-09-08');
+    const asked = calls.filter((u) => u.includes('/portfolioschedulereport/'));
+    expect(asked.map((u) => u.split(',').at(-2))).toEqual(['A1', 'E1', 'N2']);
+    expect(asked.some((u) => u.includes(',ALL,ALL'))).toBe(false);
+    expect(res.bid_areas_queried).toEqual(['A1', 'E1', 'N2']);
+  });
+
+  it('records a bare-string refusal per area instead of treating it as an empty day', async () => {
+    liveConfig({ bidArea: 'ALL' });
+    stubFetch({
+      '/master/assets': ASSET_MASTER,
+      '/deliverydates/': { DeliveryDateId: 'T+1', DeliveryDate: utcMidnightEpoch('2026-09-08') },
+      '/master/bidareas/': { BidAreaDetails: [{ BidAreaId: 'A1' }] },
+      '/portfolioschedulereport/': 'Invalid Bid Area Id',
+    });
+    const res = await fetchClearedResults('DAM', '2026-09-08');
+    expect(res.ok).toBe(true);
+    expect(res.blocks).toEqual([]);
+    expect(res.area_notes).toEqual(['A1: Invalid Bid Area Id']);
+  });
 
   it("reports OUR scheduled quantity, not the whole bid area's volume", async () => {
     liveConfig();

@@ -1,0 +1,303 @@
+<title>SJVN Button Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Tokens follow the platform's own (frontend/src/styles.css), so the report
+     reads as part of the SJVN app rather than a separate tool. */
+  :root {
+    --bg: #f4f6f9;
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+    --border: #e2e6ed;
+    --text: #1c2536;
+    --muted: #667085;
+    --navy: #1b3b6f;
+    --primary: #0b5fff;
+    --primary-bg: #eaf1ff;
+    --ok: #12875a;         --ok-bg: #e6f6ee;
+    --broken: #c22b3a;     --broken-bg: #fbe8ea;
+    --refused: #b3760a;    --refused-bg: #fdf3df;
+    --placeholder: #7a3fc4; --placeholder-bg: #f1e9fb;
+    --dead: #8a3b12;       --dead-bg: #f8eadf;
+    --silent: #1f5cd6;     --silent-bg: #e8f0fe;
+    --skipped: #5b6472;    --skipped-bg: #eef0f3;
+    --ring: 0 0 0 3px rgba(11, 95, 255, 0.32);
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f141c; --surface: #161d28; --surface-2: #1b2331; --border: #283243;
+      --text: #e4e9f1; --muted: #93a0b4; --navy: #9db8e6; --primary: #6c9dff; --primary-bg: #1a2a4a;
+      --ok: #4fc792; --ok-bg: #11301f; --broken: #ff7a86; --broken-bg: #3a151b;
+      --refused: #f0b54a; --refused-bg: #33260c; --placeholder: #bf9cf2; --placeholder-bg: #2a1d3d;
+      --dead: #f0a070; --dead-bg: #34200f; --silent: #8db2ff; --silent-bg: #17264a;
+      --skipped: #a2acba; --skipped-bg: #232b37; --ring: 0 0 0 3px rgba(108, 157, 255, 0.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f141c; --surface: #161d28; --surface-2: #1b2331; --border: #283243;
+    --text: #e4e9f1; --muted: #93a0b4; --navy: #9db8e6; --primary: #6c9dff; --primary-bg: #1a2a4a;
+    --ok: #4fc792; --ok-bg: #11301f; --broken: #ff7a86; --broken-bg: #3a151b;
+    --refused: #f0b54a; --refused-bg: #33260c; --placeholder: #bf9cf2; --placeholder-bg: #2a1d3d;
+    --dead: #f0a070; --dead-bg: #34200f; --silent: #8db2ff; --silent-bg: #17264a;
+    --skipped: #a2acba; --skipped-bg: #232b37; --ring: 0 0 0 3px rgba(108, 157, 255, 0.4);
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.5 var(--sans); padding-inline: 16px; padding-block: 28px 64px; }
+  .wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 28px; }
+  h1, h2, h3 { margin: 0; text-wrap: balance; }
+  h1 { font-size: 26px; font-weight: 650; letter-spacing: -0.01em; color: var(--navy); }
+  h2 { font-size: 17px; font-weight: 650; }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .lede { color: var(--muted); max-width: 70ch; margin: 6px 0 0; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .num { font-variant-numeric: tabular-nums; }
+  section { display: grid; gap: 12px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+
+  /* Header */
+  header { display: grid; gap: 14px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 10px 28px; }
+  .fact b { display: block; font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .fact span { color: var(--muted); font-size: 12.5px; }
+
+  /* Outcome bar */
+  .bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--skipped-bg); }
+  .bar i { display: block; height: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border); background: var(--surface);
+    color: var(--text); border-radius: 999px; padding: 5px 12px 5px 10px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .chip:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible { outline: none; box-shadow: var(--ring); }
+  .chip .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .chip .n { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .chip[aria-pressed="true"] { border-color: currentColor; background: var(--surface-2); }
+  .chip[aria-pressed="false"] { opacity: 0.55; }
+  .meaning { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px 20px; margin: 4px 0 0; padding: 0; list-style: none; }
+  .meaning li { font-size: 13px; color: var(--muted); }
+  .meaning b { color: var(--text); font-weight: 600; }
+
+  .pill { display: inline-block; font-size: 11px; font-weight: 650; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .o-OK { --c: var(--ok); --cb: var(--ok-bg); }
+  .o-BROKEN { --c: var(--broken); --cb: var(--broken-bg); }
+  .o-REFUSED { --c: var(--refused); --cb: var(--refused-bg); }
+  .o-PLACEHOLDER { --c: var(--placeholder); --cb: var(--placeholder-bg); }
+  .o-DEAD { --c: var(--dead); --cb: var(--dead-bg); }
+  .o-SILENT { --c: var(--silent); --cb: var(--silent-bg); }
+  .o-SKIPPED { --c: var(--skipped); --cb: var(--skipped-bg); }
+  .pill[class*="o-"] { color: var(--c); background: var(--cb); }
+  .dot[class*="o-"], .bar i[class*="o-"] { background: var(--c); }
+
+  /* Filters */
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .filters input, .filters select {
+    font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 10px; min-width: 0;
+  }
+  .filters input { flex: 1 1 220px; }
+  .count { color: var(--muted); font-size: 13px; }
+
+  /* Screen groups */
+  .groups { display: grid; gap: 10px; }
+  details.screen { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+  details.screen > summary {
+    list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 11px 14px;
+  }
+  details.screen > summary::-webkit-details-marker { display: none; }
+  details.screen > summary::before { content: '▸'; color: var(--muted); font-size: 11px; transition: transform 0.15s; }
+  details.screen[open] > summary::before { transform: rotate(90deg); }
+  .route { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+  .role { font-size: 12px; color: var(--muted); }
+  .tally { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  .rows { border-top: 1px solid var(--border); overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { text-align: left; font-size: 11px; font-weight: 650; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); padding: 8px 14px; background: var(--surface-2); }
+  td { padding: 9px 14px; border-top: 1px solid var(--border); vertical-align: top; }
+  td.what { color: var(--muted); min-width: 260px; }
+  td.btn { min-width: 200px; }
+  .path { color: var(--muted); font-size: 12px; display: block; }
+  .kind { font-size: 11px; color: var(--muted); }
+  .empty { padding: 28px; text-align: center; color: var(--muted); }
+
+  /* Tables in panels */
+  .scroll { overflow-x: auto; }
+  .grid-table td, .grid-table th { white-space: nowrap; }
+  .grid-table td.cell { text-align: right; font-variant-numeric: tabular-nums; }
+  .grid-table td.cell.zero { color: var(--border); }
+  .grid-table td.cell.hot { font-weight: 650; color: var(--c); background: var(--cb); }
+  .note { font-size: 13px; color: var(--muted); max-width: 80ch; }
+  footer { color: var(--muted); font-size: 12.5px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">SJVN RE Commercial &amp; Trading Platform · frontend QA</div>
+    <h1>Button audit</h1>
+    <p class="lede" id="lede"></p>
+    <div class="facts" id="facts"></div>
+  </header>
+
+  <section aria-labelledby="h-outcomes">
+    <h2 id="h-outcomes">What happened when each button was pressed</h2>
+    <div class="panel" style="display:grid;gap:14px">
+      <div class="bar" id="bar" role="img"></div>
+      <div class="legend" id="legend"></div>
+      <ul class="meaning" id="meaning"></ul>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-list">
+    <h2 id="h-list">Screen by screen</h2>
+    <div class="filters">
+      <input id="q" type="search" placeholder="Search a screen, button or message…" aria-label="Search">
+      <select id="module" aria-label="Module"></select>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="groups" id="groups"></div>
+  </section>
+
+  <section aria-labelledby="h-modules">
+    <h2 id="h-modules">By module</h2>
+    <div class="panel scroll"><table class="grid-table" id="modules"></table></div>
+  </section>
+
+  <section aria-labelledby="h-roles">
+    <h2 id="h-roles">Every role, every menu screen</h2>
+    <p class="note">Each demo role signed in, opened every link its sidebar offers, then typed in the address of one screen it must not reach.</p>
+    <div class="panel scroll"><table class="grid-table" id="roles"></table></div>
+    <div id="roleIssues"></div>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const ORDER = ['BROKEN', 'REFUSED', 'PLACEHOLDER', 'DEAD', 'SILENT', 'SKIPPED', 'OK'];
+const MEANING = {
+  BROKEN: 'a crash, the error screen, or a server error (5xx)',
+  REFUSED: 'the server said no (4xx); fine only if the screen tells the user why',
+  PLACEHOLDER: 'a demo stub, such as an alert saying "opened!"',
+  DEAD: 'nothing happened at all',
+  SILENT: 'does nothing, with no message, until its fields are filled in',
+  SKIPPED: 'not pressed: Log out, disabled, external link, or not present on a fresh load',
+  OK: 'did something visible: opened, downloaded, saved, changed the screen',
+};
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const moduleOf = (route) => route.startsWith('(header') ? 'header' : (route.split('/').filter(Boolean)[0] || 'home');
+const pressed = DATA.buttons.filter((b) => b.key !== '(screen load)' || b.outcome === 'BROKEN');
+const count = (rows) => rows.reduce((m, r) => (m[r.outcome] = (m[r.outcome] || 0) + 1, m), {});
+const totals = count(pressed);
+
+document.getElementById('lede').textContent =
+  `Every routed screen opened as a role allowed to see it, and everything clickable on it pressed on a freshly loaded page, then everything inside the dialog or panel that press opened. Run ${DATA.generatedAt} against a throwaway copy of the platform with the internet cut off.`;
+const screens = new Set(DATA.buttons.map((b) => b.route)).size;
+document.getElementById('facts').innerHTML = [
+  [DATA.inventory.length, 'screens inventoried'],
+  [pressed.length, 'presses'],
+  [screens, 'screens pressed'],
+  [new Set(DATA.roles.map((r) => r.role)).size, 'roles signed in'],
+  [(totals.BROKEN || 0), 'broken'],
+].map(([n, l]) => `<div class="fact"><b>${Number(n).toLocaleString('en-IN')}</b><span>${l}</span></div>`).join('');
+
+// Outcome bar and the chips that filter the list below.
+const active = new Set(['BROKEN', 'REFUSED', 'PLACEHOLDER', 'DEAD', 'SILENT']);
+const total = pressed.length || 1;
+document.getElementById('bar').innerHTML = ORDER.filter((o) => totals[o])
+  .map((o) => `<i class="o-${o}" style="width:${(totals[o] / total) * 100}%" title="${o}: ${totals[o]}"></i>`).join('');
+document.getElementById('bar').setAttribute('aria-label', ORDER.filter((o) => totals[o]).map((o) => `${o} ${totals[o]}`).join(', '));
+const legend = document.getElementById('legend');
+function drawLegend() {
+  legend.innerHTML = ORDER.map((o) => `<button type="button" class="chip o-${o}" data-o="${o}" aria-pressed="${active.has(o)}">
+    <span class="dot o-${o}"></span>${o}<span class="n">${(totals[o] || 0).toLocaleString('en-IN')}</span></button>`).join('');
+}
+legend.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-o]');
+  if (!b) return;
+  const o = b.dataset.o;
+  active.has(o) ? active.delete(o) : active.add(o);
+  drawLegend(); drawGroups();
+});
+document.getElementById('meaning').innerHTML = ORDER.map((o) => `<li><b>${o}</b>: ${MEANING[o]}</li>`).join('');
+
+// Module filter.
+const modules = [...new Set(pressed.map((b) => moduleOf(b.route)))].sort();
+const sel = document.getElementById('module');
+sel.innerHTML = `<option value="">All modules</option>` + modules.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+
+const q = document.getElementById('q');
+function drawGroups() {
+  const term = q.value.trim().toLowerCase();
+  const mod = sel.value;
+  const rows = pressed.filter((b) => active.has(b.outcome)
+    && (!mod || moduleOf(b.route) === mod)
+    && (!term || `${b.route} ${b.parent || ''} ${b.key} ${b.detail}`.toLowerCase().includes(term)));
+  const byScreen = new Map();
+  for (const r of rows) {
+    if (!byScreen.has(r.route)) byScreen.set(r.route, []);
+    byScreen.get(r.route).push(r);
+  }
+  const rank = (list) => Math.min(...list.map((r) => ORDER.indexOf(r.outcome)));
+  const ordered = [...byScreen.entries()].sort((a, b) => rank(a[1]) - rank(b[1]) || a[0].localeCompare(b[0]));
+  document.getElementById('count').textContent = `${rows.length.toLocaleString('en-IN')} presses on ${ordered.length} screens`;
+  const open = ordered.length <= 12;
+  document.getElementById('groups').innerHTML = ordered.length ? ordered.map(([route, list]) => {
+    const c = count(list);
+    const role = list[0].role || '';
+    return `<details class="screen"${open ? ' open' : ''}><summary>
+      <span class="route">${esc(route)}</span><span class="role">as ${esc(role.replaceAll('_', ' ').toLowerCase())}</span>
+      <span class="tally">${ORDER.filter((o) => c[o]).map((o) => `<span class="pill o-${o}">${c[o]} ${o}</span>`).join('')}</span>
+    </summary><div class="rows"><table>
+      <thead><tr><th>Button</th><th>Outcome</th><th>What happened</th></tr></thead>
+      <tbody>${list.sort((a, b) => ORDER.indexOf(a.outcome) - ORDER.indexOf(b.outcome)).map((r) => `<tr>
+        <td class="btn">${r.parent ? `<span class="path">in ${esc(r.parent.replace(/^[a-z]+:/, ''))}</span>` : ''}${esc(r.key.replace(/^[a-z]+:/, ''))} <span class="kind">${esc(r.kind || (r.key.match(/^([a-z]+):/) || [])[1] || '')}</span></td>
+        <td><span class="pill o-${r.outcome}">${r.outcome}</span></td>
+        <td class="what">${esc(r.detail)}</td></tr>`).join('')}</tbody>
+    </table></div></details>`;
+  }).join('') : `<div class="panel empty">Nothing matches. Turn on more outcomes above or clear the search.</div>`;
+}
+q.addEventListener('input', drawGroups);
+sel.addEventListener('change', drawGroups);
+
+// Module × outcome grid.
+const byMod = {};
+for (const b of pressed) (byMod[moduleOf(b.route)] ||= []).push(b);
+document.getElementById('modules').innerHTML = `<thead><tr><th>Module</th>${ORDER.map((o) => `<th style="text-align:right">${o}</th>`).join('')}<th style="text-align:right">Presses</th></tr></thead><tbody>` +
+  Object.entries(byMod).sort().map(([m, list]) => {
+    const c = count(list);
+    return `<tr><td class="mono">${esc(m)}</td>${ORDER.map((o) => {
+      const n = c[o] || 0;
+      const hot = n && o !== 'OK' && o !== 'SKIPPED';
+      return `<td class="cell o-${o}${n ? '' : ' zero'}${hot ? ' hot' : ''}">${n}</td>`;
+    }).join('')}<td class="cell">${list.length}</td></tr>`;
+  }).join('') + '</tbody>';
+
+// Roles.
+const byRole = {};
+for (const r of DATA.roles) (byRole[r.role] ||= []).push(r);
+document.getElementById('roles').innerHTML = `<thead><tr><th>Role</th><th style="text-align:right">Menu screens</th><th style="text-align:right">Broken</th><th style="text-align:right">Panels refused (403)</th><th style="text-align:right">Marked "soon"</th><th>Forbidden screen</th></tr></thead><tbody>` +
+  Object.entries(byRole).map(([role, list]) => {
+    const menu = list.filter((r) => !r.forbiddenCheck);
+    const forb = list.find((r) => r.forbiddenCheck);
+    const broken = menu.filter((r) => r.issues.length).length;
+    const refused = menu.filter((r) => r.refused && r.refused.length).length;
+    return `<tr><td>${esc(role.replaceAll('_', ' ').toLowerCase())}</td><td class="cell">${menu.length}</td>
+      <td class="cell o-BROKEN${broken ? ' hot' : ' zero'}">${broken}</td>
+      <td class="cell o-REFUSED${refused ? ' hot' : ' zero'}">${refused}</td>
+      <td class="cell${menu.filter((r) => r.soon).length ? '' : ' zero'}">${menu.filter((r) => r.soon).length}</td>
+      <td>${forb ? (forb.issues.length ? `<span class="pill o-BROKEN">not refused</span> ${esc(forb.issues.join('; '))}` : `<span class="pill o-OK">refused</span> <span class="mono">${esc(forb.href)}</span>`) : '—'}</td></tr>`;
+  }).join('') + '</tbody>';
+const roleProblems = DATA.roles.filter((r) => r.issues.length || (r.refused && r.refused.length));
+document.getElementById('roleIssues').innerHTML = roleProblems.length ? `<details class="screen"><summary><span class="route">Menu screens with a problem for a role</span><span class="tally"><span class="pill o-REFUSED">${roleProblems.length}</span></span></summary><div class="rows"><table>
+  <thead><tr><th>Role</th><th>Screen</th><th>Problem</th></tr></thead><tbody>${roleProblems.map((r) => `<tr><td>${esc(r.role)}</td><td class="mono">${esc(r.href)}</td><td class="what">${esc([...r.issues, ...(r.refused || [])].join('; '))}</td></tr>`).join('')}</tbody></table></div></details>` : '';
+
+document.getElementById('footer').innerHTML = `Generated from <span class="mono">frontend/e2e/audit</span>. Rerun with <span class="mono">npm run test:audit</span> in <span class="mono">frontend/</span>. The method and outcome definitions are in <span class="mono">frontend/e2e/AUDIT_PLAN.md</span>.`;
+
+drawLegend();
+drawGroups();
+</script>

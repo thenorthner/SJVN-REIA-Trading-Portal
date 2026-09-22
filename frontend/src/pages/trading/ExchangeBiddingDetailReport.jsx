@@ -98,7 +98,9 @@ export default function ExchangeBiddingDetailReport() {
 
   function exportExcel() {
     const data = exportRows(filtered);
-    const sheet = XLSX.utils.json_to_sheet(data.length ? data : Object.fromEntries(COLUMNS.map((c) => [c.label, ''])));
+    // An empty report still exports its header row: one blank row, in a list —
+    // handed the bare object, json_to_sheet threw "forEach is not a function".
+    const sheet = XLSX.utils.json_to_sheet(data.length ? data : [Object.fromEntries(COLUMNS.map((c) => [c.label, '']))]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, sheet, 'Bid Details');
     XLSX.writeFile(wb, `bid-details-report-${new Date().toISOString().slice(0, 10)}.xlsx`);

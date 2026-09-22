@@ -1,6 +1,5 @@
 import db from '../db/index.js';
-import { accruedLps } from '../disputesConstants.js';
-import { payerStateForInvoice } from './workingCalendar.js';
+import { invoiceLpsAsOf } from './invoiceLps.js';
 import { getParamNumber } from '../mastersService.js';
 import { lpsBilled, openOverdueInvoices } from './outstanding.js';
 
@@ -23,18 +22,8 @@ import { lpsBilled, openOverdueInvoices } from './outstanding.js';
 // disagree about what it has earned.
 
 /** LPS earned on an invoice as of now, over and above what has been charged on it. */
-function unbilledOn(invoice, defaults) {
-  const contract = db.prepare(
-    'SELECT lps_annual_pct, lps_grace_days FROM contracts WHERE id = ?',
-  ).get(invoice.contract_id);
-  const accrued = accruedLps(invoice, {
-    annualPct: contract?.lps_annual_pct ?? defaults.annualPct,
-    graceDays: contract?.lps_grace_days ?? 0,
-    monthlyStepPct: defaults.monthlyStepPct,
-    stepCapPct: defaults.stepCapPct,
-    paid: invoice.paid,
-    state: payerStateForInvoice(invoice),
-  });
+function unbilledOn(invoice) {
+  const accrued = invoiceLpsAsOf(invoice, new Date());
   return Math.max(0, (accrued.lps || 0) - (invoice.lps || 0));
 }
 
@@ -55,7 +44,7 @@ export function lpsPosition(direction) {
   let unbilled = 0;
   let invoicesAccruing = 0;
   for (const invoice of overdue) {
-    const extra = unbilledOn(invoice, defaults);
+    const extra = unbilledOn(invoice);
     if (extra > 0) {
       unbilled += extra;
       invoicesAccruing += 1;

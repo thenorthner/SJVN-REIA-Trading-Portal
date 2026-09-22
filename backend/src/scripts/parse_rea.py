@@ -30,16 +30,19 @@ STATIONS = {
         'name': 'Nathpa Jhakri HEP',
         'search_paf': r'NATHPA\s*JHAKRI\s*HEP\s+([\d\.]+)',
         'search_energy': r'TOTAL\s*NATHPA\s*JHAKRI\s*HEP\s+([\d\.]+)',
+        'd2_block': r'NATHPA\s*JHAKRI\s*HEP\s*:-([\s\S]*?)TOTAL\s*NATHPA',
     },
     'RAMPUR': {
         'name': 'Rampur HEP',
         'search_paf': r'RAMPUR\s*HEP\s+([\d\.]+)',
         'search_energy': r'TOTAL\s*RAMPUR\s*HEP\s+([\d\.]+)',
+        'd2_block': r'RAMPUR\s*HEP\s*:-([\s\S]*?)TOTAL\s*RAMPUR',
     },
     'LUHRI': {
         'name': 'Luhri HEP',
         'search_paf': r'LUHRI\s*HEP\s+([\d\.]+)',
         'search_energy': r'TOTAL\s*LUHRI\s*HEP\s+([\d\.]+)',
+        'd2_block': r'LUHRI\s*HEP\s*:-([\s\S]*?)TOTAL\s*LUHRI',
     }
 }
 
@@ -79,6 +82,18 @@ def detect_mode(text):
     return 'rea'
 
 
+MONTHS = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY',
+          'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER']
+
+
+def account_period(text):
+    """The month the REA itself says it is for ("REA for the Month of DECEMBER, 2025"), as YYYY-MM."""
+    m = re.search(r'for\s+the\s+Month\s+of\s+([A-Za-z]+)\s*,?\s*(\d{4})', text, re.I)
+    if not m or m.group(1).upper() not in MONTHS:
+        return None
+    return '%s-%02d' % (m.group(2), MONTHS.index(m.group(1).upper()) + 1)
+
+
 def parse_rea(text):
     """Parse NRPC REA — extract station-level energy and PAF data."""
     results = []
@@ -92,6 +107,17 @@ def parse_rea(text):
         
         # 1 Lakh Units (LU) = 1,00,000 kWh = 100 MWh
         energy_mwh = round(energy_lu * 100, 2) if energy_lu is not None else None
+
+        # Table D2 lists each beneficiary's scheduled energy; the home state's
+        # free power is the second figure on its row ("GOHP NJHEP 877.390350
+        # 877.390350"). The bill's E2 is this figure, not FEHS% of E1.
+        free_lu = None
+        block = re.search(config.get('d2_block', r'(?!)'), text)
+        if block:
+            rows = re.findall(r'^\s*[A-Z][A-Z &().-]*?\s+([\d.]+)\s+([\d.]+)\s*$', block.group(1), re.M)
+            if rows:
+                free_lu = round(sum(float(b) for _, b in rows), 6)
+        free_mwh = round(free_lu * 100, 4) if free_lu is not None else None
         
         if paf is not None or energy_mwh is not None:
             results.append({
@@ -100,6 +126,8 @@ def parse_rea(text):
                 'availability_percent': paf,
                 'energy_lu': energy_lu,
                 'energy_mwh': energy_mwh,
+                'free_energy_lu': free_lu,
+                'free_energy_mwh': free_mwh,
             })
     
     return results
@@ -226,6 +254,7 @@ def main():
                 'success': True,
                 'mode': 'rea',
                 'description': 'Regional Energy Account (Station-level)',
+                'period': account_period(text),
                 'data': data
             }, indent=2))
     

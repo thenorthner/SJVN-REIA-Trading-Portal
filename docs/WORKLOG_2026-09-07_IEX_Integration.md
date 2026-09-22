@@ -159,7 +159,7 @@ hi alag hai:
 | | FO API (DAM/RTM/…) | REC/EC API |
 |---|---|---|
 | User header | `UserId` | **`LoginUserId`** |
-| Token header | `Authentication` | **`Authorization`** |
+| Token header | `Authorization` *(spec kehta `Authentication`, gateway nahi maanta — 22 Sep)* | `Authorization` |
 | Decimals kahan se | Asset Master (`OrderQtyDecimal`) | **Product Master** (`PriceDecimalLocator`, `QtyDecimalLocator`) |
 | Model | time blocks + delivery date | **order book + trade book**, clock time se filter |
 | Price unit | Rs/MWh → Rs/kWh convert | **Rs per certificate — convert NAHI karna** |
@@ -233,8 +233,8 @@ calling IP. IEX only serves requests from the IP registered with them.
 401 ka bhi ("the token was rejected").
 
 **(c) Dono clients ek hi process mein alag headers bhejte hain** — verify kiya
-ki FO call pe `Authentication`/`UserId` jaata hai aur REC pe
-`Authorization`/`LoginUserId`, aur ek dusre mein leak nahi hote.
+ki FO call pe `UserId` jaata hai aur REC pe `LoginUserId`, aur ek dusre
+mein leak nahi hote. (Token dono pe `Authorization` — 22 Sep wala fix neeche.)
 
 ### 2. Live probe — IEX UAT ke against
 
@@ -278,3 +278,40 @@ hai, koi console error nahi.
 > uncommitted changes (mera koi code nahi) daal ke chalaya to **2 test fail**
 > hue. Yaani ye failure us session ke work-in-progress se aata hai, mere IEX
 > changes se nahi. Us session ko khud dekhna padega.
+
+
+---
+
+## 22 Sep 2026 — pehli asli call: 401 ki wajah token nahi, header tha
+
+Whitelisted server (`49.50.97.173`) se pehli probe pe DAM/GDAM/HPDAM/RTM sab
+`401 UnAuthorized User!`. Token ka `exp` 26 Jul tha, to pehle laga token mar
+gaya. Pakka karne ke liye DAM `businessconfig` ko 8 tareeke se bheja
+(`tools/iex-probe/iex-401-check.js`):
+
+| Variant | Result |
+|---|---|
+| Spec wala `Authentication: Bearer <token>` (ParticipantId ke saath / khaali / bina) | 401 |
+| **`Authorization: Bearer <token>`** | **200** — asli business config |
+| Bina `Bearer` | 401 |
+| Kachra token / bina token (control) | 401, **same message** |
+
+Matlab: gateway har galti pe ek hi generic message deta hai, aur **token theek
+hai** (IEX ki "exp typo hai" wali baat sahi thi). Spec ka header naam galat hai.
+`iexService.js` ab `Authorization` bhejta hai; wire test isi ko pin karta hai.
+REC ka `403 Forbidden` (HTML, Transaction ID ke saath) alag hai — IP/host
+whitelist ka lagta hai, IEX se poochhna hai.
+
+### Usi din — asli responses se teen aur milaan (`tools/iex-probe/iex-raw.js`)
+
+- **Delivery dates:** DAM/GDAM/HPDAM ek **bare object** (`{"DeliveryDateId":"T+1","DeliveryDate":1790121600}`)
+  lautate hain, RTM `DeliveryDates: [T-1, T, T+1]`. Parser sirf array samajhta tha → screen "no rows".
+  Ab dono. Epoch UTC midnight nikla — fallback sahi tha.
+- **Asset master:** `OrderQtyDecimal 10`, `TradeQtyDecimal 100`, `TradePriceDecimal 100` — code ke field
+  naam aur ÷100 result-side dono confirm.
+- **Schedule report:** `BidAreaId=ALL` pe gateway HTTP 200 ke saath JSON string `"Invalid Bid Area Id"`.
+  `ALL` sirf PortfolioId ke liye hai. Ab `ALL` config pe bid area master (13 areas) se har area puchha
+  jaata hai aur jodta hai; string refusal `area_notes` mein, khaali din nahi maana jaata.
+- **User:** `SJVA1` = user login (UserCategory 4, apna BidArea blank), 2 portfolio (`E1BR0SJV0001`, …).
+- **PQ results / publish info:** har date (T+1, aaj, -1, -3, -7) pe `PQDetails: []`, `PublishInfo: []`.
+  Request sahi hai (200) — UAT mein market clear hi nahi ho raha lagta. IEX se poochhna hai.

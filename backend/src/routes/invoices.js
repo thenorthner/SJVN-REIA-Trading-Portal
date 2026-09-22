@@ -3,7 +3,8 @@ import { resolveTariff } from '../services/tariffStructure.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES, BUYER_ROLES, counterpartySide } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct, billableCapacityMw, invalidDecision } from '../util.js';
-import { payableNow, lpsBaseAmount, accruedLps, tieredRebatePct, daysBetween } from '../disputesConstants.js';
+import { payableNow, lpsBaseAmount, tieredRebatePct, daysBetween } from '../disputesConstants.js';
+import { invoiceLpsAsOf } from '../services/invoiceLps.js';
 import { payerStateForInvoice } from '../services/workingCalendar.js';
 import { getParamNumber, getParam } from '../mastersService.js';
 import { resolveBetaRow } from '../services/betaFactor.js';
@@ -171,14 +172,7 @@ function withContract(inv, asOf = new Date()) {
   const settled = ['PAID', 'CANCELLED', 'DRAFT'].includes(inv.status);
   const accrued = settled
     ? { days_overdue: 0, lps: 0, base: 0 }
-    : accruedLps(inv, {
-        annualPct: contract?.lps_annual_pct ?? getParamNumber('lps_annual_pct', 15),
-        graceDays: contract?.lps_grace_days ?? 0,
-        monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0.5),
-        stepCapPct: getParamNumber('lps_step_cap_pct', 3),
-        asOf, paid,
-        state: payerStateForInvoice(inv),
-      });
+    : invoiceLpsAsOf(inv, asOf);
   return {
     ...inv,
     contract_no: contract?.contract_no,
@@ -1827,10 +1821,13 @@ function applyInvoicePayment(inv, { amount, payment_date, mode, reference, deduc
   let newLps = inv.lps;
   const payDate = payment_date ? new Date(payment_date) : new Date();
 
-  // ── Tiered early-payment rebate (PPA / SELLER_TO_SJVN only, computed once) ──
+  // ── Early-payment rebate (PPA / SELLER_TO_SJVN only), per payment ──
   // Buyers (DISCOMs) do NOT get early-payment rebate on PSA invoices.
-  if (inv.direction === 'SELLER_TO_SJVN' && (inv.rebate || 0) === 0) {
-    // 1st priority: the contract's own structured rebate rule (what the user set).
+  // Each payment earns rebate on the part of the bill IT settles, at the rate
+  // for the day it arrived. Before, the first payment's date fixed the rate for
+  // the whole bill, so a token payment inside five days bought 1.5% off all of
+  // it however late the rest came.
+  if (inv.direction === 'SELLER_TO_SJVN') {
     const contract = db.prepare('SELECT rebate_pct, rebate_days, rebate_basis FROM contracts WHERE id = ?').get(inv.contract_id);
     // Measured from presentation, not from when the row was created. The rebate
     // is for paying promptly once the bill arrives, and a bill held three weeks
@@ -1847,27 +1844,30 @@ function applyInvoicePayment(inv, { amount, payment_date, mode, reference, deduc
       pct = (inv.due_date && payDate <= new Date(inv.due_date)) ? getParamNumber('early_payment_rebate_pct', 2) : 0;
     }
     if (pct > 0) {
+      const gross = Number(inv.total_amount) || 0;
       // Rebate-eligible base excludes pass-through charges, taxes and LPS (PSA Art. 6.4).
-      const base = Math.max(0, (inv.total_amount || 0) - otherChargesSum(inv) - (Number(inv.taxes) || 0) - (Number(inv.lps) || 0));
-      newRebate = Math.round(base * pct / 100);
+      const base = Math.max(0, gross - otherChargesSum(inv) - (Number(inv.taxes) || 0) - (Number(inv.lps) || 0));
+      const share = gross > 0 ? base / gross : 0;
+      const rate = (pct / 100) * share;
+      const paidBefore = db.prepare(
+        'SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)),0) s FROM payments WHERE invoice_id = ? AND id != ?',
+      ).get(inv.id, id).s;
+      // What is left to settle, counting rebate already allowed as settled.
+      const open = Math.max(0, gross - (Number(inv.disputed_amount) || 0) - paidBefore - (Number(inv.rebate) || 0));
+      const thisPayment = (Number(amount) || 0) + (Number(deduction) || 0);
+      // Cash c settles c / (1 - rate) of the bill when it earns `rate`.
+      const settles = rate < 1 ? Math.min(open, thisPayment / (1 - rate)) : 0;
+      newRebate = Math.round((Number(inv.rebate) || 0) + settles * rate);
     }
   }
 
-  // ── LPS accrued on OUTSTANDING undisputed amount as of payment date ──
+  // ── LPS earned to the payment date, day by day on what was unpaid ──
+  // Computed from every payment on the bill (this one included), so a late part
+  // payment is surcharged for the days it was late and the rest for its own —
+  // not the rest alone from the due date, which forgot the first part's days.
   if (inv.due_date) {
-    const paidBefore = db.prepare(
-      'SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)),0) s FROM payments WHERE invoice_id = ? AND id != ?'
-    ).get(inv.id, id).s;
-    const lpsContract = db.prepare('SELECT lps_annual_pct, lps_grace_days FROM contracts WHERE id = ?').get(inv.contract_id);
-    const accrued = accruedLps(inv, {
-      annualPct: lpsContract?.lps_annual_pct ?? getParamNumber('lps_annual_pct', 15),
-      graceDays: lpsContract?.lps_grace_days ?? 0,
-      monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0.5),
-      stepCapPct: getParamNumber('lps_step_cap_pct', 3),
-      asOf: payDate, paid: paidBefore,
-      state: payerStateForInvoice(inv),
-    });
-    if (accrued.lps > 0) newLps = accrued.lps;
+    const accrued = invoiceLpsAsOf(inv, payDate);
+    if (accrued.lps > (Number(inv.lps) || 0)) newLps = accrued.lps;
   }
 
   const totalPaid = db.prepare('SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)),0) s FROM payments WHERE invoice_id = ?').get(inv.id).s;
@@ -1894,14 +1894,8 @@ function buyerOutstanding(buyerId) {
   return invs.map((inv) => {
     const contract = db.prepare('SELECT lps_annual_pct, lps_grace_days FROM contracts WHERE id = ?').get(inv.contract_id);
     const paid = paidTotalFor(inv.id);
-    const lps = accruedLps(inv, {
-      annualPct: contract?.lps_annual_pct ?? getParamNumber('lps_annual_pct', 15),
-      graceDays: contract?.lps_grace_days ?? 0,
-      monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0.5),
-      stepCapPct: getParamNumber('lps_step_cap_pct', 3),
-      asOf: new Date(), paid,
-      state: payerStateForInvoice(inv),
-    }).lps;
+    // Everything the bill has earned to date; principal below excludes LPS.
+    const lps = invoiceLpsAsOf(inv, new Date()).lps;
     const principal = Math.max(0, (inv.total_amount || 0) - (inv.disputed_amount || 0) - paid);
     return { inv, lps: Math.round(lps), principal: Math.round(principal) };
   }).filter((x) => x.lps > 0 || x.principal > 0);

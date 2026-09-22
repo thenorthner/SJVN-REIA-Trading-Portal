@@ -70,7 +70,7 @@ afterEach(() => {
 });
 
 describe('wire contract', () => {
-  it('sends LoginUserId and Authorization — NOT the FO API\'s UserId/Authentication', async () => {
+  it('sends LoginUserId and Authorization — NOT the FO API\'s UserId', async () => {
     // This is the whole reason REC is a separate module. Getting it wrong
     // returns 401 with nothing to explain why.
     liveConfig();

@@ -29,7 +29,7 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
       case 'CREATE':
       case 'MANAGE':
       case 'HISTORY':
-        return <Bids product={productLabel} externalView={activeTab} />;
+        return <Bids product={productLabel} externalView={activeTab} onCreateClosed={() => setActiveTab('MANAGE')} />;
       case 'SCHEDULE':
         return <EnergySchedule product={productLabel} />;
       case 'OBLIGATION':

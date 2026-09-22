@@ -81,3 +81,10 @@ reference/**
 backend/src/data/live/**
 backend/src/data/isetReportSeeds.json
 .gstack/
+
+# Browser suite (frontend/e2e): its throwaway database, build, results and report.
+frontend/e2e/.data/
+frontend/e2e/.dist/
+frontend/e2e/.results/
+frontend/e2e/.report/
+frontend/e2e/.audit-report/

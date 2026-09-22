@@ -205,7 +205,10 @@ router.put('/document-types/:id', requireRole(...MASTERS_WRITE), (req, res) => {
 });
 
 // ── Lookups ────────────────────────────────────────
-router.get('/lookups', requireRole(...MASTERS_READ, ...ROLE_GROUPS.REIA_ALL), (req, res) => {
+// Reference lists, read by the trading desk too: the Bilateral Desk's NOAR
+// rejection-reason dropdown comes from here, and a trading user was refused it,
+// so the reason for a rejection could not be recorded by the people who record it.
+router.get('/lookups', requireRole(...MASTERS_READ, ...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.TRADING_ALL), (req, res) => {
   let sql = 'SELECT * FROM lookup_master WHERE 1=1';
   const params = [];
   if (req.query.active !== '0') sql += ' AND is_active = 1';

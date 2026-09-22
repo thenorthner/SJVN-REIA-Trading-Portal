@@ -48,6 +48,18 @@ export const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'http://localhost
 
 import { secureLogAudit } from './auditEngine.js';
 
+/**
+ * Whether a failed outbound call means the other site was out of reach — DNS,
+ * a refused or timed-out connection, or fetch's own "fetch failed" around one
+ * of those — rather than anything wrong on this side. Routes that call CERC or
+ * an RPC answer 502 with a plain sentence for these instead of "fetch failed".
+ */
+export function isUnreachable(err) {
+  const code = err?.code || err?.cause?.code;
+  return ['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT'].includes(code)
+    || (err?.name === 'TypeError' && err?.message === 'fetch failed');
+}
+
 export function logAudit({ req, user, action, module, entityType, entityId, beforeValue, afterValue, reason, details }) {
   secureLogAudit(req || { user }, {
     action,

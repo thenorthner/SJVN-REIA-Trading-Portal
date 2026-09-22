@@ -21,7 +21,7 @@ Dear Sir / Madam,
 Thank you for the Trader API Implementation Guide and the Postman collection
 (mail of 15-Sep-2026, with production `external.noar.in` and test
 `devdr.noar.in:84`). We have built the integration against
-`Report/ApplicantBilateralApplicationData` and are ready to test. Six points
+`Report/ApplicantBilateralApplicationData` and are ready to test. Seven points
 before we can call the test environment:
 
 1. **API key and secret.** Clause 1.1 of the guide has the trader generate the
@@ -56,6 +56,15 @@ before we can call the test environment:
    `ApplicationApprovedSummary` / `ApplicationAppliedSummary` come back as the
    integer `YYYYMMDD`. Please confirm this is intended and stable, as we parse
    both.
+
+7. **One key, two systems.** The *Create API Key* dialog in the guide (page 9)
+   states: "Existing API key, if created any earlier, will be deactivated and
+   you should update your integration with this new key." So a login holds one
+   active key at a time. SJVN's existing ISET application may already use a key
+   from this login, and generating one for the new platform would cut it off.
+   Please confirm (a) that this one-active-key rule still applies on the
+   current portal, and (b) that the same key pair may be used from two servers
+   — ISET's and the new platform's — provided both IPs are whitelisted.
 
 One further request: are any other trader endpoints published on this gateway —
 in particular anything covering NOAR charges/payments or application submission?

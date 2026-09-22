@@ -1,6 +1,5 @@
 import db from '../db/index.js';
-import { accruedLps } from '../disputesConstants.js';
-import { payerStateForInvoice } from './workingCalendar.js';
+import { invoiceLpsAsOf } from './invoiceLps.js';
 import { getParamNumber } from '../mastersService.js';
 import { ageingBuckets, openPosition } from './outstanding.js';
 
@@ -76,16 +75,7 @@ export function paymentMonitoring(side = 'RECEIVABLE') {
 
   const bills = openBills(direction).map((bill) => {
     const overdue = (bill.days_past_due ?? 0) > 0;
-    const accrued = overdue
-      ? accruedLps(bill, {
-        annualPct: bill.lps_annual_pct ?? defaults.annualPct,
-        graceDays: bill.lps_grace_days ?? 0,
-        monthlyStepPct: defaults.monthlyStepPct,
-        stepCapPct: defaults.stepCapPct,
-        paid: bill.paid,
-        state: payerStateForInvoice(bill),
-      })
-      : { lps: 0, days_overdue: 0 };
+    const accrued = overdue ? invoiceLpsAsOf(bill, new Date()) : { lps: 0, days_overdue: 0 };
     return {
       ...bill,
       days_past_due: bill.days_past_due ?? null,

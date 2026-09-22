@@ -8,6 +8,9 @@
  *   PB   periodic bill    the beneficiary's share of a station bill   (debit)
  *   LPS  surcharge        late payment surcharge on an overdue PB     (debit)
  *   PMT  payment          money received                              (credit)
+ *   RBT  rebate           early-payment rebate allowed on a PB        (credit)
+ *        — stored as a PMT with mode REBATE, pointing at the payment that
+ *          earned it, so the table's type check did not have to be rebuilt.
  *
  * A credit that has not been applied to anything is what the desk reads as ADV
  * (advance). That is a state rather than a document type: it falls out of having
@@ -19,9 +22,9 @@
  */
 import db from '../db/index.js';
 import { newId } from '../util.js';
-import { getParamNumber } from '../mastersService.js';
-import { accruedLps } from '../disputesConstants.js';
-import { resolvePaymentTermsDays, addDays } from '../util.js';
+import { getParamNumber, getParam } from '../mastersService.js';
+import { tieredRebatePct, daysBetween } from '../disputesConstants.js';
+import { resolvePaymentTermsDays, addDays, contractRebatePct } from '../util.js';
 
 const money = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
@@ -30,6 +33,9 @@ const EPSILON = 0.005;
 
 const DEBIT_TYPES = ['PB', 'LPS'];
 const CREDIT_TYPES = ['PMT'];
+
+/** A rebate credit — allowed by SJVN, not money received. */
+const isRebate = (doc) => doc?.doc_type === 'PMT' && doc?.mode === 'REBATE';
 
 /**
  * Document numbers the desk can read aloud and search on.
@@ -143,7 +149,9 @@ export function openDebits(contractId, beneficiaryName) {
     SELECT * FROM hydro_ledger_docs
     WHERE contract_id = ? AND beneficiary_name = ? AND status = 'OPEN'
       AND doc_type IN ('PB','LPS')
-    ORDER BY COALESCE(due_date, doc_date), doc_date, created_at
+    -- MoP LPS Rules 2022, rule 5: a payment goes first to late payment
+    -- surcharge, then to the bills, the longest overdue first.
+    ORDER BY CASE doc_type WHEN 'LPS' THEN 0 ELSE 1 END, COALESCE(due_date, doc_date), doc_date, created_at
   `).all(contractId, beneficiaryName);
   return rows
     .map((d) => ({ ...d, outstanding: outstandingOf(d.id) }))
@@ -155,6 +163,7 @@ export function openCredits(contractId, beneficiaryName) {
   const rows = db.prepare(`
     SELECT * FROM hydro_ledger_docs
     WHERE contract_id = ? AND beneficiary_name = ? AND status = 'OPEN' AND doc_type = 'PMT'
+      AND COALESCE(mode, '') <> 'REBATE'
     ORDER BY doc_date, created_at
   `).all(contractId, beneficiaryName);
   return rows
@@ -169,14 +178,41 @@ export function openCredits(contractId, beneficiaryName) {
  * surcharge stop growing on the bill that has been outstanding longest. Anything
  * left over stays on the credit and shows as an advance.
  */
-export function applyCredit(creditDocId, { onDate, createdBy = null, targetDebitIds = null } = {}) {
+/**
+ * The early-payment rebate a beneficiary earns on a bill by paying it on
+ * `payDate`, as a fraction of the amount it settles.
+ *
+ * CERC's tariff regulations give 1.5% for payment within five days of the bill
+ * being presented and 1% within thirty; the platform holds that as the
+ * `early_payment_rebate_tiers` master, and a station contract with its own
+ * rebate terms uses those instead. It is on the station's charges only — the
+ * NRLDC fee billed alongside is a pass-through and earns none.
+ */
+export function rebateRateFor(pb, payDate, contract = null) {
+  const c = contract || db.prepare('SELECT rebate_pct, rebate_days, rebate_basis FROM contracts WHERE id = ?').get(pb.contract_id);
+  let pct = contractRebatePct(c, { billDate: pb.doc_date, dueDate: pb.due_date, payDate: new Date(payDate) });
+  if (pct === null) {
+    pct = tieredRebatePct(Math.max(0, daysBetween(new Date(pb.doc_date), new Date(payDate))), getParam('early_payment_rebate_tiers', null));
+  }
+  if (!(pct > 0)) return { pct: 0, rate: 0 };
+  const line = pb.bill_line_id
+    ? db.prepare('SELECT total_charges, nrldc_fee FROM hydro_bill_lines WHERE id = ?').get(pb.bill_line_id)
+    : null;
+  const charges = Number(line?.total_charges) || 0;
+  const fee = Number(line?.nrldc_fee) || 0;
+  const eligible = line && charges + fee > 0 ? charges / (charges + fee) : 1;
+  return { pct, rate: (pct / 100) * eligible };
+}
+
+export function applyCredit(creditDocId, { onDate, createdBy = null, targetDebitIds = null, rebate = true } = {}) {
   const credit = db.prepare('SELECT * FROM hydro_ledger_docs WHERE id = ?').get(creditDocId);
   if (!credit) throw new Error('Payment document not found');
   if (credit.status === 'REVERSED') throw new Error(`${credit.doc_no} has been reversed`);
   if (!CREDIT_TYPES.includes(credit.doc_type)) throw new Error(`${credit.doc_no} is not a payment`);
+  if (isRebate(credit)) throw new Error(`${credit.doc_no} is a rebate, not money to apply`);
 
   let remaining = unappliedOf(creditDocId);
-  if (remaining <= EPSILON) return { applied: 0, clearings: [], unapplied: remaining };
+  if (remaining <= EPSILON) return { applied: 0, clearings: [], unapplied: remaining, rebate: 0, rebates: [] };
 
   let debits = openDebits(credit.contract_id, credit.beneficiary_name);
   if (targetDebitIds) {
@@ -185,25 +221,85 @@ export function applyCredit(creditDocId, { onDate, createdBy = null, targetDebit
   }
 
   const clearings = [];
+  const rebates = [];
   const insert = db.prepare(`
     INSERT INTO hydro_ledger_clearings (id, credit_doc_id, debit_doc_id, amount, cleared_on, created_by)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
   const on = onDate || credit.doc_date;
+  const contract = db.prepare('SELECT rebate_pct, rebate_days, rebate_basis FROM contracts WHERE id = ?').get(credit.contract_id);
 
   db.transaction(() => {
     for (const debit of debits) {
       if (remaining <= EPSILON) break;
-      const take = money(Math.min(remaining, debit.outstanding));
-      if (take <= EPSILON) continue;
-      const id = newId('HLC');
-      insert.run(id, creditDocId, debit.id, take, on, createdBy);
-      clearings.push({ id, debit_doc_no: debit.doc_no, amount: take });
-      remaining = money(remaining - take);
+      // The rebate is earned by when the money arrived, not by when an advance
+      // was later set against the bill.
+      const { pct, rate } = rebate && debit.doc_type === 'PB'
+        ? rebateRateFor(debit, credit.doc_date, contract) : { pct: 0, rate: 0 };
+      let cash;
+      let allowed = 0;
+      if (rate > 0) {
+        // Paying (1 - rate) of the bill settles all of it; a part payment
+        // settles its own share grossed up by the rebate it earns.
+        const need = money(debit.outstanding * (1 - rate));
+        if (remaining >= need - EPSILON) {
+          cash = Math.min(remaining, need);
+          allowed = money(debit.outstanding - cash);
+        } else {
+          cash = remaining;
+          allowed = money(Math.min(debit.outstanding - cash, (remaining * rate) / (1 - rate)));
+        }
+      } else {
+        cash = money(Math.min(remaining, debit.outstanding));
+      }
+      if (cash > EPSILON) {
+        const id = newId('HLC');
+        insert.run(id, creditDocId, debit.id, cash, on, createdBy);
+        clearings.push({ id, debit_doc_no: debit.doc_no, amount: cash });
+        remaining = money(remaining - cash);
+      }
+      if (allowed > EPSILON) {
+        const days = Math.max(0, daysBetween(new Date(debit.doc_date), new Date(credit.doc_date)));
+        const rb = insertDoc({
+          doc_no: genDocNo('RBT', String(credit.doc_date).slice(0, 7)),
+          contract_id: credit.contract_id,
+          beneficiary_name: credit.beneficiary_name,
+          beneficiary_id: credit.beneficiary_id,
+          doc_type: 'PMT',
+          amount: allowed,
+          doc_date: credit.doc_date,
+          mode: 'REBATE',
+          reference: credit.doc_no,
+          info: `Rebate ${pct}% on ${debit.doc_no} — paid ${days} day(s) after the bill`,
+          created_by: createdBy,
+        });
+        insert.run(newId('HLC'), rb.id, debit.id, allowed, on, createdBy);
+        rebates.push({ doc_no: rb.doc_no, debit_doc_no: debit.doc_no, amount: allowed, pct });
+      }
     }
   })();
 
-  return { applied: money(credit.amount - remaining), clearings, unapplied: remaining };
+  return {
+    applied: money(credit.amount - remaining),
+    clearings,
+    unapplied: remaining,
+    rebate: money(rebates.reduce((a, r) => a + r.amount, 0)),
+    rebates,
+  };
+}
+
+/** Withdraw the rebates a payment earned, when the payment is undone or released. */
+function withdrawRebatesOf(pmt, reason) {
+  const docs = db.prepare(`
+    SELECT id FROM hydro_ledger_docs
+    WHERE doc_type = 'PMT' AND mode = 'REBATE' AND reference = ? AND status = 'OPEN'
+      AND contract_id = ? AND beneficiary_name = ?
+  `).all(pmt.doc_no, pmt.contract_id, pmt.beneficiary_name);
+  for (const d of docs) {
+    db.prepare('DELETE FROM hydro_ledger_clearings WHERE credit_doc_id = ?').run(d.id);
+    db.prepare(`UPDATE hydro_ledger_docs SET status = 'REVERSED', reversal_reason = ? WHERE id = ?`).run(reason, d.id);
+  }
+  return docs.length;
 }
 
 /**
@@ -215,7 +311,7 @@ export function applyCredit(creditDocId, { onDate, createdBy = null, targetDebit
  */
 export function recordPayment({
   contractId, beneficiaryName, beneficiaryId = null, amount, paymentDate,
-  mode = null, reference = null, info = null, createdBy = null,
+  mode = null, reference = null, info = null, createdBy = null, rebate = true,
 }) {
   const amt = money(amount);
   if (!(amt > 0)) throw new Error('A payment must be a positive amount');
@@ -236,7 +332,7 @@ export function recordPayment({
     created_by: createdBy,
   });
 
-  const applied = applyCredit(doc.id, { onDate: paymentDate, createdBy });
+  const applied = applyCredit(doc.id, { onDate: paymentDate, createdBy, rebate });
   return { doc, ...applied };
 }
 
@@ -250,6 +346,7 @@ export function reversePayment(paymentDocId, { reason, onDate = null, createdBy 
   const pmt = db.prepare('SELECT * FROM hydro_ledger_docs WHERE id = ?').get(paymentDocId);
   if (!pmt) throw new Error('Payment document not found');
   if (pmt.doc_type !== 'PMT') throw new Error(`${pmt.doc_no} is not a payment`);
+  if (isRebate(pmt)) throw new Error(`${pmt.doc_no} is a rebate — reverse the payment that earned it`);
   if (pmt.status === 'REVERSED') throw new Error(`${pmt.doc_no} is already reversed`);
   if (!reason) throw new Error('A reversal must say why');
 
@@ -257,6 +354,8 @@ export function reversePayment(paymentDocId, { reason, onDate = null, createdBy 
   let reversal;
   db.transaction(() => {
     db.prepare('DELETE FROM hydro_ledger_clearings WHERE credit_doc_id = ?').run(paymentDocId);
+    // A rebate stands only on the payment that earned it.
+    withdrawRebatesOf(pmt, `Payment ${pmt.doc_no} reversed: ${reason}`);
     reversal = insertDoc({
       doc_no: genDocNo('PMT', on.slice(0, 7)),
       contract_id: pmt.contract_id,
@@ -291,6 +390,7 @@ export function resetClearing(paymentDocId, { createdBy = null } = {}) {
   const pmt = db.prepare('SELECT * FROM hydro_ledger_docs WHERE id = ?').get(paymentDocId);
   if (!pmt) throw new Error('Payment document not found');
   if (pmt.doc_type !== 'PMT') throw new Error(`${pmt.doc_no} is not a payment`);
+  if (isRebate(pmt)) throw new Error(`${pmt.doc_no} is a rebate — reset the payment that earned it`);
   if (pmt.status === 'REVERSED') throw new Error(`${pmt.doc_no} has been reversed`);
 
   const cleared = db.prepare(
@@ -298,8 +398,13 @@ export function resetClearing(paymentDocId, { createdBy = null } = {}) {
   ).get(paymentDocId).c;
   if (!cleared) throw new Error(`${pmt.doc_no} is not applied to any bill — it is already an advance`);
 
-  db.prepare('DELETE FROM hydro_ledger_clearings WHERE credit_doc_id = ?').run(paymentDocId);
-  return { doc_no: pmt.doc_no, released: cleared, unapplied: unappliedOf(paymentDocId) };
+  let withdrawn = 0;
+  db.transaction(() => {
+    db.prepare('DELETE FROM hydro_ledger_clearings WHERE credit_doc_id = ?').run(paymentDocId);
+    // The rebate goes with the clearing: applying the advance again earns it afresh.
+    withdrawn = withdrawRebatesOf(pmt, `Clearing of ${pmt.doc_no} reset`);
+  })();
+  return { doc_no: pmt.doc_no, released: cleared, rebates_withdrawn: withdrawn, unapplied: unappliedOf(paymentDocId) };
 }
 
 /**
@@ -311,6 +416,7 @@ export function resetClearing(paymentDocId, { createdBy = null } = {}) {
 export function accountMaintenance(paymentDocId, { debitDocIds = null, onDate = null, createdBy = null } = {}) {
   const pmt = db.prepare('SELECT * FROM hydro_ledger_docs WHERE id = ?').get(paymentDocId);
   if (!pmt) throw new Error('Advance document not found');
+  if (isRebate(pmt)) throw new Error(`${pmt.doc_no} is a rebate, not an advance`);
   if (unappliedOf(paymentDocId) <= EPSILON) throw new Error(`${pmt.doc_no} has nothing left to apply`);
   return applyCredit(paymentDocId, {
     onDate: onDate || new Date().toISOString().slice(0, 10),
@@ -319,14 +425,60 @@ export function accountMaintenance(paymentDocId, { debitDocIds = null, onDate = 
   });
 }
 
+const DAY_MS = 86400000;
+const utcDay = (d) => {
+  const x = new Date(d);
+  return Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate());
+};
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+
 /**
- * Late payment surcharge accrued on a beneficiary's overdue bills as of a date.
+ * Late payment surcharge earned on one bill, from its due date to `asOf`.
  *
- * The arithmetic is the platform's existing LPS engine — MoP Late Payment
- * Surcharge Rules 2022, with the rate stepping up for each month of default and
- * capped above base — so a hydro bill and a PPA invoice surcharge identically.
- * Each open PB is surcharged on its own outstanding balance and its own due
- * date, which is what the rules require: they run per bill, not per account.
+ * Every day past the due date is charged on what was actually unpaid that day,
+ * so money that came in late is surcharged for the days it was late and a bill
+ * paid off late still carries the surcharge it earned — including one that was
+ * cleared before anyone ran the LPS posting. MoP LPS Rules 2022: the base rate
+ * for the first month of default, then +step for each further month, capped
+ * at base + cap. No surcharge at all if the bill was settled inside the grace
+ * days.
+ */
+export function lpsOnBill(pb, { annualPct, graceDays = 0, monthlyStepPct = 0, stepCapPct = 0, asOf = new Date() }) {
+  const none = { lps: 0, days_overdue: 0, effective_pct: annualPct, outstanding: outstandingOf(pb.id) };
+  if (!pb.due_date) return none;
+  const due = utcDay(pb.due_date);
+  const end = utcDay(asOf);
+  if (end <= due) return none;
+
+  const clearings = db.prepare(`
+    SELECT amount, cleared_on FROM hydro_ledger_clearings WHERE debit_doc_id = ? ORDER BY cleared_on
+  `).all(pb.id).map((c) => ({ amount: Number(c.amount), on: utcDay(c.cleared_on) }));
+
+  // Unpaid on a day = the bill less everything cleared before that day. A
+  // payment on day D covers day D itself, as the invoice engine counts it.
+  const unpaidOn = (dayMs) => money(pb.amount - clearings.filter((c) => c.on < dayMs).reduce((a, c) => a + c.amount, 0));
+
+  let lps = 0;
+  let lastLate = 0;
+  let pct = annualPct;
+  for (let d = 1; due + d * DAY_MS <= end; d += 1) {
+    const bal = unpaidOn(due + d * DAY_MS);
+    if (bal <= EPSILON) break;
+    const month = Math.floor((d - 1) / 30);
+    pct = annualPct + Math.min((monthlyStepPct || 0) * month, stepCapPct || 0);
+    lps += (bal * pct) / 100 / 365;
+    lastLate = d;
+  }
+  if (lastLate <= (graceDays || 0)) return { ...none, days_overdue: lastLate };
+  return { lps: Math.round(lps), days_overdue: lastLate, effective_pct: pct, outstanding: outstandingOf(pb.id) };
+}
+
+/**
+ * Late payment surcharge accrued on a beneficiary's bills as of a date.
+ *
+ * Each bill is surcharged on its own balance and its own due date, which is
+ * what the rules require: they run per bill, not per account. Bills already
+ * paid off are included — a late payment earns surcharge even after it clears.
  */
 export function accruedLpsFor(contractId, beneficiaryName, { asOf = new Date() } = {}) {
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId);
@@ -338,31 +490,30 @@ export function accruedLpsFor(contractId, beneficiaryName, { asOf = new Date() }
     asOf,
   };
 
-  const bills = openDebits(contractId, beneficiaryName).filter((d) => d.doc_type === 'PB');
+  const bills = db.prepare(`
+    SELECT * FROM hydro_ledger_docs
+    WHERE contract_id = ? AND beneficiary_name = ? AND doc_type = 'PB' AND status = 'OPEN' AND due_date IS NOT NULL
+    ORDER BY due_date, doc_date, created_at
+  `).all(contractId, beneficiaryName);
   const lines = [];
   for (const b of bills) {
-    // The engine is written against an invoice, so the bill is presented as one:
-    // its outstanding balance is the base, with nothing already paid to net off
-    // because the outstanding figure has that netted already.
-    const calc = accruedLps(
-      { total_amount: b.outstanding, disputed_amount: 0, due_date: b.due_date },
-      { ...opts, paid: 0 },
-    );
+    const calc = lpsOnBill(b, opts);
     // What has already been charged on this bill, so a second run does not
     // surcharge the same days twice.
     const alreadyCharged = db.prepare(`
       SELECT COALESCE(SUM(amount), 0) s FROM hydro_ledger_docs
       WHERE bill_id = ? AND beneficiary_name = ? AND doc_type = 'LPS' AND status = 'OPEN'
     `).get(b.bill_id, beneficiaryName).s;
+    if (calc.lps <= 0 && calc.outstanding <= EPSILON && alreadyCharged <= 0) continue;
 
     lines.push({
       doc_id: b.id,
       doc_no: b.doc_no,
       bill_id: b.bill_id,
       due_date: b.due_date,
-      outstanding: b.outstanding,
+      outstanding: calc.outstanding,
       days_overdue: calc.days_overdue,
-      effective_pct: calc.effective_pct ?? calc.annual_pct,
+      effective_pct: calc.effective_pct,
       accrued: money(calc.lps),
       already_charged: money(alreadyCharged),
       chargeable: money(Math.max(0, calc.lps - alreadyCharged)),
@@ -370,7 +521,7 @@ export function accruedLpsFor(contractId, beneficiaryName, { asOf = new Date() }
   }
   return {
     beneficiary_name: beneficiaryName,
-    as_of: new Date(asOf).toISOString().slice(0, 10),
+    as_of: isoDay(utcDay(asOf)),
     annual_pct: opts.annualPct,
     lines,
     total_accrued: money(lines.reduce((a, l) => a + l.accrued, 0)),
@@ -446,8 +597,8 @@ export function accountDisplay(contractId, beneficiaryName) {
       // advance, and so no way to know whether a clearing can be reset.
       applied: isDebit ? 0 : money(d.amount - unapplied),
       // A payment carrying nothing applied is an advance on this screen.
-      display_type: d.doc_type === 'PMT' && d.status === 'OPEN' && unapplied >= money(d.amount) - EPSILON
-        ? 'ADV' : d.doc_type,
+      display_type: isRebate(d) ? 'RBT'
+        : (d.doc_type === 'PMT' && d.status === 'OPEN' && unapplied >= money(d.amount) - EPSILON ? 'ADV' : d.doc_type),
       side: isDebit ? 'DEBIT' : 'CREDIT',
       outstanding,
       unapplied,
@@ -461,6 +612,8 @@ export function accountDisplay(contractId, beneficiaryName) {
     .reduce((a, r) => a + r.amount, 0);
   const credit = rows.filter((r) => r.side === 'CREDIT' && r.status === 'OPEN')
     .reduce((a, r) => a + r.amount, 0);
+  const rebateAllowed = rows.filter((r) => isRebate(r) && r.status === 'OPEN')
+    .reduce((a, r) => a + r.amount, 0);
 
   return {
     contract_id: contractId,
@@ -469,7 +622,9 @@ export function accountDisplay(contractId, beneficiaryName) {
     totals: {
       billed: money(rows.filter((r) => r.doc_type === 'PB' && r.status === 'OPEN').reduce((a, r) => a + r.amount, 0)),
       surcharge: money(rows.filter((r) => r.doc_type === 'LPS' && r.status === 'OPEN').reduce((a, r) => a + r.amount, 0)),
-      received: money(credit),
+      // Money in; the rebate SJVN allowed is a credit too, but not cash.
+      received: money(credit - rebateAllowed),
+      rebate: money(rebateAllowed),
       outstanding: money(rows.reduce((a, r) => a + r.outstanding, 0)),
       advance: money(rows.reduce((a, r) => a + r.unapplied, 0)),
       balance: money(debit - credit),

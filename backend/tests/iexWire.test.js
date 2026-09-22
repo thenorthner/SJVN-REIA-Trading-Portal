@@ -127,15 +127,17 @@ afterEach(() => {
 const asked = (fragment) => received.find((r) => r.url.includes(fragment));
 
 describe('Front Office — what actually goes over the socket', () => {
-  it('transmits the FO headers the spec names, spelled the FO way', async () => {
+  it('transmits the token as Authorization, which the gateway accepts — not the spec\'s Authentication', async () => {
     await checkConnectivity('DAM');
     const req = asked('/businessconfig/');
     // Node lowercases incoming header names; the spelling is what matters.
-    expect(req.headers.authentication).toBe('Bearer wire-test-token');
+    // The spec says `Authentication`; the live UAT gateway 401s on it and
+    // answers 200 to the same token under `Authorization`.
+    expect(req.headers.authorization).toBe('Bearer wire-test-token');
+    expect(req.headers.authentication).toBeUndefined();
     expect(req.headers.userid).toBe('SJVA1');
     expect(req.headers.participantid).toBe('N2DL0SJV0000');
-    // The REC spelling must NOT appear on a Front Office call.
-    expect(req.headers.authorization).toBeUndefined();
+    // The REC user-id spelling must NOT appear on a Front Office call.
     expect(req.headers.loginuserid).toBeUndefined();
   });
 
@@ -337,9 +339,12 @@ describe('the two clients do not contaminate each other', () => {
     await fetchProductMaster();
     const fo = asked('/businessconfig/');
     const rec = asked('/rec/api/v2/master/products/');
-    expect(fo.headers.authentication).toBeDefined();
-    expect(fo.headers.authorization).toBeUndefined();
+    // Both carry the token as Authorization; what differs is the user header.
+    expect(fo.headers.authorization).toBeDefined();
     expect(rec.headers.authorization).toBeDefined();
-    expect(rec.headers.authentication).toBeUndefined();
+    expect(fo.headers.userid).toBeDefined();
+    expect(fo.headers.loginuserid).toBeUndefined();
+    expect(rec.headers.loginuserid).toBeDefined();
+    expect(rec.headers.userid).toBeUndefined();
   });
 });

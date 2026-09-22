@@ -112,12 +112,17 @@ function LiveClock({ format = 'time', prefix = '' }) {
   return <>{prefix}{now.toLocaleTimeString('en-US', { hour12: false })}</>;
 }
 
-export default function Bids({ product = 'DAM', externalView = null }) {
+export default function Bids({ product = 'DAM', externalView = null, onCreateClosed = null }) {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  // On the DAM/GDAM "Create Bid" tab the dialog is held open by the tab itself
+  // (externalView === 'CREATE'), so clearing showCreate alone left it open:
+  // Close, Cancel, Escape and a successful submit did nothing, and the backdrop
+  // kept the user from reaching anything else. Closing also tells the tab.
+  const closeCreate = () => { setShowCreate(false); onCreateClosed?.(); };
   const activeTab = product;
   const [globalClient, setGlobalClient] = useState('');
   const [deliveryDateFilter, setDeliveryDateFilter] = useState('');
@@ -367,7 +372,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
       }
 
       const created = await api.bids.create(payload);
-      setShowCreate(false);
+      closeCreate();
       setOutageAcknowledged(false); // Reset for next bid
       if (created?.compliance_warnings?.length) {
         setError(created.compliance_warnings.map((w) => `Note (Clause ${w.clause}): ${w.message}`).join('\n'));
@@ -848,7 +853,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
       )}
 
       {(showCreate || externalView === 'CREATE') && (
-        <Modal open={true} onClose={() => { setShowCreate(false); }} title="" width={960}>
+        <Modal open={true} onClose={closeCreate} title="" width={960}>
           {/* ── PTC-Style CREATE DAM NEW BID Header with Clock Fallback ── */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '2px solid var(--navy)', marginBottom: 20 }}>
             <h3 style={{ margin: 0, color: 'var(--navy)', fontWeight: 700, letterSpacing: 0.5 }}>CREATE DAM NEW BID</h3>
@@ -1228,7 +1233,7 @@ export default function Bids({ product = 'DAM', externalView = null }) {
             {error && <div style={{ color: 'red', marginBottom: 15 }}>{error}</div>}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid var(--slate-200)', paddingTop: 15 }}>
-              <button type="button" className="btn btn-outline" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button type="button" className="btn btn-outline" onClick={closeCreate}>Cancel</button>
               <button type="submit" className="btn btn-primary" style={{ background: 'var(--navy)' }}>Create Draft Portfolio</button>
             </div>
           </form>

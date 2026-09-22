@@ -273,14 +273,20 @@ export function StatementViewer({ statement }) {
         <strong style={{ color: isHealthy ? '#166534' : '#991b1b' }}>{isHealthy ? 'Data is fully reconciled and ready for sign-off.' : 'Exceptions detected. Review required before sign-off.'}</strong>
       </div>
 
-      <div style={{ border: '1px solid var(--slate-200)', borderRadius: 8, overflow: 'hidden' }}>
+      {/* The notes explain each figure, so they wrap rather than run on: with
+          every cell on one line and the box clipping its overflow, the column
+          read "No en", "Payat", "Demo". A narrow window scrolls the table
+          sideways instead of cutting it off. */}
+      <div style={{ border: '1px solid var(--slate-200)', borderRadius: 8, overflowX: 'auto' }}>
         <table className="data-table" style={{ margin: 0 }}>
           <thead style={{ background: 'var(--slate-100)' }}>
+            {/* Two-word headings wrap so the figure columns are only as wide as
+                their figures, leaving the width to the notes. */}
             <tr>
-              <th scope="col">Check Item</th>
+              <th scope="col" style={{ whiteSpace: 'normal' }}>Check Item</th>
               <th scope="col">Status</th>
-              <th scope="col">Metered / Expected</th>
-              <th scope="col">Billed / Actual</th>
+              <th scope="col" style={{ whiteSpace: 'normal' }}>Metered / Expected</th>
+              <th scope="col" style={{ whiteSpace: 'normal' }}>Billed / Actual</th>
               <th scope="col">Variance</th>
               <th scope="col">Notes</th>
             </tr>
@@ -288,14 +294,14 @@ export function StatementViewer({ statement }) {
           <tbody>
             {statement.items.map((it, idx) => (
               <tr key={idx} style={{ background: it.status === 'EXACT' ? 'transparent' : '#fff1f2' }}>
-                <td style={{ fontWeight: 500, fontSize: 13 }}>{it.label}</td>
+                <td style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'normal', minWidth: 150 }}>{it.label}</td>
                 <td><Badge status={it.status === 'EXACT' ? 'AUTO_MATCHED' : 'NEEDS_REVIEW'} /></td>
                 <td>{it.metered != null ? fmtNumber(it.metered, 2) : '-'}</td>
                 <td>{it.billed != null ? (it.type.includes('FINANCIAL') ? fmtCurrency(it.billed) : fmtNumber(it.billed, 2)) : '-'}</td>
                 <td style={{ color: it.variance !== 0 ? '#e53e3e' : '#10b981', fontWeight: it.variance !== 0 ? 600 : 400 }}>
                   {it.variance != null ? fmtNumber(it.variance, 2) : '-'}
                 </td>
-                <td style={{ fontSize: 12, color: 'var(--slate-500)' }}>{it.notes}</td>
+                <td style={{ fontSize: 12, color: 'var(--slate-600)', whiteSpace: 'normal', minWidth: 200, lineHeight: 1.4 }}>{it.notes || '—'}</td>
               </tr>
             ))}
           </tbody>

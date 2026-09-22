@@ -5,6 +5,7 @@ import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { eachPage } from './reportPdfKit.js';
 import { REASON_LABELS, OPEN_STATUSES } from '../disputesConstants.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -259,13 +260,11 @@ export function generateDisputeReportPdf(report, meta, res) {
     'This is a system-generated management report. Amounts in Indian Rupees.',
   ].forEach((n, i) => doc.text(n, M + 12, y + 20 + i * 10, { width: CONTENT_W - 24, lineBreak: false }));
 
-  const pages = doc.bufferedPageRange();
-  for (let i = 0; i < pages.count; i++) {
-    doc.switchToPage(i);
+  eachPage(doc, (i, count) => {
     doc.moveTo(M, PAGE_H - 22).lineTo(M + CONTENT_W, PAGE_H - 22).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
     doc.fillColor(MUTED).font('Helvetica').fontSize(7)
       .text('SJVN Limited  ·  Confidential — for internal use', M, PAGE_H - 16, { lineBreak: false })
-      .text(`Page ${i + 1} of ${pages.count}`, M, PAGE_H - 16, { width: CONTENT_W, align: 'right', lineBreak: false });
-  }
+      .text(`Page ${i + 1} of ${count}`, M, PAGE_H - 16, { width: CONTENT_W, align: 'right', lineBreak: false });
+  });
   doc.end();
 }

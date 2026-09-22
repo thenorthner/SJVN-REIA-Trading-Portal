@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification, buildBillingFamilyRef, directionForContract, billableCapacityMw } from '../util.js';
+import { newId, logAudit, pushNotification, buildBillingFamilyRef, directionForContract, billableCapacityMw, isUnreachable } from '../util.js';
 import { getParamNumber, baselineCufFor } from '../mastersService.js';
 import { runFinalDataRecon } from './reconciliation.js';
 import {
@@ -401,6 +401,11 @@ router.post('/rea-trigger', requireRole('SJVN_ADMIN', 'REIA_USER'), async (req, 
     logAudit({ req, user: req.user, action: 'REA_TRIGGER', module: 'REIA', entityType: 'rea_fetch_log', entityId: result.logId, details: { rpc, period_month } });
     res.json({ success: true, ...result });
   } catch (err) {
+    if (isUnreachable(err)) {
+      return res.status(502).json({
+        error: `Could not reach the ${rpc} website for ${period_month} (${err.cause?.message || err.message}). Check the server's internet connection and try again.`,
+      });
+    }
     res.status(400).json({ error: err.message });
   }
 });

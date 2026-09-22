@@ -5,6 +5,7 @@ import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { eachPage } from './reportPdfKit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LOGO_PATH = path.join(__dirname, '../assets/sjvn_logo.jpg');
@@ -251,13 +252,11 @@ export function generateReiaDashboardPdf(report, meta, res) {
   doc.text('Snapshot of live REIA KPIs at generation time. Receivables / payables exclude PAID and CANCELLED invoices.', M + 12, y + 20, { width: CONTENT_W - 24, lineBreak: false });
   doc.text('Exceptions Watch = Open disputes · Recon exceptions · Overdue invoices. Confidential — for internal use.', M + 12, y + 30, { width: CONTENT_W - 24, lineBreak: false });
 
-  const pages = doc.bufferedPageRange();
-  for (let i = 0; i < pages.count; i++) {
-    doc.switchToPage(i);
+  eachPage(doc, (i, count) => {
     doc.moveTo(M, PAGE_H - 22).lineTo(M + CONTENT_W, PAGE_H - 22).strokeColor('#cbd5e1').lineWidth(0.5).stroke();
     doc.fillColor(MUTED).font('Helvetica').fontSize(7)
       .text('SJVN Limited  ·  Confidential — for internal use', M, PAGE_H - 16, { lineBreak: false })
-      .text(`Page ${i + 1} of ${pages.count}`, M, PAGE_H - 16, { width: CONTENT_W, align: 'right', lineBreak: false });
-  }
+      .text(`Page ${i + 1} of ${count}`, M, PAGE_H - 16, { width: CONTENT_W, align: 'right', lineBreak: false });
+  });
   doc.end();
 }

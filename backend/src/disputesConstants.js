@@ -1,4 +1,4 @@
-import { surchargeDays } from './services/workingCalendar.js';
+import { surchargeDays, isWorkingDay, lpsCountsWorkingDaysOnly } from './services/workingCalendar.js';
 import { nextSeriesNo } from './util.js';
 
 /** Dispute Management constants & helpers */
@@ -142,6 +142,72 @@ export function accruedLps(inv, { annualPct = 15, asOf = new Date(), paid = 0, g
     monthIdx += 1;
   }
   return { days_overdue: daysOverdue, lps: Math.round(lps), base: outstanding, annual_pct: annualPct, effective_pct: effectivePct };
+}
+
+/**
+ * Late Payment Surcharge on an invoice as the money actually moved.
+ *
+ * accruedLps() charges one outstanding figure for every day since the due
+ * date. That is only right while nothing has been paid: after a late part
+ * payment it charges the rest from the due date and forgets what the paid part
+ * earned while it was late. Here every chargeable day past the due date is
+ * charged on what was unpaid that day:
+ *
+ *   base(day) = opening base - payments made before that day
+ *               + debit notes whose own due date has passed
+ *
+ * A payment on day D covers day D (as the single-figure engine counts it), and
+ * a debit note starts earning surcharge the day after its own due date — not
+ * the original bill's, which may be months gone. Rate: the base rate for the
+ * first 30 chargeable days, +monthlyStepPct for each further 30, capped at base
+ * + stepCapPct (MoP LPS Rules 2022). Chargeable days are working days for the
+ * payer when lps_day_count_mode says so. Nothing at all if the bill was settled
+ * within the grace days.
+ *
+ * @param inv       invoice-like: total_amount, disputed_amount, due_date
+ * @param payments  [{ amount, date }]            (amount includes deductions)
+ * @param notes     [{ amount, due_date }]        debit notes folded into total_amount
+ */
+export function accruedLpsTimeline(inv, {
+  payments = [], notes = [], annualPct = 15, asOf = new Date(), graceDays = 0,
+  monthlyStepPct = 0, stepCapPct = 0, state = null,
+} = {}) {
+  const empty = { days_overdue: 0, lps: 0, base: 0, annual_pct: annualPct, effective_pct: annualPct };
+  if (!inv || !inv.due_date) return empty;
+  const DAY = 86400000;
+  const day = (d) => { const x = new Date(d); return Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()); };
+  const due = day(inv.due_date);
+  const end = day(asOf);
+  if (!(end > due)) return empty;
+
+  const noteTotal = notes.reduce((a, n) => a + (Number(n.amount) || 0), 0);
+  const opening = Math.max(0, (inv.total_amount || 0) - (inv.disputed_amount || 0) - noteTotal);
+  const pays = payments.map((p) => ({ amount: Number(p.amount) || 0, on: day(p.date) }));
+  const dn = notes.map((n) => ({ amount: Number(n.amount) || 0, due: day(n.due_date || inv.due_date) }));
+  const workingOnly = lpsCountsWorkingDaysOnly();
+
+  let lps = 0;
+  let charged = 0;
+  let lastBase = 0;
+  let pct = annualPct;
+  for (let t = due + DAY; t <= end; t += DAY) {
+    const base = Math.max(0, opening
+      - pays.filter((p) => p.on < t).reduce((a, p) => a + p.amount, 0)
+      + dn.filter((n) => n.due < t).reduce((a, n) => a + n.amount, 0));
+    lastBase = base;
+    if (base <= 0.005) {
+      // Settled — unless a debit note falls due later, nothing more accrues.
+      if (!dn.some((n) => n.due >= t)) break;
+      continue;
+    }
+    if (workingOnly && !isWorkingDay(new Date(t), state)) continue;
+    charged += 1;
+    const step = Math.min((monthlyStepPct || 0) * Math.floor((charged - 1) / 30), stepCapPct || 0);
+    pct = annualPct + step;
+    lps += (base * pct) / 100 / 365;
+  }
+  if (charged <= (graceDays || 0)) return { ...empty, days_overdue: charged, base: lastBase };
+  return { days_overdue: charged, lps: Math.round(lps), base: lastBase, annual_pct: annualPct, effective_pct: pct };
 }
 
 /**

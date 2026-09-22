@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency } from '../../components/ui.jsx';
-import { DocumentManager } from '../../components/DocumentManager.jsx';
-import { fmtDateTime } from '../../datetime.js';
+import { fmtDate, fmtDateTime } from '../../datetime.js';
 import {
   REASON_CODES, CHARGE_LINES, DISPUTE_STATUSES, OPEN_STATUSES,
   reasonLabel, chargeLabel, invoiceChargeBreakdown,
@@ -58,6 +57,8 @@ export default function Disputes() {
   const [comment, setComment] = useState('');
   const [internalComment, setInternalComment] = useState(false);
   const [infoNote, setInfoNote] = useState('');
+  const [evidenceBusy, setEvidenceBusy] = useState(false);
+  const [evidenceError, setEvidenceError] = useState('');
 
   const selectedInvoice = invoices.find((i) => i.id === form.invoice_id);
   const breakdown = invoiceChargeBreakdown(selectedInvoice);
@@ -156,9 +157,29 @@ export default function Disputes() {
   async function handleEvidence(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    await api.disputes.uploadEvidence(selectedId, file);
-    e.target.value = '';
-    await refreshDetail();
+    setEvidenceBusy(true);
+    setEvidenceError('');
+    try {
+      await api.disputes.uploadEvidence(selectedId, file);
+      await refreshDetail();
+    } catch (err) {
+      setEvidenceError(err.response?.data?.error || 'Could not upload the document.');
+    } finally {
+      e.target.value = '';
+      setEvidenceBusy(false);
+    }
+  }
+
+  async function viewEvidence(doc) {
+    setEvidenceError('');
+    try {
+      const blob = await api.disputes.downloadEvidence(selectedId, doc.filename);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      setEvidenceError(err.response?.status === 404 ? 'That file is no longer on the server.' : 'Could not open the document.');
+    }
   }
 
   const columns = [
@@ -402,11 +423,48 @@ export default function Disputes() {
               </div>
             )}
 
-            <div style={{ marginTop: 24, marginBottom: 24 }}>
-              <DocumentManager 
-                moduleName="DISPUTES"
-                title="Dispute Evidence & Resolution Notes" 
-              />
+            {/* This dispute's own evidence, not the platform document store: the
+                generic manager listed every document on the platform here, and
+                what was uploaded through it was never tied to the dispute. */}
+            <div className="card" style={{ marginTop: 24, marginBottom: 24 }}>
+              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                <h3 style={{ margin: 0 }}>Dispute Evidence &amp; Resolution Notes</h3>
+                <label className="btn btn-primary btn-sm" style={{ margin: 0, cursor: evidenceBusy ? 'wait' : 'pointer', flexShrink: 0 }}>
+                  {evidenceBusy ? 'Uploading…' : 'Upload Document'}
+                  <input type="file" onChange={handleEvidence} disabled={evidenceBusy} hidden />
+                </label>
+              </div>
+              {evidenceError && <div className="form-error" style={{ margin: '10px 16px 0' }}>{evidenceError}</div>}
+              <div className="table-wrap">
+                <table className="data-table" style={{ margin: 0 }}>
+                  <thead>
+                    <tr>
+                      <th scope="col">Document</th>
+                      <th scope="col">Uploaded by</th>
+                      <th scope="col">Uploaded</th>
+                      <th scope="col"><span className="sr-only">Actions</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!(detail.supporting_docs || []).length && (
+                      <tr><td colSpan={4} className="empty-cell">No documents uploaded for this dispute yet.</td></tr>
+                    )}
+                    {(detail.supporting_docs || []).map((d) => (
+                      <tr key={d.filename}>
+                        <td style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                          <strong>{d.original_name || d.filename}</strong>
+                          {d.note && <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 2 }}>{d.note}</div>}
+                        </td>
+                        <td>{d.uploaded_by || '—'}</td>
+                        <td>{fmtDate(d.uploaded_at)}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => viewEvidence(d)}>View</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <div className="section-title" style={{ marginTop: 18 }}>Communication thread</div>
@@ -432,7 +490,9 @@ export default function Disputes() {
                   Internal only (hidden from buyer/seller)
                 </label>
               )}
-              <button type="submit" className="btn btn-secondary">Post</button>
+              {/* Disabled until there is something to post: pressed with an empty
+                  comment it used to do nothing and say nothing. */}
+              <button type="submit" className="btn btn-secondary" disabled={!comment.trim()}>Post</button>
             </form>
 
             <div className="section-title" style={{ marginTop: 18 }}>Audit trail</div>

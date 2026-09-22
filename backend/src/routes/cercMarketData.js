@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
+import { isUnreachable } from '../util.js';
 import { cercScraper } from '../services/cercScraper.js';
 
 const router = Router();
@@ -367,17 +368,32 @@ router.get('/fetch-log', (req, res) => {
   res.json(rows);
 });
 
-router.post('/trigger', async (req, res) => {
+// Fetching makes the server go out to cercind.gov.in; that is the trading
+// desk's call, not a trading client's, though a client may read the results.
+const DESK = requireRole(...ROLE_GROUPS.TRADING_ALL);
+
+router.post('/trigger', DESK, async (req, res) => {
+  // The month used to default to January 2026 when none was sent, so "Fetch
+  // Latest" quietly re-fetched the same old report. A month is required now;
+  // the screen scans for new ones (POST /scan) when none is picked.
+  const period = String(req.body?.period || '');
+  if (!/^\d{4}-\d{2}$/.test(period)) {
+    return res.status(400).json({ error: 'period (YYYY-MM) is required: the month of the CERC report to fetch' });
+  }
   try {
-    const period = req.body?.period || '2026-01';
     const result = await cercScraper.fetchCercReport(period);
     res.json(result);
   } catch (err) {
+    if (isUnreachable(err)) {
+      return res.status(502).json({
+        error: `Could not reach cercind.gov.in for the ${period} report (${err.cause?.message || err.message}). Check the server's internet connection and try again.`,
+      });
+    }
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post('/scan', async (req, res) => {
+router.post('/scan', DESK, async (req, res) => {
   try {
     const result = await cercScraper.scanForNewReports();
     res.json(result);

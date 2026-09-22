@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import api from '../../api/client.js';
 import { parseAllocationPaste, parseEnergyPaste } from './allocationPaste.js';
+import HydroReaRun from './HydroReaRun.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import {
@@ -78,8 +80,48 @@ function BillBlock({ title, children }) {
 /** The station bill itself — pages 1 of the printed bill. */
 function StationBillSheet({ bill }) {
   if (!bill) return null;
+
+  const chartData = [
+    { name: 'Capacity Charge', value: bill.c5_total_capacity_charge, fill: 'var(--primary)' },
+    { name: 'Energy (Normative)', value: bill.ee1_energy_charge, fill: 'var(--blue)' },
+    { name: 'Energy (Excess)', value: bill.ee2_excess_energy_charge, fill: 'var(--amber)' },
+  ].filter(d => d.value > 0);
+
   return (
     <div>
+      <div style={{ display: 'flex', gap: '24px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 300, background: 'var(--slate-50)', padding: 16, borderRadius: 12, border: '1px solid var(--border)' }}>
+          <h4 style={{ fontSize: 13, marginBottom: 16, color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Charge Breakdown</h4>
+          <div style={{ height: 200 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={chartData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={4}>
+                  {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
+                </Pie>
+                <Tooltip formatter={(val) => fmtCurrency(val)} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 300, background: 'var(--slate-50)', padding: 16, borderRadius: 12, border: '1px solid var(--border)' }}>
+          <h4 style={{ fontSize: 13, marginBottom: 16, color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Energy Schedule (MWh)</h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', justifyContent: 'center', paddingBottom: 20 }}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, color: 'var(--text-light)' }}>Total Ex-Bus</span>
+                <span style={{ fontWeight: 600 }}>{fmtNumber(bill.e1_ex_bus_scheduled_kwh / 1000, 1)}</span>
+             </div>
+             <div style={{ background: 'var(--border)', height: 8, borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+                <div style={{ width: `${(bill.e3_saleable_scheduled_kwh / bill.e1_ex_bus_scheduled_kwh) * 100}%`, background: 'var(--primary)', height: '100%' }} />
+                <div style={{ width: `${(bill.e2_free_power_kwh / bill.e1_ex_bus_scheduled_kwh) * 100}%`, background: 'var(--green)', height: '100%' }} />
+             </div>
+             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <span style={{ color: 'var(--primary)' }}>Saleable: {fmtNumber(bill.e3_saleable_scheduled_kwh / 1000, 1)}</span>
+                <span style={{ color: 'var(--green)' }}>Free (Home): {fmtNumber(bill.e2_free_power_kwh / 1000, 1)}</span>
+             </div>
+          </div>
+        </div>
+      </div>
       <BillBlock title="Bill parameters">
         <BillRow code="A1" label='Annual Fixed Charges "AFC" as approved by CERC' value={fmtCurrency(bill.a1_afc)} />
         <BillRow code="A2" label="Annual Design Energy (DE)" value={mwh(bill.a2_design_energy_mwh)} />
@@ -205,8 +247,30 @@ function BeneficiarySheet({ lines, bill }) {
   // total is shown beside the station's own figure rather than left to be summed.
   const ties = bill && Math.abs(total('total_charges') - Number(bill.total_charges)) < 1;
 
+  const chartData = lines
+    .map(r => ({
+      name: r.beneficiary_name,
+      value: r.total_charges,
+      pct: r.pct_proportionate
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10); // top 10 beneficiaries
+
   return (
     <div>
+      {lines.length > 0 && (
+        <div style={{ marginBottom: 24, height: 260, background: 'var(--slate-50)', padding: '16px 20px', borderRadius: 12, border: '1px solid var(--border)' }}>
+          <h4 style={{ fontSize: 13, marginBottom: 12, color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Top Beneficiaries by Total Charge</h4>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 0, left: 40, bottom: 0 }}>
+              <XAxis type="number" hide />
+              <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <Tooltip formatter={(val) => fmtCurrency(val)} cursor={{ fill: 'var(--slate-200)' }} />
+              <Bar dataKey="value" fill="var(--primary)" radius={[0, 4, 4, 0]} barSize={16} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
       <Table columns={columns} rows={lines} caption="Beneficiary-wise breakup of capacity and energy charges" />
       <div style={{
         display: 'flex', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
@@ -359,7 +423,7 @@ function AllocationSheet({ alloc, station, canWrite, onSaved }) {
           <Field label="Allocation sheet" required htmlFor="hb-paste">
             <textarea
               id="hb-paste" rows={10} value={paste} onChange={(e) => setPaste(e.target.value)} required
-              style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
+              style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, background: '#fff', border: '1px solid var(--slate-300)', padding: 12, borderRadius: 8, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)', resize: 'vertical' }}
               placeholder={'CHANDIGARH\t1.714551\nTPDDL\t2.905400\tDELHI\nGoHP*\t34.000000'}
             />
           </Field>
@@ -550,6 +614,10 @@ export default function HydroBilling() {
   const [alloc, setAlloc] = useState(null);
   const [bills, setBills] = useState([]);
   const [openBill, setOpenBill] = useState(null);
+  const [dispatching, setDispatching] = useState(null);
+  const [dispatchForm, setDispatchForm] = useState({
+    dispatch_invoice_no: '', courier_tracking_no: '', dispatch_date: '', receipt_date: '',
+  });
   const [cancelling, setCancelling] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
   // Regulation of power: which beneficiaries had supply withheld, keyed by name.
@@ -697,6 +765,40 @@ export default function HydroBilling() {
     }
   }
 
+  async function doRelease(bill) {
+    setError('');
+    try {
+      await api.hydroBilling.release(bill.id);
+      setNotice(`${bill.bill_no} released — it can now be printed and despatched.`);
+      loadBills();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  }
+
+  async function doPrint(bill) {
+    setError('');
+    try {
+      await api.hydroBilling.downloadPdf(bill.id, bill.bill_no);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  }
+
+  async function doDispatch(e) {
+    e.preventDefault();
+    setError('');
+    try {
+      const r = await api.hydroBilling.dispatch(dispatching.id, dispatchForm);
+      setNotice(`${dispatching.bill_no} despatched on ${r.dispatch_date}`
+        + (r.courier_tracking_no ? ` — ${r.courier_tracking_no}` : '') + '.');
+      setDispatching(null);
+      loadBills();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  }
+
   async function doIssue(bill) {
     setError('');
     try {
@@ -754,23 +856,43 @@ export default function HydroBilling() {
       key: 'actions',
       header: '',
       render: (r) => (
-        <span style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
-          <button type="button" className="btn-link" onClick={() => api.hydroBilling.get(r.id).then(setOpenBill)}>
+        <span style={{ display: 'flex', gap: 8, alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+          <button type="button" className="btn btn-xs btn-outline" onClick={() => api.hydroBilling.get(r.id).then(setOpenBill)}>
             View
           </button>
           {canWrite && r.status === 'DRAFT' && r.approval_status === 'NOT_SENT' && (
             <button
-              type="button" className="btn-link"
+              type="button" className="btn btn-xs btn-outline"
               onClick={() => { setSending(r); setSendForm({ next_approver_id: '', final_approver_id: '', comments: '' }); }}
             >
               Send for approval
             </button>
           )}
           {canWrite && r.status === 'DRAFT' && r.approval_status === 'APPROVED' && (
-            <button type="button" className="btn-link" onClick={() => doIssue(r)}>Issue</button>
+            <button type="button" className="btn btn-xs btn-primary" onClick={() => doIssue(r)}>Issue</button>
+          )}
+          {canWrite && r.status === 'ISSUED' && !r.released_at && (
+            <button type="button" className="btn btn-xs btn-success" onClick={() => doRelease(r)}>Release</button>
+          )}
+          <button type="button" className="btn btn-xs btn-outline" onClick={() => doPrint(r)}>Print</button>
+          {canWrite && r.status === 'ISSUED' && r.released_at && (
+            <button
+              type="button" className="btn btn-xs btn-outline"
+              onClick={() => {
+                setDispatching(r);
+                setDispatchForm({
+                  dispatch_invoice_no: r.dispatch_invoice_no || '',
+                  courier_tracking_no: r.courier_tracking_no || '',
+                  dispatch_date: r.dispatch_date || new Date().toISOString().slice(0, 10),
+                  receipt_date: r.receipt_date || '',
+                });
+              }}
+            >
+              {r.dispatched_at ? 'Despatch ✓' : 'Despatch'}
+            </button>
           )}
           {canWrite && r.status !== 'CANCELLED' && (
-            <button type="button" className="btn-link" onClick={() => { setCancelling(r); setCancelReason(''); }}>
+            <button type="button" className="btn btn-xs btn-danger" onClick={() => { setCancelling(r); setCancelReason(''); }}>
               Cancel
             </button>
           )}
@@ -790,6 +912,8 @@ export default function HydroBilling() {
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
+
+      {canWrite && <HydroReaRun onDone={loadBills} />}
 
       {inbox.length > 0 && (
         <Card title={`Waiting for your approval (${inbox.length})`}>
@@ -824,89 +948,108 @@ export default function HydroBilling() {
         </Card>
       )}
 
-      <Card title="Bill a month">
+      <Card title="REA Upload (Monthly Bill)">
         <form onSubmit={doPreview}>
-          <div className="form-grid">
-            <Field label="Station" required htmlFor="hb-station">
-              <select id="hb-station" value={stationId} onChange={(e) => setStationId(e.target.value)} required>
-                {stations.length === 0 && <option value="">No hydro station on file</option>}
-                {stations.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.station_name} — {s.contract_no}{s.ready ? '' : ' (not ready)'}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Billing month" required htmlFor="hb-month">
-              <input id="hb-month" type="month" value={form.billing_month} onChange={set('billing_month')} required />
-            </Field>
-            <Field label="Bill kind" htmlFor="hb-kind">
-              <select id="hb-kind" value={form.bill_kind} onChange={set('bill_kind')}>
-                {KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
-              </select>
-            </Field>
-          </div>
-
-          {station && !station.ready && (
-            <div className="alert alert-warning" role="alert">
-              {station.station_name} cannot be billed yet — still missing: {station.missing.join(', ')}.
+          <div style={{ padding: '20px', background: 'var(--slate-50)', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 24 }}>
+            <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 12 }}>1</span>
+              Station & Period
+            </h4>
+            <div className="form-grid">
+              <Field label="Station" required htmlFor="hb-station">
+                <select id="hb-station" value={stationId} onChange={(e) => setStationId(e.target.value)} required>
+                  {stations.length === 0 && <option value="">No hydro station on file</option>}
+                  {stations.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.station_name} — {s.contract_no}{s.ready ? '' : ' (not ready)'}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Billing month" required htmlFor="hb-month">
+                <input id="hb-month" type="month" value={form.billing_month} onChange={set('billing_month')} required />
+              </Field>
+              <Field label="Bill kind" htmlFor="hb-kind">
+                <select id="hb-kind" value={form.bill_kind} onChange={set('bill_kind')}>
+                  {KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+                </select>
+              </Field>
             </div>
-          )}
-
-          <div className="form-grid">
-            <Field label="Ex-bus scheduled energy for the month (kWh)" htmlFor="hb-e1">
-              <input
-                id="hb-e1" type="number" step="0.1" value={form.ex_bus_scheduled_kwh}
-                onChange={set('ex_bus_scheduled_kwh')} placeholder="from the month's energy data if left blank"
-              />
-            </Field>
-            <Field label="Free power to the home state as per REA (kWh)" htmlFor="hb-e2">
-              <input
-                id="hb-e2" type="number" step="0.1" value={form.free_power_kwh}
-                onChange={set('free_power_kwh')} placeholder={station ? `${station.free_energy_home_state}% of the above if left blank` : ''}
-              />
-            </Field>
-            <Field label="Plant availability achieved, PAFM (%)" htmlFor="hb-pafm">
-              <input
-                id="hb-pafm" type="number" step="0.001" value={form.pafm_percent}
-                onChange={set('pafm_percent')} placeholder={station ? `normative ${station.napaf_percent}% if left blank` : ''}
-              />
-            </Field>
-            <Field label="Beta factor as certified by NRPC" htmlFor="hb-beta">
-              <input
-                id="hb-beta" type="number" step="0.001" min="0" max="1" value={form.beta_value}
-                onChange={set('beta_value')} placeholder="from the station's β certificate if left blank"
-              />
-            </Field>
-            <Field label="NRLDC fees issued by POSOCO (₹)" htmlFor="hb-nrldc">
-              <input id="hb-nrldc" type="number" step="0.01" value={form.nrldc_total_fee} onChange={set('nrldc_total_fee')} placeholder="0" />
-            </Field>
-            <Field label="Un-requisitioned surplus, URS_NR (kWh)" htmlFor="hb-urs">
-              <input
-                id="hb-urs" type="number" step="0.1" min="0" value={form.urs_nr_kwh}
-                onChange={set('urs_nr_kwh')} placeholder="0 — nothing regulated this month"
-              />
-            </Field>
-            <Field label="REA reference" htmlFor="hb-rea">
-              <input id="hb-rea" value={form.rea_reference} onChange={set('rea_reference')} placeholder="e.g. Provisional REA dated 01.07.2026" />
-            </Field>
+            {station && !station.ready && (
+              <div className="alert alert-warning" role="alert" style={{ marginTop: 16, marginBottom: 0 }}>
+                {station.station_name} cannot be billed yet — still missing: {station.missing.join(', ')}.
+              </div>
+            )}
           </div>
 
-          {form.bill_kind === 'REVISION' && (
-            <Field label="What changed" required htmlFor="hb-reason">
-              <input
-                id="hb-reason" value={form.revision_reason} onChange={set('revision_reason')} required
-                placeholder="e.g. β certified at 1.00 by NRPC on 19.06.2026"
-              />
-            </Field>
-          )}
+          <div style={{ padding: '20px', background: 'var(--slate-50)', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 24 }}>
+             <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 12 }}>2</span>
+              Output & Tariffs
+            </h4>
+            <div className="form-grid">
+              <Field label="Ex-bus scheduled energy for the month (kWh)" htmlFor="hb-e1">
+                <input
+                  id="hb-e1" type="number" step="0.1" value={form.ex_bus_scheduled_kwh}
+                  onChange={set('ex_bus_scheduled_kwh')} placeholder="from the month's REA / energy data if left blank"
+                />
+              </Field>
+              <Field label="Free power to the home state as per REA (kWh)" htmlFor="hb-e2">
+                <input
+                  id="hb-e2" type="number" step="0.1" value={form.free_power_kwh}
+                  onChange={set('free_power_kwh')} placeholder={station ? `from the REA (table D2) if left blank, else ${station.free_energy_home_state}% of the above` : ''}
+                />
+              </Field>
+              <Field label="Plant availability achieved, PAFM (%)" htmlFor="hb-pafm">
+                <input
+                  id="hb-pafm" type="number" step="0.001" value={form.pafm_percent}
+                  onChange={set('pafm_percent')} placeholder={station ? `from the month's REA if left blank, else normative ${station.napaf_percent}%` : ''}
+                />
+              </Field>
+              <Field label="Beta factor as certified by NRPC" htmlFor="hb-beta">
+                <input
+                  id="hb-beta" type="number" step="0.001" min="0" max="1" value={form.beta_value}
+                  onChange={set('beta_value')} placeholder="from the station's β certificate if left blank"
+                />
+              </Field>
+            </div>
+          </div>
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button type="submit" className="btn" disabled={!stationId || previewing}>
+          <div style={{ padding: '20px', background: 'var(--slate-50)', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 24 }}>
+             <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 12 }}>3</span>
+              Adjustments & Meta
+            </h4>
+            <div className="form-grid">
+              <Field label="NRLDC fees issued by POSOCO (₹)" htmlFor="hb-nrldc">
+                <input id="hb-nrldc" type="number" step="0.01" value={form.nrldc_total_fee} onChange={set('nrldc_total_fee')} placeholder="0" />
+              </Field>
+              <Field label="Un-requisitioned surplus, URS_NR (kWh)" htmlFor="hb-urs">
+                <input
+                  id="hb-urs" type="number" step="0.1" min="0" value={form.urs_nr_kwh}
+                  onChange={set('urs_nr_kwh')} placeholder="0 — nothing regulated this month"
+                />
+              </Field>
+              <Field label="REA reference" htmlFor="hb-rea">
+                <input id="hb-rea" value={form.rea_reference} onChange={set('rea_reference')} placeholder="e.g. Provisional REA dated 01.07.2026" />
+              </Field>
+              {form.bill_kind === 'REVISION' && (
+                <Field label="What changed" required htmlFor="hb-reason">
+                  <input
+                    id="hb-reason" value={form.revision_reason} onChange={set('revision_reason')} required
+                    placeholder="e.g. β certified at 1.00 by NRPC on 19.06.2026"
+                  />
+                </Field>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, marginTop: 12, padding: '16px 20px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: 'var(--shadow-sm)' }}>
+            <button type="submit" className="btn btn-primary" disabled={!stationId || previewing} style={{ padding: '10px 24px', fontSize: 14 }}>
               {previewing ? 'Computing…' : 'Compute the bill'}
             </button>
             {preview && canWrite && (
-              <button type="button" className="btn btn-primary" onClick={doSave} disabled={saving}>
+              <button type="button" className="btn btn-secondary" onClick={doSave} disabled={saving} style={{ padding: '10px 24px', fontSize: 14 }}>
                 {saving ? 'Saving…' : 'Save as draft'}
               </button>
             )}
@@ -941,11 +1084,11 @@ export default function HydroBilling() {
                 </select>
               </Field>
             </div>
-            <Field label="Table D2 — one beneficiary per line" required htmlFor="hb-epaste">
+              <Field label="Table D2 — one beneficiary per line" required htmlFor="hb-epaste">
               <textarea
                 id="hb-epaste" rows={8} value={energyPaste}
                 onChange={(e) => setEnergyPaste(e.target.value)}
-                style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
+                style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, background: '#fff', border: '1px solid var(--slate-300)', padding: 12, borderRadius: 8, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)', resize: 'vertical' }}
                 placeholder={'CHANDIGARH\t125.396150\nTPDDL\t212.428759\nGoHP\t1608.549250'}
               />
             </Field>
@@ -1173,6 +1316,47 @@ export default function HydroBilling() {
             </div>
           </form>
         )}
+      </Modal>
+
+      <Modal open={!!dispatching} onClose={() => setDispatching(null)} title={`Despatch ${dispatching?.bill_no || ''}`}>
+        <form onSubmit={doDispatch}>
+          <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
+            How the printed bill actually went out. The receipt date is the only record of when the
+            beneficiary had it, so it is what a disputed due date is argued from.
+          </p>
+          <div className="form-grid">
+            <Field label="Invoice number it went out under" htmlFor="hb-dinv">
+              <input
+                id="hb-dinv" value={dispatchForm.dispatch_invoice_no}
+                onChange={(e) => setDispatchForm({ ...dispatchForm, dispatch_invoice_no: e.target.value })}
+                placeholder="e.g. SJVN/NJHPS/2026-06/001"
+              />
+            </Field>
+            <Field label="Courier tracking number" htmlFor="hb-dtrk">
+              <input
+                id="hb-dtrk" value={dispatchForm.courier_tracking_no}
+                onChange={(e) => setDispatchForm({ ...dispatchForm, courier_tracking_no: e.target.value })}
+              />
+            </Field>
+            <Field label="Despatch date" required htmlFor="hb-ddate">
+              <input
+                id="hb-ddate" type="date" required value={dispatchForm.dispatch_date}
+                onChange={(e) => setDispatchForm({ ...dispatchForm, dispatch_date: e.target.value })}
+              />
+            </Field>
+            <Field label="Receipt date" htmlFor="hb-rdate">
+              <input
+                id="hb-rdate" type="date" value={dispatchForm.receipt_date}
+                min={dispatchForm.dispatch_date || undefined}
+                onChange={(e) => setDispatchForm({ ...dispatchForm, receipt_date: e.target.value })}
+              />
+            </Field>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button type="submit" className="btn btn-primary">Record the despatch</button>
+            <button type="button" className="btn" onClick={() => setDispatching(null)}>Cancel</button>
+          </div>
+        </form>
       </Modal>
 
       <Modal open={!!cancelling} onClose={() => setCancelling(null)} title={`Cancel ${cancelling?.bill_no || ''}`}>

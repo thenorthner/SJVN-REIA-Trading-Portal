@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import multer from 'multer';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { logAudit } from '../util.js';
@@ -15,7 +16,9 @@ const upload = multer({ dest: 'uploads/', limits: { fileSize: 25 * 1024 * 1024 }
 const IMPORT_WRITE = [...ROLE_GROUPS.TRADING_WRITE];
 
 // Default location of the ledger workbook shipped with the repo docs.
-const DEFAULT_LEDGER = path.resolve(process.cwd(), '../docs/Power Trading Ledger FY 2026-27 (13).xlsx');
+// Beside the code, not beside wherever the server was started: resolved from the
+// working directory it was found only when the process ran from backend/.
+const DEFAULT_LEDGER = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../docs/Power Trading Ledger FY 2026-27 (13).xlsx');
 
 // Import the Power Trading Ledger. Accepts an uploaded .xlsx (field "file"), or
 // falls back to the workbook in docs/ when no file is supplied. Idempotent — a

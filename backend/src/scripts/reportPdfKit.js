@@ -163,14 +163,36 @@ export function ensureSpace(doc, y, needed, ctx) {
   return y;
 }
 
-/** Page numbers, written last so the total is known. */
-export function pageNumbers(doc) {
+/**
+ * Revisit every buffered page once the body is drawn — for footers and page
+ * numbers, which need the final page count.
+ *
+ * A footer sits below the bottom margin, and PDFKit treats wrapped text placed
+ * there as overflow: it quietly opens a new page and writes the footer at the
+ * top of it. A one-page report went out as two, the second blank but for
+ * "Page 1 of 1". Lifting the margin while the footer is drawn keeps it on the
+ * page it belongs to.
+ */
+export function eachPage(doc, draw) {
   const range = doc.bufferedPageRange();
   for (let i = 0; i < range.count; i += 1) {
     doc.switchToPage(range.start + i);
-    doc.fillColor(MUTED).font('Helvetica').fontSize(7)
-      .text(`Page ${i + 1} of ${range.count}`, M, PAGE_H - M + 6, { width: CONTENT_W, align: 'right', lineBreak: false });
+    const { bottom } = doc.page.margins;
+    doc.page.margins.bottom = 0;
+    try {
+      draw(i, range.count);
+    } finally {
+      doc.page.margins.bottom = bottom;
+    }
   }
+}
+
+/** Page numbers, written last so the total is known. */
+export function pageNumbers(doc) {
+  eachPage(doc, (i, count) => {
+    doc.fillColor(MUTED).font('Helvetica').fontSize(7)
+      .text(`Page ${i + 1} of ${count}`, M, PAGE_H - M + 6, { width: CONTENT_W, align: 'right', lineBreak: false });
+  });
 }
 
 export function newDoc(res, docTitle, filename) {

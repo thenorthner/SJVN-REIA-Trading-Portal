@@ -490,6 +490,9 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
         {loading ? (
           <div style={{ padding: 20 }}>Loading documents...</div>
         ) : (
+          // The wrapper scrolls a wide table inside the card instead of letting
+          // its right-hand columns run out past the card's edge in a narrow modal.
+          <div className="table-wrap">
           <table className="data-table" style={{ margin: 0 }}>
             <thead>
               <tr>
@@ -545,6 +548,7 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

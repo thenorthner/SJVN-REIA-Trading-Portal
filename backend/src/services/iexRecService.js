@@ -8,11 +8,11 @@
  * This is a separate module from iexService.js on purpose. REC/EC is a
  * different market model and, more importantly, a different wire contract:
  *
- *   1. THE HEADERS ARE NOT THE SAME. The FO API (DAM/GDAM/HPDAM/RTM) sends
- *      `UserId` and `Authentication: Bearer …`. REC/EC sends `LoginUserId` and
- *      `Authorization: Bearer …`. Reusing the FO headers here returns 401 with
- *      nothing to explain why, so they are written out separately rather than
- *      shared and parameterised.
+ *   1. THE USER HEADER IS NOT THE SAME. The FO API (DAM/GDAM/HPDAM/RTM) sends
+ *      `UserId`; REC/EC sends `LoginUserId`. (Both send `Authorization: Bearer …`
+ *      — the FO spec says `Authentication`, but the gateway only accepts
+ *      `Authorization`.) The wrong user header returns 401 with nothing to
+ *      explain why, so they are written out separately rather than shared.
  *   2. Scaling factors come from the PRODUCT master (`PriceDecimalLocator`,
  *      `QtyDecimalLocator`), not the Asset master's OrderQtyDecimal/…
  *   3. There are no time blocks and no delivery date. Positions are an order
@@ -92,8 +92,8 @@ export function getRecConfig() {
 }
 
 /**
- * REC/EC headers — note `LoginUserId` and `Authorization`, which differ from
- * the FO API's `UserId` and `Authentication`. See the module comment.
+ * REC/EC headers — note `LoginUserId`, which differs from the FO API's
+ * `UserId`. See the module comment.
  */
 function recHeaders(cfg) {
   return {
@@ -165,10 +165,6 @@ const stubNote = (cfg) => {
   return `IEX REC/EC enabled but not fully configured (needs ${missing.join(', ')}) — running in stub mode.`;
 };
 
-const expiryNote = (cfg) => (cfg.tokenExpired
-  ? `The configured token's own expiry claim passed at ${cfg.tokenExpiresAtIso}. IEX states tokens last six months and that this claim was a typo, so the request was still sent — but if it came back 401, this is why.`
-  : undefined);
-
 /* ----------------------------------------------------------------- scaling */
 
 /**
@@ -208,7 +204,7 @@ export async function fetchProductMaster() {
       lower_dpr: p.LowerDPR ?? null,
     }));
     products.forEach((p) => productCache.set(p.product, p));
-    return { ok: true, mode: 'IEX', products, warning: expiryNote(cfg) };
+    return { ok: true, mode: 'IEX', products };
   } catch (err) {
     return { ok: false, mode: 'IEX', error: err.message };
   }
@@ -290,7 +286,6 @@ export async function fetchOrderBook({
       total_records: data?.TotalRecord ?? orders.length,
       // A row we could not scale is reported, not silently passed off as MW.
       unscaled_rows: orders.filter((o) => !o.scaled).length,
-      warning: expiryNote(cfg),
     };
   } catch (err) {
     return { ok: false, mode: 'IEX', error: err.message };
@@ -337,7 +332,6 @@ export async function fetchTradeBook({
       ok: true, mode: 'IEX', trades,
       total_records: data?.TotalRecord ?? trades.length,
       unscaled_rows: trades.filter((t) => !t.scaled).length,
-      warning: expiryNote(cfg),
     };
   } catch (err) {
     return { ok: false, mode: 'IEX', error: err.message };
@@ -356,7 +350,6 @@ export async function checkRecConnectivity() {
       base_url: cfg.baseUrl,
       elapsed_ms: Date.now() - started,
       business_date: data?.BusinessDate ?? null,
-      warning: expiryNote(cfg),
     };
   } catch (err) {
     return {
@@ -364,7 +357,6 @@ export async function checkRecConnectivity() {
       base_url: cfg.baseUrl,
       elapsed_ms: Date.now() - started,
       error: err.message,
-      warning: expiryNote(cfg),
     };
   }
 }

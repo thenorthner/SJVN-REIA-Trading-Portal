@@ -1151,6 +1151,37 @@ function migrateRampurTariffConstants() {
   db.prepare(`INSERT INTO platform_meta (key, value) VALUES (?, '1')`).run(MARKER);
 }
 
+/**
+ * Let a hydro bill also be a claim or a trading bill.
+ *
+ * Additional charges, tax collected at source and power trading are all billed
+ * on documents of their own, which are approved, released, despatched and paid
+ * exactly like a monthly tariff bill — so they are rows in the same table
+ * rather than parallel ones, and bill_kind has to admit them. SQLite cannot
+ * ALTER a CHECK, so the table is rebuilt from schema.sql the way invoices is.
+ */
+function migrateHydroBillClaimKinds() {
+  const t = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='hydro_station_bills'",
+  ).get();
+  if (!t || t.sql.includes("'PTC'")) return;
+
+  db.exec('PRAGMA foreign_keys=OFF');
+  db.exec('PRAGMA legacy_alter_table=ON'); // keep RENAME from touching other tables' FKs
+  try {
+    rebuildTableFromSchema('hydro_station_bills');
+  } finally {
+    db.exec('PRAGMA legacy_alter_table=OFF');
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
+try {
+  migrateHydroBillClaimKinds();
+} catch (e) {
+  console.error('Hydro bill claim-kind migration failed:', e.message);
+}
+
 function migrateHydroBillLifecycle() {
   const has = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='hydro_station_bills'`).get();
   if (!has) return;
@@ -1169,6 +1200,17 @@ function migrateHydroBillLifecycle() {
   }
   if (!cols.includes('urs_nr_kwh')) {
     db.exec('ALTER TABLE hydro_station_bills ADD COLUMN urs_nr_kwh REAL NOT NULL DEFAULT 0');
+  }
+  // Release, print and despatch tracking.
+  if (!cols.includes('dispatch_invoice_no')) {
+    for (const [c, t] of [
+      ['released_at', 'TEXT'], ['released_by', 'TEXT'], ['printed_at', 'TEXT'],
+      ['print_count', 'INTEGER NOT NULL DEFAULT 0'], ['dispatch_invoice_no', 'TEXT'],
+      ['courier_tracking_no', 'TEXT'], ['dispatch_date', 'TEXT'], ['receipt_date', 'TEXT'],
+      ['dispatched_at', 'TEXT'], ['dispatched_by', 'TEXT'],
+    ]) {
+      db.exec(`ALTER TABLE hydro_station_bills ADD COLUMN ${c} ${t}`);
+    }
   }
   if (!cols.includes('final_approver_id')) {
     db.exec('ALTER TABLE hydro_station_bills ADD COLUMN final_approver_id TEXT');
@@ -2368,6 +2410,9 @@ function migratePeakAvailabilityColumns() {
   add('contracts', 'min_peak_availability_percent', 'REAL');
   add('contracts', 'peak_penalty_per_mwh', 'REAL');
   add('energy_data', 'peak_availability_percent', 'REAL');
+  // The home state's free power as the REA accounts it (table D2). A hydro
+  // bill's E2 is this figure, which differs from FEHS% of E1 by rounding.
+  add('energy_data', 'free_energy_mwh', 'REAL');
 }
 
 try {

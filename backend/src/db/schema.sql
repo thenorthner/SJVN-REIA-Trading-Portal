@@ -368,6 +368,8 @@ CREATE TABLE IF NOT EXISTS energy_data (
   -- Availability inside the contract's peak window, as the regional energy
   -- account or the JMR reports it. Monthly, like everything else here.
   peak_availability_percent REAL,
+  -- Home-state free power as the REA's table D2 accounts it (hydro stations).
+  free_energy_mwh REAL,
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','VALIDATED','LOCKED','DISPUTED')),
   deviation_notes TEXT,
   billing_family_ref TEXT, -- BFR/{contract}/{YYYY-MM}/{S2S|S2B} — provisional↔final trail key
@@ -2872,7 +2874,7 @@ CREATE TABLE IF NOT EXISTS hydro_station_bills (
   -- bill when an input changes (β certified late, REA revised) and carries only
   -- the difference. FINAL closes the month against the final REA.
   bill_kind TEXT NOT NULL DEFAULT 'PROVISIONAL'
-    CHECK (bill_kind IN ('PROVISIONAL','REVISION','FINAL')),
+    CHECK (bill_kind IN ('PROVISIONAL','REVISION','FINAL','ADDITIONAL','TCS','PTC')),
   revises_bill_id TEXT REFERENCES hydro_station_bills(id),
   rea_reference TEXT,                   -- e.g. "Provisional REA dated 01.07.2026"
   revision_reason TEXT,
@@ -2943,6 +2945,23 @@ CREATE TABLE IF NOT EXISTS hydro_station_bills (
   checked_by TEXT,
   issued_by TEXT,
   issued_at TEXT,
+
+  -- Release, print and despatch. A bill is released once, printed as often as
+  -- the desk needs, and despatched with the courier details it was sent under —
+  -- which is the only record of when the beneficiary actually received it, and
+  -- so the only thing that makes a disputed due date arguable.
+  released_at TEXT,
+  released_by TEXT,
+  printed_at TEXT,
+  print_count INTEGER NOT NULL DEFAULT 0,
+  -- The number the despatched bill goes out under, as the beneficiary will
+  -- quote it back. Kept apart from bill_no, which is this system's own key.
+  dispatch_invoice_no TEXT,
+  courier_tracking_no TEXT,
+  dispatch_date TEXT,
+  receipt_date TEXT,
+  dispatched_at TEXT,
+  dispatched_by TEXT,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -3208,3 +3227,160 @@ CREATE TABLE IF NOT EXISTS client_exchange_portfolios (
   UNIQUE (client_id, exchange),
   UNIQUE (exchange, portfolio_id)
 );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Additional charges and TCS on a hydro station
+--
+-- Not everything a station bills is capacity and energy. Auxiliary consumption
+-- beyond the normative allowance, foreign exchange rate variation on a foreign
+-- loan, and similar items are charged separately and then claimed on a bill of
+-- their own; tax collected at source is claimed per beneficiary against money
+-- already received. Both are approved and despatched like any other bill, so
+-- they become rows in hydro_station_bills and the entries behind them live here.
+
+-- An item the desk has decided to charge but has not yet claimed on a bill.
+CREATE TABLE IF NOT EXISTS hydro_additional_charges (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  -- AUX_CONSUMPTION  auxiliary consumption beyond the normative allowance
+  -- FERV             foreign exchange rate variation on foreign-currency loans
+  -- OTHER            anything the tariff order allows that is none of the above
+  charge_type TEXT NOT NULL CHECK (charge_type IN ('AUX_CONSUMPTION','FERV','OTHER')),
+  -- The month the charge arises for, which is not necessarily the month it is
+  -- claimed in: a FERV entry for April may only be claimable in August.
+  period_month TEXT NOT NULL,             -- YYYY-MM
+  amount REAL NOT NULL,
+  remarks TEXT,
+  -- Set when the entry is claimed, which is what stops it being claimed twice.
+  claimed_bill_id TEXT REFERENCES hydro_station_bills(id),
+  claimed_at TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hydro_add_charges_contract
+  ON hydro_additional_charges (contract_id, period_month);
+
+-- Tax collected at source, claimed from one beneficiary.
+--
+-- TCS is charged on money actually received rather than on energy supplied, so
+-- it is per beneficiary and carries the receipt it was computed against; it is
+-- never apportioned across the station the way a capacity charge is.
+CREATE TABLE IF NOT EXISTS hydro_tcs_claims (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  bill_id TEXT REFERENCES hydro_station_bills(id),
+  beneficiary_name TEXT NOT NULL,
+  beneficiary_id TEXT REFERENCES entities(id),
+  period_month TEXT NOT NULL,             -- YYYY-MM
+  payment_date TEXT,
+  amount_received REAL NOT NULL DEFAULT 0,
+  tcs_applicable_amount REAL NOT NULL DEFAULT 0,
+  tcs_rate_pct REAL NOT NULL DEFAULT 0,
+  tcs_amount REAL NOT NULL DEFAULT 0,
+  remarks TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hydro_tcs_contract
+  ON hydro_tcs_claims (contract_id, period_month);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- FI integration: what Commercial hands Finance at month end
+--
+-- C&SO raises the bills; corporate Finance books the sale. At month end the
+-- month's bills are gathered into a posting, checked, and then posted to the
+-- finance ledger — and a posting that went in wrong is reversed rather than
+-- edited, because a booked entry is Finance's record, not ours to rewrite.
+--
+-- A posting is built once per station, month and bill category, which is what
+-- stops the same sale being booked twice.
+CREATE TABLE IF NOT EXISTS hydro_fi_postings (
+  id TEXT PRIMARY KEY,
+  posting_no TEXT UNIQUE NOT NULL,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  station_name TEXT NOT NULL,
+  plant_code TEXT,                       -- NJHPS=001, RHPS=002
+  period_month TEXT NOT NULL,            -- YYYY-MM
+  -- What is being booked. HYDRO is the monthly energy bill; the others are the
+  -- claims, kept apart because Finance books them to different heads.
+  bill_category TEXT NOT NULL DEFAULT 'HYDRO'
+    CHECK (bill_category IN ('HYDRO','ADDITIONAL','TCS')),
+
+  bills_count INTEGER NOT NULL DEFAULT 0,
+  sale_amount REAL NOT NULL DEFAULT 0,       -- capacity + energy billed
+  nrldc_amount REAL NOT NULL DEFAULT 0,      -- passed through, booked separately
+  tcs_amount REAL NOT NULL DEFAULT 0,
+  total_amount REAL NOT NULL DEFAULT 0,
+
+  -- PREPARED is built and checkable; POSTED has gone to Finance and carries the
+  -- document number Finance returned; REVERSED has been backed out.
+  status TEXT NOT NULL DEFAULT 'PREPARED'
+    CHECK (status IN ('PREPARED','POSTED','REVERSED')),
+  fi_document_no TEXT,                   -- the voucher Finance booked it under
+  posted_at TEXT,
+  posted_by TEXT,
+  reversed_at TEXT,
+  reversed_by TEXT,
+  reversal_reason TEXT,
+  reverses_posting_id TEXT REFERENCES hydro_fi_postings(id),
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One live posting per station, month and category. A reversed posting is
+-- excluded so the month can be rebuilt and posted again after a correction.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_hydro_fi_posting_period
+  ON hydro_fi_postings (contract_id, period_month, bill_category)
+  WHERE status <> 'REVERSED';
+
+-- Which bills a posting booked, frozen at the amounts it booked them at, so a
+-- later revision to a bill cannot silently restate what Finance already has.
+CREATE TABLE IF NOT EXISTS hydro_fi_posting_lines (
+  id TEXT PRIMARY KEY,
+  posting_id TEXT NOT NULL REFERENCES hydro_fi_postings(id) ON DELETE CASCADE,
+  bill_id TEXT NOT NULL REFERENCES hydro_station_bills(id),
+  bill_no TEXT NOT NULL,
+  bill_kind TEXT NOT NULL,
+  sale_amount REAL NOT NULL DEFAULT 0,
+  nrldc_amount REAL NOT NULL DEFAULT 0,
+  tcs_amount REAL NOT NULL DEFAULT 0,
+  total_amount REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hydro_fi_lines_posting
+  ON hydro_fi_posting_lines (posting_id);
+
+-- Power trading (PTC) bills raised off a hydro station.
+--
+-- A trading bill is not a tariff bill: there is no availability, no design
+-- energy and no beneficiary allocation. SJVN sells a quantum to one exchange
+-- counterparty over a date range, and what it is owed is the gross sale less
+-- the trading expense. Everything after that — despatch, payment, the account
+-- and the reversals — is the same machinery the tariff bills use, so the bill
+-- itself is a hydro_station_bills row of kind PTC and only the trade-specific
+-- figures live here.
+CREATE TABLE IF NOT EXISTS hydro_ptc_bills (
+  id TEXT PRIMARY KEY,
+  bill_id TEXT NOT NULL REFERENCES hydro_station_bills(id) ON DELETE CASCADE,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  -- The trading counterparty the power was sold to. Not a beneficiary of the
+  -- station's REA allocation, which is why it is named rather than looked up.
+  exchange_beneficiary TEXT NOT NULL,
+  from_date TEXT NOT NULL,
+  to_date TEXT NOT NULL,
+  due_date TEXT,
+  energy_kwh REAL NOT NULL DEFAULT 0,
+  gross_sale REAL NOT NULL DEFAULT 0,
+  trading_expense REAL NOT NULL DEFAULT 0,
+  -- gross_sale - trading_expense, stored rather than derived so the bill keeps
+  -- the figure it was raised on if either side is ever corrected.
+  net_amount REAL NOT NULL DEFAULT 0,
+  remarks TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hydro_ptc_contract
+  ON hydro_ptc_bills (contract_id, from_date);

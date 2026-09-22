@@ -33,10 +33,9 @@ const CustomTooltip = ({ active, payload, label }) => {
             return (
               <div key={index} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, fontSize: 13 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div 
-                    style={{ width: 10, height: 10, borderRadius: 999 }} 
-                    style={{ backgroundColor: entry.color }}
-                  ></div>
+                  {/* One style prop: a second one replaced the first, and the
+                      legend dot lost its size and shape. */}
+                  <div style={{ width: 10, height: 10, borderRadius: 999, backgroundColor: entry.color, flexShrink: 0 }}></div>
                   <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{entry.name}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>

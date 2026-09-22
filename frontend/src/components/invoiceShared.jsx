@@ -283,6 +283,17 @@ export function ValidationCompareModal({
             </div>
           )}
         </div>
+        {/* With no system invoice there are no lines to compare, and the panel
+            showed only a "NO COUNTERPART" badge — the reason, and what to do
+            about it, were in the server's refusal but never on screen. */}
+        {validationResult.status === 'NO_COUNTERPART' && (
+          <div className="inline-note" role="status" style={{ marginTop: 14 }}>
+            No system counterpart invoice found for this contract and billing period.{' '}
+            {perspective === 'seller'
+              ? 'SJVN has not raised its own invoice for this month yet, so there is nothing to compare yours against. Validate again once it has.'
+              : 'Raise the system invoice for this contract and month under Billing & Invoicing, then validate again.'}
+          </div>
+        )}
         {validationResult.lines?.length > 0 && (
           <table className="detail-table" style={{ width: '100%', marginTop: 16 }}>
             <thead>

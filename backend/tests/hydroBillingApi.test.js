@@ -652,6 +652,7 @@ describe('the beneficiary ledger once a bill is issued', () => {
     const pay = await post('/api/hydro-billing/ledger/payment', reia, {
       contract_id: contract.id, beneficiary: 'GoHP', amount: owed,
       payment_date: '2026-07-20', mode: 'RTGS', reference: 'UTR-123',
+      rebate: false, // clearing only; the rebate has its own tests
     });
     expect(pay.status).toBe(200);
     expect(pay.body.unapplied).toBe(0);
@@ -665,7 +666,7 @@ describe('the beneficiary ledger once a bill is issued', () => {
     const before = await get(`/api/hydro-billing/ledger?contract_id=${contract.id}&beneficiary=GoHP`, viewer);
     const pay = await post('/api/hydro-billing/ledger/payment', reia, {
       contract_id: contract.id, beneficiary: 'GoHP',
-      amount: before.body.totals.outstanding + 5000, payment_date: '2026-07-20',
+      amount: before.body.totals.outstanding + 5000, payment_date: '2026-07-20', rebate: false,
     });
     expect(pay.body.unapplied).toBe(5000);
     expect(pay.body.note).toMatch(/unapplied/);
@@ -796,6 +797,115 @@ describe('issue and cancel', () => {
     await create();
     const r = await post(`/api/hydro-billing/${may.body.id}/cancel`, reia, { reason: 'wrong REA' });
     expect(r.body.warning).toMatch(/2026-06/);
+  });
+});
+
+describe('release, print and despatch', () => {
+  let billId;
+
+  async function issued() {
+    const maker = makeUser('REIA_USER', { name: 'Despatch Maker' });
+    const hod = makeUser('REIA_ADMIN', { name: 'Despatch HOD' });
+    const b = await post('/api/hydro-billing', signFor(maker), { contract_id: contract.id, ...JUNE });
+    await post(`/api/hydro-billing/${b.body.id}/send-for-approval`, signFor(maker), {
+      next_approver_id: hod.id, final_approver_id: hod.id, comments: 'go',
+    });
+    await post(`/api/hydro-billing/${b.body.id}/approve`, signFor(hod), {
+      action: 'APPROVE', comments: 'approved',
+    });
+    await post(`/api/hydro-billing/${b.body.id}/issue`, reia, { due_date: '2026-07-31' });
+    return b.body.id;
+  }
+
+  beforeEach(async () => { billId = await issued(); });
+
+  it('releases an issued bill once', async () => {
+    const first = await post(`/api/hydro-billing/${billId}/release`, reia, {});
+    expect(first.status).toBe(200);
+    expect(first.body.released_at).toBeTruthy();
+
+    const again = await post(`/api/hydro-billing/${billId}/release`, reia, {});
+    expect(again.status).toBe(409);
+    expect(again.body.error).toMatch(/already released/);
+  });
+
+  it('will not release a bill that is still a draft', async () => {
+    const draft = await post('/api/hydro-billing', reia, {
+      contract_id: contract.id, ...JUNE, billing_month: '2026-05',
+    });
+    const r = await post(`/api/hydro-billing/${draft.body.id}/release`, reia, {});
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/only an issued bill/);
+  });
+
+  it('renders the four sheets as a PDF', async () => {
+    await post(`/api/hydro-billing/${billId}/release`, reia, {});
+    const r = await request(app).get(`/api/hydro-billing/${billId}/pdf`).set(auth(viewer))
+      .buffer(true).parse((res, cb) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
+    expect(r.status).toBe(200);
+    expect(r.headers['content-type']).toMatch(/application\/pdf/);
+    expect(r.body.slice(0, 5).toString()).toBe('%PDF-');
+    // Four sheets: the station bill, the allocation, the NRLDC breakup and the
+    // beneficiary charges — the NRLDC sheet appears because JUNE carries a fee.
+    expect(r.body.toString('latin1').match(/\/Type\s*\/Page[^s]/g).length).toBe(4);
+  });
+
+  it('counts a print only once the bill has been released', async () => {
+    await request(app).get(`/api/hydro-billing/${billId}/pdf`).set(auth(viewer));
+    let stored = await get(`/api/hydro-billing/${billId}`, viewer);
+    expect(stored.body.print_count).toBe(0);
+
+    await post(`/api/hydro-billing/${billId}/release`, reia, {});
+    await request(app).get(`/api/hydro-billing/${billId}/pdf`).set(auth(viewer));
+    stored = await get(`/api/hydro-billing/${billId}`, viewer);
+    expect(stored.body.print_count).toBe(1);
+    expect(stored.body.printed_at).toBeTruthy();
+  });
+
+  it('records the courier details the bill went out under', async () => {
+    await post(`/api/hydro-billing/${billId}/release`, reia, {});
+    const r = await post(`/api/hydro-billing/${billId}/dispatch`, reia, {
+      dispatch_invoice_no: 'SJVN/NJHPS/2026-06/001',
+      courier_tracking_no: 'BLUEDART-7712904',
+      dispatch_date: '2026-07-05',
+      receipt_date: '2026-07-08',
+    });
+    expect(r.status).toBe(200);
+    expect(r.body.courier_tracking_no).toBe('BLUEDART-7712904');
+    expect(r.body.dispatch_date).toBe('2026-07-05');
+    expect(r.body.receipt_date).toBe('2026-07-08');
+    expect(r.body.dispatched_at).toBeTruthy();
+  });
+
+  it('will not despatch a bill that was never released', async () => {
+    const r = await post(`/api/hydro-billing/${billId}/dispatch`, reia, { dispatch_date: '2026-07-05' });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/not been released/);
+  });
+
+  it('insists on a despatch date', async () => {
+    await post(`/api/hydro-billing/${billId}/release`, reia, {});
+    const r = await post(`/api/hydro-billing/${billId}/dispatch`, reia, { courier_tracking_no: 'X' });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/dispatch_date is required/);
+  });
+
+  it('refuses a receipt date before the despatch date', async () => {
+    await post(`/api/hydro-billing/${billId}/release`, reia, {});
+    const r = await post(`/api/hydro-billing/${billId}/dispatch`, reia, {
+      dispatch_date: '2026-07-05', receipt_date: '2026-07-01',
+    });
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/before it was despatched/);
+  });
+
+  it('lets a viewer print but not release or despatch', async () => {
+    expect((await post(`/api/hydro-billing/${billId}/release`, viewer, {})).status).toBe(403);
+    expect((await post(`/api/hydro-billing/${billId}/dispatch`, viewer, { dispatch_date: '2026-07-05' })).status).toBe(403);
   });
 });
 

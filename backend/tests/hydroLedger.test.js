@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import db from '../src/db/index.js';
 import { newId } from '../src/util.js';
 import {
-  postBillToLedger, recordPayment, reversePayment, resetClearing, accountMaintenance,
+  postBillToLedger, recordPayment as recordPaymentWithRebate, reversePayment, resetClearing, accountMaintenance,
   accountDisplay, openDebits, openCredits, outstandingOf, unappliedOf,
   accruedLpsFor, postLps, billReversalBlockers, reverseBillDocs, dueDateFor,
 } from '../src/services/hydroLedger.js';
@@ -13,6 +13,11 @@ import {
 
 let contractId;
 let bill;
+
+// These tests are about how money clears, so the early-payment rebate is kept
+// out of them (it has its own suite, hydroLedgerRebateLps). Without this the
+// rebate would depend on whether an earlier suite had seeded the masters.
+const recordPayment = (args) => recordPaymentWithRebate({ rebate: false, ...args });
 
 /** A station bill with two beneficiaries owing round numbers, so the ledger
  *  arithmetic is readable rather than buried in nine-digit rupee figures. */

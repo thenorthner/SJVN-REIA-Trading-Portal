@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification } from '../util.js';
+import { payableNow } from '../disputesConstants.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -15,6 +16,24 @@ const signedDelta = (type, amount) => (type === 'DEBIT' ? 1 : -1) * (Number(amou
 function applyToInvoice(invoiceId, delta) {
   db.prepare(`UPDATE invoices SET other_adjustments = COALESCE(other_adjustments,0) + ?, total_amount = COALESCE(total_amount,0) + ?, updated_at = datetime('now') WHERE id = ?`)
     .run(delta, delta, invoiceId);
+  resettle(invoiceId);
+}
+
+/**
+ * Re-read whether the bill is paid once a note has moved its total. A debit
+ * note on a PAID bill leaves money owing again; a credit note can finish a bill
+ * that was part-paid. Only the paid/part-paid states move — a bill in dispute
+ * or not yet sent keeps its own status.
+ */
+function resettle(invoiceId) {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
+  if (!inv || !['PAID', 'PARTIALLY_PAID'].includes(inv.status)) return;
+  const paid = db.prepare('SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)),0) s FROM payments WHERE invoice_id = ?').get(invoiceId).s;
+  const payable = payableNow(inv).payable_now;
+  const next = paid >= payable - 0.005 ? 'PAID' : (paid > 0 ? 'PARTIALLY_PAID' : 'SENT');
+  if (next !== inv.status) {
+    db.prepare(`UPDATE invoices SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(next, invoiceId);
+  }
 }
 
 router.get('/', requireRole(...READ), (req, res) => {
@@ -46,6 +65,10 @@ router.post('/', requireRole(...WRITE), (req, res) => {
   if (!note_type) return res.status(400).json({ error: 'note_type must be DEBIT or CREDIT' });
   const amount = Math.abs(Number(b.amount));
   if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'A positive amount is required' });
+  // A credit note cannot take a bill below nothing.
+  if (note_type === 'CREDIT' && amount > (Number(inv.total_amount) || 0) + 0.005) {
+    return res.status(400).json({ error: `A credit note of ${amount} exceeds the bill's total of ${inv.total_amount}` });
+  }
   const REASONS = ['REVISED_REA', 'CHANGE_IN_LAW', 'TRANSMISSION_CHARGES', 'LPS', 'COMPENSATION_EVENT', 'LIQUIDATED_DAMAGES', 'OTHER'];
   const reason_code = REASONS.includes(b.reason_code) ? b.reason_code : 'REVISED_REA';
 

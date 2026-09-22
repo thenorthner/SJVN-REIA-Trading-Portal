@@ -753,7 +753,7 @@ router.post('/:id/regenerate-statement', requireRole(...REIA_WRITE, 'TRADING_USE
 
   db.prepare(`
     UPDATE reconciliations 
-    SET version = ?, items_count = ?, items_auto_matched = ?, items_exception = ?,
+    SET version = ?, items_total = ?, items_auto_matched = ?, items_exception = ?,
         auto_match_pct = ?, unreconciled_amount = ?, status = ?, updated_at = datetime('now') 
     WHERE id = ?
   `).run(nextVer, items.length, matched, exceptions, autoMatchPct, unrecon, newStatus, recon.id);

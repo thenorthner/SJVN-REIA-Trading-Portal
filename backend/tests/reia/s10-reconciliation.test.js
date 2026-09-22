@@ -55,4 +55,18 @@ describe('S10 Reconciliation', () => {
     expect(recon.auto_match_pct).toBeGreaterThanOrEqual(0);
     expect(recon.auto_match_pct).toBeLessThanOrEqual(100);
   });
+
+  // The "Regenerate statement (Re-sync)" button wrote to a column that does not
+  // exist (items_count; the table's is items_total), so every press answered 500
+  // and the statement never moved past its first version. Found by the button audit.
+  it('regenerates the statement as the next version', async () => {
+    const r = await run();
+    const id = r.body.id;
+    const res = await request(app).post(`/api/reconciliation/${id}/regenerate-statement`).set(auth(reia));
+    expect(res.status, res.text).toBe(200);
+    expect(res.body.version).toBe(2);
+    const row = db.prepare('SELECT version, items_total FROM reconciliations WHERE id = ?').get(id);
+    const items = db.prepare('SELECT COUNT(*) c FROM recon_items WHERE reconciliation_id = ?').get(id).c;
+    expect(row).toMatchObject({ version: 2, items_total: items });
+  });
 });

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { ROLE_GROUPS } from '../roles.js';
 
 const client = axios.create({ baseURL: '/api' });
 
@@ -485,6 +486,7 @@ export const api = {
       if (note) fd.append('note', note);
       return client.post(`/disputes/${id}/evidence`, fd).then((r) => r.data);
     },
+    downloadEvidence: (id, filename) => client.get(`/disputes/${id}/evidence/${encodeURIComponent(filename)}`, { responseType: 'blob' }).then((r) => r.data),
     slaCheck: () => p('/disputes/sla/check'),
   },
   paymentSecurity: {
@@ -828,6 +830,8 @@ export const api = {
     get: (id) => g(`/hydro-billing/${id}`),
     preview: (body) => p('/hydro-billing/preview', body),
     create: (body) => p('/hydro-billing', body),
+    fromRea: (body) => p('/hydro-billing/from-rea', body),
+    fromReaJob: (id) => g(`/hydro-billing/from-rea/jobs/${id}`),
     issue: (id, body) => p(`/hydro-billing/${id}/issue`, body || {}),
     cancel: (id, reason) => p(`/hydro-billing/${id}/cancel`, { reason }),
     allocations: (params) => g('/hydro-billing/allocations', params),
@@ -848,6 +852,30 @@ export const api = {
     accountMaintenance: (docId, body) => p(`/hydro-billing/ledger/${docId}/account-maintenance`, body || {}),
     lpsPreview: (params) => g('/hydro-billing/ledger/lps', params),
     postLps: (body) => p('/hydro-billing/ledger/lps', body),
+    // Release, print and despatch. The PDF goes through the shared downloader so
+    // it carries the auth header and unwraps a JSON error into a real message.
+    release: (id) => p(`/hydro-billing/${id}/release`, {}),
+    downloadPdf: (id, billNo) =>
+      api.reports.downloadPdf(`/hydro-billing/${id}/pdf`, `${String(billNo || id).replace(/[^\w.-]+/g, '_')}.pdf`),
+    dispatch: (id, body) => p(`/hydro-billing/${id}/dispatch`, body),
+    // Additional charges and TCS
+    charges: (params) => g('/hydro-billing/charges', params),
+    addCharge: (body) => p('/hydro-billing/charges', body),
+    claimCharges: (body) => p('/hydro-billing/charges/claim', body),
+    tcsClaims: (params) => g('/hydro-billing/tcs', params),
+    previewTcs: (body) => p('/hydro-billing/tcs/preview', body),
+    claimTcs: (body) => p('/hydro-billing/tcs', body),
+    // FI integration — the month-end handover to corporate Finance
+    fiPostings: (params) => g('/hydro-billing/fi', params),
+    fiBookable: (params) => g('/hydro-billing/fi/bookable', params),
+    fiPosting: (id) => g(`/hydro-billing/fi/${id}`),
+    fiPrepare: (body) => p('/hydro-billing/fi/prepare', body),
+    fiPost: (id, body) => p(`/hydro-billing/fi/${id}/post`, body || {}),
+    fiReverse: (id, reason) => p(`/hydro-billing/fi/${id}/reverse`, { reason }),
+    // Power trading (PTC)
+    ptcBills: (params) => g('/hydro-billing/ptc', params),
+    ptcConsolidate: (body) => p('/hydro-billing/ptc/consolidate', body),
+    createPtc: (body) => p('/hydro-billing/ptc', body),
     updateAllocation: (id, body) => patch(`/hydro-billing/allocations/${id}`, body),
   },
   marketAnalytics: {
@@ -917,10 +945,14 @@ export const api = {
      * platform now holds actual clearance records, so the warnings are derived
      * from those and disappear when a clearance is renewed.
      */
-    list: async () => {
+    list: async (role) => {
+      // Only the trading desk may read clearances. Asking on everyone's behalf
+      // drew a 403 for every other role on every page and every 20-second
+      // refresh — and each refusal is written to the audit log as ACCESS_DENIED,
+      // burying real refusals under the bell's own.
       const [serverNotifs, clearance] = await Promise.all([
         g('/notifications').catch(() => []),
-        g('/bids/standing-clearance').catch(() => null),
+        ROLE_GROUPS.TRADING_ALL.includes(role) ? g('/bids/standing-clearance').catch(() => null) : null,
       ]);
       if (!clearance) return serverNotifs;
 

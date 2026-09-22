@@ -152,7 +152,8 @@ export function getIexConfig() {
   const token = envOrParam('IEX_API_TOKEN', 'iex_api_token', '');
   const loginUserId = envOrParam('IEX_LOGIN_USER_ID', 'iex_login_user_id', '');
   const participantId = envOrParam('IEX_PARTICIPANT_ID', 'iex_participant_id', '');
-  // 'ALL' is the spec's own wildcard for both of these.
+  // 'ALL' is the spec's wildcard for the portfolio only; for the bid area it
+  // means "every area in the bid area master" (see fetchClearedResults).
   const bidAreaId = envOrParam('IEX_BID_AREA_ID', 'iex_bid_area_id', 'ALL');
   const portfolioId = envOrParam('IEX_PORTFOLIO_ID', 'iex_portfolio_id', 'ALL');
   const environment = envOrParam('IEX_ENVIRONMENT', 'iex_environment', 'UAT').toUpperCase();
@@ -186,10 +187,18 @@ export function getIexConfig() {
   };
 }
 
-/** Headers every IEX request carries, per the API header table in the spec. */
+/**
+ * Headers every IEX request carries.
+ *
+ * The spec's header table names the token field `Authentication`, but the UAT
+ * gateway rejects that with 401 "UnAuthorized User!" and accepts the same
+ * token under the standard `Authorization` header (verified from the
+ * whitelisted server on 22-Sep-2026: every other variant, including a
+ * garbage token, got the same 401).
+ */
 function iexHeaders(cfg) {
   return {
-    Authentication: `Bearer ${cfg.token}`,
+    Authorization: `Bearer ${cfg.token}`,
     UserId: cfg.loginUserId,
     ParticipantId: cfg.participantId || '',
     'Content-Type': 'application/json',
@@ -342,7 +351,12 @@ export async function fetchDeliveryDates(product) {
   if (!cfg.live) return { ok: true, mode: 'STUB', dates: null, note: stubNote(cfg) };
   try {
     const data = await iexGet(cfg, product, `${productPath(product)}/api/v2/deliverydates/${cfg.loginUserId},${cfg.participantId}`);
-    const rows = data?.DeliveryDates || data?.DeliveryDateDetails || (Array.isArray(data) ? data : []);
+    // The spec shows no envelope, and the segments differ on the live UAT
+    // gateway (22-Sep-2026): RTM wraps T-1/T/T+1 in `DeliveryDates: [...]`,
+    // while DAM, GDAM and HPDAM answer with one bare object for T+1.
+    const rows = Array.isArray(data) ? data
+      : data?.DeliveryDates || data?.DeliveryDateDetails
+      || (data?.DeliveryDate != null ? [data] : []);
     const dates = rows.map((r) => ({
       delivery_date_id: r.DeliveryDateId ?? null,
       epoch_seconds: Number(r.DeliveryDate),
@@ -395,10 +409,6 @@ const stubNote = (cfg) => {
  * it may as well not be read at all. A 401 arriving next to this line is
  * self-explanatory; a 401 on its own is not.
  */
-const expiryNote = (cfg) => (cfg.tokenExpired
-  ? `The configured token's own expiry claim passed at ${cfg.tokenExpiresAtIso}. IEX states tokens last six months and that this claim was a typo, so the request was still sent — but if it came back 401, this is why.`
-  : undefined);
-
 /**
  * What our portfolios actually cleared for a delivery date, block by block.
  *
@@ -422,13 +432,26 @@ export async function fetchClearedResults(product, deliveryDate) {
   try {
     const decimals = await getDecimals(product);
     const { epoch, source, warning } = await resolveDeliveryDate(product, deliveryDate);
-    const data = await iexGet(
-      cfg, product,
-      `${productPath(product)}/api/v2/portfolioschedulereport/${cfg.loginUserId},${cfg.participantId},${epoch},${cfg.bidAreaId},${cfg.portfolioId}`,
-    );
+
+    // 'ALL' is the spec's wildcard for PortfolioId only. The bid area must be a
+    // real id from the bid area master — the gateway answers the literal 'ALL'
+    // with the JSON string "Invalid Bid Area Id" (UAT, 22-Sep-2026). So with
+    // ALL configured, ask every area the master lists and merge.
+    const areas = isAllAreas(cfg.bidAreaId) ? await getBidAreaIds(product) : [cfg.bidAreaId];
+    const reports = [];
+    const areaNotes = [];
+    for (const area of areas) {
+      const data = await iexGet(
+        cfg, product,
+        `${productPath(product)}/api/v2/portfolioschedulereport/${cfg.loginUserId},${cfg.participantId},${epoch},${area},${cfg.portfolioId}`,
+      );
+      // The gateway reports refusals as a bare JSON string with HTTP 200.
+      if (typeof data === 'string') { areaNotes.push(`${area}: ${data}`); continue; }
+      for (const r of data?.ReportDetails || []) reports.push({ ...r, BidAreaId: r?.BidAreaId ?? area });
+    }
 
     const blocks = [];
-    for (const report of data?.ReportDetails || []) {
+    for (const report of reports) {
       for (const period of report?.PeriodDetails || []) {
         const schedules = period?.ScheduleDetails || [];
         const ourQtyRaw = schedules.reduce((sum, s) => sum + Number(s?.Quantity || 0), 0);
@@ -453,14 +476,36 @@ export async function fetchClearedResults(product, deliveryDate) {
       ok: true,
       mode: 'IEX',
       blocks,
+      bid_areas_queried: areas,
+      ...(areaNotes.length ? { area_notes: areaNotes } : {}),
       delivery_date_epoch: epoch,
       delivery_date_source: source,
       scaling: { qty_factor: decimals.tradeQty, price_factor: decimals.tradePrice, source: decimals.source },
-      warning: warning || expiryNote(cfg),
+      warning,
     };
   } catch (err) {
     return { ok: false, mode: 'IEX', error: err.message };
   }
+}
+
+const isAllAreas = (id) => !id || String(id).trim().toUpperCase() === 'ALL';
+
+const bidAreaCache = new Map();
+export function clearBidAreaCache() { bidAreaCache.clear(); }
+
+/**
+ * Bid area ids from the exchange's bid area master (13 on UAT: A1, A2, …).
+ * Cached per product on success only, like the decimals — a failed lookup
+ * must not pin an empty list for the life of the process.
+ */
+export async function getBidAreaIds(product) {
+  if (bidAreaCache.has(product)) return bidAreaCache.get(product);
+  const cfg = getIexConfig();
+  const data = await iexGet(cfg, product, `${productPath(product)}/api/v2/master/bidareas/${cfg.loginUserId},${cfg.participantId}`);
+  const ids = [...new Set((data?.BidAreaDetails || []).map((a) => a?.BidAreaId).filter(Boolean))];
+  if (!ids.length) throw new Error(`IEX bid area master returned no bid areas for ${product} — set iex_bid_area_id to a specific area.`);
+  bidAreaCache.set(product, ids);
+  return ids;
 }
 
 /**
@@ -517,7 +562,7 @@ export async function fetchMarketPq(product, deliveryDate) {
       delivery_date_epoch: epoch,
       delivery_date_source: source,
       scaling: { qty_factor: decimals.tradeQty, price_factor: decimals.tradePrice, source: decimals.source },
-      warning: warning || expiryNote(cfg),
+      warning,
     };
   } catch (err) {
     return { ok: false, mode: 'IEX', error: err.message };
@@ -543,7 +588,6 @@ export async function checkConnectivity(product = 'DAM') {
       elapsed_ms: Date.now() - started,
       business_date: data?.BusinessDate ?? null,
       business_date_iso: Number.isFinite(Number(data?.BusinessDate)) ? epochToDate(data.BusinessDate) : null,
-      warning: expiryNote(cfg),
     };
   } catch (err) {
     return {
@@ -551,7 +595,6 @@ export async function checkConnectivity(product = 'DAM') {
       base_url: cfg.baseUrlFor(product),
       elapsed_ms: Date.now() - started,
       error: err.message,
-      warning: expiryNote(cfg),
     };
   }
 }
