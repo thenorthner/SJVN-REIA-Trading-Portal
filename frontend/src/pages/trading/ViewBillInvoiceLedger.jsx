@@ -224,10 +224,12 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
     const amount = Number(window.prompt('Enter note amount', '0'));
     if (!Number.isFinite(amount) || amount <= 0) return;
     const reason = window.prompt('Enter reason / remarks', '') || '';
+    const tax = Number(window.prompt('Tax on the note (0 if none)', '0') || 0);
     try {
       await api.tradingNotes.create({
         note_type: note_type.toUpperCase(),
-        amount,
+        taxable_amount: amount,
+        tax_amount: Number.isFinite(tax) && tax > 0 ? tax : 0,
         reason,
         reason_code: 'RATE_REVISION',
         client_id: r.client_id || r.clientId || null,
@@ -237,10 +239,10 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
         rate_per_unit: r.rate_per_unit ?? null,
         view_bill_invoice_id: r.id,
       });
-      setMessage(`Note issued for ${r.invoice_no}`);
+      setMessage(`Note drafted for ${r.invoice_no} — it takes effect once someone else approves it in Billing & Settlement`);
       if (viewRow?.id === r.id) openView(r);
     } catch (err) {
-      setMessage(err.response?.data?.error || 'Failed to issue note');
+      setMessage(err.response?.data?.error || 'Failed to draft the note');
     }
   }
 

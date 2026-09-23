@@ -27,7 +27,14 @@ function financialYearLabel() {
   return `${String(startYear).slice(2)}-${String(startYear + 1).slice(2)}`;
 }
 
+/** Whether the signed-in user raised this note (they cannot approve their own). */
+export function isOwnTradingNote(note, user) {
+  if (!note || !user) return false;
+  return note.created_by_id ? note.created_by_id === user.id : note.created_by === user.name;
+}
+
 export default function BillingSettlement() {
+  const { user } = useAuth();
   const [tab, setTab] = useState('INVOICES');
   const [invoices, setInvoices] = useState([]);
   const [clients, setClients] = useState([]);
@@ -51,6 +58,8 @@ export default function BillingSettlement() {
     reason_code: 'SCHEDULE_SHORTFALL_PURCHASE',
     quantum_mwh: '',
     rate_per_unit: '',
+    tax_amount: '',
+    tax_label: '',
     amount: '',
     broker_reference: '',
     reason: '',
@@ -119,7 +128,8 @@ export default function BillingSettlement() {
     try {
       await api.tradingNotes.create({
         ...noteForm,
-        amount: Number(noteForm.amount),
+        taxable_amount: Number(noteForm.amount),
+        tax_amount: Number(noteForm.tax_amount || 0),
         quantum_mwh: noteForm.quantum_mwh ? Number(noteForm.quantum_mwh) : null,
         rate_per_unit: noteForm.rate_per_unit ? Number(noteForm.rate_per_unit) : null,
       });
@@ -133,6 +143,8 @@ export default function BillingSettlement() {
         quantum_mwh: '',
         rate_per_unit: '',
         amount: '',
+        tax_amount: '',
+        tax_label: '',
         broker_reference: '',
         reason: '',
       });
@@ -140,6 +152,29 @@ export default function BillingSettlement() {
       loadNotesSummary();
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to raise trading note');
+    }
+  }
+
+  async function handleApproveNote(id) {
+    try {
+      await api.tradingNotes.approve(id);
+      loadNotes();
+      loadNotesSummary();
+      if (selectedClient) api.billingSettlement.getLedger(selectedClient).then(setLedger).catch(() => {});
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to approve the note');
+    }
+  }
+
+  async function handleRejectNote(id) {
+    const reason = window.prompt('Why is this note rejected?');
+    if (!reason) return;
+    try {
+      await api.tradingNotes.reject(id, reason);
+      loadNotes();
+      loadNotesSummary();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to reject the note');
     }
   }
 
@@ -299,8 +334,18 @@ export default function BillingSettlement() {
         let type = 'neutral';
         if (r.status === 'ISSUED') type = 'primary';
         else if (r.status === 'SETTLED') type = 'success';
-        else if (r.status === 'CANCELLED') type = 'danger';
-        return <Badge type={type}>{r.status}</Badge>;
+        else if (r.status === 'CANCELLED' || r.status === 'REJECTED') type = 'danger';
+        else if (r.status === 'DRAFT') type = 'warning';
+        return (
+          <>
+            <Badge type={type}>{r.status}</Badge>
+            <div style={{ fontSize: 10, color: '#64748b' }}>
+              {r.status === 'DRAFT' ? `raised by ${r.created_by || '—'}`
+                : r.approved_by ? `${r.status === 'REJECTED' ? 'rejected' : 'approved'} by ${r.approved_by}` : ''}
+              {r.on_ledger ? ' · on ledger' : ''}
+            </div>
+          </>
+        );
       },
     },
     {
@@ -308,6 +353,27 @@ export default function BillingSettlement() {
       label: 'Actions',
       render: (r) => (
         <div style={{ display: 'flex', gap: 6 }}>
+          {r.status === 'DRAFT' && (isOwnTradingNote(r, user)
+            ? <span style={{ fontSize: 11, color: '#64748b' }}>awaiting another approver</span>
+            : (
+              <>
+                <button
+                  className="btn btn-sm"
+                  style={{ fontSize: 11, padding: '2px 8px', background: '#1d4ed8', color: '#fff', border: 'none' }}
+                  onClick={() => handleApproveNote(r.id)}
+                  title="Issue the note and post it to the client ledger"
+                >
+                  Approve
+                </button>
+                <button
+                  className="btn btn-sm"
+                  style={{ fontSize: 11, padding: '2px 8px' }}
+                  onClick={() => handleRejectNote(r.id)}
+                >
+                  Reject
+                </button>
+              </>
+            ))}
           {r.status === 'ISSUED' && (
             <>
               <button
@@ -622,7 +688,7 @@ export default function BillingSettlement() {
           <form onSubmit={handleCreateNote}>
             <div style={{ background: '#f8fafc', padding: 12, borderRadius: 6, marginBottom: 16, border: '1px solid #e2e8f0' }}>
               <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.5 }}>
-                <strong>Settlement Reconciler:</strong> Use this note to reconcile market borrowing differentials (e.g., shortfall replacement energy purchased via PTC / power exchange where broker raised a manual invoice in obligation report that was omitted in weekly payment report).
+                <strong>Settlement Reconciler:</strong> Use this note to reconcile market borrowing differentials (e.g., shortfall replacement energy purchased via PTC / power exchange where broker raised a manual invoice in obligation report that was omitted in weekly payment report). The note is saved as a draft: someone other than you approves it, and only then is it numbered and posted to the client's ledger.
               </div>
             </div>
 
@@ -685,6 +751,22 @@ export default function BillingSettlement() {
                     <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>
                   ))}
                 </select>
+              </Field>
+
+              <Field label="Tax on the note (₹)">
+                <input
+                  type="number" step="0.01" min="0" className="input" placeholder="0 if none"
+                  value={noteForm.tax_amount}
+                  onChange={(e) => setNoteForm({ ...noteForm, tax_amount: e.target.value })}
+                />
+              </Field>
+
+              <Field label="Tax label">
+                <input
+                  className="input" placeholder="e.g. IGST 18%"
+                  value={noteForm.tax_label}
+                  onChange={(e) => setNoteForm({ ...noteForm, tax_label: e.target.value })}
+                />
               </Field>
 
               <Field label="Broker / Manual Invoice Ref">

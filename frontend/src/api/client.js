@@ -1041,6 +1041,8 @@ export const api = {
     summary: (params) => g('/trading-notes/summary', params),
     get: (id) => g(`/trading-notes/${id}`),
     create: (body) => p('/trading-notes', body),
+    approve: (id, body) => p(`/trading-notes/${id}/approve`, body || {}),
+    reject: (id, reason) => p(`/trading-notes/${id}/reject`, { reason }),
     settle: (id, body) => p(`/trading-notes/${id}/settle`, body),
     cancel: (id, body) => p(`/trading-notes/${id}/cancel`, body),
   },

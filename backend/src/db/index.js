@@ -2197,6 +2197,83 @@ try {
 }
 
 /**
+ * Trading debit / credit notes as documents of their own (V2).
+ *
+ * They were a register: raised straight to ISSUED by one person, with no tax
+ * and no reach into the client's ledger, so a debit note nobody chased was
+ * never owed anywhere. V2 gives them the same shape as the REIA notes — a
+ * draft that a second person issues, the tax on the note, and a client-ledger
+ * entry when it is issued. Rows already on file become LEGACY: issued, but
+ * never posted to the ledger.
+ */
+function migrateTradingNotesV2() {
+  const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='trading_debit_credit_notes'").get()?.sql || '';
+  if (!ddl || ddl.includes("'REJECTED'")) return;
+  const oldCols = db.prepare('PRAGMA table_info(trading_debit_credit_notes)').all().map((c) => c.name);
+  const keep = ['id', 'note_no', 'note_type', 'client_id', 'trading_invoice_id', 'view_bill_invoice_id',
+    'billing_period', 'delivery_date', 'reason_code', 'quantum_mwh', 'rate_per_unit', 'amount',
+    'broker_reference', 'reason', 'status', 'issued_date', 'settled_date', 'cancelled_reason',
+    'created_by', 'created_at', 'updated_at'].filter((c) => oldCols.includes(c));
+  db.exec('PRAGMA foreign_keys=OFF');
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE trading_notes_v2 (
+        id TEXT PRIMARY KEY,
+        note_no TEXT UNIQUE NOT NULL,
+        note_type TEXT NOT NULL CHECK (note_type IN ('DEBIT','CREDIT')),
+        client_id TEXT NOT NULL REFERENCES trading_clients(id),
+        trading_invoice_id TEXT REFERENCES trading_invoices(id),
+        view_bill_invoice_id TEXT,
+        billing_period TEXT NOT NULL,
+        delivery_date TEXT,
+        reason_code TEXT NOT NULL DEFAULT 'SCHEDULE_SHORTFALL_PURCHASE' CHECK (reason_code IN (
+          'SCHEDULE_SHORTFALL_PURCHASE','SCHEDULE_EXCESS_RETURN','BROKER_MANUAL_INVOICE',
+          'OBLIGATION_PAYMENT_MISMATCH','RATE_REVISION','EXCHANGE_FEE_ADJUSTMENT','DSM_ADJUSTMENT','OTHER'
+        )),
+        quantum_mwh REAL,
+        rate_per_unit REAL,
+        amount REAL NOT NULL,
+        taxable_amount REAL,
+        tax_amount REAL NOT NULL DEFAULT 0,
+        tax_label TEXT,
+        broker_reference TEXT,
+        reason TEXT,
+        status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','ISSUED','SETTLED','CANCELLED','REJECTED')),
+        model TEXT NOT NULL DEFAULT 'V2' CHECK (model IN ('LEGACY','V2')),
+        ledger_entry_id TEXT,
+        issued_date TEXT,
+        settled_date TEXT,
+        cancelled_reason TEXT,
+        rejected_reason TEXT,
+        created_by TEXT,
+        created_by_id TEXT,
+        approved_by TEXT,
+        approved_by_id TEXT,
+        approved_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    db.exec(`
+      INSERT INTO trading_notes_v2 (${keep.join(', ')}, taxable_amount, model)
+      SELECT ${keep.join(', ')}, amount, 'LEGACY' FROM trading_debit_credit_notes;
+      DROP TABLE trading_debit_credit_notes;
+      ALTER TABLE trading_notes_v2 RENAME TO trading_debit_credit_notes;
+      CREATE INDEX IF NOT EXISTS idx_trading_notes_client ON trading_debit_credit_notes (client_id, billing_period);
+      CREATE INDEX IF NOT EXISTS idx_trading_notes_view_bill ON trading_debit_credit_notes (view_bill_invoice_id, billing_period);
+    `);
+  })();
+  db.exec('PRAGMA foreign_keys=ON');
+  console.log('[MIGRATE] trading_debit_credit_notes: V2 (draft/approval, tax, client ledger); existing notes kept as LEGACY');
+}
+
+try {
+  migrateTradingNotesV2();
+} catch (e) {
+  console.error('Trading note V2 migration failed:', e.message);
+}
+
+/**
  * REA Scraper fetch log table.
  */
 function migrateReaFetchLogSchema() {
