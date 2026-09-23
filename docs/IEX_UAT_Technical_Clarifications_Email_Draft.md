@@ -11,10 +11,16 @@
 
 **Send from the SJVN address** used for the UAT credentials.
 
-**To:** Sandeep Kumar (Market Operations, IEX)
-**Cc:** the IEX API support id on the credentials mail; SJVN Commercial & System Operation
+**Reply in the existing thread** (subject: *RE: IEX FO API (UAT/Alpha) — base URL,
+token validity and REC/ESCerts documents — SJVN Limited (N2DL0SJV0000)*), so that
+Sandeep's answers of 08-Sep-2026 stay attached below it. If a fresh mail is
+preferred, use: **SJVN UAT (N2DL0SJV0000 / SJVA1) — no market results on Alpha,
+REC 403, and API clarifications**
 
-**Subject:** SJVN UAT (N2DL0SJV0000 / SJVA1) — no market results on Alpha, REC 403, and API clarifications
+**To:** Sandeep.Kumar3@iexindia.com
+**Cc:** Sudhir.Bharti@iexindia.com; Kunal.Bhat@iexindia.com; Kapil.Saini@iexindia.com;
+nikhil.sharma34@sjvn.nic.in; praveen.kalta@sjvn.nic.in — the same list as the
+08-Sep thread.
 
 ---
 
@@ -27,9 +33,10 @@ APIs and the delivery-date APIs end to end.
 
 Before we can test the parts that matter for settlement — market clearing
 prices and our own schedule — we need your help on the points below. Items 1
-and 2 are blocking; items 3 to 9 are clarifications, several of which differ
+and 2 are blocking; items 3 to 11 are clarifications, several of which differ
 from the API documents and which we would ask you to confirm so that we do not
-carry a wrong assumption into production.
+carry a wrong assumption into production. Where your mail of 08-Sep-2026 already
+answered a point, we only ask you to confirm what we have implemented.
 
 ## 1. No market results on the Alpha (UAT) environment — blocking
 
@@ -109,19 +116,20 @@ Kindly confirm that `Authorization` is the correct header going forward, so that
 we do not have to change this at production cutover, and consider correcting the
 header table in the documents.
 
-## 4. Token validity: the issued token carries a one-hour expiry
+## 4. Token validity: the issued token still carries a one-hour expiry
 
-The UAT token issued to us has `iat` 26-Jul-2026 08:51 UTC and `exp`
-26-Jul-2026 09:51 UTC — one hour — although your mail states a validity of six
-months. The token does work today, so the gateway evidently does not enforce
-that claim.
+Your mail of 08-Sep-2026 confirmed six months' validity, a mail 15 days before
+expiry, and that the date on the first token was a typo — thank you. The token
+we hold still carries `iat` 26-Jul-2026 08:51 UTC and `exp` 26-Jul-2026 09:51
+UTC, and it does work today, so the gateway evidently does not enforce that
+claim.
 
-- **a.** Please issue a fresh token whose `exp` reflects the true validity, so
-  that our monitoring can rely on it.
+- **a.** Please issue a replacement token whose `exp` reflects the true
+  validity, so that our monitoring can rely on the token itself rather than on
+  a note in our configuration.
 - **b.** Please confirm whether the gateway validates `exp` at all, and how a
-  genuinely expired token will present itself (401 with which body?).
-- **c.** There is no login or refresh endpoint in the documents. Please confirm
-  the renewal process and the notice period before a token lapses.
+  genuinely expired token presents itself (401 with which body?), so that we can
+  tell it apart from the `401 UnAuthorized User!` we saw in item 3.
 
 ## 5. Delivery date API returns two different shapes
 
@@ -137,10 +145,11 @@ but please confirm that this difference is intentional and stable, and whether
 DAM can ever return more than one open delivery date (in which case we expect
 the wrapped form there too).
 
-We also confirm from these values that `DeliveryDate` is **UTC midnight**
-(1790121600 = 23-Sep-2026 00:00 UTC, exactly divisible by 86400) and not IST
-midnight. Please confirm, as a 5½-hour error would address the neighbouring
-trading day.
+On the midnight question from our earlier mail, your example (1788912000 =
+09-Sep-2026 00:00 UTC) and the values above both read as **UTC midnight**
+(1790121600 = 23-Sep-2026 00:00 UTC, exactly divisible by 86400). We have taken
+that as settled and use the epochs exactly as the APIs return them, as you
+advised; we mention it only so that the record is unambiguous.
 
 ## 6. Portfolio Schedule Report: `ALL` is not accepted as a Bid Area
 
@@ -181,9 +190,10 @@ works today), and tell us what changes if we later use a portfolio-level login.
 From the Asset Master on UAT: `OrderQtyDecimal 10`, `OrderPriceDecimal 1`,
 `TradeQtyDecimal 100`, `TradePriceDecimal 100`.
 
-We have implemented: results and the schedule report are divided by the **trade**
-decimals (100), i.e. quantity in MW and price in Rs/MWh; and, per your earlier
-mail, bid submission will multiply quantity by **10** (5.3 MW → 53).
+Following your mail of 08-Sep-2026, we have implemented: results and the
+schedule report divided by the **trade** decimals (100), i.e. quantity in MW and
+price in Rs/MWh; and bid submission, when it is enabled, multiplying quantity by
+**10** (5.3 MW → 53).
 
 Please confirm both, since a wrong assumption here is a silent factor-of-ten
 error that no error message would reveal:
@@ -224,6 +234,14 @@ RTM   ... "Market":4,"Status":"N","Session":1 ...   (GDAM Market 5, HPDAM Market
   for the production gateway. Our outbound IP will remain 49.50.97.173.
 - **d.** Any sandbox or contact window for a supervised first live call.
 
+## 11. C&S back office (post-trade reports)
+
+Your host table lists `alphawebportal.iexindia.com` for UAT and
+`energx.iexindia.com` for production, for post-trade reports. We have not
+called these yet. Please confirm whether the same token and whitelisted IP
+apply there, and share the API document for the post-trade reports we should
+use for settlement reconciliation (trade/obligation and payment reports).
+
 We are ready to test as soon as results are available on Alpha, or as soon as
 you confirm that we should place test bids there. Our integration is read-only
 today: bid submission, order entry and cancellation are deliberately not wired
@@ -232,5 +250,5 @@ up pending a controlled test window with you.
 Thanks and regards,
 
 Kshitij Sharma
-SJVN Limited
-Commercial & System Operation Department
+ERP Cell
+SJVN Corporate HQ, Shimla

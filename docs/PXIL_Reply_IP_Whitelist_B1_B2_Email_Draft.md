@@ -1,50 +1,58 @@
-# Reply draft — PXIL: IP for whitelisting, and dates for B1–B2
+# Reply draft — PXIL: IP for whitelisting, and where B1–B2 come from
 
 **To:** gaurav.tiwari@pxil.co.in
 **Cc:** it@pxil.co.in; avadheshkumar.bari@pxil.co.in
 **Subject:** Re: PXIL API Documentation — clarifications before Phase 1 integration
 
-> **17 Sep update:** on a call PXIL asked us to work on staging first. Over WhatsApp they confirmed the staging URL `https://stagingmypratyaydashboard.pxil.in/` (same paths), sent a staging token, and said staging needs its own IP whitelisting, which they will confirm once done. A3 and A4 below have been rewritten to match.
+> **Status.** PXIL (Gaurav Tiwari) has answered A1–A5 by email and asked, against B1–B2, for
+> "the exact date or date range for which you are facing these issues". This reply answers that.
 >
-> **Before sending:** confirm the server's outbound IP. The simplest way is to run `node backend/scripts/pxilProbe.js` on the server: PXIL's 403 shows the IP it saw. `curl -s ifconfig.me` works too. The app servers are on private addresses (10.10.237.60 / 192.168.58.63), so PXIL sees a NAT address. IEX whitelisted `49.50.97.173`, but that has not been proven to be our outbound address. **Do not send `223.31.159.139`.** That is the development Mac, which PXIL staging refused on 17 Sep.
+> **A3 changed.** On the 17 Sep call PXIL asked us to start on staging, and sent a staging URL and
+> token. Their written reply supersedes that: staging has no data, so **production**
+> (`https://dashboard.pxil.in/`) is the environment to use. Point `PXIL_BASE_URL`/`PXIL_API_TOKEN`
+> at production, not at `stagingmypratyaydashboard.pxil.in`.
+>
+> **Before sending — confirm the outbound IP.** `49.50.97.173` is the public IP IEX whitelisted for
+> this server and is the address given to WBES and NOAR as well. Confirm it is still what PXIL will
+> see by running `node backend/scripts/pxilProbe.js` on the server (a 403 reports the IP PXIL saw),
+> or `curl -s ifconfig.me`. **Do not send `223.31.159.139`** — that is the development Mac, which
+> PXIL refused on 17 Sep.
 
 ---
 
 Dear Gaurav,
 
-Thank you for the quick and clear reply, and for the revised documents. We have updated our integration to match:
+Thank you for the clear responses and for the revised documents. Our integration is updated to match:
 
-- **A1:** the daily report now calls `/PXILPublish/api/tam-gtam/`.
-- **A2:** TAM-GTAM, TAM-GTAM Slot-Wise, Format-D and Trade Margin use the Bearer token. Member DOR and Reverse Auction L1 Summary pass the token as `APITokenNo` in the query string. Please let us know when those two support the Bearer token, and we will switch them over.
-- **A3:** as agreed on the call, we will start on staging (`https://stagingmypratyaydashboard.pxil.in/`) with the staging token, then run the same calls on production (`https://dashboard.pxil.in/`) to reconcile actual figures.
-- **A5:** we use every URL exactly as it appears in the revised documents, with the trailing slash.
+- **A1:** the daily report calls `/PXILPublish/api/tam-gtam/`.
+- **A2:** TAM-GTAM, TAM-GTAM Slot-Wise, Format-D and Trade Margin use the Bearer token; Member DOR and Reverse Auction L1 Summary pass the token as `APITokenNo` in the query string. We will switch those two over whenever you upgrade them — please let us know when that happens.
+- **A3:** understood — we will work directly against production, `https://dashboard.pxil.in/`, and will not use the staging environment.
+- **A5:** we use every URL exactly as printed in the revised documents, including the trailing slash.
 
 **A4 — IP to whitelist**
 
-Please whitelist this public IP address on **both staging and production**:
+Please whitelist this public IP address on production:
 
 ```
 49.50.97.173
 ```
 
-This is the only address our calls will come from. Please let us know once staging is done, and we will make a first read-only call on all six APIs the same day.
+This is the only address our calls will originate from. Once whitelisting is done, please confirm, and we will make a first read-only call on all six APIs the same day.
 
-**Staging data.** You mentioned that staging data is stale. Could you tell us which dates it covers? We will query within that range, so an empty response is not mistaken for a failure.
+**B1–B2 — where these come from**
 
-**One small point on the revised documents.** The Member DOR and Reverse Auction L1 Summary documents still say "Auth Type: Bearer Token", but they also list `APITokenNo` as a required query parameter. We are following your email, which says these two do not support the Bearer token yet. You may want to correct the documents so no one else is confused.
+To answer your question directly: these are not issues we hit on live data. We have not been able to call the APIs at all yet, as our IP is not whitelisted. Both points are in the **sample responses printed in your API documents**, and they are still present in the revised documents you have just sent.
 
-**B1–B2 — dates**
+- **B1 — Member DOR.** `Member_DOR_API_Document.pdf`, section 4 (page 2). Sample application **`MG320260101WR32983`**, **delivery date 11-01-2026**. The `Total` is 14,42,000.683, but the `Category` values listed in the same sample add up to 13,26,614.363 — a difference of 1,15,386.32.
+- **B2 — Reverse Auction L1 Summary.** `Reverse_Auction_L1_Summary_API_Document.pdf`, section 4 (page 2). Sample auction **`AnydaySSC_R/05012026040244`**, `deliveryMonth` **07-01-2026**, `lastUpdate` 06-01-2026. The `L1` is 5.5, while the seller bids shown in the same sample are 89 (Hari Om enterprises, S1042) and 41 (Mahesh Chemicals, S1043).
 
-B1 and B2 do not come from live data. We have not called the APIs yet because our IP was not whitelisted. Both issues are in the **sample responses printed in the API documents**, and the revised documents you sent still contain them:
+So the question is about the documents rather than about a particular trading day: are these samples illustrative only, or do they show how the live figures are built? Specifically, what does `Total` include beyond the listed categories, and in what unit is `L1` expressed compared with `bidPrice`?
 
-- **B1:** `Member_DOR_API_Document.pdf`, section 4 (page 2), application `MG320260101WR32983`, delivery date 11-01-2026. `Total` is 14,42,000.683, but the listed `Category` values add up to 13,26,614.363, which is 1,15,386.32 less.
-- **B2:** `Reverse_Auction_L1_Summary_API_Document.pdf`, section 4 (page 2), auction `AnydaySSC_R/05012026040244`. `L1` is 5.5, but the seller bids are 89 and 41.
+If it helps your team to check against real data, the identifiers in those samples are application **`MG320260101WR32983`** for delivery date **11-01-2026** (Member DOR) and auction **`AnydaySSC_R/05012026040244`** for delivery **07-01-2026** (Reverse Auction). Once our IP is whitelisted we will run the same check on production ourselves and, if the gap appears in live data too, send you the exact application numbers and delivery dates.
 
-So the question is about the documents: are these samples illustrative only, or do they show how the live figures are built? In particular, what does `Total` include beyond the listed categories, and what unit is `L1` in compared with `bidPrice`?
+**One small point on the revised documents.** The Member DOR and Reverse Auction L1 Summary documents still state "Auth Type: Bearer Token" while also listing `APITokenNo` as a required query parameter. We are following your email, which says these two do not yet support the Bearer token. You may want to correct the documents so that no one else is caught by this.
 
-Once our IP is whitelisted, we will run the same check on staging, and then on production. If the gap appears there too, we will send you the exact application numbers and delivery dates.
-
-The remaining points in our earlier note (B3–B7, C and D) do not block us, and you can answer them whenever convenient. The one that would help most is **C1**: a sample `.json` response for each API, which would settle field names and date formats.
+The remaining points in our earlier note (B3–B7, C and D) do not block us and can be answered at your convenience. The most useful would be **C1**: a sample `.json` response for each API, which would settle field names and date formats in one go.
 
 A call would be welcome whenever it suits your team.
 
