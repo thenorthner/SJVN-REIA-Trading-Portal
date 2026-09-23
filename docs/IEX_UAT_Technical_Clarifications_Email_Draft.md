@@ -41,7 +41,7 @@ answered a point, we only ask you to confirm what we have implemented.
 ## 1. No market results on the Alpha (UAT) environment — blocking
 
 For every delivery date from **08-Sep-2026 to 23-Sep-2026**, on **all four
-segments**, `pqresults` returns an empty list:
+segments** — 64 calls in all — `pqresults` returns an empty list:
 
 ```
 GET {segment}/api/v2/pqresults/SJVA1,N2DL0SJV0000,{epoch}
@@ -86,8 +86,11 @@ Host: alpharecapi.iexindia.com
   de77018a3dd533c7788737474753a9f2f8c08337860ab35d4742dca5cf82a3b8
 ```
 
-The same server, the same second, is served normally by
-`alphaidamapi`, `alphahpdamapi` and `alphartmapi`. Kindly confirm:
+In the same run, seconds apart, the same server is served normally by
+`alphaidamapi`, `alphahpdamapi` and `alphartmapi`. The call carries
+`LoginUserId` and `Authorization` as the REC/EC document specifies, and the
+refusal is an HTML page from the gateway rather than an API response, so it
+appears to be refused before it reaches the application. Kindly confirm:
 
 - **a.** Is `49.50.97.173` whitelisted for the REC/EC host as well? If the REC
   whitelist is maintained separately, please add it.
@@ -178,8 +181,8 @@ Kindly confirm:
 
 The header table says `ParticipantId` is to be left **blank in case of
 Participant login**. The User Master shows `SJVA1` as `UserCategory 4` with
-`BidAreaId: ""`, and the User Portfolio Mapping shows two portfolios
-(`E1BR0SJV0001` and one more).
+`BidAreaId: ""`, and the User Portfolio Mapping returns two portfolios for
+SJVA1, the first being `E1BR0SJV0001`.
 
 Please confirm that for our login we should continue to send
 `UserId: SJVA1` and `ParticipantId: N2DL0SJV0000` on every call (which is what
@@ -198,8 +201,9 @@ price in Rs/MWh; and bid submission, when it is enabled, multiplying quantity by
 Please confirm both, since a wrong assumption here is a silent factor-of-ten
 error that no error message would reveal:
 
-- **a.** Divide by the decimal value itself (100), not by 10^100 — i.e. the
-  value is the divisor, as the document's own worked example implies.
+- **a.** The decimal value is the divisor itself (÷100), not an exponent, as
+  the document's own worked example implies ("Order Display Quantity = 10.0 and
+  Order Quantity Decimal = 10 … API Order Quantity value should be 100").
 - **b.** The submit side uses the **order** decimals and the result side the
   **trade** decimals.
 - **c.** Price: `TradePriceDecimal 100` gives Rs/MWh, and we convert to Rs/kWh
@@ -225,7 +229,8 @@ RTM   ... "Market":4,"Status":"N","Session":1 ...   (GDAM Market 5, HPDAM Market
 
 - **a.** Rate limits or throttling on these read APIs, and the expected polling
   frequency for PQ results and the schedule report. (The documents fix the
-  response timeout at 40 seconds, which we honour.)
+  response timeout at 40 seconds — point 6.0 of the DAM document — which we
+  honour.)
 - **b.** Pagination defaults and maximums on the bid book, trade book and
   portfolio bid status APIs.
 - **c.** For production cutover: confirmation of the production hosts
