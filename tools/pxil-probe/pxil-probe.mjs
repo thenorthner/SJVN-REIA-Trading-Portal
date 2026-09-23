@@ -92,12 +92,26 @@ function parseArgs(argv) {
   return { flags, positional };
 }
 
-/** Minimal .env reader: KEY=VALUE, '#' comments, optional quotes. */
+/**
+ * Minimal .env reader: KEY=VALUE, '#' comments, optional quotes.
+ *
+ * Commented keys are reported separately rather than merely skipped. The
+ * deployed .env is generated from .env.example, which ships every PXIL line
+ * commented out — so "the key is there but commented" is the single likeliest
+ * reason a run on the server finds no token, and the error message says so
+ * instead of leaving someone to guess.
+ */
 function readEnvFile(path) {
   const out = {};
+  const commented = [];
   for (const raw of readFileSync(path, 'utf8').split(/\r?\n/)) {
     const line = raw.trim();
-    if (!line || line.startsWith('#')) continue;
+    if (!line) continue;
+    if (line.startsWith('#')) {
+      const m = line.replace(/^#+\s*/, '').match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+      if (m) commented.push(m[1]);
+      continue;
+    }
     const eq = line.indexOf('=');
     if (eq < 1) continue;
     const key = line.slice(0, eq).trim();
@@ -107,7 +121,7 @@ function readEnvFile(path) {
     }
     out[key] = value;
   }
-  return out;
+  return { values: out, commented };
 }
 
 /**
@@ -121,10 +135,21 @@ function resolveConfig(flags) {
     : ['.env', join('backend', '.env'), join('..', 'backend', '.env'), join('..', '.env')].map((p) => resolve(p));
 
   let fileEnv = {};
+  let commented = [];
   let envPath = null;
+  const searched = [];
   for (const p of candidates) {
-    if (!existsSync(p)) continue;
-    try { fileEnv = readEnvFile(p); envPath = p; break; } catch { /* unreadable — fall through to the next */ }
+    if (!existsSync(p)) { searched.push({ path: p, found: false }); continue; }
+    try {
+      const parsed = readEnvFile(p);
+      fileEnv = parsed.values;
+      commented = parsed.commented;
+      envPath = p;
+      searched.push({ path: p, found: true });
+      break;
+    } catch (err) {
+      searched.push({ path: p, found: true, unreadable: err.message });
+    }
   }
   if (flags.env && !envPath) throw new Error(`No .env at ${resolve(String(flags.env))}`);
 
@@ -138,6 +163,8 @@ function resolveConfig(flags) {
     baseUrl: (flag('base') || pick('PXIL_BASE_URL') || PRODUCTION).replace(/\/$/, ''),
     portfolioId: flag('portfolio') || pick('PXIL_PORTFOLIO_ID'),
     envPath,
+    searched,
+    tokenCommentedOut: commented.includes('PXIL_API_TOKEN'),
   };
 }
 
@@ -241,8 +268,32 @@ async function main() {
   try { cfg = resolveConfig(flags); } catch (err) { console.error(err.message); process.exit(1); }
 
   if (!cfg.token) {
-    console.error('No PXIL token found. Pass --token=<token>, or set PXIL_API_TOKEN, or point --env at');
-    console.error('the deployed backend/.env. Production and staging have different tokens.');
+    console.error('No PXIL token found.');
+    console.error('');
+    console.error('Looked for an .env in:');
+    for (const s of cfg.searched) {
+      const note = !s.found ? 'not found'
+        : s.unreadable ? `unreadable — ${s.unreadable}`
+          : cfg.tokenCommentedOut ? 'found, but PXIL_API_TOKEN is commented out'
+            : 'found, but it has no PXIL_API_TOKEN';
+      console.error(`  ${s.path}  (${note})`);
+    }
+    console.error('');
+    if (cfg.tokenCommentedOut) {
+      console.error('That is the usual cause on this server: the deployed .env is generated from');
+      console.error('.env.example, which ships the PXIL lines commented out.');
+      console.error('');
+    }
+    console.error('Either pass the token on the command line:');
+    console.error('  node pxil-probe.mjs 2026-08-01 2026-09-22 --base=https://dashboard.pxil.in --token=<token>');
+    if (cfg.envPath) {
+      console.error('');
+      console.error(`or put it in ${cfg.envPath}:`);
+      console.error('  PXIL_API_TOKEN=<token>');
+    }
+    console.error('');
+    console.error('Production and staging have different tokens. Production is');
+    console.error('https://dashboard.pxil.in; the token that has been in backend/.env is staging\'s.');
     process.exit(1);
   }
 

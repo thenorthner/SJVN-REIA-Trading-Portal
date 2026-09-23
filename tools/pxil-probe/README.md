@@ -51,7 +51,11 @@ node pxil-probe.mjs 2026-08-01 2026-09-22 --token=<production token> --base=http
 - The date range should span a day **above the 12th** — that is the only thing
   that can prove PXIL's responses are `DD-MM-YYYY` rather than `MM-DD-YYYY`, and
   it should cover a period with known trades or every answer is "no rows".
-- Leave `--token` off only if the deployed `backend\.env` already holds the
+- **The deployed `backend\.env` has no PXIL token.** It is generated from
+  `.env.example`, which ships every PXIL line commented out, so the first run on
+  the server will stop with "No PXIL token found" and list the paths it checked.
+  Pass `--token=` or uncomment `PXIL_API_TOKEN=` in that file.
+- Leave `--token` off only once the deployed `backend\.env` holds the
   **production** token. It held the staging one as of 23 Sep, and each
   environment has its own. Run from the folder above and that `.env` is found
   automatically; the report prints the token's fingerprint, never the token, so
