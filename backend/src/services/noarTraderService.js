@@ -33,6 +33,36 @@
  * Without a key and secret it runs in stub mode against a payload in the
  * documented shape, so the mapping, the reconciliation and the screens can be
  * exercised before NOAR issues credentials and whitelists SJVN's IP.
+ *
+ * MEASURED AGAINST THE LIVE REGISTRY, 28-09-2026 (422 real applications over four
+ * months, from an address nobody had registered). Four things the documents do not
+ * say, each of which changes how this client should be used:
+ *
+ *   1. PRODUCTION DOES NOT APPEAR TO FILTER BY IP. external.noar.in answered
+ *      NOAR-200 from an ordinary ISP address. §1.5 of the guide describes mutual
+ *      IP whitelisting, and PXIL and IEX both enforce theirs, so this was assumed
+ *      to be the first gate here too — it is not. Nothing here should be built on
+ *      the assumption that a wrong caller is stopped at the network.
+ *   2. THE KEY IS PRODUCTION-ONLY. The same pair returns a bare 401 on
+ *      devdr.noar.in:84, so NOAR_API_ENV=TEST is not a safe place to experiment:
+ *      it does not work at all. There is no test environment for us today.
+ *   3. THE ONE-MONTH RANGE LIMIT IS NOT ENFORCED. A 120-day request returned 422
+ *      records rather than a refusal. MAX_RANGE_DAYS chunking is therefore
+ *      politeness, not necessity.
+ *   4. `isRejected` IS INERT. true and false returned the identical 134 records,
+ *      by Id, for the same range. It cannot be used to find rejected
+ *      applications.
+ *
+ * AND THE THING THAT MATTERS MOST: across 422 records every single one carried
+ * Status 50, PaymentStatus 50, BidStatus 0, CongestionStatus 0, an ApprovalNo and
+ * a non-zero ApprovedMWH. Either SJVN has had no pending or rejected application
+ * in four months, or — far likelier — this report returns approved applications
+ * only. So this feed cannot tell us that an application is pending, rejected or
+ * short-approved; it can only confirm the ones that went through. The
+ * reconciliation must keep reading it as "what NOAR says about what was
+ * approved", never as "the status of everything we filed". That is also why the
+ * numeric codes still have no enumeration: there is no variance in live data to
+ * learn one from.
  */
 import db from '../db/index.js';
 import { newId } from '../util.js';
@@ -46,7 +76,12 @@ export const NOAR_HOSTS = {
 
 const REPORT_PATH = '/api/external-services-api/Report/ApplicantBilateralApplicationData';
 
-/** NOAR refuses a range wider than a month on this report; longer spans are chunked. */
+/**
+ * The guide's stated maximum range for this report. Measured on 28-09-2026 it is
+ * NOT enforced — 120 days came back as 422 records — but chunking to the
+ * documented limit is kept: a limit they document and do not police today is one
+ * they may police tomorrow, and 31-day requests cost nothing.
+ */
 export const MAX_RANGE_DAYS = 31;
 
 function envOrParam(envKey, paramKey, fallback = '') {
@@ -167,12 +202,18 @@ export async function fetchBilateralApplications({ fromDate, toDate, isRejected 
     });
     const text = await resp.text();
     if (!resp.ok) {
-      // 401 here is as likely to be the IP whitelist as the credentials —
-      // NOAR whitelists the caller's public IP alongside issuing the key.
-      const hint = resp.status === 401
-        ? ' — check the API key/secret and that SJVN\'s outbound IP is whitelisted at NOAR'
+      // What a refusal actually looks like, measured against both hosts on
+      // 28-Sep-2026 with a deliberately invalid key: HTTP 500 and an EMPTY body,
+      // in ~140ms. No status line, no NOAR-4xx code, nothing to read. So a 500
+      // here is not an outage at NOAR and must not be reported as one — and it
+      // cannot be told apart from an unregistered IP, because the gateway
+      // answers both the same way. Saying that outright is the only honest
+      // message; the alternative is a desk chasing a server that is fine.
+      const blank = !text.trim();
+      const hint = (resp.status === 500 && blank) || resp.status === 401 || resp.status === 403
+        ? ' — NOAR answers a rejected credential AND an unregistered source IP identically (bare 500, empty body, observed 28-Sep-2026), so this says one of the two is wrong without saying which. Check that the key/secret pair is the issued one and that this server\'s outbound IP is whitelisted at the NOAR gateway.'
         : '';
-      return { ok: false, mode: cfg.environment, error: `HTTP ${resp.status}: ${text.slice(0, 300)}${hint}` };
+      return { ok: false, mode: cfg.environment, error: `HTTP ${resp.status}${blank ? ' (empty body)' : `: ${text.slice(0, 300)}`}${hint}` };
     }
     let data;
     try {

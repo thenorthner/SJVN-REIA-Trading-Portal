@@ -9,6 +9,28 @@
  *
  * Without an API key it runs in stub mode against a recorded-shape sample, so
  * the mapping and the sync can be built and tested before credentials arrive.
+ *
+ * ACCESS (Grid India, 28-Sep-2026). They supplied the endpoint URL
+ *   https://gateway.grid-india.in/POSOCO/reports/1.0/WebAccessAPI/GetUtilityExternalSharedData?apikey=
+ * and the username `usr_SJVNL`. Note what that URL is: the whole endpoint, not a
+ * base — so normaliseBaseUrl() below strips the path and query back to
+ * `https://gateway.grid-india.in/POSOCO`. Pasted whole into wbes_base_url it
+ * would otherwise build a URL with the path twice over and a stray `apikey=`.
+ *
+ * THE ACRONYM IS NOT CONFIRMED. Asked for the registered utility acronym they
+ * answered "SJVN Limited", which is the entity's name; every acronym in the
+ * guide is a token (`BIHAR_STATE`, `BSPHCL`, `NEA_Bihar`), the username they
+ * issued is `usr_SJVNL`, and ISET's own block-wise report calls the trader
+ * `SJVNL`. So `SJVNL` is the likely value and "SJVN Limited" the likely
+ * misreading of the question — but a wrong acronym returns an empty list, which
+ * reads exactly like "no schedule was published that day". That is the one
+ * failure this integration must never guess at, so nothing is assumed: the probe
+ * tries the candidates and whichever the gateway accepts gets configured.
+ *
+ * GetLatestFullSchdRevNo (guide 3.2) takes only { Date, UserName } — no acronym
+ * — which makes it the honest first call: it proves the URL, the key, the
+ * username and the whitelisting all at once, and cannot be confused by the
+ * acronym question.
  */
 import db from '../db/index.js';
 import { newId } from '../util.js';
@@ -26,13 +48,37 @@ function envOrParam(envKey, paramKey, fallback = '') {
   return fallback;
 }
 
+/**
+ * The base a WBES URL is built from, whatever form it was configured in.
+ *
+ * Grid India hand out the full endpoint URL — path, `?apikey=` and all — and
+ * that is what lands in a config field asking for a "base URL". Taken literally
+ * it produces
+ *   .../GetUtilityExternalSharedData?apikey=/reports/1.0/WebAccessAPI/GetUtilityExternalSharedData
+ * which fails as a 404 that looks like the gateway being wrong rather than us.
+ * So anything from `/reports/` onward is cut, along with any query string.
+ */
+export function normaliseBaseUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const withoutQuery = raw.split(/[?#]/)[0];
+  const cut = withoutQuery.replace(/\/reports\/.*$/i, '');
+  return cut.replace(/\/+$/, '');
+}
+
 export function getWbesConfig() {
   const apiKey = envOrParam('WBES_API_KEY', 'wbes_api_key', '');
-  const baseUrl = envOrParam('WBES_BASE_URL', 'wbes_base_url', '');
+  const baseUrl = normaliseBaseUrl(envOrParam('WBES_BASE_URL', 'wbes_base_url', ''));
   const userName = envOrParam('WBES_USERNAME', 'wbes_username', '');
   const utility = envOrParam('WBES_UTILITY_ACRONYM', 'wbes_utility_acronym', '');
   const enabled = String(envOrParam('WBES_ENABLED', 'wbes_enabled', 'false')) === 'true';
-  return { enabled, live: enabled && !!apiKey && !!baseUrl, apiKey, baseUrl, userName, utility };
+  // The guide accepts the key either as the X-API-Key header or as an `apikey`
+  // query parameter, and Grid India handed us the query form. Both are sent by
+  // default: they carry the same value, and a gateway that routes on one of them
+  // must not be met with the other. Set WBES_KEY_IN_QUERY=false to stop putting
+  // a credential in a URL once we know the header alone is honoured.
+  const keyInQuery = String(envOrParam('WBES_KEY_IN_QUERY', 'wbes_key_in_query', 'true')) !== 'false';
+  return { enabled, live: enabled && !!apiKey && !!baseUrl, apiKey, baseUrl, userName, utility, keyInQuery };
 }
 
 /** Block index (0-based) to the 15-minute window it covers, e.g. "00:15-00:30". */
@@ -41,6 +87,53 @@ export function blockLabel(index) {
   const endMin = startMin + 15;
   const fmt = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
   return `${fmt(startMin)}-${fmt(endMin)}`;
+}
+
+const API_PREFIX = '/reports/1.0/WebAccessAPI';
+
+/** A WBES endpoint URL, with the key in the query when that form is enabled. */
+function wbesUrl(cfg, endpoint) {
+  const url = `${cfg.baseUrl}${API_PREFIX}/${endpoint}`;
+  return cfg.keyInQuery ? `${url}?apikey=${encodeURIComponent(cfg.apiKey)}` : url;
+}
+
+/**
+ * A failure that happened before any HTTP status existed.
+ *
+ * The Grid India gateway does not refuse an unregistered address with a 403 — it
+ * accepts the TCP connection and then drops it mid-handshake. Measured from a
+ * non-whitelisted address on 28-Sep-2026: port 443 opens, the client sends its
+ * 1559-byte ClientHello, reads back zero bytes, and no certificate is ever
+ * served. Node surfaces that as a flat "fetch failed", which reads like the
+ * gateway being down and sends someone to check the key.
+ *
+ * It is worth naming because of what it implies: from an unregistered address the
+ * API key is never transmitted at all, so nothing about the credential, the
+ * username or the acronym can be tested until the IP is registered.
+ */
+function describeTransportError(err) {
+  const msg = String(err?.message || err);
+  const cause = String(err?.cause?.code || err?.cause?.message || '');
+  const handshakeDied = /fetch failed|socket hang ?up|ECONNRESET|EPROTO|SSL|TLS/i.test(`${msg} ${cause}`);
+  if (handshakeDied) {
+    return `${msg}${cause ? ` (${cause})` : ''} — the connection was dropped before a reply. The Grid India gateway accepts the TCP connection from an unregistered address and then closes it during the TLS handshake, so this is what "our IP is not whitelisted" looks like: the API key is never even sent. Have 49.50.97.173 registered at the gateway before treating this as an outage.`;
+  }
+  return msg;
+}
+
+/**
+ * WBES answers its own failures with HTTP 200 and a WBES-4xx inside the body —
+ * "API Access Validation Failed" for a key, username or IP it does not accept
+ * (guide 3.2). Read only the HTTP status and that reads as success with no data,
+ * which for a schedule means "nothing was scheduled that day". Hence this.
+ */
+function readStatus(payload) {
+  const st = payload?.ResponseStatus;
+  const code = st?.Code ?? null;
+  if (!code || String(code) === 'WBES-200') return null;
+  const detail = [st?.Message, ...(Array.isArray(st?.DetailsList) ? st.DetailsList : [])]
+    .filter(Boolean).join('; ');
+  return `${code}${detail ? `: ${detail}` : ''}`;
 }
 
 /** WBES wants the delivery date as DD-MM-YYYY; we store ISO everywhere else. */
@@ -68,17 +161,50 @@ export async function fetchScheduleData(date, revisionNo = -1) {
   }
 
   try {
-    const url = `${cfg.baseUrl.replace(/\/$/, '')}/reports/1.0/WebAccessAPI/GetUtilityExternalSharedData`;
-    const resp = await fetch(url, {
+    const resp = await fetch(wbesUrl(cfg, 'GetUtilityExternalSharedData'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-API-Key': cfg.apiKey },
       body: JSON.stringify(body),
     });
     const text = await resp.text();
     if (!resp.ok) return { ok: false, mode: 'WBES', error: `HTTP ${resp.status}: ${text.slice(0, 300)}` };
-    return { ok: true, mode: 'WBES', request: body, data: JSON.parse(text) };
+    const data = JSON.parse(text);
+    const refused = readStatus(data);
+    if (refused) return { ok: false, mode: 'WBES', request: body, error: `WBES refused the request — ${refused}` };
+    return { ok: true, mode: 'WBES', request: body, data };
   } catch (err) {
-    return { ok: false, mode: 'WBES', error: err.message };
+    return { ok: false, mode: 'WBES', error: describeTransportError(err) };
+  }
+}
+
+/**
+ * The latest full-schedule revision number for a day (guide 3.2).
+ *
+ * Worth having for its own sake — a revision number is how we know a schedule we
+ * already hold has been superseded — but its real value is that it takes only a
+ * date and a username. No acronym, no parsing: whatever it answers is about the
+ * URL, the key, the username and the whitelisting, and nothing else.
+ */
+export async function fetchLatestRevisionNo(date) {
+  const cfg = getWbesConfig();
+  const body = { Date: toWbesDate(date), UserName: cfg.userName };
+  if (!cfg.live) {
+    return { ok: true, mode: 'STUB', request: body, revision_no: 1, note: 'WBES not configured (needs wbes_enabled, wbes_api_key, wbes_base_url) — returning a sample revision number.' };
+  }
+  try {
+    const resp = await fetch(wbesUrl(cfg, 'GetLatestFullSchdRevNo'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-API-Key': cfg.apiKey },
+      body: JSON.stringify(body),
+    });
+    const text = await resp.text();
+    if (!resp.ok) return { ok: false, mode: 'WBES', error: `HTTP ${resp.status}: ${text.slice(0, 300)}` };
+    const data = JSON.parse(text);
+    const refused = readStatus(data);
+    if (refused) return { ok: false, mode: 'WBES', request: body, error: `WBES refused the request — ${refused}` };
+    return { ok: true, mode: 'WBES', request: body, revision_no: data?.ResponseBody ?? null };
+  } catch (err) {
+    return { ok: false, mode: 'WBES', error: describeTransportError(err) };
   }
 }
 
