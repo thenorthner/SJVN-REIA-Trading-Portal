@@ -25,6 +25,9 @@ const TABS = [
   { key: 'pq', label: 'Market price (PQ results)' },
   { key: 'schedule', label: 'Our schedule (cleared)' },
   { key: 'dates', label: 'Delivery dates' },
+  // IEX's own answer to "when are results ready?": read this rather than
+  // polling PQ results. Empty on UAT, where clearing is run by hand.
+  { key: 'publish', label: 'Published yet?' },
   // REC/EC is a different market model — an order book and a trade book, with
   // no delivery date and no time blocks — so it gets its own tabs.
   { key: 'rec-orders', label: 'REC/EC order book' },
@@ -98,6 +101,15 @@ const REC_TRADE_COLUMNS = [
   { key: 'value_rs', header: 'Value (Rs)', render: (r) => num(r.value_rs) },
 ];
 
+const PUBLISH_COLUMNS = [
+  { key: 'delivery_date', header: 'Delivery date', render: (r) => r.delivery_date || '—' },
+  // RTM publishes per session — two 15-minute blocks, 48 in a day.
+  { key: 'session', header: 'Session (RTM)', render: (r) => (r.session == null ? '—' : r.session) },
+  { key: 'stage', header: 'Provisional or final', render: (r) => r.stage || '—' },
+  { key: 'action', header: 'Action', render: (r) => r.action || '—' },
+  { key: 'run_count', header: 'Run', render: (r) => (r.run_count == null ? '—' : r.run_count) },
+];
+
 const DATE_COLUMNS = [
   { key: 'delivery_date_id', header: 'Label', render: (r) => r.delivery_date_id || '—' },
   { key: 'iso_date', header: 'Delivery date', render: (r) => r.iso_date || '—' },
@@ -129,9 +141,10 @@ export default function IexIntegration() {
     try {
       const data = which === 'pq' ? await api.iex.pqResults({ product, date })
         : which === 'schedule' ? await api.iex.scheduleReport({ product, date })
-          : which === 'rec-orders' ? await api.iex.recOrders()
-            : which === 'rec-trades' ? await api.iex.recTrades()
-              : await api.iex.deliveryDates({ product });
+          : which === 'publish' ? await api.iex.publishInfo({ product })
+            : which === 'rec-orders' ? await api.iex.recOrders()
+              : which === 'rec-trades' ? await api.iex.recTrades()
+                : await api.iex.deliveryDates({ product });
       setResult({ tab: which, data });
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'IEX request failed');
@@ -159,14 +172,16 @@ export default function IexIntegration() {
   const isRec = REC_TABS.includes(tab);
   const rows = tab === 'pq' ? (report?.periods || [])
     : tab === 'schedule' ? (report?.blocks || [])
-      : tab === 'rec-orders' ? (report?.orders || [])
-        : tab === 'rec-trades' ? (report?.trades || [])
-          : (report?.dates || []);
+      : tab === 'publish' ? (report?.entries || [])
+        : tab === 'rec-orders' ? (report?.orders || [])
+          : tab === 'rec-trades' ? (report?.trades || [])
+            : (report?.dates || []);
   const columns = tab === 'pq' ? PQ_COLUMNS
     : tab === 'schedule' ? SCHEDULE_COLUMNS
-      : tab === 'rec-orders' ? REC_ORDER_COLUMNS
-        : tab === 'rec-trades' ? REC_TRADE_COLUMNS
-          : DATE_COLUMNS;
+      : tab === 'publish' ? PUBLISH_COLUMNS
+        : tab === 'rec-orders' ? REC_ORDER_COLUMNS
+          : tab === 'rec-trades' ? REC_TRADE_COLUMNS
+            : DATE_COLUMNS;
 
   return (
     <div>
@@ -248,7 +263,7 @@ export default function IexIntegration() {
               </select>
             </Field>
           )}
-          {tab !== 'dates' && !isRec && (
+          {tab !== 'dates' && tab !== 'publish' && !isRec && (
             <Field label="Delivery date">
               <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
             </Field>
@@ -276,6 +291,17 @@ export default function IexIntegration() {
           </Caveat>
         )}
 
+        {report?.bid_areas_queried && (
+          <p style={{ fontSize: 12, color: 'var(--text-muted, #64748b)', marginBottom: 4 }}>
+            Bid areas asked: {report.bid_areas_queried.join(', ')}{' '}
+            {report.bid_area_source === 'PORTFOLIO_MAPPING'
+              ? '— ours, from the first two characters of our portfolio ids.'
+              : report.bid_area_source === 'CONFIG'
+                ? '— fixed in configuration (iex_bid_area_id).'
+                : '— every area the exchange lists, because our own could not be established.'}
+          </p>
+        )}
+
         {report?.scaling && (
           <p style={{ fontSize: 12, color: 'var(--text-muted, #64748b)' }}>
             Quantities divided by {report.scaling.qty_factor}, prices by {report.scaling.price_factor}{' '}
@@ -299,7 +325,8 @@ export default function IexIntegration() {
         <ul style={{ fontSize: 13, marginTop: 0, lineHeight: 1.7 }}>
           <li><strong>Bid submission</strong> — two-way and money-moving. It stays manual until a controlled test window; the server refuses to place live orders rather than pretending to.</li>
           <li><strong>REC/EC order entry</strong> — read-only for now. The order book, trade book and product master are live; placing and cancelling orders needs the same controlled rollout as FO bid submission.</li>
-          <li><strong>REC in production</strong> — IEX left the live REC host blank in their table, so only UAT is reachable.</li>
+          <li><strong>REC on UAT</strong> — the production host is known (recapi.iexindia.com), but on UAT the whitelist is per host and 49.50.97.173 is not yet on the REC one, so every REC call there returns the gateway&apos;s 403 until IEX add it.</li>
+          <li><strong>C&amp;S back office (post-trade reports)</strong> — needs a token of its own, which IEX have not issued, and the report API document has not been shared. No IP whitelisting is required there.</li>
           <li><strong>TAM (Term-Ahead Market)</strong> — IEX has not issued a TAM API document or enabled TAM on UAT for SJVN (UAT covers DAM, GDAM, HPDAM, RTM and REC), so there is nothing to call yet. PXIL&apos;s TAM-GTAM report is built under PXIL Reports, and the CERC monthly report&apos;s TAM figures are on the market dashboards.</li>
         </ul>
       </Card>

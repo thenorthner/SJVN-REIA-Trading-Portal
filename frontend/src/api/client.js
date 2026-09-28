@@ -709,6 +709,7 @@ export const api = {
     deliveryDates: (params) => g('/iex/delivery-dates', params),
     pqResults: (params) => g('/iex/pq-results', params),
     scheduleReport: (params) => g('/iex/schedule-report', params),
+    publishInfo: (params) => g('/iex/publish-info', params),
     // REC and EC/ESCerts share one API; `product` separates the segments.
     recConnectivity: () => g('/iex/rec/connectivity'),
     recProducts: () => g('/iex/rec/products'),

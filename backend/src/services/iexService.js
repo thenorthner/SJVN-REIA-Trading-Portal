@@ -33,6 +33,14 @@
  * returned by the respective APIs without any modification or recalculation",
  * per IEX); the UTC-midnight computation is only the offline fallback.
  *
+ * CODE LISTS (from the per-segment documents, confirmed by IEX 25-09-2026):
+ * markettimedetails `Market` is 1 for the main market boundary and then the
+ * segment — 2 DAM, 4 RTM, 5 GDAM, 6 HPDAM; `Status` is S start, E end, N not
+ * started. Refusals are not statuses: a bad path parameter comes back as HTTP
+ * 200 carrying a bare JSON string such as "Invalid Bid Area Id" — 200 means the
+ * request reached IEX, not that it was accepted — so every caller here checks
+ * for a string before reading fields off an object.
+ *
  * HOSTS: there is no single base URL. IEX serves each segment from its own
  * host and appends the same {product}/api/v2/... path grammar to it — their
  * own example is
@@ -49,14 +57,31 @@
  * (MW) x 10, e.g. 5.3 MW -> 53" against divide-by-100 when reading results.
  * That asymmetry is a silent 10x waiting to happen. Submission must read its
  * own factor from the Asset Master order decimals, never reuse the trade ones.
+ * IEX wrote the whole round trip out on 25-09-2026 and it confirms both halves:
+ * submit 5.3 MW as 53 (x OrderQtyDecimal 10) and a price of 4500 as 4500
+ * (x OrderPriceDecimal 1); read a trade quantity of 530 as 5.3 MW and a trade
+ * price of 450000 as Rs 4500/MWh (/ 100 on both).
  *
  * TOKEN: valid for six months from issue, renewed by mail 15 days before it
  * lapses. There is no login or refresh endpoint — IEX confirmed none exists.
  * The one-hour expiry on the first UAT token was, in IEX's words, a typo, so
- * the JWT `exp` claim is treated as advisory here rather than as a gate.
+ * the JWT `exp` claim is treated as advisory here rather than as a gate. IEX
+ * declined to reissue the UAT token (25-09-2026): the production token will be
+ * system-generated and will carry its true validity, so `exp` only becomes
+ * worth trusting at cutover. It also stays the only warning we get, because the
+ * gateway answers ANY wrong header value — an expired token included — with the
+ * same 401 "UnAuthorized User" (IEX, 25-09-2026). A 401 does not say which of
+ * the three headers it disliked.
  *
- * NOT IMPLEMENTED: REC has a host and a document but no client yet; ESCerts
- * likewise. Bid submission stays manual.
+ * UAT CLEARING IS MANUAL (IEX, 25-09-2026). Nothing on Alpha clears to a
+ * schedule, RTM included, so pqresults and publishinfo stay empty until IEX run
+ * a final calculation for a window we ask for in advance. Sixteen days of empty
+ * results was the environment, not our parsing. Once they do run it, results are
+ * published to every member whether or not it bid, and Alpha carries no
+ * settlement obligation — so test bids there are safe.
+ *
+ * NOT IMPLEMENTED: bid submission stays manual; ESCerts has no client. REC/EC
+ * is a separate module, iexRecService.js.
  */
 import db from '../db/index.js';
 import { getParam } from '../mastersService.js';
@@ -82,13 +107,56 @@ const requestTimeoutMs = () => {
 };
 
 /**
+ * IEX allow 4 requests per second (IEX, 25-09-2026). No documented error says
+ * "you went too fast", so exceeding it is not something the client would find
+ * out about in a way anyone could read — it spaces its own calls instead. This
+ * is not hypothetical traffic: one schedule-report pull is a call per bid area,
+ * the bid and trade books page, and a day's sync touches several segments.
+ *
+ * 0 disables the gate. Tests set it so that a suite does not spend a quarter of
+ * a second per stubbed call.
+ */
+const maxRequestsPerSec = () => {
+  // Unset must mean 4, not 0: Number('') is 0, and 0 turns the gate off — the
+  // default would have been "no limit" in exactly the case it exists for.
+  const raw = String(envOrParam('IEX_MAX_REQUESTS_PER_SEC', 'iex_max_requests_per_sec', '')).trim();
+  const v = Number(raw);
+  return raw !== '' && Number.isFinite(v) && v >= 0 ? v : 4;
+};
+
+/**
+ * Hold a caller until its request is allowed to leave.
+ *
+ * One queue for the whole process, because the limit is the exchange's and not
+ * one report's: two pulls running at once have to share it. Only the departure
+ * is serialised — a slow response never blocks the next request's slot.
+ *
+ * Exported so the REC/EC client spends from the same budget; both talk to IEX
+ * as the same member.
+ */
+let rateChain = Promise.resolve();
+let lastSentAt = 0;
+export function resetRateGate() { rateChain = Promise.resolve(); lastSentAt = 0; }
+export function awaitRequestSlot() {
+  const perSec = maxRequestsPerSec();
+  if (!perSec) return Promise.resolve();
+  const minGapMs = 1000 / perSec;
+  rateChain = rateChain.then(async () => {
+    const wait = lastSentAt + minGapMs - Date.now();
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    lastSentAt = Date.now();
+  });
+  return rateChain;
+}
+
+/**
  * Per-segment hosts, as supplied by IEX on 08-09-2026. There is no single base
  * URL: each segment answers on its own host, with the usual {product}/api/v2/
  * path appended. DAM and GDAM share the iDAM host.
  *
- * A blank means IEX has not supplied that host — REC has no production URL in
- * their table, and asking for one is better than guessing at a name that looks
- * plausible and silently fails.
+ * A blank means IEX has not supplied that host — asking for one is better than
+ * guessing at a name that looks plausible and silently fails. The production
+ * REC host was the one gap; IEX filled it in on 25-09-2026.
  */
 export const PRODUCT_HOSTS = {
   UAT: {
@@ -103,11 +171,18 @@ export const PRODUCT_HOSTS = {
     GDAM: 'https://idamapi.iexindia.com/',
     HPDAM: 'https://hpdamapi.iexindia.com/',
     RTM: 'https://rtmapi.iexindia.com/',
-    REC: '',
+    REC: 'https://recapi.iexindia.com/',
   },
 };
 
-/** Post-trade (Clearing & Settlement back office) — a different system entirely. */
+/**
+ * Post-trade (Clearing & Settlement back office) — a different system entirely,
+ * and IEX mean it (25-09-2026): C&S needs a token of its OWN, the Front Office
+ * token does not work there, and it is not IP-whitelisted at all — valid
+ * credentials from any host are enough. Neither that token nor the post-trade
+ * report document has reached us, so there is no client yet; the hosts are here
+ * so that whoever writes one does not have to go back through the mail thread.
+ */
 export const CNS_HOSTS = {
   UAT: 'https://alphawebportal.iexindia.com/',
   LIVE: 'https://energx.iexindia.com/',
@@ -244,6 +319,7 @@ async function iexGet(cfg, product, path) {
   }
   const url = `${base.replace(/\/$/, '')}/${path}`;
   const timeoutMs = requestTimeoutMs();
+  await awaitRequestSlot();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let resp;
@@ -263,6 +339,18 @@ async function iexGet(cfg, product, path) {
     throw new Error(`IEX returned a non-JSON body for ${path}: ${text.slice(0, 200)}`);
   }
 }
+
+/**
+ * The refusal hiding inside a 200.
+ *
+ * IEX answer a bad path parameter with HTTP 200 and a bare JSON string —
+ * "Invalid Bid Area Id" — and confirmed on 25-09-2026 that this is how the
+ * gateway behaves for every member: the 200 says the request reached them, not
+ * that they accepted it. Read as an object such a body has no fields, i.e. it
+ * reads exactly like a delivery date with no data. That is the one confusion
+ * worth writing code against, so every caller asks this first.
+ */
+const asRefusal = (data) => (typeof data === 'string' && data.trim() ? data.trim() : null);
 
 function productPath(product) {
   const seg = PRODUCT_PATH[product];
@@ -307,6 +395,8 @@ export async function getDecimals(product) {
     // Do not silently assume 1 — an unscaled price is off by a power of ten.
     throw new Error(`Cannot read IEX Asset Master decimals for ${product}: ${err.message}`);
   }
+  const refused = asRefusal(data);
+  if (refused) throw new Error(`IEX refused the Asset Master request for ${product}: "${refused}" — scaling factors unknown, so no value is safe to report.`);
   const asset = (data?.AssetDetails || data?.Assets || [])[0];
   if (!asset) throw new Error(`IEX Asset Master returned no assets for ${product}; cannot determine scaling factors.`);
 
@@ -351,6 +441,8 @@ export async function fetchDeliveryDates(product) {
   if (!cfg.live) return { ok: true, mode: 'STUB', dates: null, note: stubNote(cfg) };
   try {
     const data = await iexGet(cfg, product, `${productPath(product)}/api/v2/deliverydates/${cfg.loginUserId},${cfg.participantId}`);
+    const refused = asRefusal(data);
+    if (refused) return { ok: false, mode: 'IEX', error: `IEX refused the delivery date request: "${refused}"` };
     // The spec shows no envelope, and the segments differ on the live UAT
     // gateway (22-Sep-2026): RTM wraps T-1/T/T+1 in `DeliveryDates: [...]`,
     // while DAM, GDAM and HPDAM answer with one bare object for T+1.
@@ -434,19 +526,21 @@ export async function fetchClearedResults(product, deliveryDate) {
     const { epoch, source, warning } = await resolveDeliveryDate(product, deliveryDate);
 
     // 'ALL' is the spec's wildcard for PortfolioId only. The bid area must be a
-    // real id from the bid area master — the gateway answers the literal 'ALL'
-    // with the JSON string "Invalid Bid Area Id" (UAT, 22-Sep-2026). So with
-    // ALL configured, ask every area the master lists and merge.
-    const areas = isAllAreas(cfg.bidAreaId) ? await getBidAreaIds(product) : [cfg.bidAreaId];
+    // real id — the gateway answers the literal 'ALL' with the JSON string
+    // "Invalid Bid Area Id" (UAT, 22-Sep-2026) — and the ones worth asking for
+    // are ours, not the whole master.
+    const { areas, source: areaSource, note: areaSourceNote } = await scheduleBidAreas(product, cfg);
     const reports = [];
-    const areaNotes = [];
+    const areaNotes = areaSourceNote ? [areaSourceNote] : [];
     for (const area of areas) {
       const data = await iexGet(
         cfg, product,
         `${productPath(product)}/api/v2/portfolioschedulereport/${cfg.loginUserId},${cfg.participantId},${epoch},${area},${cfg.portfolioId}`,
       );
-      // The gateway reports refusals as a bare JSON string with HTTP 200.
-      if (typeof data === 'string') { areaNotes.push(`${area}: ${data}`); continue; }
+      // Per area, a refusal is recorded and the rest of the areas still run:
+      // one bad area must not cost us the day's other twelve.
+      const refused = asRefusal(data);
+      if (refused) { areaNotes.push(`${area}: ${refused}`); continue; }
       for (const r of data?.ReportDetails || []) reports.push({ ...r, BidAreaId: r?.BidAreaId ?? area });
     }
 
@@ -477,6 +571,7 @@ export async function fetchClearedResults(product, deliveryDate) {
       mode: 'IEX',
       blocks,
       bid_areas_queried: areas,
+      bid_area_source: areaSource,
       ...(areaNotes.length ? { area_notes: areaNotes } : {}),
       delivery_date_epoch: epoch,
       delivery_date_source: source,
@@ -490,18 +585,96 @@ export async function fetchClearedResults(product, deliveryDate) {
 
 const isAllAreas = (id) => !id || String(id).trim().toUpperCase() === 'ALL';
 
+/**
+ * Which bid areas a schedule-report pull should ask for.
+ *
+ * Ours, by preference. Every area in the master is the fallback and it is a poor
+ * one: it worked, but eleven of the thirteen areas on UAT belong to other
+ * members, so it spent a dozen calls out of a four-per-second budget to be told
+ * nothing. The fallback stays because a report with an unexplained hole in it is
+ * worse than a slow one — and it says in the response which of the two it did.
+ */
+async function scheduleBidAreas(product, cfg) {
+  if (!isAllAreas(cfg.bidAreaId)) return { areas: [cfg.bidAreaId], source: 'CONFIG' };
+  let ours = [];
+  try {
+    ours = await getOurBidAreaIds(product);
+  } catch (err) {
+    return {
+      areas: await getBidAreaIds(product),
+      source: 'BID_AREA_MASTER',
+      note: `Could not read our own bid areas (${err.message}) — asked every area in the bid area master instead.`,
+    };
+  }
+  if (ours.length) return { areas: ours, source: 'PORTFOLIO_MAPPING' };
+  return {
+    areas: await getBidAreaIds(product),
+    source: 'BID_AREA_MASTER',
+    note: 'User Portfolio Mapping returned no portfolios — asked every area in the bid area master instead.',
+  };
+}
+
+/**
+ * The bid areas that are actually ours.
+ *
+ * IEX, 25-09-2026: "First two chars of the portfolio id refer to the bid area
+ * (e.g. N2DL0SJVN0001, Bid area id : N2)." There is no API that returns the
+ * mapping directly — the User Portfolio Mapping master returns portfolios with
+ * no area field, and the User Master carries BidAreaId: "" for a user login —
+ * so the prefix IS the mapping.
+ */
+export async function getOurBidAreaIds(product) {
+  const prefixes = (await getPortfolioIds(product))
+    .map((id) => String(id).trim().slice(0, 2).toUpperCase())
+    .filter((a) => /^[A-Z0-9]{2}$/.test(a));
+  return [...new Set(prefixes)];
+}
+
+const portfolioCache = new Map();
+export function clearPortfolioCache() { portfolioCache.clear(); }
+
+/**
+ * Our portfolio ids, from the User Portfolio Mapping master.
+ *
+ * The response nests them two deep (MappingDetails[] -> PortfoliosDetails[]),
+ * and the spec names the id inside `UserId` — "User Id of Portfolio" — not
+ * PortfolioId, so both are read. Cached per product on success only, like the
+ * decimals: a failed lookup must not pin an empty list for the life of the
+ * process and quietly narrow every later report to nothing.
+ */
+export async function getPortfolioIds(product) {
+  if (portfolioCache.has(product)) return portfolioCache.get(product);
+  const cfg = getIexConfig();
+  const data = await iexGet(cfg, product, `${productPath(product)}/api/v2/master/userportfoliomapping/${cfg.loginUserId},${cfg.participantId}`);
+  const refused = asRefusal(data);
+  if (refused) throw new Error(`IEX refused the User Portfolio Mapping request for ${product}: "${refused}"`);
+  const mappings = data?.MappingDetails || data?.UserPortfolioMappingDetails || (Array.isArray(data) ? data : []);
+  const ids = [...new Set(
+    mappings
+      .flatMap((m) => m?.PortfoliosDetails || m?.PortfolioDetails || [])
+      .map((pf) => pf?.PortfolioId ?? pf?.UserId ?? (typeof pf === 'string' ? pf : null))
+      .filter(Boolean)
+      .map(String),
+  )];
+  portfolioCache.set(product, ids);
+  return ids;
+}
+
 const bidAreaCache = new Map();
 export function clearBidAreaCache() { bidAreaCache.clear(); }
 
 /**
- * Bid area ids from the exchange's bid area master (13 on UAT: A1, A2, …).
- * Cached per product on success only, like the decimals — a failed lookup
- * must not pin an empty list for the life of the process.
+ * Every bid area the exchange lists (13 on UAT: A1, A2, …) — the whole market,
+ * not our areas. Used when we cannot establish our own; see scheduleBidAreas.
+ * Cached per product on success only, like the decimals — a failed lookup must
+ * not pin an empty list for the life of the process.
  */
 export async function getBidAreaIds(product) {
   if (bidAreaCache.has(product)) return bidAreaCache.get(product);
   const cfg = getIexConfig();
   const data = await iexGet(cfg, product, `${productPath(product)}/api/v2/master/bidareas/${cfg.loginUserId},${cfg.participantId}`);
+  const refused = asRefusal(data);
+  if (refused) throw new Error(`IEX refused the Bid Area Master request for ${product}: "${refused}"`);
   const ids = [...new Set((data?.BidAreaDetails || []).map((a) => a?.BidAreaId).filter(Boolean))];
   if (!ids.length) throw new Error(`IEX bid area master returned no bid areas for ${product} — set iex_bid_area_id to a specific area.`);
   bidAreaCache.set(product, ids);
@@ -529,6 +702,10 @@ export async function fetchMarketPq(product, deliveryDate) {
       cfg, product,
       `${productPath(product)}/api/v2/pqresults/${cfg.loginUserId},${cfg.participantId},${epoch}`,
     );
+    const refused = asRefusal(data);
+    if (refused) {
+      return { ok: false, mode: 'IEX', error: `IEX refused the PQ results request: "${refused}"`, delivery_date_epoch: epoch };
+    }
 
     const wantArea = String(cfg.bidAreaId || 'ALL').toUpperCase();
     const periods = (data?.PQDetails || []).map((p) => {
@@ -566,6 +743,63 @@ export async function fetchMarketPq(product, deliveryDate) {
     };
   } catch (err) {
     return { ok: false, mode: 'IEX', error: err.message };
+  }
+}
+
+/**
+ * Where a segment answers publish info. RTM says `getpublishinfo` where DAM,
+ * GDAM and HPDAM say `publishinfo` — which is all our 404 on RTM was. Section
+ * 11.5 of the RTM document had it right; we had read the DAM path across all
+ * four, and IEX confirmed the difference on 25-09-2026.
+ */
+export const publishInfoPath = (product) =>
+  `${productPath(product)}/api/v2/${product === 'RTM' ? 'getpublishinfo' : 'publishinfo'}`;
+
+/**
+ * The exchange's own "results are out" signal.
+ *
+ * Asked whether to poll pqresults or wait for something, IEX pointed at this
+ * (25-09-2026): read publish info, and pull the results when it changes. A row
+ * carries the delivery date, the RTM session, Provisional or Final, a run count,
+ * and an action — 'P' published, 'D' publication withdrawn. So a Final 'P' is
+ * the trigger to pull, a 'D' is the signal that what we hold is no longer the
+ * exchange's position, and RunCount tells a re-run from the first publication.
+ *
+ * On UAT this stays empty until IEX run a clearing by hand, so an empty list
+ * here is not evidence of anything being wrong.
+ */
+export async function fetchPublishInfo(product) {
+  const cfg = getIexConfig();
+  if (!PRODUCT_PATH[product]) return { ok: false, error: `IEX publishes no results for product ${product}` };
+  if (!cfg.live) return { ok: true, mode: 'STUB', entries: null, note: stubNote(cfg) };
+  try {
+    const data = await iexGet(cfg, product, `${publishInfoPath(product)}/${cfg.loginUserId},${cfg.participantId}`);
+    const refused = asRefusal(data);
+    if (refused) return { ok: false, mode: 'IEX', error: `IEX refused the publish info request: "${refused}"`, path: publishInfoPath(product) };
+    const rows = data?.PublishInfo || data?.RTMPublishDetails || data?.PublishDetails
+      || (Array.isArray(data) ? data : []);
+    const stage = { P: 'PROVISIONAL', F: 'FINAL' };
+    const action = { P: 'PUBLISHED', D: 'WITHDRAWN' };
+    const entries = rows.map((r) => {
+      const epoch = Number(r?.DeliveryDate);
+      return {
+        delivery_date_epoch: Number.isFinite(epoch) && epoch > 0 ? epoch : null,
+        delivery_date: Number.isFinite(epoch) && epoch > 0 ? epochToDate(epoch) : null,
+        // RTM publishes per session, the day-ahead segments per day. A session
+        // is two 15-minute blocks, so 48 of them cover the day and session n
+        // covers blocks 2n-1 and 2n — session 1 is 00:00-00:30 (IEX,
+        // 25-09-2026). RTM clearing runs every 15 minutes but publishes in
+        // half-hour sessions; the two numbers are not the same thing.
+        session: r?.Session ?? null,
+        stage: stage[r?.ProvisionalOrFinal] ?? r?.ProvisionalOrFinal ?? null,
+        action: action[r?.Action] ?? r?.Action ?? null,
+        run_count: r?.RunCount ?? null,
+        last_updated: r?.LastUpdatedTime ?? null,
+      };
+    });
+    return { ok: true, mode: 'IEX', entries, path: publishInfoPath(product) };
+  } catch (err) {
+    return { ok: false, mode: 'IEX', error: err.message, path: publishInfoPath(product) };
   }
 }
 

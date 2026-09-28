@@ -18,8 +18,12 @@ import {
   getDecimals,
   clearDecimalsCache,
   clearBidAreaCache,
+  clearPortfolioCache,
+  resetRateGate,
   fetchMarketPq,
   fetchClearedResults,
+  fetchPublishInfo,
+  publishInfoPath,
   checkConnectivity,
   fetchDeliveryDates,
 } from '../src/services/iexService.js';
@@ -41,12 +45,15 @@ function liveConfig({ token = jwtWithExp(FUTURE), bidArea = 'ALL', portfolio = '
   process.env.IEX_BID_AREA_ID = bidArea;
   process.env.IEX_PORTFOLIO_ID = portfolio;
   process.env.IEX_API_TOKEN = token;
+  // The real client spaces calls 250ms apart (IEX allow 4/sec). The rate gate
+  // has its own tests below; everywhere else it would only buy dead time.
+  process.env.IEX_MAX_REQUESTS_PER_SEC = '0';
 }
 
 const IEX_ENV_KEYS = [
   'IEX_ENABLED', 'IEX_BASE_URL', 'IEX_LOGIN_USER_ID', 'IEX_PARTICIPANT_ID',
   'IEX_BID_AREA_ID', 'IEX_PORTFOLIO_ID', 'IEX_API_TOKEN', 'IEX_ENVIRONMENT',
-  'IEX_ENFORCE_TOKEN_EXPIRY',
+  'IEX_ENFORCE_TOKEN_EXPIRY', 'IEX_MAX_REQUESTS_PER_SEC',
 ];
 
 /** Asset Master: 2 decimal places on everything, expressed as the divisor 100. */
@@ -76,6 +83,8 @@ function stubFetch(routes) {
 beforeEach(() => {
   clearDecimalsCache();
   clearBidAreaCache();
+  clearPortfolioCache();
+  resetRateGate();
   IEX_ENV_KEYS.forEach((k) => delete process.env[k]);
 });
 
@@ -333,29 +342,78 @@ describe('portfolio schedule report', () => {
     }],
   };
 
+  /**
+   * The mapping master as the spec shapes it: portfolios nested two deep, and
+   * the id living in `UserId` rather than `PortfolioId`. SJVN hold two.
+   */
+  const PORTFOLIO_MAPPING = {
+    MappingDetails: [{
+      UserId: 'SJVA1',
+      PortfoliosDetails: [{ UserId: 'E1BR0SJV0001' }, { UserId: 'N2DL0SJV0001' }],
+    }],
+  };
+
   function stubReport() {
     return stubFetch({
       '/master/assets': ASSET_MASTER,
       '/deliverydates/': { DeliveryDates: [{ DeliveryDate: utcMidnightEpoch('2026-09-08') }] },
+      '/master/userportfoliomapping/': PORTFOLIO_MAPPING,
       '/master/bidareas/': { BidAreaDetails: [{ BidAreaId: 'A1' }] },
       '/portfolioschedulereport/': REPORT,
     });
   }
 
-  // Verbatim from the UAT gateway, 22-Sep-2026: 'ALL' is not a bid area.
-  it('asks every bid area in the master when ALL is configured, never the literal ALL', async () => {
+  // Verbatim from the UAT gateway, 22-Sep-2026: 'ALL' is not a bid area. And
+  // per IEX on 25-09-2026 the areas to ask for are the first two characters of
+  // our own portfolio ids — E1 and N2 here — not the thirteen in the master.
+  it('asks only our own bid areas when ALL is configured, never the literal ALL', async () => {
     liveConfig({ bidArea: 'ALL' });
     const calls = stubFetch({
       '/master/assets': ASSET_MASTER,
       '/deliverydates/': { DeliveryDateId: 'T+1', DeliveryDate: utcMidnightEpoch('2026-09-08') },
+      '/master/userportfoliomapping/': PORTFOLIO_MAPPING,
       '/master/bidareas/': { BidAreaDetails: [{ BidAreaId: 'A1' }, { BidAreaId: 'E1' }, { BidAreaId: 'N2' }] },
       '/portfolioschedulereport/': REPORT,
     });
     const res = await fetchClearedResults('DAM', '2026-09-08');
     const asked = calls.filter((u) => u.includes('/portfolioschedulereport/'));
-    expect(asked.map((u) => u.split(',').at(-2))).toEqual(['A1', 'E1', 'N2']);
+    expect(asked.map((u) => u.split(',').at(-2))).toEqual(['E1', 'N2']);
     expect(asked.some((u) => u.includes(',ALL,ALL'))).toBe(false);
-    expect(res.bid_areas_queried).toEqual(['A1', 'E1', 'N2']);
+    expect(res.bid_areas_queried).toEqual(['E1', 'N2']);
+    expect(res.bid_area_source).toBe('PORTFOLIO_MAPPING');
+    // The market's own list of areas is nobody's business here.
+    expect(calls.some((u) => u.includes('/master/bidareas/'))).toBe(false);
+  });
+
+  it('falls back to every area in the master when our portfolios cannot be read, and says which', async () => {
+    liveConfig({ bidArea: 'ALL' });
+    const calls = stubFetch({
+      '/master/assets': ASSET_MASTER,
+      '/deliverydates/': { DeliveryDateId: 'T+1', DeliveryDate: utcMidnightEpoch('2026-09-08') },
+      // No mapping route: the stub answers 404, as a gateway outage would.
+      '/master/bidareas/': { BidAreaDetails: [{ BidAreaId: 'A1' }, { BidAreaId: 'E1' }] },
+      '/portfolioschedulereport/': REPORT,
+    });
+    const res = await fetchClearedResults('DAM', '2026-09-08');
+    expect(res.bid_areas_queried).toEqual(['A1', 'E1']);
+    expect(res.bid_area_source).toBe('BID_AREA_MASTER');
+    expect(res.area_notes[0]).toMatch(/Could not read our own bid areas/);
+    expect(calls.filter((u) => u.includes('/portfolioschedulereport/'))).toHaveLength(2);
+  });
+
+  it('treats a mapping with no portfolios as a fallback, not as nothing to ask for', async () => {
+    liveConfig({ bidArea: 'ALL' });
+    stubFetch({
+      '/master/assets': ASSET_MASTER,
+      '/deliverydates/': { DeliveryDateId: 'T+1', DeliveryDate: utcMidnightEpoch('2026-09-08') },
+      '/master/userportfoliomapping/': { MappingDetails: [] },
+      '/master/bidareas/': { BidAreaDetails: [{ BidAreaId: 'A1' }] },
+      '/portfolioschedulereport/': REPORT,
+    });
+    const res = await fetchClearedResults('DAM', '2026-09-08');
+    expect(res.bid_areas_queried).toEqual(['A1']);
+    expect(res.bid_area_source).toBe('BID_AREA_MASTER');
+    expect(res.area_notes[0]).toMatch(/returned no portfolios/);
   });
 
   it('records a bare-string refusal per area instead of treating it as an empty day', async () => {
@@ -363,13 +421,13 @@ describe('portfolio schedule report', () => {
     stubFetch({
       '/master/assets': ASSET_MASTER,
       '/deliverydates/': { DeliveryDateId: 'T+1', DeliveryDate: utcMidnightEpoch('2026-09-08') },
-      '/master/bidareas/': { BidAreaDetails: [{ BidAreaId: 'A1' }] },
+      '/master/userportfoliomapping/': PORTFOLIO_MAPPING,
       '/portfolioschedulereport/': 'Invalid Bid Area Id',
     });
     const res = await fetchClearedResults('DAM', '2026-09-08');
     expect(res.ok).toBe(true);
     expect(res.blocks).toEqual([]);
-    expect(res.area_notes).toEqual(['A1: Invalid Bid Area Id']);
+    expect(res.area_notes).toEqual(['E1: Invalid Bid Area Id', 'N2: Invalid Bid Area Id']);
   });
 
   it("reports OUR scheduled quantity, not the whole bid area's volume", async () => {
@@ -409,6 +467,132 @@ describe('portfolio schedule report', () => {
   });
 });
 
+describe('refusals that arrive as HTTP 200', () => {
+  // IEX confirmed on 25-09-2026 that a rejected path parameter comes back as
+  // 200 with a bare JSON string, market-wide. Read as an object it has no
+  // fields, which is indistinguishable from a day with no results — the one
+  // reading that must never happen quietly.
+  it('does not read "Invalid Delivery Date" as a day with no PQ results', async () => {
+    liveConfig({ bidArea: 'A1' });
+    stubFetch({
+      '/master/assets': ASSET_MASTER,
+      '/deliverydates/': { DeliveryDateId: 'T+1', DeliveryDate: utcMidnightEpoch('2026-09-08') },
+      '/pqresults/': 'Invalid Delivery Date',
+    });
+    const res = await fetchMarketPq('DAM', '2026-09-08');
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/Invalid Delivery Date/);
+  });
+
+  it('does not read a refused Asset Master as a factor of one', async () => {
+    liveConfig({ bidArea: 'A1' });
+    stubFetch({
+      '/master/assets': 'UnAuthorized User',
+      '/deliverydates/': { DeliveryDateId: 'T+1', DeliveryDate: utcMidnightEpoch('2026-09-08') },
+      '/pqresults/': { PQDetails: [] },
+    });
+    const res = await fetchMarketPq('DAM', '2026-09-08');
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/UnAuthorized User/);
+  });
+
+  it('does not read a refused delivery date list as "no open dates"', async () => {
+    liveConfig();
+    stubFetch({ '/deliverydates/': 'UnAuthorized User' });
+    const res = await fetchDeliveryDates('DAM');
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/UnAuthorized User/);
+  });
+});
+
+describe('publish info', () => {
+  // Our 404 on RTM was the path, not a missing API: RTM says getpublishinfo
+  // where the day-ahead segments say publishinfo (RTM document 11.5, confirmed
+  // by IEX 25-09-2026).
+  it('spells the RTM path getpublishinfo and the rest publishinfo', () => {
+    expect(publishInfoPath('RTM')).toBe('rtm/api/v2/getpublishinfo');
+    expect(publishInfoPath('DAM')).toBe('dam/api/v2/publishinfo');
+    expect(publishInfoPath('GDAM')).toBe('gdam/api/v2/publishinfo');
+    expect(publishInfoPath('HPDAM')).toBe('hpdam/api/v2/publishinfo');
+  });
+
+  it('calls RTM on its own spelling, with no delivery date', async () => {
+    liveConfig();
+    const calls = stubFetch({ '/getpublishinfo/': { RTMPublishDetails: [] } });
+    const res = await fetchPublishInfo('RTM');
+    expect(res.ok).toBe(true);
+    expect(calls[0]).toContain('/rtm/api/v2/getpublishinfo/SJVA1,N2DL0SJV0000');
+  });
+
+  it('decodes the trigger: which date, final or provisional, published or withdrawn', async () => {
+    liveConfig();
+    stubFetch({
+      '/publishinfo/': {
+        PublishInfo: [
+          { DeliveryDate: utcMidnightEpoch('2026-09-23'), ProvisionalOrFinal: 'F', RunCount: 2, Action: 'P', LastUpdatedTime: 1790097720 },
+          { DeliveryDate: utcMidnightEpoch('2026-09-22'), ProvisionalOrFinal: 'P', RunCount: 1, Action: 'D' },
+        ],
+      },
+    });
+    const res = await fetchPublishInfo('DAM');
+    expect(res.entries).toEqual([
+      { delivery_date_epoch: utcMidnightEpoch('2026-09-23'), delivery_date: '2026-09-23', session: null, stage: 'FINAL', action: 'PUBLISHED', run_count: 2, last_updated: 1790097720 },
+      { delivery_date_epoch: utcMidnightEpoch('2026-09-22'), delivery_date: '2026-09-22', session: null, stage: 'PROVISIONAL', action: 'WITHDRAWN', run_count: 1, last_updated: null },
+    ]);
+  });
+
+  it('keeps the RTM session number, since RTM publishes per session', async () => {
+    liveConfig();
+    stubFetch({
+      '/getpublishinfo/': {
+        RTMPublishDetails: [{ DeliveryDate: utcMidnightEpoch('2026-09-23'), Session: 17, ProvisionalOrFinal: 'F', Action: 'P' }],
+      },
+    });
+    const res = await fetchPublishInfo('RTM');
+    expect(res.entries[0].session).toBe(17);
+  });
+
+  // An empty list is the normal state of UAT, where clearing is run by hand.
+  it('reports an empty publish list as an answer, not as a failure', async () => {
+    liveConfig();
+    stubFetch({ '/publishinfo/': { PublishInfo: [] } });
+    const res = await fetchPublishInfo('DAM');
+    expect(res).toMatchObject({ ok: true, mode: 'IEX', entries: [] });
+  });
+});
+
+describe('the 4-per-second limit', () => {
+  // IEX grant 4 requests a second and document no error for exceeding it, so
+  // the client has to keep its own count. Nothing else in the suite pays for
+  // this — liveConfig turns the gate off.
+  it('spaces requests at the configured rate', async () => {
+    liveConfig();
+    process.env.IEX_MAX_REQUESTS_PER_SEC = '40'; // 25ms apart
+    stubFetch({ '/deliverydates/': { DeliveryDates: [] } });
+    const started = Date.now();
+    await Promise.all([fetchDeliveryDates('DAM'), fetchDeliveryDates('DAM'), fetchDeliveryDates('DAM')]);
+    // Three requests means two gaps, even fired at once.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(45);
+  });
+
+  it('defaults to the 4 per second IEX granted', async () => {
+    liveConfig();
+    delete process.env.IEX_MAX_REQUESTS_PER_SEC;
+    stubFetch({ '/deliverydates/': { DeliveryDates: [] } });
+    const started = Date.now();
+    await Promise.all([fetchDeliveryDates('DAM'), fetchDeliveryDates('DAM')]);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(240);
+  });
+
+  it('can be turned off, for a mock that has no limit', async () => {
+    liveConfig(); // sets 0
+    stubFetch({ '/deliverydates/': { DeliveryDates: [] } });
+    const started = Date.now();
+    await Promise.all([fetchDeliveryDates('DAM'), fetchDeliveryDates('DAM'), fetchDeliveryDates('DAM')]);
+    expect(Date.now() - started).toBeLessThan(100);
+  });
+});
+
 describe('per-segment hosts', () => {
   // IEX serves each segment from its own host and appends the usual
   // {product}/api/v2/ path to it. One base URL for everything would 404.
@@ -431,8 +615,8 @@ describe('per-segment hosts', () => {
     const cfg = getIexConfig();
     expect(cfg.baseUrlFor('DAM')).toBe('https://idamapi.iexindia.com/');
     expect(cfg.baseUrlFor('RTM')).toBe('https://rtmapi.iexindia.com/');
-    // IEX left the production REC host blank in their table; we do not invent one.
-    expect(cfg.baseUrlFor('REC')).toBe('');
+    // The one host IEX had left blank; they supplied it on 25-09-2026.
+    expect(cfg.baseUrlFor('REC')).toBe('https://recapi.iexindia.com/');
   });
 
   it('builds the URL IEX printed in their own worked example', async () => {
@@ -443,15 +627,16 @@ describe('per-segment hosts', () => {
     expect(calls[0]).toBe('https://alphaidamapi.iexindia.com/dam/api/v2/deliverydates/SJVA1,N2DL0SJV0000');
   });
 
-  it('refuses a segment whose host IEX has not published, rather than guessing', async () => {
+  it('refuses a host it has not been given, rather than guessing one', async () => {
     liveConfig();
     delete process.env.IEX_BASE_URL;
-    process.env.IEX_ENVIRONMENT = 'LIVE';
+    // IEX publish two environments. Anything else has no table, and inventing a
+    // hostname that resolves to somebody would be worse than refusing.
+    process.env.IEX_ENVIRONMENT = 'SANDBOX';
     const calls = stubFetch({ '/deliverydates/': { DeliveryDates: [] } });
-    // REC has no production host in IEX's table. (REC is not a supported
-    // product yet either, but the host guard is what must not be bypassed.)
-    const cfg = getIexConfig();
-    expect(cfg.baseUrlFor('REC')).toBe('');
+    const res = await fetchDeliveryDates('DAM');
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/No IEX host is configured for DAM in SANDBOX/);
     expect(calls).toHaveLength(0);
   });
 

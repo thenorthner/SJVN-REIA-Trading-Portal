@@ -26,13 +26,19 @@
  * Order entry, modification and cancellation are deliberately not implemented.
  * They move real money; the same rule as the FO client applies.
  *
- * UNRESOLVED: it is not confirmed whether the member token is shared with the
- * FO API or issued per system. The one token IEX issued to SJVN carries the
- * claim `system: TradeV2Api`. IEX_REC_API_TOKEN overrides for REC/EC if they
- * turn out to differ; otherwise the shared IEX_API_TOKEN is used.
+ * TOKEN: shared with the Front Office. IEX, 25-09-2026: "Token is valid for all
+ * biding APIs in Front Office" — so the `system: TradeV2Api` claim on our token
+ * covers REC/EC too, and IEX_REC_API_TOKEN stays only as an override for the day
+ * they split them. The C&S back office is the one that needs its own token.
+ *
+ * WHITELISTING IS PER HOST. Our 403 from alpharecapi was not the token and not
+ * the headers: IEX confirmed on 25-09-2026 that 49.50.97.173 is whitelisted for
+ * the DAM/RTM/HPDAM hosts but not for the REC host on UAT. Until they add it,
+ * every call here returns the gateway's HTML 403 — which describeHttpError names
+ * as a whitelist problem rather than leaving as a status code.
  */
 import { getParam } from '../mastersService.js';
-import { PRODUCT_HOSTS, readTokenExpiry, unscale } from './iexService.js';
+import { PRODUCT_HOSTS, readTokenExpiry, unscale, awaitRequestSlot } from './iexService.js';
 
 /**
  * The spec fixes the response timeout for every API at 40 seconds. Overridable
@@ -131,10 +137,13 @@ async function recGet(cfg, path) {
     throw new Error(`IEX token expired at ${cfg.tokenExpiresAtIso} — request not sent (iex_enforce_token_expiry is on).`);
   }
   if (!cfg.baseUrl) {
-    throw new Error(`No IEX REC host is configured for ${cfg.environment}. IEX published one for UAT only — set iex_base_url to override.`);
+    throw new Error(`No IEX REC host is configured for ${cfg.environment}. Set iex_base_url to override.`);
   }
   const url = `${cfg.baseUrl.replace(/\/$/, '')}/${path}`;
   const timeoutMs = requestTimeoutMs();
+  // 4 requests a second is the member's budget, not one client's: REC/EC spends
+  // from the same gate as the Front Office calls.
+  await awaitRequestSlot();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let resp;

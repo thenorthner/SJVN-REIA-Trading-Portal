@@ -16,6 +16,7 @@ import {
   placeRecOrder,
   clearRecProductCache,
 } from '../src/services/iexRecService.js';
+import { resetRateGate } from '../src/services/iexService.js';
 
 function jwtWithExp(expSeconds) {
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -26,7 +27,7 @@ const FUTURE = Math.floor(Date.now() / 1000) + 3600;
 const ENV_KEYS = [
   'IEX_ENABLED', 'IEX_BASE_URL', 'IEX_LOGIN_USER_ID', 'IEX_PARTICIPANT_ID',
   'IEX_PORTFOLIO_ID', 'IEX_API_TOKEN', 'IEX_REC_API_TOKEN', 'IEX_ENVIRONMENT',
-  'IEX_ENFORCE_TOKEN_EXPIRY',
+  'IEX_ENFORCE_TOKEN_EXPIRY', 'IEX_MAX_REQUESTS_PER_SEC',
 ];
 
 function liveConfig() {
@@ -36,6 +37,8 @@ function liveConfig() {
   process.env.IEX_PORTFOLIO_ID = 'ALL';
   process.env.IEX_API_TOKEN = jwtWithExp(FUTURE);
   process.env.IEX_ENVIRONMENT = 'UAT';
+  // REC/EC shares the Front Office's 4-per-second gate; off here, as there.
+  process.env.IEX_MAX_REQUESTS_PER_SEC = '0';
 }
 
 /** REC products quote to 2 decimals on both price and quantity. */
@@ -62,6 +65,7 @@ function stubFetch(routes) {
 
 beforeEach(() => {
   clearRecProductCache();
+  resetRateGate();
   ENV_KEYS.forEach((k) => delete process.env[k]);
 });
 afterEach(() => {
@@ -97,15 +101,21 @@ describe('wire contract', () => {
     expect(getRecConfig().token).toBe('rec-only-token');
   });
 
-  it('has no production host until IEX supplies one, and refuses rather than guessing', async () => {
+  it('uses the production REC host IEX supplied on 25-09-2026', () => {
     liveConfig();
     process.env.IEX_ENVIRONMENT = 'LIVE';
+    expect(getRecConfig().baseUrl).toBe('https://recapi.iexindia.com/');
+  });
+
+  it('refuses an environment nobody published a host for, rather than guessing', async () => {
+    liveConfig();
+    process.env.IEX_ENVIRONMENT = 'SANDBOX';
     const cfg = getRecConfig();
     expect(cfg.baseUrl).toBe('');
     expect(cfg.live).toBe(false);
     const res = await fetchOrderBook();
     expect(res.mode).toBe('STUB');
-    expect(res.note).toMatch(/REC host for LIVE/);
+    expect(res.note).toMatch(/REC host for SANDBOX/);
   });
 });
 

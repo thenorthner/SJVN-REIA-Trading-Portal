@@ -19,6 +19,7 @@ import {
   fetchDeliveryDates,
   fetchClearedResults,
   fetchMarketPq,
+  fetchPublishInfo,
   getDecimals,
   SUPPORTED_PRODUCTS,
 } from '../services/iexService.js';
@@ -162,6 +163,23 @@ router.get('/pq-results', requireRole(...IEX_READ), dated((product, date) => fet
 
 /** What our own portfolios cleared for a delivery date. */
 router.get('/schedule-report', requireRole(...IEX_READ), dated((product, date) => fetchClearedResults(product, date)));
+
+/**
+ * Whether the exchange has published results yet, and for which dates.
+ *
+ * IEX's own answer to "how do we know when to pull?" — read this instead of
+ * polling pqresults. It takes no date: the exchange lists what it has
+ * published. An empty list on UAT means nobody has run a clearing by hand.
+ */
+router.get('/publish-info', requireRole(...IEX_READ), async (req, res, next) => {
+  const { product, error } = readProduct(req);
+  if (error) return res.status(400).json({ error });
+  try {
+    send(res, await fetchPublishInfo(product));
+  } catch (err) {
+    next(err);
+  }
+});
 
 /* --------------------------------------------------------------- REC / EC */
 

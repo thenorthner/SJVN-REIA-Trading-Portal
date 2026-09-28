@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import http from 'http';
-import { fetchMarketPq, fetchClearedResults, checkConnectivity, clearDecimalsCache } from '../src/services/iexService.js';
+import { fetchMarketPq, fetchClearedResults, checkConnectivity, clearDecimalsCache, resetRateGate } from '../src/services/iexService.js';
 import { fetchOrderBook, fetchProductMaster, clearRecProductCache } from '../src/services/iexRecService.js';
 import db from '../src/db/index.js';
 import { invalidateParamCache } from '../src/mastersService.js';
@@ -18,6 +18,7 @@ const ENV_KEYS = [
   'IEX_ENABLED', 'IEX_BASE_URL', 'IEX_LOGIN_USER_ID', 'IEX_PARTICIPANT_ID',
   'IEX_BID_AREA_ID', 'IEX_PORTFOLIO_ID', 'IEX_API_TOKEN', 'IEX_REC_API_TOKEN',
   'IEX_ENVIRONMENT', 'IEX_ENFORCE_TOKEN_EXPIRY', 'IEX_TIMEOUT_MS',
+  'IEX_MAX_REQUESTS_PER_SEC',
 ];
 
 /** Everything the fake exchange was asked, in order. */
@@ -110,8 +111,12 @@ beforeEach(() => {
   overrides = {};
   clearDecimalsCache();
   clearRecProductCache();
+  resetRateGate();
   ENV_KEYS.forEach((k) => delete process.env[k]);
   process.env.IEX_ENABLED = 'true';
+  // What the gate does is pinned in iexService.test.js; here it would only add
+  // 250ms to every round trip.
+  process.env.IEX_MAX_REQUESTS_PER_SEC = '0';
   process.env.IEX_LOGIN_USER_ID = 'SJVA1';
   process.env.IEX_PARTICIPANT_ID = 'N2DL0SJV0000';
   process.env.IEX_BID_AREA_ID = 'A1';
