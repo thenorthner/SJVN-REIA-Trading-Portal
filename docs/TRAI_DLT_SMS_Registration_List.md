@@ -2,6 +2,7 @@
 
 **Prepared:** 28 September 2026
 **Scope:** every alert the platform sends, or is designed to send, to a mobile number.
+**Count:** 50 content templates — the flat, forwardable version is `docs/SMS_Alerts_Single_List.md`.
 **Modules covered:** REIA Commercial Hydro Billing, Billing & Invoicing, and the
 remaining modules that already carry an SMS path (Disputes, NOAR / Power Trading).
 
@@ -69,25 +70,37 @@ Configured in the platform at: Masters → `textguru_sender_id`
 
 ## 3. Summary — how many templates
 
-| Part | Module | Templates | Status in code today |
-|---|---|---|---|
-| **A** | Billing & Invoicing | 2 | **Live** — already calls the SMS gateway |
-| **B** | Disputes | 2 | **Live** |
-| **C** | NOAR / Power Trading | 5 | **Live** |
-| **D** | Billing & Invoicing | 9 | Designed, in-app only today |
-| **E** | REIA Commercial Hydro Billing | 8 | **No notification of any kind exists today** |
-| **F** | Payment Security (billing-adjacent) | 4 | In-app only today |
-| | **Total** | **30** | |
+**50 templates, filed as one batch.** Registering a template does not make it
+send: which events actually use SMS is set per event in the platform's master
+data (`notification_channel_policy`). The list is therefore deliberately broader
+than what is switched on today, because approval is per template and going back
+for one more costs another cycle.
 
-**Recommendation: submit all 30 in one batch.** DLT approval is per template and
-takes the same effort whether one or thirty are filed; going back a second time for
-the hydro templates costs another approval cycle and blocks the hydro go-live.
+| Module | Templates | Wired to the gateway today |
+|---|---|---|
+| Billing & Invoicing | 12 | 2 |
+| Hydro Station Billing | 10 | **0 — no notification of any kind exists** |
+| Payment Security | 6 | 0 |
+| Disputes | 6 | 2 |
+| Reconciliation | 2 | 0 |
+| Contract & billing calendar | 4 | 0 |
+| Scheduling & deviation | 2 | 0 |
+| Regulatory | 1 | 0 (in the SMS policy, but no call site) |
+| Account security | 2 | 0 |
+| Power Trading (NOAR) | 5 | 5 |
+| **Total** | **50** | **9** |
 
-If the batch must be cut down, **Parts A–C (9 templates) are mandatory immediately**
-— that code is already wired to the gateway and will start failing DLT scrubbing the
-moment `sms_enabled` is turned on without them.
+Only **9 of the 50** are wired to the gateway today. The rest are events the
+platform already raises as in-app notifications, or — for the whole of Hydro
+Station Billing — events that raise nothing at all yet. Filing them now is
+insurance against a second approval cycle, not a claim that they work.
 
----
+**The 9 that are live are mandatory immediately**: that code already calls the
+gateway and will start failing DLT scrubbing the moment `sms_enabled` is turned
+on without registered templates.
+
+The forwardable version of this list, without the source references and code
+notes, is `docs/SMS_Alerts_Single_List.md`.
 
 ## 4. The templates
 

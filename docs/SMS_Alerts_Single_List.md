@@ -1,74 +1,130 @@
-# SMS Alerts — single list for DLT registration
+# SMS Alerts — final list for DLT registration
 
 **Date:** 28 September 2026
+**Total: 50 content templates**, all under category **Service – Implicit**.
 
-All outbound SMS from the SJVN platform. Each row below is one **content template**
-that has to be registered on the DLT portal before it can be sent.
+Each line below is one template to be registered on the DLT portal. `{#var#}` is
+the DLT variable placeholder (30 characters each). Fixed text must match exactly
+at send time. No URL, phone number or email address appears in any template —
+TRAI requires those to be separately whitelisted, and a message carrying an
+unwhitelisted link is dropped.
 
-- **Total: 30 templates.** All fall under category **Service – Implicit**
-  (they arise out of an existing contract or employment relationship, so they
-  reach DND numbers too, and no consent template is needed).
-- `{#var#}` is the DLT variable placeholder. Fixed text must match exactly.
-- **Live** = the code already sends this today. **To be built** = the event exists
-  in the platform but currently only raises an in-app notification.
+Registering a template does not mean it starts sending. Which alerts actually go
+out over SMS is controlled separately in the platform's master data, per event.
+The list is deliberately broader than what is switched on today, so that turning
+an alert on later does not need a fresh approval cycle.
 
-| # | Module | Alert | Message text | Goes to | Status |
-|---|---|---|---|---|---|
-| 1 | Billing & Invoicing | Invoice sent | SJVN: Invoice {#var#} is available for payment (due {#var#}). View on the portal. | Counterparty (DISCOM / generator) | Live |
-| 2 | Billing & Invoicing | Payment received | SJVN: Payment of Rs {#var#} recorded against {#var#}. Status now {#var#}. | SJVN Finance desk | Live |
-| 3 | Disputes | SLA breached — management | SJVN: SLA breached on dispute {#var#} - escalated. | SJVN Management | Live |
-| 4 | Disputes | SLA breached — owner | SJVN: SLA breached on dispute {#var#} assigned to you. | Assigned SJVN user | Live |
-| 5 | Power Trading | NOAR approved | SJVN: NOAR open-access approved for {#var#} ({#var#}). Schedules can now be punched. | SJVN Trading desk | Live |
-| 6 | Power Trading | NOAR rejected (single) | SJVN: NOAR application rejected for {#var#} ({#var#}) - {#var#} | SJVN Management | Live |
-| 7 | Power Trading | NOAR rejected (bulk) | SJVN: {#var#} NOAR application(s) rejected - {#var#} | SJVN Management | Live |
-| 8 | Power Trading | NOAR approval overdue | SJVN: NOAR approval overdue for {#var#} ({#var#}) - {#var#}d pending against a {#var#}d {#var#} target | SJVN Management | Live |
-| 9 | Power Trading | NOAR wallet low | SJVN: NOAR wallet balance is Rs {#var#}, below the Rs {#var#} threshold. Recharge before the next open-access charge. | SJVN Trading desk | Live |
-| 10 | Billing & Invoicing | Seller invoice submitted | SJVN: Seller invoice {#var#} has been submitted for review. | SJVN REIA desk | To be built |
-| 11 | Billing & Invoicing | Invoice approved | SJVN: Invoice {#var#} is approved and ready for despatch. | Counterparty | To be built |
-| 12 | Billing & Invoicing | Invoice returned in approval | SJVN: Invoice {#var#} was returned in approval. Reason: {#var#} | Raising party | To be built |
-| 13 | Billing & Invoicing | Invoice cancelled | SJVN: Invoice {#var#} has been cancelled. Reason: {#var#} | Counterparty | To be built |
-| 14 | Billing & Invoicing | Arrear bill raised | SJVN: Arrear bill raised for contract {#var#} for period {#var#}, amount Rs {#var#}. | Counterparty | To be built |
-| 15 | Billing & Invoicing | Supplementary bill raised | SJVN: Supplementary bill raised for contract {#var#} for period {#var#}, amount Rs {#var#}. | Counterparty | To be built |
-| 16 | Billing & Invoicing | Payment released to generator | SJVN: Payment of Rs {#var#} released against invoice {#var#}. | Generator (seller) | To be built |
-| 17 | Billing & Invoicing | Invoice overdue | SJVN: Invoice {#var#} of Rs {#var#} was due on {#var#} and is outstanding. Late payment surcharge applies. | Counterparty | To be built |
-| 18 | Billing & Invoicing | Debit / credit note issued | SJVN: {#var#} note {#var#} of Rs {#var#} has been issued against invoice {#var#}. | Counterparty | To be built |
-| 19 | Hydro Billing | Bill pending approval | SJVN: Hydro bill {#var#} for {#var#} is pending your approval. | Named approver (internal) | To be built |
-| 20 | Hydro Billing | Bill approved | SJVN: Hydro bill {#var#} for {#var#} has been approved and can be issued. | Maker (internal) | To be built |
-| 21 | Hydro Billing | Bill rejected | SJVN: Hydro bill {#var#} was rejected in approval. Reason: {#var#} | Maker (internal) | To be built |
-| 22 | Hydro Billing | Bill issued | SJVN: Hydro bill {#var#} for {#var#} is issued. Your share is Rs {#var#}, due {#var#}. | Each beneficiary DISCOM | To be built |
-| 23 | Hydro Billing | Bill despatched | SJVN: Hydro bill {#var#} was despatched on {#var#}. Courier reference {#var#}. | Each beneficiary DISCOM | To be built |
-| 24 | Hydro Billing | Payment received | SJVN: Payment of Rs {#var#} received against hydro bill {#var#}. Outstanding is now Rs {#var#}. | Beneficiary + SJVN Finance | To be built |
-| 25 | Hydro Billing | Late payment surcharge raised | SJVN: Late payment surcharge of Rs {#var#} charged on hydro bill {#var#} as on {#var#}. | Beneficiary DISCOM | To be built |
-| 26 | Hydro Billing | Bill cancelled | SJVN: Hydro bill {#var#} for {#var#} has been cancelled. Reason: {#var#} | Beneficiary DISCOM | To be built |
-| 27 | Payment Security | Replenishment demanded | SJVN: Payment security against contract {#var#} is short by Rs {#var#}. Replenish by {#var#}. | Counterparty | To be built |
-| 28 | Payment Security | Instrument expiring | SJVN: Payment security instrument {#var#} against contract {#var#} expires on {#var#}. | Counterparty | To be built |
-| 29 | Payment Security | Instrument invoked | SJVN: Payment security instrument {#var#} has been invoked for Rs {#var#} against contract {#var#}. | Counterparty | To be built |
-| 30 | Payment Security | Scheduling on hold | SJVN: Scheduling on contract {#var#} is on hold - payment security is inadequate. | Counterparty | To be built |
+## Billing and Invoicing
+
+1. SJVN: Invoice {#var#} is available for payment (due {#var#}). View on the portal.
+2. SJVN: Payment of Rs {#var#} recorded against {#var#}. Status now {#var#}.
+3. SJVN: Seller invoice {#var#} has been submitted for review.
+4. SJVN: Invoice {#var#} is approved and ready for despatch.
+5. SJVN: Invoice {#var#} was returned in approval. Reason: {#var#}
+6. SJVN: Invoice {#var#} has been cancelled. Reason: {#var#}
+7. SJVN: Arrear bill raised for contract {#var#} for period {#var#}, amount Rs {#var#}.
+8. SJVN: Supplementary bill raised for contract {#var#} for period {#var#}, amount Rs {#var#}.
+9. SJVN: Payment of Rs {#var#} released against invoice {#var#}.
+10. SJVN: Invoice {#var#} of Rs {#var#} falls due on {#var#}. Kindly arrange payment.
+11. SJVN: Invoice {#var#} of Rs {#var#} was due on {#var#} and is outstanding. Late payment surcharge applies.
+12. SJVN: {#var#} note {#var#} of Rs {#var#} has been issued against invoice {#var#}.
+
+## Hydro Station Billing
+
+13. SJVN: Hydro bill {#var#} for {#var#} is pending your approval.
+14. SJVN: Hydro bill {#var#} for {#var#} has been approved and can be issued.
+15. SJVN: Hydro bill {#var#} was rejected in approval. Reason: {#var#}
+16. SJVN: Hydro bill {#var#} for {#var#} is issued. Your share is Rs {#var#}, due {#var#}.
+17. SJVN: Hydro bill {#var#} was despatched on {#var#}. Courier reference {#var#}.
+18. SJVN: Hydro bill {#var#} for {#var#} has been revised. Differential amount Rs {#var#}, due {#var#}.
+19. SJVN: Payment of Rs {#var#} received against hydro bill {#var#}. Outstanding is now Rs {#var#}.
+20. SJVN: Hydro bill {#var#} of Rs {#var#} was due on {#var#} and remains unpaid.
+21. SJVN: Late payment surcharge of Rs {#var#} charged on hydro bill {#var#} as on {#var#}.
+22. SJVN: Hydro bill {#var#} for {#var#} has been cancelled. Reason: {#var#}
+
+## Payment Security
+
+23. SJVN: Payment security against contract {#var#} is short by Rs {#var#}. Replenish by {#var#}.
+24. SJVN: Payment security cover on contract {#var#} has fallen to {#var#} percent of the required amount.
+25. SJVN: Payment security instrument {#var#} against contract {#var#} expires on {#var#}.
+26. SJVN: Payment security instrument {#var#} has been invoked for Rs {#var#} against contract {#var#}.
+27. SJVN: Payment security instrument {#var#} against contract {#var#} has been released.
+28. SJVN: Scheduling on contract {#var#} is on hold - payment security is inadequate.
+
+## Disputes
+
+29. SJVN: Your dispute {#var#} has been acknowledged and is under review.
+30. SJVN: Further information is required on dispute {#var#}. Please respond by {#var#}.
+31. SJVN: Dispute {#var#} has been resolved. Outcome: {#var#}
+32. SJVN: Dispute {#var#} is approaching its resolution deadline of {#var#}.
+33. SJVN: SLA breached on dispute {#var#} - escalated.
+34. SJVN: SLA breached on dispute {#var#} assigned to you.
+
+## Reconciliation
+
+35. SJVN: Reconciliation statement {#var#} for {#var#} is ready for your sign-off by {#var#}.
+36. SJVN: Reconciliation {#var#} has been disputed by {#var#}.
+
+## Contract and billing calendar
+
+37. SJVN: Bill presentation for {#var#} is due on {#var#}.
+38. SJVN: Settlement on contract {#var#} for {#var#} is due on {#var#}.
+39. SJVN: Contract {#var#} expires on {#var#}.
+40. SJVN: {#var#} for {#var#} expires on {#var#}. Please submit a renewed copy.
+
+## Scheduling and deviation
+
+41. SJVN: Schedule deviation of {#var#} percent recorded on contract {#var#} for {#var#}.
+42. SJVN: DSM bill {#var#} for {#var#} of Rs {#var#} has been despatched.
+
+## Regulatory
+
+43. SJVN: Form IV filing for {#var#} is due on {#var#}.
+
+## Account security
+
+44. SJVN: A change of bank account has been requested on your registration. If this was not you, contact SJVN immediately.
+45. SJVN: {#var#} is your verification code for the SJVN portal. Valid for {#var#} minutes. Do not share it.
+
+## Power Trading (NOAR)
+
+46. SJVN: NOAR open-access approved for {#var#} ({#var#}). Schedules can now be punched.
+47. SJVN: NOAR application rejected for {#var#} ({#var#}) - {#var#}
+48. SJVN: {#var#} NOAR application(s) rejected - {#var#}
+49. SJVN: NOAR approval overdue for {#var#} ({#var#}) - {#var#}d pending against a {#var#}d {#var#} target
+50. SJVN: NOAR approval at risk for {#var#} ({#var#}) - {#var#}d of {#var#}d target elapsed
 
 ---
 
-## Along with the templates, three more registrations are needed
+## Alongside the templates, three more registrations are needed
 
-| # | Registration | Note |
-|---|---|---|
-| 1 | **Principal Entity (PE)** | SJVN registers itself on any one access provider's DLT portal (Jio / Airtel / Vi / BSNL) with PAN, GST, CIN and an authorised signatory. It propagates to the other operators. |
-| 2 | **Header (Sender ID)** | 6 alphabetic characters, e.g. `SJVNLT`. Suggest registering a fallback too, since headers are allotted first-come across India. |
-| 3 | **Telemarketer chain** | The SMS gateway has to be bound to SJVN as its registered telemarketer. |
+1. **Principal Entity (PE)** — SJVN registers itself on any one access provider's
+   DLT portal (Jio / Airtel / Vi / BSNL) with PAN, GST, CIN and an authorised
+   signatory. It propagates to the other operators.
+2. **Header (Sender ID)** — 6 alphabetic characters, proposed `SJVNLT`, with one
+   fallback in case it is already allotted.
+3. **Telemarketer chain binding** — the SMS gateway has to be linked to SJVN as
+   its registered telemarketer.
+
+## A note on template 45
+
+The platform has no OTP or two-factor login today. Template 45 is included
+because if portal 2FA is added later, registering it then means another approval
+cycle. Note also that because SJVN is not registered with RBI / SEBI / IRDAI /
+PFRDA, an OTP from SJVN is filed under **Service – Implicit**, not under the
+Transactional category.
 
 ## Points to confirm
 
-1. Is SJVN **already** registered as a Principal Entity on any DLT portal for
-   another system (HR, payroll, an existing SAP alert)? If yes, the PE and
-   possibly the header already exist and only the 30 templates need filing.
-2. Which SMS gateway is confirmed? The platform is currently built against
-   **TextGuru**, but the telemarketer chain binds to one specific vendor, so if
-   there is an empanelled vendor under a GeM / corporate contract that has to be
-   settled first.
-3. For the Hydro Billing rows (22–26), do the fifteen beneficiary DISCOMs go on
-   the platform with contact mobile numbers? There is no number on record for
-   them today. Filing the templates does not depend on this; sending does.
-4. Should internal alerts (rows 2, 3, 4, 5–9, 19–21) go to individual officers'
-   mobiles or to a single ops-desk number? The platform supports both.
-
-*Detailed version with source references and the code changes required:
-`docs/TRAI_DLT_SMS_Registration_List.md`*
+1. Is SJVN already registered as a Principal Entity on any DLT portal for another
+   system (HR, payroll, an existing SAP alert)? If so, the PE and possibly the
+   header already exist, and only the templates need filing.
+2. Which SMS gateway is confirmed? The platform is presently built against
+   TextGuru. The telemarketer chain binds to one specific vendor, so if there is
+   an empanelled vendor under a GeM or corporate contract, that has to be settled
+   first.
+3. For the hydro rows (16–22), the fifteen beneficiary DISCOMs have no contact
+   mobile number on record in the platform. Filing the templates does not depend
+   on this; sending does.
+4. Should internal alerts go to individual officers' mobile numbers, or to a
+   single ops-desk number? The platform supports both.
