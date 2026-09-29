@@ -89,7 +89,9 @@ async function deliverSms({ notificationId, event, name, phone, text }) {
   if (isDuplicate(event, 'SMS', phone)) return;
   const base = { notificationId, event, channel: 'SMS', name, address: phone, body: text };
   try {
-    const res = await sendSms({ to: phone, text });
+    // The event travels with the message: sendSms() needs it to find the DLT
+    // content template this body was registered as.
+    const res = await sendSms({ to: phone, text, event });
     logDelivery({
       ...base,
       status: res.ok ? 'SENT' : 'FAILED', provider: res.mode, providerRef: res.provider_ref,
@@ -167,7 +169,10 @@ export async function retryFailedDeliveries(limit = 50) {
     // Re-send the exact content the first attempt used, held on the row.
     const res = d.channel === 'EMAIL'
       ? await sendMail({ to: d.address, subject: d.subject || `SJVN: ${d.event}`, text: d.body || '' })
-      : await sendSms({ to: d.address, text: d.body || '' });
+      // A retry is a fresh send as far as the operator is concerned, so it
+      // needs the template id too. The row carries the event it was raised
+      // under, which is what resolves it.
+      : await sendSms({ to: d.address, text: d.body || '', event: d.event });
     retried += 1;
     if (res.ok) recovered += 1;
     db.prepare(`

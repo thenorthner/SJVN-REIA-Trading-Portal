@@ -28,6 +28,10 @@ import {
   sendForApproval, actOnApproval, approvalTrail, pendingStep, approvalInbox,
 } from '../services/hydroBillApproval.js';
 import {
+  notifyBillForApproval, notifyBillApproved, notifyBillRejected, notifyBillIssued,
+  notifyBillDespatched, notifyPaymentReceived, notifyLpsRaised, notifyBillCancelled,
+} from '../services/hydroNotifications.js';
+import {
   postBillToLedger, recordPayment, reversePayment, resetClearing, accountMaintenance,
   accruedLpsFor, postLps, accountDisplay, beneficiariesWithAccounts,
   billReversalBlockers, reverseBillDocs, dueDateFor, openDebits,
@@ -914,6 +918,8 @@ router.post('/:id/send-for-approval', requireRole(...WRITE), (req, res) => {
       user: req.user,
     });
 
+    notifyBillForApproval(bill, req.body.next_approver_id);
+
     secureLogAudit(req, {
       action: 'HYDRO_BILL_SENT_FOR_APPROVAL',
       module: 'REIA',
@@ -940,6 +946,11 @@ router.post('/:id/approve', requireRole(...READ), (req, res) => {
       markFinal: !!req.body.mark_final,
       user: req.user,
     });
+
+    // Whoever raised this has been waiting on the answer, either way.
+    if (result.outcome === 'APPROVED') notifyBillApproved(bill);
+    else if (result.outcome === 'REJECTED') notifyBillRejected(bill, req.body.comments);
+    else if (req.body.next_approver_id) notifyBillForApproval(bill, req.body.next_approver_id);
 
     secureLogAudit(req, {
       action: `HYDRO_BILL_APPROVAL_${result.outcome}`,
@@ -1002,6 +1013,18 @@ router.post('/ledger/payment', requireRole(...WRITE), (req, res) => {
       // (e.g. a payment the PPA excludes from rebate).
       rebate: req.body.rebate !== false,
       createdBy: req.user?.id || null,
+    });
+
+    // What the beneficiary owes after this payment was applied — the figure
+    // they would otherwise have to ring the desk to find out.
+    const after = accountDisplay(contract_id, beneficiary);
+    notifyPaymentReceived({
+      contractId: contract_id,
+      beneficiaryName: beneficiary,
+      beneficiaryId: req.body.beneficiary_id || null,
+      amount: result.doc.amount,
+      billNo: result.clearings?.[0]?.doc_no || null,
+      outstanding: after.totals.outstanding,
     });
 
     secureLogAudit(req, {
@@ -1112,6 +1135,17 @@ router.post('/ledger/lps', requireRole(...WRITE), (req, res) => {
       asOf: as_of ? new Date(as_of) : new Date(),
       createdBy: req.user?.id || null,
     });
+    for (const doc of result.docs || []) {
+      const on = db.prepare('SELECT bill_no FROM hydro_station_bills WHERE id = ?').get(doc.bill_id);
+      notifyLpsRaised({
+        beneficiaryName: beneficiary,
+        beneficiaryId: doc.beneficiary_id || null,
+        amount: doc.amount,
+        billNo: on?.bill_no || doc.doc_no,
+        asOf: result.accrual.as_of,
+      });
+    }
+
     secureLogAudit(req, {
       action: 'HYDRO_LEDGER_LPS_POSTED',
       module: 'REIA',
@@ -1532,6 +1566,7 @@ router.post('/:id/issue', requireRole(...WRITE), (req, res) => {
     // Each beneficiary's share becomes a document on its own account: this is
     // the point the bill turns into money fifteen parties owe.
     const ledger = postBillToLedger(after, { createdBy: req.user?.id || null });
+    const notified = notifyBillIssued(after);
 
     secureLogAudit(req, {
       action: 'HYDRO_STATION_BILL_ISSUED',
@@ -1542,9 +1577,10 @@ router.post('/:id/issue', requireRole(...WRITE), (req, res) => {
       afterValue: {
         status: 'ISSUED', total_charges: after.total_charges,
         due_date: dueDate, ledger_docs_posted: ledger.posted,
+        beneficiaries_notified: notified,
       },
     });
-    res.json({ ...after, ledger_docs_posted: ledger.posted });
+    res.json({ ...after, ledger_docs_posted: ledger.posted, beneficiaries_notified: notified });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -1658,6 +1694,12 @@ router.post('/:id/dispatch', requireRole(...WRITE), (req, res) => {
       receipt_date || null, req.user?.name || req.user?.email || null, req.params.id,
     );
 
+    // Only on the first despatch — correcting a courier number later is not
+    // news the beneficiary needs a second message about.
+    if (!bill.dispatched_at) {
+      notifyBillDespatched(after, { dispatchDate: dispatch_date, courierRef: courier_tracking_no });
+    }
+
     secureLogAudit(req, {
       action: bill.dispatched_at ? 'HYDRO_BILL_DISPATCH_UPDATED' : 'HYDRO_BILL_DISPATCHED',
       module: 'REIA',
@@ -1713,6 +1755,8 @@ router.post('/:id/cancel', requireRole(...WRITE), (req, res) => {
           updated_at = datetime('now')
       WHERE id = ? RETURNING *
     `).get(`Cancelled: ${reason}`, req.params.id);
+
+    notifyBillCancelled(before, reason);
 
     secureLogAudit(req, {
       action: 'HYDRO_STATION_BILL_CANCELLED',

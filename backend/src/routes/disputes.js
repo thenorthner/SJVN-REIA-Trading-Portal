@@ -176,7 +176,7 @@ export function runSlaEscalations() {
     dispatch({
       event: 'DISPUTE_SLA_BREACHED', role: 'MANAGEMENT',
       subject: `Dispute SLA breached — ${d.dispute_no}`,
-      message: `SJVN: SLA breached on dispute ${d.dispute_no} — escalated.`,
+      message: `SJVN: SLA breached on dispute ${d.dispute_no} - escalated.`,
     }).catch((err) => console.error('[NOTIFY] DISPUTE_SLA_BREACHED failed', err.message));
     if (d.assigned_to) {
       dispatch({

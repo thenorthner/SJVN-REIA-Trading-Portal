@@ -50,7 +50,10 @@ let reia, finance, buyer, seller, contract;
 
 beforeAll(() => { if (!fs.existsSync(OUTBOX)) fs.mkdirSync(OUTBOX, { recursive: true }); });
 
-afterAll(() => {
+afterAll(async () => {
+  // dispatch() is fired and not awaited, so the last of them land after the
+  // final test returns. Let them settle before sweeping.
+  await settle();
   // dispatch() writes its own outbox files; provider_ref holds the path it used.
   for (const d of db.prepare('SELECT provider_ref FROM notification_deliveries').all()) {
     if (!d.provider_ref) continue;

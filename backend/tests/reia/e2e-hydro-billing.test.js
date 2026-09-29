@@ -1,10 +1,13 @@
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import request from 'supertest';
 import { app } from '../../src/server.js';
 import db from '../../src/db/index.js';
 import { tokenFor, auth, makeUser } from '../helpers/reia.js';
 import { signToken } from '../../src/middleware/auth.js';
 import { seedNjhpsAllocations } from '../../src/services/hydroStationBill.js';
+import { makeEntity } from '../helpers/reia.js';
 
 // A month of NJHPS station billing, walked from the allocation master to the
 // entry corporate Finance books — including the parts that only go wrong when
@@ -38,6 +41,22 @@ const TABLES = ['hydro_fi_posting_lines', 'hydro_fi_postings', 'hydro_tcs_claims
   'hydro_additional_charges', 'hydro_ledger_clearings', 'hydro_ledger_docs',
   'hydro_bill_approvals', 'hydro_bill_lines', 'hydro_station_bills'];
 
+/** With no gateway keyed, every notification lands as a file in backend/outbox.
+ *  Track what this suite causes so a run does not leave it behind. */
+const OUTBOX = path.join(process.cwd(), 'outbox');
+const written = new Set();
+function sweepOutbox() {
+  for (const d of db.prepare('SELECT provider_ref FROM notification_deliveries').all()) {
+    if (!d.provider_ref) continue;
+    written.add(path.isAbsolute(d.provider_ref) ? d.provider_ref : path.join(OUTBOX, d.provider_ref));
+  }
+}
+
+/** dispatch() is fire-and-forget by design; the delivery row lands a tick later. */
+const settle = () => new Promise((r) => setTimeout(r, 30));
+const notices = (event) => db.prepare(
+  'SELECT * FROM notifications WHERE type = ? ORDER BY rowid').all(event);
+
 // NJHPS is a seeded contract other suites read. Snapshot the constants this one
 // pins, and put them back, so nothing here follows the shared database out.
 const RESTORE_COLS = ['annual_afc', 'annual_design_energy_mwh', 'normative_aux',
@@ -51,7 +70,14 @@ beforeAll(() => {
   snapshot = db.prepare(`SELECT * FROM contracts WHERE contract_no = 'PPA/SJVN/NJHPS/001'`).get();
 });
 
-afterAll(() => {
+afterAll(async () => {
+  // Notifications are fired and not awaited, so the last few land after the
+  // final test returns. Let them settle before sweeping, or they are missed.
+  await settle();
+  sweepOutbox();
+  for (const f of written) { try { fs.unlinkSync(f); } catch { /* already gone */ } }
+  db.prepare('DELETE FROM notification_deliveries').run();
+  db.prepare('DELETE FROM notifications').run();
   for (const t of TABLES) db.prepare(`DELETE FROM ${t}`).run();
   db.prepare('DELETE FROM hydro_beneficiary_allocations').run();
   if (snapshot) {
@@ -73,6 +99,11 @@ beforeEach(() => {
     WHERE id = ?
   `).run(contract.id);
   contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract.id);
+
+  // Deliveries reference the notification they hang off, so they go first.
+  sweepOutbox();
+  db.prepare('DELETE FROM notification_deliveries').run();
+  db.prepare('DELETE FROM notifications').run();
 
   reia = tokenFor('REIA_USER');
   viewer = tokenFor('MANAGEMENT');
@@ -503,6 +534,156 @@ describe('E2E: revising a month after the beta certificate arrives', () => {
     });
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/what changed/i);
+  });
+});
+
+describe('E2E: telling people what happened', () => {
+  // Until this was wired the hydro module told nobody anything: a bill waited
+  // for an approver to notice it on a screen, and a DISCOM heard nothing at all
+  // between the bill and the surcharge. These pin that each stage now speaks.
+
+  it('tells the approver a bill is waiting, and the maker how it went', async () => {
+    const { maker, hod } = desk();
+    const raised = await post('/api/hydro-billing', signFor(maker),
+      { contract_id: contract.id, ...JUNE });
+    expect(raised.status).toBe(200);
+
+    await post(`/api/hydro-billing/${raised.body.id}/send-for-approval`, signFor(maker),
+      { next_approver_id: hod.id, final_approver_id: hod.id, comments: 'for approval' });
+    await settle();
+    const waiting = notices('HYDRO_BILL_FOR_APPROVAL');
+    expect(waiting, 'the approver was not told a bill is in their inbox').toHaveLength(1);
+    expect(waiting[0].user_id).toBe(hod.id);
+    expect(waiting[0].message).toContain(raised.body.bill_no);
+
+    await post(`/api/hydro-billing/${raised.body.id}/approve`, signFor(hod),
+      { action: 'APPROVE', comments: 'approved' });
+    await settle();
+    const done = notices('HYDRO_BILL_APPROVED');
+    expect(done, 'the maker was not told their bill cleared').toHaveLength(1);
+    expect(done[0].user_id, 'the approval notice went to somebody other than the maker')
+      .toBe(maker.id);
+  });
+
+  it('tells the maker when a bill is sent back, and why', async () => {
+    const { maker, hod } = desk();
+    const raised = await post('/api/hydro-billing', signFor(maker),
+      { contract_id: contract.id, ...JUNE });
+    await post(`/api/hydro-billing/${raised.body.id}/send-for-approval`, signFor(maker),
+      { next_approver_id: hod.id, final_approver_id: hod.id, comments: 'for approval' });
+    await post(`/api/hydro-billing/${raised.body.id}/approve`, signFor(hod),
+      { action: 'REJECT', comments: 'PAFM does not agree with the REA' });
+    await settle();
+
+    const sentBack = notices('HYDRO_BILL_REJECTED');
+    expect(sentBack, 'a rejected bill told the maker nothing').toHaveLength(1);
+    expect(sentBack[0].user_id).toBe(maker.id);
+    expect(sentBack[0].message).toContain('PAFM does not agree');
+  });
+
+  it('tells a beneficiary its share when the bill is issued, and skips those it cannot reach', async () => {
+    // A hydro beneficiary is a name from the REA; only some are registered
+    // entities with a contact. Link one and leave the rest as they are.
+    const punjab = makeEntity('BUYER', { name: 'Punjab State Power Corporation' });
+    db.prepare("UPDATE entities SET corporate_email = 'ops@pspcl.test.in', corporate_phone = '9812345699' WHERE id = ?")
+      .run(punjab.id);
+    db.prepare(`UPDATE hydro_beneficiary_allocations SET beneficiary_id = ?
+                WHERE contract_id = ? AND beneficiary_name = 'PUNJAB'`).run(punjab.id, contract.id);
+
+    const { bill } = await issuedBill();
+    expect(bill.beneficiaries_notified, 'the one reachable beneficiary was not notified').toBe(1);
+    await settle();
+
+    const issued = notices('HYDRO_BILL_ISSUED');
+    expect(issued).toHaveLength(1);
+    expect(issued[0].message).toMatch(/Your share is Rs [\d,]+, due 2026-07-31\./);
+
+    // It actually went out on the channels the policy names, and the SMS body
+    // is the one the DLT template was registered as.
+    const sms = db.prepare(
+      `SELECT * FROM notification_deliveries WHERE event = 'HYDRO_BILL_ISSUED' AND channel = 'SMS'`).get();
+    expect(sms, 'no SMS was attempted to a beneficiary that has a mobile on record').toBeTruthy();
+    expect(sms.address).toBe('9812345699');
+    expect(sms.body).toMatch(
+      /^SJVN: Hydro bill .+ for 2026-06 is issued\. Your share is Rs [\d,]+, due 2026-07-31\.$/);
+    // The other fourteen are silent rather than guessed at.
+    expect(db.prepare(
+      `SELECT COUNT(*) c FROM notification_deliveries WHERE event = 'HYDRO_BILL_ISSUED'`).get().c)
+      .toBeLessThanOrEqual(2); // one email + one SMS, for the single linked beneficiary
+  });
+
+  it('tells a beneficiary the bill was couriered, once and not again on a correction', async () => {
+    const punjab = makeEntity('BUYER', { name: 'Punjab State Power Corporation' });
+    db.prepare("UPDATE entities SET corporate_email = 'ops@pspcl.test.in' WHERE id = ?").run(punjab.id);
+    db.prepare(`UPDATE hydro_beneficiary_allocations SET beneficiary_id = ?
+                WHERE contract_id = ? AND beneficiary_name = 'PUNJAB'`).run(punjab.id, contract.id);
+
+    const { bill, maker } = await issuedBill();
+    await post(`/api/hydro-billing/${bill.id}/release`, signFor(maker));
+    await post(`/api/hydro-billing/${bill.id}/dispatch`, signFor(maker),
+      { dispatch_date: '2026-07-05', courier_tracking_no: 'BD1234567IN' });
+    await settle();
+    expect(notices('HYDRO_BILL_DESPATCHED')).toHaveLength(1);
+
+    // Fixing a mistyped courier number is not news worth a second message.
+    await post(`/api/hydro-billing/${bill.id}/dispatch`, signFor(maker),
+      { dispatch_date: '2026-07-05', courier_tracking_no: 'BD7654321IN' });
+    await settle();
+    expect(notices('HYDRO_BILL_DESPATCHED'),
+      'correcting the courier number sent the beneficiary a second despatch notice').toHaveLength(1);
+  });
+
+  it('reports a payment with what is still outstanding after it', async () => {
+    await issuedBill();
+    const owed = (await get(
+      `/api/hydro-billing/ledger?contract_id=${contract.id}&beneficiary=PUNJAB`, viewer)).body.totals.outstanding;
+
+    await post('/api/hydro-billing/ledger/payment', reia, {
+      contract_id: contract.id, beneficiary: 'PUNJAB', amount: Math.round(owed / 2),
+      payment_date: '2026-07-20', mode: 'RTGS', rebate: false,
+    });
+    await settle();
+
+    const paid = notices('HYDRO_PAYMENT_RECEIVED');
+    expect(paid, 'a payment was recorded and nobody was told').toHaveLength(1);
+    expect(paid[0].message).toMatch(/^SJVN: Payment of Rs [\d,]+ received against hydro bill .+\. Outstanding is now Rs [\d,]+\.$/);
+  });
+
+  it('reports a surcharge when it is charged, once per document', async () => {
+    await issuedBill();
+    const r = await post('/api/hydro-billing/ledger/lps', reia,
+      { contract_id: contract.id, beneficiary: 'HARYANA', as_of: '2027-01-31' });
+    expect(r.body.posted).toBeGreaterThan(0);
+    await settle();
+
+    const raised = notices('HYDRO_LPS_RAISED');
+    expect(raised).toHaveLength(r.body.posted);
+    expect(raised[0].message).toMatch(
+      /^SJVN: Late payment surcharge of Rs [\d,]+ charged on hydro bill .+ as on 2027-01-31\.$/);
+
+    // A second run surcharges nothing, so it must also say nothing.
+    await post('/api/hydro-billing/ledger/lps', reia,
+      { contract_id: contract.id, beneficiary: 'HARYANA', as_of: '2027-01-31' });
+    await settle();
+    expect(notices('HYDRO_LPS_RAISED'),
+      'the second sweep re-announced a surcharge it did not charge').toHaveLength(r.body.posted);
+  });
+
+  it('tells a beneficiary when the month is withdrawn, and why', async () => {
+    const punjab = makeEntity('BUYER', { name: 'Punjab State Power Corporation' });
+    db.prepare("UPDATE entities SET corporate_email = 'ops@pspcl.test.in' WHERE id = ?").run(punjab.id);
+    db.prepare(`UPDATE hydro_beneficiary_allocations SET beneficiary_id = ?
+                WHERE contract_id = ? AND beneficiary_name = 'PUNJAB'`).run(punjab.id, contract.id);
+
+    const { bill, maker } = await issuedBill();
+    const r = await post(`/api/hydro-billing/${bill.id}/cancel`, signFor(maker),
+      { reason: 'raised on the wrong month' });
+    expect(r.status).toBe(200);
+    await settle();
+
+    const cancelled = notices('HYDRO_BILL_CANCELLED');
+    expect(cancelled, 'a cancelled bill told the beneficiary nothing').toHaveLength(1);
+    expect(cancelled[0].message).toContain('raised on the wrong month');
   });
 });
 

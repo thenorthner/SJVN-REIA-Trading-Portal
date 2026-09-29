@@ -304,34 +304,41 @@ F4: SJVN: Scheduling on contract {#var#} is on hold - payment security is inadeq
 
 ---
 
-## 5. Code changes needed before any of this works
+## 5. Code changes — done
 
-Filing the templates is necessary but not sufficient. Four things in the platform
-have to change, and all four are small.
+All four gaps this document originally listed as outstanding have been closed
+(29 September 2026). They are recorded here because the DLT filing depends on
+knowing what the platform will actually put on the wire.
 
-1. **No DLT template ID is ever sent.** `sendSms()` accepts a `templateId` and
-   forwards it to TextGuru as the `templateid` parameter
-   (`services/smsService.js:70`), but **none of the three call sites passes one** —
-   `routes/invoices.js:1747`, `services/notificationService.js:92` and the retry
-   sweep at `:170`. Once DLT is live, a message sent without its registered template
-   ID is scrubbed and dropped by the operator. A template-ID map, keyed by event, has
-   to be added and threaded through `dispatch()`.
+1. **The registered template id now travels with every message.** `sendSms()`
+   resolves it from the new `sms_dlt_template_ids` master parameter, keyed by
+   event, and every call site passes its event — the invoice despatch, the
+   central `dispatch()` fan-out, and the retry sweep. Enter the ids the portal
+   returns into that parameter; no code change is needed for them.
 
-2. **Variable lengths are unbounded.** The 30-character DLT limit is not enforced
-   anywhere. The rejection reason in C2/C3 and the cancellation reason in D4/E8 are
-   free text and will routinely exceed it. Truncate before send.
+2. **A live send with no registered template is refused, not attempted.** This
+   matters more than it sounds: the gateway answers 200 for a message the
+   operator then scrubs, so the old behaviour would have logged a message that
+   reached nobody as SENT. While SMS is still in outbox mode the same case is
+   recorded as a warning instead, so the gap is visible before go-live.
 
-3. **The en-dash in B1 and C2–C4** forces Unicode encoding. Replace with a hyphen,
-   or register the Unicode variants knowingly.
+3. **Variables are capped and the text is normalised.** `smsVar()` cuts a value
+   to 30 characters — a rejection reason, a cancellation reason, a DISCOM's
+   full legal name. `sanitizeSmsText()` maps en-dashes, rupee signs, curly
+   quotes and non-breaking spaces onto their GSM-7 equivalents, and runs inside
+   `sendSms()` so no call site can bypass it. A test walks the SMS bodies in
+   the source and fails if a non-GSM-7 character appears in one.
 
-4. **Hydro billing has no notification path at all.** `dispatch()` is never called
-   from the hydro module. Parts E1–E8 need the call sites written, not just the
-   templates registered.
+4. **Hydro station billing now has a notification path.** `hydroNotifications.js`
+   fires at every stage the module previously passed over in silence: sent for
+   approval, approved, rejected, issued, revised, despatched, payment received,
+   surcharge raised, cancelled.
 
-None of these block the DLT filing — file first, since approval takes days, and do
-the code work in parallel.
-
----
+**What still blocks the hydro beneficiary messages is data, not code.** A hydro
+beneficiary is a name out of the Regional Energy Account; only a beneficiary
+linked to a registered entity carries a contact. Unlinked ones are skipped
+rather than guessed at, and the issue response reports how many were reached
+(`beneficiaries_notified`), so the gap is measurable rather than silent.
 
 ## 6. Order of work
 

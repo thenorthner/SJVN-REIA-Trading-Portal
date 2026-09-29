@@ -114,6 +114,18 @@ cycle. Note also that because SJVN is not registered with RBI / SEBI / IRDAI /
 PFRDA, an OTP from SJVN is filed under **Service – Implicit**, not under the
 Transactional category.
 
+## Where the platform stands
+
+The sending side is built and tested. Each message carries the DLT template id
+registered for its event, variables are capped at 30 characters, and the text is
+held to the GSM-7 character set so it matches the registered template exactly. A
+message whose template is not yet registered is refused before it reaches the
+gateway rather than being accepted and silently dropped by the operator.
+
+Enter the template ids the DLT portal returns into the `sms_dlt_template_ids`
+master parameter. Nothing else needs to change in the platform, and `sms_enabled`
+should stay off until they are in.
+
 ## Points to confirm
 
 1. Is SJVN already registered as a Principal Entity on any DLT portal for another

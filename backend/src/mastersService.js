@@ -63,6 +63,7 @@ const DEFAULT_PARAMS = [
   { category: 'GENERAL', param_key: 'sms_enabled', param_value: 'false', data_type: 'TEXT', unit: '', description: 'Master switch for outbound SMS. "true" sends via TextGuru (needs textguru_api_key + sender ID); anything else keeps SMS in outbox-only mode. Email and in-app are unaffected.' },
   { category: 'GENERAL', param_key: 'textguru_api_key', param_value: '', data_type: 'TEXT', unit: '', description: 'TextGuru SMS gateway API key (or TEXTGURU_API_KEY env). Empty = SMS written to backend/outbox/ instead of sent.' },
   { category: 'GENERAL', param_key: 'textguru_sender_id', param_value: '', data_type: 'TEXT', unit: '', description: 'DLT-registered 6-char sender ID / header for TextGuru (or TEXTGURU_SENDER env). Required by Indian carriers for transactional SMS.' },
+  { category: 'GENERAL', param_key: 'sms_dlt_template_ids', param_value: JSON.stringify({}), data_type: 'JSON', unit: '', description: 'DLT content-template ids issued by the portal, as {"EVENT_NAME": "1234567890123456789"}. TRAI requires every commercial SMS to carry the id of the template it was registered against; a message sent without one is scrubbed by the operator and dropped, while the gateway still answers 200. An event with no id here is refused before it is sent once the gateway is keyed, and only warned about while SMS is in outbox mode. Fill this in from the DLT portal before setting sms_enabled to true — see docs/SMS_Alerts_Single_List.md for the fifty templates and their text.' },
   { category: 'GENERAL', param_key: 'ops_desk_phone', param_value: '', data_type: 'TEXT', unit: '', description: 'Fallback mobile number for internal desk alerts where the target user has no phone on record. Comma-separated for multiple.' },
   { category: 'GENERAL', param_key: 'notification_channel_policy', param_value: JSON.stringify({
     INVOICE_SENT: ['INAPP', 'EMAIL', 'SMS'],
@@ -74,6 +75,19 @@ const DEFAULT_PARAMS = [
     NOAR_SLA_AT_RISK: ['INAPP', 'EMAIL'],
     DISPUTE_SLA_BREACHED: ['INAPP', 'EMAIL', 'SMS'],
     FORM_IV_DUE: ['INAPP', 'EMAIL', 'SMS'],
+    // Hydro station billing. The beneficiary-facing events carry SMS because a
+    // DISCOM hearing nothing between the bill and the surcharge is how a month
+    // goes unpaid; they stay silent in practice until a beneficiary is linked
+    // to a registered entity with a contact number.
+    HYDRO_BILL_FOR_APPROVAL: ['INAPP', 'EMAIL'],
+    HYDRO_BILL_APPROVED: ['INAPP', 'EMAIL'],
+    HYDRO_BILL_REJECTED: ['INAPP', 'EMAIL'],
+    HYDRO_BILL_ISSUED: ['INAPP', 'EMAIL', 'SMS'],
+    HYDRO_BILL_REVISED: ['INAPP', 'EMAIL', 'SMS'],
+    HYDRO_BILL_DESPATCHED: ['INAPP', 'EMAIL'],
+    HYDRO_PAYMENT_RECEIVED: ['INAPP', 'EMAIL', 'SMS'],
+    HYDRO_LPS_RAISED: ['INAPP', 'EMAIL', 'SMS'],
+    HYDRO_BILL_CANCELLED: ['INAPP', 'EMAIL', 'SMS'],
     DEFAULT: ['INAPP'],
   }), data_type: 'JSON', unit: '', description: 'Which channels each notification event uses, keyed by event type. Events not listed fall back to DEFAULT (in-app only). Channels: INAPP, EMAIL, SMS. Edit to add or silence a channel without a code change.' },
   { category: 'TRADING', param_key: 'iex_enabled', param_value: 'false', data_type: 'TEXT', unit: '', description: 'Master switch for the IEX exchange API. "true" pulls live cleared results and market prices (needs iex_api_token and iex_login_user_id; hosts are built in per segment); anything else runs in stub mode. Bid submission stays manual either way.' },

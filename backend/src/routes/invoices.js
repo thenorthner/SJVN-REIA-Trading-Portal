@@ -1744,7 +1744,7 @@ router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res
     const phone = recipientEntity?.corporate_phone || contacts.find((c) => c.phone)?.phone;
     if (phone && channelsFor('INVOICE_SENT').includes('SMS')) {
       const smsText = `SJVN: Invoice ${inv.invoice_no} is available for payment (due ${dueDate}). View on the portal.`;
-      const smsRes = await sendSms({ to: phone, text: smsText });
+      const smsRes = await sendSms({ to: phone, text: smsText, event: 'INVOICE_SENT' });
       db.prepare(`
         INSERT INTO invoice_deliveries (id, invoice_id, channel, recipient, status, mode, detail_json, sent_by)
         VALUES (?, ?, 'SMS', ?, ?, ?, ?, ?)
