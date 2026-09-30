@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, fmtNumber } from '../../components/ui.jsx';
+import ModuleGuide from '../../components/ModuleGuide.jsx';
+import { getGuide } from '../../content/guides/index.js';
 import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
 import ReaAutomationPipeline from '../../components/ReaAutomationPipeline.jsx';
 import EnergyAccountUpload from '../../components/EnergyAccountUpload.jsx';
@@ -12,6 +14,7 @@ const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
 const EMPTY_FORM = { contract_id: '', period_month: '', data_type: 'PROVISIONAL', source: 'MANUAL', energy_mwh: '', cuf_percent: '', availability_percent: '', peak_availability_percent: '' };
 
 export default function EnergyData() {
+  const [view, setView] = useState('main');
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [contracts, setContracts] = useState([]);
@@ -203,7 +206,7 @@ export default function EnergyData() {
       <PageHeader
         title="Energy Data Accounting & Validation"
         subtitle="Record metered generation, validate against contracted parameters and lock for billing"
-        actions={
+        actions={view === 'main' && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button
               type="button"
@@ -221,9 +224,18 @@ export default function EnergyData() {
               </>
             )}
           </div>
-        }
+        )}
       />
 
+      <Tabs style={{ marginBottom: 18 }}>
+        <Tab active={view === 'main'} onClick={() => setView('main')}>Periods</Tab>
+        <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
+      </Tabs>
+
+      {view === 'fyi' && <ModuleGuide guide={getGuide('energy')} />}
+
+      {view === 'main' && (
+      <>
       {accountResult && (
         <div className="alert alert-success" role="status">
           {accountResult.account_label} {accountResult.file_name ? `(${accountResult.file_name}) ` : ''}imported:
@@ -522,6 +534,9 @@ export default function EnergyData() {
         )}
       </div>
     )}
+
+      </>
+      )}
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Record Energy Data" width={560}>
         {error && <div className="form-error">{error}</div>}

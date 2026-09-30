@@ -17,6 +17,52 @@ export const OPEN_RECON_STATUSES = [
   'DRAFT', 'IN_PROGRESS', 'AUTO_MATCHED', 'NEEDS_REVIEW', 'PENDING_SIGN_OFF', 'REOPENED', 'DISPUTED',
 ];
 
+/**
+ * A line the platform cannot actually check, because the system it would be
+ * checked against is not connected.
+ *
+ * The tax line wants a figure filed with the GST portal and the SAP line wants
+ * the finance system's own total. Neither connector exists, so both defaulted to
+ * the platform's own number and compared it against itself — reporting an
+ * exact match on every run, and lifting the auto-match percentage with two of
+ * the six lines that were never able to move it.
+ *
+ * Saying so is the honest answer. A NOT_CONNECTED line counts as neither
+ * matched nor an exception: it does not block sign-off, because there is nothing
+ * for anyone to resolve, and it does not flatter the percentage either.
+ */
+export const NOT_CONNECTED = 'NOT_CONNECTED';
+
+/** Statuses that mean a line agrees. */
+export const MATCHED_STATUSES = ['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN'];
+
+/** Statuses that mean a line is open and has to be dealt with before sign-off. */
+export const OPEN_ITEM_STATUSES = ['EXCEPTION', 'CARRIED'];
+
+/**
+ * The counts every screen reads off a statement.
+ *
+ * Four call sites used to compute these separately, which is how a new status
+ * ends up counted one way in the engine and another in the route.
+ */
+export function summariseItems(items = []) {
+  const matched = items.filter((i) => MATCHED_STATUSES.includes(i.match_status)).length;
+  const exceptions = items.filter((i) => OPEN_ITEM_STATUSES.includes(i.match_status)).length;
+  const notConnected = items.filter((i) => i.match_status === NOT_CONNECTED).length;
+  // Only lines that could have gone either way are in the denominator.
+  const checkable = matched + exceptions;
+  return {
+    matched,
+    exceptions,
+    not_connected: notConnected,
+    checkable,
+    auto_match_pct: checkable ? Number(((matched / checkable) * 100).toFixed(2)) : 0,
+    unreconciled_amount: items
+      .filter((i) => OPEN_ITEM_STATUSES.includes(i.match_status))
+      .reduce((s, i) => s + Math.abs(i.variance || 0), 0),
+  };
+}
+
 export const ITEM_TYPES = [
   'ENERGY_THREE_WAY', 'FINANCIAL_THREE_WAY', 'TAX', 'PERFORMANCE', 'PENALTY',
   'INTERNAL_SAP', 'TRADING_BID_CLEAR_BILL', 'CARRY_FORWARD', 'DISPUTE_REF',

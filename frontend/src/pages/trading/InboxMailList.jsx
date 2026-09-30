@@ -134,14 +134,14 @@ export default function InboxMailList() {
 
   return (
     <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
-      <PageHeader title="INBOX MAIL LIST" />
+      <PageHeader title="Broadcast Log" subtitle="Broadcasts sent from Bulk Communications. Personal messages are in Mail." />
 
       {/* Top Action Bar */}
       <Card style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f5f7f9' }}>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-primary" onClick={() => navigate('/trading/bulk-communications')}>[ New Mail ]</button>
-          <button className="btn" style={{ background: '#fff', border: '1px solid #ccc' }} onClick={() => fetchInbox()}>[ Inbox ]</button>
-          <button className="btn" style={{ background: '#fff', border: '1px solid #ccc' }} onClick={() => navigate('/trading/bulk-communications')}>[ Sent Mail ]</button>
+          <button className="btn btn-primary" onClick={() => navigate('/trading/bulk-communications')}>[ New Broadcast ]</button>
+          <button className="btn" style={{ background: '#fff', border: '1px solid #ccc' }} onClick={() => fetchInbox()}>[ Refresh ]</button>
+          <button className="btn" style={{ background: '#fff', border: '1px solid #ccc' }} onClick={() => navigate('/trading/bulk-communications')}>[ Bulk Communications ]</button>
           <button className="btn btn-danger" onClick={handleDelete} disabled={selectedMessages.length === 0}>[ Delete ]</button>
         </div>
         

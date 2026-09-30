@@ -9,6 +9,8 @@ import {
   PageHeader, Card, Table, Badge, Modal, Field, StatCard, Tabs, Tab,
   fmtCurrency, fmtNumber,
 } from '../../components/ui.jsx';
+import ModuleGuide from '../../components/ModuleGuide.jsx';
+import { getGuide } from '../../content/guides/index.js';
 
 // The monthly bill for a hydro station, in the shape SJVN's Commercial & System
 // Operation Department issues it: the station's own charges (the A, C, E and EE
@@ -599,6 +601,8 @@ function RegulationPanel({ ursNr, allocations, deductions, setDeductions, e3, pr
 }
 
 export default function HydroBilling() {
+  // Page-level view. `tab` is already taken by the preview's inner tabs.
+  const [view, setView] = useState('billing');
   const { user } = useAuth();
   const canWrite = ROLE_GROUPS.REIA_WRITE.includes(user?.role);
 
@@ -910,6 +914,15 @@ export default function HydroBilling() {
         subtitle="Monthly CERC two-part bill for a hydro station, split across the beneficiaries of the Regional Energy Account"
       />
 
+      <Tabs style={{ marginBottom: 18 }}>
+        <Tab active={view === 'billing'} onClick={() => setView('billing')}>Billing</Tab>
+        <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
+      </Tabs>
+
+      {view === 'fyi' && <ModuleGuide guide={getGuide('hydro')} />}
+
+      {view === 'billing' && (
+      <>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
 
@@ -1214,6 +1227,9 @@ export default function HydroBilling() {
           emptyMessage="No bill has been raised for this station yet."
         />
       </Card>
+
+      </>
+      )}
 
       <Modal open={!!openBill} onClose={() => setOpenBill(null)} title={openBill ? `${openBill.bill_no} — ${openBill.station_name} ${openBill.billing_month}` : ''} width={980}>
         {openBill && (

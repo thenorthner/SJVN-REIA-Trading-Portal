@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/client.js';
-import { PageHeader, Card, Badge, StatCard, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Badge, StatCard, Tabs, Tab, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import ModuleGuide from '../../components/ModuleGuide.jsx';
+import { getGuide } from '../../content/guides/index.js';
 import { fmtDateTime } from '../../datetime.js';
 
 // Every developer bill waiting to be verified, and what each one is waiting on.
@@ -23,6 +25,7 @@ const FILTERS = [
 ];
 
 export default function VerificationQueue() {
+  const [view, setView] = useState('queue');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -55,6 +58,15 @@ export default function VerificationQueue() {
         actions={<Link className="btn btn-outline" to="/reia/invoices">Open invoices</Link>}
       />
 
+      <Tabs style={{ marginBottom: 18 }}>
+        <Tab active={view === 'queue'} onClick={() => setView('queue')}>Queue</Tab>
+        <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
+      </Tabs>
+
+      {view === 'fyi' && <ModuleGuide guide={getGuide('verification')} />}
+
+      {view === 'queue' && (
+      <>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
 
       {loading && !data ? (
@@ -213,6 +225,8 @@ export default function VerificationQueue() {
             </p>
           </Card>
         </>
+      )}
+      </>
       )}
     </div>
   );

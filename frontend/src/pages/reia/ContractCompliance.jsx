@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/client.js';
-import { PageHeader, Card, Badge, StatCard, Field, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Badge, StatCard, Field, Tabs, Tab, fmtNumber } from '../../components/ui.jsx';
+import ModuleGuide from '../../components/ModuleGuide.jsx';
+import { getGuide } from '../../content/guides/index.js';
 import { fmtDate } from '../../datetime.js';
 
 // Where each contract stands against its own timeline and obligations.
@@ -22,6 +24,7 @@ const FILTERS = [
 ];
 
 export default function ContractCompliance() {
+  const [view, setView] = useState('main');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -56,6 +59,15 @@ export default function ContractCompliance() {
         actions={<Link className="btn btn-outline" to="/reia/contracts">Open contracts</Link>}
       />
 
+      <Tabs style={{ marginBottom: 18 }}>
+        <Tab active={view === 'main'} onClick={() => setView('main')}>Contracts</Tab>
+        <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
+      </Tabs>
+
+      {view === 'fyi' && <ModuleGuide guide={getGuide('compliance')} />}
+
+      {view === 'main' && (
+      <>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
 
       {loading && !data ? (
@@ -179,6 +191,8 @@ export default function ContractCompliance() {
             </p>
           </Card>
         </>
+      )}
+      </>
       )}
     </div>
   );

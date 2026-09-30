@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, StatementViewer } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, fmtCurrency, StatementViewer } from '../../components/ui.jsx';
+import ModuleGuide from '../../components/ModuleGuide.jsx';
+import { getGuide } from '../../content/guides/index.js';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { fmtDateTime } from '../../datetime.js';
 
@@ -24,11 +26,24 @@ function StatPill({ label, value, sub }) {
 }
 
 function MatchCell({ status }) {
+  // A line with no system to check against is neither a pass nor a failure, and
+  // showing it as either would be a claim the platform cannot make.
+  if (status === 'NOT_CONNECTED') {
+    return (
+      <span
+        title="No connector for the system this would be checked against, so this line was not checked."
+        style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}
+      >
+        Not checked
+      </span>
+    );
+  }
   const ok = ['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN'].includes(status);
   return <Badge status={ok ? 'AUTO_MATCHED' : status === 'CARRIED' ? 'REOPENED' : 'NEEDS_REVIEW'} />;
 }
 
 export default function Reconciliation() {
+  const [view, setView] = useState('main');
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [stats, setStats] = useState(null);
@@ -282,7 +297,7 @@ export default function Reconciliation() {
       <PageHeader
         title="Reconciliation"
         subtitle="Three-way trust: Metered ↔ Billed ↔ Paid — with joint digital sign-off and dispute linkage"
-        actions={
+        actions={view === 'main' && (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-primary" disabled={pdfLoading} onClick={downloadReconPdf}>
               {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
@@ -291,9 +306,18 @@ export default function Reconciliation() {
               <button className="btn btn-secondary" onClick={() => setShowRun(true)}>+ Run Reconciliation</button>
             )}
           </div>
-        }
+        )}
       />
 
+      <Tabs style={{ marginBottom: 18 }}>
+        <Tab active={view === 'main'} onClick={() => setView('main')}>Statements</Tab>
+        <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
+      </Tabs>
+
+      {view === 'fyi' && <ModuleGuide guide={getGuide('reconciliation')} />}
+
+      {view === 'main' && (
+      <>
       {stats && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
           <StatPill label="Auto-match avg" value={`${stats.avg_auto_match_pct}%`} />
@@ -366,6 +390,9 @@ export default function Reconciliation() {
       </Card>
 
       {/* Modal: Run Reconciliation */}
+      </>
+      )}
+
       <Modal open={showRun} onClose={() => setShowRun(false)} title="Run Reconciliation" width={560}>
         {error && <div className="form-error">{error}</div>}
         <form onSubmit={handleRun}>

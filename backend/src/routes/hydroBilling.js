@@ -10,7 +10,8 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { newId, genInvoiceNo } from '../util.js';
+import { newId, genInvoiceNo, pushNotification } from '../util.js';
+import { getParam } from '../mastersService.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { generateHydroStationBillPdf } from '../scripts/hydroStationBillPdf.js';
 import {
@@ -599,7 +600,7 @@ function saveBill(contract, month, kind, body, req) {
       bill.e4_cum_scheduled_kwh, bill.e5_cum_free_power_kwh, bill.e6_cum_saleable_kwh,
       bill.e7_excess_kwh, bill.e8_upto_design_kwh, bill.urs_nr_kwh,
       bill.ee1_energy_charge, bill.ee2_excess_energy_charge, bill.total_charges, bill.nrldc_total_fee,
-      prevTotal, differential, req.user?.name || req.user?.email || null, req.user?.id || null,
+      prevTotal, differential, req?.user?.name || req?.user?.email || null, req?.user?.id || null,
     );
     for (const l of lines) {
       insertLine.run(
@@ -721,6 +722,16 @@ async function importReaMonth(rpc, month, stationIds, link = null) {
   return { data_type: null, imported: false, notes };
 }
 
+/** Every hydro/PSP station PPA the desk bills, live ones first to last. */
+function hydroStations() {
+  return db.prepare(`
+    SELECT c.*, e.name AS seller_name FROM contracts c
+    LEFT JOIN entities e ON c.seller_id = e.id
+    WHERE c.contract_type = 'PPA' AND c.project_type IN ('Hydro','PSP') AND c.status IN ('ACTIVE','SIGNED')
+    ORDER BY c.contract_no
+  `).all();
+}
+
 /**
  * POST /hydro-billing/from-rea — fetch each month's Regional Energy Account
  * from the RPC website and draft that month's bill for every hydro station
@@ -739,7 +750,7 @@ async function importReaMonth(rpc, month, stationIds, link = null) {
  * enters β where NRPC has certified it, and issues as usual. A month that
  * already has a live bill is left alone.
  */
-async function runFromRea(body, req, onProgress) {
+async function runFromRea(body, actor, onProgress) {
   const from = normalizeMonth(body.from_month);
   const to = normalizeMonth(body.to_month || body.from_month);
   if (!from || !to) throw Object.assign(new Error('from_month and to_month must be YYYY-MM'), { status: 400 });
@@ -750,12 +761,7 @@ async function runFromRea(body, req, onProgress) {
   // { "2026-08": "https://nrpc.gov.in/allfile/…REA0826_P.pdf", … }
   const links = body.rea_links && typeof body.rea_links === 'object' ? body.rea_links : {};
 
-  const stations = db.prepare(`
-    SELECT c.*, e.name AS seller_name FROM contracts c
-    LEFT JOIN entities e ON c.seller_id = e.id
-    WHERE c.contract_type = 'PPA' AND c.project_type IN ('Hydro','PSP') AND c.status IN ('ACTIVE','SIGNED')
-    ORDER BY c.contract_no
-  `).all();
+  const stations = hydroStations();
   const ready = stations.filter((c) => readiness(c).ready);
   const skippedStations = stations.filter((c) => !readiness(c).ready)
     .map((c) => ({ contract_no: c.contract_no, station_name: c.seller_name, missing: readiness(c).missing }));
@@ -778,7 +784,7 @@ async function runFromRea(body, req, onProgress) {
     const bills = [];
     for (const c of ready) {
       const row = { contract_no: c.contract_no, station_name: c.seller_name };
-      if (blocked.has(c.id)) { bills.push({ ...row, status: 'SKIPPED', reason: 'an earlier month in this run was not billed, so the cumulative would be wrong' }); continue; }
+      if (blocked.has(c.id)) { bills.push({ ...row, status: 'SKIPPED', cascade: true, reason: 'an earlier month in this run was not billed, so the cumulative would be wrong' }); continue; }
       const live = db.prepare(`
         SELECT bill_no, bill_kind, status FROM hydro_station_bills
         WHERE contract_id = ? AND billing_month = ? AND status <> 'CANCELLED' AND bill_kind IN ('PROVISIONAL','FINAL')
@@ -812,7 +818,7 @@ async function runFromRea(body, req, onProgress) {
           pafm_percent: energy.availability_percent,
           ...(energy.free_energy_mwh != null ? { free_power_kwh: Number(energy.free_energy_mwh) * 1000 } : {}),
           rea_reference: `${rpc} ${rea.data_type === 'FINAL' ? 'Final' : 'Provisional'} REA ${month}`,
-        }, req);
+        }, actor);
         bills.push({
           ...row, status: 'CREATED', bill_no: saved.bill_no, bill_kind: kind,
           energy_mwh: energy.energy_mwh, free_power_mwh: energy.free_energy_mwh, pafm_pct: saved.c1_pafm_pct,
@@ -826,7 +832,7 @@ async function runFromRea(body, req, onProgress) {
     results.push({ month, rea: rea.data_type, rea_imported: rea.imported, notes: rea.notes, bills });
   }
 
-  secureLogAudit(req, {
+  secureLogAudit(actor, {
     action: 'HYDRO_BILLS_FROM_REA',
     module: 'REIA',
     entityType: 'hydro_station_bills',
@@ -875,6 +881,223 @@ router.get('/from-rea/jobs/:id', requireRole(...WRITE), (req, res) => {
   if (!job) return res.status(404).json({ error: 'No such REA run (the server may have restarted) — look at the bills list, then run again' });
   const { partial, ...rest } = job;
   res.json({ ...rest, months: job.result?.months || partial || [] });
+});
+
+// ─── Drafting without being asked ────────────────────────────────────────────
+//
+// The REA scraper already fetches each month's Regional Energy Account off the
+// RPC site on a schedule and lands the energy behind it. The bills that account
+// makes possible still waited for someone to open the page and press the
+// button, so an account published on a Saturday sat undrafted until Monday —
+// and the desk's own month-end was spent re-doing what the platform already had
+// every input for.
+//
+// This is that same run, started by the scraper instead of by a person: the
+// same readiness checks, the same oldest-first order so the year's cumulative
+// is right, and the same DRAFT bills that nobody has issued or sent. What it
+// does not do is decide anything — a draft still goes through review, β entry
+// and the approval chain before it becomes a bill.
+//
+// Switched off with the hydro_rea_auto_draft parameter.
+
+// A bill made this way is recorded as made by the platform rather than by the
+// last person who happened to be signed in. secureLogAudit() and saveBill()
+// both read a request loosely, so this shape is all either of them needs.
+const AUTO_DRAFT_ACTOR = { user: { name: 'REA auto-draft', role: 'SYSTEM' } };
+
+/** `n` months back from now, as YYYY-MM. */
+function monthsBack(n, now = new Date()) {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * The months in the window that have an REA on file for a billable station and
+ * no live bill against it. Empty means there is nothing for a run to do, which
+ * is the normal answer on most days — the scraper fires far more often than the
+ * RPC publishes, and a run costs several PDF fetches.
+ */
+function monthsAwaitingDraft(readyIds, from, to) {
+  if (!readyIds.length) return [];
+  return db.prepare(`
+    SELECT DISTINCT e.period_month AS month FROM energy_data e
+    WHERE e.source = 'REA'
+      AND e.period_month BETWEEN ? AND ?
+      AND e.contract_id IN (${readyIds.map(() => '?').join(',')})
+      AND NOT EXISTS (
+        SELECT 1 FROM hydro_station_bills b
+        WHERE b.contract_id = e.contract_id AND b.billing_month = e.period_month
+          AND b.status <> 'CANCELLED' AND b.bill_kind IN ('PROVISIONAL','FINAL')
+      )
+    ORDER BY month
+  `).all(from, to, ...readyIds).map((r) => r.month);
+}
+
+/**
+ * Write down that a sweep happened, and what came of it.
+ *
+ * Recorded for the runs that did nothing as much as for the ones that drafted:
+ * "it ran at 06:00 and no account had landed" and "it has not run since the
+ * release on Tuesday" look identical on the bills list, and only one of them is
+ * fine. Trimmed to the last two hundred, which is about four months of sweeps.
+ */
+function recordAutoDraft({ rpc = 'NRPC', from = null, to = null, outcome, detail = null, created = [], blocked = [], startedAt }) {
+  const id = newId('ADR');
+  db.prepare(`
+    INSERT INTO hydro_auto_draft_runs
+      (id, rpc, from_month, to_month, outcome, detail, bills_created, bill_nos, blocked, started_at, finished_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+  `).run(id, rpc, from, to, outcome, detail, created.length,
+    created.length ? created.join(', ') : null,
+    blocked.length ? JSON.stringify(blocked) : null,
+    startedAt || new Date().toISOString());
+  db.prepare(`
+    DELETE FROM hydro_auto_draft_runs WHERE id NOT IN (
+      SELECT id FROM hydro_auto_draft_runs ORDER BY started_at DESC, rowid DESC LIMIT 200
+    )
+  `).run();
+  return id;
+}
+
+/**
+ * Say it once.
+ *
+ * The scraper runs every morning through the first ten days of the month, and a
+ * blockage it reports — a station with no allocation, a month nobody has billed
+ * — is not fixed by being told about it ten times. The same sentence to the
+ * same audience is not repeated inside a week; a sentence that names new bills
+ * is different every time and so always goes out.
+ */
+function noteOnce(role, message) {
+  const said = db.prepare(`
+    SELECT 1 FROM notifications
+    WHERE type = 'HYDRO_BILL_AUTO_DRAFT' AND role = ? AND message = ?
+      AND created_at > datetime('now', '-7 days')
+  `).get(role, message);
+  if (said) return false;
+  pushNotification({ role, type: 'HYDRO_BILL_AUTO_DRAFT', message });
+  return true;
+}
+
+/** The first few station-months and why, short enough to read on a phone. */
+function reasons(rows, limit = 5) {
+  const head = rows.slice(0, limit).map((b) => `${b.month} ${b.contract_no} (${b.reason})`).join('; ');
+  return rows.length > limit ? `${head}; and ${rows.length - limit} more` : head;
+}
+
+/**
+ * Draft whatever the accounts on file allow, and say what happened.
+ *
+ * Runs under the same single-run lock as the background button, and registers
+ * itself in the same job map — so a desk that opens the page mid-sweep is told
+ * a run is in progress and can watch this one finish, rather than starting a
+ * second run over the same months.
+ */
+export async function runReaAutoDraft({ rpc = 'NRPC', lookbackMonths = 3, now = new Date() } = {}) {
+  const startedAt = new Date().toISOString();
+  const nothing = (outcome, detail) => {
+    recordAutoDraft({ rpc, outcome, detail, startedAt });
+    return { skipped: detail };
+  };
+  if (String(getParam('hydro_rea_auto_draft', 'true')).toLowerCase() !== 'true') {
+    return nothing('OFF', 'switched off (hydro_rea_auto_draft)');
+  }
+  // Not recorded: the sweep did not decide anything, it stood aside for a run
+  // that is about to write its own row.
+  if (reaJobRunning) return { skipped: `an REA run is already in progress (${reaJobRunning})` };
+
+  const ready = hydroStations().filter((c) => readiness(c).ready);
+  if (!ready.length) return nothing('NOTHING_TO_DO', 'no hydro station is ready to bill');
+
+  const waiting = monthsAwaitingDraft(ready.map((c) => c.id), monthsBack(lookbackMonths, now), monthsBack(0, now));
+  if (!waiting.length) return nothing('NOTHING_TO_DO', 'no month in the window has an unbilled account');
+
+  const id = newId('REAJOB');
+  const job = {
+    id, trigger: 'AUTO', status: 'RUNNING', started_at: new Date().toISOString(),
+    progress: null, result: null, error: null,
+  };
+  reaJobs.set(id, job);
+  reaJobRunning = id;
+  const from = waiting[0];
+  const to = waiting[waiting.length - 1];
+  try {
+    const result = await runFromRea({ rpc, from_month: from, to_month: to }, AUTO_DRAFT_ACTOR, (p) => {
+      job.progress = { month: p.month, done: p.done, total: p.total };
+      job.partial = p.months;
+    });
+    job.status = 'DONE';
+    job.result = result;
+    const bills = result.months.flatMap((m) => m.bills.map((b) => ({ ...b, month: m.month })));
+    const created = bills.filter((b) => b.status === 'CREATED');
+    const failed = bills.filter((b) => b.status === 'FAILED');
+    const blocked = bills.filter((b) => b.status !== 'CREATED' && b.status !== 'EXISTS' && b.reason && !b.cascade);
+    if (created.length) {
+      noteOnce('REIA_USER', `${created.length} hydro station bill(s) drafted from the ${rpc} REA for ${from}${to === from ? '' : `..${to}`} — review and send for approval: ${created.map((b) => b.bill_no).join(', ')}`);
+    }
+    // A month whose account has landed and which still did not get billed is
+    // the desk's to fix — a missing allocation, an unbilled earlier month. Said
+    // plainly, because the whole promise of drafting without being asked is
+    // that silence means the bills are there.
+    if (blocked.length) {
+      noteOnce('REIA_USER', `Auto-draft left ${blocked.length} station-month(s) unbilled: ${reasons(blocked)}`);
+    }
+    // A station that threw is a fault in the platform, not a gap in the inputs.
+    if (failed.length) {
+      noteOnce('SJVN_ADMIN', `Auto-draft failed on ${failed.length} station-month(s): ${reasons(failed)}`);
+    }
+    const billNos = created.map((b) => b.bill_no);
+    const left = blocked.map((b) => ({ month: b.month, contract_no: b.contract_no, reason: b.reason }));
+    recordAutoDraft({
+      rpc, from, to, startedAt, created: billNos, blocked: left,
+      outcome: billNos.length ? 'DRAFTED' : (left.length ? 'BLOCKED' : 'NOTHING_TO_DO'),
+      detail: billNos.length || left.length ? null : 'the accounts on file produced no new bill',
+    });
+    return {
+      job_id: id, rpc, from_month: from, to_month: to,
+      created: billNos,
+      failed: failed.map((b) => ({ month: b.month, contract_no: b.contract_no, reason: b.reason })),
+      blocked: left,
+      months: result.months,
+    };
+  } catch (err) {
+    job.status = 'FAILED';
+    job.error = err.message;
+    noteOnce('SJVN_ADMIN', `Auto-draft from the ${rpc} REA failed for ${from}..${to}: ${err.message}. Draft from the Hydro Billing page instead.`);
+    recordAutoDraft({ rpc, from, to, outcome: 'FAILED', detail: err.message, startedAt });
+    return { job_id: id, from_month: from, to_month: to, error: err.message };
+  } finally {
+    reaJobRunning = null;
+    job.finished_at = new Date().toISOString();
+    if (reaJobs.size > 20) reaJobs.delete(reaJobs.keys().next().value);
+  }
+}
+
+/**
+ * GET /hydro-billing/from-rea/auto — whether drafting runs by itself, when it
+ * last did, and what it left behind.
+ *
+ * Read-only and open to the whole desk: an empty bills list is ambiguous until
+ * you know whether the sweep ran, so everyone who reads the list needs this.
+ */
+router.get('/from-rea/auto', requireRole(...READ), (_req, res) => {
+  const last = db.prepare(`
+    SELECT * FROM hydro_auto_draft_runs ORDER BY started_at DESC, rowid DESC LIMIT 1
+  `).get();
+  const recent = db.prepare(`
+    SELECT started_at, outcome, from_month, to_month, bills_created, detail
+    FROM hydro_auto_draft_runs ORDER BY started_at DESC, rowid DESC LIMIT 10
+  `).all();
+  res.json({
+    enabled: String(getParam('hydro_rea_auto_draft', 'true')).toLowerCase() === 'true',
+    running: reaJobRunning ? (reaJobs.get(reaJobRunning)?.trigger === 'AUTO') : false,
+    last: last ? {
+      ...last,
+      bill_nos: last.bill_nos ? last.bill_nos.split(', ') : [],
+      blocked: last.blocked ? JSON.parse(last.blocked) : [],
+    } : null,
+    recent,
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

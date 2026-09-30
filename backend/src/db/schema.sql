@@ -776,7 +776,7 @@ CREATE TABLE IF NOT EXISTS recon_items (
   variance_pct REAL,
   unit TEXT,
   match_status TEXT NOT NULL CHECK (match_status IN (
-    'EXACT','AUTO_MATCHED','EXCEPTION','CARRIED','OVERRIDDEN'
+    'EXACT','AUTO_MATCHED','EXCEPTION','CARRIED','OVERRIDDEN','NOT_CONNECTED'
   )),
   pattern_flag INTEGER NOT NULL DEFAULT 0,
   dispute_id TEXT,
@@ -1664,6 +1664,26 @@ CREATE TABLE IF NOT EXISTS lookup_master (
 -- ---------------------------------------------------------------
 -- Regional Energy Account (REA) Scraper Fetch Log
 -- ---------------------------------------------------------------
+
+-- Every scheduled run of the REA auto-draft, whether or not it drafted anything.
+-- A desk that arrives to no new drafts has to be able to tell "it ran and there
+-- was nothing to do" from "it has not run since Tuesday" — and the in-memory job
+-- map cannot answer that, because a release clears it.
+CREATE TABLE IF NOT EXISTS hydro_auto_draft_runs (
+  id TEXT PRIMARY KEY,
+  rpc TEXT NOT NULL DEFAULT 'NRPC',
+  from_month TEXT,
+  to_month TEXT,
+  outcome TEXT NOT NULL
+    CHECK (outcome IN ('DRAFTED','NOTHING_TO_DO','BLOCKED','FAILED','OFF')),
+  detail TEXT,
+  bills_created INTEGER NOT NULL DEFAULT 0,
+  bill_nos TEXT,
+  blocked TEXT,
+  started_at TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_hydro_auto_draft_runs_started ON hydro_auto_draft_runs (started_at);
 
 CREATE TABLE IF NOT EXISTS rea_fetch_log (
   id TEXT PRIMARY KEY,
@@ -3372,6 +3392,67 @@ CREATE TABLE IF NOT EXISTS hydro_fi_posting_lines (
 CREATE INDEX IF NOT EXISTS idx_hydro_fi_lines_posting
   ON hydro_fi_posting_lines (posting_id);
 
+-- REIA's month-end handover to corporate Finance — the same prepare / post /
+-- reverse as the hydro one above, booked by what a document is to Finance
+-- rather than by contract: SALE (bills to buyers, receivable), PURCHASE
+-- (developers' bills SJVN accepted, payable) and CREDIT_NOTE. A debit note is
+-- its own supplementary invoice, so it is already in SALE or PURCHASE.
+CREATE TABLE IF NOT EXISTS reia_fi_postings (
+  id TEXT PRIMARY KEY,
+  posting_no TEXT UNIQUE NOT NULL,
+  period_month TEXT NOT NULL,            -- YYYY-MM
+  category TEXT NOT NULL CHECK (category IN ('SALE','PURCHASE','CREDIT_NOTE')),
+
+  docs_count INTEGER NOT NULL DEFAULT 0,
+  energy_amount REAL NOT NULL DEFAULT 0,        -- energy, capacity and the like
+  margin_amount REAL NOT NULL DEFAULT 0,        -- SJVN's trading margin
+  pass_through_amount REAL NOT NULL DEFAULT 0,  -- NRLDC + transmission
+  tax_amount REAL NOT NULL DEFAULT 0,
+  adjustment_amount REAL NOT NULL DEFAULT 0,    -- paid on provisional, taken off a final
+  total_amount REAL NOT NULL DEFAULT 0,
+
+  status TEXT NOT NULL DEFAULT 'PREPARED'
+    CHECK (status IN ('PREPARED','POSTED','REVERSED')),
+  fi_document_no TEXT,
+  posted_at TEXT,
+  posted_by TEXT,
+  reversed_at TEXT,
+  reversed_by TEXT,
+  reversal_reason TEXT,
+  reverses_posting_id TEXT REFERENCES reia_fi_postings(id),
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- One live posting per month and category; a reversed one frees the month.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reia_fi_posting_period
+  ON reia_fi_postings (period_month, category)
+  WHERE status <> 'REVERSED';
+
+-- Which documents a posting booked, frozen at the amounts it booked them at.
+CREATE TABLE IF NOT EXISTS reia_fi_posting_lines (
+  id TEXT PRIMARY KEY,
+  posting_id TEXT NOT NULL REFERENCES reia_fi_postings(id) ON DELETE CASCADE,
+  source_type TEXT NOT NULL CHECK (source_type IN ('INVOICE','CREDIT_NOTE')),
+  source_id TEXT NOT NULL,               -- invoices.id or debit_credit_notes.id
+  doc_no TEXT NOT NULL,
+  doc_kind TEXT,
+  direction TEXT,
+  contract_no TEXT,
+  counterparty TEXT,
+  energy_amount REAL NOT NULL DEFAULT 0,
+  margin_amount REAL NOT NULL DEFAULT 0,
+  pass_through_amount REAL NOT NULL DEFAULT 0,
+  tax_amount REAL NOT NULL DEFAULT 0,
+  adjustment_amount REAL NOT NULL DEFAULT 0,
+  total_amount REAL NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_reia_fi_lines_posting ON reia_fi_posting_lines (posting_id);
+CREATE INDEX IF NOT EXISTS idx_reia_fi_lines_source ON reia_fi_posting_lines (source_id);
+
 -- Power trading (PTC) bills raised off a hydro station.
 --
 -- A trading bill is not a tariff bill: there is no availability, no design
@@ -3403,3 +3484,47 @@ CREATE TABLE IF NOT EXISTS hydro_ptc_bills (
 );
 CREATE INDEX IF NOT EXISTS idx_hydro_ptc_contract
   ON hydro_ptc_bills (contract_id, from_date);
+
+-- In-portal mail: one person writing to another inside the platform. Nothing
+-- here leaves the portal — no SMTP, no SMS — so what is written stays on
+-- SJVN's server and in its audit.
+--
+-- A message is written once; each person who has it gets a mailbox row —
+-- the sender a SENT row, every recipient an INBOX row — which carries that
+-- person's own read / archived / deleted state, so one recipient archiving a
+-- message does not move it for anyone else.
+CREATE TABLE IF NOT EXISTS mail_messages (
+  id TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL,               -- the first message's id; replies share it
+  parent_id TEXT REFERENCES mail_messages(id),
+  sender_id TEXT NOT NULL REFERENCES users(id),
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,                    -- plain text, shown as written
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_mail_messages_thread ON mail_messages (thread_id, created_at);
+
+CREATE TABLE IF NOT EXISTS mail_boxes (
+  id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL REFERENCES mail_messages(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  box TEXT NOT NULL CHECK (box IN ('INBOX','SENT')),
+  recipient_kind TEXT CHECK (recipient_kind IN ('TO','CC')),  -- null on the sender's row
+  read_at TEXT,
+  archived_at TEXT,
+  deleted_at TEXT,                       -- hidden for this person only
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (message_id, user_id, box)
+);
+CREATE INDEX IF NOT EXISTS idx_mail_boxes_user ON mail_boxes (user_id, box, deleted_at);
+
+CREATE TABLE IF NOT EXISTS mail_attachments (
+  id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL REFERENCES mail_messages(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  stored_name TEXT NOT NULL,
+  mime_type TEXT,
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_mail_attachments_message ON mail_attachments (message_id);

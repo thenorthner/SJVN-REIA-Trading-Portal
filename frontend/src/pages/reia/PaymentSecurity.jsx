@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, DemandLetterViewer } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, fmtCurrency, DemandLetterViewer } from '../../components/ui.jsx';
+import ModuleGuide from '../../components/ModuleGuide.jsx';
+import { getGuide } from '../../content/guides/index.js';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER', 'FINANCE_USER'];
@@ -21,6 +23,7 @@ function StatPill({ label, value, sub }) {
 }
 
 export default function PaymentSecurity() {
+  const [view, setView] = useState('instruments');
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [stats, setStats] = useState(null);
@@ -169,7 +172,7 @@ export default function PaymentSecurity() {
       <PageHeader
         title="Payment Security"
         subtitle="Revolving LC, bank guarantees, corpus waterfall, coverage & invocation control"
-        actions={(
+        actions={view === 'instruments' && (
           <div style={{ display: 'flex', gap: 8 }}>
             {CAN_WRITE.includes(user?.role) && (
               <>
@@ -181,6 +184,15 @@ export default function PaymentSecurity() {
         )}
       />
 
+      <Tabs style={{ marginBottom: 18 }}>
+        <Tab active={view === 'instruments'} onClick={() => setView('instruments')}>Instruments</Tab>
+        <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
+      </Tabs>
+
+      {view === 'fyi' && <ModuleGuide guide={getGuide('security')} />}
+
+      {view === 'instruments' && (
+      <>
       {stats && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
           <StatPill label="Total security" value={fmtCurrency(stats.total_security_value)} sub={`${stats.instrument_count} active`} />
@@ -324,6 +336,9 @@ export default function PaymentSecurity() {
             />
           </Card>
         </div>
+      )}
+
+      </>
       )}
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add payment security" width={560}>

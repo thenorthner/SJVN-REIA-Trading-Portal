@@ -93,4 +93,56 @@ router.get('/users', requireAuth, (req, res) => {
   res.json(users);
 });
 
+// Password rules for a self-service change. Kept deliberately modest — long
+// enough to be worth hashing, mixed enough that "password1" is refused — and
+// stated in the error text so a rejected change says what to do about it.
+const PASSWORD_MIN_LENGTH = 8;
+
+export function passwordComplaint(password) {
+  const pw = String(password || '');
+  if (pw.length < PASSWORD_MIN_LENGTH) return `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
+  if (!/[A-Za-z]/.test(pw)) return 'Password must contain at least one letter.';
+  if (!/[0-9]/.test(pw)) return 'Password must contain at least one digit.';
+  return null;
+}
+
+/**
+ * Change one's own password.
+ *
+ * The current password is re-checked here even though the caller already holds a
+ * valid token: a token left behind on a shared machine should not be enough to
+ * lock the real owner out of the account.
+ */
+router.post('/change-password', requireAuth, (req, res) => {
+  const { current_password: currentPassword, new_password: newPassword } = req.body || {};
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'current_password and new_password are required' });
+  }
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  if (!bcrypt.compareSync(currentPassword, user.password_hash)) {
+    logAudit({ req, user, action: 'PASSWORD_CHANGE_FAILED', module: 'AUTH', entityType: 'user', entityId: user.id, reason: 'current password did not match' });
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+
+  const complaint = passwordComplaint(newPassword);
+  if (complaint) return res.status(400).json({ error: complaint });
+
+  if (bcrypt.compareSync(newPassword, user.password_hash)) {
+    return res.status(400).json({ error: 'New password must be different from the current one' });
+  }
+
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(newPassword, 10), user.id);
+  // A pending lockout from earlier bad guesses is cleared: the account holder has
+  // just proved who they are, and the old password no longer works anyway.
+  clearLoginAttempts(String(user.email).toLowerCase());
+  logAudit({ req, user, action: 'PASSWORD_CHANGED', module: 'AUTH', entityType: 'user', entityId: user.id });
+
+  // A fresh token so the session continues rather than dropping the user at the
+  // sign-in screen straight after a successful change.
+  res.json({ success: true, token: signToken(user) });
+});
+
 export default router;

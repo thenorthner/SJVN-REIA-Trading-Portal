@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { Card, Table, Badge, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 
@@ -45,6 +45,70 @@ export function monthsBetween(from, to) {
 
 const STATUS_TONE = { CREATED: 'APPROVED', EXISTS: 'PENDING', SKIPPED: 'DRAFT', FAILED: 'REJECTED' };
 
+const when = (iso) => (iso ? new Date(iso).toLocaleString('en-IN') : '');
+
+/**
+ * What to tell the desk about the sweep that drafts without being asked.
+ *
+ * An empty bills list means two very different things depending on whether the
+ * sweep ran, so this never says nothing: every state, including "it has not run
+ * yet", gets a sentence.
+ */
+export function describeAutoDraft(status) {
+  if (!status) return null;
+  const { enabled, running, last } = status;
+  if (running) return { tone: 'info', text: 'Drafting from the latest Regional Energy Accounts right now.' };
+  if (!enabled) {
+    return {
+      tone: 'warn',
+      text: 'Drafting by itself is switched off (hydro_rea_auto_draft) — bills are drafted only from this page.',
+    };
+  }
+  if (!last) {
+    return {
+      tone: 'info',
+      text: 'Drafting by itself is on. It has not run yet — the next REA scan will draft whatever the accounts allow.',
+    };
+  }
+  const ran = `Last ran ${when(last.started_at)}`;
+  const range = last.from_month ? ` for ${last.from_month}${last.to_month === last.from_month ? '' : `..${last.to_month}`}` : '';
+  if (last.outcome === 'FAILED') return { tone: 'error', text: `${ran}${range} and failed: ${last.detail}` };
+  if (last.outcome === 'OFF') return { tone: 'warn', text: `${ran}: drafting was switched off.` };
+  if (last.outcome === 'DRAFTED') {
+    return {
+      tone: 'ok',
+      text: `${ran}${range}: drafted ${last.bills_created} bill(s) — ${last.bill_nos.join(', ')}.`,
+    };
+  }
+  if (last.outcome === 'BLOCKED') {
+    return { tone: 'warn', text: `${ran}${range}: nothing could be drafted from the accounts on file.` };
+  }
+  return { tone: 'info', text: `${ran}: nothing to draft — ${last.detail || 'every landed account is already billed'}.` };
+}
+
+const TONE_CLASS = { error: 'alert alert-error', warn: 'alert alert-warning', ok: 'alert alert-success', info: 'alert alert-info' };
+
+/** The standing answer to "did it draft anything this morning?". */
+export function AutoDraftPanel({ status }) {
+  const said = describeAutoDraft(status);
+  if (!said) return null;
+  const left = status.last?.blocked || [];
+  return (
+    <div className={TONE_CLASS[said.tone]} role="status" style={{ marginBottom: 12 }}>
+      <div>{said.text}</div>
+      {left.length > 0 && (
+        <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+          {left.map((b) => (
+            <li key={`${b.month}-${b.contract_no}`}>
+              {b.month} {b.contract_no} — {b.reason}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function HydroReaRun({ onDone }) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -53,6 +117,12 @@ export default function HydroReaRun({ onDone }) {
   const [err, setErr] = useState('');
   const [result, setResult] = useState(null);
   const [progress, setProgress] = useState('');
+  const [auto, setAuto] = useState(null);
+
+  // The sweep's own state, reloaded after a manual run because that run is what
+  // the next sweep will find already billed.
+  const loadAuto = () => api.hydroBilling.autoDraft().then(setAuto).catch(() => setAuto(null));
+  useEffect(() => { loadAuto(); }, []);
 
   const { links, unread } = parseReaLinks(paste);
   const linkMonths = Object.keys(links).sort();
@@ -99,6 +169,7 @@ export default function HydroReaRun({ onDone }) {
     } finally {
       setRunning(false);
       setProgress('');
+      loadAuto();
       onDone?.();
     }
   }
@@ -117,8 +188,10 @@ export default function HydroReaRun({ onDone }) {
         accounts, and drafts that month&apos;s bill for every station ready to bill. Months run oldest first
         so each bill carries the year&apos;s cumulative energy; nothing is issued. On nrpc.gov.in open
         Commercial → Regional Energy Accounts → Provisional REA, copy the PDF link of each month and paste
-        them below — one per line.
+        them below — one per line. The same run happens by itself after each scheduled REA scan; this page is
+        for the months it could not reach, and for a link the scan does not have.
       </p>
+      <AutoDraftPanel status={auto} />
       <form onSubmit={run}>
         <Field label="REA PDF links (nrpc.gov.in)" htmlFor="rea-links">
           <textarea

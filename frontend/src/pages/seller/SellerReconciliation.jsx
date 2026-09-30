@@ -166,7 +166,16 @@ export default function SellerReconciliation() {
             <ul style={{ paddingLeft: 18 }}>
               {(detail.items || []).map((it) => (
                 <li key={it.id} style={{ marginBottom: 4 }}>
-                  <Badge status={['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN'].includes(it.match_status) ? 'AUTO_MATCHED' : 'NEEDS_REVIEW'} />{' '}
+                  {it.match_status === 'NOT_CONNECTED' ? (
+                    <span
+                      title="No connector for the system this would be checked against, so this line was not checked."
+                      style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}
+                    >
+                      Not checked
+                    </span>
+                  ) : (
+                    <Badge status={['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN'].includes(it.match_status) ? 'AUTO_MATCHED' : 'NEEDS_REVIEW'} />
+                  )}{' '}
                   <strong>{it.label}</strong> — Metered: {it.metered_value ?? '—'} | Billed: {it.billed_value ?? '—'} | Var: {it.variance}
                 </li>
               ))}

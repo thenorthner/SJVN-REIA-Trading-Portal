@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
-import { PageHeader, Card, Badge, StatCard, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Badge, StatCard, Tabs, Tab, fmtNumber } from '../../components/ui.jsx';
+import ModuleGuide from '../../components/ModuleGuide.jsx';
+import { getGuide } from '../../content/guides/index.js';
 import { fmtDate } from '../../datetime.js';
 
 // The CERC filing calendar: every period that owes a return, and where it stands.
@@ -64,6 +66,7 @@ function PeriodTable({ title, rows, emptyText }) {
 }
 
 export default function CercCompliance() {
+  const [view, setView] = useState('calendar');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -95,6 +98,15 @@ export default function CercCompliance() {
         subtitle="Every period that owes the Commission a return, monthly and annual"
       />
 
+      <Tabs style={{ marginBottom: 18 }}>
+        <Tab active={view === 'calendar'} onClick={() => setView('calendar')}>Calendar</Tab>
+        <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
+      </Tabs>
+
+      {view === 'fyi' && <ModuleGuide guide={getGuide('cerc')} />}
+
+      {view === 'calendar' && (
+      <>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
 
       <Card>
@@ -166,6 +178,8 @@ export default function CercCompliance() {
             until it ends. Deadlines are the period end plus the filing window in Masters.
           </p>
         </>
+      )}
+      </>
       )}
     </div>
   );

@@ -28,11 +28,14 @@ const CercCompliance = lazy(() => import('./pages/reia/CercCompliance.jsx'));
 const DeviationSettlements = lazy(() => import('./pages/reia/DeviationSettlements.jsx'));
 const PowerDiversion = lazy(() => import('./pages/reia/PowerDiversion.jsx'));
 const EnergyBanking = lazy(() => import('./pages/reia/EnergyBanking.jsx'));
-const HydroBilling = lazy(() => import('./pages/reia/HydroBilling.jsx'));
-const HydroLedger = lazy(() => import('./pages/reia/HydroLedger.jsx'));
-const HydroClaims = lazy(() => import('./pages/reia/HydroClaims.jsx'));
-const HydroFinance = lazy(() => import('./pages/reia/HydroFinance.jsx'));
-const HydroPtc = lazy(() => import('./pages/reia/HydroPtc.jsx'));
+const HydroBilling = lazy(() => import('./pages/hydro-thermal/HydroBilling.jsx'));
+const HydroLedger = lazy(() => import('./pages/hydro-thermal/HydroLedger.jsx'));
+const HydroClaims = lazy(() => import('./pages/hydro-thermal/HydroClaims.jsx'));
+const HydroFinance = lazy(() => import('./pages/hydro-thermal/HydroFinance.jsx'));
+const ReiaFinance = lazy(() => import('./pages/reia/ReiaFinance.jsx'));
+const Mail = lazy(() => import('./pages/Mail.jsx'));
+const HydroPtc = lazy(() => import('./pages/hydro-thermal/HydroPtc.jsx'));
+const HydroThermalDashboard = lazy(() => import('./pages/hydro-thermal/HydroThermalDashboard.jsx'));
 
 const TradingDashboard = lazy(() => import('./pages/trading/TradingDashboard.jsx'));
 const TradingClients = lazy(() => import('./pages/trading/TradingClients.jsx'));
@@ -166,6 +169,7 @@ const UserProfile = lazy(() => import('./pages/settings/UserProfile.jsx'));
 // Internal SJVN REIA desk only — counterparties use their own portals below,
 // which scope every query to their own entity.
 const REIA_ROLES = [...ROLE_GROUPS.REIA_ALL];
+const HYDRO_THERMAL_ROLES = [...ROLE_GROUPS.HYDRO_THERMAL_ALL];
 const TRADING_INTERNAL_ROLES = [...ROLE_GROUPS.TRADING_ALL];
 const TRADING_CLIENT_ROLES = [...ROLE_GROUPS.TRADING_CLIENT_ALL];
 const TRADING_COMBINED_ROLES = [...new Set([...TRADING_INTERNAL_ROLES, ...TRADING_CLIENT_ROLES])];
@@ -244,14 +248,17 @@ export default function App() {
         <Route path="reia/disputes" element={<ProtectedRoute roles={REIA_ROLES}><Disputes /></ProtectedRoute>} />
         <Route path="reia/payment-security" element={<ProtectedRoute roles={REIA_ROLES}><PaymentSecurity /></ProtectedRoute>} />
         <Route path="reia/reconciliation" element={<ProtectedRoute roles={REIA_ROLES}><Reconciliation /></ProtectedRoute>} />
+        <Route path="reia/finance-posting" element={<ProtectedRoute roles={REIA_ROLES}><ReiaFinance /></ProtectedRoute>} />
         <Route path="reia/deviation" element={<ProtectedRoute roles={REIA_ROLES}><DeviationSettlements /></ProtectedRoute>} />
         <Route path="reia/power-diversion" element={<ProtectedRoute roles={REIA_ROLES}><PowerDiversion /></ProtectedRoute>} />
         <Route path="reia/energy-banking" element={<ProtectedRoute roles={REIA_ROLES}><EnergyBanking /></ProtectedRoute>} />
-        <Route path="reia/hydro-billing" element={<ProtectedRoute roles={REIA_ROLES}><HydroBilling /></ProtectedRoute>} />
-        <Route path="reia/hydro-ledger" element={<ProtectedRoute roles={REIA_ROLES}><HydroLedger /></ProtectedRoute>} />
-        <Route path="reia/hydro-claims" element={<ProtectedRoute roles={REIA_ROLES}><HydroClaims /></ProtectedRoute>} />
-        <Route path="reia/hydro-finance" element={<ProtectedRoute roles={REIA_ROLES}><HydroFinance /></ProtectedRoute>} />
-        <Route path="reia/hydro-ptc" element={<ProtectedRoute roles={REIA_ROLES}><HydroPtc /></ProtectedRoute>} />
+        {/* Hydro & Thermal Billing Portal */}
+        <Route path="hydro-thermal" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroThermalDashboard /></ProtectedRoute>} />
+        <Route path="hydro-thermal/hydro-billing" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroBilling /></ProtectedRoute>} />
+        <Route path="hydro-thermal/hydro-ledger" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroLedger /></ProtectedRoute>} />
+        <Route path="hydro-thermal/hydro-claims" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroClaims /></ProtectedRoute>} />
+        <Route path="hydro-thermal/hydro-finance" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroFinance /></ProtectedRoute>} />
+        <Route path="hydro-thermal/hydro-ptc" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroPtc /></ProtectedRoute>} />
         <Route path="reia/reports" element={<ProtectedRoute roles={REIA_ROLES}><Reports /></ProtectedRoute>} />
         <Route path="reia/payment-monitoring" element={<ProtectedRoute roles={REIA_ROLES}><PaymentMonitoring /></ProtectedRoute>} />
         <Route path="reia/generation-performance" element={<ProtectedRoute roles={REIA_ROLES}><GenerationPerformance /></ProtectedRoute>} />
@@ -377,6 +384,8 @@ export default function App() {
         <Route path="trading/daily-obligation-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><DailyObligationReport /></ProtectedRoute>} />
 
         <Route path="notification-board" element={<ProtectedRoute roles={BOARD_ROLES}><NotificationBoard /></ProtectedRoute>} />
+        {/* Every signed-in user has a mailbox; who may write to whom is the server's call. */}
+        <Route path="mail" element={<ProtectedRoute><Mail /></ProtectedRoute>} />
         <Route path="master/portfolio-registry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PortfolioRegistry /></ProtectedRoute>} />
         <Route path="masters" element={<ProtectedRoute roles={MASTERS_ROLES}><MastersHub /></ProtectedRoute>} />
         <Route path="audit-logs" element={<ProtectedRoute roles={AUDIT_ROLES}><AuditLogs /></ProtectedRoute>} />

@@ -50,7 +50,10 @@ export function buildTemplate(invoice) {
   auto.ENERGY_VERIFIED = invoice.validation_status === 'MATCHED' ? 'VERIFIED'
     : (invoice.validation_status === 'MISMATCH' ? 'FAILED' : (energy ? 'PENDING' : 'FAILED'));
   auto.TARIFF_VERIFIED = tariffMatch ? 'VERIFIED' : 'FAILED';
-  auto.CAPACITY_VERIFIED = contract.capacity_mw ? 'PENDING' : 'PENDING';
+  // Manual by design: the contract capacity is shown as a hint, but whether the
+  // bill is consistent with it is a judgement. The ternary this replaces chose
+  // between PENDING and PENDING, which read as a decision being made.
+  auto.CAPACITY_VERIFIED = 'PENDING';
   auto.CUF_COMPLIANCE = cufOk === null ? 'PENDING' : (cufOk ? 'VERIFIED' : 'FAILED');
   auto.COD_COMPLIANCE = codOk ? 'VERIFIED' : (contract.cod_date ? 'FAILED' : 'PENDING');
   auto.CURTAILMENT_CHECKED = 'PENDING';

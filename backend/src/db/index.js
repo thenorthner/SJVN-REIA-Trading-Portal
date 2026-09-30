@@ -2606,6 +2606,254 @@ try {
   console.error('REC obligation migration failed:', e.message);
 }
 
+/**
+ * Let a reconciliation line say it could not be checked.
+ *
+ * The tax and SAP lines had no system to check against, so they compared the
+ * platform's own figure with itself and reported an exact match on every run.
+ * They now record NOT_CONNECTED instead, which the CHECK constraint on an
+ * existing database does not allow — hence the rebuild. Nothing is
+ * reclassified: rows already stored keep whatever they were written with.
+ */
+function migrateReconItemsNotConnected() {
+  const cols = db.prepare("PRAGMA table_info(recon_items)").all();
+  if (!cols.length) return;
+  const sql = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'recon_items'",
+  ).get()?.sql || '';
+  if (sql.includes('NOT_CONNECTED')) return;
+
+  db.exec(`
+    CREATE TABLE recon_items_new (
+      id TEXT PRIMARY KEY,
+      reconciliation_id TEXT NOT NULL REFERENCES reconciliations(id),
+      item_type TEXT NOT NULL CHECK (item_type IN (
+        'ENERGY_THREE_WAY','FINANCIAL_THREE_WAY','TAX','PERFORMANCE','PENALTY',
+        'INTERNAL_SAP','TRADING_BID_CLEAR_BILL','CARRY_FORWARD','DISPUTE_REF'
+      )),
+      label TEXT,
+      metered_value REAL,
+      billed_value REAL,
+      paid_value REAL,
+      sap_reference_amount REAL,
+      variance REAL NOT NULL DEFAULT 0,
+      variance_pct REAL,
+      unit TEXT,
+      match_status TEXT NOT NULL CHECK (match_status IN (
+        'EXACT','AUTO_MATCHED','EXCEPTION','CARRIED','OVERRIDDEN','NOT_CONNECTED'
+      )),
+      pattern_flag INTEGER NOT NULL DEFAULT 0,
+      dispute_id TEXT,
+      invoice_id TEXT,
+      override_reason TEXT,
+      notes TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    INSERT INTO recon_items_new SELECT
+      id, reconciliation_id, item_type, label, metered_value, billed_value, paid_value,
+      sap_reference_amount, variance, variance_pct, unit, match_status, pattern_flag,
+      dispute_id, invoice_id, override_reason, notes, created_at
+    FROM recon_items;
+
+    DROP TABLE recon_items;
+    ALTER TABLE recon_items_new RENAME TO recon_items;
+  `);
+  console.log('[MIGRATE] recon_items: match_status can now record NOT_CONNECTED');
+}
+
+try {
+  migrateReconItemsNotConnected();
+} catch (e) {
+  console.error('recon_items NOT_CONNECTED migration failed:', e.message);
+}
+
+/**
+ * Give deviation_settlements a provenance, and stop it insisting on a rate.
+ *
+ * The table was built around one idea: that a week's settlement is
+ * (actual − scheduled) × a rate. Measured against NRPC's own published
+ * accounts that does not hold — each 15-minute block is priced against the
+ * grid frequency in that block, so no single rate reproduces the figure, and
+ * the direction does not even follow the deviation. Over the archive, Nathpa
+ * Jhakri settles against the direction of its own deviation on 88 of 1715
+ * days; Rampur on 33.
+ *
+ * So a row now says where its amount came from. A NRPC_DSA row carries the
+ * figure the statement published, converted once in nrpcDsa.js, and has no
+ * rate at all — hence deviation_rate becoming nullable, which is the reason
+ * this is a table rebuild rather than three ALTERs. A MANUAL row keeps the old
+ * behaviour, and is an estimate until the statement arrives.
+ *
+ * Existing rows are carried across as MANUAL, which is what they were.
+ */
+function migrateDeviationSettlementsProvenance() {
+  const cols = db.prepare("PRAGMA table_info(deviation_settlements)").all();
+  if (!cols.length) return;                       // table not created yet
+  if (cols.some((c) => c.name === 'source')) return;  // already migrated
+
+  db.exec(`
+    CREATE TABLE deviation_settlements_new (
+      id TEXT PRIMARY KEY,
+      dsm_no TEXT UNIQUE NOT NULL,
+      contract_id TEXT NOT NULL REFERENCES contracts(id),
+      plant_code TEXT,
+      plant_name TEXT,
+      period_month TEXT NOT NULL,
+      week_no INTEGER NOT NULL,
+      week_date TEXT,
+      entry_type TEXT NOT NULL DEFAULT 'PRIMARY' CHECK (entry_type IN ('PRIMARY','REVISED')),
+      -- Where the amount came from. MANUAL rows are computed from a rate and
+      -- are an estimate; NRPC_DSA rows carry the published figure.
+      source TEXT NOT NULL DEFAULT 'MANUAL' CHECK (source IN ('MANUAL','NRPC_DSA')),
+      dsa_account_id TEXT REFERENCES nrpc_dsa_accounts(id),
+      dsa_entity_name TEXT,
+      scheduled_mwh REAL NOT NULL DEFAULT 0,
+      actual_mwh REAL NOT NULL DEFAULT 0,
+      deviation_mwh REAL NOT NULL DEFAULT 0,
+      -- Null on a NRPC_DSA row: the statement prices per block against
+      -- frequency and publishes no rate, and a zero here would read as one.
+      deviation_rate REAL,
+      deviation_amount REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'DRAFT'
+        CHECK (status IN ('DRAFT','CALCULATED','SUBMITTED','DISPATCHED','CANCELLED')),
+      invoice_no TEXT,
+      dispatch_date TEXT,
+      notes TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      invoice_id TEXT,
+      UNIQUE(contract_id, period_month, week_no, entry_type)
+    );
+
+    INSERT INTO deviation_settlements_new
+      (id, dsm_no, contract_id, plant_code, plant_name, period_month, week_no, week_date,
+       entry_type, source, scheduled_mwh, actual_mwh, deviation_mwh, deviation_rate,
+       deviation_amount, status, invoice_no, dispatch_date, notes, created_by,
+       created_at, updated_at, invoice_id)
+    SELECT id, dsm_no, contract_id, plant_code, plant_name, period_month, week_no, week_date,
+       entry_type, 'MANUAL', scheduled_mwh, actual_mwh, deviation_mwh, deviation_rate,
+       deviation_amount, status, invoice_no, dispatch_date, notes, created_by,
+       created_at, updated_at, invoice_id
+    FROM deviation_settlements;
+
+    DROP TABLE deviation_settlements;
+    ALTER TABLE deviation_settlements_new RENAME TO deviation_settlements;
+
+    CREATE INDEX IF NOT EXISTS idx_deviation_settlements_dsa
+      ON deviation_settlements(dsa_account_id, dsa_entity_name);
+  `);
+  console.log('[MIGRATE] deviation_settlements: added source/dsa provenance, deviation_rate now nullable');
+}
+
+/**
+ * NRPC weekly Deviation Settlement Account (DSA) store.
+ *
+ * Holds the statement exactly as published — LU for energy, Rs Lakh for money,
+ * and the document's own sign, where positive means the entity owes the pool.
+ * Nothing here is converted into the units or the sign convention of
+ * deviation_settlements; that mapping is a separate, reviewed step, and keeping
+ * the raw figures lets a stored week be diffed against the PDF line by line.
+ *
+ * A statement can be reissued. Rather than overwrite, each ingest is its own
+ * account row and the earlier one for that week is marked SUPERSEDED, so the
+ * history of what NRPC said, and when, survives.
+ */
+function migrateNrpcDsaSchema() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS nrpc_dsa_accounts (
+      id TEXT PRIMARY KEY,
+      week_code TEXT,
+      -- 'R1', 'R2', 'Corrigendum' — null for an original statement.
+      revision TEXT,
+      week_no INTEGER NOT NULL,
+      financial_year TEXT NOT NULL,
+      week_start TEXT NOT NULL,
+      week_end TEXT NOT NULL,
+      issued_date TEXT,
+      due_date TEXT,
+      source_kind TEXT NOT NULL DEFAULT 'UPLOAD'
+        CHECK (source_kind IN ('ARCHIVE','UPLOAD')),
+      source_url TEXT,
+      file_name TEXT,
+      file_sha256 TEXT NOT NULL UNIQUE,
+      file_bytes INTEGER,
+      -- Where the statement PDF itself is kept. An auditor asking why a bill
+      -- says what it says wants the document, not a digest of it.
+      local_file_path TEXT,
+      entity_count INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'ACTIVE'
+        CHECK (status IN ('ACTIVE','SUPERSEDED')),
+      superseded_by TEXT REFERENCES nrpc_dsa_accounts(id),
+      created_by TEXT,
+      fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_nrpc_dsa_accounts_week
+      ON nrpc_dsa_accounts(financial_year, week_no, status);
+    CREATE INDEX IF NOT EXISTS idx_nrpc_dsa_accounts_span
+      ON nrpc_dsa_accounts(week_start, week_end);
+
+    CREATE TABLE IF NOT EXISTS nrpc_dsa_entity_days (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL REFERENCES nrpc_dsa_accounts(id) ON DELETE CASCADE,
+      entity_name TEXT NOT NULL,
+      entry_date TEXT NOT NULL,
+      schedule_lu REAL,
+      actual_lu REAL,
+      devi_amt_lakh REAL,
+      -- Null, not zero, wherever the statement prints no such column. Which
+      -- columns exist varies by era and by entity: the sustained-deviation and
+      -- additional-deviation charges below were dropped after WK-27 of 2022-23,
+      -- and the inter-regional exchanges carry no nuclear-station adjustment
+      -- and so publish neither ADJ nor NET DEVI in any era.
+      sus_devi REAL,
+      sus_amount_lakh REAL,
+      add_devi_lakh REAL,
+      adj_lakh REAL,
+      net_devi_lakh REAL,
+      UNIQUE (account_id, entity_name, entry_date)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_nrpc_dsa_days_entity
+      ON nrpc_dsa_entity_days(entity_name, entry_date);
+
+    -- The Total line the statement prints for each entity, kept as published
+    -- rather than recomputed, so a parse can be checked against the document.
+    CREATE TABLE IF NOT EXISTS nrpc_dsa_entity_totals (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL REFERENCES nrpc_dsa_accounts(id) ON DELETE CASCADE,
+      entity_name TEXT NOT NULL,
+      schedule_lu REAL,
+      actual_lu REAL,
+      devi_amt_lakh REAL,
+      sus_devi REAL,
+      sus_amount_lakh REAL,
+      add_devi_lakh REAL,
+      adj_lakh REAL,
+      net_devi_lakh REAL,
+      UNIQUE (account_id, entity_name)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_nrpc_dsa_totals_entity
+      ON nrpc_dsa_entity_totals(entity_name);
+  `);
+}
+
+try {
+  migrateNrpcDsaSchema();
+} catch (e) {
+  console.error('NRPC DSA migration failed:', e.message);
+}
+
+try {
+  migrateDeviationSettlementsProvenance();
+} catch (e) {
+  console.error('deviation_settlements provenance migration failed:', e.message);
+}
+
 try {
   db.prepare(`UPDATE contracts SET tariff_structure_json = NULL WHERE tariff_structure_json = '{}' OR tariff_structure_json = '"{}"' OR TRIM(tariff_structure_json) = ''`).run();
 } catch (e) {

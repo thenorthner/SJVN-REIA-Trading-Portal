@@ -12,7 +12,11 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    // A 401 from the password-change form means the *typed* current password was
+    // wrong, not that the session expired — signing the user out there would
+    // throw them back to the login screen for a typo.
+    const isPasswordCheck = err.config?.url?.includes('/auth/change-password');
+    if (err.response?.status === 401 && !isPasswordCheck) {
       localStorage.removeItem('sjvn_token');
       localStorage.removeItem('sjvn_user');
       if (!window.location.pathname.startsWith('/login')) {
@@ -34,6 +38,8 @@ export const api = {
   auth: {
     login: (email, password) => p('/auth/login', { email, password }),
     me: () => g('/auth/me'),
+    changePassword: (current_password, new_password) =>
+      p('/auth/change-password', { current_password, new_password }),
   },
   entities: {
     list: (params) => g('/entities', params),
@@ -173,13 +179,53 @@ export const api = {
     list: (params) => g('/deviation', params),
     summary: (params) => g('/deviation/summary', params),
     get: (id) => g(`/deviation/${id}`),
+    scrape: (plantCode) => g('/deviation/scrape', { plant_code: plantCode }),
     create: (body) => p('/deviation', body),
+    fromDsa: (body) => p('/deviation/from-dsa', body),
     update: (id, body) => put(`/deviation/${id}`, body),
     submit: (id) => p(`/deviation/${id}/submit`),
     dispatch: (id, body) => p(`/deviation/${id}/dispatch`, body),
     linkInvoice: (id, body) => p(`/deviation/${id}/link-invoice`, body),
     remove: (id) => del(`/deviation/${id}`),
   },
+  // NRPC's weekly Deviation Settlement Account: the statement SJVN's DSM bills
+  // are raised from, imported whole rather than per plant.
+  nrpcDsa: {
+    upload: (file) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return client.post('/nrpc-dsa/upload', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }).then((r) => r.data);
+    },
+    accounts: (params) => g('/nrpc-dsa/accounts', params),
+    account: (id) => g(`/nrpc-dsa/accounts/${id}`),
+    entities: (params) => g('/nrpc-dsa/entities', params),
+    entityWeeks: (name, params) => g(`/nrpc-dsa/entities/${encodeURIComponent(name)}/weeks`, params),
+    /**
+     * Open the statement PDF in a new tab.
+     *
+     * Fetched rather than linked: the endpoint needs the session token, which a
+     * plain href would not carry, so the bytes are pulled and handed to the
+     * browser as an object URL.
+     */
+    openPdf: async (id) => {
+      const res = await client.get(`/nrpc-dsa/accounts/${id}/pdf`, { responseType: 'blob' });
+      if (res.data?.type && res.data.type.includes('json')) {
+        const text = await res.data.text();
+        let msg = 'Could not open the statement PDF';
+        try { msg = JSON.parse(text).error || msg; } catch { /* keep the default */ }
+        throw new Error(msg);
+      }
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const win = window.open(url, '_blank', 'noopener');
+      if (!win) { URL.revokeObjectURL(url); throw new Error('The browser blocked the popup — allow popups for this site.'); }
+      // Released once the tab has had time to read it; revoking immediately
+      // leaves some browsers with a blank tab.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    },
+  },
+
   // The exchange's obligation report, and the REC purchase/sale ledger built
   // from it. `upload_` takes the File itself — the report is parsed server-side,
   // so the browser never has to understand the exchange's layout.
@@ -837,6 +883,7 @@ export const api = {
     create: (body) => p('/hydro-billing', body),
     fromRea: (body) => p('/hydro-billing/from-rea', body),
     fromReaJob: (id) => g(`/hydro-billing/from-rea/jobs/${id}`),
+    autoDraft: () => g('/hydro-billing/from-rea/auto'),
     issue: (id, body) => p(`/hydro-billing/${id}/issue`, body || {}),
     cancel: (id, reason) => p(`/hydro-billing/${id}/cancel`, { reason }),
     allocations: (params) => g('/hydro-billing/allocations', params),
@@ -882,6 +929,37 @@ export const api = {
     ptcConsolidate: (body) => p('/hydro-billing/ptc/consolidate', body),
     createPtc: (body) => p('/hydro-billing/ptc', body),
     updateAllocation: (id, body) => patch(`/hydro-billing/allocations/${id}`, body),
+  },
+  // In-portal mail. Nothing here leaves the portal.
+  mail: {
+    list: (params) => g('/mail', params),
+    get: (id) => g(`/mail/${id}`),
+    unreadCount: () => g('/mail/unread-count'),
+    directory: (q) => g('/mail/directory', { q }),
+    send: ({ to, cc, subject, body, replyTo, files }) => {
+      const fd = new FormData();
+      fd.append('to', JSON.stringify(to || []));
+      fd.append('cc', JSON.stringify(cc || []));
+      fd.append('subject', subject || '');
+      fd.append('body', body || '');
+      if (replyTo) fd.append('reply_to', replyTo);
+      for (const f of files || []) fd.append('files', f);
+      return client.post('/mail', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+    },
+    setRead: (id, read) => p(`/mail/${id}/read`, { read }),
+    setArchived: (id, archived) => p(`/mail/${id}/archive`, { archived }),
+    remove: (id) => del(`/mail/${id}`),
+    attachment: (id) => client.get(`/mail/attachments/${id}`, { responseType: 'blob' }).then((r) => r.data),
+  },
+  // REIA's month-end handover to corporate Finance (the hydro one is under
+  // hydroBilling.fi*).
+  reiaFi: {
+    postings: (params) => g('/reia-fi', params),
+    bookable: (params) => g('/reia-fi/bookable', params),
+    posting: (id) => g(`/reia-fi/${id}`),
+    prepare: (body) => p('/reia-fi/prepare', body),
+    post: (id, body) => p(`/reia-fi/${id}/post`, body || {}),
+    reverse: (id, reason) => p(`/reia-fi/${id}/reverse`, { reason }),
   },
   marketAnalytics: {
     getRates: (params) => g('/market-analytics/rates', params),

@@ -11,6 +11,8 @@ import {
   classifyVariance,
   prevPeriod,
   genReconNo,
+  summariseItems,
+  NOT_CONNECTED,
 } from './reconciliationConstants.js';
 
 function makeItem(partial) {
@@ -180,19 +182,32 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
     pattern_flag: checkPatternFlag(contractId, null, 'FINANCIAL_THREE_WAY') && finCls.match_status === 'EXCEPTION',
   }));
 
-  // 3. Tax
-  const filedTax = billedTaxes; // demo: filed = billed unless mismatch seeded via sapOverride.tax_filed
-  const taxFiled = sapOverride?.tax_filed != null ? sapOverride.tax_filed : filedTax;
-  const taxCls = classifyAmount(billedTaxes, taxFiled);
-  items.push(makeItem({
-    item_type: 'TAX',
-    label: 'Tax/GST: Billed vs Filed',
-    billed_value: billedTaxes,
-    paid_value: taxFiled,
-    unit: 'INR',
-    ...taxCls,
-    notes: 'Demo filed amount; live GST portal out of scope',
-  }));
+  // 3. Tax. There is no GST connector, so unless a filed figure is supplied the
+  //    line has nothing to compare against. It used to default to the billed
+  //    amount and compare it with itself, which reported an exact match every
+  //    run; now it says it could not be checked.
+  const taxFiled = sapOverride?.tax_filed != null ? Number(sapOverride.tax_filed) : null;
+  items.push(makeItem(taxFiled == null
+    ? {
+      item_type: 'TAX',
+      label: 'Tax/GST: Billed vs Filed',
+      billed_value: billedTaxes,
+      paid_value: null,
+      unit: 'INR',
+      variance: 0,
+      variance_pct: null,
+      match_status: NOT_CONNECTED,
+      notes: 'No GST portal connector — the filed figure has to be supplied to check this',
+    }
+    : {
+      item_type: 'TAX',
+      label: 'Tax/GST: Billed vs Filed',
+      billed_value: billedTaxes,
+      paid_value: taxFiled,
+      unit: 'INR',
+      ...classifyAmount(billedTaxes, taxFiled),
+      notes: 'Filed figure supplied with the run',
+    }));
 
   // 4. Performance
   const availability = energy?.availability_percent ?? 100;
@@ -224,21 +239,37 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
     notes: expectedPenalty ? 'Shortfall penalty expected' : 'No shortfall expected',
   }));
 
-  // 6. Internal SAP
+  // 6. Internal SAP. Same shape as the tax line: with no finance-system
+  //    connector, defaulting the mirror to our own total made the line agree
+  //    with itself. A factor of 1 is not a comparison.
   const sapRef = sapOverride?.sap_amount != null
-    ? sapOverride.sap_amount
-    : Math.round(billedTotal * (sapOverride?.sap_factor ?? 1));
-  const sapCls = classifyAmount(billedTotal, sapRef);
-  items.push(makeItem({
-    item_type: 'INTERNAL_SAP',
-    label: 'Internal: System vs SAP mirror',
-    billed_value: billedTotal,
-    sap_reference_amount: sapRef,
-    paid_value: sapRef,
-    unit: 'INR',
-    ...sapCls,
-    notes: 'Demo SAP mirror — no live connector',
-  }));
+    ? Number(sapOverride.sap_amount)
+    : (sapOverride?.sap_factor != null
+      ? Math.round(billedTotal * Number(sapOverride.sap_factor))
+      : null);
+  items.push(makeItem(sapRef == null
+    ? {
+      item_type: 'INTERNAL_SAP',
+      label: 'Internal: System vs SAP mirror',
+      billed_value: billedTotal,
+      sap_reference_amount: null,
+      paid_value: null,
+      unit: 'INR',
+      variance: 0,
+      variance_pct: null,
+      match_status: NOT_CONNECTED,
+      notes: 'No SAP connector — the mirror figure has to be supplied to check this',
+    }
+    : {
+      item_type: 'INTERNAL_SAP',
+      label: 'Internal: System vs SAP mirror',
+      billed_value: billedTotal,
+      sap_reference_amount: sapRef,
+      paid_value: sapRef,
+      unit: 'INR',
+      ...classifyAmount(billedTotal, sapRef),
+      notes: 'SAP mirror figure supplied with the run',
+    }));
 
   // 7. Open disputes as refs
   for (const d of openDisputesForPeriod(contractId, period)) {
@@ -259,11 +290,8 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
   const carry = carryForwardItems(contractId, period, periodType);
   items.push(...carry.items);
 
-  const matched = items.filter((i) => ['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN'].includes(i.match_status)).length;
-  const exceptions = items.filter((i) => ['EXCEPTION', 'CARRIED'].includes(i.match_status)).length;
-  const unreconciled = items
-    .filter((i) => ['EXCEPTION', 'CARRIED'].includes(i.match_status))
-    .reduce((s, i) => s + Math.abs(i.variance || 0), 0);
+  const summary = summariseItems(items);
+  const exceptions = summary.exceptions;
 
   const energyMatch = items.find((i) => i.item_type === 'ENERGY_THREE_WAY')?.match_status !== 'EXCEPTION' ? 1 : 0;
   const paymentMatch = items.find((i) => i.item_type === 'FINANCIAL_THREE_WAY')?.match_status !== 'EXCEPTION' ? 1 : 0;
@@ -282,10 +310,13 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
     items,
     metrics: {
       items_total: items.length,
-      items_auto_matched: matched,
-      items_exception: exceptions,
-      auto_match_pct: items.length ? Number(((matched / items.length) * 100).toFixed(2)) : 0,
-      unreconciled_amount: unreconciled,
+      items_auto_matched: summary.matched,
+      items_exception: summary.exceptions,
+      // Lines with nothing to check against are outside the percentage, so a
+      // missing connector cannot make the books look more agreed than they are.
+      items_not_connected: summary.not_connected,
+      auto_match_pct: summary.auto_match_pct,
+      unreconciled_amount: summary.unreconciled_amount,
       energy_match: energyMatch,
       payment_match: paymentMatch,
       performance_match: performanceMatch,
@@ -340,19 +371,20 @@ export function buildTradingReconItems({ tradingClientId, period }) {
     ...finCls,
   }));
 
-  const sapRef = Math.round(billed);
-  const sapCls = classifyAmount(billed, sapRef);
   items.push(makeItem({
     item_type: 'INTERNAL_SAP',
     label: 'Trading system vs SAP mirror',
     billed_value: billed,
-    sap_reference_amount: sapRef,
-    paid_value: sapRef,
-    ...sapCls,
+    sap_reference_amount: null,
+    paid_value: null,
+    variance: 0,
+    variance_pct: null,
+    match_status: NOT_CONNECTED,
+    notes: 'No SAP connector — nothing to compare the trading total against',
   }));
 
-  const matched = items.filter((i) => ['EXACT', 'AUTO_MATCHED'].includes(i.match_status)).length;
-  const exceptions = items.filter((i) => i.match_status === 'EXCEPTION').length;
+  const summary = summariseItems(items);
+  const exceptions = summary.exceptions;
 
   return {
     client,
@@ -360,10 +392,11 @@ export function buildTradingReconItems({ tradingClientId, period }) {
     dataBasis: 'FINAL',
     metrics: {
       items_total: items.length,
-      items_auto_matched: matched,
-      items_exception: exceptions,
-      auto_match_pct: items.length ? Number(((matched / items.length) * 100).toFixed(2)) : 0,
-      unreconciled_amount: items.filter((i) => i.match_status === 'EXCEPTION').reduce((s, i) => s + Math.abs(i.variance || 0), 0),
+      items_auto_matched: summary.matched,
+      items_exception: summary.exceptions,
+      items_not_connected: summary.not_connected,
+      auto_match_pct: summary.auto_match_pct,
+      unreconciled_amount: summary.unreconciled_amount,
       energy_match: clearCls.match_status !== 'EXCEPTION' ? 1 : 0,
       payment_match: finCls.match_status !== 'EXCEPTION' ? 1 : 0,
       performance_match: 1,

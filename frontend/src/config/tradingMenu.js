@@ -225,13 +225,13 @@ export const TRADING_MENU = [
     ],
   },
   {
+    // ISET's ERP group also carries the SAP upload formats — Vendor Format,
+    // Vendor Payable, Customer Receivable, Weekly Billing and TDS. Those now sit
+    // under Finance & SAP Integration (FINANCE_SAP_MENU below), next to the other
+    // verticals' postings, because SAP is one ledger for all three. What stays
+    // here is the desk's own work.
     group: 'ERP',
     items: [
-      { label: 'Vendor Format', to: '/erp/vendors' },
-      { label: 'ERP Vendor Payable', to: '/erp/payables' },
-      { label: 'ERP Customer Receivable', to: '/erp/receivables' },
-      { label: 'Weekly Billing Format', to: '/erp/weekly-billing' },
-      { label: 'ERP TDS Format', to: '/erp/tds-format' },
       { label: 'DAM Orders', to: '/erp/dam-orders' },
       { label: 'RTM Orders', to: '/erp/rtm-orders' },
       { label: 'NOC Updation', to: '/erp/noc-updation' },
@@ -244,7 +244,9 @@ export const TRADING_MENU = [
     ours: true,
     items: [
       { label: 'Bulk Communications', to: '/trading/bulk-communications' },
-      { label: 'Inbox', to: '/trading/inbox' },
+      // The broadcasts sent from Bulk Communications — not anyone's personal
+      // mail, which is Mail (/mail). The URL is kept so saved links still work.
+      { label: 'Broadcast Log', to: '/trading/inbox' },
     ],
   },
 ];
@@ -252,3 +254,41 @@ export const TRADING_MENU = [
 /** Every screen ISET has that we have not built yet. */
 export const pendingScreens = () =>
   TRADING_MENU.flatMap((g) => g.items.filter((i) => i.pending).map((i) => ({ ...i, group: g.group })));
+
+/**
+ * Finance & SAP Integration — one section for what goes to SAP from every
+ * vertical.
+ *
+ * SAP is one set of books for Power Trading, REIA and Hydro & Thermal, and the
+ * same Finance team posts all three, so their postings live together rather
+ * than as one screen buried in each vertical. Grouped by vertical for now,
+ * because each still posts its own way; the URLs are unchanged. Each is a
+ * manual handover — Finance's voucher number is typed in — until the SAP
+ * interface (RFC / IDoc / OData) is settled with SJVN IT.
+ *
+ * `roles` on an item keeps it to the people its route admits.
+ */
+export const FINANCE_SAP_MENU = (roles) => [
+  {
+    group: 'REIA',
+    items: [
+      { label: 'Finance Posting (FI)', to: '/reia/finance-posting', roles: roles.REIA_ALL },
+    ],
+  },
+  {
+    group: 'Hydro & Thermal',
+    items: [
+      { label: 'Finance Posting (FI)', to: '/hydro-thermal/hydro-finance', roles: roles.HYDRO_THERMAL_ALL },
+    ],
+  },
+  {
+    group: 'Power Trading',
+    items: [
+      { label: 'Vendor Format', to: '/erp/vendors', roles: roles.TRADING_ALL },
+      { label: 'ERP Vendor Payable', to: '/erp/payables', roles: roles.TRADING_ALL },
+      { label: 'ERP Customer Receivable', to: '/erp/receivables', roles: roles.TRADING_ALL },
+      { label: 'Weekly Billing Format', to: '/erp/weekly-billing', roles: roles.TRADING_ALL },
+      { label: 'ERP TDS Format', to: '/erp/tds-format', roles: roles.TRADING_ALL },
+    ],
+  },
+];

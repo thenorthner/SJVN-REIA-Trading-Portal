@@ -27,6 +27,18 @@ export function AuthProvider({ children }) {
     return res.user;
   }
 
+  /**
+   * Change the signed-in user's own password.
+   *
+   * The server hands back a fresh token; storing it keeps the session alive, so
+   * a successful change does not bounce the user to the sign-in screen.
+   */
+  async function changePassword(currentPassword, newPassword) {
+    const res = await api.auth.changePassword(currentPassword, newPassword);
+    if (res?.token) localStorage.setItem('sjvn_token', res.token);
+    return res;
+  }
+
   function logout() {
     localStorage.removeItem('sjvn_token');
     localStorage.removeItem('sjvn_user');
@@ -34,7 +46,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, changePassword }}>
       {children}
     </AuthContext.Provider>
   );

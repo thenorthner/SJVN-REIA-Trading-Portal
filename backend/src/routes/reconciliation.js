@@ -10,7 +10,7 @@ import {
   TOLERANCE_QTY_PCT,
   TOLERANCE_AMOUNT,
 } from '../reconciliationEngine.js';
-import { OPEN_RECON_STATUSES } from '../reconciliationConstants.js';
+import { OPEN_RECON_STATUSES, summariseItems } from '../reconciliationConstants.js';
 import { OPEN_STATUSES as OPEN_DISPUTE_STATUSES, genDisputeNo, REASON_CODES, CHARGE_LINES, addDaysIso, SLA_ACK_DAYS, SLA_RESOLVE_DAYS } from '../disputesConstants.js';
 
 const router = Router();
@@ -513,16 +513,14 @@ router.post('/:id/override', requireRole(...REIA_WRITE), (req, res) => {
     .run(reason, item.id);
 
   const items = db.prepare('SELECT * FROM recon_items WHERE reconciliation_id = ?').all(recon.id);
-  const exceptions = items.filter((i) => ['EXCEPTION', 'CARRIED'].includes(i.match_status)).length;
-  const matched = items.filter((i) => ['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN'].includes(i.match_status)).length;
-  const status = exceptions > 0 ? 'NEEDS_REVIEW' : 'PENDING_SIGN_OFF';
-  const unrecon = items.filter((i) => ['EXCEPTION', 'CARRIED'].includes(i.match_status))
-    .reduce((s, i) => s + Math.abs(i.variance || 0), 0);
+  const summary = summariseItems(items);
+  const status = summary.exceptions > 0 ? 'NEEDS_REVIEW' : 'PENDING_SIGN_OFF';
 
   db.prepare(`
     UPDATE reconciliations SET status = ?, items_exception = ?, items_auto_matched = ?,
       auto_match_pct = ?, unreconciled_amount = ?, updated_at = datetime('now') WHERE id = ?
-  `).run(status, exceptions, matched, Number(((matched / items.length) * 100).toFixed(2)), unrecon, recon.id);
+  `).run(status, summary.exceptions, summary.matched, summary.auto_match_pct,
+    summary.unreconciled_amount, recon.id);
 
   recordEvent(recon.id, req.user, 'OVERRIDE', { item_id, reason });
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'RECON_OVERRIDE', module: 'REIA', entityType: 'reconciliation', entityId: recon.id, details: { item_id, reason } });
@@ -743,11 +741,8 @@ router.post('/:id/regenerate-statement', requireRole(...REIA_WRITE, 'TRADING_USE
   }
 
   const items = db.prepare('SELECT * FROM recon_items WHERE reconciliation_id = ?').all(recon.id);
-  const exceptions = items.filter((i) => ['EXCEPTION', 'CARRIED'].includes(i.match_status)).length;
-  const matched = items.filter((i) => ['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN'].includes(i.match_status)).length;
-  const unrecon = items.filter((i) => ['EXCEPTION', 'CARRIED'].includes(i.match_status))
-    .reduce((s, i) => s + Math.abs(i.variance || 0), 0);
-  const autoMatchPct = items.length > 0 ? Number(((matched / items.length) * 100).toFixed(2)) : 0;
+  const summary = summariseItems(items);
+  const { exceptions, matched, auto_match_pct: autoMatchPct, unreconciled_amount: unrecon } = summary;
   const nextVer = (Number(recon.version) || 1) + 1;
   const newStatus = exceptions > 0 ? 'NEEDS_REVIEW' : (['AGREED', 'CLOSED'].includes(recon.status) ? recon.status : 'PENDING_SIGN_OFF');
 

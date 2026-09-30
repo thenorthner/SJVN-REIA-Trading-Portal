@@ -30,6 +30,10 @@ backend/outbox/*
 # lines — ignore both locations, not just the one under backend/.
 outbox/
 backend/rea_downloads/
+# NRPC Deviation Settlement Account PDFs, kept so a bill can be traced back to
+# the document it came from. Re-uploadable, and several hundred megabytes once
+# the archive is in, so they stay out of the repository.
+backend/dsa_statements/
 backend/temp/
 backend/test*.pdf
 

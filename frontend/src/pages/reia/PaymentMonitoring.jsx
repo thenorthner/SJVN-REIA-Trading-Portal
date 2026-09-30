@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/client.js';
-import { PageHeader, Card, Badge, StatCard, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Badge, StatCard, Tabs, Tab, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import ModuleGuide from '../../components/ModuleGuide.jsx';
+import { getGuide } from '../../content/guides/index.js';
 import { fmtDate } from '../../datetime.js';
 
 // Who owes what, how late it is, and what the lateness has earned.
@@ -33,6 +35,7 @@ function delayBadge(days) {
 }
 
 export default function PaymentMonitoring() {
+  const [view, setView] = useState('main');
   const [side, setSide] = useState('RECEIVABLE');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -72,6 +75,15 @@ export default function PaymentMonitoring() {
         actions={<Link className="btn btn-outline" to="/reia/invoices">Open invoices</Link>}
       />
 
+      <Tabs style={{ marginBottom: 18 }}>
+        <Tab active={view === 'main'} onClick={() => setView('main')}>Outstanding</Tab>
+        <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
+      </Tabs>
+
+      {view === 'fyi' && <ModuleGuide guide={getGuide('monitoring')} />}
+
+      {view === 'main' && (
+      <>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
 
       <div className="report-toolbar">
@@ -240,6 +252,8 @@ export default function PaymentMonitoring() {
             </p>
           </Card>
         </>
+      )}
+      </>
       )}
     </div>
   );

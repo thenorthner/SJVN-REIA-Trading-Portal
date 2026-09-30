@@ -6,7 +6,11 @@ import {
   PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtCurrency, fmtNumber,
 } from '../../components/ui.jsx';
 
-// Power trading bills raised off a hydro station.
+// Sale bills a hydro station raises on the trader it sells through (PTC India).
+//
+// This is the station's revenue, not SJVN's own trading desk: the bill sits on
+// the station's contract and ledger, which is why it lives under Hydro & Thermal
+// and not under Power Trading.
 //
 // A trade is not a tariff bill: no availability, no design energy, no
 // beneficiary allocation. SJVN sells a quantum to one counterparty over a date
@@ -97,8 +101,8 @@ export default function HydroPtc() {
   return (
     <div>
       <PageHeader
-        title="Power Trading (PTC)"
-        subtitle="Trading bills raised off a hydro station, and what each trade netted"
+        title="PTC Sale Bills"
+        subtitle="Bills a hydro station raises on PTC for power sold through it, and what each sale netted"
       />
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}
@@ -111,7 +115,7 @@ export default function HydroPtc() {
             type="button" className="btn btn-primary"
             onClick={() => setForm({ ...EMPTY, from_date: '', to_date: '', due_date: '' })}
           >
-            Raise a trading bill
+            Raise a PTC sale bill
           </button>
         )}
       >
@@ -132,7 +136,7 @@ export default function HydroPtc() {
         </div>
       )}
 
-      <Card title={`Trading bills for ${station?.station_name || 'this station'}`}>
+      <Card title={`PTC sale bills for ${station?.station_name || 'this station'}`}>
         <Table
           columns={[
             { key: 'bill_no', header: 'Bill no.' },
@@ -166,16 +170,16 @@ export default function HydroPtc() {
             },
           ]}
           rows={bills}
-          emptyMessage="No trading bill has been raised on this station."
+          emptyMessage="No PTC sale bill has been raised on this station."
         />
         <p style={{ color: 'var(--text-light)', fontSize: 12, marginTop: 10 }}>
-          A trading bill goes up the same approval chain as a tariff bill, and once issued it opens
+          A PTC sale bill goes up the same approval chain as a tariff bill, and once issued it opens
           an account for the counterparty on the Hydro Account Display — where its payment, any
           reversal and its surcharge are handled exactly the same way.
         </p>
       </Card>
 
-      <Modal open={!!form} onClose={() => { setForm(null); setNet(null); }} title="Raise a trading bill" width={660}>
+      <Modal open={!!form} onClose={() => { setForm(null); setNet(null); }} title="Raise a PTC sale bill" width={660}>
         {form && (
           <form onSubmit={submit}>
             <div className="form-grid">

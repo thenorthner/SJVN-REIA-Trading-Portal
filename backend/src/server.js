@@ -80,7 +80,9 @@ import tradingNotesRoutes from './routes/tradingNotes.js';
 import powerDiversionRoutes from './routes/powerDiversion.js';
 import rateMasterRoutes from './routes/rateMaster.js';
 import dsmChargesRoutes from './routes/dsmCharges.js';
-import hydroBillingRoutes from './routes/hydroBilling.js';
+import hydroBillingRoutes, { runReaAutoDraft } from './routes/hydroBilling.js';
+import reiaFinanceRoutes from './routes/reiaFinance.js';
+import mailRoutes from './routes/mail.js';
 import nocUpdationRoutes from './routes/nocUpdation.js';
 import clientPortfoliosRoutes from './routes/clientPortfolios.js';
 import tradingClientPortalRoutes from './routes/tradingClientPortal.js';
@@ -89,6 +91,7 @@ import tdsLedgerRoutes from './routes/tdsLedger.js';
 import oaChargesRoutes from './routes/oaCharges.js';
 import importsRoutes from './routes/imports.js';
 import deviationRegisterRoutes from './routes/deviationRegister.js';
+import nrpcDsaRoutes from './routes/nrpcDsa.js';
 import { runDeviationAlerts } from './services/deviationRegister.js';
 import paymentCycleRoutes from './routes/paymentCycle.js';
 import contractPnlRoutes from './routes/contractPnl.js';
@@ -235,12 +238,15 @@ app.use('/api/tds', tdsLedgerRoutes);
 app.use('/api/oa-charges', oaChargesRoutes);
 app.use('/api/import', importsRoutes);
 app.use('/api/deviations', deviationRegisterRoutes);
+app.use('/api/nrpc-dsa', nrpcDsaRoutes);
 app.use('/api/payment-cycle', paymentCycleRoutes);
 app.use('/api/pnl', contractPnlRoutes);
 app.use('/api/margin', marginAssuranceRoutes);
 app.use('/api/energy-banking', requireAuth, energyBankingRoutes);
 app.use('/api/generator-billing', generatorBillingRoutes);
 app.use('/api/hydro-billing', hydroBillingRoutes);
+app.use('/api/reia-fi', reiaFinanceRoutes);
+app.use('/api/mail', mailRoutes);
 app.use('/api/market-analytics', marketAnalyticsRoutes);
 app.use('/api/market-forecast', marketForecastRoutes);
 app.use('/api/cerc-market', requireAuth, cercMarketDataRoutes);
@@ -525,10 +531,14 @@ const server = app.listen(PORT, HOST, () => {
   });
 
   // ─── REA Scraper Scheduled Jobs ───────────────────────
-  // Smart schedule: Daily at 6 AM IST during 1st-10th of each month
-  // (when provisional REA is typically published), every 3 days otherwise
-  cron.schedule('30 0 1-10 * *', async () => {  // 6:00 AM IST = 00:30 UTC
-    console.log('[REA Scraper] Scheduled daily scan (1st-10th of month)');
+  //
+  // A scan, and then the bills it makes possible. Drafting is the second half
+  // of the same errand — an account that lands at 06:00 and is drafted at 06:01
+  // is waiting for the desk when it arrives, rather than waiting for the desk
+  // to remember. The draft costs one query on the mornings the RPC published
+  // nothing, so it runs after every scan.
+  const reaScanAndDraft = async (label) => {
+    console.log(`[REA Scraper] ${label}`);
     try {
       const results = await reaScraper.runAllSources();
       const totalRecords = results.reduce((sum, r) => sum + (r.records || 0), 0);
@@ -536,20 +546,21 @@ const server = app.listen(PORT, HOST, () => {
     } catch (err) {
       console.error('[REA Scraper] Scheduled scan failed:', err.message);
     }
-  });
+    try {
+      const draft = await runReaAutoDraft();
+      if (draft.skipped) console.log(`[REA Auto-draft] Nothing drafted — ${draft.skipped}`);
+      else if (draft.error) console.error(`[REA Auto-draft] ${draft.from_month}..${draft.to_month} failed: ${draft.error}`);
+      else console.log(`[REA Auto-draft] ${draft.from_month}..${draft.to_month}: drafted ${draft.created.length} bill(s)${draft.created.length ? ` — ${draft.created.join(', ')}` : ''}${draft.blocked.length ? `; ${draft.blocked.length} station-month(s) left unbilled` : ''}`);
+    } catch (err) {
+      console.error('[REA Auto-draft] sweep failed:', err.message);
+    }
+  };
 
-  // Lower frequency rest of month: every 3 days at 6 AM IST
-  cron.schedule('30 0 12,15,18,21,24,27 * *', async () => {  // 6:00 AM IST = 00:30 UTC
-    console.log('[REA Scraper] Scheduled periodic scan (mid-month)');
-    try {
-      const results = await reaScraper.runAllSources();
-      const totalRecords = results.reduce((sum, r) => sum + (r.records || 0), 0);
-      if (totalRecords > 0) console.log(`[REA Scraper] Imported ${totalRecords} record(s)`);
-    } catch (err) {
-      console.error('[REA Scraper] Scheduled scan failed:', err.message);
-    }
-  });
-  console.log('[REA Scraper] Cron jobs registered (daily 1st-10th, every 3 days mid-month)');
+  // Daily at 6 AM IST through the 1st-10th, when the provisional REA is
+  // typically published; every 3 days for the rest of the month.
+  cron.schedule('30 0 1-10 * *', () => reaScanAndDraft('Scheduled daily scan (1st-10th of month)'));  // 6:00 AM IST = 00:30 UTC
+  cron.schedule('30 0 12,15,18,21,24,27 * *', () => reaScanAndDraft('Scheduled periodic scan (mid-month)'));  // 6:00 AM IST = 00:30 UTC
+  console.log('[REA Scraper] Cron jobs registered (daily 1st-10th, every 3 days mid-month), each followed by auto-draft');
 
   // CERC Market Monitoring Report scan — 15th and 25th of each month at 07:00 AM IST (01:30 UTC)
   cron.schedule('30 1 15,25 * *', async () => {

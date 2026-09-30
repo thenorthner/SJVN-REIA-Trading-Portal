@@ -2,10 +2,11 @@ import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import api from '../api/client.js';
-import { TRADING_MENU } from '../config/tradingMenu.js';
+import { TRADING_MENU, FINANCE_SAP_MENU } from '../config/tradingMenu.js';
 import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from '../roles.js';
 import { PortfolioSelect } from '../context/PortfolioContext.jsx';
 import { RouteSkeleton } from './ui.jsx';
+import ChangePasswordModal from './ChangePasswordModal.jsx';
 
 /**
  * Keeps the shell up if a screen's module fails to load or throws while
@@ -103,7 +104,10 @@ const NAV_INTERNAL = [
   {
     section: 'Alerts',
     roles: [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.TRADING_ALL])],
-    links: [{ to: '/notification-board', label: 'Notification Board' }],
+    links: [
+      { to: '/mail', label: 'Mail' },
+      { to: '/notification-board', label: 'Notification Board' },
+    ],
   },
   {
     section: 'REIA Billing & Settlement',
@@ -123,11 +127,6 @@ const NAV_INTERNAL = [
       { to: '/reia/payment-monitoring', label: 'Payment Monitoring' },
       // Energy against what each project's capacity could make.
       { to: '/reia/generation-performance', label: 'Generation Performance' },
-      { to: '/reia/hydro-billing', label: 'Hydro Billing (Station-wise)' },
-      { to: '/reia/hydro-ledger', label: 'Hydro Account Display' },
-      { to: '/reia/hydro-claims', label: 'Additional Charges & TCS' },
-      { to: '/reia/hydro-finance', label: 'Finance Posting (FI)' },
-      { to: '/reia/hydro-ptc', label: 'Power Trading (PTC)' },
       { to: '/reia/disputes', label: 'Dispute Management' },
       { to: '/reia/payment-security', label: 'Payment Security' },
       { to: '/reia/power-diversion', label: 'Power Diversion' },
@@ -141,6 +140,19 @@ const NAV_INTERNAL = [
       { to: '/reia/deviation', label: 'Deviation Settlement (DSA)' },
     ],
   },
+  {
+    section: 'Hydro & Thermal Billing',
+    roles: ROLE_GROUPS.HYDRO_THERMAL_ALL,
+    links: [
+      { to: '/hydro-thermal', label: 'Hydro & Thermal Dashboard', end: true },
+      { to: '/hydro-thermal/hydro-billing', label: 'Hydro Billing (Station-wise)' },
+      { to: '/hydro-thermal/hydro-ledger', label: 'Hydro Account Display' },
+      { to: '/hydro-thermal/hydro-claims', label: 'Additional Charges & TCS' },
+      // Sale bills the station raises on PTC India, the trader it sells through —
+      // station revenue on the station's ledger, not SJVN's own trading desk.
+      { to: '/hydro-thermal/hydro-ptc', label: 'PTC Sale Bills' },
+    ],
+  },
     {
     // Grouped the way ISET groups it. The flat list of thirty-four worked while
     // there were thirty-four; the menu it mirrors has close to a hundred, so the
@@ -149,6 +161,12 @@ const NAV_INTERNAL = [
     section: 'Power Trading',
     roles: ROLE_GROUPS.TRADING_ALL,
     groups: TRADING_MENU,
+  },
+  {
+    // What goes to SAP, from all three verticals — see FINANCE_SAP_MENU.
+    section: 'Finance & SAP Integration',
+    roles: [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.TRADING_ALL])],
+    groups: FINANCE_SAP_MENU(ROLE_GROUPS),
   },
   {
     section: 'Platform',
@@ -167,6 +185,7 @@ const NAV_SELLER = [
     roles: null,
     links: [
       { to: '/seller', label: 'My Dashboard', end: true },
+      { to: '/mail', label: 'Mail' },
       { to: '/notification-board', label: 'Notification Board' },
       { to: '/seller/team', label: 'My Team' },
       { to: '/seller/documents', label: 'My Documents & KYC' },
@@ -187,6 +206,7 @@ const NAV_BUYER = [
     roles: null,
     links: [
       { to: '/buyer', label: 'My Dashboard', end: true },
+      { to: '/mail', label: 'Mail' },
       { to: '/notification-board', label: 'Notification Board' },
       { to: '/buyer/team', label: 'My Team' },
       { to: '/buyer/documents', label: 'My Documents & KYC' },
@@ -210,6 +230,7 @@ const NAV_TRADING_CLIENT = [
       // the bidding engine, the bilateral desk, Billing & Settlement — which a
       // client can open but whose every call the API refuses.
       { to: '/trading/home', label: 'Home Dashboard', end: true },
+      { to: '/mail', label: 'Mail' },
       { to: '/trading/my-profile', label: 'My Profile & Portfolio' },
       { to: '/trading/my-bids', label: 'My Bids' },
       { to: '/trading/my-deals', label: 'My Deals' },
@@ -322,6 +343,8 @@ export default function Layout() {
   const [notifications, setNotifications] = useState([]);
   const [showNotif, setShowNotif] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const notifRef = useRef(null);
   const profileRef = useRef(null);
 
@@ -372,6 +395,18 @@ export default function Layout() {
 
   const unread = (Array.isArray(notifications) ? notifications : []).filter((n) => !n.is_read).length;
 
+  // Unread mail, beside the bell. The Mail page announces reads and deletes
+  // with a 'mail:changed' event so the count does not wait for the next poll.
+  const [unreadMail, setUnreadMail] = useState(0);
+  useEffect(() => {
+    if (!user) return undefined;
+    const refresh = () => api.mail.unreadCount().then((r) => setUnreadMail(r?.unread || 0)).catch(() => {});
+    refresh();
+    const interval = setInterval(refresh, 30000);
+    window.addEventListener('mail:changed', refresh);
+    return () => { clearInterval(interval); window.removeEventListener('mail:changed', refresh); };
+  }, [user?.id]);
+
   // Select sidebar based on user role. Matching on the role *group* (not the
   // exact 'SELLER'/'BUYER' string) keeps SELLER_L1/L2/L3 and BUYER_L1/L2/L3
   // sub-users inside their company portal instead of the internal SJVN nav.
@@ -408,7 +443,7 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
         {branded ? (
           <div className="brand">
             {logoSrc ? (
@@ -442,6 +477,18 @@ export default function Layout() {
       <div className="main-col">
         <header className="topbar">
           <div className="topbar-left">
+            <button 
+              className="icon-btn" 
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              aria-label="Toggle Sidebar"
+              style={{ marginRight: 12, padding: 4 }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+              </svg>
+            </button>
             {!branded && (
               <img className="topbar-logo" src="/sjvn-logo.png" alt="SJVN" />
             )}
@@ -456,6 +503,19 @@ export default function Layout() {
           </div>
           <div className="topbar-actions">
 
+            <button
+              className="icon-btn"
+              onClick={() => navigate('/mail')}
+              aria-label={unreadMail ? `Mail, ${unreadMail} unread` : 'Mail'}
+              title="Mail"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="14" rx="2" />
+                <path d="m3 7 9 6 9-6" />
+              </svg>
+              {unreadMail > 0 && <span className="badge-dot">{unreadMail > 99 ? '99+' : unreadMail}</span>}
+            </button>
+
             <div className="notif-wrap" ref={notifRef}>
               <button className="icon-btn" onClick={() => { setShowNotif((s) => !s); setShowProfile(false); }} aria-label="Notifications" aria-expanded={showNotif}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -467,7 +527,7 @@ export default function Layout() {
               {showNotif && (
                 <div className="notif-dropdown">
                   <div className="notif-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 600 }}>Inbox & System Alerts</span>
+                    <span style={{ fontWeight: 600 }}>System Alerts</span>
                     <div style={{ display: 'flex', gap: 10 }}>
                       <button className="link-btn" onClick={() => alert('Compose Mail modal opened!')} style={{ color: '#0052cc', fontWeight: 600 }}>+ Compose Mail</button>
                       <button className="link-btn" onClick={() => api.notifications.markAllRead().then(() => api.notifications.list(user?.role).then(setNotifications))}>Mark all read</button>
@@ -508,7 +568,7 @@ export default function Layout() {
                       Manage Portfolio
                     </div>
                   )}
-                  <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => setShowProfile(false)}>
+                  <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => { setShowChangePassword(true); setShowProfile(false); }}>
                     Change Password
                   </div>
                   <div className="notif-item" style={{ cursor: 'pointer', borderTop: '1px solid var(--border)', color: 'var(--red)' }} onClick={handleLogout}>
@@ -530,6 +590,7 @@ export default function Layout() {
           </RouteErrorBoundary>
         </main>
       </div>
+      <ChangePasswordModal open={showChangePassword} onClose={() => setShowChangePassword(false)} />
     </div>
   );
 }
