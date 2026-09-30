@@ -28,7 +28,7 @@
 **To:** anupamkumar@grid-india.in
 **Cc:** power.trading@sjvn.nic.in
 
-**Subject:** WBES API — IP whitelisting and three integration details — SJVN Limited
+**Subject:** WBES API — IP whitelisting request (49.50.97.173) — SJVN Limited
 
 ---
 
@@ -96,8 +96,8 @@ required from our side.
 
 Thanks and regards,
 
-`<YOUR_NAME>`
-`<DESIGNATION>`, ERP Cell
+Kshitij Sharma
+ERP Cell
 SJVN Limited, Corporate HQ, Shimla
 `<phone>`
 kshitij.sharma@sjvn.nic.in
