@@ -31,6 +31,7 @@ const g = (url, params) => client.get(url, { params }).then((r) => r.data);
 const p = (url, body) => client.post(url, body).then((r) => r.data);
 const put = (url, body) => client.put(url, body).then((r) => r.data);
 const patch = (url, body) => client.patch(url, body).then((r) => r.data);
+const of = (entityId) => (entityId ? { entity_id: entityId } : undefined);
 const del = (url) => client.delete(url).then((r) => r.data);
 
 export const api = {
@@ -66,11 +67,53 @@ export const api = {
     create: (body) => p('/users', body),
     updateStatus: (id, is_active) => put(`/users/${id}/status`, { is_active })
   },
+  // A company's own users: levels, resets, switching off, and what each has been doing.
+  // `entityId` is for SJVN's admins, opening a company's team from outside it.
+  team: {
+    companies: () => g('/team/companies'),
+    get: (entityId) => g('/team', of(entityId)),
+    add: (body, entityId) => client.post('/team', body, { params: of(entityId) }).then((r) => r.data),
+    update: (id, body, entityId) => client.patch(`/team/${id}`, body, { params: of(entityId) }).then((r) => r.data),
+    deactivate: (id, reason, entityId) => client.post(`/team/${id}/deactivate`, { reason }, { params: of(entityId) }).then((r) => r.data),
+    reactivate: (id, entityId) => client.post(`/team/${id}/reactivate`, {}, { params: of(entityId) }).then((r) => r.data),
+    resetPassword: (id, entityId) => client.post(`/team/${id}/reset-password`, {}, { params: of(entityId) }).then((r) => r.data),
+    unlock: (id, entityId) => client.post(`/team/${id}/unlock`, {}, { params: of(entityId) }).then((r) => r.data),
+    activity: (id, entityId) => g(`/team/${id}/activity`, of(entityId)),
+    history: (entityId) => g('/team/history', of(entityId)),
+    exportCsv: (entityId) => client.get('/team/export.csv', { params: of(entityId), responseType: 'blob' }).then((r) => r.data),
+  },
+  // SJVN's own users: roles, resets, switching off.
+  staff: {
+    get: () => g('/staff'),
+    add: (body) => p('/staff', body),
+    update: (id, body) => patch(`/staff/${id}`, body),
+    deactivate: (id, reason) => p(`/staff/${id}/deactivate`, { reason }),
+    reactivate: (id) => p(`/staff/${id}/reactivate`),
+    resetPassword: (id) => p(`/staff/${id}/reset-password`),
+    unlock: (id) => p(`/staff/${id}/unlock`),
+    activity: (id) => g(`/staff/${id}/activity`),
+    history: () => g('/staff/history'),
+    exportCsv: () => client.get('/staff/export.csv', { responseType: 'blob' }).then((r) => r.data),
+  },
+  // What is waiting on SJVN, across every desk.
+  sjvnDesk: () => g('/sjvn-desk'),
   documents: {
     list: (params) => g('/documents', params),
     upload: (formData) => client.post('/documents/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
     verify: (versionId) => p(`/documents/${versionId}/verify`),
-    reject: (versionId, reason) => p(`/documents/${versionId}/reject`, { reason }),
+    reject: (versionId, reason, reason_code) => p(`/documents/${versionId}/reject`, { reason, reason_code }),
+    rejectReasons: () => g('/documents/reject-reasons'),
+    history: (documentId) => g(`/documents/history/${documentId}`),
+    queue: () => g('/documents/queue'),
+    kycReport: () => g('/documents/kyc-report'),
+    requests: (params) => g('/documents/requests', params),
+    createRequest: (body) => p('/documents/requests', body),
+    cancelRequest: (id) => p(`/documents/requests/${id}/cancel`),
+    zip: (params) => client.get('/documents/zip', { params, responseType: 'blob' }).then((r) => ({
+      blob: r.data,
+      fileName: (r.headers['content-disposition'] || '').match(/filename="?([^";]+)"?/i)?.[1] || 'documents.zip',
+    })),
+    submitL2: (versionId) => p(`/documents/${versionId}/submit-l2`),
     downloadUrl: (versionId) => `/api/documents/${versionId}/download`,
     download: (versionId) => client.get(`/documents/${versionId}/download`, { responseType: 'blob' }).then((r) => ({
       blob: r.data,
@@ -81,6 +124,24 @@ export const api = {
       })(),
       contentType: r.headers['content-type'] || r.data.type,
     })),
+  },
+  // The working side of a contract: milestones, requests, notices, the guarantee.
+  contractWorkspace: {
+    meta: () => g('/contract-workspace/meta'),
+    summary: () => g('/contract-workspace/summary'),
+    pending: () => g('/contract-workspace/pending'),
+    get: (id) => g(`/contract-workspace/${id}`),
+    addStandardMilestones: (id) => p(`/contract-workspace/${id}/milestones/standard`),
+    addMilestone: (id, body) => p(`/contract-workspace/${id}/milestones`, body),
+    updateMilestone: (mid, body) => patch(`/contract-workspace/milestones/${mid}`, body),
+    removeMilestone: (mid) => del(`/contract-workspace/milestones/${mid}`),
+    reportMilestone: (mid, body) => p(`/contract-workspace/milestones/${mid}/report`, body),
+    confirmMilestone: (mid, body) => p(`/contract-workspace/milestones/${mid}/confirm`, body),
+    raiseRequest: (id, body) => p(`/contract-workspace/${id}/requests`, body),
+    decideRequest: (rid, body) => p(`/contract-workspace/requests/${rid}/decide`, body),
+    withdrawRequest: (rid) => p(`/contract-workspace/requests/${rid}/withdraw`),
+    sendNotice: (id, body) => p(`/contract-workspace/${id}/notices`, body),
+    acknowledgeNotice: (nid) => p(`/contract-workspace/notices/${nid}/acknowledge`),
   },
   contracts: {
     list: (params) => g('/contracts', params),
@@ -101,7 +162,7 @@ export const api = {
     list: (params) => g('/energy-data', params),
     create: (body) => p('/energy-data', body),
     validate: (id) => p(`/energy-data/${id}/validate`),
-    lock: (id) => p(`/energy-data/${id}/lock`),
+    lock: (id, body) => p(`/energy-data/${id}/lock`, body),
     parseREA: (formData) => client.post('/energy-data/parse-rea', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
     reaStatus: () => g('/energy-data/rea-status'),
     reaLog: (params) => g('/energy-data/rea-log', params),
@@ -148,6 +209,94 @@ export const api = {
     setOtherCharges: (id, body) => p(`/invoices/${id}/other-charges`, body),
     buyerOutstanding: (buyer_id) => g('/invoices/buyer-outstanding', { buyer_id }),
     waterfallPayment: (body) => p('/invoices/waterfall-payment', body),
+  },
+  // A guarantee as a document: expiry, the bank's SFMS advice, the scan, amendments, and SJVN's own LCs.
+  securityDesk: {
+    meta: () => g('/security-desk/meta'),
+    overview: () => g('/security-desk/overview'),
+    get: (id) => g(`/security-desk/instruments/${id}`),
+    submit: (body) => p('/security-desk/instruments', body),
+    decideSubmission: (id, body) => p(`/security-desk/instruments/${id}/decide`, body),
+    recordSfms: (id, body) => p(`/security-desk/instruments/${id}/sfms`, body),
+    attachDocument: (id, body) => p(`/security-desk/instruments/${id}/document`, body),
+    amend: (id, body) => p(`/security-desk/instruments/${id}/amendments`, body),
+    decideAmendment: (id, body) => p(`/security-desk/amendments/${id}/decide`, body),
+    withdrawAmendment: (id) => p(`/security-desk/amendments/${id}/withdraw`),
+    lc: (id) => g(`/security-desk/lcs/${id}`),
+    openLc: (body) => p('/security-desk/lcs', body),
+    amendLc: (id, body) => p(`/security-desk/lcs/${id}/amend`, body),
+    closeLc: (id, note) => p(`/security-desk/lcs/${id}/close`, { note }),
+    register: () => client.get('/security-desk/register.xlsx', { responseType: 'blob' }).then((r) => r.data),
+  },
+  // A dispute's clock, surcharge, answer to the resolution, group and dossier.
+  disputeExtras: {
+    meta: () => g('/dispute-extras/meta'),
+    overview: () => g('/dispute-extras/overview'),
+    get: (id) => g(`/dispute-extras/${id}`),
+    respond: (id, body) => p(`/dispute-extras/${id}/respond`, body),
+    conclude: (id, note) => p(`/dispute-extras/${id}/conclude`, { note }),
+    withdraw: (id, note) => p(`/dispute-extras/${id}/withdraw`, { note }),
+    link: (ids, title) => p('/dispute-extras/link', { ids, title }),
+    dossier: (id, format) => client.get(`/dispute-extras/${id}/dossier.${format}`, { responseType: 'blob' }).then((r) => r.data),
+  },
+  // Around the signatures of a reconciliation statement.
+  reconSignoff: {
+    get: (id) => g(`/recon-signoff/${id}`),
+    sign: (id, body) => p(`/recon-signoff/${id}/sign`, body),
+    resolveException: (id, body) => p(`/recon-signoff/exceptions/${id}/resolve`, body),
+    attachSignedCopy: (id, version_id) => p(`/recon-signoff/${id}/signed-copy`, { version_id }),
+    statementFile: (id, format) => client.get(`/recon-signoff/${id}/statement.${format}`, { responseType: 'blob' }).then((r) => r.data),
+  },
+  // A seller's account with SJVN: statement, ageing, payment advice, TDS certificates.
+  ledger: {
+    statement: (params) => g('/ledger/statement', params),
+    sellers: () => g('/ledger/sellers'),
+    buyers: () => g('/ledger/buyers'),
+    statementFile: (format, params) => client.get(`/ledger/statement.${format}`, { params, responseType: 'blob' }).then((r) => r.data),
+    payment: (id) => g(`/ledger/payments/${id}`),
+    advicePdf: (id) => client.get(`/ledger/payments/${id}/advice.pdf`, { responseType: 'blob' }).then((r) => r.data),
+    tdsCertificates: (params) => g('/ledger/tds-certificates', params),
+    fileTdsCertificate: (body) => p('/ledger/tds-certificates', body),
+  },
+  // A buyer's bills from SJVN, and the payments it tells SJVN about. Finance confirms each one.
+  buyerBills: {
+    list: (params) => g('/buyer-bills', params),
+    exportCsv: (params) => client.get('/buyer-bills/export.csv', { params, responseType: 'blob' }).then((r) => r.data),
+    downloadZip: (ids) => client.post('/buyer-bills/download.zip', { ids }, { responseType: 'blob' }).then((r) => r.data),
+    acknowledge: (id) => p(`/buyer-bills/${id}/acknowledge`),
+    intimations: (params) => g('/buyer-bills/intimations', params),
+    notify: (body) => p('/buyer-bills/intimations', body),
+    approve: (id) => p(`/buyer-bills/intimations/${id}/approve`),
+    withdraw: (id, note) => p(`/buyer-bills/intimations/${id}/withdraw`, { note }),
+    confirm: (id, body) => p(`/buyer-bills/intimations/${id}/confirm`, body),
+    reject: (id, note) => p(`/buyer-bills/intimations/${id}/reject`, { note }),
+  },
+  // What goes with a seller's invoice: e-invoice reference, signed copy, TDS estimate, hard copy.
+  invoiceCompliance: {
+    get: (id) => g(`/invoice-compliance/${id}`),
+    tdsPreview: (params) => g('/invoice-compliance/tds-preview', params),
+    saveEinvoice: (id, body) => p(`/invoice-compliance/${id}/einvoice`, body),
+    removeEinvoice: (id) => del(`/invoice-compliance/${id}/einvoice`),
+    qr: (id) => g(`/invoice-compliance/${id}/einvoice/qr`),
+    attachSigned: (id, version_id) => p(`/invoice-compliance/${id}/signed-copy`, { version_id }),
+    dispatchHardcopy: (id, body) => p(`/invoice-compliance/${id}/hardcopy`, body),
+    receiveHardcopy: (id, body) => p(`/invoice-compliance/${id}/hardcopy/received`, body),
+  },
+  // One period's energy as its counterparty sees and answers it.
+  energyRecords: {
+    analytics: (params) => g('/energy-records/analytics', params),
+    get: (id) => g(`/energy-records/${id}`),
+    blocks: (id, date) => g(`/energy-records/${id}/blocks`, date ? { date } : undefined),
+    blocksXlsx: (id) => client.get(`/energy-records/${id}/blocks.xlsx`, { responseType: 'blob' }).then((r) => r.data),
+    blocksTemplate: () => client.get('/energy-records/blocks-template', { responseType: 'blob' }).then((r) => r.data),
+    uploadBlocks: (id, file) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return client.post(`/energy-records/${id}/blocks`, fd).then((r) => r.data);
+    },
+    attachSource: (id, version_id) => p(`/energy-records/${id}/source-document`, { version_id }),
+    respond: (id, body) => p(`/energy-records/${id}/respond`, body),
+    resolveObjection: (id, body) => p(`/energy-records/${id}/resolve-objection`, body),
   },
   energyBanking: {
     position: (contractId) => g(`/energy-banking/${contractId}`),
@@ -574,7 +723,11 @@ export const api = {
     override: (id, item_id, reason) => p(`/reconciliation/${id}/override`, { item_id, reason }),
     raiseDispute: (id, body) => p(`/reconciliation/${id}/raise-dispute`, body),
     requestSignoff: (id) => p(`/reconciliation/${id}/request-signoff`),
-    acknowledge: (id, decision, note, remarks) => p(`/reconciliation/${id}/acknowledge`, { decision, note, remarks }),
+    // Agreeing goes through the sign-off route, which records who signed what;
+    // disagreeing stays where it was.
+    acknowledge: (id, decision, note, remarks) => (decision === 'DISAGREE'
+      ? p(`/reconciliation/${id}/acknowledge`, { decision, note, remarks })
+      : p(`/recon-signoff/${id}/sign`, { decision, remarks: remarks || note })),
     reopenRequest: (id, reason) => p(`/reconciliation/${id}/reopen-request`, { reason }),
     reopenRequests: () => g('/reconciliation/reopen-requests'),
     actReopen: (id, decision) => p(`/reconciliation/reopen-requests/${id}/act`, { decision }),
@@ -740,7 +893,7 @@ export const api = {
   pxil: {
     status: () => g('/pxil/status'),
     tamGtam: (params) => g('/pxil/tam-gtam', params),
-    tamGtamSlotWise: (params) => g('/pxil/tam-gtam/slot-wise', params),
+    slotWise: (params) => g('/pxil/slot-wise', params),
     formatD: (params) => g('/pxil/format-d', params),
     memberDor: (params) => g('/pxil/member-dor', params),
     tradeMargin: (params) => g('/pxil/trade-margin', params),
@@ -936,19 +1089,39 @@ export const api = {
     get: (id) => g(`/mail/${id}`),
     unreadCount: () => g('/mail/unread-count'),
     directory: (q) => g('/mail/directory', { q }),
-    send: ({ to, cc, subject, body, replyTo, files }) => {
+    send: ({ to, cc, bcc, subject, body, bodyHtml, replyTo, files, forwardAttachments, draftId }) => {
       const fd = new FormData();
       fd.append('to', JSON.stringify(to || []));
       fd.append('cc', JSON.stringify(cc || []));
+      fd.append('bcc', JSON.stringify(bcc || []));
       fd.append('subject', subject || '');
       fd.append('body', body || '');
+      if (bodyHtml) fd.append('body_html', bodyHtml);
       if (replyTo) fd.append('reply_to', replyTo);
+      if (forwardAttachments?.length) fd.append('forward_attachments', JSON.stringify(forwardAttachments));
+      if (draftId) fd.append('draft_id', draftId);
       for (const f of files || []) fd.append('files', f);
       return client.post('/mail', fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
     },
+    drafts: (params) => g('/mail/drafts', params),
+    createDraft: (body) => p('/mail/drafts', body),
+    updateDraft: (id, body) => client.put(`/mail/drafts/${id}`, body).then((r) => r.data),
+    removeDraft: (id) => del(`/mail/drafts/${id}`),
+    settings: () => g('/mail/settings'),
+    saveSettings: (body) => client.put('/mail/settings', body).then((r) => r.data),
     setRead: (id, read) => p(`/mail/${id}/read`, { read }),
     setArchived: (id, archived) => p(`/mail/${id}/archive`, { archived }),
+    setStarred: (id, starred) => p(`/mail/${id}/star`, { starred }),
     remove: (id) => del(`/mail/${id}`),
+    restore: (id) => p(`/mail/${id}/restore`),
+    purge: (id) => del(`/mail/${id}?forever=1`),
+    bulk: (ids, action) => p('/mail/bulk', { ids, action }),
+    addDraftFiles: (id, files) => {
+      const fd = new FormData();
+      for (const f of files) fd.append('files', f);
+      return client.post(`/mail/drafts/${id}/files`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+    },
+    removeDraftFile: (id, fileId) => del(`/mail/drafts/${id}/files/${fileId}`),
     attachment: (id) => client.get(`/mail/attachments/${id}`, { responseType: 'blob' }).then((r) => r.data),
   },
   // REIA's month-end handover to corporate Finance (the hydro one is under
@@ -1002,6 +1175,11 @@ export const api = {
       health: () => g('/dashboard/trading/health'),
     },
     consolidated: () => g('/dashboard/consolidated'),
+  },
+  // A seller's or buyer's landing page: what is waiting, where the money stands, what is coming up.
+  home: {
+    get: (period) => g('/home', period ? { period } : undefined),
+    summaryPdf: (period) => client.get('/home/summary.pdf', { params: period ? { period } : undefined, responseType: 'blob' }).then((r) => r.data),
   },
   sellerDashboard: () => g('/seller-dashboard'),
   // A client's own requests to the desk: raised by its maker, cleared by its
@@ -1072,6 +1250,11 @@ export const api = {
   },
   alerts: {
     board: () => g('/alerts/board'),
+    acknowledge: (kind, key) => p('/alerts/board/ack', { kind, key }),
+    unacknowledge: (kind, key) => p('/alerts/board/unack', { kind, key }),
+    history: (params) => g('/alerts/history', params),
+    preferences: () => g('/alerts/preferences'),
+    savePreferences: (body) => put('/alerts/preferences', body),
     complianceTicker: (portfolio_id) => g('/alerts/compliance-ticker', portfolio_id ? { portfolio_id } : undefined),
     broadcasts: (params) => g('/alerts/broadcasts', params),
     createBroadcast: (body) => p('/alerts/broadcasts', body),

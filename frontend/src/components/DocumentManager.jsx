@@ -4,7 +4,108 @@ import { api } from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { Badge, Modal, Field } from './ui.jsx';
 import { DOCUMENT_TAXONOMY } from '../constants/documentTaxonomy.js';
+import { ROLE_GROUPS } from '../roles.js';
 import { fmtDate, fmtDateTime } from '../datetime.js';
+
+// Sellers, buyers and trading clients send documents in; everyone else at SJVN
+// reads them, and the REIA desk reviews them. Mirrors routes/documents.js.
+export const isOutsideRole = (role) => /^(SELLER|BUYER|TRADING_CLIENT)/.test(role || '');
+export const canReviewDocuments = (role) => ROLE_GROUPS.REIA_WRITE.includes(role);
+
+/** Where a document stands, as a badge: the review status, or Expired once its date has passed. */
+export function DocStatus({ doc }) {
+  const st = doc.effective_status || doc.verification_status;
+  if (st === 'EXPIRED') return <Badge status="REJECTED" label="Expired" />;
+  if (st === 'VERIFIED') return <Badge status="ACTIVE" label="Verified" />;
+  if (st === 'REJECTED') return <Badge status="REJECTED" />;
+  if (st === 'DRAFT') return <Badge status="DRAFT" />;
+  if (st === 'PENDING') return <Badge status="PENDING" label="Awaiting SJVN" />;
+  return <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>Not Required</span>;
+}
+
+/** The validity date, with how close it is when that matters. */
+export function ExpiryTag({ doc }) {
+  if (!doc.expiry_date) return <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>—</span>;
+  const d = doc.days_to_expiry;
+  const tone = doc.expiry_state === 'EXPIRED' ? { bg: '#fef2f2', fg: '#b91c1c' } : { bg: '#fffbeb', fg: '#b45309' };
+  return (
+    <div>
+      <div style={{ fontSize: 13 }}>{fmtDate(doc.expiry_date)}</div>
+      {doc.expiry_state && (
+        <span style={{ display: 'inline-block', marginTop: 2, padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: tone.bg, color: tone.fg }}>
+          {doc.expiry_state === 'EXPIRED'
+            ? `Expired ${-d} day${d === -1 ? '' : 's'} ago`
+            : d === 0 ? 'Expires today' : `Expiring in ${d} day${d === 1 ? '' : 's'}`}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** What was read from the file, and whether it agrees with the company record. */
+export function ExtractedChecks({ extracted }) {
+  if (!extracted) return null;
+  if (!extracted.readable && !extracted.checks?.length) {
+    return (
+      <div style={{ fontSize: 12.5, color: 'var(--slate-500)', background: 'var(--slate-50, #f8fafc)', padding: '8px 10px', borderRadius: 6 }}>
+        No text could be read from this file (a scan or a picture), so its PAN / GSTIN was not checked automatically. Check it by eye.
+      </div>
+    );
+  }
+  const found = [...(extracted.pan || []).map((v) => `PAN ${v}`), ...(extracted.gstin || []).map((v) => `GSTIN ${v}`)];
+  return (
+    <div style={{ fontSize: 12.5, background: 'var(--slate-50, #f8fafc)', padding: '8px 10px', borderRadius: 6 }}>
+      <div style={{ color: 'var(--slate-600)' }}>
+        Read from the file: {found.length ? found.join(' · ') : 'no PAN or GSTIN found'}
+      </div>
+      {(extracted.checks || []).map((c, i) => (
+        <div key={i} style={{ marginTop: 4, fontWeight: 600, color: c.ok ? '#15803d' : '#b91c1c' }}>
+          {c.ok ? '✓' : '✗'} {c.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Download the latest version of every document under a company or contract as one zip. */
+export async function downloadAllDocuments(params) {
+  try {
+    const { blob, fileName } = await api.documents.zip(params);
+    saveBlob(blob, fileName);
+  } catch (err) {
+    alert(await parseErrorBlob(err, 'Could not download the documents'));
+  }
+}
+
+/**
+ * A light, repeating mark laid over a preview: who is looking, and that it is
+ * confidential. It sits on top of the viewer and lets clicks and scrolling
+ * through. It marks what is on screen — a screenshot carries it — but it is
+ * not written into the file itself.
+ */
+function Watermark({ text }) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="380" height="220"><text x="20" y="130" transform="rotate(-24 190 110)" font-family="Arial, sans-serif" font-size="15" font-weight="700" fill="#1e293b" fill-opacity="0.13">${text.replace(/[<>&]/g, '')}</text></svg>`;
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none', borderRadius: 6,
+        backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(svg)}")`, backgroundRepeat: 'repeat',
+      }}
+    />
+  );
+}
 
 // Extension -> MIME map, used only as a last-resort hint. See sniffType()
 // below for why we don't trust the filename.
@@ -342,6 +443,8 @@ function ExcelViewer({ blob, fileName }) {
 }
 
 export function PreviewModal({ open, versionId, fileName, onClose }) {
+  const { user } = useAuth();
+  const mark = `CONFIDENTIAL · SJVN · ${user?.name || ''} · ${new Date().toLocaleDateString('en-IN')}`;
   const [state, setState] = useState({ loading: true, error: null, url: null, blob: null, kind: 'other', name: fileName });
 
   useEffect(() => {
@@ -359,6 +462,19 @@ export function PreviewModal({ open, versionId, fileName, onClose }) {
         const sniffed = await sniffType(blob);
         const resolvedType = sniffed || EXT_MIME[extOf(name)] || contentType || blob.type || '';
         const kind = kindOfType(resolvedType, name);
+
+        // A PDF with a header and no body would be handed to the browser's own
+        // viewer, which answers with a bare "Failed to load PDF document". Say
+        // what is wrong instead, and leave the download available.
+        if (resolvedType === 'application/pdf') {
+          const tail = await blob.slice(Math.max(0, blob.size - 2048)).text();
+          if (!(tail.includes('startxref') && tail.includes('%%EOF'))) {
+            const url = URL.createObjectURL(blob);
+            objectUrl = url;
+            if (!cancelled) setState({ loading: false, error: `This file cannot be shown: it is not a complete PDF (${blob.size.toLocaleString('en-IN')} bytes). It was probably damaged or cut short when it was uploaded. Ask for it to be uploaded again.`, url, blob, kind: 'other', name });
+            return;
+          }
+        }
 
         // Re-type the blob to match what we're actually rendering
         const typed = blob.type === resolvedType ? blob : new Blob([blob], { type: resolvedType });
@@ -402,18 +518,24 @@ export function PreviewModal({ open, versionId, fileName, onClose }) {
         <div style={{ padding: 20, color: 'var(--red-deep)' }}>{state.error}</div>
       )}
       {!state.loading && !state.error && state.kind === 'image' && (
-        <img
-          src={state.url}
-          alt={state.name}
-          style={{ maxWidth: '100%', maxHeight: '70vh', display: 'block', margin: '0 auto', borderRadius: 6 }}
-        />
+        <div style={{ position: 'relative', width: 'fit-content', maxWidth: '100%', margin: '0 auto' }}>
+          <img
+            src={state.url}
+            alt={state.name}
+            style={{ maxWidth: '100%', maxHeight: '70vh', display: 'block', borderRadius: 6 }}
+          />
+          <Watermark text={mark} />
+        </div>
       )}
       {!state.loading && !state.error && state.kind === 'pdf' && (
-        <iframe
-          src={state.url}
-          title={state.name}
-          style={{ width: '100%', height: '70vh', border: '1px solid var(--slate-200)', borderRadius: 6 }}
-        />
+        <div style={{ position: 'relative' }}>
+          <iframe
+            src={`${state.url}#view=FitH`}
+            title={state.name}
+            style={{ width: '100%', height: '75vh', border: '1px solid var(--slate-200)', borderRadius: 6, display: 'block' }}
+          />
+          <Watermark text={mark} />
+        </div>
       )}
       {!state.loading && !state.error && state.kind === 'excel' && state.blob && (
         <ExcelViewer blob={state.blob} fileName={state.name} />
@@ -457,16 +579,23 @@ export function PreviewModal({ open, versionId, fileName, onClose }) {
   );
 }
 
-export function DocumentManager({ moduleName, entityId, contractId, category = null, title = 'Documents' }) {
+// `onChange` tells the page around it that something here was uploaded, reviewed or submitted.
+export function DocumentManager({ moduleName, entityId, contractId, category = null, title = 'Documents', onChange }) {
   const { user } = useAuth();
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(null);
   const [previewDoc, setPreviewDoc] = useState(null);
+  const [versionOf, setVersionOf] = useState(null);
+  const [historyOf, setHistoryOf] = useState(null);
+  const [zipping, setZipping] = useState(false);
 
-  const isAdmin = user?.role === 'SJVN_ADMIN';
-
+  const isAdmin = canReviewDocuments(user?.role);
+  // The side that sends a document in is the side that may replace it.
+  const mayReplace = (doc) => (doc.category === 'VERIFY') === isOutsideRole(user?.role);
+  const canSubmitToSjvn = ['SELLER', 'SELLER_L2', 'SELLER_L3', 'BUYER', 'BUYER_L2', 'BUYER_L3'].includes(user?.role);
+  
   function load() {
     setLoading(true);
     api.documents.list({ entity_id: entityId, contract_id: contractId, category })
@@ -478,13 +607,30 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
     load();
   }, [entityId, contractId, category]);
 
+  const changed = () => { load(); onChange?.(); };
+
   return (
     <div className="card" style={{ marginTop: 16 }}>
       <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h3 style={{ margin: 0 }}>{title}</h3>
-        <button className="btn btn-primary btn-sm" onClick={() => setUploadOpen(true)}>
-          Upload Document
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {docs.length > 0 && (entityId || contractId) && (
+            <button
+              className="btn btn-secondary btn-sm" disabled={zipping}
+              title="The latest version of every document here, in one zip file"
+              onClick={async () => {
+                setZipping(true);
+                await downloadAllDocuments({ entity_id: entityId, contract_id: contractId });
+                setZipping(false);
+              }}
+            >
+              {zipping ? 'Preparing…' : 'Download all (ZIP)'}
+            </button>
+          )}
+          <button className="btn btn-primary btn-sm" onClick={() => setUploadOpen(true)}>
+            Upload Document
+          </button>
+        </div>
       </div>
       <div className="card-body" style={{ padding: 0 }}>
         {loading ? (
@@ -500,6 +646,7 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
                 <th scope="col">Title</th>
                 <th scope="col">Category</th>
                 <th scope="col">Status</th>
+                <th scope="col">Valid until</th>
                 <th scope="col">Version</th>
                 <th scope="col">Uploaded</th>
                 <th scope="col">Actions</th>
@@ -507,7 +654,7 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
             </thead>
             <tbody>
               {docs.length === 0 && (
-                <tr><td colSpan={7} className="empty-cell">No documents found</td></tr>
+                <tr><td colSpan={8} className="empty-cell">No documents found</td></tr>
               )}
               {docs.map(doc => (
                 <tr key={doc.id}>
@@ -515,13 +662,22 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
                   <td><strong>{doc.title}</strong></td>
                   <td>{doc.category}</td>
                   <td>
-                    {doc.verification_status === 'VERIFIED' ? <Badge status="ACTIVE" /> :
-                     doc.verification_status === 'REJECTED' ? <Badge status="REJECTED" /> :
-                     doc.verification_status === 'PENDING' ? <Badge status="PENDING" /> :
-                     <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>Not Required</span>}
+                    <div style={{ maxWidth: 260, whiteSpace: 'normal', wordWrap: 'break-word' }}>
+                      <DocStatus doc={doc} />
+                      {doc.verification_status === 'REJECTED' && doc.verification_notes && (
+                        <div style={{ marginTop: 4, fontSize: 12, color: '#b91c1c', lineHeight: 1.35 }}>
+                          <strong>SJVN's remark:</strong> {doc.verification_notes}
+                        </div>
+                      )}
+                    </div>
                   </td>
-                  <td>v{doc.version_number}</td>
-                  <td>{fmtDate(doc.created_at)}</td>
+                  <td><ExpiryTag doc={doc} /></td>
+                  <td>
+                    <button type="button" className="btn-link" title="See every version" onClick={() => setHistoryOf(doc)}>
+                      v{doc.version_number}{doc.version_count > 1 ? ` of ${doc.version_count}` : ''}
+                    </button>
+                  </td>
+                  <td>{fmtDate(doc.uploaded_at || doc.created_at)}</td>
                   <td>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <button
@@ -537,9 +693,31 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
                         </svg>
                         <span>View</span>
                       </button>
+                      {mayReplace(doc) && (
+                        <button className="btn btn-secondary btn-sm" onClick={() => setVersionOf(doc)}>
+                          {doc.verification_status === 'REJECTED' ? 'Re-upload' : doc.expiry_state ? 'Renew' : 'New version'}
+                        </button>
+                      )}
                       {isAdmin && doc.category === 'VERIFY' && doc.verification_status === 'PENDING' && (
                         <button className="btn btn-secondary btn-sm" onClick={() => setReviewOpen(doc)}>
                           Review
+                        </button>
+                      )}
+                      {canSubmitToSjvn && doc.category === 'VERIFY' && doc.verification_status === 'DRAFT' && (
+                        <button 
+                          className="btn btn-primary btn-sm" 
+                          onClick={async () => {
+                            if (window.confirm('Submit this document to SJVN for verification?')) {
+                              try {
+                                await api.documents.submitL2(doc.latest_version_id);
+                                changed();
+                              } catch (e) {
+                                alert(e.response?.data?.error || 'Failed to submit');
+                              }
+                            }
+                          }}
+                        >
+                          Submit to SJVN
                         </button>
                       )}
                     </div>
@@ -555,18 +733,28 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
       <UploadModal 
         open={uploadOpen} 
         onClose={() => setUploadOpen(false)} 
-        onSuccess={load}
+        onSuccess={changed}
         moduleName={moduleName}
         entityId={entityId}
         contractId={contractId}
+      />
+
+      <UploadModal
+        open={!!versionOf}
+        existing={versionOf}
+        onClose={() => setVersionOf(null)}
+        onSuccess={changed}
+        moduleName={moduleName}
       />
 
       <ReviewModal
         open={!!reviewOpen}
         doc={reviewOpen}
         onClose={() => setReviewOpen(null)}
-        onSuccess={load}
+        onSuccess={changed}
       />
+
+      <HistoryModal doc={historyOf} onClose={() => setHistoryOf(null)} />
 
       <PreviewModal
         open={!!previewDoc}
@@ -578,12 +766,15 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
   );
 }
 
-export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, contractId, presetDocType = null, presetTitle = '' }) {
+// `existing` turns this into "upload a new version of that document": the type,
+// title and category are the document's own and are not asked for again.
+export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, contractId, presetDocType = null, presetTitle = '', existing = null }) {
   const { user } = useAuth();
+  const [expiry, setExpiry] = useState('');
   // Segregation of duties: internal users (SJVN Admin / REIA / Finance / Trading)
   // are the reviewers — they can only upload RECORD-category documents. VERIFY
   // documents must be uploaded by the stakeholder (Seller/Buyer) themselves.
-  const isInternal = ['SJVN_ADMIN', 'REIA_USER', 'FINANCE_USER', 'TRADING_USER'].includes(user?.role);
+  const isInternal = !isOutsideRole(user?.role);
   const filterTypes = (list) => (isInternal ? list.filter((t) => t.category !== 'VERIFY') : list);
 
   const fallbackTypes = filterTypes(DOCUMENT_TAXONOMY[moduleName] || [{ value: 'OTHER', label: 'Other Document', category: 'RECORD', reason: '' }]);
@@ -596,6 +787,9 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
   useEffect(() => {
     if (!open) return;
     setTitle(presetTitle);
+    setExpiry('');
+    setFile(null);
+    if (existing) return undefined;
     let cancelled = false;
     api.masters.documentTypes({ module: moduleName })
       .then((rows) => {
@@ -626,7 +820,7 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
   // VERIFY doc) gets filtered out — treat that exactly like "nothing to upload".
   const presetLocked = !!presetDocType;
   const presetBlocked = presetLocked && !availableTypes.some((t) => t.value === presetDocType);
-  const noTypesAvailable = availableTypes.length === 0 || presetBlocked;
+  const noTypesAvailable = !existing && (availableTypes.length === 0 || presetBlocked);
 
   if (!open) return null;
 
@@ -652,19 +846,32 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!file || !title) return;
+    if (!file || (!existing && !title)) return;
     
+    if (file.size > 10 * 1024 * 1024) {
+      alert('The selected document exceeds the maximum allowed size of 10MB. Please compress the file and try again.');
+      return;
+    }
+
     setUploading(true);
     const formData = new FormData();
     formData.append('file', file);
-    if (entityId) formData.append('entity_id', entityId);
-    if (contractId) formData.append('contract_id', contractId);
-    formData.append('document_type', docType);
-    formData.append('category', autoCategory);
-    formData.append('title', title);
+    if (existing) {
+      formData.append('document_id', existing.id);
+    } else {
+      if (entityId) formData.append('entity_id', entityId);
+      if (contractId) formData.append('contract_id', contractId);
+      formData.append('document_type', docType);
+      formData.append('category', autoCategory);
+      formData.append('title', title);
+    }
+    if (expiry) formData.append('expiry_date', expiry);
 
     try {
-      await api.documents.upload(formData);
+      const r = await api.documents.upload(formData);
+      // Say straight away if the file does not agree with the company record.
+      const wrong = (r.extracted?.checks || []).filter((c) => !c.ok);
+      if (wrong.length) alert(`Uploaded. Please note:\n\n${wrong.map((c) => `• ${c.text}`).join('\n')}\n\nSJVN's reviewer will see the same note.`);
       onSuccess();
       onClose();
     } catch (err) {
@@ -675,11 +882,27 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Upload Document">
+    <Modal open={open} onClose={onClose} title={existing ? `New version — ${existing.title}` : 'Upload Document'}>
       <form onSubmit={handleSubmit}>
+        {existing && (
+          <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--slate-600)' }}>
+            This replaces version {existing.version_number} of <strong>{existing.title}</strong>. The earlier
+            versions stay on record{existing.category === 'VERIFY' ? ', and the new one goes to SJVN for verification' : ''}.
+          </p>
+        )}
+        {existing?.verification_status === 'REJECTED' && existing.verification_notes && (
+          <div className="alert alert-error" style={{ fontSize: 13 }}>
+            <strong>Why the last one was rejected:</strong> {existing.verification_notes}
+          </div>
+        )}
         <Field label="Document File (PDF, JPG, PNG, Excel. Max 10MB)">
           <input type="file" required onChange={(e) => setFile(e.target.files[0])} />
         </Field>
+        <Field label="Valid until (leave empty if it does not expire)">
+          <input type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} />
+        </Field>
+        {!existing && (
+        <>
         <Field label="Title">
           <input required placeholder="e.g., Q3 Payment Guarantee" value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
@@ -709,6 +932,8 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
             This is strictly enforced by the platform's cross-module document taxonomy rules.
           </div>
         </Field>
+        </>
+        )}
         <div className="form-actions" style={{ marginTop: 24 }}>
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={uploading}>Cancel</button>
           <button type="submit" className="btn btn-primary" disabled={uploading || !file}>
@@ -720,25 +945,38 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
   );
 }
 
-function ReviewModal({ open, doc, onClose, onSuccess }) {
+export function ReviewModal({ open, doc, onClose, onSuccess }) {
   const [reason, setReason] = useState('');
+  const [code, setCode] = useState('');
+  const [reasons, setReasons] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setReason('');
+    setCode('');
+    api.documents.rejectReasons().then(setReasons).catch(() => setReasons([]));
+  }, [open, doc?.latest_version_id]);
 
   if (!open || !doc) return null;
 
   async function handleAction(action) {
-    if (action === 'REJECT' && !reason) {
-      alert('Please provide a reason for rejection');
+    if (action === 'REJECT' && !code) {
+      alert('Choose why the document is being rejected');
       return;
     }
-    
+    if (action === 'REJECT' && code === 'OTHER' && !reason.trim()) {
+      alert('Please say what is wrong with the document');
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (action === 'VERIFY') {
         await api.documents.verify(doc.latest_version_id);
       } else {
-        await api.documents.reject(doc.latest_version_id, reason);
+        await api.documents.reject(doc.latest_version_id, reason, code);
       }
       onSuccess();
       onClose();
@@ -751,27 +989,35 @@ function ReviewModal({ open, doc, onClose, onSuccess }) {
 
   return (
     <Modal open={open} onClose={onClose} title="Review Document">
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 16 }}>
         <strong>{doc.title}</strong> (v{doc.version_number})
         <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
-          Uploaded on {fmtDateTime(doc.created_at)}
+          {doc.entity_name ? `${doc.entity_name} · ` : ''}{doc.document_type} · uploaded {fmtDateTime(doc.uploaded_at || doc.created_at)}
+          {doc.uploaded_by_name ? ` by ${doc.uploaded_by_name}` : ''}
         </div>
+        {doc.expiry_date && <div style={{ marginTop: 8 }}><ExpiryTag doc={doc} /></div>}
         <div style={{ marginTop: 12 }}>
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            onClick={() => setPreviewOpen(true)}
-          >
-            View / Download File
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPreviewOpen(true)}>
+            View file
           </button>
         </div>
       </div>
 
-      <Field label="Rejection Reason (Required if Rejecting)">
-        <textarea 
-          rows={3} 
-          placeholder="Why is this document invalid?" 
-          value={reason} 
+      <div style={{ marginBottom: 16 }}>
+        <ExtractedChecks extracted={doc.extracted} />
+      </div>
+
+      <Field label="If rejecting — why">
+        <select value={code} onChange={(e) => setCode(e.target.value)}>
+          <option value="">Choose a reason…</option>
+          {reasons.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
+        </select>
+      </Field>
+      <Field label="Remark for the company (they will see this)">
+        <textarea
+          rows={3}
+          placeholder="e.g. Image is blurry, please upload a clear scanned copy"
+          value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
       </Field>
@@ -791,6 +1037,73 @@ function ReviewModal({ open, doc, onClose, onSuccess }) {
         fileName={doc.file_name}
         onClose={() => setPreviewOpen(false)}
       />
+    </Modal>
+  );
+}
+
+/** Every version of one document: who sent it, what SJVN said, and the file itself. */
+function HistoryModal({ doc, onClose }) {
+  const [versions, setVersions] = useState(null);
+  const [error, setError] = useState('');
+  const [preview, setPreview] = useState(null);
+
+  useEffect(() => {
+    if (!doc) return;
+    setVersions(null);
+    setError('');
+    api.documents.history(doc.id)
+      .then((r) => setVersions(r.versions))
+      .catch((e) => setError(e.response?.data?.error || 'Could not load the versions'));
+  }, [doc?.id]);
+
+  if (!doc) return null;
+
+  return (
+    <Modal open onClose={onClose} title={`Versions — ${doc.title}`} width={860}>
+      {error && <div className="alert alert-error">{error}</div>}
+      {!versions && !error && <div style={{ padding: 20 }}>Loading…</div>}
+      {versions && (
+        <div className="table-wrap">
+          <table className="data-table" style={{ margin: 0 }}>
+            <thead>
+              <tr>
+                <th scope="col">Version</th>
+                <th scope="col">Uploaded</th>
+                <th scope="col">Status</th>
+                <th scope="col">Reviewed</th>
+                <th scope="col">Valid until</th>
+                <th scope="col">File</th>
+              </tr>
+            </thead>
+            <tbody>
+              {versions.map((v) => (
+                <tr key={v.id}>
+                  <td><strong>v{v.version_number}</strong></td>
+                  <td>
+                    {fmtDateTime(v.created_at)}
+                    <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{v.uploaded_by_name || '—'}</div>
+                  </td>
+                  <td style={{ maxWidth: 240 }}>
+                    <DocStatus doc={v} />
+                    {v.verification_notes && (
+                      <div style={{ marginTop: 4, fontSize: 12, color: '#b91c1c' }}>{v.verification_notes}</div>
+                    )}
+                  </td>
+                  <td>
+                    {v.verified_at ? fmtDateTime(v.verified_at) : '—'}
+                    {v.verified_by_name && <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{v.verified_by_name}</div>}
+                  </td>
+                  <td>{v.expiry_date ? fmtDate(v.expiry_date) : '—'}</td>
+                  <td>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPreview(v)}>View</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <PreviewModal open={!!preview} versionId={preview?.id} fileName={preview?.file_name} onClose={() => setPreview(null)} />
     </Modal>
   );
 }

@@ -65,8 +65,11 @@ describe('buyer portal — every user of the company', () => {
   it.each(['admin', 'l1', 'l2', 'l3'])('%s can notify a payment on the company bill', async (who) => {
     const inv = bill(psaX, 'SENT');
     const r = await post(`/api/invoices/${inv.id}/payments`, t[who], payment);
-    expect(r.status).toBe(201);
-    expect(paidOn(inv.id)).toBe(1);
+    // It is an intimation now: the bill is untouched until Finance confirms it.
+    expect(r.status).toBe(202);
+    expect(r.body.intimation.status).toBe(who === 'l1' ? 'PENDING_CHECKER' : 'SUBMITTED');
+    expect(paidOn(inv.id)).toBe(0);
+    expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('SENT');
   });
 
   it.each(['admin', 'l1', 'l2', 'l3'])('%s can replenish a drawn revolving instrument', async (who) => {

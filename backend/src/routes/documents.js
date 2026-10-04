@@ -4,7 +4,12 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
-import { requireAuth } from '../middleware/auth.js';
+import crypto from 'crypto';
+import { ZipArchive } from 'archiver';
+import { unreadablePdf } from '../services/fileChecks.js';
+import { requireAuth, ROLE_GROUPS, SELLER_ROLES, BUYER_ROLES } from '../middleware/auth.js';
+import { pushNotification } from '../util.js';
+import { secureLogAudit } from '../auditEngine.js';
 import { fileURLToPath } from 'url';
 
 const router = express.Router();
@@ -39,156 +44,541 @@ const upload = multer({
   }
 });
 
+
+// ── Who may do what ─────────────────────────────────────────────────────────
+//
+// A document belongs to a company (entity_id), to a contract, or to both.
+// SJVN staff read all of them. A seller, buyer or trading client reads only
+// what belongs to its own company or to a contract it is a party to — and a
+// login linked to no company reads nothing, where it used to match every
+// document that had no company on it.
+//
+// Verifying is the REIA desk's job, and never the uploader's own.
+
+const EXTERNAL_ROLES = [...SELLER_ROLES, ...BUYER_ROLES, 'TRADING_CLIENT', 'TRADING_CLIENT_MAKER', 'TRADING_CLIENT_CHECKER'];
+const isExternal = (user) => EXTERNAL_ROLES.includes(user?.role);
+const canVerify = (user) => ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+
+/** The entity ids an outside login stands for. A trading client's login may
+ *  point at the client row or at the entity behind it; both are honoured. */
+function ownEntityIds(user) {
+  const linked = user?.linked_entity_id;
+  if (!linked) return [];
+  const ids = new Set([linked]);
+  try {
+    for (const t of db.prepare('SELECT id, entity_id FROM trading_clients WHERE id = ? OR entity_id = ?').all(linked, linked)) {
+      if (t.id) ids.add(t.id);
+      if (t.entity_id) ids.add(t.entity_id);
+    }
+  } catch { /* no trading clients on this database */ }
+  return [...ids];
+}
+
+function ownContractIds(user) {
+  const ids = ownEntityIds(user);
+  if (!ids.length) return [];
+  const marks = ids.map(() => '?').join(',');
+  return db.prepare(`SELECT id FROM contracts WHERE seller_id IN (${marks}) OR buyer_id IN (${marks})`)
+    .all(...ids, ...ids).map((c) => c.id);
+}
+
+/** May this person read a document with this owner? */
+function canRead(user, doc) {
+  if (!isExternal(user)) return true;
+  if (doc.entity_id && ownEntityIds(user).includes(doc.entity_id)) return true;
+  if (doc.contract_id && ownContractIds(user).includes(doc.contract_id)) return true;
+  return false;
+}
+
+const audit = (req, action, versionId, extra = {}) => {
+  try {
+    secureLogAudit(req, { action, module: 'DOCUMENTS', entityType: 'document_versions', entityId: versionId, ...extra });
+  } catch (err) {
+    console.error('[DOCUMENTS] audit failed', err.message);
+  }
+};
+
+const today = () => new Date().toISOString().slice(0, 10);
+const daysUntil = (iso) => Math.round((new Date(`${iso.slice(0, 10)}T00:00:00Z`) - new Date(`${today()}T00:00:00Z`)) / 86400000);
+export const EXPIRY_WARNING_DAYS = 30;
+
+/** Where a dated document stands: expired, expiring within the warning window, or neither. */
+function expiryOf(row) {
+  if (!row.expiry_date) return { days_to_expiry: null, expiry_state: null };
+  const days = daysUntil(row.expiry_date);
+  return { days_to_expiry: days, expiry_state: days < 0 ? 'EXPIRED' : days <= EXPIRY_WARNING_DAYS ? 'EXPIRING' : null };
+}
+
+const parseJson = (v) => { try { return v ? JSON.parse(v) : null; } catch { return null; } };
+
+/** A verified document whose date has passed is no longer proof of anything. */
+const decorate = (row) => {
+  const exp = expiryOf(row);
+  return {
+    ...row,
+    ...exp,
+    extracted: parseJson(row.extracted_json),
+    extracted_json: undefined,
+    effective_status: row.verification_status === 'VERIFIED' && exp.expiry_state === 'EXPIRED' ? 'EXPIRED' : row.verification_status,
+  };
+};
+
+// Why a document is sent back. A fixed list so the reasons can be counted; the
+// reviewer's own words go alongside.
+export const REJECTION_REASONS = {
+  NOT_LEGIBLE: 'Not legible — blurred, cropped or too dark',
+  EXPIRED: 'The document has expired',
+  WRONG_DOCUMENT: 'Not the document asked for',
+  DETAILS_MISMATCH: 'Name or number does not match the company record',
+  INCOMPLETE: 'Pages missing or incomplete',
+  NOT_SIGNED: 'Not signed, stamped or attested',
+  OTHER: 'Other',
+};
+
+// ── Reading what a file says ────────────────────────────────────────────────
+
+const PAN_RE = /\b[A-Z]{5}[0-9]{4}[A-Z]\b/g;
+const GSTIN_RE = /\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]\b/g;
+
+/**
+ * The PAN and GSTIN printed in a PDF, and whether they are the company's.
+ *
+ * This reads the text a PDF carries. A scan — a photograph of the page saved
+ * as a PDF or an image — carries none, and comes back as "no text"; reading
+ * those needs OCR, which is not done here.
+ */
+async function extractIdentifiers(filePath, mime, entity) {
+  const out = { readable: false, pan: [], gstin: [], checks: [] };
+  if (mime !== 'application/pdf') return out;
+  let text = '';
+  try {
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse({ data: new Uint8Array(fs.readFileSync(filePath)) });
+    try { ({ text } = await parser.getText()); } finally { await parser.destroy?.(); }
+  } catch {
+    return out;
+  }
+  const upper = String(text || '').toUpperCase();
+  if (upper.replace(/\s/g, '').length < 20) return out;
+  out.readable = true;
+  out.gstin = [...new Set(upper.match(GSTIN_RE) || [])].slice(0, 5);
+  // A GSTIN carries a PAN inside it; that one is not a separate finding.
+  const inGst = new Set(out.gstin.map((g) => g.slice(2, 12)));
+  out.pan = [...new Set(upper.match(PAN_RE) || [])].filter((p) => !inGst.has(p)).slice(0, 5);
+
+  const pan = String(entity?.pan_no || '').toUpperCase().trim();
+  const gst = String(entity?.gst_no || '').toUpperCase().trim();
+  const allPans = [...out.pan, ...inGst];
+  if (allPans.length && pan) {
+    out.checks.push(allPans.includes(pan)
+      ? { ok: true, text: `PAN in the file (${pan}) matches the company record` }
+      : { ok: false, text: `PAN in the file (${allPans.join(', ')}) is not the company's PAN on record (${pan})` });
+  }
+  if (out.gstin.length && gst) {
+    out.checks.push(out.gstin.includes(gst)
+      ? { ok: true, text: `GSTIN in the file (${gst}) matches the company record` }
+      : { ok: false, text: `GSTIN in the file (${out.gstin.join(', ')}) is not the company's GSTIN on record (${gst})` });
+  }
+  if (gst && pan && gst.length === 15 && gst.slice(2, 12) !== pan) {
+    out.checks.push({ ok: false, text: `The company's GSTIN on record (${gst}) does not contain its PAN on record (${pan})` });
+  }
+  return out;
+}
+
+const hashFile = (filePath) => crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+
+// ── Lists ───────────────────────────────────────────────────────────────────
+
+const LATEST = `
+  SELECT d.*, e.name AS entity_name, c.contract_no,
+         v.id AS latest_version_id, v.version_number, v.verification_status, v.verification_notes,
+         v.rejection_code, v.verified_at, vu.name AS verified_by_name, v.expiry_date, v.file_name,
+         v.file_size_bytes, v.created_at AS uploaded_at, uu.name AS uploaded_by_name, v.extracted_json,
+         (SELECT COUNT(*) FROM document_versions x WHERE x.document_id = d.id) AS version_count
+  FROM documents d
+  JOIN document_versions v ON d.id = v.document_id
+  LEFT JOIN entities e ON e.id = d.entity_id
+  LEFT JOIN contracts c ON c.id = d.contract_id
+  LEFT JOIN users vu ON vu.id = v.verified_by
+  LEFT JOIN users uu ON uu.id = v.created_by
+  WHERE v.version_number = (SELECT MAX(version_number) FROM document_versions WHERE document_id = d.id)
+`;
+
+/** The WHERE clause that keeps an outside login to its own documents. */
+function ownScope(user) {
+  const entities = ownEntityIds(user);
+  const contracts = ownContractIds(user);
+  const parts = [];
+  if (entities.length) parts.push(`d.entity_id IN (${entities.map(() => '?').join(',')})`);
+  if (contracts.length) parts.push(`d.contract_id IN (${contracts.map(() => '?').join(',')})`);
+  return { sql: parts.length ? ` AND (${parts.join(' OR ')})` : ' AND 1 = 0', params: [...entities, ...contracts] };
+}
+
+function listDocuments(user, { entity_id, contract_id, category } = {}) {
+  let sql = LATEST;
+  const params = [];
+  if (isExternal(user)) {
+    const scope = ownScope(user);
+    sql += scope.sql;
+    params.push(...scope.params);
+  }
+  if (entity_id) { sql += ' AND d.entity_id = ?'; params.push(entity_id); }
+  if (contract_id) { sql += ' AND d.contract_id = ?'; params.push(contract_id); }
+  if (category) { sql += ' AND d.category = ?'; params.push(category); }
+  sql += ' ORDER BY d.created_at DESC';
+  return db.prepare(sql).all(...params).map(decorate);
+}
+
 // GET / - List documents based on filters
 router.get('/', requireAuth, (req, res) => {
-  const { entity_id, contract_id, category } = req.query;
-  
-  let sql = `
-    SELECT d.*, 
-           v.id as latest_version_id, 
-           v.version_number, 
-           v.verification_status, 
-           v.expiry_date,
-           v.file_name
-    FROM documents d
-    JOIN document_versions v ON d.id = v.document_id
-    WHERE v.version_number = (
-      SELECT MAX(version_number) FROM document_versions WHERE document_id = d.id
-    )
-  `;
-  const params = [];
-
-  // Basic RBAC: Non-admins can only see their own entity's documents
-  if (req.user.role !== 'SJVN_ADMIN' && req.user.role !== 'FINANCE_USER') {
-    sql += ' AND d.entity_id = ?';
-    params.push(req.user.linked_entity_id);
-  } else if (entity_id) {
-    sql += ' AND d.entity_id = ?';
-    params.push(entity_id);
-  }
-
-  if (contract_id) {
-    sql += ' AND d.contract_id = ?';
-    params.push(contract_id);
-  }
-  if (category) {
-    sql += ' AND d.category = ?';
-    params.push(category);
-  }
-
-  sql += ' ORDER BY d.created_at DESC';
-
   try {
-    const docs = db.prepare(sql).all(...params);
-    res.json(docs);
+    res.json(listDocuments(req.user, req.query));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
+// GET /reject-reasons — the fixed list a reviewer picks from.
+router.get('/reject-reasons', requireAuth, (_req, res) => {
+  res.json(Object.entries(REJECTION_REASONS).map(([code, label]) => ({ code, label })));
+});
+
+// GET /queue — everything waiting on the REIA desk, longest-waiting first.
+router.get('/queue', requireAuth, (req, res) => {
+  if (!canVerify(req.user)) return res.status(403).json({ error: 'The verification queue is for the REIA desk' });
+  const rows = db.prepare(`${LATEST} AND d.category = 'VERIFY' AND v.verification_status = 'PENDING' ORDER BY v.created_at ASC`).all()
+    .map(decorate)
+    .map((r) => ({ ...r, waiting_days: Math.max(0, -daysUntil(String(r.uploaded_at).slice(0, 10))) }));
+  res.json(rows);
+});
+
+// GET /kyc-report — one row per company: where its documents stand.
+router.get('/kyc-report', requireAuth, (req, res) => {
+  if (isExternal(req.user)) return res.status(403).json({ error: 'Access denied' });
+  const docs = db.prepare(`${LATEST} AND d.entity_id IS NOT NULL AND d.category = 'VERIFY'`).all().map(decorate);
+  const by = new Map();
+  for (const d of docs) {
+    if (!by.has(d.entity_id)) by.set(d.entity_id, []);
+    by.get(d.entity_id).push(d);
+  }
+  let approvals = [];
+  try {
+    approvals = db.prepare(`
+      SELECT entity_id, COUNT(*) AS total, SUM(CASE WHEN status = 'VERIFIED' THEN 1 ELSE 0 END) AS verified
+      FROM entity_regulatory_approvals WHERE is_mandatory = 1 AND status <> 'NOT_APPLICABLE' GROUP BY entity_id
+    `).all();
+  } catch { /* checklist not on this database */ }
+  const mandatory = new Map(approvals.map((a) => [a.entity_id, a]));
+  const count = (list, fn) => list.filter(fn).length;
+  const rows = db.prepare(`SELECT id, name, entity_type, status FROM entities ORDER BY name`).all().map((e) => {
+    const list = by.get(e.id) || [];
+    const m = mandatory.get(e.id) || { total: 0, verified: 0 };
+    const dated = list.filter((d) => d.expiry_date && d.expiry_state !== 'EXPIRED').map((d) => d.expiry_date).sort();
+    return {
+      entity_id: e.id, name: e.name, entity_type: e.entity_type, onboarding_status: e.status,
+      mandatory_total: m.total, mandatory_verified: m.verified,
+      progress_pct: m.total ? Math.round((m.verified / m.total) * 100) : null,
+      documents: list.length,
+      verified: count(list, (d) => d.effective_status === 'VERIFIED'),
+      pending: count(list, (d) => d.verification_status === 'PENDING'),
+      draft: count(list, (d) => d.verification_status === 'DRAFT'),
+      rejected: count(list, (d) => d.verification_status === 'REJECTED'),
+      // A rejected document's date is beside the point: it has to be sent again anyway.
+      expiring: count(list, (d) => d.expiry_state === 'EXPIRING' && d.verification_status !== 'REJECTED'),
+      expired: count(list, (d) => d.expiry_state === 'EXPIRED' && d.verification_status !== 'REJECTED'),
+      next_expiry: dated[0] || null,
+    };
+  });
+  res.json(rows);
+});
+
+// GET /zip?entity_id=&contract_id=&verified=1 — the latest version of each
+// document the caller may read, in one file.
+router.get('/zip', requireAuth, (req, res) => {
+  if (!req.query.entity_id && !req.query.contract_id) return res.status(400).json({ error: 'entity_id or contract_id is required' });
+  let docs = listDocuments(req.user, req.query);
+  if (req.query.verified === '1') docs = docs.filter((d) => d.effective_status === 'VERIFIED');
+  const rows = docs
+    .map((d) => ({ ...d, file_path: db.prepare('SELECT file_path FROM document_versions WHERE id = ?').get(d.latest_version_id)?.file_path }))
+    .filter((d) => d.file_path && fs.existsSync(d.file_path));
+  if (!rows.length) return res.status(404).json({ error: 'There are no documents to download' });
+
+  const owner = (rows[0].entity_name || 'documents').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${owner}_documents_${today()}.zip"`);
+  const zip = new ZipArchive({ zlib: { level: 6 } });
+  zip.on('error', (err) => { console.error('[DOCUMENTS] zip failed', err.message); res.destroy(err); });
+  zip.pipe(res);
+  const used = new Set();
+  const index = ['Type,Title,Version,Status,Expiry,Verified by,Verified at,File'];
+  const csv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  for (const d of rows) {
+    const clean = String(d.file_name || 'document').replace(/[\\/:*?"<>|\r\n]/g, '_');
+    let name = `${d.document_type}/${clean}`;
+    for (let i = 2; used.has(name); i += 1) name = `${d.document_type}/${i}_${clean}`;
+    used.add(name);
+    zip.file(d.file_path, { name });
+    index.push([d.document_type, d.title, `v${d.version_number}`, d.effective_status, d.expiry_date || '', d.verified_by_name || '', d.verified_at || '', name].map(csv).join(','));
+  }
+  zip.append(`${index.join('\n')}\n`, { name: 'index.csv' });
+  zip.finalize();
+  audit(req, 'DOCUMENTS_ZIP_DOWNLOADED', req.query.entity_id || req.query.contract_id, { details: { files: rows.length, verified_only: req.query.verified === '1' } });
+});
+
+// ── Requests: SJVN asking a company for a document ──────────────────────────
+
+const requestRows = (where, ...params) => db.prepare(`
+  SELECT r.*, e.name AS entity_name, u.name AS requested_by_name
+  FROM document_requests r
+  LEFT JOIN entities e ON e.id = r.entity_id
+  LEFT JOIN users u ON u.id = r.requested_by
+  WHERE ${where}
+  ORDER BY (r.status = 'OPEN') DESC, COALESCE(r.due_date, '9999') ASC, r.created_at DESC
+`).all(...params).map((r) => ({ ...r, overdue: r.status === 'OPEN' && !!r.due_date && r.due_date < today() }));
+
+// GET /requests?entity_id=&status=
+router.get('/requests', requireAuth, (req, res) => {
+  const where = ['1 = 1'];
+  const params = [];
+  if (isExternal(req.user)) {
+    const ids = ownEntityIds(req.user);
+    if (!ids.length) return res.json([]);
+    where.push(`r.entity_id IN (${ids.map(() => '?').join(',')})`);
+    params.push(...ids);
+  } else if (req.query.entity_id) {
+    where.push('r.entity_id = ?'); params.push(req.query.entity_id);
+  }
+  if (req.query.status) { where.push('r.status = ?'); params.push(String(req.query.status).toUpperCase()); }
+  res.json(requestRows(where.join(' AND '), ...params));
+});
+
+// POST /requests { entity_id, document_type, note, due_date }
+router.post('/requests', requireAuth, (req, res) => {
+  if (!canVerify(req.user)) return res.status(403).json({ error: 'Only the REIA desk can ask for a document' });
+  const { entity_id, document_type, note, due_date } = req.body;
+  const entity = entity_id && db.prepare('SELECT id, name FROM entities WHERE id = ?').get(entity_id);
+  if (!entity) return res.status(400).json({ error: 'Choose the company to ask' });
+  if (!document_type) return res.status(400).json({ error: 'Say which document is needed' });
+  if (due_date && !/^\d{4}-\d{2}-\d{2}$/.test(due_date)) return res.status(400).json({ error: 'due_date must be YYYY-MM-DD' });
+  const id = `DRQ-${uuidv4().slice(0, 12)}`;
+  db.prepare(`
+    INSERT INTO document_requests (id, entity_id, document_type, note, due_date, requested_by)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, entity.id, String(document_type), note ? String(note).slice(0, 1000) : null, due_date || null, req.user.id);
+  for (const u of db.prepare('SELECT id FROM users WHERE linked_entity_id = ? AND is_active = 1').all(entity.id)) {
+    pushNotification({ userId: u.id, type: 'DOCUMENT_REQUEST', message: `SJVN has asked for a document: ${document_type}${due_date ? ` — by ${due_date}` : ''}. Upload it under My Documents.` });
+  }
+  audit(req, 'DOCUMENT_REQUESTED', id, { details: { entity_id: entity.id, document_type, due_date: due_date || null } });
+  res.status(201).json(requestRows('r.id = ?', id)[0]);
+});
+
+// POST /requests/:id/cancel
+router.post('/requests/:id/cancel', requireAuth, (req, res) => {
+  if (!canVerify(req.user)) return res.status(403).json({ error: 'Only the REIA desk can withdraw a request' });
+  const r = db.prepare(`SELECT * FROM document_requests WHERE id = ?`).get(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Request not found' });
+  if (r.status !== 'OPEN') return res.status(400).json({ error: 'Only an open request can be withdrawn' });
+  db.prepare(`UPDATE document_requests SET status = 'CANCELLED', closed_at = datetime('now') WHERE id = ?`).run(r.id);
+  audit(req, 'DOCUMENT_REQUEST_CANCELLED', r.id);
+  res.json(requestRows('r.id = ?', r.id)[0]);
+});
+
+// ── Upload ──────────────────────────────────────────────────────────────────
+
 // POST /upload - Upload a new document or a new version of an existing document
-router.post('/upload', requireAuth, upload.single('file'), (req, res) => {
+router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  const drop = () => { try { fs.unlinkSync(req.file.path); } catch { /* already gone */ } };
+  const refuse = (status, error) => { drop(); return res.status(status).json({ error }); };
 
   const { document_id, entity_id, contract_id, document_type, category, title, expiry_date } = req.body;
-  
-  // Basic RBAC
-  const isInternal = ['SJVN_ADMIN', 'REIA_USER', 'FINANCE_USER', 'TRADING_USER'].includes(req.user.role);
-  if (!isInternal && entity_id && entity_id !== req.user.linked_entity_id) {
-    fs.unlinkSync(req.file.path); // Delete the file
-    return res.status(403).json({ error: 'Cannot upload document for another entity' });
+  const external = isExternal(req.user);
+
+  // A new version goes onto a document the caller may already read; a new
+  // document goes under the caller's own company or one of its contracts.
+  const existing = document_id ? db.prepare('SELECT * FROM documents WHERE id = ?').get(document_id) : null;
+  if (document_id && !existing) return refuse(404, 'Document not found');
+  const owner = existing || { entity_id: entity_id || null, contract_id: contract_id || null };
+  if (external && !canRead(req.user, owner)) return refuse(403, 'Cannot upload document for another entity');
+  if (!existing && (!document_type || !title || !['VERIFY', 'RECORD'].includes(category))) {
+    return refuse(400, 'document_type, title and category are required');
   }
+  if (expiry_date && !/^\d{4}-\d{2}-\d{2}$/.test(expiry_date)) return refuse(400, 'expiry_date must be YYYY-MM-DD');
 
   // Segregation of duties: internal users (SJVN Admin / REIA / Finance) are the
   // reviewers/verifiers. They must NOT also upload VERIFY-category documents —
   // those must come from the stakeholder (Seller/Buyer) themselves so the same
   // person never uploads and self-verifies. Internal users may still upload
   // RECORD-category documents (internal notes, calculations, etc.).
-  const effectiveCategory = category
-    || (document_id ? db.prepare('SELECT category FROM documents WHERE id = ?').get(document_id)?.category : null);
-  if (isInternal && effectiveCategory === 'VERIFY') {
-    fs.unlinkSync(req.file.path);
-    return res.status(403).json({
-      error: 'VERIFY-category documents must be uploaded by the stakeholder (Seller/Buyer). Internal users can only review and verify them.',
-    });
+  const actualCategory = existing ? existing.category : category;
+  if (!external && actualCategory === 'VERIFY') {
+    return refuse(403, 'VERIFY-category documents must be uploaded by the stakeholder (Seller/Buyer). Internal users can only review and verify them.');
+  }
+
+  if (unreadablePdf(req.file.path)) {
+    return refuse(400, 'This PDF cannot be opened — it is empty, cut short or damaged. Export or scan it again and upload the new file.');
   }
 
   try {
-    db.transaction(() => {
-      let docId = document_id;
-      let versionNum = 1;
+    const fileHash = hashFile(req.file.path);
+    // The same file sent back after it was turned down is still the file that was turned down.
+    if (existing) {
+      const rejected = db.prepare(`
+        SELECT version_number, verification_notes FROM document_versions
+        WHERE document_id = ? AND file_hash = ? AND verification_status = 'REJECTED'
+      `).get(existing.id, fileHash);
+      if (rejected) {
+        return refuse(400, `This is the same file that was rejected as version ${rejected.version_number}${rejected.verification_notes ? ` (“${rejected.verification_notes}”)` : ''}. Upload a corrected copy.`);
+      }
+    }
 
+    const entity = owner.entity_id ? db.prepare('SELECT id, name, pan_no, gst_no FROM entities WHERE id = ?').get(owner.entity_id) : null;
+    const extracted = actualCategory === 'VERIFY'
+      ? await extractIdentifiers(req.file.path, sniffFileType(req.file.path) || req.file.mimetype, entity)
+      : null;
+    if (extracted) {
+      // The identical file under another company is for the reviewer to see, not for the uploader.
+      const elsewhere = db.prepare(`
+        SELECT DISTINCT e.name FROM document_versions v
+        JOIN documents d ON d.id = v.document_id LEFT JOIN entities e ON e.id = d.entity_id
+        WHERE v.file_hash = ? AND d.entity_id IS NOT NULL AND d.entity_id <> ?
+      `).all(fileHash, owner.entity_id || '').map((r) => r.name).filter(Boolean);
+      if (elsewhere.length) {
+        extracted.checks.push({ ok: false, text: `The identical file is also on record for: ${elsewhere.join(', ')}` });
+      }
+    }
+
+    let versionId;
+    let docId = existing?.id;
+    db.transaction(() => {
+      let versionNum = 1;
       if (!docId) {
-        // Create new document
         docId = uuidv4();
         db.prepare(`
           INSERT INTO documents (id, entity_id, contract_id, document_type, category, title, created_by)
           VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(docId, entity_id, contract_id, document_type, category, title, req.user.id);
+        `).run(docId, entity_id || null, contract_id || null, document_type, category, title, req.user.id);
       } else {
-        // Get max version
         const maxV = db.prepare('SELECT MAX(version_number) as v FROM document_versions WHERE document_id = ?').get(docId);
         versionNum = (maxV.v || 0) + 1;
-        // Verify category matches
-        const existingDoc = db.prepare('SELECT category FROM documents WHERE id = ?').get(docId);
-        if (!existingDoc) throw new Error('Document not found');
       }
 
       // Record vs Verify status
-      const actualCategory = category || db.prepare('SELECT category FROM documents WHERE id = ?').get(docId).category;
-      const initialStatus = actualCategory === 'VERIFY' ? 'PENDING' : 'NOT_REQUIRED';
+      let initialStatus = actualCategory === 'VERIFY' ? 'PENDING' : 'NOT_REQUIRED';
+      if (actualCategory === 'VERIFY' && (req.user.role === 'SELLER_L1' || req.user.role === 'BUYER_L1')) {
+        initialStatus = 'DRAFT';
+      }
 
-      const versionId = uuidv4();
+      versionId = uuidv4();
       db.prepare(`
         INSERT INTO document_versions (
-          id, document_id, version_number, file_path, file_name, file_size_bytes, 
-          mime_type, verification_status, expiry_date, created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, document_id, version_number, file_path, file_name, file_size_bytes,
+          mime_type, verification_status, expiry_date, created_by, file_hash, extracted_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        versionId, docId, versionNum, req.file.path, req.file.originalname, 
-        req.file.size, req.file.mimetype, initialStatus, expiry_date || null, req.user.id
+        versionId, docId, versionNum, req.file.path, req.file.originalname,
+        req.file.size, req.file.mimetype, initialStatus, expiry_date || null, req.user.id,
+        fileHash, extracted ? JSON.stringify(extracted) : null,
       );
 
+      // What SJVN asked for has now arrived.
+      if (owner.entity_id) {
+        db.prepare(`
+          UPDATE document_requests SET status = 'FULFILLED', fulfilled_version_id = ?, closed_at = datetime('now')
+          WHERE entity_id = ? AND document_type = ? AND status = 'OPEN'
+        `).run(versionId, owner.entity_id, existing ? existing.document_type : document_type);
+      }
     })();
 
-    res.json({ success: true, message: 'Document uploaded successfully' });
+    audit(req, 'DOCUMENT_UPLOADED', versionId, {
+      afterValue: { document_id: docId, entity_id: owner.entity_id, contract_id: owner.contract_id, file_name: req.file.originalname, new_version: !!existing },
+    });
+    res.json({ success: true, message: 'Document uploaded successfully', document_id: docId, version_id: versionId, extracted });
   } catch (error) {
-    if (req.file) fs.unlinkSync(req.file.path);
+    drop();
     res.status(500).json({ error: error.message });
   }
 });
 
+// ── Review ──────────────────────────────────────────────────────────────────
+
+/** The version being reviewed, if it is one that can be: the latest, and waiting. */
+function reviewable(req, res) {
+  if (!canVerify(req.user)) { res.status(403).json({ error: 'Only the REIA desk can review documents' }); return null; }
+  const v = db.prepare(`
+    SELECT v.*, d.title, d.document_type, d.category, d.entity_id,
+           (SELECT MAX(version_number) FROM document_versions WHERE document_id = d.id) AS latest
+    FROM document_versions v JOIN documents d ON d.id = v.document_id WHERE v.id = ?
+  `).get(req.params.versionId);
+  if (!v) { res.status(404).json({ error: 'Document version not found' }); return null; }
+  if (v.category !== 'VERIFY') { res.status(400).json({ error: 'This document is kept for the record and is not verified' }); return null; }
+  if (v.version_number !== v.latest) { res.status(400).json({ error: 'A newer version has been uploaded. Review that one.' }); return null; }
+  if (v.verification_status !== 'PENDING') {
+    res.status(400).json({ error: v.verification_status === 'DRAFT'
+      ? 'This document has not been submitted to SJVN yet'
+      : `This document has already been ${v.verification_status.toLowerCase()}` });
+    return null;
+  }
+  if (v.created_by === req.user.id) { res.status(403).json({ error: 'A document cannot be reviewed by the person who uploaded it' }); return null; }
+  return v;
+}
+
+const tellUploader = (v, message) => {
+  if (!v.created_by) return;
+  try { pushNotification({ userId: v.created_by, type: 'DOCUMENT_REVIEW', message }); } catch { /* the review stands either way */ }
+};
+
 // POST /:versionId/verify
 router.post('/:versionId/verify', requireAuth, (req, res) => {
-  if (req.user.role !== 'SJVN_ADMIN') return res.status(403).json({ error: 'Only SJVN Admin can verify documents' });
-
-  const { versionId } = req.params;
-  
+  const v = reviewable(req, res);
+  if (!v) return;
+  if (v.expiry_date && daysUntil(v.expiry_date) < 0) {
+    return res.status(400).json({ error: `This document expired on ${v.expiry_date} and cannot be verified. Reject it and ask for a current one.` });
+  }
   db.prepare(`
-    UPDATE document_versions 
-    SET verification_status = 'VERIFIED', verified_by = ?, verified_at = datetime('now')
+    UPDATE document_versions
+    SET verification_status = 'VERIFIED', verification_notes = NULL, rejection_code = NULL, verified_by = ?, verified_at = datetime('now')
     WHERE id = ?
-  `).run(req.user.id, versionId);
-
+  `).run(req.user.id, v.id);
+  audit(req, 'DOCUMENT_VERIFIED', v.id, { beforeValue: { status: 'PENDING' }, afterValue: { status: 'VERIFIED', document_type: v.document_type, entity_id: v.entity_id } });
+  tellUploader(v, `Your document "${v.title}" has been verified by SJVN.`);
   res.json({ success: true });
 });
 
-// POST /:versionId/reject
+// POST /:versionId/reject { reason, reason_code }
 router.post('/:versionId/reject', requireAuth, (req, res) => {
-  if (req.user.role !== 'SJVN_ADMIN') return res.status(403).json({ error: 'Only SJVN Admin can reject documents' });
-
-  const { versionId } = req.params;
-  const { reason } = req.body;
-
-  if (!reason) return res.status(400).json({ error: 'Rejection reason is required' });
-
+  const reason = String(req.body.reason || '').trim();
+  const code = req.body.reason_code || 'OTHER';
+  if (!REJECTION_REASONS[code]) return res.status(400).json({ error: 'Unknown rejection reason' });
+  // "Other" explains itself only in the reviewer's own words.
+  if (!reason && code === 'OTHER') return res.status(400).json({ error: 'Rejection reason is required' });
+  const v = reviewable(req, res);
+  if (!v) return;
+  const notes = reason || REJECTION_REASONS[code];
   db.prepare(`
-    UPDATE document_versions 
-    SET verification_status = 'REJECTED', verification_notes = ?, verified_by = ?, verified_at = datetime('now')
+    UPDATE document_versions
+    SET verification_status = 'REJECTED', verification_notes = ?, rejection_code = ?, verified_by = ?, verified_at = datetime('now')
     WHERE id = ?
-  `).run(reason, req.user.id, versionId);
-
+  `).run(notes, code, req.user.id, v.id);
+  audit(req, 'DOCUMENT_REJECTED', v.id, { beforeValue: { status: 'PENDING' }, afterValue: { status: 'REJECTED', reason_code: code, document_type: v.document_type, entity_id: v.entity_id }, reason: notes });
+  tellUploader(v, `Your document "${v.title}" was rejected by SJVN: ${notes}. Upload a corrected copy under My Documents.`);
   res.json({ success: true });
+});
+
+// GET /history/:documentId — every version of one document, newest first.
+router.get('/history/:documentId', requireAuth, (req, res) => {
+  const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.documentId);
+  if (!doc || !canRead(req.user, doc)) return res.status(404).json({ error: 'Document not found' });
+  const versions = db.prepare(`
+    SELECT v.id, v.version_number, v.file_name, v.file_size_bytes, v.verification_status, v.verification_notes,
+           v.rejection_code, v.verified_at, v.expiry_date, v.created_at, v.extracted_json,
+           uu.name AS uploaded_by_name, vu.name AS verified_by_name
+    FROM document_versions v
+    LEFT JOIN users uu ON uu.id = v.created_by
+    LEFT JOIN users vu ON vu.id = v.verified_by
+    WHERE v.document_id = ? ORDER BY v.version_number DESC
+  `).all(doc.id).map(decorate);
+  res.json({ document: doc, versions });
 });
 
 /**
@@ -246,19 +636,14 @@ router.get('/:versionId/download', requireAuth, (req, res) => {
   const { versionId } = req.params;
 
   const doc = db.prepare(`
-    SELECT v.file_path, v.file_name, v.mime_type, d.entity_id
+    SELECT v.file_path, v.file_name, v.mime_type, d.entity_id, d.contract_id
     FROM document_versions v
     JOIN documents d ON v.document_id = d.id
     WHERE v.id = ?
   `).get(versionId);
 
   if (!doc) return res.status(404).json({ error: 'Document version not found' });
-
-  if (req.user.role !== 'SJVN_ADMIN' && req.user.role !== 'FINANCE_USER') {
-    if (doc.entity_id !== req.user.linked_entity_id) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-  }
+  if (!canRead(req.user, doc)) return res.status(403).json({ error: 'Access denied' });
 
   if (!fs.existsSync(doc.file_path)) {
     return res.status(404).json({ error: 'File is missing from storage' });
@@ -278,9 +663,48 @@ router.get('/:versionId/download', requireAuth, (req, res) => {
     'application/octet-stream';
   const safeName = (doc.file_name || 'document').replace(/["\r\n]/g, '');
 
+  // Who opened which KYC document, and when.
+  audit(req, 'DOCUMENT_OPENED', versionId, { details: { file_name: doc.file_name, entity_id: doc.entity_id } });
+
   res.setHeader('Content-Type', contentType);
   res.setHeader('Content-Disposition', `inline; filename="${safeName}"`);
   fs.createReadStream(doc.file_path).pipe(res);
+});
+
+// POST /:versionId/submit-l2
+router.post('/:versionId/submit-l2', requireAuth, (req, res) => {
+  const { versionId } = req.params;
+
+  try {
+    const doc = db.prepare(`
+      SELECT v.verification_status, d.entity_id 
+      FROM document_versions v
+      JOIN documents d ON v.document_id = d.id
+      WHERE v.id = ?
+    `).get(versionId);
+
+    if (!doc) return res.status(404).json({ error: 'Document version not found' });
+    if (doc.verification_status !== 'DRAFT') {
+      return res.status(400).json({ error: 'Only DRAFT documents can be submitted to SJVN.' });
+    }
+
+    // Role check: Only SELLER (admin), SELLER_L2, SELLER_L3 (or buyers) can submit.
+    const allowed = ['SELLER', 'SELLER_L2', 'SELLER_L3', 'BUYER', 'BUYER_L2', 'BUYER_L3'];
+    if (!allowed.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Only an L2 Checker or Admin can submit this document to SJVN.' });
+    }
+    if (!doc.entity_id || !ownEntityIds(req.user).includes(doc.entity_id)) {
+      return res.status(403).json({ error: 'Access denied to this entity.' });
+    }
+
+    db.prepare('UPDATE document_versions SET verification_status = ? WHERE id = ?')
+      .run('PENDING', versionId);
+    audit(req, 'DOCUMENT_SUBMITTED', versionId, { beforeValue: { status: 'DRAFT' }, afterValue: { status: 'PENDING' } });
+
+    res.json({ success: true, message: 'Document submitted to SJVN successfully.' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 export default router;

@@ -106,9 +106,10 @@ export function auditFor(entityId) {
 
 export function resetReia() {
   const order = [
-    'invoice_approvals', 'invoice_deliveries', 'payments', 'invoices',
+    'payment_intimations', 'invoice_approvals', 'invoice_deliveries', 'payments', 'invoices',
     'dispute_comments', 'dispute_events', 'disputes',
     'recon_items', 'recon_events', 'recon_statements', 'recon_reopen_requests', 'reconciliations',
+    'security_amendments', 'sjvn_lc_events', 'sjvn_lcs',
     'security_events', 'security_invocations', 'security_alerts', 'security_releases', 'payment_security',
     'contract_allocations', 'contract_amendments', 'contract_projects', 'contracts',
     'energy_data', 'entity_audit', 'documents', 'audit_logs', 'notifications',

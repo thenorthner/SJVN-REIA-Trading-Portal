@@ -625,6 +625,10 @@ router.post('/:id/acknowledge', (req, res) => {
   }
 
   const isSjvn = isReia(req.user);
+  // A side signs a statement once. Signing again used to overwrite who had signed and when.
+  if (isSjvn ? recon.sjvn_ack_at : recon.counterparty_ack_at) {
+    return res.status(400).json({ error: `This statement was already signed for ${isSjvn ? 'SJVN' : 'your company'} by ${isSjvn ? recon.sjvn_ack_by : recon.counterparty_ack_by}` });
+  }
   if (isSjvn) {
     db.prepare(`UPDATE reconciliations SET sjvn_ack_at = datetime('now'), sjvn_ack_by = ?, discrepancy_notes = COALESCE(?, discrepancy_notes), updated_at = datetime('now') WHERE id = ?`)
       .run(req.user.name, remarks ? `SJVN Note: ${remarks}` : null, recon.id);
@@ -650,7 +654,13 @@ router.post('/:id/acknowledge', (req, res) => {
 
   let fresh = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(recon.id);
   let dualSigned = false;
-  if (fresh.sjvn_ack_at && fresh.counterparty_ack_at) {
+  // Both have signed. While an exception the counterparty raised is still open,
+  // the statement is agreed but not finished.
+  const openExceptions = db.prepare(`SELECT COUNT(*) c FROM recon_exceptions WHERE reconciliation_id = ? AND status = 'OPEN'`).get(recon.id).c;
+  if (fresh.sjvn_ack_at && fresh.counterparty_ack_at && openExceptions) {
+    db.prepare(`UPDATE reconciliations SET status = 'AGREED', updated_at = datetime('now') WHERE id = ?`).run(recon.id);
+    dualSigned = true;
+  } else if (fresh.sjvn_ack_at && fresh.counterparty_ack_at) {
     db.prepare(`UPDATE reconciliations SET status = 'CLOSED', closed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`)
       .run(recon.id);
     recordEvent(recon.id, req.user, 'CLOSED', { via: 'dual_ack' });
@@ -802,4 +812,4 @@ router.post('/:id/resolve', requireRole(...REIA_WRITE), (req, res) => {
 });
 
 export default router;
-export { persistRun };
+export { persistRun, canAccessRecon, isReia, recordEvent, saveStatement };

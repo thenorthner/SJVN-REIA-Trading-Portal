@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import InvoiceCompliance from '../../components/InvoiceCompliance.jsx';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -48,7 +49,7 @@ export default function Invoices() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
   const [payForm, setPayForm] = useState(PAY_FORM);
-  const [releaseForm, setReleaseForm] = useState({ amount: '', source: 'DISCOM_REALIZATION', payment_date: '', reference: '' });
+  const [releaseForm, setReleaseForm] = useState({ amount: '', source: 'DISCOM_REALIZATION', payment_date: '', reference: '', tds_amount: '', other_deduction: '', deduction_note: '' });
   const [releaseError, setReleaseError] = useState('');
   const [showWaterfall, setShowWaterfall] = useState(false);
   const [buyers, setBuyers] = useState([]);
@@ -328,8 +329,11 @@ export default function Invoices() {
     e.preventDefault();
     setReleaseError('');
     try {
-      await api.invoices.releaseToGenerator(selected.id, { ...releaseForm, amount: Number(releaseForm.amount) });
-      setReleaseForm({ amount: '', source: 'DISCOM_REALIZATION', payment_date: '', reference: '' });
+      await api.invoices.releaseToGenerator(selected.id, {
+        ...releaseForm, amount: Number(releaseForm.amount),
+        tds_amount: Number(releaseForm.tds_amount) || 0, other_deduction: Number(releaseForm.other_deduction) || 0,
+      });
+      setReleaseForm({ amount: '', source: 'DISCOM_REALIZATION', payment_date: '', reference: '', tds_amount: '', other_deduction: '', deduction_note: '' });
       await refreshSelected(selected.id);
     } catch (err) {
       setReleaseError(err.response?.data?.error || 'Failed to release payment.');
@@ -681,6 +685,15 @@ export default function Invoices() {
             <InvoiceBreakdown invoice={selected} />
             <InvoiceFinancialStrip invoice={selected} />
 
+            {selected.direction === 'SJVN_TO_BUYER' && !['DRAFT', 'CANCELLED'].includes(selected.status) && (
+              <p className="inline-note" style={{ marginTop: 12, color: selected.buyer_ack_at ? '#15803d' : undefined }}>
+                {selected.buyer_ack_at ? `✓ The buyer acknowledged receipt of this bill — ${selected.buyer_ack_by}, ${selected.buyer_ack_at}.` : 'The buyer has not yet acknowledged receipt of this bill on the portal.'}
+              </p>
+            )}
+            {/* The seller's e-invoice reference, signed copy and hard copy; receipt of the paper is recorded here. */}
+            {/* A seller's invoice carries what the seller added; SJVN's own bill, the IRN and signed copy its desk records for the buyer. */}
+            {(selected.direction === 'SELLER_TO_SJVN' || !['DRAFT', 'CANCELLED'].includes(selected.status)) && <InvoiceCompliance key={selected.id} invoice={selected} onChanged={load} />}
+
             {selected.direction === 'SELLER_TO_SJVN' && (
               <details style={{ marginTop: 18 }} open>
                 <summary className="section-title" style={{ cursor: 'pointer' }}>Verification Checklist (Technical &amp; Commercial)</summary>
@@ -818,7 +831,7 @@ export default function Invoices() {
                 {releaseError && <div className="form-error">{releaseError}</div>}
                 <form onSubmit={handleRelease}>
                   <div className="form-grid">
-                    <Field label="Amount (₹)">
+                    <Field label="Net amount paid (₹)">
                       <input required type="number" value={releaseForm.amount} onChange={(e) => setReleaseForm({ ...releaseForm, amount: e.target.value })} />
                     </Field>
                     <Field label="Fund Source">
@@ -834,7 +847,24 @@ export default function Invoices() {
                     <Field label="Reference">
                       <input value={releaseForm.reference} onChange={(e) => setReleaseForm({ ...releaseForm, reference: e.target.value })} />
                     </Field>
+                    {/* What is held back settles the bill too; it is recorded as what it is, and shows on the seller's payment advice. */}
+                    <Field label="TDS deducted (₹)">
+                      <input type="number" min="0" value={releaseForm.tds_amount} onChange={(e) => setReleaseForm({ ...releaseForm, tds_amount: e.target.value })} />
+                    </Field>
+                    <Field label="Other deduction (₹)">
+                      <input type="number" min="0" value={releaseForm.other_deduction} onChange={(e) => setReleaseForm({ ...releaseForm, other_deduction: e.target.value })} />
+                    </Field>
+                    {Number(releaseForm.other_deduction) > 0 && (
+                      <Field label="Other deduction is for" required>
+                        <input required value={releaseForm.deduction_note} onChange={(e) => setReleaseForm({ ...releaseForm, deduction_note: e.target.value })} placeholder="e.g. Liquidated damages" />
+                      </Field>
+                    )}
                   </div>
+                  {(Number(releaseForm.tds_amount) > 0 || Number(releaseForm.other_deduction) > 0) && (
+                    <p className="inline-note">
+                      Settles ₹{((Number(releaseForm.amount) || 0) + (Number(releaseForm.tds_amount) || 0) + (Number(releaseForm.other_deduction) || 0)).toLocaleString('en-IN')} of the bill: ₹{(Number(releaseForm.amount) || 0).toLocaleString('en-IN')} paid, the rest held back.
+                    </p>
+                  )}
                   <p className="inline-note">DISCOM Realization can only release what the buyer has actually paid; use Own Fund / Security Fund for the balance.</p>
                   <div className="form-actions">
                     <button type="submit" className="btn btn-primary">Release to Generator</button>

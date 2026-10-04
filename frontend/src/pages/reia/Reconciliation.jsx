@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import ReconSignoffPanel from '../../components/ReconSignoffPanel.jsx';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, fmtCurrency, StatementViewer } from '../../components/ui.jsx';
@@ -474,7 +475,7 @@ export default function Reconciliation() {
               border: '1px solid var(--border)',
             }}>
               <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>🤝 Dual Digital Sign-off & Acknowledgment Status</span>
+                <span>🤝 Dual Sign-off & Acknowledgment Status</span>
                 {detail.sjvn_ack_at && detail.counterparty_ack_at ? (
                   <span style={{ fontSize: 12, background: '#10b981', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
                     ✓ 2/2 Complete (Closed & Legally Agreed)
@@ -593,6 +594,9 @@ export default function Reconciliation() {
             <div className="section-title" style={{ marginTop: 16 }}>Reconciliation statement</div>
             <StatementViewer statement={detail.statement} />
 
+            {/* The balance rolled forward, the counterparty's exceptions, the signatures and the signed statement. */}
+            <ReconSignoffPanel key={`${detail.id}-${detail.updated_at}`} reconId={detail.id} onChanged={refreshDetail} />
+
             {/* Action Bar */}
             <div className="form-actions" style={{ flexWrap: 'wrap', gap: 10, marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
               {CAN_WRITE.includes(user?.role) && detail.items_exception === 0 && detail.status === 'NEEDS_REVIEW' && (
@@ -649,11 +653,11 @@ export default function Reconciliation() {
         )}
       </Modal>
 
-      {/* Modal: Interactive Digital Sign-off & Acknowledgment / Disagreement */}
+      {/* Modal: Interactive Sign-off & Acknowledgment / Disagreement */}
       <Modal
         open={ackModal.open}
         onClose={() => !ackLoading && setAckModal({ ...ackModal, open: false })}
-        title={ackModal.decision === 'AGREE' ? '✍️ Digital Sign-off & Acknowledgment' : '⚠️ Record Disagreement & Dispute Notice'}
+        title={ackModal.decision === 'AGREE' ? '✍️ Sign-off & Acknowledgment' : '⚠️ Record Disagreement & Dispute Notice'}
         width={560}
       >
         <div>
@@ -714,7 +718,7 @@ export default function Reconciliation() {
                   disabled={!ackModal.confirmed || ackLoading}
                   onClick={submitAcknowledgement}
                 >
-                  {ackLoading ? 'Recording Sign-off…' : '✓ Confirm & Digitally Sign Off'}
+                  {ackLoading ? 'Recording Sign-off…' : '✓ Confirm & Sign Off'}
                 </button>
               </div>
             </div>

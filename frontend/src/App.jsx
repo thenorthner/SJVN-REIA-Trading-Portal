@@ -142,6 +142,7 @@ const IexBidBookReport = lazy(() => import('./pages/trading/IexBidBookReport.jsx
 const ExchangeApplications = lazy(() => import('./pages/trading/ExchangeApplications.jsx'));
 const UpdateCharges = lazy(() => import('./pages/trading/UpdateCharges.jsx'));
 const PendingScreen = lazy(() => import('./pages/trading/PendingScreen.jsx'));
+import GuidedPage from './components/GuidedPage.jsx';
 const SellerDashboard = lazy(() => import('./pages/seller/SellerDashboard.jsx'));
 const SellerContracts = lazy(() => import('./pages/seller/SellerContracts.jsx'));
 const SellerEnergyData = lazy(() => import('./pages/seller/SellerEnergyData.jsx'));
@@ -163,6 +164,10 @@ const BuyerPaymentSecurity = lazy(() => import('./pages/buyer/BuyerPaymentSecuri
 const AuditLogs = lazy(() => import('./pages/AuditLogs.jsx'));
 const MastersHub = lazy(() => import('./pages/masters/MastersHub.jsx'));
 const NotificationBoard = lazy(() => import('./pages/NotificationBoard.jsx'));
+const DocumentDesk = lazy(() => import('./pages/reia/DocumentDesk.jsx'));
+const SellerLedgers = lazy(() => import('./pages/reia/SellerLedgers.jsx'));
+const CompanyUsers = lazy(() => import('./pages/reia/CompanyUsers.jsx'));
+const StaffUsers = lazy(() => import('./pages/reia/StaffUsers.jsx'));
 const PortfolioRegistry = lazy(() => import('./pages/masters/PortfolioRegistry.jsx'));
 const UserProfile = lazy(() => import('./pages/settings/UserProfile.jsx'));
 
@@ -242,6 +247,10 @@ export default function App() {
 
         <Route path="reia" element={<ProtectedRoute roles={REIA_ROLES}><ReiaDashboard /></ProtectedRoute>} />
         <Route path="reia/entities" element={<ProtectedRoute roles={REIA_ROLES}><Entities /></ProtectedRoute>} />
+        <Route path="reia/document-desk" element={<ProtectedRoute roles={REIA_ROLES}><DocumentDesk /></ProtectedRoute>} />
+        <Route path="admin/users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN']}><StaffUsers /></ProtectedRoute>} />
+        <Route path="reia/company-users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN']}><CompanyUsers /></ProtectedRoute>} />
+        <Route path="reia/seller-ledgers" element={<ProtectedRoute roles={REIA_ROLES}><SellerLedgers /></ProtectedRoute>} />
         <Route path="reia/contracts" element={<ProtectedRoute roles={REIA_ROLES}><Contracts /></ProtectedRoute>} />
         <Route path="reia/energy-data" element={<ProtectedRoute roles={REIA_ROLES}><EnergyData /></ProtectedRoute>} />
         <Route path="reia/invoices" element={<ProtectedRoute roles={REIA_ROLES}><Invoices /></ProtectedRoute>} />
@@ -267,28 +276,28 @@ export default function App() {
         <Route path="reia/cerc-compliance" element={<ProtectedRoute roles={REIA_ROLES}><CercCompliance /></ProtectedRoute>} />
 
         {/* Seller Portal */}
-        <Route path="seller" element={<ProtectedRoute roles={SELLER_ROLES}><SellerDashboard /></ProtectedRoute>} />
-        <Route path="seller/contracts" element={<ProtectedRoute roles={SELLER_ROLES}><SellerContracts /></ProtectedRoute>} />
-        <Route path="seller/energy-data" element={<ProtectedRoute roles={SELLER_ROLES}><SellerEnergyData /></ProtectedRoute>} />
-        <Route path="seller/invoices" element={<ProtectedRoute roles={SELLER_ROLES}><SellerInvoices /></ProtectedRoute>} />
-        <Route path="seller/team" element={<ProtectedRoute roles={SELLER_ROLES}><Team /></ProtectedRoute>} />
-        <Route path="seller/documents" element={<ProtectedRoute roles={SELLER_ROLES}><MyDocuments /></ProtectedRoute>} />
-        <Route path="seller/payments" element={<ProtectedRoute roles={SELLER_ROLES}><SellerPayments /></ProtectedRoute>} />
-        <Route path="seller/disputes" element={<ProtectedRoute roles={SELLER_ROLES}><SellerDisputes /></ProtectedRoute>} />
-        <Route path="seller/reconciliation" element={<ProtectedRoute roles={SELLER_ROLES}><SellerReconciliation /></ProtectedRoute>} />
-        <Route path="seller/payment-security" element={<ProtectedRoute roles={SELLER_ROLES}><SellerPaymentSecurity /></ProtectedRoute>} />
+        <Route path="seller" element={<ProtectedRoute roles={SELLER_ROLES}><GuidedPage guide="dashboard"><SellerDashboard /></GuidedPage></ProtectedRoute>} />
+        <Route path="seller/contracts" element={<ProtectedRoute roles={SELLER_ROLES} requiresKyc><GuidedPage guide="contracts"><SellerContracts /></GuidedPage></ProtectedRoute>} />
+        <Route path="seller/energy-data" element={<ProtectedRoute roles={SELLER_ROLES} requiresKyc><GuidedPage guide="energy"><SellerEnergyData /></GuidedPage></ProtectedRoute>} />
+        <Route path="seller/invoices" element={<ProtectedRoute roles={SELLER_ROLES} requiresKyc><GuidedPage guide="invoices"><SellerInvoices /></GuidedPage></ProtectedRoute>} />
+        <Route path="seller/team" element={<ProtectedRoute roles={SELLER_ROLES}><GuidedPage guide="team"><Team /></GuidedPage></ProtectedRoute>} />
+        <Route path="seller/documents" element={<ProtectedRoute roles={SELLER_ROLES}><GuidedPage guide="documents"><MyDocuments /></GuidedPage></ProtectedRoute>} />
+        <Route path="seller/payments" element={<ProtectedRoute roles={SELLER_ROLES} requiresKyc><GuidedPage guide="payments"><SellerPayments /></GuidedPage></ProtectedRoute>} />
+        <Route path="seller/disputes" element={<ProtectedRoute roles={SELLER_ROLES} requiresKyc><GuidedPage guide="disputes"><SellerDisputes /></GuidedPage></ProtectedRoute>} />
+        <Route path="seller/reconciliation" element={<ProtectedRoute roles={SELLER_ROLES} requiresKyc><GuidedPage guide="reconciliation"><SellerReconciliation /></GuidedPage></ProtectedRoute>} />
+        <Route path="seller/payment-security" element={<ProtectedRoute roles={SELLER_ROLES} requiresKyc><GuidedPage guide="security"><SellerPaymentSecurity /></GuidedPage></ProtectedRoute>} />
 
         {/* Buyer Portal */}
-        <Route path="buyer" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerDashboard /></ProtectedRoute>} />
-        <Route path="buyer/contracts" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerContracts /></ProtectedRoute>} />
-        <Route path="buyer/energy-data" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerEnergyData /></ProtectedRoute>} />
-        <Route path="buyer/invoices" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerInvoices /></ProtectedRoute>} />
-        <Route path="buyer/team" element={<ProtectedRoute roles={BUYER_ROLES}><Team /></ProtectedRoute>} />
-        <Route path="buyer/documents" element={<ProtectedRoute roles={BUYER_ROLES}><MyDocuments /></ProtectedRoute>} />
-        <Route path="buyer/payments" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerPayments /></ProtectedRoute>} />
-        <Route path="buyer/disputes" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerDisputes /></ProtectedRoute>} />
-        <Route path="buyer/reconciliation" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerReconciliation /></ProtectedRoute>} />
-        <Route path="buyer/payment-security" element={<ProtectedRoute roles={BUYER_ROLES}><BuyerPaymentSecurity /></ProtectedRoute>} />
+        <Route path="buyer" element={<ProtectedRoute roles={BUYER_ROLES}><GuidedPage guide="dashboard"><BuyerDashboard /></GuidedPage></ProtectedRoute>} />
+        <Route path="buyer/contracts" element={<ProtectedRoute roles={BUYER_ROLES} requiresKyc><GuidedPage guide="contracts"><BuyerContracts /></GuidedPage></ProtectedRoute>} />
+        <Route path="buyer/energy-data" element={<ProtectedRoute roles={BUYER_ROLES} requiresKyc><GuidedPage guide="energy"><BuyerEnergyData /></GuidedPage></ProtectedRoute>} />
+        <Route path="buyer/invoices" element={<ProtectedRoute roles={BUYER_ROLES} requiresKyc><GuidedPage guide="invoices"><BuyerInvoices /></GuidedPage></ProtectedRoute>} />
+        <Route path="buyer/team" element={<ProtectedRoute roles={BUYER_ROLES}><GuidedPage guide="team"><Team /></GuidedPage></ProtectedRoute>} />
+        <Route path="buyer/documents" element={<ProtectedRoute roles={BUYER_ROLES}><GuidedPage guide="documents"><MyDocuments /></GuidedPage></ProtectedRoute>} />
+        <Route path="buyer/payments" element={<ProtectedRoute roles={BUYER_ROLES} requiresKyc><GuidedPage guide="payments"><BuyerPayments /></GuidedPage></ProtectedRoute>} />
+        <Route path="buyer/disputes" element={<ProtectedRoute roles={BUYER_ROLES} requiresKyc><GuidedPage guide="disputes"><BuyerDisputes /></GuidedPage></ProtectedRoute>} />
+        <Route path="buyer/reconciliation" element={<ProtectedRoute roles={BUYER_ROLES} requiresKyc><GuidedPage guide="reconciliation"><BuyerReconciliation /></GuidedPage></ProtectedRoute>} />
+        <Route path="buyer/payment-security" element={<ProtectedRoute roles={BUYER_ROLES} requiresKyc><GuidedPage guide="security"><BuyerPaymentSecurity /></GuidedPage></ProtectedRoute>} />
 
         <Route path="trading" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TradingDashboard /></ProtectedRoute>} />
         <Route path="trading/clients" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><TradingClients /></ProtectedRoute>} />
@@ -383,9 +392,9 @@ export default function App() {
         <Route path="trading/schedule-archive" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><EnergyScheduleArchive /></ProtectedRoute>} />
         <Route path="trading/daily-obligation-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><DailyObligationReport /></ProtectedRoute>} />
 
-        <Route path="notification-board" element={<ProtectedRoute roles={BOARD_ROLES}><NotificationBoard /></ProtectedRoute>} />
+        <Route path="notification-board" element={<ProtectedRoute roles={BOARD_ROLES}><GuidedPage guide="notifications"><NotificationBoard /></GuidedPage></ProtectedRoute>} />
         {/* Every signed-in user has a mailbox; who may write to whom is the server's call. */}
-        <Route path="mail" element={<ProtectedRoute><Mail /></ProtectedRoute>} />
+        <Route path="mail" element={<ProtectedRoute><GuidedPage guide="mail"><Mail /></GuidedPage></ProtectedRoute>} />
         <Route path="master/portfolio-registry" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><PortfolioRegistry /></ProtectedRoute>} />
         <Route path="masters" element={<ProtectedRoute roles={MASTERS_ROLES}><MastersHub /></ProtectedRoute>} />
         <Route path="audit-logs" element={<ProtectedRoute roles={AUDIT_ROLES}><AuditLogs /></ProtectedRoute>} />

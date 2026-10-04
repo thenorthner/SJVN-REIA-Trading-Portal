@@ -13,6 +13,17 @@ import authRoutes from './routes/auth.js';
 import entitiesRoutes from './routes/entities.js';
 import contractsRoutes from './routes/contracts.js';
 import energyDataRoutes from './routes/energyData.js';
+import energyRecordsRoutes from './routes/energyRecords.js';
+import invoiceComplianceRoutes from './routes/invoiceCompliance.js';
+import sellerLedgerRoutes from './routes/sellerLedger.js';
+import reconSignoffRoutes from './routes/reconSignoff.js';
+import disputeExtrasRoutes from './routes/disputeExtras.js';
+import teamRoutes from './routes/team.js';
+import counterpartyHomeRoutes from './routes/counterpartyHome.js';
+import buyerBillsRoutes from './routes/buyerBills.js';
+import sjvnDeskRoutes from './routes/sjvnDesk.js';
+import staffRoutes from './routes/staff.js';
+import securityDeskRoutes, { remindExpiringSecurity } from './routes/securityDesk.js';
 import invoicesRoutes from './routes/invoices.js';
 import billingTrailRoutes from './routes/billingTrail.js';
 import disputesRoutes, { runSlaEscalations } from './routes/disputes.js';
@@ -54,6 +65,7 @@ import notificationsRoutes from './routes/notifications.js';
 import { retryFailedDeliveries } from './services/notificationService.js';
 import { getMailConfig } from './services/mailService.js';
 import alertsRoutes from './routes/alerts.js';
+import { sweepBoards } from './services/alertBoard.js';
 import auditLogsRoutes from './routes/auditLogs.js';
 import sandboxRoutes from './routes/sandbox.js';
 import preTradeRoutes from './routes/preTrade.js';
@@ -64,6 +76,7 @@ import archiveRoutes from './routes/archive.js';
 import dorRoutes from './routes/dor.js';
 import lossesRoutes from './routes/losses.js';
 import documentsRoutes from './routes/documents.js';
+import contractWorkspaceRoutes from './routes/contractWorkspace.js';
 import usersRoutes from './routes/users.js';
 import holidaysRoutes from './routes/holidays.js';
 import mastersRoutes from './routes/masters.js';
@@ -194,6 +207,17 @@ app.use('/api/auth', authRoutes);
 app.use('/api/entities', requireAuth, entitiesRoutes);
 app.use('/api/contracts', requireAuth, contractsRoutes);
 app.use('/api/energy-data', requireAuth, energyDataRoutes);
+app.use('/api/energy-records', energyRecordsRoutes);
+app.use('/api/invoice-compliance', invoiceComplianceRoutes);
+app.use('/api/ledger', sellerLedgerRoutes);
+app.use('/api/recon-signoff', reconSignoffRoutes);
+app.use('/api/dispute-extras', disputeExtrasRoutes);
+app.use('/api/security-desk', securityDeskRoutes);
+app.use('/api/team', teamRoutes);
+app.use('/api/home', counterpartyHomeRoutes);
+app.use('/api/buyer-bills', buyerBillsRoutes);
+app.use('/api/sjvn-desk', sjvnDeskRoutes);
+app.use('/api/staff', staffRoutes);
 app.use('/api/invoices', requireAuth, invoicesRoutes);
 app.use('/api/billing-trail', requireAuth, billingTrailRoutes);
 app.use('/api/station-beta', requireAuth, stationBetaRoutes);
@@ -260,6 +284,7 @@ app.use('/api/trading/dor', requireAuth, requireRole(...TRADING_READ), dorRoutes
 
 // Cross-cutting Services
 app.use('/api/documents', documentsRoutes);
+app.use('/api/contract-workspace', contractWorkspaceRoutes);
 app.use('/api/masters/holidays', requireAuth, holidaysRoutes);
 app.use('/api/masters/losses', requireAuth, lossesRoutes);
 app.use('/api/masters/rates', requireAuth, rateMasterRoutes);
@@ -357,7 +382,7 @@ app.use((err, req, res, next) => {
   if (err.name === 'MulterError') {
     const tooBig = err.code === 'LIMIT_FILE_SIZE';
     return res.status(tooBig ? 413 : 400).json({
-      error: tooBig ? 'The uploaded file is too large' : `Upload rejected: ${err.message}`,
+      error: tooBig ? 'The uploaded file exceeds the maximum allowed size of 10MB. Please compress the document and try again.' : `Upload rejected: ${err.message}`,
       trace_id: trace,
     });
   }
@@ -427,8 +452,20 @@ const server = app.listen(PORT, HOST, () => {
     try {
       const result = runAlertCascade();
       if (result.sent > 0) console.log(`[SECURITY] Sent ${result.sent} alert(s)`);
+      // The counterparty whose guarantee it is, and SJVN's own letters of credit.
+      const reminded = remindExpiringSecurity();
+      if (reminded.sent > 0) console.log(`[SECURITY] Sent ${reminded.sent} expiry reminder(s)`);
     } catch (err) {
       console.error('[SECURITY] alert cascade failed', err.message);
+    }
+  }, 60 * 60 * 1000);
+  // Notification boards — hourly, so the history has no gaps and a new alert
+  // reaches the people who asked for it even when nobody has the board open.
+  setInterval(() => {
+    try {
+      sweepBoards();
+    } catch (err) {
+      console.error('[BOARD] sweep failed', err.message);
     }
   }, 60 * 60 * 1000);
   // Stakeholder and contract alerts cascade every hour

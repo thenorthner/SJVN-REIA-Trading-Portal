@@ -1,5 +1,6 @@
 import { secureLogAudit } from '../auditEngine.js';
 import jwt from 'jsonwebtoken';
+import db from '../db/index.js';
 
 const DEV_SECRET = 'sjvn-dev-secret-change-me';
 
@@ -35,9 +36,30 @@ export function requireAuth(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Authentication required' });
   try {
     req.user = jwt.verify(token, JWT_SECRET);
-    next();
   } catch (err) {
     return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+  // A token is good for twelve hours, and used to stay good for all of them
+  // whatever happened to the account in the meantime: a team member switched off
+  // at ten could go on working until evening. The account is looked up, and a
+  // token issued before its sessions were ended is refused.
+  const ended = sessionEnded(req.user);
+  if (ended) return res.status(401).json({ error: ended });
+  next();
+}
+
+let accountLookup = null;
+function sessionEnded(claims) {
+  try {
+    accountLookup = accountLookup || db.prepare('SELECT is_active, sessions_revoked_at FROM users WHERE id = ?');
+    const row = accountLookup.get(claims.id);
+    if (!row) return null; // tokens for accounts that are not rows (service callers, tests) are left as they were
+    if (!row.is_active) return 'This account has been deactivated';
+    if (row.sessions_revoked_at && claims.iat && claims.iat < row.sessions_revoked_at) return 'Your session has ended — please sign in again';
+    return null;
+  } catch {
+    accountLookup = null; // a database without the column yet
+    return null;
   }
 }
 

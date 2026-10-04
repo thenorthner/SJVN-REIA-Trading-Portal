@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import DisputeExtrasPanel, { SlaTag } from '../../components/DisputeExtrasPanel.jsx';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency } from '../../components/ui.jsx';
@@ -63,6 +64,10 @@ export default function Disputes() {
   const selectedInvoice = invoices.find((i) => i.id === form.invoice_id);
   const breakdown = invoiceChargeBreakdown(selectedInvoice);
 
+  const [clock, setClock] = useState({});
+  const [desk, setDesk] = useState(null);
+  const [mineOnly, setMineOnly] = useState(false);
+
   function load() {
     setLoading(true);
     const params = {};
@@ -77,6 +82,12 @@ export default function Disputes() {
         ? api.disputes.stats().catch(() => null)
         : Promise.resolve(null),
     ]).then(([list, s]) => {
+      // Each dispute's clock, whose move it is and the surcharge running on it.
+      Promise.resolve(api.disputeExtras?.overview?.()).then((o) => {
+        if (!o) return;
+        setClock(Object.fromEntries(o.disputes.map((d) => [d.id, d])));
+        setDesk(o.totals);
+      }).catch(() => {});
       setRows(list);
       if (s) setStats(s);
     }).finally(() => setLoading(false));
@@ -191,7 +202,9 @@ export default function Disputes() {
     { key: 'disputed_amount', header: 'Amount', render: (r) => fmtCurrency(r.disputed_amount) },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
     { key: 'ageing_days', header: 'Age', render: (r) => `${r.ageing_days ?? 0}d` },
-    { key: 'sla', header: 'SLA', render: (r) => (r.sla_breached || r.status === 'ESCALATED' ? <Badge status="ESCALATED" /> : 'OK') },
+    { key: 'sla', header: 'Clock', render: (r) => (clock[r.id] ? <SlaTag sla={clock[r.id].sla} sjvn /> : (r.sla_breached || r.status === 'ESCALATED' ? <Badge status="ESCALATED" /> : 'OK')) },
+    { key: 'lps', header: 'LPS at stake', render: (r) => (clock[r.id]?.lps_estimate?.amount > 0 ? <span style={{ color: clock[r.id].lps_estimate.running ? '#b45309' : 'inherit' }}>{fmtCurrency(clock[r.id].lps_estimate.amount)}</span> : '—') },
+    { key: 'group', header: 'Linked', render: (r) => (clock[r.id]?.group_ref ? <span title={clock[r.id].group_title || ''} style={{ fontSize: 12 }}>{clock[r.id].group_ref}</span> : '—') },
   ];
 
   return (
@@ -222,6 +235,17 @@ export default function Disputes() {
           <StatPill label="8–15" value={stats.aging?.['8_15'] ?? 0} />
           <StatPill label="16–30" value={stats.aging?.['16_30'] ?? 0} />
           <StatPill label="30+" value={stats.aging?.['30_plus'] ?? 0} />
+        </div>
+      )}
+
+      {desk && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
+          <button type="button" onClick={() => setMineOnly((v) => !v)} style={{ border: mineOnly ? '2px solid var(--primary)' : '2px solid transparent', borderRadius: 10, padding: 0, background: 'none', cursor: 'pointer', textAlign: 'left' }} aria-pressed={mineOnly}>
+            <StatPill label="Waiting on SJVN" value={desk.awaiting_me} sub={mineOnly ? 'Showing only these' : 'Click to show only these'} />
+          </button>
+          <StatPill label="Past the time limit" value={desk.breached} sub="The counterparty sees the overrun" />
+          <StatPill label="Escalated by the counterparty" value={desk.contested} sub="Outcome to be recorded" />
+          <StatPill label="LPS running on open amounts" value={fmtCurrency(desk.lps_running)} sub={desk.lps_per_day > 0 ? `Growing ${fmtCurrency(desk.lps_per_day)} a day` : undefined} />
         </div>
       )}
 
@@ -275,9 +299,9 @@ export default function Disputes() {
       <Card>
         <Table
           columns={columns}
-          rows={loading ? [] : rows}
+          rows={loading ? [] : rows.filter((r) => !mineOnly || clock[r.id]?.awaiting_me)}
           onRowClick={openDetail}
-          emptyMessage={loading ? 'Loading...' : 'No disputes found.'}
+          emptyMessage={loading ? 'Loading...' : mineOnly ? 'Nothing is waiting on SJVN.' : 'No disputes found.'}
         />
       </Card>
 
@@ -353,6 +377,9 @@ export default function Disputes() {
               <div className="detail-item"><span className="detail-label">Assignee</span><span className="detail-value">{detail.assignee?.name || 'Unassigned'}</span></div>
             </div>
             <p style={{ marginTop: 12 }}>{detail.issue_description}</p>
+            {/* The clock, the surcharge at stake, the submitter's answer to the resolution, linked disputes and the dossier. */}
+            <DisputeExtrasPanel key={`${detail.id}-${detail.updated_at}`} disputeId={detail.id} onChanged={refreshDetail} />
+
             {detail.resolution_notes && (
               <div className="inline-note"><strong>Resolution ({detail.resolution_outcome}):</strong> {detail.resolution_notes}
                 {detail.credit_amount > 0 && <> — Credit {fmtCurrency(detail.credit_amount)} (before {fmtCurrency(detail.before_total)} → after {fmtCurrency(detail.after_total)})</>}

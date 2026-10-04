@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
+import { unreadablePdf, UNREADABLE_PDF_MESSAGE } from '../services/fileChecks.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -496,8 +497,9 @@ router.post('/', requireRole(...SELLER_ROLES, ...BUYER_ROLES, ...REIA_WRITE), (r
   const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
   const id = newId('DIS');
   const disputeNo = genDisputeNo();
-  const slaAckDue = addDaysIso(now, SLA_ACK_DAYS);
-  const slaResolveDue = addDaysIso(now, SLA_RESOLVE_DAYS);
+  // The time SJVN has, from the contract; held as parameters so they can follow it.
+  const slaAckDue = addDaysIso(now, getParamNumber('dispute_sla_ack_days', SLA_ACK_DAYS));
+  const slaResolveDue = addDaysIso(now, getParamNumber('dispute_sla_resolve_days', SLA_RESOLVE_DAYS));
 
   // Auto-acknowledge immediately for submitter confidence
   const ackStatus = 'ACKNOWLEDGED';
@@ -807,6 +809,11 @@ router.post('/:id/evidence', upload.single('file'), (req, res) => {
   if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
   if (!canAccessDispute(req.user, dispute)) return res.status(403).json({ error: 'Not authorized' });
   if (!req.file) return res.status(400).json({ error: 'file required' });
+  // Evidence nobody can open is not evidence; it is turned away rather than filed.
+  if (unreadablePdf(req.file.path)) {
+    try { fs.unlinkSync(req.file.path); } catch { /* already gone */ }
+    return res.status(400).json({ error: `${req.file.originalname} ${UNREADABLE_PDF_MESSAGE}` });
+  }
 
   const docs = parseDocs(dispute.supporting_docs);
   const entry = {
@@ -904,3 +911,4 @@ router.post('/:id/status', requireRole(...REIA_WRITE), (req, res) => {
 });
 
 export default router;
+export { canAccessDispute, recordEvent, setInvoiceOpenDispute, uploadDir as disputeUploadDir };

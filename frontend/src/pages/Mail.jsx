@@ -1,26 +1,52 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { PageHeader, Modal, Field } from '../components/ui.jsx';
-
-// In-portal mail. What one person writes lands in the other's inbox here; it is
-// never sent out of the portal. Who may write to whom is decided by the server
-// (services/mail.js) — the address book only ever offers people this user may
-// reach, so a seller never sees another company's names.
+import {
+  Inbox, Send, Archive, Search, Reply, ReplyAll, Forward, ArchiveRestore, Trash2, Paperclip, X,
+  Mail as MailIcon, MailOpen, Plus, FileText, Settings, ArrowDownUp, Star, RotateCcw, Printer,
+  Table as TableIcon, Download, CheckCheck,
+} from 'lucide-react';
+import './Mail-elite.css';
 
 const FOLDERS = [
-  { key: 'INBOX', label: 'Inbox' },
-  { key: 'SENT', label: 'Sent' },
-  { key: 'ARCHIVE', label: 'Archive' },
+  { key: 'INBOX', label: 'Inbox', icon: Inbox },
+  { key: 'STARRED', label: 'Starred', icon: Star },
+  { key: 'DRAFTS', label: 'Drafts', icon: FileText },
+  { key: 'SENT', label: 'Sent', icon: Send },
+  { key: 'ARCHIVE', label: 'Archive', icon: Archive },
+  { key: 'TRASH', label: 'Trash', icon: Trash2 },
+];
+
+// What the server keeps of a formatted body; the toolbar offers nothing else.
+const EDITOR_MODULES = {
+  toolbar: [
+    [{ header: [1, 2, 3, false] }],
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }],
+    ['blockquote', 'link'],
+    ['clean'],
+  ],
+  table: true,
+};
+const EDITOR_FORMATS = [
+  'header', 'bold', 'italic', 'underline', 'strike', 'list', 'indent', 'blockquote', 'link',
+  'table', 'table-row', 'table-body', 'table-container',
 ];
 
 const MAX_FILES = 5;
 const MAX_FILE_MB = 10;
+const AUTOSAVE_MS = 1500;
+const PAGE = 50;
+const TRASH_DAYS = 30;
+
+const asDate = (iso) => new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso.replace(' ', 'T')}Z`);
 
 function when(iso) {
   if (!iso) return '';
-  // SQLite's datetime('now') is UTC without a zone; say so before parsing.
-  const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso.replace(' ', 'T')}Z`);
+  const d = asDate(iso);
   const today = new Date();
   const sameDay = d.toDateString() === today.toDateString();
   return sameDay
@@ -28,17 +54,102 @@ function when(iso) {
     : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' });
 }
 
-const fullWhen = (iso) => {
-  if (!iso) return '';
-  const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso.replace(' ', 'T')}Z`);
-  return d.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
-};
+const fullWhen = (iso) => (iso ? asDate(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '');
 
 const person = (p) => (p.company && p.company !== 'SJVN' ? `${p.name} (${p.company})` : p.name);
 
 const kb = (n) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 
-/** Pick people from the address book, as chips. */
+const esc = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+const linesToHtml = (text) => String(text || '').split('\n').map((l) => `<p>${esc(l) || '<br>'}</p>`).join('');
+
+const htmlOf = (m) => m.body_html || linesToHtml(m.body);
+
+// Quill quotes line by line, so each paragraph of the original becomes its own quoted line.
+const quoteHtml = (html) => html.replace(/<p(\s[^>]*)?>/g, '<blockquote>').replace(/<\/p>/g, '</blockquote>');
+
+const signatureHtml = (signature) => (signature ? `<p><br></p><p>--</p>${linesToHtml(signature)}` : '');
+
+const names = (list, kind) => list.filter((r) => r.kind === kind).map(person).join(', ');
+
+// The editor's own account of what was written, as plain tags: real nested
+// lists and tables, and a blank line that still takes up a line when read.
+const writtenHtml = (quill) => quill.getSemanticHTML().replace(/&nbsp;/g, ' ').replace(/<p><\/p>/g, '<p><br></p>');
+
+// What can be shown in the page without downloading. The type is decided here,
+// from the name — never taken from the upload — so nothing else is ever rendered.
+const PREVIEW_TYPES = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp' };
+const previewType = (filename) => PREVIEW_TYPES[String(filename || '').split('.').pop().toLowerCase()] || null;
+
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** A conversation as a page for the printer — or for the browser's "Save as PDF". */
+function printThread(thread, printedBy) {
+  const subject = thread.messages[thread.messages.length - 1]?.subject || '';
+  const messages = thread.messages.map((m) => `
+    <section>
+      <table class="head">
+        <tr><th>From</th><td>${esc(m.sender_name)} &lt;${esc(m.sender_email)}&gt;</td></tr>
+        <tr><th>To</th><td>${esc(names(m.recipients, 'TO') || '—')}</td></tr>
+        ${names(m.recipients, 'CC') ? `<tr><th>Cc</th><td>${esc(names(m.recipients, 'CC'))}</td></tr>` : ''}
+        ${names(m.recipients, 'BCC') ? `<tr><th>Bcc</th><td>${esc(names(m.recipients, 'BCC'))}</td></tr>` : ''}
+        <tr><th>Date</th><td>${esc(fullWhen(m.created_at))}</td></tr>
+        <tr><th>Subject</th><td>${esc(m.subject)}</td></tr>
+        ${m.attachments.length ? `<tr><th>Attachments</th><td>${esc(m.attachments.map((a) => `${a.filename} (${kb(a.size_bytes)})`).join(', '))}</td></tr>` : ''}
+      </table>
+      <div class="body">${htmlOf(m)}</div>
+    </section>`).join('');
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(subject)}</title><style>
+    body { font: 12pt/1.5 Georgia, 'Times New Roman', serif; color: #000; margin: 18mm; }
+    header { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 14px; }
+    header small { display: block; font: 9pt Arial, sans-serif; color: #444; }
+    h1 { font-size: 15pt; margin: 0; }
+    section { border-bottom: 1px solid #999; padding: 10px 0 14px; }
+    table.head { border-collapse: collapse; font: 10pt Arial, sans-serif; margin-bottom: 10px; }
+    table.head th { text-align: left; padding: 1px 14px 1px 0; vertical-align: top; color: #444; font-weight: normal; }
+    .body p, .body h1, .body h2, .body h3 { margin: 0; }
+    .body blockquote { margin: 0; padding-left: 10px; border-left: 2px solid #999; color: #444; }
+    .body table { border-collapse: collapse; margin: 6px 0; }
+    .body td, .body th { border: 1px solid #000; padding: 3px 8px; }
+    footer { margin-top: 12px; font: 9pt Arial, sans-serif; color: #444; }
+  </style></head><body>
+    <header><small>SJVN — RE Commercial &amp; Trading Platform · In-portal mail</small><h1>${esc(subject)}</h1></header>
+    ${messages}
+    <footer>Printed by ${esc(printedBy)} on ${esc(new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }))} · ${thread.messages.length} message${thread.messages.length === 1 ? '' : 's'}</footer>
+  </body></html>`;
+
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.className = 'mail-print-frame';
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  frame.onload = () => {
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+    setTimeout(() => frame.remove(), 60000);
+  };
+  frame.srcdoc = doc;
+  document.body.appendChild(frame);
+}
+
+const Avatar = ({ name }) => {
+  const initials = name ? name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : '?';
+  const hash = name ? name.split('').reduce((acc, char) => char.charCodeAt(0) + ((acc << 5) - acc), 0) : 0;
+  const h = Math.abs(hash) % 360;
+  return (
+    <div className="mail-avatar" style={{ background: `linear-gradient(135deg, hsl(${h}, 70%, 55%), hsl(${(h+40)%360}, 80%, 45%))` }}>
+      {initials}
+    </div>
+  );
+};
+
 function RecipientPicker({ id, value, onChange, placeholder }) {
   const [q, setQ] = useState('');
   const [options, setOptions] = useState([]);
@@ -67,9 +178,9 @@ function RecipientPicker({ id, value, onChange, placeholder }) {
     <div className="mail-picker" ref={wrap}>
       <div className="mail-chips" onClick={() => wrap.current?.querySelector('input')?.focus()}>
         {value.map((v) => (
-          <span key={v.id} className="mail-chip">
+          <span key={v.id} className="mail-chip" style={{ background: 'var(--mail-surface)' }}>
             {person(v)}
-            <button type="button" aria-label={`Remove ${v.name}`} onClick={() => onChange(value.filter((x) => x.id !== v.id))}>×</button>
+            <button type="button" aria-label={`Remove ${v.name}`} onClick={() => onChange(value.filter((x) => x.id !== v.id))}><X size={14} /></button>
           </span>
         ))}
         <input
@@ -107,32 +218,245 @@ function RecipientPicker({ id, value, onChange, placeholder }) {
 function Compose({ draft, onClose, onSent }) {
   const [to, setTo] = useState(draft.to || []);
   const [cc, setCc] = useState(draft.cc || []);
+  const [bcc, setBcc] = useState(draft.bcc || []);
   const [showCc, setShowCc] = useState((draft.cc || []).length > 0);
+  const [showBcc, setShowBcc] = useState((draft.bcc || []).length > 0);
   const [subject, setSubject] = useState(draft.subject || '');
-  const [body, setBody] = useState(draft.body || '');
-  const [files, setFiles] = useState([]);
+  const [body, setBody] = useState(draft.bodyHtml || '');
+  const [kept, setKept] = useState(draft.forwardAttachments || []);
+  const [files, setFiles] = useState(draft.files || []);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(draft.id ? 'Draft' : '');
+  const editor = useRef(null);
 
-  function addFiles(list) {
-    const next = [...files, ...Array.from(list || [])];
-    const big = next.find((f) => f.size > MAX_FILE_MB * 1024 * 1024);
+  // Autosave: one save at a time, each carrying whatever is on screen when it runs.
+  const draftId = useRef(draft.id || null);
+  const dirty = useRef(false);
+  const stopped = useRef(false);
+  const chain = useRef(Promise.resolve());
+  const timer = useRef(null);
+  const fields = useRef(null);
+  fields.current = { to, cc, bcc, subject, kept };
+
+  const quill = () => editor.current?.getEditor();
+
+  const payload = () => {
+    const f = fields.current;
+    return {
+      to: f.to.map((x) => x.id), cc: f.cc.map((x) => x.id), bcc: f.bcc.map((x) => x.id),
+      subject: f.subject, body_html: quill() ? writtenHtml(quill()) : '',
+      reply_to: draft.replyTo || null, forward_attachments: f.kept.map((a) => a.id),
+    };
+  };
+
+  const save = useCallback(() => {
+    chain.current = chain.current.then(async () => {
+      if (stopped.current || !dirty.current) return;
+      dirty.current = false;
+      try {
+        const d = draftId.current
+          ? await api.mail.updateDraft(draftId.current, payload())
+          : await api.mail.createDraft(payload());
+        draftId.current = d.id;
+        setSaved(`Draft saved ${new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`);
+      } catch {
+        dirty.current = true;
+        setSaved('Draft not saved — will retry');
+      }
+    });
+    return chain.current;
+  // payload reads refs only, so the one save function serves the whole life of the composer.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const touch = useCallback(() => {
+    dirty.current = true;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(save, AUTOSAVE_MS);
+  }, [save]);
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const edit = (set) => (v) => { set(v); touch(); };
+
+  // A file is uploaded to the draft as soon as it is chosen, so it is still
+  // there if the message is finished another day.
+  async function addFiles(list) {
+    const chosen = Array.from(list || []);
+    if (!chosen.length) return;
+    const big = chosen.find((f) => f.size > MAX_FILE_MB * 1024 * 1024);
     if (big) { setError(`${big.name} is over ${MAX_FILE_MB} MB`); return; }
-    if (next.length > MAX_FILES) { setError(`At most ${MAX_FILES} attachments`); return; }
+    if (files.length + chosen.length > MAX_FILES) { setError(`At most ${MAX_FILES} attachments`); return; }
     setError('');
-    setFiles(next);
+    setUploading(true);
+    try {
+      if (!draftId.current) { dirty.current = true; await save(); }
+      if (!draftId.current) throw new Error('The draft could not be saved, so the file was not attached');
+      const d = await api.mail.addDraftFiles(draftId.current, chosen);
+      setFiles(d.files);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removeFile(f) {
+    try {
+      const d = await api.mail.removeDraftFile(draftId.current, f.id);
+      setFiles(d.files);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  }
+
+  // The table buttons act on wherever the cursor is; mousedown is held back so
+  // pressing one does not take the cursor out of the editor first.
+  const table = (fn) => (e) => {
+    e.preventDefault();
+    const q = quill();
+    if (!q) return;
+    q.focus();
+    fn(q.getModule('table'));
+  };
+
+  // Closing keeps what was written; only Discard throws it away.
+  async function close() {
+    clearTimeout(timer.current);
+    await save();
+    onClose(draftId.current ? 'Saved to Drafts.' : '');
+  }
+
+  async function discard() {
+    stopped.current = true;
+    clearTimeout(timer.current);
+    await chain.current;
+    if (draftId.current) await api.mail.removeDraft(draftId.current).catch(() => {});
+    onClose(draftId.current ? 'Draft discarded.' : '');
   }
 
   async function submit(e) {
     e.preventDefault();
     setError('');
     if (!to.length) { setError('Choose at least one person to send to'); return; }
+    const q = quill();
+    if (!q.getText().trim()) { setError('A message needs a body'); return; }
     setBusy(true);
+    stopped.current = true;
+    clearTimeout(timer.current);
     try {
+      await chain.current;
+      const p = payload();
       await api.mail.send({
-        to: to.map((x) => x.id), cc: cc.map((x) => x.id), subject, body, replyTo: draft.replyTo, files,
+        to: p.to, cc: p.cc, bcc: p.bcc, subject, bodyHtml: p.body_html,
+        replyTo: draft.replyTo, forwardAttachments: p.forward_attachments, draftId: draftId.current,
       });
       onSent();
+    } catch (err) {
+      stopped.current = false;
+      setError(err.response?.data?.error || err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={close} title={draft.title || 'New message'} width={760}>
+      <form onSubmit={submit} className="mail-compose">
+        {error && <div className="alert alert-error" role="alert">{error}</div>}
+        <Field label="To" htmlFor="mail-to">
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+            <div style={{ flex: 1 }}>
+              <RecipientPicker id="mail-to" value={to} onChange={edit(setTo)} placeholder="Type a name, email or company" />
+            </div>
+            {!showCc && <button type="button" className="btn-link" onClick={() => setShowCc(true)}>Cc</button>}
+            {!showBcc && <button type="button" className="btn-link" onClick={() => setShowBcc(true)}>Bcc</button>}
+          </div>
+        </Field>
+        {showCc && (
+          <Field label="Cc" htmlFor="mail-cc">
+            <RecipientPicker id="mail-cc" value={cc} onChange={edit(setCc)} placeholder="Copy someone in" />
+          </Field>
+        )}
+        {showBcc && (
+          <Field label="Bcc" htmlFor="mail-bcc">
+            <RecipientPicker id="mail-bcc" value={bcc} onChange={edit(setBcc)} placeholder="Copy someone in without the others seeing" />
+          </Field>
+        )}
+        <Field label="Subject" required htmlFor="mail-subject">
+          <input id="mail-subject" className="form-control" required maxLength={200} value={subject} onChange={(e) => edit(setSubject)(e.target.value)} />
+        </Field>
+        {/* Quill renders a contenteditable, not a form control, so the region
+            carries the name instead of a <label htmlFor>. */}
+        <div className="field">
+          <span className="field-label" id="mail-body-label">
+            Message<span aria-hidden="true" style={{ color: 'var(--red)' }}> *</span>
+          </span>
+          <div role="group" aria-labelledby="mail-body-label" className="mail-editor">
+            <ReactQuill
+              ref={editor}
+              theme="snow"
+              value={body}
+              onChange={(v, _delta, source) => { setBody(v); if (source === 'user') touch(); }}
+              modules={EDITOR_MODULES}
+              formats={EDITOR_FORMATS}
+            />
+            <div className="mail-table-tools" role="toolbar" aria-label="Table">
+              <TableIcon size={14} aria-hidden="true" />
+              <button type="button" onMouseDown={table((t) => t.insertTable(3, 3))}>Insert table</button>
+              <span className="sep" />
+              <button type="button" onMouseDown={table((t) => t.insertRowBelow())}>+ Row</button>
+              <button type="button" onMouseDown={table((t) => t.insertColumnRight())}>+ Column</button>
+              <button type="button" onMouseDown={table((t) => t.deleteRow())}>− Row</button>
+              <button type="button" onMouseDown={table((t) => t.deleteColumn())}>− Column</button>
+              <button type="button" onMouseDown={table((t) => t.deleteTable())}>Delete table</button>
+            </div>
+          </div>
+        </div>
+        <div className="mail-files" style={{ padding: '0 4px' }}>
+          {kept.map((a) => (
+            <span key={a.id} className="mail-chip" style={{ background: 'var(--mail-surface)' }}>
+              <Paperclip size={14} /> {a.filename} <small>{kb(a.size_bytes)}</small>
+              <button type="button" aria-label={`Remove ${a.filename}`} onClick={() => edit(setKept)(kept.filter((x) => x.id !== a.id))}><X size={14} /></button>
+            </span>
+          ))}
+          {files.map((f) => (
+            <span key={f.id} className="mail-chip" style={{ background: 'var(--mail-surface)' }}>
+              <Paperclip size={14} /> {f.filename} <small>{kb(f.size_bytes)}</small>
+              <button type="button" aria-label={`Remove ${f.filename}`} onClick={() => removeFile(f)}><X size={14} /></button>
+            </span>
+          ))}
+          <label className="btn btn-sm" style={{ cursor: 'pointer', background: 'var(--mail-surface)', border: '1px solid var(--border)' }}>
+            <Paperclip size={14} style={{ marginRight: 6 }} /> {uploading ? 'Attaching…' : 'Attach files'}
+            <input type="file" multiple hidden disabled={uploading} onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+          </label>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 24, alignItems: 'center' }}>
+          <button type="submit" className="btn btn-primary" disabled={busy || uploading} style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)', border: 'none' }}>
+            {busy ? 'Sending…' : 'Send Message'}
+          </button>
+          <button type="button" className="btn" onClick={close} disabled={busy || uploading}>Save &amp; close</button>
+          <button type="button" className="btn" onClick={discard} disabled={busy || uploading}>Discard</button>
+          <span className="mail-draft-note" role="status" style={{ marginLeft: 'auto' }}>{saved}</span>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function SignatureSettings({ value, onClose, onSaved }) {
+  const [text, setText] = useState(value);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const r = await api.mail.saveSettings({ signature: text });
+      onSaved(r.signature);
     } catch (err) {
       setError(err.response?.data?.error || err.message);
     } finally {
@@ -141,82 +465,169 @@ function Compose({ draft, onClose, onSent }) {
   }
 
   return (
-    <Modal open onClose={onClose} title={draft.replyTo ? 'Reply' : 'New message'} width={720}>
-      <form onSubmit={submit} className="mail-compose">
+    <Modal open onClose={onClose} title="Mail settings" width={560}>
+      <form onSubmit={submit}>
         {error && <div className="alert alert-error" role="alert">{error}</div>}
-        <Field label="To" htmlFor="mail-to">
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-            <div style={{ flex: 1 }}>
-              <RecipientPicker id="mail-to" value={to} onChange={setTo} placeholder="Type a name, email or company" />
-            </div>
-            {!showCc && <button type="button" className="btn-link" onClick={() => setShowCc(true)}>Cc</button>}
-          </div>
+        <Field label="Signature">
+          <textarea
+            rows={6} maxLength={2000} value={text} onChange={(e) => setText(e.target.value)}
+            placeholder={'Your name\nDesignation, department\nPhone'}
+          />
         </Field>
-        {showCc && (
-          <Field label="Cc" htmlFor="mail-cc">
-            <RecipientPicker id="mail-cc" value={cc} onChange={setCc} placeholder="Copy someone in" />
-          </Field>
-        )}
-        <Field label="Subject" required htmlFor="mail-subject">
-          <input id="mail-subject" required maxLength={200} value={subject} onChange={(e) => setSubject(e.target.value)} />
-        </Field>
-        <Field label="Message" required htmlFor="mail-body">
-          <textarea id="mail-body" required rows={10} maxLength={20000} value={body} onChange={(e) => setBody(e.target.value)} />
-        </Field>
-        <div className="mail-files">
-          {files.map((f, i) => (
-            <span key={`${f.name}-${i}`} className="mail-chip">
-              📎 {f.name} <small>{kb(f.size)}</small>
-              <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setFiles(files.filter((_, j) => j !== i))}>×</button>
-            </span>
-          ))}
-          <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
-            Attach files
-            <input type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
-          </label>
-          <small style={{ color: 'var(--text-light)' }}>Up to {MAX_FILES} files, {MAX_FILE_MB} MB each</small>
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-          <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Sending…' : 'Send'}</button>
-          <button type="button" className="btn" onClick={onClose}>Discard</button>
+        <div className="mail-draft-note">Added under every new message, reply and forward. Leave it empty for none.</div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+          <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
         </div>
       </form>
     </Modal>
   );
 }
 
+/** A PDF or picture shown in the page, with the download still one click away. */
+function AttachmentPreview({ file, onClose }) {
+  const [url, setUrl] = useState('');
+  const [blob, setBlob] = useState(null);
+  const [error, setError] = useState('');
+  const type = previewType(file.filename);
+
+  useEffect(() => {
+    let made = '';
+    let live = true;
+    api.mail.attachment(file.id)
+      .then((b) => {
+        if (!live) return;
+        made = URL.createObjectURL(new Blob([b], { type }));
+        setBlob(b);
+        setUrl(made);
+      })
+      .catch((e) => { if (live) setError(e.response?.status === 404 ? 'That attachment is no longer available' : e.message); });
+    return () => { live = false; if (made) URL.revokeObjectURL(made); };
+  }, [file.id, type]);
+
+  return (
+    <Modal open onClose={onClose} title={file.filename} width={980}>
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      {!url && !error && <div className="mail-empty">Loading…</div>}
+      {url && (
+        <div className="mail-preview">
+          {type === 'application/pdf'
+            ? <iframe src={url} title={file.filename} />
+            : <img src={url} alt={file.filename} />}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+        <button type="button" className="btn btn-primary" disabled={!blob} onClick={() => saveBlob(blob, file.filename)}>
+          <Download size={14} style={{ marginRight: 6 }} /> Download
+        </button>
+        <button type="button" className="btn" onClick={onClose}>Close</button>
+      </div>
+    </Modal>
+  );
+}
+
+/** For the sender: who has opened the message, and when. */
+function Receipts({ recipients }) {
+  const opened = recipients.filter((r) => r.opened_at);
+  return (
+    <details className="mail-receipts">
+      <summary>
+        <CheckCheck size={14} /> Opened by {opened.length} of {recipients.length}
+      </summary>
+      <ul>
+        {recipients.map((r) => (
+          <li key={r.id} className={r.opened_at ? 'opened' : ''}>
+            <span>{person(r)}</span>
+            <span>{r.opened_at ? fullWhen(r.opened_at) : 'Not opened yet'}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+const EMPTY = {
+  INBOX: 'You have no new messages.',
+  STARRED: 'Nothing starred. Star a message to keep it close at hand.',
+  DRAFTS: 'No drafts. A message you start and do not send is kept here.',
+  SENT: 'You have not sent anything yet.',
+  ARCHIVE: 'Nothing archived.',
+  TRASH: 'The trash is empty.',
+};
+
 export default function Mail() {
   const { user } = useAuth();
   const [folder, setFolder] = useState('INBOX');
   const [q, setQ] = useState('');
   const [items, setItems] = useState([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [shown, setShown] = useState(PAGE);
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState(null);
   const [thread, setThread] = useState(null);
   const [compose, setCompose] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [onlyUnread, setOnlyUnread] = useState(false);
+  const [sort, setSort] = useState('newest');
+  const [counts, setCounts] = useState({ unread: 0, drafts: 0 });
+  const [signature, setSignature] = useState('');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
+  const [preview, setPreview] = useState(null);
+
+  const isDrafts = folder === 'DRAFTS';
+  const isTrash = folder === 'TRASH';
+  const canFilterUnread = folder === 'INBOX' || folder === 'ARCHIVE';
 
   const load = useCallback(() => {
     setLoading(true);
-    api.mail.list({ box: folder, q: q || undefined })
-      .then((r) => { setItems(r || []); setError(''); })
+    const list = folder === 'DRAFTS'
+      ? api.mail.drafts({ q: q || undefined })
+      : api.mail.list({
+        box: folder, q: q || undefined, sort, limit: shown + 1,
+        unread: onlyUnread && (folder === 'INBOX' || folder === 'ARCHIVE') ? 1 : undefined,
+      });
+    list
+      .then((r) => {
+        const rows = r || [];
+        // One more than a page is asked for, to know whether there is another page.
+        const page = folder === 'DRAFTS' ? rows : rows.slice(0, shown);
+        setItems(page);
+        setHasMore(folder !== 'DRAFTS' && rows.length > shown);
+        // A message that has left the folder cannot stay ticked.
+        setSelected((sel) => {
+          const here = new Set(page.map((m) => m.id));
+          const next = new Set([...sel].filter((id) => here.has(id)));
+          return next.size === sel.size ? sel : next;
+        });
+        setError('');
+      })
       .catch((e) => setError(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
-  }, [folder, q]);
+    api.mail.unreadCount().then(setCounts).catch(() => {});
+  }, [folder, q, sort, onlyUnread, shown]);
+
+  useEffect(() => {
+    api.mail.settings().then((r) => setSignature(r.signature || '')).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(load, q ? 250 : 0);
     return () => clearTimeout(t);
   }, [load, q]);
 
-  // New mail turns up without a reload.
   useEffect(() => {
     const i = setInterval(() => { if (!document.hidden) load(); }, 30000);
     return () => clearInterval(i);
   }, [load]);
 
+  // A different folder, search or filter starts again from the first page.
+  useEffect(() => { setShown(PAGE); setSelected(new Set()); }, [folder, q, sort, onlyUnread]);
+
   const tellHeader = () => window.dispatchEvent(new Event('mail:changed'));
+  const fail = (e) => setError(e.response?.data?.error || e.message);
+  const closeReader = () => { setOpenId(null); setThread(null); };
 
   async function openMessage(id) {
     setOpenId(id);
@@ -225,9 +636,10 @@ export default function Mail() {
       const t = await api.mail.get(id);
       setThread(t);
       setItems((list) => list.map((m) => (m.id === id ? { ...m, is_read: true } : m)));
+      api.mail.unreadCount().then(setCounts).catch(() => {});
       tellHeader();
     } catch (e) {
-      setError(e.response?.data?.error || e.message);
+      fail(e);
     }
   }
 
@@ -235,22 +647,51 @@ export default function Mail() {
     try {
       await fn();
       setNotice(msg);
-      setOpenId(null); setThread(null);
+      closeReader();
       load(); tellHeader();
     } catch (e) {
-      setError(e.response?.data?.error || e.message);
+      fail(e);
     }
   }
 
-  async function download(a) {
+  async function toggleStar(id, starred) {
     try {
-      const blob = await api.mail.attachment(a.id);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = a.filename;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      await api.mail.setStarred(id, starred);
+      setItems((list) => (folder === 'STARRED' && !starred
+        ? list.filter((m) => m.id !== id)
+        : list.map((m) => (m.id === id ? { ...m, is_starred: starred } : m))));
+      setThread((t) => (t && t.id === id ? { ...t, starred } : t));
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  async function bulk(action, msg) {
+    const ids = [...selected];
+    if (action === 'purge' && !window.confirm(`Delete ${ids.length} message${ids.length === 1 ? '' : 's'} for good? This cannot be undone.`)) return;
+    try {
+      const r = await api.mail.bulk(ids, action);
+      setNotice(`${r.done} message${r.done === 1 ? '' : 's'} ${msg}.`);
+      setSelected(new Set());
+      if (ids.includes(openId)) closeReader();
+      load(); tellHeader();
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  const toggleSelected = (id) => setSelected((sel) => {
+    const next = new Set(sel);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const allSelected = items.length > 0 && items.every((m) => selected.has(m.id));
+
+  async function openAttachment(a) {
+    if (previewType(a.filename)) { setPreview(a); return; }
+    try {
+      saveBlob(await api.mail.attachment(a.id), a.filename);
     } catch (e) {
       setError(e.response?.status === 404 ? 'That attachment is no longer available' : e.message);
     }
@@ -258,24 +699,54 @@ export default function Mail() {
 
   const last = thread?.messages?.[thread.messages.length - 1];
 
-  const replyDraft = useMemo(() => {
+  // Reply, reply to all and forward, each opening on the last message of the thread.
+  const drafts = useMemo(() => {
     if (!last) return null;
-    const subject = /^re:/i.test(last.subject) ? last.subject : `Re: ${last.subject}`;
-    const quoted = `\n\n— On ${fullWhen(last.created_at)}, ${last.sender_name} wrote:\n${last.body.split('\n').map((l) => `> ${l}`).join('\n')}`;
+    const sig = signatureHtml(signature);
+    const reSubject = /^re:/i.test(last.subject) ? last.subject : `Re: ${last.subject}`;
+    const quoted = `<p><br></p>${sig}<p><br></p><p>On ${esc(fullWhen(last.created_at))}, ${esc(last.sender_name)} wrote:</p>${quoteHtml(htmlOf(last))}`;
+    const mine = last.sender_id === user?.id;
     const sender = { id: last.sender_id, name: last.sender_name, email: last.sender_email };
-    const others = last.recipients.filter((r) => r.id !== user?.id && r.id !== last.sender_id);
+    // A blind copy stays blind: it is never carried into a reply.
+    const others = last.recipients.filter((r) => r.kind !== 'BCC' && r.id !== user?.id && r.id !== last.sender_id);
+    const to = (list) => list.filter((r) => r.kind === 'TO');
+    const cc = others.filter((r) => r.kind === 'CC');
+    const forwarded = [
+      '<p><br></p>', sig, '<p><br></p>',
+      '<p>---------- Forwarded message ----------</p>',
+      `<p>From: ${esc(last.sender_name)}</p>`,
+      `<p>Date: ${esc(fullWhen(last.created_at))}</p>`,
+      `<p>Subject: ${esc(last.subject)}</p>`,
+      `<p>To: ${esc(names(last.recipients, 'TO') || '—')}</p>`,
+      names(last.recipients, 'CC') ? `<p>Cc: ${esc(names(last.recipients, 'CC'))}</p>` : '',
+      '<p><br></p>', htmlOf(last),
+    ].join('');
     return {
       reply: {
-        replyTo: last.id, subject, body: quoted,
-        to: last.sender_id === user?.id ? last.recipients.filter((r) => r.kind === 'TO') : [sender],
+        title: 'Reply', replyTo: last.id, subject: reSubject, bodyHtml: quoted,
+        to: mine ? to(last.recipients.filter((r) => r.id !== user?.id)) : [sender],
       },
       replyAll: {
-        replyTo: last.id, subject, body: quoted,
-        to: last.sender_id === user?.id ? last.recipients.filter((r) => r.kind === 'TO') : [sender, ...others.filter((r) => r.kind === 'TO')],
-        cc: others.filter((r) => r.kind === 'CC'),
+        title: 'Reply to all', replyTo: last.id, subject: reSubject, bodyHtml: quoted,
+        to: mine ? to(others) : [sender, ...to(others)],
+        cc,
       },
+      forward: {
+        title: 'Forward', subject: /^fwd?:/i.test(last.subject) ? last.subject : `Fwd: ${last.subject}`,
+        bodyHtml: forwarded, forwardAttachments: last.attachments,
+      },
+      // Reply-all is only worth offering when it reaches someone Reply does not.
+      hasOthers: others.length > 0 && !(mine && cc.length === 0),
     };
-  }, [last, user?.id]);
+  }, [last, user?.id, signature]);
+
+  const startCompose = (d) => { setNotice(''); setCompose(d); };
+
+  const openDraft = (d) => startCompose({
+    id: d.id, title: 'Draft', to: d.to, cc: d.cc, bcc: d.bcc, subject: d.subject,
+    bodyHtml: d.body_html || linesToHtml(d.body), replyTo: d.reply_to,
+    forwardAttachments: d.forward_attachments, files: d.files,
+  });
 
   return (
     <div>
@@ -284,123 +755,265 @@ export default function Mail() {
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
 
-      <div className="mail-shell">
-        <aside className="mail-folders">
-          <button type="button" className="btn btn-primary" style={{ width: '100%' }} onClick={() => { setNotice(''); setCompose({}); }}>
-            New message
+      <div className="elite-mail-wrapper">
+        <aside className="mail-sidebar">
+          <button type="button" className="mail-compose-btn" onClick={() => startCompose({ bodyHtml: signature ? `<p><br></p>${signatureHtml(signature)}` : '' })}>
+            <Plus size={18} />
+            <span>New Message</span>
           </button>
+
+          <div className="mail-nav-title">Folders</div>
           <nav aria-label="Mail folders">
             {FOLDERS.map((f) => (
-              <button
-                type="button" key={f.key}
-                className={`mail-folder${folder === f.key ? ' active' : ''}`}
-                aria-current={folder === f.key ? 'page' : undefined}
-                onClick={() => { setFolder(f.key); setOpenId(null); setThread(null); }}
+              <div
+                key={f.key}
+                className={`mail-nav-item ${folder === f.key ? 'active' : ''}`}
+                onClick={() => { setItems([]); setHasMore(false); setFolder(f.key); closeReader(); }}
               >
-                {f.label}
-                {f.key === 'INBOX' && folder === 'INBOX' && items.some((m) => !m.is_read) && (
-                  <span className="mail-count">{items.filter((m) => !m.is_read).length}</span>
-                )}
-              </button>
+                <div className="left">
+                  <f.icon size={18} />
+                  <span>{f.label}</span>
+                </div>
+                {f.key === 'INBOX' && counts.unread > 0 && <div className="mail-nav-badge">{counts.unread}</div>}
+                {f.key === 'DRAFTS' && counts.drafts > 0 && <div className="mail-nav-badge muted">{counts.drafts}</div>}
+              </div>
             ))}
           </nav>
+
+          <div className="mail-nav-item mail-nav-settings" onClick={() => setSettingsOpen(true)}>
+            <div className="left">
+              <Settings size={18} />
+              <span>Signature</span>
+            </div>
+          </div>
         </aside>
 
-        <section className={`mail-list${openId ? ' has-open' : ''}`} aria-label={`${folder.toLowerCase()} messages`}>
-          <div className="mail-search">
-            <input type="search" placeholder="Search subject, text or sender" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search mail" />
-          </div>
-          {loading && !items.length && <div className="mail-empty">Loading…</div>}
-          {!loading && !items.length && (
-            <div className="mail-empty">
-              {q ? 'Nothing matches that search.' : folder === 'INBOX' ? 'Your inbox is empty.' : folder === 'SENT' ? 'You have not sent anything yet.' : 'Nothing archived.'}
+        <section className="mail-list-col">
+          <div className="mail-list-header">
+            <h2>{FOLDERS.find(f => f.key === folder)?.label}</h2>
+            <div className="mail-search-box">
+              <Search size={16} />
+              <input type="search" placeholder="Search messages..." value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search mail" />
             </div>
-          )}
-          {items.map((m) => (
-            <button
-              type="button" key={m.id}
-              className={`mail-row${m.is_read || folder === 'SENT' ? '' : ' unread'}${openId === m.id ? ' active' : ''}`}
-              onClick={() => openMessage(m.id)}
-            >
-              <div className="mail-row-top">
-                <span className="mail-row-who">
-                  {folder === 'SENT' ? `To: ${m.recipients.map((r) => r.name).join(', ') || '—'}` : m.sender_name}
-                </span>
-                <span className="mail-row-when">{when(m.created_at)}</span>
+            {!isDrafts && (
+              <div className="mail-list-tools">
+                <input
+                  type="checkbox" className="mail-check" aria-label="Select all shown"
+                  checked={allSelected} disabled={!items.length}
+                  onChange={() => setSelected(allSelected ? new Set() : new Set(items.map((m) => m.id)))}
+                />
+                {canFilterUnread && (
+                  <>
+                    <button type="button" className={`mail-filter ${onlyUnread ? '' : 'active'}`} aria-pressed={!onlyUnread} onClick={() => setOnlyUnread(false)}>All</button>
+                    <button type="button" className={`mail-filter ${onlyUnread ? 'active' : ''}`} aria-pressed={onlyUnread} onClick={() => setOnlyUnread(true)}>Unread</button>
+                  </>
+                )}
+                <button type="button" className="mail-filter mail-sort" onClick={() => setSort(sort === 'newest' ? 'oldest' : 'newest')} title="Change the order">
+                  <ArrowDownUp size={13} /> {sort === 'newest' ? 'Newest first' : 'Oldest first'}
+                </button>
               </div>
-              <div className="mail-row-subject">
-                {m.attachment_count > 0 && <span aria-label="has attachments">📎 </span>}
-                {m.subject}
+            )}
+            {selected.size > 0 && (
+              <div className="mail-bulk" role="toolbar" aria-label="Actions on the selected messages">
+                <strong>{selected.size} selected</strong>
+                {isTrash ? (
+                  <>
+                    <button type="button" onClick={() => bulk('restore', 'restored')}><RotateCcw size={13} /> Restore</button>
+                    <button type="button" className="danger" onClick={() => bulk('purge', 'deleted for good')}><Trash2 size={13} /> Delete forever</button>
+                  </>
+                ) : (
+                  <>
+                    {folder !== 'SENT' && <button type="button" onClick={() => bulk('read', 'marked read')}><MailOpen size={13} /> Read</button>}
+                    {folder !== 'SENT' && <button type="button" onClick={() => bulk('unread', 'marked unread')}><MailIcon size={13} /> Unread</button>}
+                    {folder === 'INBOX' && <button type="button" onClick={() => bulk('archive', 'archived')}><Archive size={13} /> Archive</button>}
+                    {folder === 'ARCHIVE' && <button type="button" onClick={() => bulk('unarchive', 'moved to the inbox')}><ArchiveRestore size={13} /> To inbox</button>}
+                    <button type="button" onClick={() => bulk(folder === 'STARRED' ? 'unstar' : 'star', folder === 'STARRED' ? 'unstarred' : 'starred')}><Star size={13} /> {folder === 'STARRED' ? 'Unstar' : 'Star'}</button>
+                    <button type="button" className="danger" onClick={() => bulk('trash', 'moved to the trash')}><Trash2 size={13} /> Delete</button>
+                  </>
+                )}
               </div>
-              <div className="mail-row-preview">{m.preview}</div>
-            </button>
-          ))}
+            )}
+          </div>
+
+          <div className="mail-list-scroll">
+            {isTrash && items.length > 0 && (
+              <div className="mail-trash-note">Messages are removed from the trash after {TRASH_DAYS} days.</div>
+            )}
+            {loading && !items.length && <div className="mail-empty">Loading messages...</div>}
+            {!loading && !items.length && (
+              <div className="mail-empty">
+                {q ? 'Nothing matches that search.' : onlyUnread && canFilterUnread ? 'Nothing unread.' : EMPTY[folder]}
+              </div>
+            )}
+            {isDrafts && items.map((d) => (
+              <div key={d.id} className="mail-item" onClick={() => openDraft(d)}>
+                <div className="mail-item-header">
+                  <span className="mail-item-sender">
+                    <span className="mail-draft-tag">Draft</span> {d.to?.length ? `To: ${d.to.map((r) => r.name).join(', ')}` : 'No recipient yet'}
+                  </span>
+                  <span className="mail-item-time">{when(d.updated_at)}</span>
+                </div>
+                <div className="mail-item-subject">
+                  {(d.files?.length > 0 || d.forward_attachments?.length > 0) && <Paperclip size={12} style={{ display: 'inline', marginRight: 4 }} />}
+                  {d.subject || '(no subject)'}
+                </div>
+                <div className="mail-item-preview">{d.preview}</div>
+              </div>
+            ))}
+            {!isDrafts && items.map((m) => (
+              <div
+                key={m.id}
+                className={`mail-item with-check ${m.is_read || m.box === 'SENT' ? '' : 'unread'} ${openId === m.id ? 'active' : ''} ${selected.has(m.id) ? 'selected' : ''}`}
+                onClick={() => openMessage(m.id)}
+              >
+                <input
+                  type="checkbox" className="mail-check" aria-label={`Select ${m.subject}`}
+                  checked={selected.has(m.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggleSelected(m.id)}
+                />
+                <div className="mail-item-main">
+                  <div className="mail-item-header">
+                    <span className="mail-item-sender">
+                      {m.box === 'SENT' ? `To: ${m.recipients.map((r) => r.name).join(', ') || '—'}` : m.sender_name}
+                    </span>
+                    <span className="mail-item-time">{when(m.created_at)}</span>
+                  </div>
+                  <div className="mail-item-subject">
+                    {m.attachment_count > 0 && <Paperclip size={12} style={{ display: 'inline', marginRight: 4 }} />}
+                    {m.subject}
+                  </div>
+                  <div className="mail-item-preview">{m.preview}</div>
+                </div>
+                {!isTrash && (
+                  <button
+                    type="button" className={`mail-star ${m.is_starred ? 'on' : ''}`}
+                    aria-label={m.is_starred ? 'Remove star' : 'Star'} aria-pressed={!!m.is_starred}
+                    onClick={(e) => { e.stopPropagation(); toggleStar(m.id, !m.is_starred); }}
+                  >
+                    <Star size={15} fill={m.is_starred ? 'currentColor' : 'none'} />
+                  </button>
+                )}
+              </div>
+            ))}
+            {hasMore && (
+              <button type="button" className="mail-more" disabled={loading} onClick={() => setShown(shown + PAGE)}>
+                {loading ? 'Loading…' : 'Load more'}
+              </button>
+            )}
+          </div>
         </section>
 
-        <section className={`mail-read${openId ? ' open' : ''}`} aria-label="Message">
-          {!openId && <div className="mail-empty">Choose a message to read it.</div>}
-          {openId && !thread && <div className="mail-empty">Loading…</div>}
+        <section className="mail-read-col">
+          {!openId && (
+            <div className="mail-read-empty">
+              <MailIcon size={64} strokeWidth={1} />
+              <p>Select a message to read</p>
+            </div>
+          )}
+          {openId && !thread && (
+            <div className="mail-read-empty">
+              <p>Loading thread...</p>
+            </div>
+          )}
           {thread && (
             <>
-              <div className="mail-read-bar">
-                <button type="button" className="btn btn-sm mail-back" onClick={() => { setOpenId(null); setThread(null); }}>← Back</button>
-                <h2>{last?.subject}</h2>
+              <div className="mail-read-header">
+                <h2 className="mail-read-subject">{last?.subject}</h2>
                 <div className="mail-read-actions">
-                  <button type="button" className="btn btn-sm" onClick={() => setCompose(replyDraft.reply)}>Reply</button>
-                  {(last?.recipients.length || 0) > 1 && (
-                    <button type="button" className="btn btn-sm" onClick={() => setCompose(replyDraft.replyAll)}>Reply all</button>
+                  {!thread.trashed && (
+                    <>
+                      <button className="mail-action-btn" title="Reply" onClick={() => startCompose(drafts.reply)}><Reply size={18} /></button>
+                      {drafts.hasOthers && (
+                        <button className="mail-action-btn" title="Reply to all" onClick={() => startCompose(drafts.replyAll)}><ReplyAll size={18} /></button>
+                      )}
+                      <button className="mail-action-btn" title="Forward" onClick={() => startCompose(drafts.forward)}><Forward size={18} /></button>
+                      <button className={`mail-action-btn ${thread.starred ? 'starred' : ''}`} title={thread.starred ? 'Remove star' : 'Star'} onClick={() => toggleStar(thread.id, !thread.starred)}>
+                        <Star size={18} fill={thread.starred ? 'currentColor' : 'none'} />
+                      </button>
+                      {thread.box === 'INBOX' && (
+                        <button className="mail-action-btn" title="Mark as unread" onClick={() => act(() => api.mail.setRead(thread.id, false), 'Marked unread.')}><MailOpen size={18} /></button>
+                      )}
+                      {thread.box === 'INBOX' && (
+                        <button className="mail-action-btn" title={thread.archived ? "Move to inbox" : "Archive"} onClick={() => act(() => api.mail.setArchived(thread.id, !thread.archived), thread.archived ? 'Moved back to the inbox.' : 'Archived.')}>
+                          <ArchiveRestore size={18} />
+                        </button>
+                      )}
+                    </>
                   )}
-                  {thread.box === 'INBOX' && (
-                    <button
-                      type="button" className="btn btn-sm"
-                      onClick={() => act(() => api.mail.setArchived(thread.id, !thread.archived), thread.archived ? 'Moved back to the inbox.' : 'Archived.')}
-                    >
-                      {thread.archived ? 'Move to inbox' : 'Archive'}
+                  <button className="mail-action-btn" title="Print or save as PDF" onClick={() => printThread(thread, user?.name || '')}><Printer size={18} /></button>
+                  {thread.trashed ? (
+                    <>
+                      <button className="mail-action-btn" title="Restore" onClick={() => act(() => api.mail.restore(thread.id), 'Restored.')}><RotateCcw size={18} /></button>
+                      <button className="mail-action-btn delete" title="Delete forever" onClick={() => {
+                          if (window.confirm('Delete this message for good? This cannot be undone. Everyone else keeps their copy.')) {
+                            act(() => api.mail.purge(thread.id), 'Deleted for good.');
+                          }
+                        }}>
+                        <Trash2 size={18} />
+                      </button>
+                    </>
+                  ) : (
+                    <button className="mail-action-btn delete" title="Delete" onClick={() => act(() => api.mail.remove(thread.id), 'Moved to the trash.')}>
+                      <Trash2 size={18} />
                     </button>
                   )}
-                  {thread.box === 'INBOX' && (
-                    <button type="button" className="btn btn-sm" onClick={() => act(() => api.mail.setRead(thread.id, false), 'Marked unread.')}>
-                      Mark unread
-                    </button>
-                  )}
-                  <button
-                    type="button" className="btn btn-sm"
-                    onClick={() => {
-                      if (window.confirm('Remove this message from your mail? Everyone else keeps their copy.')) {
-                        act(() => api.mail.remove(thread.id), 'Removed from your mail.');
-                      }
-                    }}
-                  >
-                    Delete
-                  </button>
                 </div>
               </div>
-              {thread.messages.map((m) => (
-                <article key={m.id} className="mail-message">
-                  <header>
-                    <div>
-                      <strong>{m.sender_name}</strong> <span className="mail-addr">&lt;{m.sender_email}&gt;</span>
-                      <div className="mail-addr">
-                        To: {m.recipients.filter((r) => r.kind === 'TO').map(person).join(', ') || '—'}
-                        {m.recipients.some((r) => r.kind === 'CC') && (
-                          <> · Cc: {m.recipients.filter((r) => r.kind === 'CC').map(person).join(', ')}</>
-                        )}
+
+              <div className="mail-thread">
+                {thread.messages.map((m) => (
+                  <div key={m.id} className="mail-message-bubble">
+                    <div className="mail-message-header">
+                      <div className="mail-message-sender-info">
+                        <Avatar name={m.sender_name} />
+                        <div className="mail-message-meta">
+                          <h4>{m.sender_name}</h4>
+                          <div>To: {names(m.recipients, 'TO') || '—'}
+                          {names(m.recipients, 'CC') && <span> · Cc: {names(m.recipients, 'CC')}</span>}
+                          {names(m.recipients, 'BCC') && <span> · Bcc: {names(m.recipients, 'BCC')}</span>}</div>
+                          {m.sender_id === user?.id && m.recipients.length > 0 && <Receipts recipients={m.recipients} />}
+                        </div>
                       </div>
+                      <div className="mail-message-time">{fullWhen(m.created_at)}</div>
                     </div>
-                    <span className="mail-addr">{fullWhen(m.created_at)}</span>
-                  </header>
-                  <div className="mail-body">{m.body}</div>
-                  {m.attachments.length > 0 && (
-                    <div className="mail-files">
-                      {m.attachments.map((a) => (
-                        <button type="button" key={a.id} className="mail-chip mail-chip-btn" onClick={() => download(a)}>
-                          📎 {a.filename} <small>{kb(a.size_bytes)}</small>
-                        </button>
-                      ))}
-                    </div>
+
+                    {/* body_html is cleaned by the server to a short list of tags before it is stored. */}
+                    {m.body_html
+                      ? <div className="mail-message-body mail-html" dangerouslySetInnerHTML={{ __html: m.body_html }} />
+                      : <div className="mail-message-body">{m.body}</div>}
+
+                    {m.attachments.length > 0 && (
+                      <div className="mail-attachments">
+                        {m.attachments.map((a) => (
+                          <div key={a.id} className="mail-attachment-chip" onClick={() => openAttachment(a)} title={previewType(a.filename) ? 'Preview' : 'Download'}>
+                            <Paperclip size={14} />
+                            <span>{a.filename}</span>
+                            <small style={{ color: 'var(--mail-muted)' }}>{kb(a.size_bytes)}</small>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {!thread.trashed && (
+                <div className="mail-reply-box">
+                  <button type="button" className="mail-reply-btn" onClick={() => startCompose(drafts.reply)}>
+                    <Reply size={18} />
+                    <span>Reply</span>
+                  </button>
+                  {drafts.hasOthers && (
+                    <button type="button" className="mail-reply-btn" onClick={() => startCompose(drafts.replyAll)}>
+                      <ReplyAll size={18} />
+                      <span>Reply all</span>
+                    </button>
                   )}
-                </article>
-              ))}
+                  <button type="button" className="mail-reply-btn" onClick={() => startCompose(drafts.forward)}>
+                    <Forward size={18} />
+                    <span>Forward</span>
+                  </button>
+                </div>
+              )}
             </>
           )}
         </section>
@@ -409,7 +1022,7 @@ export default function Mail() {
       {compose && (
         <Compose
           draft={compose}
-          onClose={() => setCompose(null)}
+          onClose={(msg) => { setCompose(null); setNotice(msg || ''); load(); }}
           onSent={() => {
             setCompose(null);
             setNotice('Sent.');
@@ -418,6 +1031,16 @@ export default function Mail() {
           }}
         />
       )}
+
+      {settingsOpen && (
+        <SignatureSettings
+          value={signature}
+          onClose={() => setSettingsOpen(false)}
+          onSaved={(sig) => { setSignature(sig); setSettingsOpen(false); setNotice('Signature saved.'); }}
+        />
+      )}
+
+      {preview && <AttachmentPreview file={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }

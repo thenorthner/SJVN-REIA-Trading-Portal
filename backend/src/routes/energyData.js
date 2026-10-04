@@ -7,6 +7,8 @@ import { runFinalDataRecon } from './reconciliation.js';
 import {
   importEnergyAccount, accountTemplate, ACCOUNT_TYPES, UNITS, AccountImportError,
 } from '../services/energyAccountImport.js';
+import { announceValidated } from './energyRecords.js';
+import { PRESENTED_STATUSES } from '../services/counterpartyScope.js';
 import multer from 'multer';
 import { exec } from 'child_process';
 import path from 'path';
@@ -43,7 +45,16 @@ function resolveEnergyBfr(contractId, periodMonth, dataType) {
 
 router.get('/', (req, res) => {
   const { contract_id, period_month, status } = req.query;
-  let sql = `SELECT ed.*, c.contract_no FROM energy_data ed JOIN contracts c ON c.id = ed.contract_id WHERE 1=1`;
+  // The bill a period went onto, once it has been presented — the one a dispute would be raised against.
+  const billed = PRESENTED_STATUSES.filter((s) => s !== 'CANCELLED').map((s) => `'${s}'`).join(',');
+  const invoice = (col) => `(SELECT i.${col} FROM invoices i WHERE i.contract_id = ed.contract_id AND i.billing_period = ed.period_month AND i.status IN (${billed}) ORDER BY i.created_at DESC LIMIT 1)`;
+  let sql = `
+    SELECT ed.*, c.contract_no, c.min_cuf_percent,
+           ${invoice('id')} AS invoice_id, ${invoice('invoice_no')} AS invoice_no,
+           EXISTS (SELECT 1 FROM energy_blocks b WHERE b.contract_id = ed.contract_id AND b.period_month = ed.period_month) AS has_blocks,
+           -- A provisional figure that a final one has since replaced.
+           (ed.data_type = 'PROVISIONAL' AND EXISTS (SELECT 1 FROM energy_data f WHERE f.contract_id = ed.contract_id AND f.period_month = ed.period_month AND f.data_type = 'FINAL')) AS is_superseded
+    FROM energy_data ed JOIN contracts c ON c.id = ed.contract_id WHERE 1=1`;
   const params = [];
   
   const side = counterpartySide(req.user);
@@ -260,6 +271,8 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
 
   db.prepare(`UPDATE energy_data SET status = ?, deviation_notes = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(flagged ? 'DISPUTED' : 'VALIDATED', note, row.id);
+  // A clean period goes to the counterparty to confirm before it is locked for billing.
+  if (!flagged && row.status !== 'VALIDATED') announceValidated(row);
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'VALIDATE', module: 'REIA', entityType: 'energy_data', entityId: row.id, details: { deviationPct } });
   res.json(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id));
 });
@@ -280,6 +293,17 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     return res.status(400).json({
       error: 'Validate this period before locking it — locking is what makes it billable.',
       energy_status: row.status,
+    });
+  }
+
+  // The counterparty has said the figure is wrong and has not been answered.
+  // Billing it anyway is SJVN's call to make, but not one to make by accident.
+  if (row.response_status === 'OBJECTED' && !row.objection_outcome && !override) {
+    return res.status(400).json({
+      error: 'The counterparty has objected to this figure and the objection has not been answered.',
+      energy_status: row.status,
+      objection: row.response_note,
+      hint: 'Answer the objection first, or pass override_reason to lock the period as it stands.',
     });
   }
 
@@ -306,7 +330,7 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     }
   }
 
-  const overrodeFlag = row.status === 'DISPUTED' && !!override;
+  const overrodeFlag = (row.status === 'DISPUTED' || (row.response_status === 'OBJECTED' && !row.objection_outcome)) && !!override;
   db.prepare(`
     UPDATE energy_data
     SET status = 'LOCKED', locked_at = datetime('now'),

@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext.jsx';
  * round trip; everything else — whether the current password is right, whether
  * the new one is strong enough — is the server's answer, shown as it came back.
  */
-export default function ChangePasswordModal({ open, onClose }) {
+export default function ChangePasswordModal({ open, onClose, forced = false }) {
   const { changePassword } = useAuth();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -41,7 +41,12 @@ export default function ChangePasswordModal({ open, onClose }) {
   }
 
   return (
-    <Modal open={open} onClose={close} title="Change Password" width={440}>
+    <Modal open={open} onClose={forced && !done ? () => {} : close} title={forced ? 'Choose your own password' : 'Change Password'} width={440}>
+      {forced && !done && (
+        <div className="alert alert-warning" role="alert" style={{ marginBottom: 12 }}>
+          Your password was issued by your administrator. Choose one only you know before going further. The current password is the one you just signed in with.
+        </div>
+      )}
       {done ? (
         <div>
           <div className="alert alert-success" role="status" style={{ marginBottom: 16 }}>
@@ -78,7 +83,7 @@ export default function ChangePasswordModal({ open, onClose }) {
             At least 8 characters, with a letter and a digit.
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
-            <button type="button" className="btn btn-outline" onClick={close} disabled={saving}>Cancel</button>
+            {!forced && <button type="button" className="btn btn-outline" onClick={close} disabled={saving}>Cancel</button>}
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Saving…' : 'Change Password'}
             </button>

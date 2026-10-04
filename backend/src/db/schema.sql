@@ -98,7 +98,51 @@ CREATE TABLE IF NOT EXISTS broadcast_messages (
   expires_at TEXT,
   created_by TEXT,
   created_by_name TEXT,
+  removed_at TEXT,                       -- when it was taken off the board by hand
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- The notification board's memory. An alert on the board is a live figure —
+-- "4 invoices overdue" — and leaves no trace once it clears. Each row here is
+-- one stretch of an alert being on a board, from first shown to cleared, so
+-- what the board said last month can still be read.
+CREATE TABLE IF NOT EXISTS board_alert_episodes (
+  id TEXT PRIMARY KEY,
+  scope_key TEXT NOT NULL,               -- whose board: INTERNAL, SELLER:<entity id>, BUYER:<entity id>
+  alert_key TEXT NOT NULL,
+  category TEXT,
+  grp TEXT,
+  severity TEXT NOT NULL,
+  title TEXT NOT NULL,
+  detail TEXT,
+  link TEXT,
+  peak_count INTEGER NOT NULL DEFAULT 0,
+  last_count INTEGER NOT NULL DEFAULT 0,
+  first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+  resolved_at TEXT                       -- null while it is still on the board
+);
+CREATE INDEX IF NOT EXISTS idx_board_episodes_scope ON board_alert_episodes (scope_key, resolved_at);
+
+-- "Seen it." One person standing an alert or a pinned message down on their
+-- own board. For an alert it holds for the episode and count it was given at.
+CREATE TABLE IF NOT EXISTS board_acknowledgements (
+  user_id TEXT NOT NULL REFERENCES users(id),
+  item_kind TEXT NOT NULL CHECK (item_kind IN ('ALERT','BROADCAST')),
+  item_key TEXT NOT NULL,
+  episode_id TEXT,
+  acked_count INTEGER,
+  acked_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (user_id, item_kind, item_key)
+);
+
+-- Which board alerts a person also wants by email or SMS: the least severe
+-- level worth sending, or NONE.
+CREATE TABLE IF NOT EXISTS board_preferences (
+  user_id TEXT PRIMARY KEY REFERENCES users(id),
+  email_min TEXT NOT NULL DEFAULT 'NONE' CHECK (email_min IN ('NONE','CRITICAL','WARNING','INFO')),
+  sms_min TEXT NOT NULL DEFAULT 'NONE' CHECK (sms_min IN ('NONE','CRITICAL','WARNING','INFO')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS communication_logs (
@@ -152,15 +196,34 @@ CREATE TABLE IF NOT EXISTS document_versions (
   file_name TEXT NOT NULL,
   file_size_bytes INTEGER NOT NULL,
   mime_type TEXT NOT NULL,
-  verification_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (verification_status IN ('PENDING', 'VERIFIED', 'REJECTED', 'NOT_REQUIRED')),
+  verification_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (verification_status IN ('DRAFT', 'PENDING', 'VERIFIED', 'REJECTED', 'NOT_REQUIRED')),
   verification_notes TEXT,
   verified_by TEXT REFERENCES users(id),
   verified_at TEXT,
   expiry_date TEXT,
+  rejection_code TEXT,                   -- why it was sent back, from a fixed list; the words are in verification_notes
+  file_hash TEXT,                        -- sha-256 of the file, to know the same file when it comes round again
+  extracted_json TEXT,                   -- the PAN / GSTIN read from the file, and how they compare with the company record
   created_by TEXT REFERENCES users(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(document_id, version_number)
 );
+
+-- SJVN asking a company for a document. It closes itself when a document of
+-- that type is uploaded for the company.
+CREATE TABLE IF NOT EXISTS document_requests (
+  id TEXT PRIMARY KEY,
+  entity_id TEXT NOT NULL REFERENCES entities(id),
+  document_type TEXT NOT NULL,
+  note TEXT,
+  due_date TEXT,
+  status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','FULFILLED','CANCELLED')),
+  fulfilled_version_id TEXT,
+  requested_by TEXT REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  closed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_document_requests_entity ON document_requests (entity_id, status);
 
 CREATE TABLE IF NOT EXISTS price_alerts (
   id TEXT PRIMARY KEY,
@@ -332,6 +395,77 @@ CREATE TABLE IF NOT EXISTS contract_amendments (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- What a project owes by when: financial closure, SCOD, COD. The counterparty
+-- reports one achieved (reported_*); it is achieved once SJVN confirms it.
+-- original_due_date is the date first agreed, kept when an extension moves due_date.
+CREATE TABLE IF NOT EXISTS contract_milestones (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  milestone_type TEXT NOT NULL,
+  label TEXT NOT NULL,
+  due_date TEXT,
+  original_due_date TEXT,
+  achieved_date TEXT,
+  reported_date TEXT,
+  reported_note TEXT,
+  reported_by TEXT REFERENCES users(id),
+  reported_at TEXT,
+  confirmed_by TEXT REFERENCES users(id),
+  remarks TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 50,
+  created_by TEXT REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_contract_milestones_contract ON contract_milestones (contract_id);
+
+-- The counterparty asking SJVN for something under a contract: more time on a
+-- milestone, an amendment, a renewed guarantee to be taken on record.
+CREATE TABLE IF NOT EXISTS contract_requests (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  request_type TEXT NOT NULL CHECK (request_type IN ('MILESTONE_EXTENSION','AMENDMENT','PBG_RENEWAL','OTHER')),
+  ground TEXT NOT NULL DEFAULT 'OTHER',
+  subject TEXT NOT NULL,
+  description TEXT NOT NULL,
+  milestone_id TEXT REFERENCES contract_milestones(id),
+  requested_date TEXT,                   -- the new milestone date, or the renewed guarantee's expiry
+  approved_date TEXT,                    -- what SJVN granted, which may differ from what was asked
+  amount REAL,
+  bank TEXT,
+  attachment_version_id TEXT,
+  status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED','WITHDRAWN')),
+  decision_note TEXT,
+  decided_by TEXT REFERENCES users(id),
+  decided_at TEXT,
+  raised_by TEXT REFERENCES users(id),
+  raised_by_side TEXT NOT NULL CHECK (raised_by_side IN ('SELLER','BUYER')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_contract_requests_contract ON contract_requests (contract_id, status);
+
+-- Formal notices under a contract, either way. Written once and never edited;
+-- a reply is a notice of its own that points at the one it answers.
+CREATE TABLE IF NOT EXISTS contract_notices (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  notice_no TEXT NOT NULL,
+  notice_type TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  event_date TEXT,
+  response_due TEXT,
+  attachment_version_id TEXT,
+  parent_notice_id TEXT REFERENCES contract_notices(id),
+  sent_by TEXT REFERENCES users(id),
+  sent_by_side TEXT NOT NULL CHECK (sent_by_side IN ('SJVN','SELLER','BUYER')),
+  counterparty_side TEXT NOT NULL CHECK (counterparty_side IN ('SELLER','BUYER')),  -- whose correspondence with SJVN this is
+  acknowledged_at TEXT,
+  acknowledged_by TEXT REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_contract_notices_contract ON contract_notices (contract_id);
+
 -- CERC Average Monthly Frequency Response Performance (Beta β)
 -- Certified by RPC (~1 month late). Not computed by SJVN — stored & applied.
 CREATE TABLE IF NOT EXISTS station_beta (
@@ -374,9 +508,42 @@ CREATE TABLE IF NOT EXISTS energy_data (
   deviation_notes TEXT,
   billing_family_ref TEXT, -- BFR/{contract}/{YYYY-MM}/{S2S|S2B} — provisional↔final trail key
   supersedes_energy_id TEXT, -- FINAL row points at provisional energy for same period
+  -- The document the figure was taken from: the signed JMR, or the REA copy.
+  source_version_id TEXT,
+  -- What the counterparty said to the figure. An acceptance is both sides'
+  -- agreement on record before the bill; an objection carries the figure they
+  -- hold, and SJVN's answer to it.
+  response_status TEXT CHECK (response_status IS NULL OR response_status IN ('ACCEPTED','OBJECTED')),
+  response_note TEXT,
+  claimed_mwh REAL,
+  response_version_id TEXT,
+  response_by TEXT,
+  response_at TEXT,
+  objection_outcome TEXT CHECK (objection_outcome IS NULL OR objection_outcome IN ('UPHELD','REJECTED')),
+  objection_resolution TEXT,
+  objection_resolved_by TEXT,
+  objection_resolved_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- A month's energy by 15-minute block: what was scheduled and what was
+-- injected, 96 blocks to the day. Loaded by SJVN from the SLDC/RLDC block
+-- statement; the monthly figure in energy_data is what is billed.
+CREATE TABLE IF NOT EXISTS energy_blocks (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  period_month TEXT NOT NULL,
+  block_date TEXT NOT NULL,
+  block_no INTEGER NOT NULL CHECK (block_no BETWEEN 1 AND 96),
+  scheduled_mwh REAL,
+  actual_mwh REAL,
+  source_file TEXT,
+  uploaded_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (contract_id, block_date, block_no)
+);
+CREATE INDEX IF NOT EXISTS idx_energy_blocks_period ON energy_blocks (contract_id, period_month);
 
 -- Stakeholder regulatory approval checklist (replaces free-text "Passed")
 CREATE TABLE IF NOT EXISTS entity_regulatory_approvals (
@@ -460,6 +627,25 @@ CREATE TABLE IF NOT EXISTS invoices (
   verification_json TEXT,
   verified_at TEXT,
   verified_by TEXT,
+  -- The e-invoice as registered on the GST invoice portal, as the seller gave it,
+  -- and how it compares with this bill.
+  irn TEXT,
+  irn_ack_no TEXT,
+  irn_ack_date TEXT,
+  irn_signed_qr TEXT,
+  irn_checks_json TEXT,
+  irn_recorded_by TEXT,
+  irn_recorded_at TEXT,
+  -- The invoice PDF as the seller signed it, and what its signature says of itself.
+  signed_version_id TEXT,
+  signed_info_json TEXT,
+  -- The signed paper: how it was sent, and when SJVN received it.
+  hardcopy_courier TEXT,
+  hardcopy_docket_no TEXT,
+  hardcopy_dispatched_on TEXT,
+  hardcopy_received_on TEXT,
+  hardcopy_received_by TEXT,
+  hardcopy_note TEXT,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -695,6 +881,74 @@ CREATE TABLE IF NOT EXISTS security_releases (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- A change the bank made to an instrument after issue: validity extended, value
+-- raised or cut. Submitted by the counterparty, taken on record by SJVN. seq is
+-- given only once it is accepted, so the chain reads Original -> 1 -> 2.
+CREATE TABLE IF NOT EXISTS security_amendments (
+  id TEXT PRIMARY KEY,
+  payment_security_id TEXT NOT NULL REFERENCES payment_security(id),
+  contract_id TEXT NOT NULL,
+  seq INTEGER,
+  amendment_ref TEXT,
+  amendment_date TEXT,
+  old_limit REAL,
+  new_limit REAL,
+  old_validity_end TEXT,
+  new_validity_end TEXT,
+  old_claim_deadline TEXT,
+  new_claim_deadline TEXT,
+  reason TEXT,
+  document_version_id TEXT,
+  sfms_message_type TEXT,
+  sfms_date TEXT,
+  sfms_reference TEXT,
+  status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','ACCEPTED','REJECTED','WITHDRAWN')),
+  decision_note TEXT,
+  raised_by TEXT,
+  raised_by_name TEXT,
+  raised_by_side TEXT,
+  decided_by TEXT,
+  decided_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_security_amendments_ps ON security_amendments(payment_security_id);
+
+-- The other direction: a letter of credit SJVN opens in the seller's favour as
+-- payment security under a PPA. Kept apart from payment_security, which is cover
+-- SJVN holds, so that none of this is ever counted as SJVN's own security.
+CREATE TABLE IF NOT EXISTS sjvn_lcs (
+  id TEXT PRIMARY KEY,
+  lc_no TEXT UNIQUE NOT NULL,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  entity_id TEXT,
+  issuing_bank TEXT,
+  issuing_branch TEXT,
+  advising_bank TEXT,
+  is_revolving INTEGER NOT NULL DEFAULT 1,
+  amount REAL NOT NULL,
+  utilized_amount REAL NOT NULL DEFAULT 0,
+  issue_date TEXT,
+  validity_end TEXT,
+  sfms_message_type TEXT,
+  sfms_date TEXT,
+  sfms_reference TEXT,
+  document_version_id TEXT,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','CLOSED')),
+  remarks TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS sjvn_lc_events (
+  id TEXT PRIMARY KEY,
+  lc_id TEXT NOT NULL REFERENCES sjvn_lcs(id),
+  event_type TEXT NOT NULL,
+  details TEXT,
+  actor_name TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS security_adequacy_overrides (
   id TEXT PRIMARY KEY,
   contract_id TEXT NOT NULL REFERENCES contracts(id),
@@ -715,8 +969,63 @@ CREATE TABLE IF NOT EXISTS payments (
   remarks TEXT,
   -- For generator (developer) pay-outs: where the money came from.
   release_source TEXT CHECK (release_source IN ('DISCOM_REALIZATION','OWN_FUND','PAYMENT_SECURITY_FUND')),
+  -- What `deduction` is made of, and the rebate this payment earned, so a
+  -- payment advice can say why the cash is less than the bill settled.
+  tds_amount REAL,
+  tds_section TEXT,
+  deduction_note TEXT,
+  rebate_amount REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Quarterly TDS certificates (Form 16A) SJVN issues to a seller. The file is a
+-- document of the seller's; this says which quarter it is for.
+CREATE TABLE IF NOT EXISTS tds_certificates (
+  id TEXT PRIMARY KEY,
+  entity_id TEXT NOT NULL REFERENCES entities(id),
+  financial_year TEXT NOT NULL,          -- 2026-27
+  quarter TEXT NOT NULL CHECK (quarter IN ('Q1','Q2','Q3','Q4')),
+  certificate_no TEXT,
+  tds_amount REAL NOT NULL DEFAULT 0,
+  version_id TEXT,
+  uploaded_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (entity_id, financial_year, quarter)
+);
+
+-- A buyer telling SJVN it has paid. Nothing here touches a bill: a payment is
+-- recorded only when Finance confirms the intimation against the bank.
+CREATE TABLE IF NOT EXISTS payment_intimations (
+  id TEXT PRIMARY KEY,
+  invoice_id TEXT NOT NULL REFERENCES invoices(id),
+  contract_id TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  amount REAL NOT NULL,                  -- what reached SJVN's bank
+  tds_amount REAL NOT NULL DEFAULT 0,
+  tds_section TEXT,
+  other_deduction REAL NOT NULL DEFAULT 0,
+  deduction_note TEXT,
+  payment_date TEXT NOT NULL,            -- as the buyer gave it
+  confirmed_date TEXT,                   -- the value date Finance found
+  mode TEXT,
+  reference TEXT NOT NULL,
+  proof_version_id TEXT,
+  remarks TEXT,
+  exceeds_balance INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('PENDING_CHECKER','SUBMITTED','CONFIRMED','REJECTED','WITHDRAWN')),
+  prepared_by TEXT,
+  approved_by TEXT,
+  approved_at TEXT,
+  decided_by TEXT,
+  decided_at TEXT,
+  decision_note TEXT,
+  payment_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_payment_intimations_invoice ON payment_intimations(invoice_id);
+CREATE INDEX IF NOT EXISTS idx_payment_intimations_status ON payment_intimations(status);
 
 -- Reconciliation (three-way trust + joint sign-off)
 CREATE TABLE IF NOT EXISTS reconciliations (
@@ -751,6 +1060,11 @@ CREATE TABLE IF NOT EXISTS reconciliations (
   sjvn_ack_by TEXT,
   counterparty_ack_at TEXT,
   counterparty_ack_by TEXT,
+  -- Each side's signature as recorded: who, when, from where, and a fingerprint of the figures.
+  sjvn_sign_json TEXT,
+  counterparty_sign_json TEXT,
+  counterparty_cert_json TEXT,           -- the auditor's certificate that went with the counterparty's signature
+  signed_copies_json TEXT,               -- the statement as each side signed it with a certificate
   carried_from_id TEXT,
   reopened_from_id TEXT,
   reopen_reason TEXT,
@@ -785,6 +1099,27 @@ CREATE TABLE IF NOT EXISTS recon_items (
   notes TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- What the counterparty did not accept when it signed a statement "with
+-- exceptions". The rest of the statement stands agreed; each of these is open
+-- until SJVN accepts or refuses it, and the statement closes when none is.
+CREATE TABLE IF NOT EXISTS recon_exceptions (
+  id TEXT PRIMARY KEY,
+  reconciliation_id TEXT NOT NULL REFERENCES reconciliations(id),
+  item_id TEXT,
+  label TEXT NOT NULL,
+  amount REAL NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','ACCEPTED','REJECTED')),
+  dispute_id TEXT,
+  resolution_note TEXT,
+  resolved_by TEXT,
+  resolved_at TEXT,
+  raised_by TEXT,
+  raised_by_name TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_recon_exceptions_recon ON recon_exceptions (reconciliation_id, status);
 
 CREATE TABLE IF NOT EXISTS recon_events (
   id TEXT PRIMARY KEY,
@@ -860,6 +1195,18 @@ CREATE TABLE IF NOT EXISTS disputes (
   sla_resolve_due TEXT,
   sla_breached_at TEXT,
   escalated_at TEXT,
+  -- Disputes raised for one cause across several bills share a group.
+  group_ref TEXT,
+  group_title TEXT,
+  -- The submitter's answer to SJVN's resolution: accepted (which closes it),
+  -- contested (taken to a named forum), or the dispute withdrawn before one.
+  resolution_response TEXT CHECK (resolution_response IS NULL OR resolution_response IN ('ACCEPTED','CONTESTED','WITHDRAWN')),
+  resolution_response_by TEXT,
+  resolution_response_at TEXT,
+  resolution_response_note TEXT,
+  escalation_forum TEXT,
+  contested_amount REAL,
+  escalation_outcome TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -3499,7 +3846,8 @@ CREATE TABLE IF NOT EXISTS mail_messages (
   parent_id TEXT REFERENCES mail_messages(id),
   sender_id TEXT NOT NULL REFERENCES users(id),
   subject TEXT NOT NULL,
-  body TEXT NOT NULL,                    -- plain text, shown as written
+  body TEXT NOT NULL,                    -- plain text: what search and previews read
+  body_html TEXT,                        -- the formatted body, sanitised on the way in; null on plain messages
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_mail_messages_thread ON mail_messages (thread_id, created_at);
@@ -3509,10 +3857,13 @@ CREATE TABLE IF NOT EXISTS mail_boxes (
   message_id TEXT NOT NULL REFERENCES mail_messages(id) ON DELETE CASCADE,
   user_id TEXT NOT NULL REFERENCES users(id),
   box TEXT NOT NULL CHECK (box IN ('INBOX','SENT')),
-  recipient_kind TEXT CHECK (recipient_kind IN ('TO','CC')),  -- null on the sender's row
+  recipient_kind TEXT CHECK (recipient_kind IN ('TO','CC','BCC')),  -- null on the sender's row
   read_at TEXT,
   archived_at TEXT,
-  deleted_at TEXT,                       -- hidden for this person only
+  deleted_at TEXT,                       -- in this person's trash; everyone else keeps their copy
+  starred_at TEXT,
+  opened_at TEXT,                        -- first opened; unlike read_at, marking unread does not clear it
+  purged_at TEXT,                        -- removed from the trash: gone from this person's mail for good
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (message_id, user_id, box)
 );
@@ -3528,3 +3879,41 @@ CREATE TABLE IF NOT EXISTS mail_attachments (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_mail_attachments_message ON mail_attachments (message_id);
+
+-- A message still being written. It is its author's alone until it is sent,
+-- when it becomes a mail_messages row and the draft is dropped.
+CREATE TABLE IF NOT EXISTS mail_drafts (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  to_ids TEXT NOT NULL DEFAULT '[]',     -- JSON arrays of user ids
+  cc_ids TEXT NOT NULL DEFAULT '[]',
+  bcc_ids TEXT NOT NULL DEFAULT '[]',
+  subject TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL DEFAULT '',
+  body_html TEXT,
+  reply_to TEXT,                         -- the message this answers, if any
+  forward_attachments TEXT NOT NULL DEFAULT '[]',  -- attachment ids carried by a forward
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_mail_drafts_user ON mail_drafts (user_id, updated_at);
+
+-- Files attached to a draft. Sending moves them onto the message; discarding
+-- the draft removes them from disk.
+CREATE TABLE IF NOT EXISTS mail_draft_files (
+  id TEXT PRIMARY KEY,
+  draft_id TEXT NOT NULL REFERENCES mail_drafts(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  stored_name TEXT NOT NULL,
+  mime_type TEXT,
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_mail_draft_files_draft ON mail_draft_files (draft_id);
+
+-- Each person's own mail preferences.
+CREATE TABLE IF NOT EXISTS mail_settings (
+  user_id TEXT PRIMARY KEY REFERENCES users(id),
+  signature TEXT NOT NULL DEFAULT '',    -- plain text, added under every new message
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

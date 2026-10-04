@@ -5,6 +5,7 @@ import { PageHeader, Card, Badge, StatCard, Tabs, Tab, fmtCurrency, fmtNumber } 
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { fmtDate } from '../../datetime.js';
+import PaymentConfirmationDesk from '../../components/PaymentIntimations.jsx';
 
 // Who owes what, how late it is, and what the lateness has earned.
 //
@@ -42,6 +43,12 @@ export default function PaymentMonitoring() {
   const [error, setError] = useState('');
   const [onlyOverdue, setOnlyOverdue] = useState(false);
   const [counterparty, setCounterparty] = useState('');
+  // How many buyer payments are waiting to be matched to the bank.
+  const [pending, setPending] = useState(0);
+  useEffect(() => {
+    // The count is a courtesy on the tab; the outstanding view does not depend on it.
+    Promise.resolve(api.buyerBills?.intimations?.({ status: 'SUBMITTED' })).then((r) => setPending(r?.intimations?.length || 0)).catch(() => {});
+  }, [view]);
 
   useEffect(() => {
     setLoading(true);
@@ -77,10 +84,12 @@ export default function PaymentMonitoring() {
 
       <Tabs style={{ marginBottom: 18 }}>
         <Tab active={view === 'main'} onClick={() => setView('main')}>Outstanding</Tab>
+        <Tab active={view === 'confirm'} onClick={() => setView('confirm')}>Payments to confirm{pending > 0 ? ` (${pending})` : ''}</Tab>
         <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
       </Tabs>
 
       {view === 'fyi' && <ModuleGuide guide={getGuide('monitoring')} />}
+      {view === 'confirm' && <Card><PaymentConfirmationDesk /></Card>}
 
       {view === 'main' && (
       <>

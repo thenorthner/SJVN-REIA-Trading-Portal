@@ -5,6 +5,8 @@ import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, fmtCurrency, D
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
+import SecurityInstrumentPanel, { ExpiryTag, changeText } from '../../components/SecurityInstrumentPanel.jsx';
+import SjvnLcDesk from '../../components/SjvnLcDesk.jsx';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER', 'FINANCE_USER'];
 const EMPTY_FORM = {
@@ -40,6 +42,7 @@ export default function PaymentSecurity() {
   const [action, setAction] = useState(null);
   const [actionValue, setActionValue] = useState('');
   const [invokeForm, setInvokeForm] = useState({ contract_id: '', amount: '' });
+  const [desk, setDesk] = useState(null);
 
   function load() {
     setLoading(true);
@@ -51,7 +54,9 @@ export default function PaymentSecurity() {
       api.paymentSecurity.releases().catch(() => []),
       api.paymentSecurity.overrides().catch(() => []),
       api.paymentSecurity.invocations().catch(() => []),
-    ]).then(([list, s, rel, ov, inv]) => {
+      api.securityDesk.overview().catch(() => null),
+    ]).then(([list, s, rel, ov, inv, dk]) => {
+      setDesk(dk);
       setRows(list);
       setStats(s);
       setReleases(rel || []);
@@ -155,14 +160,15 @@ export default function PaymentSecurity() {
     {
       key: 'validity_end',
       header: 'Expiry',
-      render: (r) => (
-        <span>
-          {r.validity_end || '—'}
-          {r.days_to_expiry != null && r.days_to_expiry <= 30 && (
-            <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--amber-strong)' }}>{r.days_to_expiry}d</span>
-          )}
-        </span>
-      ),
+      render: (r) => {
+        const d = desk?.instruments.find((i) => i.id === r.id);
+        return <span style={{ whiteSpace: 'nowrap' }}>{r.validity_end || '—'} {d && <ExpiryTag expiry={d.expiry} />}</span>;
+      },
+    },
+    {
+      key: 'sfms',
+      header: 'SFMS',
+      render: (r) => (r.verified_at ? <span style={{ color: '#15803d', fontWeight: 600 }}>Received</span> : <span style={{ color: '#b45309' }}>Pending</span>),
     },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
   ];
@@ -174,6 +180,7 @@ export default function PaymentSecurity() {
         subtitle="Revolving LC, bank guarantees, corpus waterfall, coverage & invocation control"
         actions={view === 'instruments' && (
           <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="btn btn-secondary" onClick={() => api.securityDesk.register().then((blob) => { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `payment-security-register-${new Date().toISOString().slice(0, 10)}.xlsx`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }).catch(() => {})}>Download register (Excel)</button>
             {CAN_WRITE.includes(user?.role) && (
               <>
                 <button type="button" className="btn btn-secondary" onClick={() => api.paymentSecurity.runAlerts().then(load)}>Run Alerts</button>
@@ -186,10 +193,12 @@ export default function PaymentSecurity() {
 
       <Tabs style={{ marginBottom: 18 }}>
         <Tab active={view === 'instruments'} onClick={() => setView('instruments')}>Instruments</Tab>
+        <Tab active={view === 'lcs'} onClick={() => setView('lcs')}>LCs to sellers</Tab>
         <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
       </Tabs>
 
       {view === 'fyi' && <ModuleGuide guide={getGuide('security')} />}
+      {view === 'lcs' && <Card><SjvnLcDesk overview={desk} onChanged={load} /></Card>}
 
       {view === 'instruments' && (
       <>
@@ -218,6 +227,21 @@ export default function PaymentSecurity() {
         </Card>
       )}
 
+      {desk && desk.instruments.some((i) => i.pending_amendment || (i.status === 'DRAFT' && i.submitted_by_side)) && (
+        <Card title="Awaiting your acceptance" className="mb-3">
+          <Table
+            columns={[
+              { key: 'instrument_no', header: 'Instrument' },
+              { key: 'contract_no', header: 'Contract' },
+              { key: 'what', header: 'Submitted', render: (r) => (r.pending_amendment ? `Amendment — ${changeText(r.pending_amendment.changes)}` : `New ${r.bg_subtype || r.mechanism_type} ${r.bank_reference_no || ''} for ${fmtCurrency(r.limit_amount)}`) },
+              { key: 'by', header: 'By', render: (r) => r.pending_amendment?.raised_by_name || (r.submitted_by_side || '').toLowerCase() },
+            ]}
+            rows={desk.instruments.filter((i) => i.pending_amendment || (i.status === 'DRAFT' && i.submitted_by_side))}
+            onRowClick={openDetail}
+          />
+        </Card>
+      )}
+
       <div className="filters-bar">
         <select value={filters.mechanism_type} onChange={(e) => setFilters({ ...filters, mechanism_type: e.target.value, bg_subtype: '' })}>
           <option value="">All types</option>
@@ -236,7 +260,7 @@ export default function PaymentSecurity() {
         )}
         <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
           <option value="">All statuses</option>
-          {['ACTIVE', 'PARTIALLY_UTILIZED', 'INVOKED', 'EXPIRED', 'RENEWED', 'RELEASE_PENDING', 'RELEASED', 'CLOSED'].map((s) => (
+          {['DRAFT', 'ACTIVE', 'PARTIALLY_UTILIZED', 'INVOKED', 'EXPIRED', 'RENEWED', 'RELEASE_PENDING', 'RELEASED', 'CLOSED'].map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
@@ -414,8 +438,6 @@ export default function PaymentSecurity() {
               <div className="cell-actions" style={{ marginTop: 12, flexWrap: 'wrap' }}>
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setAction('utilize'); setActionValue(''); }}>Utilize</button>
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setAction('replenish'); setActionValue(''); }}>Replenish</button>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setAction('renew'); setActionValue(detail.validity_end || ''); }}>Renew</button>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setAction('verify'); setActionValue(''); }}>Verify</button>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setAction('release'); setActionValue('Contract completion release'); }}>Request release</button>
               </div>
             )}
@@ -435,6 +457,10 @@ export default function PaymentSecurity() {
                 </div>
               </form>
             )}
+
+            <div style={{ marginTop: 14 }}>
+              <SecurityInstrumentPanel instrumentId={detail.id} onChanged={refreshDetail} />
+            </div>
 
             {detail.requirements?.length > 0 && (
               <>

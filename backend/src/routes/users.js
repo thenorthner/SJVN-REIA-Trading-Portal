@@ -90,7 +90,17 @@ router.put('/:id/status', requireAuth, (req, res) => {
     return res.status(403).json({ error: 'Unauthorized' });
   }
   
-  db.prepare('UPDATE users SET is_active = ? WHERE id = ?').run(is_active ? 1 : 0, req.params.id);
+  // Guards that existed only as a disabled button: an admin could switch off
+  // their own account, or the company's registered admin account, by calling
+  // this directly.
+  if (!is_active && targetUser.id === req.user.id) return res.status(400).json({ error: 'You cannot switch off your own account' });
+  if (!is_active && !isSuperAdmin && ['SELLER', 'BUYER'].includes(targetUser.role)) {
+    return res.status(400).json({ error: 'The Company Admin account cannot be switched off here' });
+  }
+
+  // Switching an account off also ends its sessions.
+  db.prepare('UPDATE users SET is_active = ?, sessions_revoked_at = CASE WHEN ? THEN sessions_revoked_at ELSE ? END WHERE id = ?')
+    .run(is_active ? 1 : 0, is_active ? 1 : 0, Math.floor(Date.now() / 1000), req.params.id);
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'UPDATE_STATUS', module: 'AUTH', entityType: 'user', entityId: req.params.id, details: { is_active } });
   
   res.json({ success: true });

@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { complianceBlock } from './invoiceCompliance.js';
+import { createIntimation } from './buyerBills.js';
 import { resolveTariff } from '../services/tariffStructure.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES, BUYER_ROLES, counterpartySide } from '../middleware/auth.js';
@@ -1567,6 +1569,9 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
   if (req.body?.decision !== 'REJECTED') {
     const unresolved = unresolvedValidation(inv);
     if (unresolved) return res.status(400).json({ error: unresolved, validation_status: inv.validation_status });
+    // Where SJVN has made the signed copy or the IRN mandatory, a bill without it is not approved.
+    const missing = complianceBlock(inv);
+    if (missing) return res.status(400).json({ error: missing });
   }
 
   const approval = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? AND level = ?').get(req.params.id, req.params.level);
@@ -1811,7 +1816,7 @@ function generatorRealization(devInvoiceId) {
 
 // Record a payment against an invoice and roll up rebate / LPS / status. Shared
 // by buyer payment recording and generator pay-out release.
-function applyInvoicePayment(inv, { amount, payment_date, mode, reference, deduction, release_source }, req) {
+export function applyInvoicePayment(inv, { amount, payment_date, mode, reference, deduction, release_source, breakup = null }, req) {
   const id = newId('PAY');
   db.prepare(`INSERT INTO payments (id, invoice_id, amount, payment_date, mode, reference, deduction, release_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(id, inv.id, amount, payment_date, mode ?? null, reference ?? null, deduction || 0, release_source ?? null);
@@ -1879,6 +1884,10 @@ function applyInvoicePayment(inv, { amount, payment_date, mode, reference, deduc
   
   db.prepare(`UPDATE invoices SET status = ?, rebate = ?, lps = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(newStatus, newRebate, newLps, inv.id);
+  // What this payment earned in rebate and what was held back from it, kept on
+  // the payment so its advice can say why the cash is less than the bill settled.
+  db.prepare('UPDATE payments SET rebate_amount = ?, tds_amount = ?, tds_section = ?, deduction_note = ? WHERE id = ?')
+    .run(Math.max(0, newRebate - (Number(inv.rebate) || 0)), breakup?.tds_amount ?? null, breakup?.tds_section ?? null, breakup?.deduction_note ?? null, id);
 
   return db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id);
 }
@@ -1955,6 +1964,16 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, ...BUYER_ROLES)
       invoice_status: inv.status,
     });
   }
+  // A buyer does not settle its own bill. What it sends here is an intimation;
+  // the payment is recorded when Finance confirms it against the bank.
+  if (counterpartySide(req.user) === 'BUYER') {
+    try {
+      return res.status(202).json({ intimation: createIntimation(req, inv.id, req.body), invoice: inv });
+    } catch (err) {
+      if (!err.status) console.error('[INVOICES] intimation failed', err);
+      return res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong' });
+    }
+  }
   const updated = applyInvoicePayment(inv, req.body, req);
   logAudit({ req, user: req.user, action: 'PAYMENT_RECORDED', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: req.body });
 
@@ -2013,6 +2032,15 @@ router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...
   const amt = Number(amount);
   if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'A positive release amount is required' });
 
+  // `amount` is the cash that leaves. Tax deducted at source and anything else
+  // held back settle the bill too, and are recorded as what they are.
+  const tds = Number(req.body.tds_amount) || 0;
+  const otherDeduction = Number(req.body.other_deduction) || 0;
+  if (tds < 0 || otherDeduction < 0) return res.status(400).json({ error: 'A deduction cannot be negative' });
+  const deductionNote = String(req.body.deduction_note || '').trim().slice(0, 200);
+  if (otherDeduction > 0 && !deductionNote) return res.status(400).json({ error: 'Say what the other deduction is for' });
+  const held = Math.round((tds + otherDeduction) * 100) / 100;
+
   // Enforce pay-when-paid for the DISCOM-realization source: can only release
   // what the DISCOM(s) have actually paid, net of what was already released from
   // realization.
@@ -2023,7 +2051,7 @@ router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...
       "SELECT COALESCE(SUM(amount + COALESCE(deduction,0)),0) s FROM payments WHERE invoice_id = ? AND release_source = 'DISCOM_REALIZATION'"
     ).get(inv.id).s;
     const headroom = realized - alreadyFromRealization;
-    if (amt > headroom) {
+    if (amt + held > headroom) {
       return res.status(400).json({ error: `Only ${Math.round(headroom).toLocaleString('en-IN')} realized from the DISCOM so far. Release the balance from Own Fund or Payment Security Fund.` });
     }
   }
@@ -2033,10 +2061,11 @@ router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...
     payment_date: payment_date || new Date().toISOString().split('T')[0],
     mode: `RELEASE:${source}`,
     reference: reference || null,
-    deduction: 0,
+    deduction: held,
     release_source: source,
+    breakup: { tds_amount: tds || null, tds_section: tds > 0 ? String(getParam('seller_invoice_tds_section', '194Q')) : null, deduction_note: deductionNote || null },
   }, req);
-  logAudit({ req, user: req.user, action: 'RELEASE_TO_GENERATOR', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: { amount: amt, source, reference } });
+  logAudit({ req, user: req.user, action: 'RELEASE_TO_GENERATOR', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: { amount: amt, tds_amount: tds, other_deduction: otherDeduction, source, reference } });
   pushNotification({ role: 'SELLER', type: 'PAYMENT_RELEASED', message: `Payment of Rs.${amt.toLocaleString('en-IN')} released for ${inv.invoice_no} (${source.replace(/_/g, ' ').toLowerCase()})` });
   res.status(201).json(updated);
 });

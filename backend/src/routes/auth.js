@@ -13,9 +13,13 @@ function withBranding(u) {
     id: u.id, name: u.name, email: u.email, role: u.role,
     linked_entity_id: u.linked_entity_id || null,
   };
+  // Set when an admin issued the password, so the portal makes the holder choose their own.
+  try {
+    base.must_change_password = !!db.prepare('SELECT must_change_password FROM users WHERE id = ?').get(u.id)?.must_change_password;
+  } catch { base.must_change_password = false; }
   if (base.linked_entity_id) {
-    const ent = db.prepare('SELECT id, name, logo_url, category, entity_type FROM entities WHERE id = ?').get(base.linked_entity_id);
-    if (ent) base.entity = { id: ent.id, name: ent.name, logo_url: ent.logo_url, category: ent.category, entity_type: ent.entity_type };
+    const ent = db.prepare('SELECT id, name, logo_url, category, entity_type, status FROM entities WHERE id = ?').get(base.linked_entity_id);
+    if (ent) base.entity = { id: ent.id, name: ent.name, logo_url: ent.logo_url, category: ent.category, entity_type: ent.entity_type, status: ent.status };
   }
   return base;
 }
@@ -28,7 +32,7 @@ const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
 const failedLogins = new Map();   // email -> { count, firstAt, lockedUntil }
 
-function lockoutState(email) {
+export function lockoutState(email) {
   const rec = failedLogins.get(email);
   if (!rec) return { locked: false };
   if (rec.lockedUntil && rec.lockedUntil > Date.now()) {
@@ -134,7 +138,7 @@ router.post('/change-password', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'New password must be different from the current one' });
   }
 
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(newPassword, 10), user.id);
+  db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(bcrypt.hashSync(newPassword, 10), user.id);
   // A pending lockout from earlier bad guesses is cleared: the account holder has
   // just proved who they are, and the old password no longer works anyway.
   clearLoginAttempts(String(user.email).toLowerCase());

@@ -3,6 +3,7 @@ export const DOCUMENT_TAXONOMY = {
     { value: 'COMPANY_REGISTRATION', label: 'Company Registration (PAN, GST, CIN)', category: 'VERIFY', reason: 'Legal identity confirm karni hai, fake entity na ho' },
     { value: 'GENERATION_LICENSE', label: 'Generation License', category: 'VERIFY', reason: 'Bina valid license ke onboard nahi kar sakte' },
     { value: 'ENV_CLEARANCE', label: 'Environmental Clearance', category: 'VERIFY', reason: 'Regulatory mandatory document' },
+    { value: 'GRID_CONNECTIVITY', label: 'Grid Connectivity (CTU / STU / RLDC)', category: 'VERIFY', reason: 'Grid synchronization status ke liye' },
     { value: 'PLANT_TECHNICAL_DOCS', label: 'Plant Technical Docs (SLD, Capacity)', category: 'VERIFY', reason: 'Contract capacity ke against match karna hai' },
     { value: 'DISCOM_LICENSE', label: 'DISCOM License/Registration', category: 'VERIFY', reason: 'Legal buyer-status confirm karna' },
     { value: 'BANK_ACCOUNT_PROOF', label: 'Bank Account Proof (Cancelled Cheque)', category: 'VERIFY', reason: 'Penny-drop verification ke saath, fraud-prevention' },

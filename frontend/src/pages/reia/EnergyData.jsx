@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
+import EnergyOverview from '../../components/EnergyOverview.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, fmtNumber } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
@@ -7,6 +8,7 @@ import { getGuide } from '../../content/guides/index.js';
 import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
 import ReaAutomationPipeline from '../../components/ReaAutomationPipeline.jsx';
 import EnergyAccountUpload from '../../components/EnergyAccountUpload.jsx';
+import EnergyRecordDetail, { ResponseBadge } from '../../components/EnergyRecordDetail.jsx';
 import { fmtDateTime } from '../../datetime.js';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
@@ -41,6 +43,8 @@ export default function EnergyData() {
   const [scanning, setScanning] = useState(false);
   const [reaMsg, setReaMsg] = useState('');
   const [trailEnergyId, setTrailEnergyId] = useState(null);
+  // The record whose source document, blocks and counterparty answer are open.
+  const [recordId, setRecordId] = useState(null);
   const [pdfLoading, setPdfLoading] = useState(false);
 
   // Live Step-by-Step Pipeline Monitor State
@@ -167,8 +171,24 @@ export default function EnergyData() {
     load();
   }
 
+  // Locking can be refused — an unvalidated period, or one the counterparty has
+  // objected to. The refusal is shown; where a recorded reason lets the lock go
+  // ahead anyway, the reason is asked for.
   async function handleLock(row) {
-    await api.energyData.lock(row.id);
+    try {
+      await api.energyData.lock(row.id);
+    } catch (err) {
+      const data = err.response?.data || {};
+      if (!data.hint) { alert(data.error || 'Could not lock this period'); return; }
+      const reason = window.prompt(`${data.error}${data.objection ? `\n\nTheir objection: ${data.objection}` : ''}\n\nTo lock it as it stands, give the reason (it is kept on record):`);
+      if (!reason || !reason.trim()) return;
+      try {
+        await api.energyData.lock(row.id, { override_reason: reason.trim() });
+      } catch (e2) {
+        alert(e2.response?.data?.error || 'Could not lock this period');
+        return;
+      }
+    }
     load();
   }
 
@@ -185,6 +205,8 @@ export default function EnergyData() {
     { key: 'availability_percent', header: 'Availability %', render: (r) => r.availability_percent != null ? `${fmtNumber(r.availability_percent)}%` : '-' },
     { key: 'peak_availability_percent', header: 'Peak Avail. %', render: (r) => r.peak_availability_percent != null ? `${fmtNumber(r.peak_availability_percent)}%` : '-' },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
+    // What the seller or buyer has said to the figure: accepted, objected, or not yet answered.
+    { key: 'response', header: 'Counterparty', render: (r) => <ResponseBadge row={r} /> },
     { key: 'deviation_notes', header: 'Notes', render: (r) => r.deviation_notes || '-' },
     ...(CAN_WRITE.includes(user?.role) ? [{
       key: 'actions', header: 'Actions', render: (r) => (
@@ -192,11 +214,15 @@ export default function EnergyData() {
           {r.status === 'DRAFT' && <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); handleValidate(r); }}>Validate</button>}
           {r.status === 'VALIDATED' && <button className="btn btn-success btn-sm" onClick={(e) => { e.stopPropagation(); handleLock(r); }}>Lock</button>}
           <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); setTrailEnergyId(r.id); }}>Trail</button>
+          <button className="btn btn-outline btn-sm" title="Source document, 15-minute blocks and the counterparty's answer" onClick={(e) => { e.stopPropagation(); setRecordId(r.id); }}>Record</button>
         </div>
       ),
     }] : [{
       key: 'actions', header: 'Actions', render: (r) => (
-        <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); setTrailEnergyId(r.id); }}>Trail</button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); setTrailEnergyId(r.id); }}>Trail</button>
+          <button className="btn btn-outline btn-sm" title="Source document, 15-minute blocks and the counterparty's answer" onClick={(e) => { e.stopPropagation(); setRecordId(r.id); }}>Record</button>
+        </div>
       ),
     }]),
   ];
@@ -242,6 +268,8 @@ export default function EnergyData() {
           {' '}{accountResult.created} new, {accountResult.replaced} replacing a draft, {accountResult.skipped} left alone — all as DRAFT, to validate before locking.
         </div>
       )}
+
+      <EnergyOverview contractId={filters.contract_id} rows={rows} />
 
       <div className="filters-bar">
         <select value={filters.contract_id} onChange={(e) => setFilters({ ...filters, contract_id: e.target.value })}>
@@ -654,6 +682,10 @@ export default function EnergyData() {
 
       <Modal open={!!trailEnergyId} onClose={() => setTrailEnergyId(null)} title="Settlement Trail" width={720}>
         {trailEnergyId && <SettlementTrailPanel energyId={trailEnergyId} />}
+      </Modal>
+
+      <Modal open={!!recordId} onClose={() => setRecordId(null)} title="Energy record" width={940}>
+        {recordId && <EnergyRecordDetail key={recordId} id={recordId} onChanged={load} />}
       </Modal>
     </div>
   );

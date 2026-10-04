@@ -18,6 +18,7 @@ import {
   refreshAvailable,
 } from '../paymentSecurityEngine.js';
 import { ACTIVE_STATUSES, WATERFALL_DEFAULTS } from '../paymentSecurityConstants.js';
+import { takeAmendmentOnRecord } from './securityDesk.js';
 
 export {
   computeCoverage,
@@ -546,13 +547,20 @@ router.post('/:id/renew', requireRole(...REIA_WRITE), (req, res) => {
   const { validity_end, limit_amount, amount } = req.body;
   const existing = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
-  const newLimit = limit_amount ?? amount ?? existing.limit_amount;
-  db.prepare(`
-    UPDATE payment_security SET validity_end = ?, limit_amount = ?, available_amount = ? - utilized_amount,
-      status = CASE WHEN utilized_amount > 0 THEN 'PARTIALLY_UTILIZED' ELSE 'ACTIVE' END,
-      renewal_status = 'RENEWED', updated_at = datetime('now')
-    WHERE id = ?
-  `).run(validity_end, newLimit, newLimit, existing.id);
+  if (!validity_end) return res.status(400).json({ error: 'validity_end required' });
+  const newLimit = Number(limit_amount ?? amount ?? existing.limit_amount);
+  // A renewal is an amendment by the bank, so it goes into the amendment chain
+  // rather than overwriting the dates with nothing to show what they were.
+  try {
+    if (validity_end !== existing.validity_end || newLimit !== Number(existing.limit_amount)) db.transaction(() => takeAmendmentOnRecord(existing, {
+      newValidityEnd: validity_end !== existing.validity_end ? validity_end : null,
+      newLimit: newLimit !== Number(existing.limit_amount) ? newLimit : null,
+      reason: req.body.reason || 'Renewed by the REIA desk', user: req.user, side: 'SJVN',
+    }))();
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
   const fresh = syncInstrumentAvailable(existing.id);
   recordSecurityEvent({ instrumentId: existing.id, contractId: existing.contract_id, user: req.user, eventType: 'RENEW', details: { validity_end, limit_amount: newLimit } });
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'RENEW', module: 'REIA', entityType: 'payment_security', entityId: existing.id });
@@ -623,6 +631,11 @@ router.post('/:id/release-request', (req, res) => {
   const ps = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(req.params.id);
   if (!ps) return res.status(404).json({ error: 'Not found' });
   if (!canAccessInstrument(req.user, ps) && !isReia(req.user)) return res.status(403).json({ error: 'Not authorized' });
+  // A second request used to stack on the first, and one could be raised on an
+  // instrument already released or never accepted.
+  if (!['ACTIVE', 'PARTIALLY_UTILIZED', 'RENEWED', 'EXPIRED'].includes(ps.status)) {
+    return res.status(400).json({ error: ps.status === 'RELEASE_PENDING' ? 'A release request on this instrument is already with SJVN' : `An instrument that is ${ps.status.toLowerCase().replace(/_/g, ' ')} cannot be released` });
+  }
 
   const outstanding = computeCoverage(ps.contract_id).outstanding_dues;
   const openDisputes = db.prepare(`

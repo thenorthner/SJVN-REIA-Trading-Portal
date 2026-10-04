@@ -7,6 +7,7 @@ import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from '../
 import { PortfolioSelect } from '../context/PortfolioContext.jsx';
 import { RouteSkeleton } from './ui.jsx';
 import ChangePasswordModal from './ChangePasswordModal.jsx';
+import { Lock } from 'lucide-react';
 
 /**
  * Keeps the shell up if a screen's module fails to load or throws while
@@ -115,6 +116,10 @@ const NAV_INTERNAL = [
     links: [
       { to: '/reia', label: 'REIA Dashboard', end: true },
       { to: '/reia/entities', label: 'Stakeholders (Sellers/Buyers)' },
+      // Each company's portal users; only SJVN's administrators manage them.
+      { to: '/reia/company-users', label: 'Company Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN'] },
+      // What is waiting to be verified, and where each company's KYC stands.
+      { to: '/reia/document-desk', label: 'Documents & KYC Desk' },
       { to: '/reia/contracts', label: 'Contracts (PPA/PSA)' },
       // Tenure, commissioning, security and approvals, contract by contract.
       { to: '/reia/contract-compliance', label: 'Contract Compliance' },
@@ -128,6 +133,8 @@ const NAV_INTERNAL = [
       // Energy against what each project's capacity could make.
       { to: '/reia/generation-performance', label: 'Generation Performance' },
       { to: '/reia/disputes', label: 'Dispute Management' },
+      // A seller's statement of account, and where Finance files its Form 16A.
+      { to: '/reia/seller-ledgers', label: 'Counterparty Ledgers & TDS' },
       { to: '/reia/payment-security', label: 'Payment Security' },
       { to: '/reia/power-diversion', label: 'Power Diversion' },
       { to: '/reia/energy-banking', label: 'Energy Banking' },
@@ -170,8 +177,10 @@ const NAV_INTERNAL = [
   },
   {
     section: 'Platform',
-    roles: [...new Set([...ROLE_GROUPS.AUDITOR, ...ROLE_GROUPS.MASTERS_READ, ...ROLE_GROUPS.TRADING_ALL])],
+    roles: [...new Set([...ROLE_GROUPS.AUDITOR, ...ROLE_GROUPS.MASTERS_READ, ...ROLE_GROUPS.TRADING_ALL, 'REIA_ADMIN', 'TRADING_ADMIN', 'IT_SUPER_ADMIN'])],
     links: [
+      // SJVN's own officers on the platform; an administrator's page.
+      { to: '/admin/users', label: 'SJVN Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN'] },
       { to: '/master/portfolio-registry', label: 'Portfolio Registry', roles: ROLE_GROUPS.TRADING_ALL },
       { to: '/masters', label: 'Master Data', roles: ROLE_GROUPS.MASTERS_READ },
       { to: '/audit-logs', label: 'Audit Trail', roles: ROLE_GROUPS.AUDITOR },
@@ -189,13 +198,13 @@ const NAV_SELLER = [
       { to: '/notification-board', label: 'Notification Board' },
       { to: '/seller/team', label: 'My Team' },
       { to: '/seller/documents', label: 'My Documents & KYC' },
-      { to: '/seller/contracts', label: 'My Contracts (PPAs)' },
-      { to: '/seller/energy-data', label: 'Energy Data' },
-      { to: '/seller/invoices', label: 'My Invoices' },
-      { to: '/seller/payments', label: 'Payments & Ledger' },
-      { to: '/seller/disputes', label: 'My Disputes' },
-      { to: '/seller/payment-security', label: 'Payment Security' },
-      { to: '/seller/reconciliation', label: 'Reconciliation' },
+      { to: '/seller/contracts', label: 'My Contracts (PPAs)', requiresKyc: true },
+      { to: '/seller/energy-data', label: 'Energy Data', requiresKyc: true },
+      { to: '/seller/invoices', label: 'My Invoices', requiresKyc: true },
+      { to: '/seller/payments', label: 'Payments & Ledger', requiresKyc: true },
+      { to: '/seller/disputes', label: 'My Disputes', requiresKyc: true },
+      { to: '/seller/payment-security', label: 'Payment Security', requiresKyc: true },
+      { to: '/seller/reconciliation', label: 'Reconciliation', requiresKyc: true },
     ],
   },
 ];
@@ -210,13 +219,13 @@ const NAV_BUYER = [
       { to: '/notification-board', label: 'Notification Board' },
       { to: '/buyer/team', label: 'My Team' },
       { to: '/buyer/documents', label: 'My Documents & KYC' },
-      { to: '/buyer/contracts', label: 'My PSAs' },
-      { to: '/buyer/energy-data', label: 'Energy Allocation' },
-      { to: '/buyer/invoices', label: 'Payable Invoices' },
-      { to: '/buyer/payments', label: 'Payment Ledger' },
-      { to: '/buyer/disputes', label: 'My Disputes' },
-      { to: '/buyer/payment-security', label: 'Payment Security' },
-      { to: '/buyer/reconciliation', label: 'Reconciliation' },
+      { to: '/buyer/contracts', label: 'My PSAs', requiresKyc: true },
+      { to: '/buyer/energy-data', label: 'Energy Allocation', requiresKyc: true },
+      { to: '/buyer/invoices', label: 'Payable Invoices', requiresKyc: true },
+      { to: '/buyer/payments', label: 'Payment Ledger', requiresKyc: true },
+      { to: '/buyer/disputes', label: 'My Disputes', requiresKyc: true },
+      { to: '/buyer/payment-security', label: 'Payment Security', requiresKyc: true },
+      { to: '/buyer/reconciliation', label: 'Reconciliation', requiresKyc: true },
     ],
   },
 ];
@@ -320,16 +329,26 @@ const NavGroup = ({ section, user }) => {
       {isOpen && (
         <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
           {subGroups.map((g) => <NavSubGroup key={g.group} group={g} user={user} />)}
-          {links.map((l) => (
-            <NavLink
-              key={l.to}
-              to={l.to}
-              end={l.end}
-              className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}
-            >
-              {l.label}
-            </NavLink>
-          ))}
+          {links.map((l) => {
+            const isKycLocked = l.requiresKyc && user?.entity && user.entity.status !== 'APPROVED';
+            return (
+              <NavLink
+                key={l.to}
+                to={isKycLocked ? '#' : l.to}
+                end={l.end}
+                className={({ isActive }) => 'nav-link' + (isActive && !isKycLocked ? ' active' : '') + (isKycLocked ? ' locked' : '')}
+                style={isKycLocked ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                onClick={(e) => {
+                  if (isKycLocked) {
+                    e.preventDefault();
+                  }
+                }}
+              >
+                {l.label}
+                {isKycLocked && <Lock size={12} style={{ marginLeft: 'auto', opacity: 0.5 }} />}
+              </NavLink>
+            );
+          })}
         </div>
       )}
     </div>
@@ -529,7 +548,6 @@ export default function Layout() {
                   <div className="notif-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 600 }}>System Alerts</span>
                     <div style={{ display: 'flex', gap: 10 }}>
-                      <button className="link-btn" onClick={() => alert('Compose Mail modal opened!')} style={{ color: '#0052cc', fontWeight: 600 }}>+ Compose Mail</button>
                       <button className="link-btn" onClick={() => api.notifications.markAllRead().then(() => api.notifications.list(user?.role).then(setNotifications))}>Mark all read</button>
                     </div>
                   </div>
@@ -590,7 +608,7 @@ export default function Layout() {
           </RouteErrorBoundary>
         </main>
       </div>
-      <ChangePasswordModal open={showChangePassword} onClose={() => setShowChangePassword(false)} />
+      <ChangePasswordModal open={showChangePassword || !!user?.must_change_password} forced={!!user?.must_change_password && !showChangePassword} onClose={() => setShowChangePassword(false)} />
     </div>
   );
 }

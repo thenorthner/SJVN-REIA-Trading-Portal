@@ -36,6 +36,13 @@ export function AuthProvider({ children }) {
   async function changePassword(currentPassword, newPassword) {
     const res = await api.auth.changePassword(currentPassword, newPassword);
     if (res?.token) localStorage.setItem('sjvn_token', res.token);
+    // A password an admin issued has now been replaced by the holder's own.
+    setUser((u) => {
+      if (!u?.must_change_password) return u;
+      const next = { ...u, must_change_password: false };
+      localStorage.setItem('sjvn_user', JSON.stringify(next));
+      return next;
+    });
     return res;
   }
 

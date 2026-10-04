@@ -154,6 +154,34 @@ export async function dispatch(o) {
 }
 
 /**
+ * Send to one person on the channels they themselves chose, outside the
+ * per-event channel policy — the person's own preference is the policy.
+ * `smsEvent` names the DLT template when it differs from the event logged.
+ */
+export async function deliverDirect({ event, smsEvent, rcpt, email = false, sms = false, subject, text, smsText }) {
+  let count = 0;
+  if (email && rcpt.email) {
+    await deliverEmail({ notificationId: null, event, rcpt, subject, text });
+    count += 1;
+  }
+  if (sms && rcpt.phone && !isDuplicate(event, 'SMS', rcpt.phone)) {
+    const base = { notificationId: null, event, channel: 'SMS', name: rcpt.name, address: rcpt.phone, body: smsText || text };
+    try {
+      const res = await sendSms({ to: rcpt.phone, text: smsText || text, event: smsEvent || event });
+      logDelivery({
+        ...base,
+        status: res.ok ? 'SENT' : 'FAILED', provider: res.mode, providerRef: res.provider_ref,
+        error: res.ok ? null : res.error, attempts: 1, sentAt: res.ok ? new Date().toISOString() : null,
+      });
+    } catch (err) {
+      logDelivery({ ...base, status: 'FAILED', error: err.message, attempts: 1 });
+    }
+    count += 1;
+  }
+  return count;
+}
+
+/**
  * Retry deliveries that failed, oldest first, up to the attempt cap. Runs on a
  * schedule; also callable manually. Skipped rows and successes are left alone.
  */

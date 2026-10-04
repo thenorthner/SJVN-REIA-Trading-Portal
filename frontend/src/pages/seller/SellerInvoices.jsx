@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, StatCard, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import InvoiceCompliance, { TdsEstimate } from '../../components/InvoiceCompliance.jsx';
 import {
   InvoiceBreakdown,
   InvoiceFinancialStrip,
@@ -30,6 +31,24 @@ const STATUS_LABELS = {
 };
 
 const SELLER_STATUS_FILTERS = INVOICE_STATUS_OPTIONS.filter((s) => s !== 'SENT');
+
+const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+function exportCsv(rows) {
+  const head = ['Invoice No.', 'Contract', 'Period', 'Type', 'Energy (MWh)', 'Amount', 'Paid', 'Status', 'Due date', 'IRN', 'Signed copy', 'Courier docket', 'Hard copy received'];
+  const lines = rows.map((r) => [r.invoice_no, r.contract_no, r.billing_period, r.invoice_type, r.energy_mwh, r.total_amount, r.paid_total ?? 0, r.status,
+    r.due_date || '', r.irn || '', r.signed_version_id ? 'Yes' : 'No', r.hardcopy_docket_no || '', r.hardcopy_received_on || ''].map(csvCell).join(','));
+  const url = URL.createObjectURL(new Blob([`${head.map(csvCell).join(',')}\n${lines.join('\n')}\n`], { type: 'text/csv' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `invoices-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// A small mark for each thing that goes with the bill.
+const Mark = ({ on, children, title }) => (
+  <span title={title} style={{ display: 'inline-block', marginRight: 4, padding: '1px 6px', borderRadius: 999, fontSize: 10.5, fontWeight: 700, background: on ? '#dcfce7' : '#f1f5f9', color: on ? '#15803d' : '#94a3b8' }}>{children}</span>
+);
 
 function StatusStepper({ status }) {
   let currentIdx = STATUS_STEPS.indexOf(status);
@@ -76,6 +95,12 @@ export default function SellerInvoices() {
   const [rows, setRows] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [filters, setFilters] = useState({ status: '', billing_period: '' });
+  const [q, setQ] = useState('');
+  const [contractFilter, setContractFilter] = useState('');
+  const [picked, setPicked] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResult, setBulkResult] = useState(null);
+  const [tdsPreview, setTdsPreview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
@@ -119,6 +144,55 @@ export default function SellerInvoices() {
     + (Number(form.transmission_charges) || 0)
     + (Number(form.taxes) || 0)
     + (Number(form.other_adjustments) || 0);
+
+  // What SJVN would deduct at source on a bill of this size — shown before it is raised.
+  useEffect(() => {
+    if (!form.contract_id || !form.period_month || !(totalAmount > 0)) { setTdsPreview(null); return undefined; }
+    const t = setTimeout(() => {
+      api.invoiceCompliance.tdsPreview({ contract_id: form.contract_id, billing_period: form.period_month, amount: totalAmount, taxes: Number(form.taxes) || 0 })
+        .then(setTdsPreview).catch(() => setTdsPreview(null));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [form.contract_id, form.period_month, form.taxes, totalAmount]);
+
+  const text = q.trim().toLowerCase();
+  const shown = useMemo(() => rows.filter((r) => (!contractFilter || r.contract_id === contractFilter)
+    && (!text || `${r.invoice_no} ${r.contract_no} ${r.billing_period}`.toLowerCase().includes(text))), [rows, contractFilter, text]);
+
+  const totals = useMemo(() => {
+    const live = shown.filter((r) => !['CANCELLED', 'DRAFT', 'PENDING_L2', 'REJECTED'].includes(r.status));
+    const billed = live.reduce((s, r) => s + (Number(r.total_amount) || 0), 0);
+    const paid = live.reduce((s, r) => s + (Number(r.paid_total) || 0), 0);
+    return {
+      billed, paid, outstanding: Math.max(0, billed - paid),
+      overdue: live.filter((r) => r.days_overdue > 0).length,
+      withSjvn: shown.filter((r) => ['SUBMITTED', 'UNDER_APPROVAL'].includes(r.status)).length,
+      toAct: shown.filter((r) => (r.status === 'REJECTED' && canSendToSjvn) || (r.status === 'DRAFT' && isMaker) || (r.status === 'PENDING_L2' && canSendToSjvn)).length,
+    };
+  }, [shown, canSendToSjvn, isMaker]);
+
+  // What this person can move on in bulk: the maker sends drafts to the checker; the checker sends checked bills to SJVN.
+  const bulkable = (r) => (r.status === 'DRAFT' && isMaker) || (r.status === 'PENDING_L2' && canSendToSjvn);
+  const pickedRows = shown.filter((r) => picked.has(r.id) && bulkable(r));
+  const pickedDrafts = pickedRows.filter((r) => r.status === 'DRAFT');
+  const pickedChecked = pickedRows.filter((r) => r.status === 'PENDING_L2');
+  const allBulkable = shown.filter(bulkable);
+
+  // One at a time, through the same routes the single buttons use, so every bill
+  // is held to the same checks and a refusal names the bill it was for.
+  async function bulk(list, call, verb) {
+    if (!window.confirm(`${verb} ${list.length} invoice${list.length === 1 ? '' : 's'}?`)) return;
+    setBulkBusy(true);
+    const failed = [];
+    let done = 0;
+    for (const r of list) {
+      try { await call(r.id); done += 1; } catch (err) { failed.push(`${r.invoice_no}: ${err.response?.data?.error || err.message}`); }
+    }
+    setBulkBusy(false);
+    setBulkResult({ verb, done, failed });
+    setPicked(new Set());
+    load();
+  }
 
   function openDetail(row) {
     api.invoices.get(row.id).then(setSelected);
@@ -233,6 +307,23 @@ export default function SellerInvoices() {
   }
 
   const columns = [
+    {
+      key: 'pick',
+      header: (
+        <input
+          type="checkbox" aria-label="Select all that can be moved on" disabled={!allBulkable.length}
+          checked={allBulkable.length > 0 && allBulkable.every((r) => picked.has(r.id))}
+          onChange={(e) => setPicked(e.target.checked ? new Set(allBulkable.map((r) => r.id)) : new Set())}
+        />
+      ),
+      render: (r) => (bulkable(r) ? (
+        <input
+          type="checkbox" aria-label={`Select ${r.invoice_no}`} checked={picked.has(r.id)}
+          onClick={(e) => e.stopPropagation()}
+          onChange={() => setPicked((p) => { const n = new Set(p); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })}
+        />
+      ) : null),
+    },
     { key: 'invoice_no', header: 'Invoice No.' },
     { key: 'contract_no', header: 'Contract' },
     { key: 'billing_period', header: 'Period' },
@@ -241,6 +332,19 @@ export default function SellerInvoices() {
     { key: 'total_amount', header: 'Amount', render: (r) => fmtCurrency(r.total_amount) },
     { key: 'status', header: 'Status', render: (r) => <InvoiceStatusCell row={r} showValidation /> },
     { key: 'due_date', header: 'Due Date', render: (r) => r.due_date || '-' },
+    {
+      key: 'goes_with',
+      header: 'With the bill',
+      render: (r) => (
+        <span style={{ whiteSpace: 'nowrap' }}>
+          <Mark on={!!r.irn} title={r.irn ? 'E-invoice IRN recorded' : 'No e-invoice IRN'}>IRN</Mark>
+          <Mark on={!!r.signed_version_id} title={r.signed_version_id ? 'Signed copy attached' : 'No signed copy'}>Signed</Mark>
+          <Mark on={!!r.hardcopy_received_on} title={r.hardcopy_received_on ? `Hard copy received ${r.hardcopy_received_on}` : r.hardcopy_docket_no ? `Hard copy in transit — ${r.hardcopy_docket_no}` : 'No hard copy sent'}>
+            {r.hardcopy_received_on ? 'Paper ✓' : r.hardcopy_docket_no ? 'In transit' : 'Paper'}
+          </Mark>
+        </span>
+      ),
+    },
   ];
 
   return (
@@ -250,6 +354,7 @@ export default function SellerInvoices() {
         subtitle="Create invoices, submit to SJVN for approval, and track payment status"
         actions={
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn btn-secondary" disabled={!shown.length} onClick={() => exportCsv(shown)}>Export CSV</button>
             <button className="btn btn-secondary" onClick={() => setShowUpload(true)}>
               Raise from a Sheet
             </button>
@@ -262,7 +367,45 @@ export default function SellerInvoices() {
 
       <SellerInvoiceUpload open={showUpload} onClose={() => setShowUpload(false)} onRaised={load} />
 
+      <div className="kpi-grid">
+        <StatCard label="Billed" value={fmtCurrency(totals.billed)} tone="blue" hint="Submitted to SJVN, not cancelled" />
+        <StatCard label="Received" value={fmtCurrency(totals.paid)} tone="green" />
+        <StatCard label="Outstanding" value={fmtCurrency(totals.outstanding)} tone={totals.outstanding > 0 ? 'amber' : 'green'} hint={totals.overdue ? `${totals.overdue} past due date` : 'Nothing past due'} />
+        <StatCard label="With SJVN for approval" value={totals.withSjvn} />
+        <StatCard label="Waiting on you" value={totals.toAct} tone={totals.toAct ? 'red' : 'green'} hint="Drafts, bills to check, and rejections" />
+      </div>
+
+      {bulkResult && (
+        <div className={`alert ${bulkResult.failed.length ? 'alert-error' : 'alert-success'}`} role="status">
+          {bulkResult.verb}: {bulkResult.done} done{bulkResult.failed.length ? `, ${bulkResult.failed.length} not done —` : '.'}
+          {bulkResult.failed.length > 0 && <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{bulkResult.failed.map((f) => <li key={f}>{f}</li>)}</ul>}
+        </div>
+      )}
+
+      {pickedRows.length > 0 && (
+        <div className="mail-bulk" role="toolbar" aria-label="Actions on the selected invoices" style={{ marginBottom: 12 }}>
+          <strong>{pickedRows.length} selected</strong>
+          {pickedDrafts.length > 0 && (
+            <button type="button" disabled={bulkBusy} onClick={() => bulk(pickedDrafts, api.invoices.submitL2, 'Send to checker')}>
+              Send {pickedDrafts.length} to checker
+            </button>
+          )}
+          {pickedChecked.length > 0 && (
+            <button type="button" disabled={bulkBusy} onClick={() => bulk(pickedChecked, (id) => api.invoices.approveL2(id), 'Approve and submit to SJVN')}>
+              Approve &amp; submit {pickedChecked.length} to SJVN
+            </button>
+          )}
+          <button type="button" disabled={bulkBusy} onClick={() => setPicked(new Set())}>Clear</button>
+          {bulkBusy && <span>Working…</span>}
+        </div>
+      )}
+
       <div className="filters-bar">
+        <input type="search" placeholder="Search invoice no. or contract…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search invoices" />
+        <select value={contractFilter} onChange={(e) => setContractFilter(e.target.value)} aria-label="Contract">
+          <option value="">All contracts</option>
+          {contracts.map((c) => <option key={c.id} value={c.id}>{c.contract_no}</option>)}
+        </select>
         <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
           <option value="">All statuses</option>
           {SELLER_STATUS_FILTERS.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -273,7 +416,7 @@ export default function SellerInvoices() {
       <Card>
         <Table
           columns={columns}
-          rows={loading ? [] : rows}
+          rows={loading ? [] : shown}
           onRowClick={openDetail}
           emptyMessage={loading ? 'Loading...' : 'No invoices found. Click "+ Create Invoice" to create your first invoice.'}
         />
@@ -346,6 +489,13 @@ export default function SellerInvoices() {
             </div>
           )}
 
+          {energyPreview && tdsPreview && (
+            <div style={{ margin: '12px 0' }}>
+              <div className="section-title" style={{ marginBottom: 8 }}>TDS — what SJVN is expected to deduct</div>
+              <TdsEstimate tds={tdsPreview} total={totalAmount} />
+            </div>
+          )}
+
           <div className="form-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={!energyPreview}>{isMaker ? 'Save draft for your checker' : 'Submit to SJVN'}</button>
@@ -360,6 +510,15 @@ export default function SellerInvoices() {
               <button type="button" onClick={handleDownloadPdf} className="btn btn-sm btn-outline">Download PDF Bill</button>
             </div>
             <StatusStepper status={selected.status} />
+
+            {selected.status === 'REJECTED' && (() => {
+              const r = [...(selected.approvals || [])].reverse().find((a) => a.status === 'REJECTED');
+              return (
+                <div className="alert alert-error" style={{ marginTop: 12 }}>
+                  <strong>Rejected by SJVN{r?.approver_name ? ` (${r.approver_name})` : ''}:</strong> {r?.comments || 'No reason was recorded.'}
+                </div>
+              );
+            })()}
 
             <div className="detail-grid mb-0" style={{ marginTop: 12 }}>
               <div className="detail-item"><span className="detail-label">Status</span><span className="detail-value"><Badge status={selected.status} /></span></div>
@@ -380,6 +539,8 @@ export default function SellerInvoices() {
 
             <InvoiceBreakdown invoice={selected} />
             <InvoiceFinancialStrip invoice={{ ...selected, direction: selected.direction || 'SELLER_TO_SJVN' }} />
+
+            <InvoiceCompliance key={selected.id} invoice={selected} onChanged={load} />
 
             {selected.approvals?.length > 0 && (
               <>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import ContractWorkspace from '../../components/ContractWorkspace.jsx';
 import ContractBulkLoad from './ContractBulkLoad.jsx';
 
 const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
@@ -121,6 +122,18 @@ export default function Contracts() {
   const [statusError, setStatusError] = useState('');
   const [amendError, setAmendError] = useState('');
   const [selected, setSelected] = useState(null);
+  // The contract whose working file — milestones, documents, requests, notices — is open, and on which tab.
+  const [workFile, setWorkFile] = useState(null);
+  // What across all contracts is waiting on SJVN.
+  const [pending, setPending] = useState(null);
+  // Per contract: the next milestone and what on it needs someone to act.
+  const [attention, setAttention] = useState({});
+  const loadPending = () => {
+    api.contractWorkspace.pending().then(setPending).catch(() => setPending(null));
+    api.contractWorkspace.summary().then((list) => setAttention(Object.fromEntries(list.map((a) => [a.contract_id, a])))).catch(() => setAttention({}));
+  };
+  useEffect(() => { loadPending(); }, []);
+  const openWorkFile = (contractId, tab) => api.contracts.get(contractId).then((c) => setWorkFile({ contract: c, tab })).catch(() => {});
   const [allocations, setAllocations] = useState([]);
   const [amendForm, setAmendForm] = useState(null);
   const [requirements, setRequirements] = useState([]);
@@ -291,7 +304,36 @@ export default function Contracts() {
         <div style={{fontSize: 11, color:'#666'}}>{r.tariff_type}</div>
       </div>
     )},
+    {
+      key: 'next', header: 'Next milestone', render: (r) => {
+        const n = attention[r.id]?.next_milestone;
+        if (!n) return <span style={{ color: 'var(--slate-500)' }}>—</span>;
+        return <span>{n.label.replace(/\s*\(.*\)$/, '')}{n.due_date ? <div style={{ fontSize: 12, color: n.status === 'DELAYED' ? '#b91c1c' : 'var(--slate-500)' }}>{n.due_date}</div> : null}</span>;
+      },
+    },
+    {
+      key: 'attention', header: 'Needs attention', render: (r) => {
+        const a = attention[r.id];
+        const n = (k, one) => `${k} ${one}${k === 1 ? '' : 's'}`;
+        const flags = a ? [
+          a.notices_awaiting_me > 0 && ['red', `${n(a.notices_awaiting_me, 'notice')} to acknowledge`, 'NOTICES'],
+          a.milestones_delayed > 0 && ['red', `${n(a.milestones_delayed, 'milestone')} delayed`, 'MILESTONES'],
+          a.pbg_state === 'EXPIRED' && ['red', 'PBG expired', 'GUARANTEE'],
+          a.requests_pending > 0 && ['amber', `${n(a.requests_pending, 'request')} to decide`, 'REQUESTS'],
+          a.milestones_to_confirm > 0 && ['amber', `${n(a.milestones_to_confirm, 'milestone')} to confirm`, 'MILESTONES'],
+          a.pbg_state === 'EXPIRING' && ['amber', `PBG expires in ${n(a.pbg_days_to_expiry, 'day')}`, 'GUARANTEE'],
+        ].filter(Boolean) : [];
+        return flags.length
+          ? flags.map(([tone, text, tab]) => <button key={text} type="button" className={`cw-flag ${tone}`} style={{ border: 'none', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); openWorkFile(r.id, tab); }}>{text}</button>)
+          : <span style={{ color: 'var(--slate-500)' }}>—</span>;
+      },
+    },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
+    {
+      key: 'file', header: '', render: (r) => (
+        <button type="button" className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); openWorkFile(r.id, 'OVERVIEW'); }}>Working file</button>
+      ),
+    },
   ];
 
   return (
@@ -313,6 +355,25 @@ export default function Contracts() {
           </div>
         }
       />
+
+      {pending && (pending.requests.length + pending.notices.length + pending.milestones_to_confirm.length + pending.milestones_delayed.length) > 0 && (
+        <Card title="Waiting on SJVN" style={{ marginBottom: 16 }}>
+          {[
+            ...pending.requests.map((r) => ({ key: `r${r.id}`, tone: 'amber', flag: 'Request to decide', text: r.subject, tab: 'REQUESTS', ...r })),
+            ...pending.notices.map((n) => ({ key: `n${n.id}`, tone: 'red', flag: 'Notice to acknowledge', text: `${n.notice_no} — ${n.subject}`, tab: 'NOTICES', ...n })),
+            ...pending.milestones_to_confirm.map((m) => ({ key: `c${m.id}`, tone: 'amber', flag: 'Milestone to confirm', text: `${m.label} — reported for ${m.reported_date}`, tab: 'MILESTONES', ...m })),
+            ...pending.milestones_delayed.map((m) => ({ key: `d${m.id}`, tone: 'red', flag: `Milestone ${m.delay_days} day(s) late`, text: `${m.label} — was due ${m.due_date}`, tab: 'MILESTONES', ...m })),
+          ].map((x) => (
+            <div key={x.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '7px 0', borderBottom: '1px solid var(--slate-100)', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 13.5, minWidth: 0 }}>
+                <span className={`cw-flag ${x.tone}`}>{x.flag}</span>
+                <strong>{x.contract_no}</strong>{x.counterparty ? ` · ${x.counterparty}` : ''} — {x.text}
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={() => openWorkFile(x.contract_id, x.tab)}>Open</button>
+            </div>
+          ))}
+        </Card>
+      )}
 
       <div className="filters-bar">
         <input type="search" placeholder="Search contract no..." value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} />
@@ -559,8 +620,18 @@ export default function Contracts() {
         </form>
       </Modal>
 
-      {selected && !amendForm && !statusForm && (
+      {workFile && (
+        <Modal open={true} onClose={() => setWorkFile(null)} title={`Working file: ${workFile.contract.contract_no}`} width={980}>
+          <ContractWorkspace key={workFile.contract.id} contract={workFile.contract} startTab={workFile.tab || 'MILESTONES'} onChanged={loadPending} />
+        </Modal>
+      )}
+
+      {selected && !amendForm && !statusForm && !workFile && (
         <Modal open={true} onClose={() => setSelected(null)} title={`Contract: ${selected.contract_no}`} width={800}>
+          <div className="ps-alert blue" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span>Documents, milestones, the guarantee, requests and notices on this contract are in its working file — the same one the counterparty sees.</span>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => { const id = selected.id; setSelected(null); openWorkFile(id, 'OVERVIEW'); }}>Open working file</button>
+          </div>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 20 }}>
             <div style={{ flex: 1, minWidth: 300 }}>
               <h4 style={{ margin: '0 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Contract Info</h4>
@@ -668,7 +739,10 @@ export default function Contracts() {
           )}
 
           {/* Action buttons */}
-          <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+          <div style={{ display: 'flex', gap: 12, marginTop: 24, flexWrap: 'wrap' }}>
+            <button className="btn btn-primary" onClick={() => setWorkFile({ contract: selected, tab: 'MILESTONES' })}>
+              Documents, milestones, requests &amp; notices
+            </button>
             {CAN_WRITE.includes(user?.role) && selected.status !== 'CLOSED' && selected.status !== 'TERMINATED' && (
               <>
                 <button className="btn btn-outline" onClick={() => {

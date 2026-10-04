@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import api from '../../api/client.js';
+import SjvnDeskCard from '../../components/SjvnDeskCard.jsx';
 import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Modal, Table } from '../../components/ui.jsx';
 
 const COLORS = ['var(--primary)', 'var(--green)', '#b3760a', 'var(--red)', '#1f5cd6', '#7a5bd6'];
@@ -46,6 +47,8 @@ export default function ReiaDashboard() {
           </div>
         }
       />
+
+      <SjvnDeskCard />
 
       <div className="kpi-grid">
         <div style={{ cursor: 'pointer' }} onClick={() => navigate('/reia/contracts')}>

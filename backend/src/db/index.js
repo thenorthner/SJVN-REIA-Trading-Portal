@@ -2545,6 +2545,64 @@ try {
   console.error('Trading-client maker/checker role migration failed:', e.message);
 }
 
+/**
+ * Widen document_versions.verification_status to support DRAFT for Seller Maker/Checker.
+ */
+function migrateDocumentVersionsStatus() {
+  const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='document_versions'").get()?.sql;
+  if (!ddl || ddl.includes("'DRAFT'")) return;
+
+  const cols = db.prepare('PRAGMA table_info(document_versions)').all().map((c) => c.name);
+  const rows = db.prepare('SELECT * FROM document_versions').all();
+  db.exec('PRAGMA foreign_keys=OFF');
+  try {
+    db.exec('DROP TABLE IF EXISTS document_versions_migration');
+    db.exec(`
+      CREATE TABLE document_versions_migration (
+        id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL REFERENCES documents(id),
+        version_number INTEGER NOT NULL,
+        file_path TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        file_size_bytes INTEGER NOT NULL,
+        mime_type TEXT NOT NULL,
+        verification_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (verification_status IN ('DRAFT', 'PENDING', 'VERIFIED', 'REJECTED', 'NOT_REQUIRED')),
+        verification_notes TEXT,
+        verified_by TEXT REFERENCES users(id),
+        verified_at TEXT,
+        expiry_date TEXT,
+        created_by TEXT REFERENCES users(id),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(document_id, version_number)
+      )
+    `);
+    if (rows.length) {
+      const keep = cols.filter((c) => [
+        'id', 'document_id', 'version_number', 'file_path', 'file_name',
+        'file_size_bytes', 'mime_type', 'verification_status', 'verification_notes',
+        'verified_by', 'verified_at', 'expiry_date', 'created_by', 'created_at'
+      ].includes(c));
+      const ins = db.prepare(`
+        INSERT INTO document_versions_migration (${keep.join(', ')})
+        VALUES (${keep.map(() => '?').join(', ')})
+      `);
+      const copy = db.transaction(() => { for (const r of rows) ins.run(...keep.map((c) => r[c])); });
+      copy();
+    }
+    db.exec('DROP TABLE document_versions');
+    db.exec('ALTER TABLE document_versions_migration RENAME TO document_versions');
+    console.log(`[MIGRATE] document_versions.verification_status widened for DRAFT (${rows.length} version(s) carried over)`);
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
+try {
+  migrateDocumentVersionsStatus();
+} catch (e) {
+  console.error('Document versions DRAFT status migration failed:', e.message);
+}
+
 /** The peak-window obligation on a contract, and what each month reported. */
 function migratePeakAvailabilityColumns() {
   const add = (table, column, type) => {
@@ -2852,6 +2910,236 @@ try {
   migrateDeviationSettlementsProvenance();
 } catch (e) {
   console.error('deviation_settlements provenance migration failed:', e.message);
+}
+
+/**
+ * Mail, second pass: a formatted body beside the plain one, and blind copies.
+ * BCC is a new value of a CHECKed column, so mail_boxes is rebuilt in place.
+ */
+function migrateMailRichTextAndBcc() {
+  const cols = db.pragma('table_info(mail_messages)').map((c) => c.name);
+  if (!cols.length) return;
+  if (!cols.includes('body_html')) db.exec('ALTER TABLE mail_messages ADD COLUMN body_html TEXT');
+
+  const ddl = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='mail_boxes'"
+  ).get()?.sql || '';
+  if (ddl.includes("'BCC'")) return;
+
+  db.exec('PRAGMA foreign_keys=OFF');
+  try {
+    db.transaction(() => {
+      const before = db.prepare('SELECT COUNT(*) c FROM mail_boxes').get().c;
+      db.exec(`
+        CREATE TABLE mail_boxes_new (
+          id TEXT PRIMARY KEY,
+          message_id TEXT NOT NULL REFERENCES mail_messages(id) ON DELETE CASCADE,
+          user_id TEXT NOT NULL REFERENCES users(id),
+          box TEXT NOT NULL CHECK (box IN ('INBOX','SENT')),
+          recipient_kind TEXT CHECK (recipient_kind IN ('TO','CC','BCC')),
+          read_at TEXT,
+          archived_at TEXT,
+          deleted_at TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          UNIQUE (message_id, user_id, box)
+        );
+        INSERT INTO mail_boxes_new (id, message_id, user_id, box, recipient_kind, read_at, archived_at, deleted_at, created_at)
+          SELECT id, message_id, user_id, box, recipient_kind, read_at, archived_at, deleted_at, created_at FROM mail_boxes;
+      `);
+      const after = db.prepare('SELECT COUNT(*) c FROM mail_boxes_new').get().c;
+      if (after !== before) throw new Error(`mail_boxes rebuild would lose rows (${before} → ${after})`);
+      db.exec(`
+        DROP TABLE mail_boxes;
+        ALTER TABLE mail_boxes_new RENAME TO mail_boxes;
+        CREATE INDEX IF NOT EXISTS idx_mail_boxes_user ON mail_boxes (user_id, box, deleted_at);
+      `);
+    })();
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+  console.log('[MIGRATE] mail_boxes: blind copies allowed');
+}
+
+try {
+  migrateMailRichTextAndBcc();
+} catch (e) {
+  console.error('Mail rich-text / BCC migration failed:', e.message);
+}
+
+/** Buyer bills: the buyer's acknowledgement that a bill reached it. */
+function migrateBuyerBillAck() {
+  const cols = db.pragma('table_info(invoices)').map((c) => c.name);
+  if (!cols.length) return;
+  for (const col of ['buyer_ack_at', 'buyer_ack_by']) {
+    if (!cols.includes(col)) db.exec(`ALTER TABLE invoices ADD COLUMN ${col} TEXT`);
+  }
+}
+
+try {
+  migrateBuyerBillAck();
+} catch (e) {
+  console.error('Buyer bill acknowledgement migration failed:', e.message);
+}
+
+/** Team management: who a member is, why an account was switched off, and when its sessions were ended. */
+function migrateTeamMembers() {
+  const cols = db.pragma('table_info(users)').map((c) => c.name);
+  if (!cols.length) return;
+  for (const [col, type] of [['designation', 'TEXT'], ['must_change_password', 'INTEGER NOT NULL DEFAULT 0'], ['sessions_revoked_at', 'INTEGER'],
+    ['deactivated_at', 'TEXT'], ['deactivated_by', 'TEXT'], ['deactivation_reason', 'TEXT'], ['created_by', 'TEXT']]) {
+    if (!cols.includes(col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${type}`);
+  }
+}
+
+try {
+  migrateTeamMembers();
+} catch (e) {
+  console.error('Team member migration failed:', e.message);
+}
+
+/** Payment security: the bank's own reference, the SFMS advice, the scanned instrument, and what it was before any amendment. */
+function migrateSecurityDesk() {
+  const cols = db.pragma('table_info(payment_security)').map((c) => c.name);
+  if (!cols.length) return;
+  for (const [col, type] of [['bank_reference_no', 'TEXT'], ['issuing_branch', 'TEXT'], ['issuing_ifsc', 'TEXT'], ['issue_date', 'TEXT'],
+    ['sfms_message_type', 'TEXT'], ['sfms_date', 'TEXT'], ['sfms_reference', 'TEXT'], ['sfms_sender_ifsc', 'TEXT'],
+    ['is_ebg', 'INTEGER NOT NULL DEFAULT 0'], ['ebg_reference', 'TEXT'], ['document_version_id', 'TEXT'],
+    ['submitted_by', 'TEXT'], ['submitted_by_side', 'TEXT'], ['rejection_note', 'TEXT'],
+    ['original_limit_amount', 'REAL'], ['original_validity_end', 'TEXT']]) {
+    if (!cols.includes(col)) db.exec(`ALTER TABLE payment_security ADD COLUMN ${col} ${type}`);
+  }
+}
+
+try {
+  migrateSecurityDesk();
+} catch (e) {
+  console.error('Payment security desk migration failed:', e.message);
+}
+
+/** Disputes: groups, the submitter's answer to a resolution, and where a contested one went. */
+function migrateDisputeResponses() {
+  const cols = db.pragma('table_info(disputes)').map((c) => c.name);
+  if (!cols.length) return;
+  for (const [col, type] of [['group_ref', 'TEXT'], ['group_title', 'TEXT'], ['resolution_response', 'TEXT'], ['resolution_response_by', 'TEXT'],
+    ['resolution_response_at', 'TEXT'], ['resolution_response_note', 'TEXT'], ['escalation_forum', 'TEXT'], ['contested_amount', 'REAL'], ['escalation_outcome', 'TEXT']]) {
+    if (!cols.includes(col)) db.exec(`ALTER TABLE disputes ADD COLUMN ${col} ${type}`);
+  }
+}
+
+try {
+  migrateDisputeResponses();
+} catch (e) {
+  console.error('Dispute response migration failed:', e.message);
+}
+
+/** Reconciliation: each side's signature as recorded, the auditor's certificate and the signed copies. */
+function migrateReconSignoff() {
+  const cols = db.pragma('table_info(reconciliations)').map((c) => c.name);
+  if (!cols.length) return;
+  for (const col of ['sjvn_sign_json', 'counterparty_sign_json', 'counterparty_cert_json', 'signed_copies_json']) {
+    if (!cols.includes(col)) db.exec(`ALTER TABLE reconciliations ADD COLUMN ${col} TEXT`);
+  }
+}
+
+try {
+  migrateReconSignoff();
+} catch (e) {
+  console.error('Reconciliation sign-off migration failed:', e.message);
+}
+
+/** Payments: what a deduction is made of, and the rebate the payment earned. */
+function migratePaymentBreakup() {
+  const cols = db.pragma('table_info(payments)').map((c) => c.name);
+  if (!cols.length) return;
+  for (const [col, type] of [['tds_amount', 'REAL'], ['tds_section', 'TEXT'], ['deduction_note', 'TEXT'], ['rebate_amount', 'REAL']]) {
+    if (!cols.includes(col)) db.exec(`ALTER TABLE payments ADD COLUMN ${col} ${type}`);
+  }
+}
+
+try {
+  migratePaymentBreakup();
+} catch (e) {
+  console.error('Payment breakup migration failed:', e.message);
+}
+
+/** Invoices: the e-invoice reference, the signed copy and the hard copy's journey. */
+function migrateInvoiceCompliance() {
+  const cols = db.pragma('table_info(invoices)').map((c) => c.name);
+  if (!cols.length) return;
+  for (const col of ['irn', 'irn_ack_no', 'irn_ack_date', 'irn_signed_qr', 'irn_checks_json', 'irn_recorded_by', 'irn_recorded_at',
+    'signed_version_id', 'signed_info_json', 'hardcopy_courier', 'hardcopy_docket_no', 'hardcopy_dispatched_on',
+    'hardcopy_received_on', 'hardcopy_received_by', 'hardcopy_note']) {
+    if (!cols.includes(col)) db.exec(`ALTER TABLE invoices ADD COLUMN ${col} TEXT`);
+  }
+}
+
+try {
+  migrateInvoiceCompliance();
+} catch (e) {
+  console.error('Invoice compliance migration failed:', e.message);
+}
+
+/** Energy records: the source document, and what the counterparty said to the figure. */
+function migrateEnergyResponses() {
+  const cols = db.pragma('table_info(energy_data)').map((c) => c.name);
+  if (!cols.length) return;
+  const add = { source_version_id: 'TEXT', response_status: 'TEXT', response_note: 'TEXT', claimed_mwh: 'REAL', response_version_id: 'TEXT',
+    response_by: 'TEXT', response_at: 'TEXT', objection_outcome: 'TEXT', objection_resolution: 'TEXT', objection_resolved_by: 'TEXT', objection_resolved_at: 'TEXT' };
+  for (const [col, type] of Object.entries(add)) {
+    if (!cols.includes(col)) db.exec(`ALTER TABLE energy_data ADD COLUMN ${col} ${type}`);
+  }
+}
+
+try {
+  migrateEnergyResponses();
+} catch (e) {
+  console.error('Energy response migration failed:', e.message);
+}
+
+/** Documents: why one was sent back, the file's fingerprint, and what was read from it. */
+function migrateDocumentVersionChecks() {
+  const cols = db.pragma('table_info(document_versions)').map((c) => c.name);
+  if (!cols.length) return;
+  for (const col of ['rejection_code', 'file_hash', 'extracted_json']) {
+    if (!cols.includes(col)) db.exec(`ALTER TABLE document_versions ADD COLUMN ${col} TEXT`);
+  }
+}
+
+try {
+  migrateDocumentVersionChecks();
+} catch (e) {
+  console.error('Document version checks migration failed:', e.message);
+}
+
+/** A pinned message remembers when it was taken down, for the board's history. */
+function migrateBroadcastRemovedAt() {
+  const cols = db.pragma('table_info(broadcast_messages)').map((c) => c.name);
+  if (cols.length && !cols.includes('removed_at')) db.exec('ALTER TABLE broadcast_messages ADD COLUMN removed_at TEXT');
+}
+
+try {
+  migrateBroadcastRemovedAt();
+} catch (e) {
+  console.error('Broadcast removed_at migration failed:', e.message);
+}
+
+/** Mail, third pass: a star, a trash that can be emptied, and when a message was first opened. */
+function migrateMailBoxFlags() {
+  const cols = db.pragma('table_info(mail_boxes)').map((c) => c.name);
+  if (!cols.length) return;
+  for (const col of ['starred_at', 'opened_at', 'purged_at']) {
+    if (!cols.includes(col)) db.exec(`ALTER TABLE mail_boxes ADD COLUMN ${col} TEXT`);
+  }
+  // What was already read was, at the latest, opened then.
+  if (!cols.includes('opened_at')) {
+    db.exec(`UPDATE mail_boxes SET opened_at = read_at WHERE box = 'INBOX' AND read_at IS NOT NULL`);
+  }
+}
+
+try {
+  migrateMailBoxFlags();
+} catch (e) {
+  console.error('Mail box-flags migration failed:', e.message);
 }
 
 try {
