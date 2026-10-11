@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../../api/client.js';
 import { PageHeader, Card, StatCard, Badge, Modal, Field, fmtCurrency } from '../../components/ui.jsx';
-import SecurityInstrumentPanel, { ExpiryTag, attachSecurityFile, errText } from '../../components/SecurityInstrumentPanel.jsx';
+import SecurityInstrumentPanel, { ExpiryTag, attachSecurityFile, errText, eventLabel } from '../../components/SecurityInstrumentPanel.jsx';
 import { PreviewModal } from '../../components/DocumentManager.jsx';
 import { fmtDate, fmtDateTime } from '../../datetime.js';
 
@@ -10,13 +10,7 @@ import { fmtDate, fmtDateTime } from '../../datetime.js';
 // favour; a buyer sees the letters of credit it has given SJVN.
 
 const ROW_CLASS = { EXPIRED: 'ps-row-expired', CRITICAL: 'ps-row-critical', WARN: 'ps-row-warn' };
-const EVENT_LABEL = {
-  CREATE: 'Recorded by SJVN', SUBMITTED: 'Submitted', SUBMISSION_ACCEPTED: 'Accepted by SJVN', SUBMISSION_REJECTED: 'Refused by SJVN',
-  VERIFIED: 'Bank confirmation recorded', DOCUMENT_ATTACHED: 'Document attached', AMENDMENT_SUBMITTED: 'Amendment submitted',
-  AMENDMENT_ACCEPTED: 'Amendment taken on record', AMENDMENT_REJECTED: 'Amendment refused', AMENDMENT_WITHDRAWN: 'Amendment withdrawn',
-  RENEW: 'Renewed', RELEASE_REQUESTED: 'Release requested', RELEASED: 'Released', UTILIZE: 'Drawn on', REPLENISH: 'Replenished',
-};
-const typeOf = (r) => (r.mechanism_type === 'BANK_GUARANTEE' ? (r.bg_subtype === 'OTHER_BG' ? 'BG' : r.bg_subtype || 'BG') : r.mechanism_type === 'LC' ? 'LC' : r.mechanism_type.replace(/_/g, ' '));
+const typeOf = (r) => (r.mechanism_type === 'BANK_GUARANTEE' ? (r.bg_subtype === 'OTHER_BG' ? 'BG · Other' : r.bg_subtype || 'BG') : r.mechanism_type === 'LC' ? 'LC' : r.mechanism_type.replace(/_/g, ' '));
 
 function saveBlob(blob, name) {
   const url = URL.createObjectURL(blob);
@@ -136,6 +130,7 @@ function ReleaseBox({ d, onDone }) {
       {d.releases?.map((r) => (
         <div key={r.id} style={{ fontSize: 13, marginTop: 6 }}>
           <Badge status={r.status} /> {r.reason} <span style={{ color: 'var(--text-light)' }}>· {r.requested_by}, {fmtDate(r.created_at)}{r.acted_by ? ` · decided by ${r.acted_by}` : ''}</span>
+          {r.decision_note && <div style={{ fontSize: 12, color: r.status === 'REJECTED' ? '#b91c1c' : 'var(--text-light)' }}>SJVN: {r.decision_note}</div>}
         </div>
       ))}
       {!pending && rc.can_request && (
@@ -174,8 +169,8 @@ function ReplenishBox({ d, onDone }) {
     setError('');
     try {
       await api.paymentSecurity.replenish(d.id, Number(amt));
+      onDone(`${fmtCurrency(Number(amt))} recorded as reinstated on ${d.instrument_no}. SJVN has been told and will check it against your bank's advice.`);
       setAmt('');
-      onDone();
     } catch (err) {
       setError(errText(err));
     }
@@ -244,6 +239,7 @@ export default function MyPaymentSecurity({ role = 'SELLER' }) {
   const [showSubmit, setShowSubmit] = useState(false);
   const [preview, setPreview] = useState(null);
   const [flash, setFlash] = useState('');
+  const [detailFlash, setDetailFlash] = useState('');
 
   const load = useCallback(() => {
     api.securityDesk.overview().then(setO).catch((e) => setError(errText(e)));
@@ -253,7 +249,7 @@ export default function MyPaymentSecurity({ role = 'SELLER' }) {
   const loadDetail = useCallback((id) => {
     api.securityDesk.get(id).then(setDetail).catch((e) => setError(errText(e)));
   }, []);
-  useEffect(() => { setDetail(null); if (openId) loadDetail(openId); }, [openId, loadDetail]);
+  useEffect(() => { setDetail(null); setDetailFlash(''); if (openId) loadDetail(openId); }, [openId, loadDetail]);
   const refresh = () => { load(); if (openId) loadDetail(openId); };
 
   const rows = useMemo(() => {
@@ -308,7 +304,7 @@ export default function MyPaymentSecurity({ role = 'SELLER' }) {
       <div className="kpi-grid">
         <StatCard label="Security given to SJVN" value={fmtCurrency(t.held)} hint={`${t.count} live instrument${t.count === 1 ? '' : 's'}`} />
         <StatCard label={`Expiring within ${o.thresholds.warn_days} days`} value={t.expiring + t.expired} tone={t.critical || t.expired ? 'red' : t.expiring ? 'amber' : 'green'}
-          hint={t.expired ? `${t.expired} already expired` : t.critical ? `${t.critical} within ${o.thresholds.critical_days} days` : 'Nothing running out'}
+          hint={t.expired ? `${t.expired} already expired` : t.critical ? `${t.critical} within ${o.thresholds.critical_days} days` : t.expiring ? 'Have the bank extend before it lapses' : 'Nothing running out'}
           onClick={t.expiring + t.expired ? () => { setTab('given'); setView('ATTENTION'); } : undefined} />
         <StatCard label="Bank confirmation awaited" value={t.awaiting_sfms} tone={t.awaiting_sfms ? 'amber' : 'green'} hint="SFMS advice not yet with SJVN" />
         <StatCard label="With SJVN for acceptance" value={withSjvn} hint="New instruments and amendments" onClick={withSjvn ? () => { setTab('given'); setView('WITH_SJVN'); } : undefined} />
@@ -417,8 +413,9 @@ export default function MyPaymentSecurity({ role = 'SELLER' }) {
                 {detail.invocations.map((v) => `${v.invocation_no}: ${fmtCurrency(v.amount)} (${v.status.replace(/_/g, ' ').toLowerCase()})`).join('; ')}
               </div>
             )}
+            {detailFlash && <div className="ps-alert green" role="status">{detailFlash}</div>}
             <SecurityInstrumentPanel instrumentId={openId} onChanged={refresh} />
-            {detail && !seller && !!detail.is_revolving && detail.utilized_amount > 0 && detail.status !== 'RELEASED' && <ReplenishBox d={detail} onDone={refresh} />}
+            {detail && !seller && !!detail.is_revolving && detail.utilized_amount > 0 && detail.status !== 'RELEASED' && <ReplenishBox d={detail} onDone={(msg) => { setDetailFlash(msg || ''); refresh(); }} />}
             {detail && detail.status !== 'DRAFT' && detail.status !== 'CLOSED' && <ReleaseBox d={detail} onDone={refresh} />}
             {detail?.events?.length > 0 && (
               <>
@@ -426,7 +423,7 @@ export default function MyPaymentSecurity({ role = 'SELLER' }) {
                 <div className="timeline">
                   {detail.events.slice().reverse().slice(0, 12).map((ev) => (
                     <div className="timeline-item" key={ev.id}>
-                      {EVENT_LABEL[ev.event_type] || ev.event_type.replace(/_/g, ' ').toLowerCase()} — {ev.actor_name}
+                      {eventLabel(ev.event_type)} — {ev.actor_name}
                       <div className="t-meta">{fmtDateTime(ev.created_at)}</div>
                     </div>
                   ))}

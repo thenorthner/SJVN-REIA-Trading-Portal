@@ -19,17 +19,23 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
   const [disagree, setDisagree] = useState(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [error, setError] = useState('');
+  const [pageError, setPageError] = useState('');
+  const [reopen, setReopen] = useState(null);
 
   function load() {
     setLoading(true);
-    api.reconciliation.list().then(setRows).finally(() => setLoading(false));
+    api.reconciliation.list().then(setRows).catch((err) => setPageError(err.response?.data?.error || err.message)).finally(() => setLoading(false));
   }
   useEffect(load, []);
 
   async function openDetail(row) {
     setSignoff(null);
     setFeedback(null);
-    setDetail(await api.reconciliation.get(row.id));
+    setError('');
+    setReopen(null);
+    setPageError('');
+    try { setDetail(await api.reconciliation.get(row.id)); } catch (err) { setPageError(err.response?.data?.error || err.message); }
   }
   async function refreshDetail() {
     if (!detail) return;
@@ -37,8 +43,27 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
     load();
   }
 
+  async function submitReopen(e) {
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await api.reconciliation.reopenRequest(detail.id, reopen);
+      setReopen(null);
+      setFeedback({ type: 'success', title: 'Reopen requested', message: 'The request has gone to the SJVN desk for review.' });
+      await refreshDetail();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'The reopen request could not be sent');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submitDisagree(e) {
     e.preventDefault();
+    if (busy) return;
+    setError('');
     setBusy(true);
     try {
       const res = await api.reconciliation.acknowledge(detail.id, 'DISAGREE', disagree, disagree);
@@ -46,7 +71,7 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
       setDisagree(null);
       await refreshDetail();
     } catch (err) {
-      alert(err.response?.data?.error || err.message || 'Failed to record the disagreement');
+      setError(err.response?.data?.error || err.message || 'Failed to record the disagreement');
     } finally {
       setBusy(false);
     }
@@ -66,6 +91,7 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
   return (
     <div>
       <PageHeader title="Reconciliation Statements" subtitle={subtitle} />
+      {pageError && <div className="form-error" role="alert">{pageError}</div>}
       <Card>
         <Table columns={columns} rows={loading ? [] : rows} onRowClick={openDetail} emptyMessage={loading ? 'Loading...' : 'No reconciliation statements yet.'} />
       </Card>
@@ -131,21 +157,23 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
               </div>
             )}
 
-            {['CLOSED', 'AGREED'].includes(detail.status) && (
+            {error && reopen === null && disagree === null && <div className="form-error" role="alert">{error}</div>}
+            {['CLOSED', 'AGREED'].includes(detail.status) && reopen === null && (
               <div className="form-actions" style={{ marginTop: 16 }}>
-                <button
-                  type="button" className="btn btn-secondary"
-                  onClick={async () => {
-                    const reason = prompt('Why reopen this closed period?');
-                    if (!reason) return;
-                    await api.reconciliation.reopenRequest(detail.id, reason);
-                    setFeedback({ type: 'success', title: 'Reopen requested', message: 'The request has gone to the SJVN desk for review.' });
-                    await refreshDetail();
-                  }}
-                >
-                  Request Period Reopen
-                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setReopen(''); setError(''); }}>Request Period Reopen</button>
               </div>
+            )}
+            {reopen !== null && (
+              <form className="cw-form" onSubmit={submitReopen}>
+                {error && <div className="form-error" role="alert">{error}</div>}
+                <Field label="Why should this closed period be reopened?" required>
+                  <textarea rows={2} required value={reopen} onChange={(e) => setReopen(e.target.value)} style={{ width: '100%' }} />
+                </Field>
+                <div className="form-actions">
+                  <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => setReopen(null)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" disabled={busy || !reopen.trim()}>{busy ? 'Sending…' : 'Send reopen request'}</button>
+                </div>
+              </form>
             )}
           </div>
         )}
@@ -165,6 +193,7 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
 
       <Modal open={disagree !== null} onClose={() => !busy && setDisagree(null)} title="Disagree with the statement" width={540}>
         <form onSubmit={submitDisagree}>
+          {error && <div className="form-error" role="alert">{error}</div>}
           <div className="alert alert-error" style={{ fontSize: 13 }}>
             This marks the whole statement <strong>disputed</strong> and holds everything on it. If you accept most of it, use <strong>Agree with exceptions</strong> instead, so what is not in question can be settled.
           </div>

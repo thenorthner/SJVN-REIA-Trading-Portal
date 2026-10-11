@@ -87,26 +87,23 @@ function fmtStamp(s) {
 
 function FormSection({ title, children }) {
   return (
-    <div style={{ marginBottom: 20 }}>
-      <div className="form-section-header">{title}</div>
+    <div style={{ marginBottom: 24 }}>
+      <h4 style={{ fontSize: 15, fontWeight: 600, color: '#0f172a', borderBottom: '2px solid #e2e8f0', paddingBottom: 8, marginBottom: 16, marginTop: 0 }}>{title}</h4>
       {children}
     </div>
   );
 }
 
-function BearerRadio({ label, field, form, setForm }) {
+function BearerRow({ label, field, form, setForm }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
-      <span style={{ color: 'var(--slate-700)' }}>{label}</span>
-      <div style={{ display: 'flex', gap: 10 }}>
-        {['Seller', 'Buyer', 'SJVN', 'Both'].map(opt => (
-          <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <input type="radio" name={field} checked={form[field] === opt} onChange={() => setForm({...form, [field]: opt})} />
-            {opt}
-          </label>
-        ))}
-      </div>
-    </div>
+    <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+      <td style={{ padding: '10px 12px', color: 'var(--slate-700)', fontSize: 13 }}>{label}</td>
+      {['Seller', 'Buyer', 'SJVN', 'Both'].map(opt => (
+        <td key={opt} style={{ padding: '10px 12px', textAlign: 'center' }}>
+          <input type="radio" name={field} checked={form[field] === opt} onChange={() => setForm({...form, [field]: opt})} style={{ margin: 0, cursor: 'pointer', width: 16, height: 16 }} />
+        </td>
+      ))}
+    </tr>
   );
 }
 
@@ -642,7 +639,7 @@ export default function Bilateral() {
       </Card>
 
       {showCreate && (
-        <Modal open={true} onClose={() => setShowCreate(false)} title="Create Bilateral Transaction" width={800}>
+        <Modal open={true} onClose={() => setShowCreate(false)} title="Create Bilateral Transaction" width={1100}>
           <form onSubmit={handleCreate}>
             <FormSection title="Contract Details">
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15, marginBottom: 15 }}>
@@ -665,9 +662,13 @@ export default function Bilateral() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
                 <Field label="Type of Contract *">
-                  <div style={{ display: 'flex', gap: 15, height: '36px', alignItems: 'center' }}>
-                    <label style={{ display: 'flex', gap: 4 }}><input type="radio" name="type_of_contract" checked={form.type_of_contract === 'Purchase Side'} onChange={() => setForm({...form, type_of_contract: 'Purchase Side'})} /> Purchase Side</label>
-                    <label style={{ display: 'flex', gap: 4 }}><input type="radio" name="type_of_contract" checked={form.type_of_contract === 'Sell Side'} onChange={() => setForm({...form, type_of_contract: 'Sell Side'})} /> Sell Side</label>
+                  <div style={{ display: 'flex', gap: 20, height: '36px', alignItems: 'center' }}>
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                      <input type="radio" name="type_of_contract" style={{ width: 16, height: 16, margin: 0, cursor: 'pointer' }} checked={form.type_of_contract === 'Purchase Side'} onChange={() => setForm({...form, type_of_contract: 'Purchase Side'})} /> Purchase Side
+                    </label>
+                    <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                      <input type="radio" name="type_of_contract" style={{ width: 16, height: 16, margin: 0, cursor: 'pointer' }} checked={form.type_of_contract === 'Sell Side'} onChange={() => setForm({...form, type_of_contract: 'Sell Side'})} /> Sell Side
+                    </label>
                   </div>
                 </Field>
                 <Field label="Product *"><input type="text" className="input" value={form.product} onChange={e => setForm({...form, product: e.target.value})} /></Field>
@@ -695,47 +696,72 @@ export default function Bilateral() {
             </FormSection>
 
             <FormSection title="Order Details">
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', minWidth: '800px', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-                  <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflowX: 'auto', marginBottom: 20 }}>
+                <table style={{ width: '100%', minWidth: '900px', borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
+                  <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                     <tr>
-                      <th colSpan="2" style={{ padding: '8px', borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>Date</th>
-                      <th colSpan="2" style={{ padding: '8px', borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>Hours</th>
-                      <th style={{ padding: '8px' }}>Rate Type</th>
-                      <th style={{ padding: '8px' }}>Rate (INR/MW) *</th>
-                      <th style={{ padding: '8px' }}>Quantum (MW) *</th>
-                      <th style={{ padding: '8px' }}>Variation</th>
-                      <th style={{ padding: '8px', width: 60, textAlign: 'center' }}>Action</th>
+                      <th colSpan="2" style={{ padding: '10px 12px', borderRight: '1px solid #e2e8f0', textAlign: 'center', color: 'var(--slate-700)' }}>Date</th>
+                      <th colSpan="2" style={{ padding: '10px 12px', borderRight: '1px solid #e2e8f0', textAlign: 'center', color: 'var(--slate-700)' }}>Hours</th>
+                      <th style={{ padding: '10px 12px', borderRight: '1px solid #e2e8f0', color: 'var(--slate-700)' }}>Rate Type</th>
+                      <th style={{ padding: '10px 12px', borderRight: '1px solid #e2e8f0', color: 'var(--slate-700)' }}>Rate (INR/MW) *</th>
+                      <th style={{ padding: '10px 12px', borderRight: '1px solid #e2e8f0', color: 'var(--slate-700)' }}>Quantum (MW) *</th>
+                      <th style={{ padding: '10px 12px', borderRight: '1px solid #e2e8f0', color: 'var(--slate-700)' }}>Variation</th>
+                      <th style={{ padding: '10px 12px', width: 70, textAlign: 'center', color: 'var(--slate-700)' }}>Action</th>
                     </tr>
-                    <tr style={{ color: 'var(--slate-500)', fontWeight: 'normal', fontSize: 11 }}>
-                      <th style={{ padding: '4px 8px' }}>From *</th>
-                      <th style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>To *</th>
-                      <th style={{ padding: '4px 8px' }}>From *</th>
-                      <th style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>To *</th>
-                      <th></th><th></th><th></th><th></th>
-                      <th style={{ textAlign: 'center' }}><button type="button" className="btn btn-sm btn-outline" style={{ padding: '2px 6px', fontSize: 14 }} onClick={addOrderRow}>+</button></th>
+                    <tr style={{ background: '#f1f5f9', color: 'var(--slate-600)', fontSize: 12 }}>
+                      <th style={{ padding: '6px 12px', borderRight: '1px solid #e2e8f0', borderTop: '1px solid #e2e8f0', fontWeight: 500 }}>From *</th>
+                      <th style={{ padding: '6px 12px', borderRight: '1px solid #e2e8f0', borderTop: '1px solid #e2e8f0', fontWeight: 500 }}>To *</th>
+                      <th style={{ padding: '6px 12px', borderRight: '1px solid #e2e8f0', borderTop: '1px solid #e2e8f0', fontWeight: 500 }}>From *</th>
+                      <th style={{ padding: '6px 12px', borderRight: '1px solid #e2e8f0', borderTop: '1px solid #e2e8f0', fontWeight: 500 }}>To *</th>
+                      <th style={{ borderRight: '1px solid #e2e8f0', borderTop: '1px solid #e2e8f0' }}></th>
+                      <th style={{ borderRight: '1px solid #e2e8f0', borderTop: '1px solid #e2e8f0' }}></th>
+                      <th style={{ borderRight: '1px solid #e2e8f0', borderTop: '1px solid #e2e8f0' }}></th>
+                      <th style={{ borderRight: '1px solid #e2e8f0', borderTop: '1px solid #e2e8f0' }}></th>
+                      <th style={{ textAlign: 'center', borderTop: '1px solid #e2e8f0', padding: '6px' }}>
+                        <button type="button" className="btn btn-sm btn-primary" style={{ padding: '4px 8px', fontSize: 13, borderRadius: 4 }} onClick={addOrderRow}>Add Row</button>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {form.order_details.map((row, idx) => (
-                      <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                        <td style={{ padding: '4px' }}><input type="date" className="input" style={{ width: 130, padding: 4 }} value={row.date_from} onChange={e => updateOrderRow(idx, 'date_from', e.target.value)} /></td>
-                        <td style={{ padding: '4px', borderRight: '1px solid #e2e8f0' }}><input type="date" className="input" style={{ width: 130, padding: 4 }} value={row.date_to} onChange={e => updateOrderRow(idx, 'date_to', e.target.value)} /></td>
-                        <td style={{ padding: '4px' }}><input type="time" className="input" style={{ width: 100, padding: 4 }} value={row.time_from} onChange={e => updateOrderRow(idx, 'time_from', e.target.value)} /></td>
-                        <td style={{ padding: '4px', borderRight: '1px solid #e2e8f0' }}><input type="time" className="input" style={{ width: 100, padding: 4 }} value={row.time_to} onChange={e => updateOrderRow(idx, 'time_to', e.target.value)} /></td>
-                        <td style={{ padding: '4px' }}>
-                          <select className="input" style={{ padding: 4 }} value={row.rate_type} onChange={e => updateOrderRow(idx, 'rate_type', e.target.value)}>
+                      <tr key={row.id} style={{ borderBottom: '1px solid #e2e8f0', background: '#fff' }}>
+                        <td style={{ padding: 0, borderRight: '1px solid #e2e8f0' }}>
+                          <input type="date" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} value={row.date_from} onChange={e => updateOrderRow(idx, 'date_from', e.target.value)} />
+                        </td>
+                        <td style={{ padding: 0, borderRight: '1px solid #e2e8f0' }}>
+                          <input type="date" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} value={row.date_to} onChange={e => updateOrderRow(idx, 'date_to', e.target.value)} />
+                        </td>
+                        <td style={{ padding: 0, borderRight: '1px solid #e2e8f0' }}>
+                          <input type="time" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} value={row.time_from} onChange={e => updateOrderRow(idx, 'time_from', e.target.value)} />
+                        </td>
+                        <td style={{ padding: 0, borderRight: '1px solid #e2e8f0' }}>
+                          <input type="time" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} value={row.time_to} onChange={e => updateOrderRow(idx, 'time_to', e.target.value)} />
+                        </td>
+                        <td style={{ padding: 0, borderRight: '1px solid #e2e8f0' }}>
+                          <select style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13, cursor: 'pointer' }} value={row.rate_type} onChange={e => updateOrderRow(idx, 'rate_type', e.target.value)}>
                             <option value="">Select</option>
                             <option value="Fixed">Fixed</option>
                             <option value="Variable">Variable</option>
                           </select>
                         </td>
-                        <td style={{ padding: '4px' }}><input type="number" className="input" style={{ padding: 4 }} value={row.rate} onChange={e => updateOrderRow(idx, 'rate', e.target.value)} /></td>
-                        <td style={{ padding: '4px' }}><input type="number" className="input" style={{ padding: 4 }} value={row.quantum} onChange={e => updateOrderRow(idx, 'quantum', e.target.value)} /></td>
-                        <td style={{ padding: '4px' }}><input type="text" className="input" style={{ padding: 4 }} value={row.variation} onChange={e => updateOrderRow(idx, 'variation', e.target.value)} /></td>
-                        <td style={{ padding: '4px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          <button type="button" className="btn btn-sm btn-outline" style={{ padding: '2px 6px', fontSize: 14, marginRight: 4 }} onClick={addOrderRow}>+</button>
-                          <button type="button" className="btn btn-sm btn-outline" style={{ padding: '2px 8px', fontSize: 14, color: 'var(--red)' }} onClick={() => removeOrderRow(idx)}>-</button>
+                        <td style={{ padding: 0, borderRight: '1px solid #e2e8f0' }}>
+                          <input type="number" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} placeholder="0.00" value={row.rate} onChange={e => updateOrderRow(idx, 'rate', e.target.value)} />
+                        </td>
+                        <td style={{ padding: 0, borderRight: '1px solid #e2e8f0' }}>
+                          <input type="number" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} placeholder="0.00" value={row.quantum} onChange={e => updateOrderRow(idx, 'quantum', e.target.value)} />
+                        </td>
+                        <td style={{ padding: 0, borderRight: '1px solid #e2e8f0' }}>
+                          <input type="text" style={{ width: '100%', border: 'none', padding: '10px 12px', background: 'transparent', outline: 'none', fontSize: 13 }} placeholder="-" value={row.variation} onChange={e => updateOrderRow(idx, 'variation', e.target.value)} />
+                        </td>
+                        <td style={{ padding: '6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          <button type="button" className="icon-btn" style={{ padding: '4px 8px', color: 'var(--slate-500)', display: 'inline-flex', alignItems: 'center' }} onClick={addOrderRow} title="Add Row">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                          </button>
+                          {form.order_details.length > 1 && (
+                            <button type="button" className="icon-btn" style={{ padding: '4px 8px', color: 'var(--red)', display: 'inline-flex', alignItems: 'center' }} onClick={() => removeOrderRow(idx)} title="Remove Row">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -753,9 +779,13 @@ export default function Bilateral() {
 
             <FormSection title="Renewable Details">
               <Field label="Is source of energy renewable? *">
-                <div style={{ display: 'flex', gap: 15, height: '36px', alignItems: 'center' }}>
-                  <label style={{ display: 'flex', gap: 4 }}><input type="radio" name="is_renewable" checked={form.is_renewable === 'Yes'} onChange={() => setForm({...form, is_renewable: 'Yes'})} /> Yes</label>
-                  <label style={{ display: 'flex', gap: 4 }}><input type="radio" name="is_renewable" checked={form.is_renewable === 'No'} onChange={() => setForm({...form, is_renewable: 'No'})} /> No</label>
+                <div style={{ display: 'flex', gap: 20, height: '36px', alignItems: 'center' }}>
+                  <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                    <input type="radio" name="is_renewable" style={{ width: 16, height: 16, margin: 0, cursor: 'pointer' }} checked={form.is_renewable === 'Yes'} onChange={() => setForm({...form, is_renewable: 'Yes'})} /> Yes
+                  </label>
+                  <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', fontSize: 14 }}>
+                    <input type="radio" name="is_renewable" style={{ width: 16, height: 16, margin: 0, cursor: 'pointer' }} checked={form.is_renewable === 'No'} onChange={() => setForm({...form, is_renewable: 'No'})} /> No
+                  </label>
                 </div>
               </Field>
             </FormSection>
@@ -771,23 +801,28 @@ export default function Bilateral() {
             </FormSection>
 
             <FormSection title="Fee and Charges">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px', marginBottom: 20 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <BearerRadio label="ISTS Transmission Charges" field="ists_charges_bearer" form={form} setForm={setForm} />
-                  <BearerRadio label="State Operating Charges" field="state_operating_bearer" form={form} setForm={setForm} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <BearerRadio label="State Transmission Charges" field="state_transmission_charges_bearer" form={form} setForm={setForm} />
-                  <BearerRadio label="DIS Operating Charges" field="dis_operating_bearer" form={form} setForm={setForm} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-                  <BearerRadio label="Distribution Wheeling Charge" field="distribution_wheeling_bearer" form={form} setForm={setForm} />
-                  <BearerRadio label="NOAR Application Fee" field="noar_application_bearer" form={form} setForm={setForm} />
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-                  <BearerRadio label="RLDC Operating Charges" field="rldc_operating_bearer" form={form} setForm={setForm} />
-                  <BearerRadio label="SLDC Consent Fee" field="sldc_consent_bearer" form={form} setForm={setForm} />
-                </div>
+              <div style={{ marginBottom: 20, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                    <tr>
+                      <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: 'var(--slate-600)', width: '40%' }}>Charge / Fee Type</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--slate-600)' }}>Seller</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--slate-600)' }}>Buyer</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--slate-600)' }}>SJVN</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600, color: 'var(--slate-600)' }}>Both</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <BearerRow label="ISTS Transmission Charges" field="ists_charges_bearer" form={form} setForm={setForm} />
+                    <BearerRow label="State Transmission Charges" field="state_transmission_charges_bearer" form={form} setForm={setForm} />
+                    <BearerRow label="State Operating Charges" field="state_operating_bearer" form={form} setForm={setForm} />
+                    <BearerRow label="DIS Operating Charges" field="dis_operating_bearer" form={form} setForm={setForm} />
+                    <BearerRow label="Distribution Wheeling Charge" field="distribution_wheeling_bearer" form={form} setForm={setForm} />
+                    <BearerRow label="RLDC Operating Charges" field="rldc_operating_bearer" form={form} setForm={setForm} />
+                    <BearerRow label="NOAR Application Fee" field="noar_application_bearer" form={form} setForm={setForm} />
+                    <BearerRow label="SLDC Consent Fee" field="sldc_consent_bearer" form={form} setForm={setForm} />
+                  </tbody>
+                </table>
               </div>
               <div style={{ borderTop: '1px dashed #cbd5e1', paddingTop: 15, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 15 }}>
                 <Field label="Client Registration Fee (Rs.) *"><input type="number" className="input" value={form.client_registration_fee} onChange={e => setForm({...form, client_registration_fee: e.target.value})} /></Field>
@@ -804,7 +839,7 @@ export default function Bilateral() {
 
             {error && <div style={{ color: 'red', marginBottom: 15, background: '#fee2e2', padding: 10, borderRadius: 4 }}>{error}</div>}
             
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, position: 'sticky', bottom: 0, background: '#fff', padding: '15px 0', borderTop: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, position: 'sticky', bottom: -20, background: '#fff', padding: '16px 20px', margin: '24px -20px -20px -20px', borderTop: '1px solid #e2e8f0', zIndex: 10 }}>
               <button type="button" className="btn btn-outline" onClick={() => setShowCreate(false)}>Cancel</button>
               <button type="submit" className="btn btn-primary">Create Transaction</button>
             </div>
@@ -1061,7 +1096,7 @@ export default function Bilateral() {
                     ['DSM charges', `₹${fmtNumber(settlement.money.dsm_penalty_amount)}`, `deviation ${fmtNumber(settlement.energy.deviation_mwh)} MWh`],
                   ].map(([label, value, sub]) => (
                     <div key={label} style={{ padding: '10px 12px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8 }}>
-                      <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.3 }}>{label}</div>
                       <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2 }}>{value}</div>
                       <div style={{ fontSize: 11, color: 'var(--slate-500)' }}>{sub}</div>
                     </div>

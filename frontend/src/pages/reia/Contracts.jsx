@@ -4,8 +4,10 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import ContractWorkspace from '../../components/ContractWorkspace.jsx';
 import ContractBulkLoad from './ContractBulkLoad.jsx';
+import { ROLE_GROUPS } from '../../roles.js';
 
-const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
+// The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_ADMIN.
+const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
 
 // Must stay in lockstep with backend CONTRACT_TRANSITIONS. A draft is not yet
 // signed or regulator-cleared, so ACTIVE is not a legal next hop from DRAFT.
@@ -621,7 +623,7 @@ export default function Contracts() {
       </Modal>
 
       {workFile && (
-        <Modal open={true} onClose={() => setWorkFile(null)} title={`Working file: ${workFile.contract.contract_no}`} width={980}>
+        <Modal open={true} onClose={() => setWorkFile(null)} title={`Working file: ${workFile.contract.contract_no}`} width={1060}>
           <ContractWorkspace key={workFile.contract.id} contract={workFile.contract} startTab={workFile.tab || 'MILESTONES'} onChanged={loadPending} />
         </Modal>
       )}

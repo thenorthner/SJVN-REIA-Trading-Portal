@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../api/client.js';
 import { Badge, Field, fmtCurrency } from './ui.jsx';
 import { PreviewModal } from './DocumentManager.jsx';
@@ -95,10 +95,14 @@ export function IntimationRow({ i, side, tier, myId, canConfirm, onChanged, onPr
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const sjvn = side === 'SJVN';
+  // A second click landing before the next render must not send a second decision.
+  const lock = useRef(false);
   const run = async (fn) => {
+    if (lock.current) return;
+    lock.current = true;
     setError('');
     setBusy(true);
-    try { await fn(); setMode(null); setNote(''); onChanged(); } catch (err) { setError(errText(err)); } finally { setBusy(false); }
+    try { await fn(); setMode(null); setNote(''); onChanged(); } catch (err) { setError(errText(err)); } finally { lock.current = false; setBusy(false); }
   };
   const canApprove = !sjvn && i.status === 'PENDING_CHECKER' && tier !== 'L1' && i.prepared_by !== myId;
   const canWithdraw = !sjvn && (i.status === 'PENDING_CHECKER' || (i.status === 'SUBMITTED' && tier !== 'L1'));
@@ -169,7 +173,7 @@ export function IntimationRow({ i, side, tier, myId, canConfirm, onChanged, onPr
 }
 
 /** SJVN Finance's desk: what buyers say they have paid, to match against the bank. */
-export default function PaymentConfirmationDesk() {
+export default function PaymentConfirmationDesk({ onChanged }) {
   const [d, setD] = useState(null);
   const [filter, setFilter] = useState('SUBMITTED');
   const [error, setError] = useState('');
@@ -193,7 +197,7 @@ export default function PaymentConfirmationDesk() {
         ))}
       </div>
       {d.intimations.length === 0 && <div className="ps-alert green" style={{ marginBottom: 0 }}>{filter === 'SUBMITTED' ? 'Nothing is waiting to be confirmed.' : 'Nothing here.'}</div>}
-      {d.intimations.map((i) => <IntimationRow key={i.id} i={i} side="SJVN" canConfirm={d.can_confirm} onChanged={load} onPreview={setPreview} />)}
+      {d.intimations.map((i) => <IntimationRow key={i.id} i={i} side="SJVN" canConfirm={d.can_confirm} onChanged={() => { load(); onChanged?.(); }} onPreview={setPreview} />)}
       <PreviewModal open={!!preview} versionId={preview?.version_id} fileName={preview?.file_name} onClose={() => setPreview(null)} />
     </div>
   );

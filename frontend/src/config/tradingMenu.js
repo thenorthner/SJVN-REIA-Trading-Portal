@@ -131,6 +131,7 @@ export const TRADING_MENU = [
       { label: 'Refund Report Uploader', to: '/uploader/refund-report' },
       { label: 'Latest Refund Report Uploader', to: '/uploader/refund-report-latest' },
       { label: 'MMR Excel File Uploader', to: '/uploader/mmr-excel' },
+      { label: 'CEA Excel File Uploader', to: '/uploader/cea-excel', ours: true },
       { label: 'Import Ledger', to: '/trading/ledger-import', ours: true },
     ],
   },

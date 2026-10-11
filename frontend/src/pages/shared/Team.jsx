@@ -201,9 +201,9 @@ export default function Team({ entityId = null }) {
           <p>{entityId ? 'This company\'s users on the portal. You can also reset or switch off its Company Admin account, which nobody inside the company can.' : `${team.entity?.name ? `${team.entity.name} — ` : ''}the people in your organisation on this portal, and what each may do.`}</p>
         </div>
         <div className="elite-header-actions">
-          <button type="button" className="elite-ghost-btn" onClick={exportCsv}><Download size={16} /> Export</button>
+          <button type="button" className="btn btn-secondary elite-ghost-btn" onClick={exportCsv}><Download size={16} /> Export</button>
           {team.can_manage && (
-            <button type="button" className="elite-add-btn" onClick={() => { setError(''); setModal({ kind: 'add' }); }} disabled={t.seats_left === 0} title={t.seats_left === 0 ? `All ${t.seat_limit} seats are in use` : undefined}>
+            <button type="button" className="btn btn-primary elite-add-btn" onClick={() => { setError(''); setModal({ kind: 'add' }); }} disabled={t.seats_left === 0} title={t.seats_left === 0 ? `All ${t.seat_limit} seats are in use` : undefined}>
               <UserPlus size={18} /> Add Team Member
             </button>
           )}

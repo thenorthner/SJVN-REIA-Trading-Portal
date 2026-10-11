@@ -161,3 +161,50 @@ export function formatInvoiceEmail({ invoice, contract, recipientName, portalHin
 
   return { subject, text, html };
 }
+
+/**
+ * The covering mail for one beneficiary's hydro bill.
+ *
+ * States the one amount that beneficiary owes and when — the station total is
+ * in the attachment, and leading with it would read as the amount due.
+ */
+export function formatHydroBillEmail({ bill, line, billRef, monthLabel }) {
+  const amt = Number(line.total_charges || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const kind = String(bill.bill_kind || 'PROVISIONAL').toLowerCase();
+  const due = bill.due_date || 'as per the payment terms';
+  const subject = `${kind.charAt(0).toUpperCase()}${kind.slice(1)} bill ${billRef} — ${bill.station_name} — ${monthLabel} — Rs ${amt}`;
+  const rows = [
+    ['Station', bill.station_name],
+    ['Billing month', monthLabel],
+    ['Bill no.', billRef],
+    ['Amount payable', `Rs ${amt}`],
+    ['Due date', due],
+  ];
+  const text = [
+    `To: ${line.beneficiary_name}`,
+    '',
+    'Sir/Madam,',
+    '',
+    `Please find attached the ${kind} bill for energy supplied from ${bill.station_name} for ${monthLabel}.`,
+    '',
+    ...rows.map(([k, v]) => `${k}: ${v}`),
+    '',
+    'The attachment carries your bill on the first page, followed by the station bill it is worked from.',
+    '',
+    'This is a system-generated email from the SJVN Commercial & Trading Platform.',
+    'Regards,',
+    'Commercial & System Operation Department, SJVN Limited',
+  ].join('\n');
+  const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const html = `
+    <p>To: <strong>${esc(line.beneficiary_name)}</strong></p>
+    <p>Sir/Madam,</p>
+    <p>Please find attached the ${kind} bill for energy supplied from <strong>${esc(bill.station_name)}</strong> for <strong>${esc(monthLabel)}</strong>.</p>
+    <table cellpadding="4" style="border-collapse:collapse">
+      ${rows.map(([k, v]) => `<tr><td style="color:#64748b">${esc(k)}</td><td><strong>${esc(v)}</strong></td></tr>`).join('')}
+    </table>
+    <p>The attachment carries your bill on the first page, followed by the station bill it is worked from.</p>
+    <p style="color:#64748b;font-size:12px">System-generated email — SJVN Commercial &amp; Trading Platform.<br>Commercial &amp; System Operation Department, SJVN Limited</p>
+  `;
+  return { subject, text, html };
+}

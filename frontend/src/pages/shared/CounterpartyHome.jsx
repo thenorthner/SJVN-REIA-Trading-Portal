@@ -132,8 +132,8 @@ export default function CounterpartyHome() {
                     <YAxis tickFormatter={short} tick={{ fontSize: 11 }} width={70} />
                     <Tooltip formatter={(v) => fmtCurrency(v)} />
                     <Legend />
-                    <Bar dataKey="billed" name="Billed" fill="#2563eb" isAnimationActive={false} />
-                    <Bar dataKey="received" name={seller ? 'Received' : 'Paid'} fill="#16a34a" isAnimationActive={false} />
+                    <Bar dataKey="billed" name="Billed" fill="url(#eliteBlue)" isAnimationActive={false} />
+                    <Bar dataKey="received" name={seller ? 'Received' : 'Paid'} fill="url(#eliteGreen)" isAnimationActive={false} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -151,8 +151,8 @@ export default function CounterpartyHome() {
                     <YAxis yAxisId="cuf" orientation="right" tick={{ fontSize: 11 }} width={40} unit="%" domain={[0, 'auto']} />
                     <Tooltip formatter={(v, name) => (name === 'CUF' ? `${v}%` : `${fmtNumber(v, 1)} MWh`)} />
                     <Legend />
-                    <Bar yAxisId="mwh" dataKey="energy_mwh" name="Energy (MWh)" fill="#0ea5e9" isAnimationActive={false} />
-                    <Line yAxisId="cuf" dataKey="cuf" name="CUF" stroke="#f97316" strokeWidth={2} connectNulls isAnimationActive={false} />
+                    <Bar yAxisId="mwh" dataKey="energy_mwh" name="Energy (MWh)" fill="url(#eliteTeal)" isAnimationActive={false} />
+                    <Line yAxisId="cuf" dataKey="cuf" name="CUF" stroke="url(#eliteOrange)" strokeWidth={2} connectNulls isAnimationActive={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>

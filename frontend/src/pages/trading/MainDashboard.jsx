@@ -63,7 +63,7 @@ export const DashboardKPIs = () => {
   ];
 
   return (
-    <div>
+    <div className="animate-fade-in-up stagger-2">
       {failed && (
         <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b',
                       borderRadius: 6, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>
@@ -91,9 +91,9 @@ export const DashboardKPIs = () => {
 // the observed block prices.
 
 const MIX = [
-  { key: 'bilateral_mu', label: 'Bilateral', colour: 'var(--primary)' },
-  { key: 'exchanges_mu', label: 'Power exchanges', colour: 'var(--green)' },
-  { key: 'dsm_mu', label: 'Through DSM', colour: '#c2410c' },
+  { key: 'bilateral_mu', label: 'Bilateral', colour: 'url(#eliteBlue)' },
+  { key: 'exchanges_mu', label: 'Power exchanges', colour: 'url(#eliteGreen)' },
+  { key: 'dsm_mu', label: 'Through DSM', colour: 'url(#eliteOrange)' },
 ];
 
 export default function MainDashboard() {
@@ -104,12 +104,12 @@ export default function MainDashboard() {
   }, []);
 
   return (
-    <div className="page">
+    <div className="page animate-fade-in-up stagger-1">
       <PageHeader title="Main Dashboard" subtitle="Platform-level trading and revenue analytics" />
 
       <DashboardKPIs />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 16, marginTop: 20 }}>
+      <div className="animate-fade-in-up stagger-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 16, marginTop: 20 }}>
         <NotHeld title="All-India generation mix">
           The platform does not hold CEA generation data — no feed or upload brings it in — so there is no mix to draw.
           The thermal, hydro, RE and nuclear shares that used to be here were typed in.
@@ -123,10 +123,23 @@ export default function MainDashboard() {
               <div style={{ width: '100%', height: 280 }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={history} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="period" tickFormatter={periodLabel} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-                    <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={56} />
-                    <Tooltip labelFormatter={periodLabel} formatter={(v, name) => [v == null ? '—' : `${mu(v)} MU`, name]} />
+                    <defs>
+                      <linearGradient id="bilateralGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.9}/>
+                        <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.6}/>
+                      </linearGradient>
+                      <linearGradient id="exchangeGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--green)" stopOpacity={0.9}/>
+                        <stop offset="95%" stopColor="var(--green)" stopOpacity={0.6}/>
+                      </linearGradient>
+                      <linearGradient id="dsmGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#c2410c" stopOpacity={0.9}/>
+                        <stop offset="95%" stopColor="#c2410c" stopOpacity={0.6}/>
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="period" tickFormatter={periodLabel} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={56} axisLine={false} tickLine={false} />
+                    <Tooltip labelFormatter={periodLabel} formatter={(v, name) => [v == null ? '—' : `${mu(v)} MU`, name]} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
                     <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 12 }} />
                     {MIX.map((m) => (
                       <Bar key={m.key} dataKey={m.key} name={m.label} stackId="mu" fill={m.colour} maxBarSize={32} isAnimationActive={false} />
@@ -140,8 +153,10 @@ export default function MainDashboard() {
         </Card>
       </div>
 
-      <h3 style={{ margin: '24px 0 12px', fontSize: 16 }}>Time-block prices</h3>
-      <IntradayMarketTab />
+      <div className="animate-fade-in-up stagger-4">
+        <h3 style={{ margin: '24px 0 12px', fontSize: 16 }}>Time-block prices</h3>
+        <IntradayMarketTab />
+      </div>
     </div>
   );
 }

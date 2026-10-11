@@ -137,7 +137,7 @@ const NationalCapacityChart = () => {
               yAxisId="left" 
               dataKey="Hydro" 
               name="Hydro"
-              fill="#0ea5e9" 
+              fill="url(#eliteTeal)" 
               barSize={20}
               radius={[2, 2, 0, 0]} 
             />
@@ -145,7 +145,7 @@ const NationalCapacityChart = () => {
               yAxisId="left" 
               dataKey="RES" 
               name="RES"
-              fill="#16a34a" 
+              fill="url(#eliteGreen)" 
               barSize={20}
               radius={[2, 2, 0, 0]} 
             />
@@ -155,7 +155,7 @@ const NationalCapacityChart = () => {
               type="monotone" 
               dataKey="Nuclear" 
               name="Nuclear"
-              stroke="#ef4444" 
+              stroke="url(#eliteRed)" 
               strokeWidth={2}
               dot={{ stroke: '#f97316', strokeWidth: 2, fill: '#ffffff', r: 5 }}
               activeDot={{ stroke: '#f97316', strokeWidth: 2, fill: '#ffffff', r: 7 }}

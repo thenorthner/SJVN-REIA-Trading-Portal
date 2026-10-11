@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieCha
 import api from '../../api/client.js';
 import { parseAllocationPaste, parseEnergyPaste } from './allocationPaste.js';
 import HydroReaRun from './HydroReaRun.jsx';
+import HydroBillSend from './HydroBillSend.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import {
@@ -93,7 +94,7 @@ function StationBillSheet({ bill }) {
     <div>
       <div style={{ display: 'flex', gap: '24px', marginBottom: '24px', flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 300, background: 'var(--slate-50)', padding: 16, borderRadius: 12, border: '1px solid var(--border)' }}>
-          <h4 style={{ fontSize: 13, marginBottom: 16, color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Charge Breakdown</h4>
+          <h4 style={{ fontSize: 13, marginBottom: 16, color: 'var(--text-light)', textTransform: 'none', letterSpacing: '0.04em' }}>Charge Breakdown</h4>
           <div style={{ height: 200 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -107,7 +108,7 @@ function StationBillSheet({ bill }) {
           </div>
         </div>
         <div style={{ flex: 1, minWidth: 300, background: 'var(--slate-50)', padding: 16, borderRadius: 12, border: '1px solid var(--border)' }}>
-          <h4 style={{ fontSize: 13, marginBottom: 16, color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Energy Schedule (MWh)</h4>
+          <h4 style={{ fontSize: 13, marginBottom: 16, color: 'var(--text-light)', textTransform: 'none', letterSpacing: '0.04em' }}>Energy Schedule (MWh)</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', justifyContent: 'center', paddingBottom: 20 }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 13, color: 'var(--text-light)' }}>Total Ex-Bus</span>
@@ -262,7 +263,7 @@ function BeneficiarySheet({ lines, bill }) {
     <div>
       {lines.length > 0 && (
         <div style={{ marginBottom: 24, height: 260, background: 'var(--slate-50)', padding: '16px 20px', borderRadius: 12, border: '1px solid var(--border)' }}>
-          <h4 style={{ fontSize: 13, marginBottom: 12, color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Top Beneficiaries by Total Charge</h4>
+          <h4 style={{ fontSize: 13, marginBottom: 12, color: 'var(--text-light)', textTransform: 'none', letterSpacing: '0.04em' }}>Top Beneficiaries by Total Charge</h4>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 0, left: 40, bottom: 0 }}>
               <XAxis type="number" hide />
@@ -622,6 +623,7 @@ export default function HydroBilling() {
   const [dispatchForm, setDispatchForm] = useState({
     dispatch_invoice_no: '', courier_tracking_no: '', dispatch_date: '', receipt_date: '',
   });
+  const [sendingBill, setSendingBill] = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
   // Regulation of power: which beneficiaries had supply withheld, keyed by name.
@@ -789,6 +791,15 @@ export default function HydroBilling() {
     }
   }
 
+  async function doPrintBeneficiaryBills(bill) {
+    setError('');
+    try {
+      await api.hydroBilling.downloadBeneficiaryBills(bill.id, bill.bill_no);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  }
+
   async function doDispatch(e) {
     e.preventDefault();
     setError('');
@@ -879,6 +890,10 @@ export default function HydroBilling() {
             <button type="button" className="btn btn-xs btn-success" onClick={() => doRelease(r)}>Release</button>
           )}
           <button type="button" className="btn btn-xs btn-outline" onClick={() => doPrint(r)}>Print</button>
+          <button type="button" className="btn btn-xs btn-outline" title="Each beneficiary's own bill, one page apiece" onClick={() => doPrintBeneficiaryBills(r)}>Beneficiary bills</button>
+          {r.status !== 'CANCELLED' && (
+            <button type="button" className="btn btn-xs btn-outline" onClick={() => setSendingBill(r)}>Send</button>
+          )}
           {canWrite && r.status === 'ISSUED' && r.released_at && (
             <button
               type="button" className="btn btn-xs btn-outline"
@@ -1333,6 +1348,8 @@ export default function HydroBilling() {
           </form>
         )}
       </Modal>
+
+      <HydroBillSend bill={sendingBill} canWrite={canWrite} onClose={() => setSendingBill(null)} />
 
       <Modal open={!!dispatching} onClose={() => setDispatching(null)} title={`Despatch ${dispatching?.bill_no || ''}`}>
         <form onSubmit={doDispatch}>

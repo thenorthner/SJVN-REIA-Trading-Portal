@@ -117,7 +117,7 @@ describe('signed copy', () => {
   it('holds up approval only where SJVN has made it mandatory', async () => {
     const approver = makeUser('REIA_ADMIN', { name: 'Ravi REIA' });
     db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES ('AP1', ?, 1, 'PENDING')`).run(inv.id);
-    db.prepare(`UPDATE invoices SET validation_status = 'MATCHED' WHERE id = ?`).run(inv.id);
+    db.prepare(`UPDATE invoices SET validation_status = 'MATCHED', status = 'UNDER_APPROVAL' WHERE id = ?`).run(inv.id);
     setParam('seller_invoice_requires_signed_copy', 1);
     try {
       const refused = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(as(approver)).send({ decision: 'APPROVED' });

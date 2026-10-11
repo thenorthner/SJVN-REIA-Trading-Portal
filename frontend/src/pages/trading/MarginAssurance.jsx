@@ -32,9 +32,9 @@ function RateTrend({ points }) {
           </g>
         ))}
         {/* The margin band — thin and even is what "healthy" looks like. */}
-        <path d={band} fill="#2563eb" opacity="0.18" />
-        <path d={line('purchase_rate')} fill="none" stroke="#dc2626" strokeWidth="1.8" />
-        <path d={line('sale_rate')} fill="none" stroke="#16a34a" strokeWidth="1.8" />
+        <path d={band} fill="url(#eliteBlue)" opacity="0.18" />
+        <path d={line('purchase_rate')} fill="none" stroke="url(#eliteRed)" strokeWidth="1.8" />
+        <path d={line('sale_rate')} fill="none" stroke="url(#eliteGreen)" strokeWidth="1.8" />
         {points.map((p, i) => (
           (points.length <= 14 || i % Math.ceil(points.length / 12) === 0) && (
             <text key={p.settlement_date} x={x(i)} y={H - 20} textAnchor="end" fontSize="10"

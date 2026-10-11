@@ -278,7 +278,7 @@ function ExcelViewer({ blob, fileName }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, background: 'var(--bg, #f8fafc)', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border, #e2e8f0)' }}>
         {/* Sheet Tabs */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--text-light, #64748b)', marginRight: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'none', color: 'var(--text-light, #64748b)', marginRight: 4 }}>
             Sheets ({sheets.length}):
           </span>
           {sheets.map((s) => (
@@ -580,7 +580,7 @@ export function PreviewModal({ open, versionId, fileName, onClose }) {
 }
 
 // `onChange` tells the page around it that something here was uploaded, reviewed or submitted.
-export function DocumentManager({ moduleName, entityId, contractId, category = null, title = 'Documents', onChange }) {
+export function DocumentManager({ moduleName, entityId, contractId, category = null, title = 'Documents', onChange, canUpload = true }) {
   const { user } = useAuth();
   const [docs, setDocs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -627,9 +627,11 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
               {zipping ? 'Preparing…' : 'Download all (ZIP)'}
             </button>
           )}
-          <button className="btn btn-primary btn-sm" onClick={() => setUploadOpen(true)}>
-            Upload Document
-          </button>
+          {canUpload && (
+            <button className="btn btn-primary btn-sm" onClick={() => setUploadOpen(true)}>
+              Upload Document
+            </button>
+          )}
         </div>
       </div>
       <div className="card-body" style={{ padding: 0 }}>
@@ -771,11 +773,13 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
 export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, contractId, presetDocType = null, presetTitle = '', existing = null }) {
   const { user } = useAuth();
   const [expiry, setExpiry] = useState('');
-  // Segregation of duties: internal users (SJVN Admin / REIA / Finance / Trading)
-  // are the reviewers — they can only upload RECORD-category documents. VERIFY
-  // documents must be uploaded by the stakeholder (Seller/Buyer) themselves.
+  // Segregation of duties: general internal users (Finance / Trading) are reviewers,
+  // but SJVN_ADMIN / REIA_USER / REIA_ADMIN / IT_SUPER_ADMIN are fully empowered
+  // to onboard stakeholders directly and upload their regulatory verification documents.
   const isInternal = !isOutsideRole(user?.role);
-  const filterTypes = (list) => (isInternal ? list.filter((t) => t.category !== 'VERIFY') : list);
+  const canAdminDirectUpload = ['SJVN_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role);
+  const filterTypes = (list) => (isInternal && !canAdminDirectUpload ? list.filter((t) => t.category !== 'VERIFY') : list);
+  const [autoVerify, setAutoVerify] = useState(true);
 
   const fallbackTypes = filterTypes(DOCUMENT_TAXONOMY[moduleName] || [{ value: 'OTHER', label: 'Other Document', category: 'RECORD', reason: '' }]);
   const [availableTypes, setAvailableTypes] = useState(fallbackTypes);
@@ -816,8 +820,7 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
   // Auto-resolve category based on taxonomy
   const activeDef = availableTypes.find(t => t.value === docType) || availableTypes[0] || fallbackTypes[0];
   const autoCategory = activeDef?.category || 'RECORD';
-  // A preset type the current user isn't allowed to upload (e.g. internal user +
-  // VERIFY doc) gets filtered out — treat that exactly like "nothing to upload".
+  // A preset type the current user isn't allowed to upload gets filtered out — treat that like "nothing to upload".
   const presetLocked = !!presetDocType;
   const presetBlocked = presetLocked && !availableTypes.some((t) => t.value === presetDocType);
   const noTypesAvailable = !existing && (availableTypes.length === 0 || presetBlocked);
@@ -833,8 +836,7 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
           </p>
           <p style={{ fontSize: 13, color: 'var(--slate-500)', margin: 0 }}>
             The documents required for this section are <strong>VERIFY-category</strong> and must be uploaded
-            by the stakeholder (Seller / Buyer) from their own login. As an internal reviewer, you can only
-            <strong> review and verify</strong> the documents they submit.
+            by the stakeholder (Seller / Buyer) or an SJVN Admin.
           </p>
         </div>
         <div className="form-actions">
@@ -866,6 +868,9 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
       formData.append('title', title);
     }
     if (expiry) formData.append('expiry_date', expiry);
+    if (canAdminDirectUpload && autoVerify) {
+      formData.append('auto_verify', 'true');
+    }
 
     try {
       const r = await api.documents.upload(formData);
@@ -932,6 +937,20 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
             This is strictly enforced by the platform's cross-module document taxonomy rules.
           </div>
         </Field>
+        {canAdminDirectUpload && autoCategory === 'VERIFY' && (
+          <div style={{ margin: '14px 0 6px', padding: '10px 14px', background: 'linear-gradient(135deg, rgba(37,99,235,0.06) 0%, rgba(30,58,138,0.08) 100%)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <input
+              type="checkbox"
+              id="autoVerifyDoc"
+              checked={autoVerify}
+              onChange={(e) => setAutoVerify(e.target.checked)}
+              style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#2563eb' }}
+            />
+            <label htmlFor="autoVerifyDoc" style={{ fontSize: 12.5, fontWeight: 600, color: '#1e3a8a', cursor: 'pointer', margin: 0 }}>
+              Direct SJVN Admission: Auto-verify document upon upload (Clears regulatory approval checklist)
+            </label>
+          </div>
+        )}
         </>
         )}
         <div className="form-actions" style={{ marginTop: 24 }}>
@@ -988,7 +1007,7 @@ export function ReviewModal({ open, doc, onClose, onSuccess }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Review Document">
+    <Modal open={open} onClose={onClose} title="Review Document" width={740}>
       <div style={{ marginBottom: 16 }}>
         <strong>{doc.title}</strong> (v{doc.version_number})
         <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>

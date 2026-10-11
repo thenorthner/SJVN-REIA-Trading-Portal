@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
     -- raises a request to the desk and the checker clears it, so what reaches
     -- SJVN has already been agreed inside the client's own office.
     'TRADING_CLIENT','TRADING_CLIENT_MAKER','TRADING_CLIENT_CHECKER',
+    'COMMERCIAL_ADMIN','COMMERCIAL_USER','COMMERCIAL',
     'SJVN_ADMIN', 'SELLER', 'BUYER', 'REIA_USER', 'TRADING_USER' -- Legacy roles preserved for existing data
   )),
   linked_entity_id TEXT,
@@ -602,6 +603,10 @@ CREATE TABLE IF NOT EXISTS invoices (
   trading_margin REAL NOT NULL DEFAULT 0,
   taxes REAL NOT NULL DEFAULT 0,
   other_adjustments REAL NOT NULL DEFAULT 0,
+  -- What the seller says its other adjustment is for.
+  adjustment_remarks TEXT,
+  -- Where the bill stood before a dispute turned it DISPUTED, to go back to.
+  status_before_dispute TEXT,
   disputed_amount REAL NOT NULL DEFAULT 0,
   due_date TEXT,
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN (
@@ -669,6 +674,8 @@ CREATE TABLE IF NOT EXISTS invoice_approvals (
   invoice_id TEXT NOT NULL REFERENCES invoices(id),
   level INTEGER NOT NULL,
   approver_name TEXT,
+  -- Who decided the level, as an id: a name cannot tell two people apart.
+  approver_id TEXT,
   status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED')),
   comments TEXT,
   acted_at TEXT
@@ -878,6 +885,7 @@ CREATE TABLE IF NOT EXISTS security_releases (
   requested_by TEXT,
   acted_by TEXT,
   acted_at TEXT,
+  decision_note TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -975,6 +983,9 @@ CREATE TABLE IF NOT EXISTS payments (
   tds_section TEXT,
   deduction_note TEXT,
   rebate_amount REAL,
+  -- How much of this payment went to late payment surcharge rather than to the
+  -- bill itself. Set where a receipt is applied surcharge-first (PSA Art. 6.3).
+  lps_component REAL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -2032,6 +2043,36 @@ CREATE TABLE IF NOT EXISTS hydro_auto_draft_runs (
 );
 CREATE INDEX IF NOT EXISTS idx_hydro_auto_draft_runs_started ON hydro_auto_draft_runs (started_at);
 
+-- Every time a beneficiary's hydro bill was emailed, to whom, and whether it
+-- went. A station bill is fourteen separate sends, and "was Punjab's sent?" is
+-- asked of one of them — so the row is per beneficiary line, not per bill.
+CREATE TABLE IF NOT EXISTS hydro_bill_deliveries (
+  id TEXT PRIMARY KEY,
+  bill_id TEXT NOT NULL REFERENCES hydro_station_bills(id),
+  line_id TEXT,
+  beneficiary_name TEXT NOT NULL,
+  channel TEXT NOT NULL DEFAULT 'EMAIL' CHECK (channel IN ('EMAIL','SMS','PORTAL')),
+  recipient TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('SENT','FAILED','SIMULATED')),
+  mode TEXT,
+  detail_json TEXT,
+  sent_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hydro_bill_deliveries_bill ON hydro_bill_deliveries (bill_id, created_at);
+
+-- Where a beneficiary's bill is emailed, for a beneficiary that is a name on
+-- the Regional Energy Account and not (yet) a registered entity with contacts
+-- of its own. Keyed on the name as the bill prints it, so the address typed
+-- for one month's bill is there for the next.
+CREATE TABLE IF NOT EXISTS hydro_beneficiary_contacts (
+  beneficiary_key TEXT PRIMARY KEY,
+  beneficiary_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  updated_by TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS rea_fetch_log (
   id TEXT PRIMARY KEY,
   rpc_source TEXT NOT NULL,
@@ -2943,6 +2984,33 @@ CREATE TABLE IF NOT EXISTS cea_api_catalog (
   fetched_upto TEXT,
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS cea_scraped_reports (
+  id TEXT PRIMARY KEY,
+  month INTEGER,
+  year INTEGER,
+  category TEXT,
+  file_path TEXT,
+  scraped_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS cea_installed_capacity (
+  id TEXT PRIMARY KEY,
+  month_year TEXT,
+  state TEXT,
+  sector TEXT,
+  capacity_mw REAL
+);
+
+CREATE TABLE IF NOT EXISTS cea_power_supply (
+  id TEXT PRIMARY KEY,
+  month_year TEXT,
+  state TEXT,
+  energy_req REAL,
+  energy_avail REAL,
+  peak_demand REAL,
+  peak_met REAL
 );
 
 CREATE TABLE IF NOT EXISTS client_registrations (

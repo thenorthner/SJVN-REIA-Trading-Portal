@@ -85,7 +85,7 @@ function GuideTable({ columns, rows, caption }) {
                 textAlign: 'left', padding: '8px 12px 8px 0',
                 borderBottom: '1px solid var(--border)',
                 fontSize: 11, fontWeight: 700, letterSpacing: '.04em',
-                textTransform: 'uppercase', color: 'var(--text-muted)', whiteSpace: 'nowrap',
+                textTransform: 'none', color: 'var(--text-muted)', whiteSpace: 'nowrap',
               }}>{c}</th>
             ))}
           </tr>
@@ -215,7 +215,7 @@ export default function ModuleGuide({ guide }) {
       }}>
         <div style={{
           fontSize: 11, fontWeight: 700, letterSpacing: '.07em',
-          textTransform: 'uppercase', color: 'var(--primary)', marginBottom: 8,
+          textTransform: 'none', color: 'var(--primary)', marginBottom: 8,
         }}>
           {guide.eyebrow || 'Reference'}
         </div>
@@ -241,7 +241,7 @@ export default function ModuleGuide({ guide }) {
               }}>
                 <div style={{
                   fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em',
-                  textTransform: 'uppercase', color: 'var(--text-muted)',
+                  textTransform: 'none', color: 'var(--text-muted)',
                 }}>{f.label}</div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', margin: '4px 0 2px' }}>
                   {f.value}
@@ -304,7 +304,7 @@ export default function ModuleGuide({ guide }) {
             }}>
               <div style={{
                 fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em',
-                textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10,
+                textTransform: 'none', color: 'var(--text-muted)', marginBottom: 10,
               }}>On this page</div>
               {guide.sections.map((s) => (
                 <a
@@ -331,7 +331,7 @@ export default function ModuleGuide({ guide }) {
               }}>
                 <div style={{
                   fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em',
-                  textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 10,
+                  textTransform: 'none', color: 'var(--text-muted)', marginBottom: 10,
                 }}>{guide.quickRef.title}</div>
                 {guide.quickRef.items.map((q) => (
                   <div key={q.k} style={{ marginBottom: 11 }}>

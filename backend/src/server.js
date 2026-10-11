@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import cron from 'node-cron';
 import { reaScraper } from './services/reaScraper.js';
 import { cercScraper } from './services/cercScraper.js';
+import { runCeaScraper } from './services/ceaScraper.js';
 
 import authRoutes from './routes/auth.js';
 import entitiesRoutes from './routes/entities.js';
@@ -93,7 +94,7 @@ import tradingNotesRoutes from './routes/tradingNotes.js';
 import powerDiversionRoutes from './routes/powerDiversion.js';
 import rateMasterRoutes from './routes/rateMaster.js';
 import dsmChargesRoutes from './routes/dsmCharges.js';
-import hydroBillingRoutes, { runReaAutoDraft } from './routes/hydroBilling.js';
+import hydroBillingRoutes, { runReaAutoDraft, runDelhiSplitConfirmation } from './routes/hydroBilling.js';
 import reiaFinanceRoutes from './routes/reiaFinance.js';
 import mailRoutes from './routes/mail.js';
 import nocUpdationRoutes from './routes/nocUpdation.js';
@@ -382,7 +383,7 @@ app.use((err, req, res, next) => {
   if (err.name === 'MulterError') {
     const tooBig = err.code === 'LIMIT_FILE_SIZE';
     return res.status(tooBig ? 413 : 400).json({
-      error: tooBig ? 'The uploaded file exceeds the maximum allowed size of 10MB. Please compress the document and try again.' : `Upload rejected: ${err.message}`,
+      error: tooBig ? 'The uploaded file is too large (exceeds the maximum allowed size of 10MB). Please compress the document and try again.' : `Upload rejected: ${err.message}`,
       trace_id: trace,
     });
   }
@@ -591,6 +592,12 @@ const server = app.listen(PORT, HOST, () => {
     } catch (err) {
       console.error('[REA Auto-draft] sweep failed:', err.message);
     }
+    try {
+      const settled = (await runDelhiSplitConfirmation()).filter((r) => r.status !== 'WAITING');
+      if (settled.length) console.log(`[REA Auto-draft] Delhi split: ${settled.map((r) => `${r.contract_no} ${r.month} ${r.status}`).join(', ')}`);
+    } catch (err) {
+      console.error('[REA Auto-draft] Delhi split check failed:', err.message);
+    }
   };
 
   // Daily at 6 AM IST through the 1st-10th, when the provisional REA is
@@ -610,6 +617,17 @@ const server = app.listen(PORT, HOST, () => {
     }
   });
   console.log('[CERC Scraper] Cron job registered (15th & 25th of each month at 07:00 IST)');
+
+  // ── CEA Scraper: 5th of each month at 07:30 IST (02:00 UTC) ───────────────────
+  cron.schedule('0 2 5 * *', async () => {
+    console.log('[CEA Scraper] Starting scheduled scrape...');
+    try {
+      await runCeaScraper();
+    } catch (err) {
+      console.error('[CEA Scraper] Error during scheduled scrape:', err);
+    }
+  });
+  console.log('[CEA Scraper] Cron job registered (5th of each month at 07:30 IST)');
 
   // Auto-seed CERC reports from local disk if table is empty
   cercScraper.autoSeedLocalReports().catch(err => {

@@ -606,7 +606,7 @@ export default function ExchangeContractDetail() {
                   ['Client position', `₹${fmtNumber(settlement.money?.client_energy_position)}`, settlement.side === 'Buyer' ? 'buy-side' : 'sell-side'],
                 ].map(([label, value, sub]) => (
                   <div key={label} style={{ padding: '10px 12px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.3 }}>{label}</div>
                     <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2 }}>{value}</div>
                     <div style={{ fontSize: 11, color: 'var(--slate-500)' }}>{sub}</div>
                   </div>

@@ -105,7 +105,8 @@ function LcDetail({ id, canManage, onChanged, onPreview }) {
   }
 
   if (!lc) return error ? <div className="form-error">{error}</div> : <div style={{ fontSize: 13, color: 'var(--text-light)' }}>Loading…</div>;
-  const short = Math.max(0, (lc.required_amount || 0) - (lc.live ? lc.available_amount : 0));
+  // Against everything open on the PPA, as the tab counts it — not this one letter alone.
+  const short = Math.max(0, (lc.required_amount || 0) - (lc.open_on_contract ?? (lc.live ? lc.available_amount : 0)));
   return (
     <div>
       {error && <div className="form-error">{error}</div>}
@@ -158,8 +159,8 @@ function LcDetail({ id, canManage, onChanged, onPreview }) {
                   <div style={{ fontSize: 12 }}>
                     {[ev.details.amount?.from != null && `amount ${fmtCurrency(ev.details.amount.from)} → ${fmtCurrency(ev.details.amount.to)}`,
                       typeof ev.details.amount === 'number' && fmtCurrency(ev.details.amount),
-                      ev.details.validity_end?.from !== undefined && `validity ${ev.details.validity_end.from || '—'} → ${ev.details.validity_end.to}`,
-                      typeof ev.details.validity_end === 'string' && `valid until ${ev.details.validity_end}`,
+                      ev.details.validity_end?.from !== undefined && `validity ${ev.details.validity_end.from ? fmtDate(ev.details.validity_end.from) : '—'} → ${fmtDate(ev.details.validity_end.to)}`,
+                      typeof ev.details.validity_end === 'string' && `valid until ${fmtDate(ev.details.validity_end)}`,
                       ev.details.utilized_amount && `drawn ${fmtCurrency(ev.details.utilized_amount.from)} → ${fmtCurrency(ev.details.utilized_amount.to)}`,
                       ev.details.note].filter(Boolean).join(' · ')}
                   </div>

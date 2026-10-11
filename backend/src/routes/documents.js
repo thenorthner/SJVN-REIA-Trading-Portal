@@ -405,14 +405,13 @@ router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
   }
   if (expiry_date && !/^\d{4}-\d{2}-\d{2}$/.test(expiry_date)) return refuse(400, 'expiry_date must be YYYY-MM-DD');
 
-  // Segregation of duties: internal users (SJVN Admin / REIA / Finance) are the
-  // reviewers/verifiers. They must NOT also upload VERIFY-category documents —
-  // those must come from the stakeholder (Seller/Buyer) themselves so the same
-  // person never uploads and self-verifies. Internal users may still upload
-  // RECORD-category documents (internal notes, calculations, etc.).
+  // Segregation of duties: counterparty users upload their own documents.
+  // SJVN Admin and REIA desk officers are also authorized to directly intake
+  // and upload stakeholder compliance/KYC documents on behalf of stakeholders.
   const actualCategory = existing ? existing.category : category;
-  if (!external && actualCategory === 'VERIFY') {
-    return refuse(403, 'VERIFY-category documents must be uploaded by the stakeholder (Seller/Buyer). Internal users can only review and verify them.');
+  const canAdminUpload = ['SJVN_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(req.user.role);
+  if (!external && !canAdminUpload && actualCategory === 'VERIFY') {
+    return refuse(403, 'VERIFY-category documents must be uploaded by the stakeholder (Seller/Buyer) or SJVN Admin.');
   }
 
   if (unreadablePdf(req.file.path)) {
@@ -468,6 +467,10 @@ router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
       if (actualCategory === 'VERIFY' && (req.user.role === 'SELLER_L1' || req.user.role === 'BUYER_L1')) {
         initialStatus = 'DRAFT';
       }
+      const shouldAutoVerify = canAdminUpload && (req.body.auto_verify === 'true' || req.body.auto_verify === true);
+      if (shouldAutoVerify && actualCategory === 'VERIFY') {
+        initialStatus = 'VERIFIED';
+      }
 
       versionId = uuidv4();
       db.prepare(`
@@ -487,6 +490,16 @@ router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
           UPDATE document_requests SET status = 'FULFILLED', fulfilled_version_id = ?, closed_at = datetime('now')
           WHERE entity_id = ? AND document_type = ? AND status = 'OPEN'
         `).run(versionId, owner.entity_id, existing ? existing.document_type : document_type);
+
+        if (shouldAutoVerify) {
+          try {
+            db.prepare(`
+              UPDATE entity_regulatory_approvals
+              SET status = 'VERIFIED', document_id = ?, verified_by = ?, verified_at = datetime('now'), updated_at = datetime('now')
+              WHERE entity_id = ? AND approval_code = ?
+            `).run(docId, req.user.name || 'SJVN Admin', owner.entity_id, existing ? existing.document_type : document_type);
+          } catch { /* ignore if not a regulatory approval code */ }
+        }
       }
     })();
 
@@ -540,6 +553,17 @@ router.post('/:versionId/verify', requireAuth, (req, res) => {
     SET verification_status = 'VERIFIED', verification_notes = NULL, rejection_code = NULL, verified_by = ?, verified_at = datetime('now')
     WHERE id = ?
   `).run(req.user.id, v.id);
+
+  if (v.entity_id) {
+    try {
+      db.prepare(`
+        UPDATE entity_regulatory_approvals
+        SET status = 'VERIFIED', document_id = ?, verified_by = ?, verified_at = datetime('now'), updated_at = datetime('now')
+        WHERE entity_id = ? AND approval_code = ?
+      `).run(v.document_id, req.user.name || 'SJVN Admin', v.entity_id, v.document_type);
+    } catch { /* ignore if not a regulatory approval code */ }
+  }
+
   audit(req, 'DOCUMENT_VERIFIED', v.id, { beforeValue: { status: 'PENDING' }, afterValue: { status: 'VERIFIED', document_type: v.document_type, entity_id: v.entity_id } });
   tellUploader(v, `Your document "${v.title}" has been verified by SJVN.`);
   res.json({ success: true });

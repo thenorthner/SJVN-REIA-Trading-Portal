@@ -271,12 +271,48 @@ for (const [slug, title] of CERC_FORMS) {
 }
 
 const CEA_REPORTS = [
-  ['supply-position-energy', 'Power Supply Position — Energy'],
-  ['supply-position-peak', 'Power Supply Position — Peak'],
-  ['installed-capacity-month', 'Month Wise Installed Capacity'],
-  ['installed-capacity-state', 'State Wise Installed Capacity'],
   ['per-capita-consumption', 'State Wise Per-Capita Consumption'],
 ];
+
+PENDING_REPORT_CATALOG['cea-installed-capacity-month'] = {
+  title: 'Month Wise Installed Capacity',
+  columns: [
+    { key: 'month_year', label: 'Month/Year' },
+    { key: 'state', label: 'State' },
+    { key: 'sector', label: 'Sector' },
+    { key: 'capacity_mw', label: 'Capacity (MW)' },
+  ]
+};
+
+PENDING_REPORT_CATALOG['cea-installed-capacity-state'] = {
+  title: 'State Wise Installed Capacity',
+  columns: [
+    { key: 'month_year', label: 'Month/Year' },
+    { key: 'state', label: 'State' },
+    { key: 'sector', label: 'Sector' },
+    { key: 'capacity_mw', label: 'Capacity (MW)' },
+  ]
+};
+
+PENDING_REPORT_CATALOG['cea-supply-position-energy'] = {
+  title: 'Power Supply Position — Energy',
+  columns: [
+    { key: 'month_year', label: 'Month/Year' },
+    { key: 'state', label: 'State' },
+    { key: 'energy_req', label: 'Energy Requirement (MU)' },
+    { key: 'energy_avail', label: 'Energy Availability (MU)' },
+  ]
+};
+
+PENDING_REPORT_CATALOG['cea-supply-position-peak'] = {
+  title: 'Power Supply Position — Peak',
+  columns: [
+    { key: 'month_year', label: 'Month/Year' },
+    { key: 'state', label: 'State' },
+    { key: 'peak_demand', label: 'Peak Demand (MW)' },
+    { key: 'peak_met', label: 'Peak Met (MW)' },
+  ]
+};
 
 for (const [slug, title] of CEA_REPORTS) {
   PENDING_REPORT_CATALOG[`cea-${slug}`] = {

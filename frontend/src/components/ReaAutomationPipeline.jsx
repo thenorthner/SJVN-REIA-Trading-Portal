@@ -240,6 +240,11 @@ export default function ReaAutomationPipeline({
       position: 'relative',
       overflow: 'hidden',
     }}>
+      {mode === 'DEMO' && (
+        <div role="note" style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 12 }}>
+          <strong>Demonstration.</strong> This walks through the steps a fetch goes through. Nothing is being contacted, read or saved — use “Trigger Fetch” for a real run.
+        </div>
+      )}
       {/* Top Banner & Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         <div>

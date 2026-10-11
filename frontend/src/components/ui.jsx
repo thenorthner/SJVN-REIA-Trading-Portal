@@ -169,7 +169,7 @@ export function Table({
 
 let modalSeq = 0;
 
-export function Modal({ open, onClose, title, children, width = 560 }) {
+export function Modal({ open, onClose, title, children, width = 640 }) {
   const titleId = React.useMemo(() => `modal-title-${++modalSeq}`, []);
   const panelRef = React.useRef(null);
   const wasOpenRef = React.useRef(false);
@@ -191,12 +191,23 @@ export function Modal({ open, onClose, title, children, width = 560 }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
+  // Scaled modal width: User requested "aisi har window thodi si badha de"
+  // Increases every modal window size across the application by ~18-20% for optimal readability & breathing room
+  const computedMaxWidth = React.useMemo(() => {
+    let numWidth = typeof width === 'number' ? width : parseInt(width, 10);
+    if (!isNaN(numWidth)) {
+      const scaled = Math.round(Math.max(numWidth * 1.18, 640));
+      return `min(${scaled}px, calc(100vw - 36px))`;
+    }
+    return width || '680px';
+  }, [width]);
+
   if (!open) return null;
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal"
-        style={{ maxWidth: width }}
+        style={{ maxWidth: computedMaxWidth }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -239,7 +250,10 @@ export function Field({ label, children, required, htmlFor }) {
 
 export function fmtCurrency(v) {
   if (v == null || isNaN(v)) return '₹0';
-  return '₹' + Number(v).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  const n = Number(v);
+  // The sign goes before the rupee mark: −₹8,000, not ₹-8,000.
+  const text = Math.abs(n).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  return `${n < 0 && text !== '0' ? '-' : ''}₹${text}`;
 }
 
 export function fmtNumber(v, digits = 1) {
@@ -293,9 +307,12 @@ export function StatementViewer({ statement }) {
           </thead>
           <tbody>
             {statement.items.map((it, idx) => (
-              <tr key={idx} style={{ background: it.status === 'EXACT' ? 'transparent' : '#fff1f2' }}>
+              <tr key={idx} style={{ background: ['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN', 'NOT_CONNECTED'].includes(it.status) ? 'transparent' : '#fff1f2' }}>
                 <td style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'normal', minWidth: 150 }}>{it.label}</td>
-                <td><Badge status={it.status === 'EXACT' ? 'AUTO_MATCHED' : 'NEEDS_REVIEW'} /></td>
+                <td>{it.status === 'NOT_CONNECTED'
+                  ? <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>Not checked</span>
+                  : it.status === 'OVERRIDDEN' ? <Badge status="AUTO_MATCHED" label="Overridden" />
+                    : <Badge status={['EXACT', 'AUTO_MATCHED'].includes(it.status) ? 'AUTO_MATCHED' : it.status === 'CARRIED' ? 'REOPENED' : 'NEEDS_REVIEW'} />}</td>
                 <td>{it.metered != null ? fmtNumber(it.metered, 2) : '-'}</td>
                 <td>{it.billed != null ? (it.type.includes('FINANCIAL') ? fmtCurrency(it.billed) : fmtNumber(it.billed, 2)) : '-'}</td>
                 <td style={{ color: it.variance !== 0 ? '#e53e3e' : '#10b981', fontWeight: it.variance !== 0 ? 600 : 400 }}>
@@ -310,11 +327,11 @@ export function StatementViewer({ statement }) {
       
       <div style={{ display: 'flex', gap: 24, marginTop: 16, borderTop: '1px solid var(--slate-200)', paddingTop: 16 }}>
         <div>
-          <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase' }}>SJVN Sign-off</div>
+          <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none' }}>SJVN Sign-off</div>
           <div style={{ fontWeight: 500 }}>{statement.sign_off?.sjvn ? `${statement.sign_off.sjvn.by}` : 'Pending'}</div>
         </div>
         <div>
-          <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase' }}>Counterparty Sign-off</div>
+          <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none' }}>Counterparty Sign-off</div>
           <div style={{ fontWeight: 500 }}>{statement.sign_off?.counterparty ? `${statement.sign_off.counterparty.by}` : 'Pending'}</div>
         </div>
       </div>
@@ -322,7 +339,7 @@ export function StatementViewer({ statement }) {
   );
 }
 
-export function DemandLetterViewer({ letterStr }) {
+export function DemandLetterViewer({ letterStr, status = 'NOTICE_ISSUED', invocationNo, onDownload }) {
   if (!letterStr) return null;
   let letter;
   try {
@@ -330,56 +347,82 @@ export function DemandLetterViewer({ letterStr }) {
   } catch(e) {
     return <div className="empty-cell">Invalid letter format</div>;
   }
+  // The letter carries the invoices by number and each draw as an object; this
+  // read a field it never had and printed the draws as they were, which is not
+  // something a screen can show.
+  const invoices = letter.invoice_nos?.length ? letter.invoice_nos : (letter.invoices || letter.invoice_ids || []);
+  const draws = Array.isArray(letter.waterfall) ? letter.waterfall : [];
+  const issued = letter.issued_at ? new Date(letter.issued_at) : null;
 
   return (
     <div className="card" style={{ border: '1px solid var(--slate-300)', borderRadius: 8, overflow: 'hidden', margin: '16px 0', background: 'white' }}>
-      <div style={{ background: 'var(--slate-50)', padding: '16px 20px', borderBottom: '1px solid var(--slate-200)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ background: 'var(--slate-50)', padding: '16px 20px', borderBottom: '1px solid var(--slate-200)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 12, textTransform: 'uppercase', color: 'var(--slate-500)', fontWeight: 600, letterSpacing: 0.5 }}>Official Demand Letter</div>
+          <div style={{ fontSize: 12, textTransform: 'none', color: 'var(--slate-500)', fontWeight: 600, letterSpacing: 0.5 }}>Demand notice{invocationNo ? ` · ${invocationNo}` : ''}</div>
           <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--slate-900)', marginTop: 4 }}>{letter.subject}</div>
         </div>
-        <Badge status="NOTICE_ISSUED" />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Badge status={status} />
+          {onDownload && <button type="button" className="btn btn-secondary btn-sm" onClick={onDownload}>Download demand letter (PDF)</button>}
+        </div>
       </div>
-      
+
       <div style={{ padding: '20px' }}>
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>To:</div>
           <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--slate-800)' }}>{letter.to}</div>
         </div>
-        
-        <div style={{ display: 'flex', gap: 32, marginBottom: 20 }}>
+
+        <div style={{ display: 'flex', gap: 32, marginBottom: 20, flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Demand Amount</div>
             <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--red-deep)' }}>{fmtCurrency(letter.amount)}</div>
           </div>
+          {letter.requested != null && Number(letter.requested) !== Number(letter.amount) && (
+            <div>
+              <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Asked for</div>
+              <div style={{ fontSize: 15, fontWeight: 500 }}>{fmtCurrency(letter.requested)}</div>
+            </div>
+          )}
+          {Number(letter.shortfall_uncovered) > 0 && (
+            <div>
+              <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Not covered by any security</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--red-deep)' }}>{fmtCurrency(letter.shortfall_uncovered)}</div>
+            </div>
+          )}
           <div>
             <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Date Issued</div>
-            <div style={{ fontSize: 15, fontWeight: 500 }}>{new Date().toLocaleDateString('en-IN')}</div>
+            <div style={{ fontSize: 15, fontWeight: 500 }}>{issued && !Number.isNaN(issued.getTime()) ? issued.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</div>
           </div>
         </div>
 
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 4 }}>Outstanding Invoices Covered:</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {letter.invoice_ids?.map((inv) => (
+            {invoices.length === 0 && <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>None named — the amount was entered by the desk.</span>}
+            {invoices.map((inv) => (
               <span key={inv} style={{ padding: '4px 8px', background: 'var(--slate-100)', borderRadius: 4, fontSize: 13, border: '1px solid var(--slate-200)' }}>{inv}</span>
             ))}
           </div>
         </div>
 
-        {letter.waterfall?.length > 0 && (
+        {draws.length > 0 && (
           <div>
-            <div style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 4 }}>Invocation Waterfall Sequence:</div>
+            <div style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 4 }}>Drawn, in waterfall order:</div>
             <ol style={{ margin: 0, paddingLeft: 20, fontSize: 14, color: 'var(--slate-700)' }}>
-              {letter.waterfall.map((step, i) => (
-                <li key={i} style={{ marginBottom: 4 }}>{step}</li>
+              {draws.map((step, i) => (
+                <li key={step?.id || i} style={{ marginBottom: 4 }}>
+                  {typeof step === 'string'
+                    ? step
+                    : <><strong>{step.instrument_no}</strong> ({String(step.type || '').replaceAll('_', ' ')}) — {fmtCurrency(step.amount)}</>}
+                </li>
               ))}
             </ol>
           </div>
         )}
       </div>
       <div style={{ padding: '12px 20px', background: '#fffbeb', borderTop: '1px solid #fef3c7', fontSize: 12, color: '#92400e' }}>
-        <strong>Important:</strong> This is a legally binding demand against the counterparty's payment security. The specified waterfall sequence will be executed unless payment is received immediately.
+        <strong>Important:</strong> This is a demand against the counterparty's payment security. The amounts above have been drawn on the instruments named.
       </div>
     </div>
   );

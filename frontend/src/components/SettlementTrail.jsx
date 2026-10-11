@@ -69,16 +69,20 @@ export function SettlementTrailPanel({
           <code style={{ fontSize: 12, color: '#4f46e5', wordBreak: 'break-all' }}>{trail.billing_family_ref}</code>
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {s.has_provisional_energy ? <Badge status="ACTIVE" label="Prov Energy" /> : <Badge status="DRAFT" label="No Prov Energy" />}
-          {s.has_final_energy ? <Badge status="ACTIVE" label="Final Energy" /> : <Badge status="PENDING" label="Awaiting Final" />}
+          {trail.psa_unallocated ? <Badge status="REJECTED" label="No PPA allocation" /> : (
+            <>
+              {s.has_provisional_energy ? <Badge status="ACTIVE" label="Prov Energy" /> : <Badge status="DRAFT" label="No Prov Energy" />}
+              {s.has_final_energy ? <Badge status="ACTIVE" label="Final Energy" /> : <Badge status="PENDING" label="Awaiting Final" />}
+            </>
+          )}
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 14 }}>
         <Stat label="Period" value={trail.billing_period} />
-        <Stat label="Already paid" value={fmtCurrency(trail.already_paid)} />
+        <Stat label="Paid on the period" value={fmtCurrency(trail.paid_on_period ?? trail.already_paid)} />
         <Stat label="Δ Energy" value={trail.delta_mwh != null ? `${fmtNumber(trail.delta_mwh)} MWh` : '—'} />
-        <Stat label="Net due (final)" value={trail.net_due != null ? fmtCurrency(trail.net_due) : '—'} />
+        <Stat label="Net due (final)" value={trail.net_due != null ? fmtCurrency(trail.net_due) : '—'} hint={trail.net_due_invoice_no || undefined} />
         {trail.frequency_beta && (
           <Stat
             label="Freq. β"
@@ -117,9 +121,14 @@ export function SettlementTrailPanel({
         </TrailBlock>
       )}
 
-      {trail.direction === 'SJVN_TO_BUYER' && (
+      {trail.direction === 'SJVN_TO_BUYER' && !trail.psa_unallocated && (
         <div style={{ fontSize: 12, color: 'var(--slate-500)', marginBottom: 10, padding: '6px 10px', background: '#eef2ff', borderRadius: 6 }}>
           Energy shown below is the <strong>source PPA</strong> generation for this period. The PSA bill uses the allocated share (see invoice breakdown: Source PPA Energy × Allocation %).
+        </div>
+      )}
+      {trail.psa_unallocated && (
+        <div style={{ fontSize: 12, color: '#92400e', marginBottom: 10, padding: '6px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6 }}>
+          This PSA holds no allocation from a PPA, so there is no source energy to show for it — and no energy bill can be generated on it until the PPA allocates it a share (Contracts → the source PPA).
         </div>
       )}
 
@@ -130,7 +139,7 @@ export function SettlementTrailPanel({
               <div>{fmtNumber(trail.provisional_energy.energy_mwh)} MWh · {trail.provisional_energy.source}</div>
               <div style={{ fontSize: 12, color: 'var(--slate-500)' }}><Badge status={trail.provisional_energy.status} /> · {trail.provisional_energy.id}</div>
             </>
-          ) : <span style={{ color: 'var(--text-subtle)' }}>None</span>}
+          ) : <span style={{ color: 'var(--text-subtle)' }}>{trail.psa_unallocated ? 'No source PPA' : 'None'}</span>}
         </TrailBlock>
         <TrailBlock title="Final Energy">
           {trail.final_energy ? (
@@ -138,10 +147,10 @@ export function SettlementTrailPanel({
               <div>{fmtNumber(trail.final_energy.energy_mwh)} MWh · {trail.final_energy.source}</div>
               <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>
                 <Badge status={trail.final_energy.status} />
-                {trail.final_energy.supersedes_energy_id && ` · supersedes ${trail.final_energy.supersedes_energy_id}`}
+                {trail.final_energy.supersedes_energy_id && ' · replaces the provisional figure'}
               </div>
             </>
-          ) : <span style={{ color: 'var(--text-subtle)' }}>Awaiting CERC final</span>}
+          ) : <span style={{ color: 'var(--text-subtle)' }}>{trail.psa_unallocated ? 'No source PPA' : 'Awaiting CERC final'}</span>}
         </TrailBlock>
       </div>
 
@@ -150,24 +159,24 @@ export function SettlementTrailPanel({
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
             {trail.provisional_invoices.map((inv) => (
               <li key={inv.id}>
-                {inv.invoice_no} · {fmtCurrency(inv.total_amount)} · <Badge status={inv.status} />
+                {inv.invoice_no}{whose(inv, trail)} · {fmtCurrency(inv.total_amount)} · <Badge status={inv.status} />
               </li>
             ))}
           </ul>
         ) : <span style={{ color: 'var(--text-subtle)' }}>None</span>}
         <div style={{ marginTop: 6, fontSize: 12, color: 'var(--slate-500)' }}>
-          Billed {fmtCurrency(trail.provisional_billed)} · Paid {fmtCurrency(trail.already_paid)}
+          Billed {fmtCurrency(trail.provisional_billed)} · Paid on provisional {fmtCurrency(trail.already_paid)}
         </div>
       </TrailBlock>
 
-      <TrailBlock title="Final / True-up Invoices" style={{ marginTop: 12 }}>
+      <TrailBlock title="Final, Supplementary and Arrear Bills" style={{ marginTop: 12 }}>
         {trail.final_invoices?.length ? (
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
             {trail.final_invoices.map((inv) => (
               <li key={inv.id}>
-                {inv.invoice_no} ({inv.invoice_type}) · Net {fmtCurrency(inv.total_amount)}
+                {inv.invoice_no} ({inv.invoice_type}){whose(inv, trail)} · Net {fmtCurrency(inv.total_amount)}
                 {inv.other_adjustments ? ` · adj ${fmtCurrency(inv.other_adjustments)}` : ''}
-                {inv.parent_invoice_id ? ` · parent ${inv.parent_invoice_id}` : ''}
+                {inv.paid_total > 0 ? ` · paid ${fmtCurrency(inv.paid_total)}` : ''}
                 {' · '}<Badge status={inv.status} />
               </li>
             ))}
@@ -178,11 +187,19 @@ export function SettlementTrailPanel({
   );
 }
 
-function Stat({ label, value }) {
+// On a PPA month the family holds SJVN's own computation and the invoice the
+// seller raised; say which is which, since they can differ.
+function whose(inv, trail) {
+  if (trail.direction !== 'SELLER_TO_SJVN' || inv.raised_by_seller == null) return '';
+  return inv.raised_by_seller ? ' — seller\u2019s invoice' : ' — SJVN\u2019s computation';
+}
+
+function Stat({ label, value, hint }) {
   return (
     <div style={{ background: '#fff', border: '1px solid var(--slate-200)', borderRadius: 6, padding: '8px 10px' }}>
-      <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.3 }}>{label}</div>
       <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-900)', marginTop: 2 }}>{value}</div>
+      {hint && <div style={{ fontSize: 11, color: 'var(--slate-500)', marginTop: 1, wordBreak: 'break-all' }}>{hint}</div>}
     </div>
   );
 }

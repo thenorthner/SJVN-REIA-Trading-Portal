@@ -39,4 +39,10 @@ if (capture.tool !== 'pxil-probe' || !capture.attempts) {
   process.exit(1);
 }
 
-renderProbeReport({ meta: capture.meta || {}, attempts: capture.attempts });
+renderProbeReport({
+  meta: capture.meta || {},
+  attempts: capture.attempts,
+  controls: capture.controls,
+  scan: capture.scan,
+  usage: { calls: capture.calls, budget: capture.budget, rateLimit: capture.rate_limited },
+});

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import api from '../../api/client.js';
 import EnergyOverview from '../../components/EnergyOverview.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -10,8 +10,12 @@ import ReaAutomationPipeline from '../../components/ReaAutomationPipeline.jsx';
 import EnergyAccountUpload from '../../components/EnergyAccountUpload.jsx';
 import EnergyRecordDetail, { ResponseBadge } from '../../components/EnergyRecordDetail.jsx';
 import { fmtDateTime } from '../../datetime.js';
+import { ROLE_GROUPS } from '../../roles.js';
 
-const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER'];
+// The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_ADMIN.
+const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
+
+const lastMonth = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 
 const EMPTY_FORM = { contract_id: '', period_month: '', data_type: 'PROVISIONAL', source: 'MANUAL', energy_mwh: '', cuf_percent: '', availability_percent: '', peak_availability_percent: '' };
 
@@ -25,6 +29,17 @@ export default function EnergyData() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState('');
+  // What went wrong on the page, and what was just done — said here, not in a browser pop-up.
+  const [pageError, setPageError] = useState('');
+  const [notice, setNotice] = useState('');
+  // A lock the server will only take with a recorded reason.
+  const [lockAsk, setLockAsk] = useState(null);
+  const [lockReason, setLockReason] = useState('');
+  const [lockError, setLockError] = useState('');
+  const [busy, setBusyState] = useState(false);
+  const lock = useRef(false);
+  const setBusy = (on) => { lock.current = on; setBusyState(on); };
+  const errOf = (err, fallback) => err?.response?.data?.error || err?.message || fallback;
 
   const [showUploadREA, setShowUploadREA] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
@@ -38,7 +53,7 @@ export default function EnergyData() {
   const [reaStatus, setReaStatus] = useState(null);
   const [reaLog, setReaLog] = useState([]);
   const [showReaPanel, setShowReaPanel] = useState(true);
-  const [triggerForm, setTriggerForm] = useState({ rpc: 'NRPC', period_month: '2026-06', data_type: 'PROVISIONAL' });
+  const [triggerForm, setTriggerForm] = useState({ rpc: 'NRPC', period_month: lastMonth(), data_type: 'PROVISIONAL' });
   const [triggering, setTriggering] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [reaMsg, setReaMsg] = useState('');
@@ -66,8 +81,7 @@ export default function EnergyData() {
       if (filters.contract_id) params.contract_id = filters.contract_id;
       await api.reports.energySummaryPdf(params);
     } catch (err) {
-      console.error(err);
-      alert(err.message || err.response?.data?.error || 'Failed to download energy PDF report');
+      setPageError(errOf(err, 'Failed to download energy PDF report'));
     } finally {
       setPdfLoading(false);
     }
@@ -77,10 +91,10 @@ export default function EnergyData() {
     setLoading(true);
     const params = {};
     Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
-    api.energyData.list(params).then(setRows).finally(() => setLoading(false));
+    return api.energyData.list(params).then(setRows).catch((err) => setPageError(errOf(err, 'The energy records could not be loaded.'))).finally(() => setLoading(false));
   }
 
-  useEffect(load, [filters.contract_id, filters.period_month, filters.status]);
+  useEffect(() => { load(); }, [filters.contract_id, filters.period_month, filters.status]);
   useEffect(() => { api.contracts.list().then(setContracts).catch(() => {}); }, []);
 
   function loadReaStatus() {
@@ -89,11 +103,16 @@ export default function EnergyData() {
   }
   useEffect(() => { if (CAN_WRITE.includes(user?.role)) loadReaStatus(); }, []);
 
+  function openCreate() { setForm(EMPTY_FORM); setError(''); setShowCreate(true); }
+  function openUploadRea() { setError(''); setParsedData(null); setUploadFile(null); setReaPeriod(''); setShowUploadREA(true); }
+
   async function handleCreate(e) {
     e.preventDefault();
+    if (lock.current) return;
     setError('');
+    setBusy(true);
     try {
-      await api.energyData.create({
+      const made = await api.energyData.create({
         ...form,
         energy_mwh: Number(form.energy_mwh),
         cuf_percent: form.cuf_percent ? Number(form.cuf_percent) : null,
@@ -102,9 +121,15 @@ export default function EnergyData() {
       });
       setShowCreate(false);
       setForm(EMPTY_FORM);
+      setPageError('');
+      setNotice(made.replaced
+        ? `The ${made.period_month} figure was corrected to ${fmtNumber(made.energy_mwh)} MWh and is a draft again. Validate it before it can be locked.`
+        : `${fmtNumber(made.energy_mwh)} MWh recorded for ${made.period_month} as a draft. Validate it before it can be locked.`);
       load();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to record energy data.');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -167,27 +192,49 @@ export default function EnergyData() {
   }
 
   async function handleValidate(row) {
-    await api.energyData.validate(row.id);
+    if (lock.current) return;
+    setBusy(true);
+    setPageError('');
+    try {
+      const done = await api.energyData.validate(row.id);
+      setNotice(done.status === 'VALIDATED'
+        ? `${row.contract_no} ${row.period_month} validated. It has gone to the counterparty to confirm, and can now be locked.`
+        : `${row.contract_no} ${row.period_month} failed validation and is marked DISPUTED — ${done.deviation_notes || 'see the Notes column'}.`);
+    } catch (err) {
+      setNotice('');
+      setPageError(errOf(err, 'This period could not be validated.'));
+    } finally {
+      setBusy(false);
+    }
     load();
   }
 
   // Locking can be refused — an unvalidated period, or one the counterparty has
   // objected to. The refusal is shown; where a recorded reason lets the lock go
-  // ahead anyway, the reason is asked for.
-  async function handleLock(row) {
+  // ahead anyway, the reason is asked for in the page.
+  async function handleLock(row, reason) {
+    if (lock.current) return;
+    setBusy(true);
+    setPageError('');
+    setLockError('');
     try {
-      await api.energyData.lock(row.id);
+      await api.energyData.lock(row.id, reason ? { override_reason: reason } : undefined);
+      setLockAsk(null);
+      setLockReason('');
+      setNotice(`${row.contract_no} ${row.period_month} locked for billing${reason ? ', with the reason on record' : ''}.${row.response_status === 'ACCEPTED' ? '' : ' The counterparty had not accepted this figure; it has been told it is locked.'}`);
     } catch (err) {
       const data = err.response?.data || {};
-      if (!data.hint) { alert(data.error || 'Could not lock this period'); return; }
-      const reason = window.prompt(`${data.error}${data.objection ? `\n\nTheir objection: ${data.objection}` : ''}\n\nTo lock it as it stands, give the reason (it is kept on record):`);
-      if (!reason || !reason.trim()) return;
-      try {
-        await api.energyData.lock(row.id, { override_reason: reason.trim() });
-      } catch (e2) {
-        alert(e2.response?.data?.error || 'Could not lock this period');
-        return;
+      if (data.hint && !reason) {
+        setLockAsk({ row, error: data.error, objection: data.objection, validation: data.validation_note });
+        setLockReason('');
+      } else if (reason) {
+        setLockError(data.error || 'Could not lock this period');
+      } else {
+        setNotice('');
+        setPageError(data.error || 'Could not lock this period');
       }
+    } finally {
+      setBusy(false);
     }
     load();
   }
@@ -206,13 +253,13 @@ export default function EnergyData() {
     { key: 'peak_availability_percent', header: 'Peak Avail. %', render: (r) => r.peak_availability_percent != null ? `${fmtNumber(r.peak_availability_percent)}%` : '-' },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
     // What the seller or buyer has said to the figure: accepted, objected, or not yet answered.
-    { key: 'response', header: 'Counterparty', render: (r) => <ResponseBadge row={r} /> },
+    { key: 'response', header: 'Counterparty', render: (r) => (r.is_superseded ? <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>Replaced by final</span> : <ResponseBadge row={r} />) },
     { key: 'deviation_notes', header: 'Notes', render: (r) => r.deviation_notes || '-' },
     ...(CAN_WRITE.includes(user?.role) ? [{
       key: 'actions', header: 'Actions', render: (r) => (
         <div className="cell-actions">
-          {r.status === 'DRAFT' && <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); handleValidate(r); }}>Validate</button>}
-          {r.status === 'VALIDATED' && <button className="btn btn-success btn-sm" onClick={(e) => { e.stopPropagation(); handleLock(r); }}>Lock</button>}
+          {['DRAFT', 'DISPUTED'].includes(r.status) && !r.is_superseded && <button className="btn btn-secondary btn-sm" disabled={busy} onClick={(e) => { e.stopPropagation(); handleValidate(r); }}>{r.status === 'DISPUTED' ? 'Re-validate' : 'Validate'}</button>}
+          {['VALIDATED', 'DISPUTED'].includes(r.status) && !r.is_superseded && <button className="btn btn-success btn-sm" disabled={busy} onClick={(e) => { e.stopPropagation(); handleLock(r); }}>Lock</button>}
           <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); setTrailEnergyId(r.id); }}>Trail</button>
           <button className="btn btn-outline btn-sm" title="Source document, 15-minute blocks and the counterparty's answer" onClick={(e) => { e.stopPropagation(); setRecordId(r.id); }}>Record</button>
         </div>
@@ -244,9 +291,9 @@ export default function EnergyData() {
             </button>
             {CAN_WRITE.includes(user?.role) && (
               <>
-                <button className="btn btn-secondary" onClick={() => setShowUploadREA(true)}>Upload REA PDF</button>
+                <button className="btn btn-secondary" onClick={openUploadRea}>Upload REA PDF</button>
                 <button className="btn btn-secondary" onClick={() => { setAccountResult(null); setShowAccountUpload(true); }}>Upload JMR / SEA</button>
-                <button className="btn btn-secondary" onClick={() => setShowCreate(true)}>+ Record Energy Data</button>
+                <button className="btn btn-secondary" onClick={openCreate}>+ Record Energy Data</button>
               </>
             )}
           </div>
@@ -262,6 +309,8 @@ export default function EnergyData() {
 
       {view === 'main' && (
       <>
+      {pageError && <div className="form-error" role="alert">{pageError}</div>}
+      {notice && <div className="alert alert-success" role="status">{notice}</div>}
       {accountResult && (
         <div className="alert alert-success" role="status">
           {accountResult.account_label} {accountResult.file_name ? `(${accountResult.file_name}) ` : ''}imported:
@@ -281,6 +330,9 @@ export default function EnergyData() {
           <option value="">All statuses</option>
           {['DRAFT', 'VALIDATED', 'LOCKED', 'DISPUTED'].map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
+        {(filters.contract_id || filters.period_month || filters.status) && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFilters({ contract_id: '', period_month: '', status: '' })}>Clear filters</button>
+        )}
       </div>
 
       <Card>
@@ -352,7 +404,7 @@ export default function EnergyData() {
                   isRunning={pipelineRunning}
                   mode={pipelineMode}
                   rpcSource={triggerForm.rpc || 'NRPC'}
-                  periodMonth={triggerForm.period_month || '2026-06'}
+                  periodMonth={triggerForm.period_month || lastMonth()}
                   dataType={triggerForm.data_type || 'PROVISIONAL'}
                   result={pipelineResult}
                   error={pipelineError}
@@ -612,7 +664,7 @@ export default function EnergyData() {
           </div>
           <div className="form-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Save</button>
+            <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
           </div>
         </form>
       </Modal>
@@ -677,6 +729,26 @@ export default function EnergyData() {
             onCancel={() => setShowAccountUpload(false)}
             onDone={(result) => { setShowAccountUpload(false); setAccountResult(result); load(); }}
           />
+        )}
+      </Modal>
+
+      <Modal open={!!lockAsk} onClose={() => setLockAsk(null)} title="Lock this period as it stands?" width={560}>
+        {lockAsk && (
+          <form onSubmit={(e) => { e.preventDefault(); handleLock(lockAsk.row, lockReason.trim()); }}>
+            <div className="alert alert-error" style={{ fontSize: 13.5 }}>
+              <strong>{lockAsk.row.contract_no} · {lockAsk.row.period_month}</strong> — {lockAsk.error}
+              {lockAsk.objection && <div style={{ marginTop: 6 }}>Their objection: {lockAsk.objection}</div>}
+              {lockAsk.validation && <div style={{ marginTop: 6 }}>Validation: {lockAsk.validation}</div>}
+            </div>
+            {lockError && <div className="form-error" role="alert">{lockError}</div>}
+            <Field label="Reason for locking it anyway (kept on record, and the desk is told)" required>
+              <textarea required rows={3} value={lockReason} onChange={(e) => setLockReason(e.target.value)} style={{ width: '100%' }} />
+            </Field>
+            <div className="form-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setLockAsk(null)}>Cancel</button>
+              <button type="submit" className="btn btn-danger" disabled={busy || !lockReason.trim()}>{busy ? 'Locking…' : 'Lock with this reason'}</button>
+            </div>
+          </form>
         )}
       </Modal>
 

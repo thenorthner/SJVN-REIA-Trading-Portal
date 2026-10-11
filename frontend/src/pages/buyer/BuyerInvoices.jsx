@@ -42,8 +42,11 @@ export default function BuyerInvoices() {
   const navigate = useNavigate();
   const [d, setD] = useState(null);
   const [pins, setPins] = useState(null);
-  const [error, setError] = useState('');
-  const [flash, setFlash] = useState('');
+  const [error, setErrorText] = useState('');
+  const [flash, setFlashText] = useState('');
+  // One message at a time: a new refusal clears the last success, and the reverse.
+  const setError = (text) => { setErrorText(text); if (text) setFlashText(''); };
+  const setFlash = (text) => { setFlashText(text); if (text) setErrorText(''); };
   const [view, setView] = useState('ALL');
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState({});
@@ -60,7 +63,7 @@ export default function BuyerInvoices() {
   useEffect(load, [load]);
 
   const loadFull = useCallback((id) => { api.invoices.get(id).then(setFull).catch((e) => setError(errText(e))); }, []);
-  useEffect(() => { setFull(null); setNotify(false); if (openId) loadFull(openId); }, [openId, loadFull]);
+  useEffect(() => { setFull(null); setNotify(false); setErrorText(''); if (openId) loadFull(openId); }, [openId, loadFull]);
   const refresh = () => { load(); if (openId) loadFull(openId); };
 
   const rows = useMemo(() => {
@@ -203,11 +206,18 @@ export default function BuyerInvoices() {
 
             <div className="section-title" style={{ marginTop: 18 }}>Payments</div>
             {full?.payments?.length > 0 && full.payments.map((p) => (
-              <div key={p.id} className="cw-card" style={{ borderLeft: '4px solid #16a34a' }}>
-                <strong style={{ color: '#15803d' }}>{fmtCurrency(p.amount)}</strong> recorded on {fmtDate(p.payment_date)}
-                <span style={{ color: 'var(--text-light)' }}> · {p.mode === 'CREDIT_NOTE' ? 'credit note' : p.mode || '—'} · {p.reference || '—'}{p.deduction > 0 ? ` · ${fmtCurrency(p.deduction)} deducted` : ''}</span>
-                <button type="button" className="btn-link" style={{ marginLeft: 8, fontSize: 12.5 }} onClick={() => navigate('/buyer/payments')}>Receipt in the ledger →</button>
-              </div>
+              // A credit note is no payment: nothing was received, the bill came down.
+              p.mode === 'CREDIT_NOTE' ? (
+                <div key={p.id} className="cw-card" style={{ borderLeft: '4px solid #2563eb' }}>
+                  <strong style={{ color: '#1d4ed8' }}>{fmtCurrency(p.deduction)}</strong> credit note {p.reference || ''} set against this bill on {fmtDate(p.payment_date)}
+                </div>
+              ) : (
+                <div key={p.id} className="cw-card" style={{ borderLeft: '4px solid #16a34a' }}>
+                  <strong style={{ color: '#15803d' }}>{fmtCurrency(p.amount)}</strong> recorded on {fmtDate(p.payment_date)}
+                  <span style={{ color: 'var(--text-light)' }}> · {p.mode === 'WATERFALL' ? 'applied by SJVN' : p.mode || '—'} · {p.reference || '—'}{p.deduction > 0 ? ` · ${fmtCurrency(p.deduction)} deducted` : ''}{p.lps_component > 0 ? ` · ${fmtCurrency(p.lps_component)} of it to surcharge` : ''}</span>
+                  <button type="button" className="btn-link" style={{ marginLeft: 8, fontSize: 12.5 }} onClick={() => navigate('/buyer/payments')}>Receipt in the ledger →</button>
+                </div>
+              )
             ))}
             {forBill.filter((i) => i.status !== 'CONFIRMED').map((i) => <IntimationRow key={i.id} i={i} side="BUYER" tier={d.my_tier} myId={pins?.my_id} onChanged={refresh} onPreview={setPreview} />)}
             {!full?.payments?.length && !forBill.length && <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--text-light)' }}>No payment has been recorded or notified on this bill.</p>}
@@ -218,7 +228,7 @@ export default function BuyerInvoices() {
               : (
                 <div className="form-actions" style={{ marginTop: 12, justifyContent: 'flex-start', flexWrap: 'wrap' }}>
                   {bill.can_notify && <button type="button" className="btn btn-primary" onClick={() => setNotify(true)}>Tell SJVN about a payment</button>}
-                  {!['PAID', 'CANCELLED'].includes(bill.status) && <button type="button" className="btn btn-danger" onClick={() => navigate(`/buyer/disputes?invoice=${bill.id}`)}>Raise a dispute on this bill</button>}
+                  {!['PAID', 'CANCELLED'].includes(bill.status) && Number(bill.total_amount) > 0 && <button type="button" className="btn btn-danger" onClick={() => navigate(`/buyer/disputes?invoice=${bill.id}`)}>Raise a dispute on this bill</button>}
                 </div>
               )}
 

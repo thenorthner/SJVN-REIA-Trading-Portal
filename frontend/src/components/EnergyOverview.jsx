@@ -10,12 +10,13 @@ import { Card, StatCard, fmtNumber } from './ui.jsx';
 const monthLabel = (ym) => new Date(`${ym}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
 
 export default function EnergyOverview({ contractId, rows = [], onShow }) {
+  // Read again whenever the list behind it changes — a record, a validation, a lock.
+  const stamp = rows.map((r) => `${r.id}:${r.status}:${r.energy_mwh}`).join('|');
   const [a, setA] = useState(null);
   useEffect(() => {
-    setA(null);
     // A courtesy above the list: if it cannot load, the list stands without it.
     Promise.resolve(api.energyRecords?.analytics?.(contractId ? { contract_id: contractId } : undefined)).then((r) => setA(r || false)).catch(() => setA(false));
-  }, [contractId]);
+  }, [contractId, stamp]);
 
   const live = rows.filter((r) => !r.is_superseded);
   const awaiting = live.filter((r) => r.status === 'VALIDATED' && !r.response_status).length;
@@ -28,7 +29,7 @@ export default function EnergyOverview({ contractId, rows = [], onShow }) {
   return (
     <>
       <div className="kpi-grid">
-        <StatCard label={t ? `Energy — last ${t.months} month${t.months === 1 ? '' : 's'}` : 'Energy'} value={t ? `${fmtNumber(t.energy_mwh)} MWh` : '—'} tone="blue" />
+        <StatCard label={t && t.months > 0 ? `Energy — last ${t.months} month${t.months === 1 ? '' : 's'}` : 'Energy'} value={t ? `${fmtNumber(t.energy_mwh)} MWh` : '—'} tone="blue" />
         <StatCard label="Average CUF" value={t?.avg_cuf_percent != null ? `${fmtNumber(t.avg_cuf_percent)}%` : '—'} hint={contractId && minCuf != null ? `Contractual minimum ${fmtNumber(minCuf)}%` : contractId ? undefined : 'Across the contracts shown'} />
         <StatCard label="Objections to answer" value={objected} tone={objected ? 'red' : 'green'} hint="A counterparty does not accept the figure" onClick={objected && onShow ? () => onShow('OBJECTED') : undefined} />
         <StatCard label="Awaiting the counterparty" value={awaiting} tone={awaiting ? 'amber' : 'default'} hint="Validated, not yet accepted or objected to" />
@@ -46,11 +47,11 @@ export default function EnergyOverview({ contractId, rows = [], onShow }) {
                 <Tooltip labelFormatter={(p) => `${monthLabel(p)}${series.find((s) => s.period === p)?.provisional ? ' — provisional' : ''}`}
                   formatter={(v, name) => (name === 'CUF' ? [`${fmtNumber(v)}%`, name] : [`${fmtNumber(v)} MWh`, name])} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar yAxisId="mwh" dataKey="energy_mwh" name="Energy" fill="#2563eb" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                <Bar yAxisId="mwh" dataKey="energy_mwh" name="Energy" fill="url(#eliteBlue)" radius={[3, 3, 0, 0]} isAnimationActive={false}>
                   {series.map((s) => <Cell key={s.period} fill={s.provisional ? '#93c5fd' : '#2563eb'} />)}
                 </Bar>
-                <Line yAxisId="cuf" type="monotone" dataKey="cuf_percent" name="CUF" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} connectNulls isAnimationActive={false} />
-                {contractId && minCuf != null && <ReferenceLine yAxisId="cuf" y={minCuf} stroke="#dc2626" strokeDasharray="5 4" label={{ value: `Min CUF ${minCuf}%`, position: 'insideTopRight', fontSize: 11, fill: '#dc2626' }} />}
+                <Line yAxisId="cuf" type="monotone" dataKey="cuf_percent" name="CUF" stroke="url(#eliteOrange)" strokeWidth={2} dot={{ r: 3 }} connectNulls isAnimationActive={false} />
+                {contractId && minCuf != null && <ReferenceLine yAxisId="cuf" y={minCuf} stroke="url(#eliteRed)" strokeDasharray="5 4" label={{ value: `Min CUF ${minCuf}%`, position: 'insideTopRight', fontSize: 11, fill: '#dc2626' }} />}
               </ComposedChart>
             </ResponsiveContainer>
           </div>

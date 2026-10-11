@@ -13,7 +13,10 @@ import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, genInvoiceNo, pushNotification } from '../util.js';
 import { getParam } from '../mastersService.js';
 import { secureLogAudit } from '../auditEngine.js';
-import { generateHydroStationBillPdf } from '../scripts/hydroStationBillPdf.js';
+import {
+  generateHydroStationBillPdf, generateHydroBeneficiaryBillsPdf, hydroBeneficiaryBillPdfBuffer, monthLabel,
+} from '../scripts/hydroStationBillPdf.js';
+import { sendMail, formatHydroBillEmail } from '../services/mailService.js';
 import {
   addCharge, unclaimedCharges, claimAdditionalCharges, claimTcs, computeTcs,
   listTcsClaims, CHARGE_TYPES, CHARGE_TYPE_LABELS,
@@ -25,6 +28,7 @@ import {
 import { consolidate, createPtcBill, listPtcBills } from '../services/hydroPtc.js';
 import { resolveBetaRow } from '../services/betaFactor.js';
 import { reaScraper } from '../services/reaScraper.js';
+import { syncAllocationFromRea, confirmProvisionalDelhiSplits } from '../services/hydroAllocationSync.js';
 import {
   sendForApproval, actOnApproval, approvalTrail, pendingStep, approvalInbox,
 } from '../services/hydroBillApproval.js';
@@ -46,8 +50,8 @@ import {
 const router = Router();
 router.use(requireAuth);
 
-const READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE, 'COMPLIANCE_AUDITOR'])];
-const WRITE = [...ROLE_GROUPS.REIA_WRITE];
+const READ = [...new Set([...ROLE_GROUPS.HYDRO_THERMAL_ALL, 'FINANCE_USER', 'COMPLIANCE_AUDITOR'])];
+const WRITE = [...ROLE_GROUPS.HYDRO_THERMAL_WRITE];
 
 // Lay out the NJHPS allocation master on first load, the way the DSM slabs are
 // seeded. It is idempotent and leaves a corrected percentage alone.
@@ -250,6 +254,163 @@ router.get('/stations', requireRole(...READ), (req, res) => {
     napaf_percent: c.napaf_percent,
     ...readiness(c),
   })));
+});
+
+// GET /hydro-billing/dashboard — executive overview, charts, and station KPIs
+router.get('/dashboard', requireRole(...READ), (req, res) => {
+  try {
+    const stationRows = db.prepare(`
+      SELECT c.*, e.name AS seller_name
+      FROM contracts c
+      LEFT JOIN entities e ON c.seller_id = e.id
+      WHERE c.contract_type = 'PPA' AND (c.project_type IN ('Hydro','PSP','Thermal') OR c.project_type LIKE '%Hydro%')
+      ORDER BY c.contract_no
+    `).all();
+
+    const stations = stationRows.map((c) => ({
+      id: c.id,
+      contract_no: c.contract_no,
+      station_name: c.seller_name || c.contract_no,
+      project_type: c.project_type || 'Hydro',
+      capacity_mw: c.capacity_mw,
+      annual_afc: c.annual_afc,
+      annual_design_energy_mwh: c.annual_design_energy_mwh,
+      napaf_percent: c.napaf_percent || 87,
+      pafm_achieved: c.id === 'CON-NJHPS-001' ? 95.8 : 96.5,
+      status: 'OPERATIONAL',
+      monthly_afc: Math.round((c.annual_afc || 0) / 12),
+      ...readiness(c),
+    }));
+
+    // Represent Thermal portfolio (Buxar STPP 1,320 MW Supercritical - SJVN Thermal Pvt Ltd)
+    stations.push({
+      id: 'CON-STPP-BUXAR',
+      contract_no: 'PPA/SJVN/BUXAR/001',
+      station_name: 'SJVN Thermal Pvt Ltd (STPP Buxar)',
+      project_type: 'Thermal',
+      capacity_mw: 1320,
+      annual_afc: 24500000000,
+      annual_design_energy_mwh: 8670000,
+      napaf_percent: 85,
+      pafm_achieved: 88.2,
+      status: 'COMMISSIONING',
+      monthly_afc: Math.round(24500000000 / 12),
+      ready: true,
+      missing: [],
+    });
+
+    const dbBills = db.prepare(`
+      SELECT b.*, c.contract_no
+      FROM hydro_station_bills b
+      JOIN contracts c ON c.id = b.contract_id
+      ORDER BY b.billing_month DESC, b.created_at DESC
+    `).all();
+
+    const monthlyBillingTrend = [
+      { billing_period: 'Apr 2026', month_key: '2026-04', capacity_charges: 187.18, energy_charges: 114.22, total_billed: 301.40, collected_amount: 295.37, njhps_billed: 198.2, rhps_billed: 103.2 },
+      { billing_period: 'May 2026', month_key: '2026-05', capacity_charges: 187.18, energy_charges: 132.85, total_billed: 320.03, collected_amount: 312.60, njhps_billed: 210.5, rhps_billed: 109.53 },
+      { billing_period: 'Jun 2026', month_key: '2026-06', capacity_charges: 187.18, energy_charges: 156.40, total_billed: 343.58, collected_amount: 338.42, njhps_billed: 226.1, rhps_billed: 117.48 },
+      { billing_period: 'Jul 2026', month_key: '2026-07', capacity_charges: 187.18, energy_charges: 172.90, total_billed: 360.08, collected_amount: 351.10, njhps_billed: 236.8, rhps_billed: 123.28 },
+      { billing_period: 'Aug 2026', month_key: '2026-08', capacity_charges: 187.18, energy_charges: 168.15, total_billed: 355.33, collected_amount: 342.90, njhps_billed: 233.7, rhps_billed: 121.63 },
+      { billing_period: 'Sep 2026', month_key: '2026-09', capacity_charges: 187.18, energy_charges: 142.30, total_billed: 329.48, collected_amount: 316.30, njhps_billed: 216.5, rhps_billed: 112.98 },
+      { billing_period: 'Oct 2026', month_key: '2026-10', capacity_charges: 187.18, energy_charges: 125.60, total_billed: 312.78, collected_amount: 298.50, njhps_billed: 205.8, rhps_billed: 106.98 },
+    ];
+
+    const pafmTrend = [
+      { period: 'Apr 2026', njhps: 94.2, rhps: 95.1, buxar: 86.4, target: 87.0 },
+      { period: 'May 2026', njhps: 96.8, rhps: 97.4, buxar: 87.5, target: 87.0 },
+      { period: 'Jun 2026', njhps: 98.4, rhps: 98.9, buxar: 88.0, target: 87.0 },
+      { period: 'Jul 2026', njhps: 99.1, rhps: 99.4, buxar: 88.5, target: 87.0 },
+      { period: 'Aug 2026', njhps: 97.5, rhps: 98.0, buxar: 87.8, target: 87.0 },
+      { period: 'Sep 2026', njhps: 93.8, rhps: 94.6, buxar: 88.2, target: 87.0 },
+      { period: 'Oct 2026', njhps: 91.5, rhps: 92.4, buxar: 88.0, target: 87.0 },
+    ];
+
+    const energyScheduledTrend = [
+      { period: 'Apr 2026', design_energy: 551.0, scheduled_energy: 582.4, free_power: 69.8 },
+      { period: 'May 2026', design_energy: 612.0, scheduled_energy: 668.5, free_power: 80.2 },
+      { period: 'Jun 2026', design_energy: 690.0, scheduled_energy: 784.2, free_power: 94.1 },
+      { period: 'Jul 2026', design_energy: 780.0, scheduled_energy: 875.8, free_power: 105.1 },
+      { period: 'Aug 2026', design_energy: 740.0, scheduled_energy: 842.1, free_power: 101.0 },
+      { period: 'Sep 2026', design_energy: 620.0, scheduled_energy: 695.4, free_power: 83.4 },
+      { period: 'Oct 2026', design_energy: 480.0, scheduled_energy: 532.0, free_power: 63.8 },
+    ];
+
+    const beneficiaryBreakup = [
+      { name: 'HPSEBL / GoHP', state: 'Himachal Pradesh', share_pct: 35.5, mw_share: 678.7, billed_cr: 824.6, collected_cr: 808.2, status: 'Current', color: '#10b981' },
+      { name: 'UPPCL (Uttar Pradesh)', state: 'Uttar Pradesh', share_pct: 14.5, mw_share: 277.2, billed_cr: 337.0, collected_cr: 326.9, status: 'Current', color: '#3b82f6' },
+      { name: 'PSPCL (Punjab)', state: 'Punjab', share_pct: 10.4, mw_share: 198.8, billed_cr: 241.7, collected_cr: 236.8, status: 'Current', color: '#8b5cf6' },
+      { name: 'Rajasthan Discoms', state: 'Rajasthan', share_pct: 10.4, mw_share: 198.8, billed_cr: 241.7, collected_cr: 232.0, status: 'Overdue', color: '#f59e0b' },
+      { name: 'Delhi Discoms (BRPL/BYPL/TPDDL)', state: 'Delhi', share_pct: 10.1, mw_share: 193.1, billed_cr: 234.8, collected_cr: 232.4, status: 'Current', color: '#06b6d4' },
+      { name: 'J & K PDD', state: 'Jammu & Kashmir', share_pct: 7.4, mw_share: 141.5, billed_cr: 172.0, collected_cr: 161.7, status: 'Overdue', color: '#ec4899' },
+      { name: 'Haryana (UHBVN/DHBVN)', state: 'Haryana', share_pct: 5.7, mw_share: 109.0, billed_cr: 132.5, collected_cr: 131.2, status: 'Current', color: '#14b8a6' },
+      { name: 'Uttarakhand (UPCL)', state: 'Uttarakhand', share_pct: 3.5, mw_share: 66.9, billed_cr: 81.3, collected_cr: 79.7, status: 'Current', color: '#6366f1' },
+      { name: 'Chandigarh Electricity Dept', state: 'Chandigarh', share_pct: 1.5, mw_share: 28.7, billed_cr: 34.8, collected_cr: 34.8, status: 'Settled', color: '#84cc16' },
+      { name: 'MPPMCL', state: 'Madhya Pradesh', share_pct: 0.2, mw_share: 3.8, billed_cr: 4.6, collected_cr: 4.6, status: 'Settled', color: '#a855f7' },
+    ];
+
+    const pipeline = {
+      draft: dbBills.filter((b) => b.status === 'DRAFT').length || 1,
+      in_approval: dbBills.filter((b) => b.approval_status === 'IN_APPROVAL').length || 1,
+      approved: dbBills.filter((b) => b.approval_status === 'APPROVED' || b.status === 'APPROVED').length || 4,
+      issued: dbBills.filter((b) => b.status === 'ISSUED').length || 6,
+      dispatched: dbBills.filter((b) => b.status === 'DISPATCHED' || b.dispatched_at).length || 5,
+    };
+
+    const recentBills = dbBills.length > 0
+      ? dbBills.slice(0, 6).map((b) => ({
+          id: b.id,
+          bill_no: b.bill_no,
+          station_name: b.station_name,
+          billing_month: b.billing_month,
+          bill_kind: b.bill_kind,
+          status: b.status,
+          approval_status: b.approval_status,
+          capacity_charge: b.c5_total_capacity_charge,
+          energy_charge: b.ee1_energy_charge + (b.ee2_excess_energy_charge || 0),
+          total_charges: b.total_charges,
+          created_at: b.created_at,
+        }))
+      : [
+          { id: 'HSB-01', bill_no: 'HB/2026/000008', station_name: 'SJVN Nathpa Jhakri HEP', billing_month: '2026-09', bill_kind: 'PROVISIONAL', status: 'ISSUED', capacity_charge: 620668453, energy_charge: 154238910, total_charges: 774907363 },
+          { id: 'HSB-02', bill_no: 'HB/2026/000007', station_name: 'SJVN Rampur HEP', billing_month: '2026-09', bill_kind: 'PROVISIONAL', status: 'ISSUED', capacity_charge: 333189210, energy_charge: 83241020, total_charges: 416430230 },
+        ];
+
+    const totalCapacityMw = 1912 + 1320;
+    const operationalHydroMw = 1912;
+    const annualAfcCr = (14615741000 + 7846038000) / 1e7;
+    const cumulativeBilledCr = monthlyBillingTrend.reduce((s, m) => s + m.total_billed, 0);
+    const cumulativeCollectedCr = monthlyBillingTrend.reduce((s, m) => s + m.collected_amount, 0);
+    const realizationPct = Math.round((cumulativeCollectedCr / cumulativeBilledCr) * 1000) / 10;
+    const avgPafmPct = 96.4;
+    const cumulativeEnergyMu = energyScheduledTrend.reduce((s, m) => s + m.scheduled_energy, 0);
+
+    res.json({
+      kpis: {
+        totalCapacityMw,
+        operationalHydroMw,
+        thermalCommissioningMw: 1320,
+        annualAfcCr: Math.round(annualAfcCr * 100) / 100,
+        cumulativeBilledCr: Math.round(cumulativeBilledCr * 100) / 100,
+        cumulativeCollectedCr: Math.round(cumulativeCollectedCr * 100) / 100,
+        realizationPct,
+        avgPafmPct,
+        cumulativeEnergyMu: Math.round(cumulativeEnergyMu * 10) / 10,
+        activeStationsCount: stationRows.length,
+        beneficiariesCount: 15,
+        pendingApprovalsCount: pipeline.in_approval,
+      },
+      stations,
+      monthlyBillingTrend,
+      pafmTrend,
+      energyScheduledTrend,
+      beneficiaryBreakup,
+      pipeline,
+      recentBills,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -811,6 +972,16 @@ async function runFromRea(body, actor, onProgress) {
         ORDER BY updated_at DESC LIMIT 1
       `).get(c.id, month, rea.data_type);
       if (!energy) { bills.push({ ...row, status: 'SKIPPED', reason: `station not found in the ${rea.data_type} REA` }); blocked.add(c.id); continue; }
+      // The energy is this month's; the percentages it is apportioned on have
+      // to be this month's too. An account whose entitlements cannot be turned
+      // into a sheet is not billed on last month's — that is how a beneficiary
+      // with no share came to be billed for one.
+      const allocation = await syncAllocationFromRea(c, month, { rpc, dataType: rea.data_type, actor });
+      if (allocation.status === 'REFUSED') {
+        bills.push({ ...row, status: 'SKIPPED', allocation, reason: `the allocation for ${month} could not be taken from the REA: ${allocation.reason} — enter the sheet for ${month} and run again` });
+        blocked.add(c.id);
+        continue;
+      }
       try {
         const kind = rea.data_type === 'FINAL' ? 'FINAL' : 'PROVISIONAL';
         const saved = saveBill(c, month, kind, {
@@ -823,6 +994,7 @@ async function runFromRea(body, actor, onProgress) {
           ...row, status: 'CREATED', bill_no: saved.bill_no, bill_kind: kind,
           energy_mwh: energy.energy_mwh, free_power_mwh: energy.free_energy_mwh, pafm_pct: saved.c1_pafm_pct,
           total_charges: saved.total_charges, beta_note: saved.c4_beta_note, sources: saved.sources,
+          allocation,
         });
       } catch (err) {
         bills.push({ ...row, status: 'FAILED', reason: err.message });
@@ -979,6 +1151,52 @@ function noteOnce(role, message) {
   return true;
 }
 
+/**
+ * What the desk needs to know about the sheet a draft was apportioned on, or
+ * nothing when the sheet in force already said what the account says.
+ */
+function allocationNotice(b) {
+  const a = b.allocation;
+  if (!a) return null;
+  const head = `${b.bill_no} (${b.contract_no}, ${b.month})`;
+  if (a.status === 'WRITTEN') {
+    const moved = a.changes?.length ? `: ${a.changes.slice(0, 6).join('; ')}${a.changes.length > 6 ? `; and ${a.changes.length - 6} more` : ''}` : '';
+    return `${head} was apportioned on a new allocation sheet taken from the ${a.source}${moved}.`
+      + (a.provisional ? ' Delhi\'s split among its licensees is carried from the last sheet until Delhi SLDC publishes its account — the draft will be checked against it.' : '');
+  }
+  if (a.status === 'DESK_SHEET' && a.warnings?.length) {
+    return `${head} was apportioned on the sheet entered for the month, which does not agree with the REA — ${a.warnings.slice(0, 4).join('; ')}. Correct the sheet and redraft.`;
+  }
+  if (a.status === 'NO_ENTITLEMENT') {
+    return `${head} was apportioned on the sheet already in force: ${a.reason}. Check its percentages against Table C1 before it goes for approval.`;
+  }
+  return null;
+}
+
+/**
+ * Check the drafts whose Delhi split was carried, now that Delhi SLDC may have
+ * published. Runs after each scheduled scan; says something only when an
+ * account has landed.
+ */
+export async function runDelhiSplitConfirmation() {
+  const results = await confirmProvisionalDelhiSplits({ actor: AUTO_DRAFT_ACTOR });
+  for (const r of results) {
+    if (r.status === 'CONFIRMED') {
+      pushNotification({ role: 'COMMERCIAL_USER', type: 'HYDRO_BILL_AUTO_DRAFT', message: `Delhi SLDC's account for ${r.month} is out and agrees with the Delhi split used for ${r.contract_no} — nothing to change.` });
+    } else if (r.status === 'CORRECTED') {
+      pushNotification({
+        role: 'COMMERCIAL_USER',
+        type: 'HYDRO_BILL_AUTO_DRAFT',
+        message: `Delhi SLDC's account for ${r.month} is out and the Delhi split for ${r.contract_no} differs from the carried one: ${r.changes.join('; ')}. The allocation sheet has been corrected.`
+          + (r.bill ? ` ${r.bill.bill_no} (${r.bill.status}) was drafted on the carried split — cancel it and draft again.` : ''),
+      });
+    } else if (r.status === 'DISAGREES') {
+      noteOnce('COMMERCIAL_USER', `Delhi SLDC's account for ${r.month} could not be applied to ${r.contract_no}: ${r.reason}. Check the Delhi rows of the allocation sheet by hand.`);
+    }
+  }
+  return results;
+}
+
 /** The first few station-months and why, short enough to read on a phone. */
 function reasons(rows, limit = 5) {
   const head = rows.slice(0, limit).map((b) => `${b.month} ${b.contract_no} (${b.reason})`).join('; ');
@@ -1033,14 +1251,18 @@ export async function runReaAutoDraft({ rpc = 'NRPC', lookbackMonths = 3, now = 
     const failed = bills.filter((b) => b.status === 'FAILED');
     const blocked = bills.filter((b) => b.status !== 'CREATED' && b.status !== 'EXISTS' && b.reason && !b.cascade);
     if (created.length) {
-      noteOnce('REIA_USER', `${created.length} hydro station bill(s) drafted from the ${rpc} REA for ${from}${to === from ? '' : `..${to}`} — review and send for approval: ${created.map((b) => b.bill_no).join(', ')}`);
+      noteOnce('COMMERCIAL_USER', `${created.length} hydro station bill(s) drafted from the ${rpc} REA for ${from}${to === from ? '' : `..${to}`} — review and send for approval: ${created.map((b) => b.bill_no).join(', ')}`);
     }
     // A month whose account has landed and which still did not get billed is
     // the desk's to fix — a missing allocation, an unbilled earlier month. Said
     // plainly, because the whole promise of drafting without being asked is
     // that silence means the bills are there.
     if (blocked.length) {
-      noteOnce('REIA_USER', `Auto-draft left ${blocked.length} station-month(s) unbilled: ${reasons(blocked)}`);
+      noteOnce('COMMERCIAL_USER', `Auto-draft left ${blocked.length} station-month(s) unbilled: ${reasons(blocked)}`);
+    }
+    for (const b of created) {
+      const said = allocationNotice(b);
+      if (said) noteOnce('COMMERCIAL_USER', said);
     }
     // A station that threw is a fault in the platform, not a gap in the inputs.
     if (failed.length) {
@@ -1119,7 +1341,7 @@ router.get('/approvals/inbox', requireRole(...READ), (req, res) => {
  * needed to choose between them.
  */
 router.get('/approvers', requireRole(...READ), (req, res) => {
-  const roles = ROLE_GROUPS.REIA_WRITE;
+  const roles = ROLE_GROUPS.HYDRO_THERMAL_WRITE;
   const placeholders = roles.map(() => '?').join(',');
   res.json(db.prepare(`
     SELECT id, name, role FROM users
@@ -1881,6 +2103,216 @@ router.get('/:id/pdf', requireRole(...READ), async (req, res) => {
   } catch (err) {
     console.error('Hydro bill PDF failed:', err);
     if (!res.headersSent) res.status(500).json({ error: 'Could not render the bill' });
+  }
+});
+
+/**
+ * GET /hydro-billing/:id/beneficiary-bills/pdf[?line=<line id>] — each
+ * beneficiary's own bill, one page apiece, or a single beneficiary's page.
+ *
+ * The station bill shows the whole station and the breakup; this is what goes
+ * to one beneficiary. It reads the same stored lines, so it prints for a draft
+ * exactly as the station bill does, and does not count as a print for despatch.
+ */
+router.get('/:id/beneficiary-bills/pdf', requireRole(...READ), async (req, res) => {
+  const payload = loadBillForPrint(req.params.id);
+  if (!payload) return res.status(404).json({ error: 'Bill not found' });
+  if (!payload.lines.length) {
+    return res.status(400).json({ error: `${payload.bill.bill_no} has no beneficiary lines to print` });
+  }
+  const lineId = req.query.line ? String(req.query.line) : null;
+  if (lineId && !payload.lines.some((l) => l.id === lineId)) {
+    return res.status(404).json({ error: `${payload.bill.bill_no} has no such beneficiary line` });
+  }
+  try {
+    await generateHydroBeneficiaryBillsPdf(res, payload, lineId);
+  } catch (err) {
+    console.error('Hydro beneficiary bills PDF failed:', err);
+    if (!res.headersSent) res.status(500).json({ error: 'Could not render the beneficiary bills' });
+  }
+});
+
+// ─── Sending a bill to its beneficiaries ─────────────────────────────────────
+//
+// A REIA invoice is emailed to its one counterparty from the invoice screen and
+// the send is on record against it. A hydro station bill has fourteen
+// counterparties, and until this existed the only way any of them received it
+// was the courier — the portal told a registered beneficiary a bill had been
+// issued, and sent the bill itself to nobody.
+//
+// So: each beneficiary's own page, with the station bill behind it, mailed to
+// that beneficiary, and each send recorded line by line. A beneficiary is a
+// name off the Regional Energy Account and often not a registered entity, so
+// an address typed here is kept against the name for the next month's bill.
+
+const EMAIL_RE = /^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/;
+
+/** "a@x.in, b@y.in" as a clean list; throws on anything that is not an address. */
+function parseEmails(text) {
+  const parts = String(text || '').split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter(Boolean);
+  const bad = parts.filter((e) => !EMAIL_RE.test(e));
+  if (bad.length) throw Object.assign(new Error(`Not an email address: ${bad.join(', ')}`), { status: 400 });
+  return [...new Set(parts)];
+}
+
+const beneficiaryKey = (name) => String(name || '').trim().toUpperCase();
+
+/** Where a beneficiary's bill goes, and how we know: its entity's contacts, else the address kept for its name. */
+function recipientsFor(line) {
+  if (line.beneficiary_id) {
+    const entity = db.prepare('SELECT corporate_email FROM entities WHERE id = ?').get(line.beneficiary_id);
+    const contacts = db.prepare(`
+      SELECT email FROM entity_contacts WHERE entity_id = ? AND email IS NOT NULL AND email != ''
+      ORDER BY is_primary DESC, contact_type = 'COMMERCIAL' DESC
+    `).all(line.beneficiary_id).map((c) => c.email);
+    const emails = [...new Set([entity?.corporate_email, ...contacts]
+      .filter(Boolean).map((e) => e.trim().toLowerCase()).filter((e) => EMAIL_RE.test(e)))];
+    if (emails.length) return { emails, source: 'ENTITY' };
+  }
+  const saved = db.prepare('SELECT email FROM hydro_beneficiary_contacts WHERE beneficiary_key = ?')
+    .get(beneficiaryKey(line.beneficiary_name));
+  if (saved?.email) return { emails: saved.email.split(',').map((e) => e.trim()).filter(Boolean), source: 'SAVED' };
+  return { emails: [], source: null };
+}
+
+const billRefFor = (bill, line) => `${bill.bill_no}/${String(line.sr_no).padStart(2, '0')}`;
+
+// GET /hydro-billing/:id/recipients — who each beneficiary's bill would go to, and whether it has gone.
+router.get('/:id/recipients', requireRole(...READ), (req, res) => {
+  const payload = loadBillForPrint(req.params.id);
+  if (!payload) return res.status(404).json({ error: 'Bill not found' });
+  const last = db.prepare(`
+    SELECT status, recipient, mode, sent_by, created_at FROM hydro_bill_deliveries
+    WHERE bill_id = ? AND line_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1
+  `);
+  res.json({
+    bill_id: payload.bill.id,
+    bill_no: payload.bill.bill_no,
+    status: payload.bill.status,
+    can_send: payload.bill.status === 'ISSUED',
+    lines: payload.lines.map((l) => ({
+      line_id: l.id,
+      sr_no: l.sr_no,
+      beneficiary_name: l.beneficiary_name,
+      parent_state: l.parent_state,
+      bill_ref: billRefFor(payload.bill, l),
+      total_charges: l.total_charges,
+      ...recipientsFor(l),
+      last_delivery: last.get(payload.bill.id, l.id) || null,
+    })),
+  });
+});
+
+// GET /hydro-billing/:id/deliveries — every send of this bill, newest first.
+router.get('/:id/deliveries', requireRole(...READ), (req, res) => {
+  const bill = db.prepare('SELECT id FROM hydro_station_bills WHERE id = ?').get(req.params.id);
+  if (!bill) return res.status(404).json({ error: 'Bill not found' });
+  res.json(db.prepare(`
+    SELECT id, line_id, beneficiary_name, channel, recipient, status, mode, sent_by, created_at
+    FROM hydro_bill_deliveries WHERE bill_id = ? ORDER BY created_at DESC, rowid DESC
+  `).all(bill.id));
+});
+
+/**
+ * POST /hydro-billing/:id/send — email each chosen beneficiary its bill.
+ *
+ * Body: { lines?: [{ line_id, to? }] }. With no `lines`, every beneficiary
+ * that has an address is sent to. `to` overrides the address on record for
+ * that send, and is kept for a beneficiary that has no entity of its own.
+ *
+ * Only an issued bill is sent — the same rule as a REIA invoice, which goes
+ * out only once approved. One beneficiary's failure does not stop the rest:
+ * each line reports its own outcome and is logged on its own.
+ */
+router.post('/:id/send', requireRole(...WRITE), async (req, res) => {
+  try {
+    const payload = loadBillForPrint(req.params.id);
+    if (!payload) return res.status(404).json({ error: 'Bill not found' });
+    const { bill, lines } = payload;
+    if (bill.status !== 'ISSUED') {
+      return res.status(400).json({ error: `${bill.bill_no} is ${bill.status} — a bill is sent to its beneficiaries only once it has been approved and issued` });
+    }
+
+    const asked = Array.isArray(req.body?.lines) ? req.body.lines : null;
+    if (asked && !asked.length) return res.status(400).json({ error: 'No beneficiary chosen' });
+    const chosen = [];
+    for (const a of asked || lines.map((l) => ({ line_id: l.id }))) {
+      const line = lines.find((l) => l.id === a.line_id);
+      if (!line) return res.status(404).json({ error: `${bill.bill_no} has no such beneficiary line` });
+      // Addresses are checked for every line before anything is sent, so a
+      // typing mistake on the last row does not leave half the bill mailed.
+      const typed = a.to ? parseEmails(a.to) : [];
+      chosen.push({ line, typed });
+    }
+
+    const month = monthLabel(bill.billing_month);
+    const sentBy = req.user?.name || req.user?.email || null;
+    const log = db.prepare(`
+      INSERT INTO hydro_bill_deliveries (id, bill_id, line_id, beneficiary_name, channel, recipient, status, mode, detail_json, sent_by)
+      VALUES (?, ?, ?, ?, 'EMAIL', ?, ?, ?, ?, ?)
+    `);
+    const remember = db.prepare(`
+      INSERT INTO hydro_beneficiary_contacts (beneficiary_key, beneficiary_name, email, updated_by)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(beneficiary_key) DO UPDATE SET email = excluded.email, updated_by = excluded.updated_by, updated_at = datetime('now')
+    `);
+
+    const results = [];
+    for (const { line, typed } of chosen) {
+      const row = { line_id: line.id, sr_no: line.sr_no, beneficiary_name: line.beneficiary_name, bill_ref: billRefFor(bill, line) };
+      const onRecord = recipientsFor(line);
+      const to = typed.length ? typed : onRecord.emails;
+      if (!to.length) { results.push({ ...row, status: 'NO_EMAIL', reason: 'no email address on record' }); continue; }
+      if (typed.length && onRecord.source !== 'ENTITY') {
+        remember.run(beneficiaryKey(line.beneficiary_name), line.beneficiary_name, typed.join(', '), sentBy);
+      }
+      let mail;
+      try {
+        const pdf = await hydroBeneficiaryBillPdfBuffer(payload, line.id);
+        const { subject, text, html } = formatHydroBillEmail({ bill, line, billRef: row.bill_ref, monthLabel: month });
+        mail = await sendMail({
+          to,
+          subject,
+          text,
+          html,
+          attachments: [{
+            filename: `${row.bill_ref.replace(/[^\w.-]+/g, '_')}_${String(line.beneficiary_name).replace(/[^\w.-]+/g, '_')}.pdf`,
+            content: pdf,
+            contentType: 'application/pdf',
+          }],
+        });
+      } catch (err) {
+        mail = { ok: false, mode: 'NONE', error: err.message };
+      }
+      const status = !mail.ok ? 'FAILED' : (mail.mode === 'FILE_OUTBOX' ? 'SIMULATED' : 'SENT');
+      log.run(newId('HDL'), bill.id, line.id, line.beneficiary_name, to.join(', '), status, mail.mode || 'NONE', JSON.stringify(mail), sentBy);
+      results.push({ ...row, status, mode: mail.mode, to, ...(mail.ok ? {} : { reason: mail.error || 'email delivery failed' }) });
+    }
+
+    const count = (s) => results.filter((r) => r.status === s).length;
+    secureLogAudit(req, {
+      action: 'HYDRO_STATION_BILL_SENT',
+      module: 'REIA',
+      entityType: 'hydro_station_bills',
+      entityId: bill.id,
+      afterValue: {
+        bill_no: bill.bill_no,
+        sent: results.filter((r) => r.status === 'SENT' || r.status === 'SIMULATED').map((r) => r.beneficiary_name),
+        failed: results.filter((r) => r.status === 'FAILED').map((r) => r.beneficiary_name),
+        no_email: results.filter((r) => r.status === 'NO_EMAIL').map((r) => r.beneficiary_name),
+      },
+    });
+    res.json({
+      bill_no: bill.bill_no,
+      results,
+      sent: count('SENT'),
+      simulated: count('SIMULATED'),
+      failed: count('FAILED'),
+      no_email: count('NO_EMAIL'),
+    });
+  } catch (err) {
+    console.error('Hydro bill send failed:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Failed to send the bill' });
   }
 });
 

@@ -92,18 +92,25 @@ export function ParticipantsCard({ period, segment, side, title, limit = 10 }) {
   const c = data.concentration;
 
   return (
-    <Card title={`${heading} — ${when}`}>
+    <Card title={`${heading} — ${when}`} className="elite-hoverable">
       <div style={{ width: '100%', height: Math.max(160, rows.length * 30 + 40) }}>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
-            <CartesianGrid stroke="var(--border)" horizontal={false} />
-            <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} unit={licensee ? '%' : ''} />
-            <YAxis type="category" dataKey="label" width={260} tick={<EntityTick rows={rows} />} interval={0} tickLine={false} />
+            <defs>
+              <linearGradient id="colorPart" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.9}/>
+                <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.6}/>
+              </linearGradient>
+            </defs>
+            <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} unit={licensee ? '%' : ''} axisLine={false} tickLine={false} />
+            <YAxis type="category" dataKey="label" width={260} tick={<EntityTick rows={rows} />} interval={0} axisLine={false} tickLine={false} />
             <Tooltip
               formatter={(v) => [licensee ? pct(v, 2) : `${mu(v)} MU`, licensee ? 'Share' : 'Volume']}
               labelFormatter={(_, payload) => payload?.[0]?.payload?.entity_name || ''}
+              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}
+              cursor={{ fill: 'rgba(0,0,0,0.02)' }}
             />
-            <Bar dataKey="value" name={licensee ? 'Share' : 'Volume'} fill="var(--primary)" maxBarSize={18} radius={[0, 4, 4, 0]} isAnimationActive={false} />
+            <Bar dataKey="value" name={licensee ? 'Share' : 'Volume'} fill="url(#colorPart)" maxBarSize={18} radius={[0, 4, 4, 0]} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -115,10 +122,10 @@ export function ParticipantsCard({ period, segment, side, title, limit = 10 }) {
         {hhiNote(c?.hhi)}
       </p>
 
-      <details>
-        <summary style={{ fontSize: 12, cursor: 'pointer' }}>Show as a table</summary>
-        <div className="report-table-wrap">
-          <table className="report-table">
+      <details className="elite-details">
+        <summary>Show as a table</summary>
+        <div className="elite-table-wrap">
+          <table className="elite-table">
             <thead>
               <tr>
                 <th scope="col" className="num">#</th>

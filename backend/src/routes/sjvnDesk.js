@@ -12,6 +12,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { getParamNumber } from '../mastersService.js';
+import { dayInWords } from '../paymentSecurityConstants.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -46,7 +47,7 @@ function todo() {
   const req = one(`SELECT COUNT(*) n FROM contract_requests WHERE status = 'PENDING'`);
   add({ key: 'requests', group: 'Contracts', level: 'amber', count: req.n, title: `${req.n} contract request${s(req.n)} to decide`, detail: 'Extensions, amendments and renewed guarantees counterparties have asked for.', link: '/reia/contracts' });
   const notices = one(`SELECT COUNT(*) n, MIN(response_due) first FROM contract_notices WHERE sent_by_side <> 'SJVN' AND acknowledged_at IS NULL`);
-  add({ key: 'notices', group: 'Contracts', level: 'red', count: notices.n, title: `${notices.n} notice${s(notices.n)} from counterparties to acknowledge`, detail: notices.first ? `A response is due by ${notices.first}.` : 'Force majeure, default and other formal notices.', link: '/reia/contracts', due: notices.first });
+  add({ key: 'notices', group: 'Contracts', level: 'red', count: notices.n, title: `${notices.n} notice${s(notices.n)} from counterparties to acknowledge`, detail: notices.first ? `A response is due by ${dayInWords(notices.first)}.` : 'Force majeure, default and other formal notices.', link: '/reia/contracts', due: notices.first });
   const confirm = one(`SELECT COUNT(*) n FROM contract_milestones WHERE reported_date IS NOT NULL AND achieved_date IS NULL`);
   add({ key: 'milestones', group: 'Contracts', level: 'amber', count: confirm.n, title: `${confirm.n} milestone${s(confirm.n)} reported as achieved, to confirm`, detail: 'Check the proof and confirm the date.', link: '/reia/contracts' });
 
@@ -60,9 +61,9 @@ function todo() {
   const lapsing = all(`SELECT ps.instrument_no, ps.validity_end FROM payment_security ps
     WHERE ps.status IN ('ACTIVE','PARTIALLY_UTILIZED','RENEWED') AND ps.validity_end IS NOT NULL AND julianday(ps.validity_end) - julianday('now') <= ?
       AND NOT EXISTS (SELECT 1 FROM security_amendments a WHERE a.payment_security_id = ps.id AND a.status = 'PENDING') ORDER BY ps.validity_end`, critical);
-  add({ key: 'security-lapsing', group: 'Security', level: 'red', count: lapsing.length, title: `${lapsing.length} guarantee${s(lapsing.length)} within ${critical} days of expiry with no extension submitted`, detail: lapsing.length ? `${lapsing[0].instrument_no} expires on ${lapsing[0].validity_end}. Decide whether to invoke before it lapses.` : '', link: '/reia/payment-security', due: lapsing[0]?.validity_end });
+  add({ key: 'security-lapsing', group: 'Security', level: 'red', count: lapsing.length, title: `${lapsing.length} guarantee${s(lapsing.length)} within ${critical} days of expiry with no extension submitted`, detail: lapsing.length ? `${lapsing[0].instrument_no} expires on ${dayInWords(lapsing[0].validity_end)}. Decide whether to invoke before it lapses.` : '', link: '/reia/payment-security', due: lapsing[0]?.validity_end });
   const lcs = all(`SELECT lc_no, validity_end FROM sjvn_lcs WHERE status = 'ACTIVE' AND validity_end IS NOT NULL AND julianday(validity_end) - julianday('now') <= ? ORDER BY validity_end`, getParamNumber('security_expiry_warn_days', 60));
-  add({ key: 'own-lc', group: 'Security', level: 'amber', count: lcs.length, title: `${lcs.length} of SJVN's own LC${s(lcs.length)} to renew`, detail: lcs.length ? `${lcs[0].lc_no} in a seller's favour expires on ${lcs[0].validity_end}.` : '', link: '/reia/payment-security', due: lcs[0]?.validity_end });
+  add({ key: 'own-lc', group: 'Security', level: 'amber', count: lcs.length, title: `${lcs.length} of SJVN's own LC${s(lcs.length)} to renew`, detail: lcs.length ? `${lcs[0].lc_no} in a seller's favour expires on ${dayInWords(lcs[0].validity_end)}.` : '', link: '/reia/payment-security', due: lcs[0]?.validity_end });
 
   // Documents
   const docs = one(`SELECT COUNT(*) n FROM documents d JOIN document_versions v ON v.document_id = d.id

@@ -7,13 +7,13 @@ import { Card, StatCard, Table, Badge, PageHeader, fmtCurrency, fmtNumber } from
 import api from '../../api/client';
 
 const COLORS = {
-  dam: '#3b82f6',      // blue
-  gdam: '#10b981',     // emerald  
-  rtm: '#f59e0b',      // amber
-  hpDam: '#8b5cf6',    // violet
-  tam: '#ec4899',      // pink
-  dsm: '#ef4444',      // red
-  rec: '#06b6d4',      // cyan
+  dam: 'url(#eliteBlue)',
+  gdam: 'url(#eliteGreen)',
+  rtm: 'url(#eliteOrange)',
+  hpDam: 'url(#elitePurple)',
+  tam: 'url(#eliteTeal)',
+  dsm: 'url(#eliteRed)',
+  rec: 'url(#eliteSlate)',
 };
 
 export default function CERCMarketIntelligence() {

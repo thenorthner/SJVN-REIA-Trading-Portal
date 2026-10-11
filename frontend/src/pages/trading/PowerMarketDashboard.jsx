@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import api from '../../api/client.js';
 import { PageHeader, Card } from '../../components/ui.jsx';
@@ -33,17 +33,17 @@ function DailyMarket() {
   const withEnergy = (rows || []).filter((r) => r.energy_mwh != null);
 
   return (
-    <Card title="Day-wise clearing price and cleared energy">
-      <div className="report-criteria" style={{ marginBottom: 12 }}>
-        <label className="report-search">
+    <Card title="Day-wise clearing price and cleared energy" className="elite-hoverable">
+      <div className="elite-filter-bar" style={{ marginBottom: 20 }}>
+        <label className="elite-filter-label">
           Exchange
-          <select className="input" value={sel.exchange} onChange={(e) => setSel({ ...sel, exchange: e.target.value })}>
+          <select className="elite-select" value={sel.exchange} onChange={(e) => setSel({ ...sel, exchange: e.target.value })}>
             {['IEX', 'PXIL', 'HPX'].map((x) => <option key={x}>{x}</option>)}
           </select>
         </label>
-        <label className="report-search">
+        <label className="elite-filter-label">
           Product
-          <select className="input" value={sel.product} onChange={(e) => setSel({ ...sel, product: e.target.value })}>
+          <select className="elite-select" value={sel.product} onChange={(e) => setSel({ ...sel, product: e.target.value })}>
             {['DAM', 'GDAM', 'RTM'].map((x) => <option key={x}>{x}</option>)}
           </select>
         </label>
@@ -54,24 +54,34 @@ function DailyMarket() {
         <>
           <div style={{ width: '100%', height: 240 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="rate_date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} />
-                <Tooltip labelFormatter={shortDate} formatter={(v) => [`₹${Number(v).toFixed(2)}/kWh`, 'Day price']} />
-                <Line dataKey="mcp_rate" name="Day price" stroke="var(--primary)" strokeWidth={2} dot={false} isAnimationActive={false} />
-              </LineChart>
+              <AreaChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorMcp" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="rate_date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} axisLine={false} tickLine={false} />
+                <Tooltip labelFormatter={shortDate} formatter={(v) => [`₹${Number(v).toFixed(2)}/kWh`, 'Day price']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
+                <Area type="monotone" dataKey="mcp_rate" name="Day price" stroke="var(--primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorMcp)" isAnimationActive={false} />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
           {withEnergy.length > 0 ? (
             <div style={{ width: '100%', height: 200, marginTop: 12 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={withEnergy} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="rate_date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={64} />
-                  <Tooltip labelFormatter={shortDate} formatter={(v) => [`${Number(v).toLocaleString('en-IN')} MWh`, 'Cleared']} />
-                  <Bar dataKey="energy_mwh" name="Cleared MWh" fill="var(--green)" maxBarSize={24} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+                  <defs>
+                    <linearGradient id="colorEnergy" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--green)" stopOpacity={0.9}/>
+                      <stop offset="95%" stopColor="var(--green)" stopOpacity={0.6}/>
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="rate_date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={64} axisLine={false} tickLine={false} />
+                  <Tooltip labelFormatter={shortDate} formatter={(v) => [`${Number(v).toLocaleString('en-IN')} MWh`, 'Cleared']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} cursor={{ fill: 'rgba(0,0,0,0.02)' }} />
+                  <Bar dataKey="energy_mwh" name="Cleared MWh" fill="url(#colorEnergy)" maxBarSize={24} radius={[4, 4, 0, 0]} isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -93,9 +103,9 @@ function MonthlyMarket() {
   if (!data?.period) return null;
   return (
     <>
-    <Card title={`Exchanges and RECs — ${periodLabel(data.period)}`} actions={<PeriodSelect data={data} onChange={setPeriod} />}>
-      <div className="report-table-wrap">
-        <table className="report-table">
+    <Card title={`Exchanges and RECs — ${periodLabel(data.period)}`} actions={<PeriodSelect data={data} onChange={setPeriod} />} className="elite-hoverable">
+      <div className="elite-table-wrap">
+        <table className="elite-table">
           <thead>
             <tr>
               <th scope="col">Exchange</th>
@@ -135,12 +145,18 @@ function MonthlyMarket() {
 
 export default function PowerMarketDashboard() {
   return (
-    <div className="page">
+    <div className="page animate-fade-in-up stagger-1">
       <PageHeader title="Power Market Dashboard" subtitle="Exchange clearing prices and volumes, as observed and as reported to CERC" />
-      <DailyMarket />
-      <MonthlyMarket />
-      <h3 style={{ margin: '24px 0 12px', fontSize: 16 }}>Time-block prices</h3>
-      <IntradayMarketTab />
+      <div className="animate-fade-in-up stagger-2">
+        <DailyMarket />
+      </div>
+      <div className="animate-fade-in-up stagger-3" style={{ marginTop: 24 }}>
+        <MonthlyMarket />
+      </div>
+      <div className="animate-fade-in-up stagger-4" style={{ marginTop: 24 }}>
+        <h3 style={{ margin: '24px 0 12px', fontSize: 16 }}>Time-block prices</h3>
+        <IntradayMarketTab />
+      </div>
     </div>
   );
 }

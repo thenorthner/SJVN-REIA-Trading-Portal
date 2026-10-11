@@ -60,7 +60,7 @@ export const api = {
       formData.append('signature', file);
       return client.post(`/entities/${id}/signature`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
     },
-    approve: (id, decision, remarks) => p(`/entities/${id}/approve`, { decision, remarks }),
+    approve: (id, decision, remarks, extra = {}) => p(`/entities/${id}/approve`, { decision, remarks, ...extra }),
   },
   users: {
     list: () => g('/users'),
@@ -195,6 +195,8 @@ export const api = {
     arrear: (body) => p('/invoices/arrear', body),
     supplementary: (body) => p('/invoices/supplementary', body),
     submit: (body) => p('/invoices', body),
+    // A seller correcting its own draft, or a bill SJVN sent back, before it goes again.
+    revise: (id, body) => client.put(`/invoices/${id}/revise`, body).then((r) => r.data),
     submitL2: (id) => p(`/invoices/${id}/submit-l2`),
     approveL2: (id, comments) => p(`/invoices/${id}/approve-l2`, { comments }),
     submitForApproval: (id) => p(`/invoices/${id}/submit-for-approval`),
@@ -359,7 +361,12 @@ export const api = {
      * browser as an object URL.
      */
     openPdf: async (id) => {
-      const res = await client.get(`/nrpc-dsa/accounts/${id}/pdf`, { responseType: 'blob' });
+      // Asked for as a file, a refusal comes back as a file too — read the reason out of it.
+      const res = await client.get(`/nrpc-dsa/accounts/${id}/pdf`, { responseType: 'blob' }).catch(async (err) => {
+        let msg = 'Could not open the statement PDF';
+        try { msg = JSON.parse(await err.response.data.text()).error || msg; } catch { /* keep the default */ }
+        throw new Error(msg);
+      });
       if (res.data?.type && res.data.type.includes('json')) {
         const text = await res.data.text();
         let msg = 'Could not open the statement PDF';
@@ -551,7 +558,7 @@ export const api = {
       const from = params.from || 'all';
       const to = params.to || 'all';
       a.href = url;
-      a.download = `SJVN_Energy_Report_${from}_to_${to}.pdf`;
+      a.download = from === 'all' && to === 'all' ? 'SJVN_Energy_Report_all-periods.pdf' : `SJVN_Energy_Report_${from}_to_${to}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -574,7 +581,7 @@ export const api = {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `SJVN_Dispute_Report_${params.from || 'all'}_to_${params.to || 'all'}.pdf`;
+      a.download = `SJVN_Dispute_Report_${params.status ? `${String(params.status).toLowerCase()}_` : ''}${params.from || params.to ? `${params.from || 'start'}_to_${params.to || 'today'}` : 'all-dates'}.pdf`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -702,14 +709,15 @@ export const api = {
     create: (body) => p('/payment-security', body),
     fromContract: (contractId) => p(`/payment-security/from-contract/${contractId}`),
     verify: (id, bank_confirmation_ref) => p(`/payment-security/${id}/verify`, { bank_confirmation_ref }),
-    utilize: (id, amount) => p(`/payment-security/${id}/utilize`, { amount }),
-    replenish: (id, amount) => p(`/payment-security/${id}/replenish`, { amount }),
+    utilize: (id, amount, reason) => p(`/payment-security/${id}/utilize`, { amount, reason }),
+    replenish: (id, amount, reason) => p(`/payment-security/${id}/replenish`, { amount, reason }),
     renew: (id, body) => p(`/payment-security/${id}/renew`, body),
     invoke: (id, amount) => p(`/payment-security/${id}/invoke`, { amount }),
     startInvocation: (body) => p('/payment-security/invocations', body),
     transitionInvocation: (id, status, notes) => p(`/payment-security/invocations/${id}/transition`, { status, notes }),
     releaseRequest: (id, reason) => p(`/payment-security/${id}/release-request`, { reason }),
-    actRelease: (id, decision) => p(`/payment-security/releases/${id}/act`, { decision }),
+    actRelease: (id, decision, note) => p(`/payment-security/releases/${id}/act`, { decision, note }),
+    invocationPdf: (id) => client.get(`/payment-security/invocations/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data),
     createOverride: (body) => p('/payment-security/overrides', body),
     runAlerts: () => p('/payment-security/alerts/run'),
   },
@@ -1029,6 +1037,7 @@ export const api = {
     updateStatus: (id, status) => p(`/generator-billing/${id}/status`, { status }),
   },
   hydroBilling: {
+    dashboard: () => g('/hydro-billing/dashboard'),
     stations: () => g('/hydro-billing/stations'),
     list: (params) => g('/hydro-billing', params),
     get: (id) => g(`/hydro-billing/${id}`),
@@ -1062,6 +1071,13 @@ export const api = {
     release: (id) => p(`/hydro-billing/${id}/release`, {}),
     downloadPdf: (id, billNo) =>
       api.reports.downloadPdf(`/hydro-billing/${id}/pdf`, `${String(billNo || id).replace(/[^\w.-]+/g, '_')}.pdf`),
+    // Each beneficiary's own bill, one page apiece, in a single PDF.
+    downloadBeneficiaryBills: (id, billNo) =>
+      api.reports.downloadPdf(`/hydro-billing/${id}/beneficiary-bills/pdf`, `${String(billNo || id).replace(/[^\w.-]+/g, '_')}_beneficiary_bills.pdf`),
+    // Emailing the bill to its beneficiaries, and the record of each send.
+    recipients: (id) => g(`/hydro-billing/${id}/recipients`),
+    send: (id, body) => p(`/hydro-billing/${id}/send`, body || {}),
+    deliveries: (id) => g(`/hydro-billing/${id}/deliveries`),
     dispatch: (id, body) => p(`/hydro-billing/${id}/dispatch`, body),
     // Additional charges and TCS
     charges: (params) => g('/hydro-billing/charges', params),

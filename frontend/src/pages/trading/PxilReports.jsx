@@ -66,7 +66,7 @@ export default function PxilReports() {
     try {
       const params = { fromdate: range.fromdate, todate: range.todate };
       const data = which === 'tam-gtam' ? await api.pxil.tamGtam(params)
-        : which === 'slot-wise' ? await api.pxil.tamGtamSlotWise(params)
+        : which === 'slot-wise' ? await api.pxil.slotWise(params)
           : which === 'format-d' ? await api.pxil.formatD(params)
             : which === 'member-dor' ? await api.pxil.memberDor(params)
               : which === 'trade-margin' ? await api.pxil.tradeMargin(params)
@@ -149,8 +149,22 @@ export default function PxilReports() {
           <Badge type={report.mode === 'PXIL' ? 'success' : 'warning'}>
             {report.mode === 'PXIL' ? 'Live from PXIL' : 'Documented sample'}
           </Badge>
-          {report.code && <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-muted)' }}>Response code {report.code}</span>}
+          {report.code && (
+            <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+              {/* PXIL sends an empty period as a 404; that is an answer, not a failure. */}
+              {Number(report.code) === 404 ? 'PXIL holds no data for this period' : `Response code ${report.code}`}
+            </span>
+          )}
         </div>
+      )}
+
+      {report?.repeated_across_windows > 0 && (
+        <Caveat>
+          <strong>{report.repeated_across_windows} row{report.repeated_across_windows === 1 ? '' : 's'} sent
+            twice.</strong> PXIL limits how much one call may return, so this period was fetched
+          in {report.windows} parts, and the same row came back in more than one of them. Every row
+          is shown as received; do not total this table without removing the repeats.
+        </Caveat>
       )}
 
       {tab === 'tam-gtam' && <DailyBilling result={report} loading={loading} />}
@@ -184,7 +198,7 @@ function DailyBilling({ result, loading }) {
 
   return (
     <Card title="TAM / GTAM billing — day level">
-      {result && result.date_order_confirmed === false && (
+      {result?.rows?.length > 0 && result.date_order_confirmed === false && (
         <Caveat>
           <strong>Date order unconfirmed.</strong> Every day in this response is 12 or under, so
           PXIL's <code>DD-MM-YYYY</code> ordering cannot be proven from the data itself. Dates are
@@ -197,6 +211,20 @@ function DailyBilling({ result, loading }) {
     </Card>
   );
 }
+
+/** STOA components in PXIL's order. DE is PXIL's own abbreviation, left unexpanded. */
+const STOA_LABELS = [
+  ['application_nldc', 'Application — NLDC'],
+  ['application_rldc', 'Application — RLDC'],
+  ['application_sldc', 'Application — SLDC'],
+  ['operating_de', 'Operating — DE'],
+  ['operating_nldc', 'Operating — NLDC'],
+  ['operating_rldc', 'Operating — RLDC'],
+  ['operating_sldc', 'Operating — SLDC'],
+  ['transmission_det', 'Transmission — DET'],
+  ['transmission_state', 'Transmission — State'],
+  ['transmission_zonal', 'Transmission — Zonal'],
+];
 
 function SlotBilling({ result, loading }) {
   const [open, setOpen] = useState(null);
@@ -211,6 +239,17 @@ function SlotBilling({ result, loading }) {
     { key: 'traded_qty_mwh', label: 'Traded (MWh)', render: r => money(r.traded_qty_mwh) },
     { key: 'final_scheduled_qty_mwh', label: 'Final scheduled (MWh)', render: r => money(r.final_scheduled_qty_mwh) },
     { key: 'real_time_curtailment_mwh', label: 'Curtailed (MWh)', render: r => money(r.real_time_curtailment_mwh) },
+    {
+      key: 'stoa_charges',
+      label: 'STOA',
+      render: r => (
+        <span>
+          {money(r.stoa_charges)}
+          {r.stoa_breakup?.reconciles === false && <Badge type="danger">Parts off by {money(r.stoa_breakup.variance)}</Badge>}
+        </span>
+      ),
+    },
+    { key: 'total_payin_payout', label: 'Pay-in / pay-out', render: r => money(r.total_payin_payout) },
     {
       key: 'trade_slot_count',
       label: 'Slots',
@@ -227,7 +266,7 @@ function SlotBilling({ result, loading }) {
       render: r => (
         <button className="btn btn-secondary btn-sm"
           onClick={() => setOpen(open === r.application_no ? null : r.application_no)}>
-          {open === r.application_no ? 'Hide slots' : 'Show slots'}
+          {open === r.application_no ? 'Hide detail' : 'Show detail'}
         </button>
       ),
     },
@@ -236,7 +275,7 @@ function SlotBilling({ result, loading }) {
   const shown = rows.find(r => r.application_no === open);
 
   return (
-    <Card title="TAM / GTAM billing — 15-minute slots">
+    <Card title="Slot-wise quantities and charges — 15-minute slots">
       <Caveat>
         <strong>Slot labelling unconfirmed.</strong> PXIL's sample day begins at{' '}
         <code>00:15–00:30</code>, so we do not yet know whether a slot is labelled by its start or
@@ -250,12 +289,36 @@ function SlotBilling({ result, loading }) {
           values are shown as received; neither has been recomputed.
         </Caveat>
       )}
+      {result?.stoa_unreconciled_count > 0 && (
+        <Caveat>
+          <strong>{result.stoa_unreconciled_count} application{result.stoa_unreconciled_count === 1 ? '' : 's'} where
+            the STOA components do not add up to STOA charges.</strong> PXIL has not said whether the
+          ten components are the whole of STOA. Both figures are shown as received; neither should be
+          posted component by component until the gap is explained.
+        </Caveat>
+      )}
       <Table columns={columns} rows={rows} loading={loading}
         emptyMessage="No slot-wise data in this period." />
 
       {shown && (
         <div style={{ marginTop: 16 }}>
-          <h4 style={{ margin: '0 0 8px' }}>Slots — {shown.application_no}</h4>
+          {shown.stoa_breakup?.present && (
+            <>
+              <h4 style={{ margin: '0 0 8px' }}>STOA charges — {shown.application_no}</h4>
+              <Table
+                columns={[
+                  { key: 'component', label: 'Component' },
+                  { key: 'amount', label: 'Amount', render: r => money(r.amount) },
+                ]}
+                rows={[
+                  ...STOA_LABELS.map(([k, label]) => ({ component: label, amount: shown.stoa_breakup.components[k] })),
+                  { component: 'Sum of components', amount: shown.stoa_breakup.component_sum },
+                  { component: 'STOA charges (PXIL)', amount: shown.stoa_charges },
+                ]}
+              />
+            </>
+          )}
+          <h4 style={{ margin: '16px 0 8px' }}>Slots — {shown.application_no}</h4>
           <Table
             columns={[
               { key: 'from_time', label: 'From' },
@@ -447,7 +510,7 @@ function ReverseAuction({ result, loading }) {
       </Caveat>
       {result?.polled_at && (
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0 }}>
-          Polled at {result.polled_at}
+          Polled at {new Date(result.polled_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST
         </p>
       )}
       <Table

@@ -39,10 +39,26 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  const [fileName, setFileName] = useState('');
+  const [fileSize, setFileSize] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = React.useRef(null);
+
   const parsed = useMemo(() => parseSheet(text, { columns: INVOICE_COLUMNS, numeric: NUMERIC }), [text]);
 
-  function onText(value) {
+  function onText(value, name = '') {
     setText(value);
+    if (name) setFileName(name);
+    setChecked(null);
+    setRaised(null);
+    setError('');
+  }
+
+  function handleClear() {
+    setText('');
+    setFileName('');
+    setFileSize(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setChecked(null);
     setRaised(null);
     setError('');
@@ -59,7 +75,16 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
 
   async function readFile(file) {
     if (!file) return;
-    onText(await file.text());
+    setFileName(file.name);
+    setFileSize((file.size / 1024).toFixed(1) + ' KB');
+    onText(await file.text(), file.name);
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    setIsDragging(false);
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) readFile(droppedFile);
   }
 
   async function check() {
@@ -96,47 +121,238 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
   const total = (checked?.preview || []).reduce((a, r) => a + (r.total_amount || 0), 0);
 
   return (
-    <Modal open={open} onClose={onClose} title="Raise invoices from a sheet" width={880}>
+    <Modal open={open} onClose={onClose} title="Raise Invoices from Spreadsheet" width={880}>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
 
-      <ol style={{ margin: '0 0 16px', paddingLeft: 20, lineHeight: 1.9 }}>
-        <li>
-          Take the template —{' '}
-          <button type="button" className="btn-link" onClick={takeTemplate}>seller_invoice_template.csv</button>
-          {' '}— one bill per row, the contract named by its contract number.
-        </li>
-        <li>Paste the filled sheet below, or pick the saved file.</li>
-        <li>Check it, then raise. Leave <code>invoice_no</code> blank to have it numbered for you.</li>
-      </ol>
+      {/* Modern Workflow Step Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.9) 0%, rgba(241, 245, 249, 0.7) 100%)',
+          border: '1px solid #e2e8f0',
+          borderRadius: 10,
+          padding: '12px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          gap: 10
+        }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{
+                background: '#2563eb', color: '#fff', width: 20, height: 20, borderRadius: '50%',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700
+              }}>1</span>
+              <strong style={{ fontSize: 13, color: '#1e293b' }}>Template</strong>
+            </div>
+            <p style={{ margin: 0, fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
+              Download official CSV template, 1 bill per row with contract number.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-outline btn-xs"
+            onClick={takeTemplate}
+            style={{ alignSelf: 'flex-start', fontWeight: 600 }}
+          >
+            Download CSV Template
+          </button>
+        </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
-        <input type="file" accept=".csv,.tsv,.txt" onChange={(e) => readFile(e.target.files?.[0])} aria-label="Choose a filled template" />
-        {text && <button type="button" className="btn btn-ghost btn-sm" onClick={() => onText('')}>Clear</button>}
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.9) 0%, rgba(241, 245, 249, 0.7) 100%)',
+          border: '1px solid #e2e8f0',
+          borderRadius: 10,
+          padding: '12px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              background: '#0284c7', color: '#fff', width: 20, height: 20, borderRadius: '50%',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700
+            }}>2</span>
+            <strong style={{ fontSize: 13, color: '#1e293b' }}>Input Data</strong>
+          </div>
+          <p style={{ margin: 0, fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
+            Drop or browse CSV file, or paste spreadsheet rows into the editor.
+          </p>
+        </div>
+
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.9) 0%, rgba(241, 245, 249, 0.7) 100%)',
+          border: '1px solid #e2e8f0',
+          borderRadius: 10,
+          padding: '12px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              background: '#059669', color: '#fff', width: 20, height: 20, borderRadius: '50%',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700
+            }}>3</span>
+            <strong style={{ fontSize: 13, color: '#1e293b' }}>Verify & Raise</strong>
+          </div>
+          <p style={{ margin: 0, fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
+            Check validation against SJVN records. Invoices are raised reliably.
+          </p>
+        </div>
       </div>
 
-      <textarea
-        className="input"
-        rows={8}
-        style={{ width: '100%', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12 }}
-        placeholder={'contract_no,billing_period,invoice_no,invoice_type,energy_mwh,…\nPPA/SOLAR/001,2026-08,,FINAL,1250.5,…'}
-        value={text}
-        onChange={(e) => onText(e.target.value)}
-      />
+      {/* Interactive Dropzone Card */}
+      <div
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
+        style={{
+          border: `2px dashed ${isDragging ? '#2563eb' : '#cbd5e1'}`,
+          backgroundColor: isDragging ? '#eff6ff' : '#f8fafc',
+          borderRadius: 12,
+          padding: '18px 24px',
+          textAlign: 'center',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          marginBottom: 16,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8
+        }}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,.tsv,.txt"
+          onChange={(e) => readFile(e.target.files?.[0])}
+          style={{ display: 'none' }}
+        />
+        {fileName ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#ffffff', border: '1px solid #bfdbfe', padding: '6px 14px', borderRadius: 20, boxShadow: '0 2px 5px rgba(37,99,235,0.08)' }}>
+            <strong style={{ fontSize: 13, color: '#1e3a8a' }}>{fileName}</strong>
+            {fileSize && <span style={{ fontSize: 11, color: '#64748b' }}>({fileSize})</span>}
+          </div>
+        ) : (
+          <div>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
+              Choose a file or drag and drop
+            </span>
+            <span style={{ fontSize: 12, color: '#64748b', display: 'block', marginTop: 2 }}>
+              Supports CSV, TSV, or TXT invoice sheets
+            </span>
+          </div>
+        )}
+      </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
-        <span className="report-count" style={{ margin: 0 }}>
-          {parsed.rows.length === 0
-            ? 'Nothing to raise yet.'
-            : `${parsed.rows.length} ${parsed.rows.length === 1 ? 'bill' : 'bills'} read from the sheet.`}
-        </span>
-        <button type="button" className="btn btn-secondary btn-sm" disabled={!parsed.rows.length || busy} onClick={check}>
-          {busy && !raised ? 'Checking…' : 'Check the sheet'}
-        </button>
-        <button type="button" className="btn btn-primary btn-sm" disabled={!canRaise} onClick={raise}>
-          {parsed.rows.length && checked && checked.failed === 0
-            ? `Raise ${checked.would_raise} ${checked.would_raise === 1 ? 'bill' : 'bills'}`
-            : 'Raise'}
-        </button>
+      {/* Direct Paste Container */}
+      <div style={{
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: 10,
+        overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+        marginBottom: 16
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 14px',
+          background: '#f8fafc',
+          borderBottom: '1px solid #e2e8f0',
+          fontSize: 12
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569', fontWeight: 600 }}>
+            <span>Spreadsheet CSV Data</span>
+            {parsed.rows.length > 0 && (
+              <span style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700 }}>
+                {parsed.rows.length} {parsed.rows.length === 1 ? 'bill' : 'bills'} detected
+              </span>
+            )}
+          </div>
+          {text && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs"
+              onClick={handleClear}
+              style={{ color: '#ef4444' }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <textarea
+          rows={7}
+          style={{
+            width: '100%',
+            border: 'none',
+            outline: 'none',
+            padding: '12px 14px',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+            fontSize: 12,
+            lineHeight: 1.6,
+            color: '#1e293b',
+            background: '#ffffff',
+            boxSizing: 'border-box',
+            resize: 'vertical'
+          }}
+          placeholder={'contract_no,billing_period,invoice_no,invoice_type,energy_mwh,…\nPPA/SOLAR/001,2026-08,,FINAL,1250.5,…'}
+          value={text}
+          onChange={(e) => onText(e.target.value)}
+        />
+      </div>
+
+      {/* Action Toolbar */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+        padding: '12px 16px',
+        background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+        border: '1px solid #e2e8f0',
+        borderRadius: 10,
+        flexWrap: 'wrap'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            backgroundColor: parsed.rows.length === 0 ? '#94a3b8' : (checked && checked.failed === 0 ? '#10b981' : '#3b82f6')
+          }} />
+          <span style={{ fontSize: 13, fontWeight: 500, color: '#334155' }}>
+            {parsed.rows.length === 0
+              ? 'Nothing to raise yet.'
+              : `${parsed.rows.length} ${parsed.rows.length === 1 ? 'bill' : 'bills'} ready to validate.`}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={!parsed.rows.length || busy}
+            onClick={check}
+            style={{ fontWeight: 600 }}
+          >
+            {busy && !raised ? 'Checking…' : 'Check the Sheet'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={!canRaise}
+            onClick={raise}
+            style={{ fontWeight: 600 }}
+          >
+            {parsed.rows.length && checked && checked.failed === 0
+              ? `Raise ${checked.would_raise} ${checked.would_raise === 1 ? 'Bill' : 'Bills'}`
+              : 'Raise Invoices'}
+          </button>
+        </div>
       </div>
 
       {parsed.unknownColumns.length > 0 && (

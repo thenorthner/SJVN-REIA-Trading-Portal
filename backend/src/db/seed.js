@@ -347,6 +347,9 @@ const insertUser = db.prepare(`
 const users = [
   { name: 'Admin User', email: 'admin@sjvn.in', role: 'SJVN_ADMIN' },
   { name: 'Rahul (REIA Ops)', email: 'reia@sjvn.in', role: 'REIA_USER' },
+  // A second REIA signatory, so a bill that needs three approvals has three
+  // people to give them besides whoever raised it.
+  { name: 'Meera (REIA Admin)', email: 'reia.admin@sjvn.in', role: 'REIA_ADMIN' },
   { name: 'Shreya (Trading Ops)', email: 'trading@sjvn.in', role: 'TRADING_USER' },
   { name: 'Vikas (Finance)', email: 'finance@sjvn.in', role: 'FINANCE_USER' },
   { name: 'Divyankur (Management)', email: 'management@sjvn.in', role: 'MANAGEMENT' },
@@ -354,6 +357,8 @@ const users = [
   { name: 'Sunrise Solar Pvt Ltd', email: 'seller@sunrise-solar.in', role: 'SELLER' },
   { name: 'State DISCOM Buyer', email: 'buyer@discom.gov.in', role: 'BUYER' },
   { name: 'ABC Trading Client', email: 'client@abctrading.in', role: 'TRADING_CLIENT' },
+  { name: 'Anand (Commercial Ops)', email: 'commercial@sjvn.in', role: 'COMMERCIAL_USER' },
+  { name: 'Sunil (Commercial Admin)', email: 'commercial.admin@sjvn.in', role: 'COMMERCIAL_ADMIN' },
 ];
 
 const userIds = {};

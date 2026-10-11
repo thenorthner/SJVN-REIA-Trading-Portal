@@ -808,7 +808,7 @@ export default function MastersHub() {
               <div style={{ marginTop: 14 }}>
                 <div style={{ padding: 14, background: '#ffffff', borderRadius: 8, border: '1px solid #cbd5e1', display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
                   <div>
-                    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', fontWeight: 700, letterSpacing: 0.5 }}>Calculated Due Date (Target)</div>
+                    <div style={{ fontSize: 11, color: '#64748b', textTransform: 'none', fontWeight: 700, letterSpacing: 0.5 }}>Calculated Due Date (Target)</div>
                     <div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>
                       {simResult.due_date} <span style={{ fontSize: 13, fontWeight: 600, color: '#0284c7' }}>({formatDayName(simResult.due_date)})</span>
                     </div>

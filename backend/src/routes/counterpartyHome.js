@@ -12,7 +12,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, SELLER_ROLES, BUYER_ROLES, counterpartySide } from '../middleware/auth.js';
 import { OPEN_STATUSES } from '../disputesConstants.js';
-import { PRESENTED_STATUSES } from '../services/counterpartyScope.js';
+import { presentedSql, raisedBySellerSql } from '../services/counterpartyScope.js';
 import { getParamNumber } from '../mastersService.js';
 import { buildBoard } from '../services/alertBoard.js';
 import {
@@ -79,8 +79,13 @@ function scopeOf(user) {
     side, seller, entityId, tier, prefix: seller ? '/seller' : '/buyer',
     direction: seller ? 'SELLER_TO_SJVN' : 'SJVN_TO_BUYER',
     contracts, ids: contracts.map((c) => c.id),
-    // A seller sees its own bills at every stage; a buyer only those SJVN has presented.
-    billWhere: seller ? `i.status <> 'CANCELLED'` : `i.status IN (${PRESENTED_STATUSES.map((s) => `'${s}'`).join(',')}) AND i.status <> 'CANCELLED'`,
+    // A seller sees its own bills at every stage; a buyer only those SJVN has
+    // presented. SJVN's own computation of a PPA month runs the same direction
+    // as the seller's bill, and is the seller's to see only once presented —
+    // its drafts were being counted into the seller's billed and overdue figures.
+    billWhere: seller
+      ? `i.status <> 'CANCELLED' AND (${raisedBySellerSql('i')} OR ${presentedSql('i')})`
+      : `${presentedSql('i')} AND i.status <> 'CANCELLED'`,
   };
 }
 
@@ -93,7 +98,7 @@ function todoOf(user, s) {
   const P = s.prefix;
 
   if (s.seller) {
-    const drafts = one(`SELECT COUNT(*) n, COALESCE(SUM(total_amount), 0) amt FROM invoices i WHERE i.contract_id IN (${ph}) AND i.direction = 'SELLER_TO_SJVN' AND i.status = 'DRAFT'`, ...s.ids);
+    const drafts = one(`SELECT COUNT(*) n, COALESCE(SUM(total_amount), 0) amt FROM invoices i WHERE i.contract_id IN (${ph}) AND ${raisedBySellerSql('i')} AND i.status = 'DRAFT'`, ...s.ids);
     add(s.tier === 'L1'
       ? { key: 'drafts', level: 'blue', count: drafts.n, title: `${drafts.n} invoice${drafts.n === 1 ? '' : 's'} in draft`, detail: 'Finish them and send them to your checker.', link: `${P}/invoices` }
       : { key: 'drafts', level: 'amber', count: drafts.n, title: `${drafts.n} invoice${drafts.n === 1 ? '' : 's'} waiting for your approval`, detail: `Prepared by a maker — ${inr(drafts.amt)} in all. Approve and submit to SJVN.`, link: `${P}/invoices` });

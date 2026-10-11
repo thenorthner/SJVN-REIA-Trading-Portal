@@ -103,7 +103,11 @@ export function estimateTds({ seller, billingPeriod, amount, taxes = 0, excludeI
       AND i.billing_period BETWEEN ? AND ?
       AND i.status NOT IN ('DRAFT','PENDING_L2','REJECTED','CANCELLED')
       AND i.id <> ?
-  `).get(seller.id, fy.from, fy.to, excludeInvoiceId || '').v : 0;
+      -- "Billed earlier" is what was raised before this bill, not everything
+      -- else in the year: a bill raised afterwards used to push this one's
+      -- estimate over the threshold in hindsight.
+      AND (? = '' OR i.rowid < COALESCE((SELECT rowid FROM invoices WHERE id = ?), i.rowid + 1))
+  `).get(seller.id, fy.from, fy.to, excludeInvoiceId || '', excludeInvoiceId || '', excludeInvoiceId || '').v : 0;
 
   const over = (v) => Math.max(0, v - threshold);
   const liable = round2(over(before + base) - over(before));

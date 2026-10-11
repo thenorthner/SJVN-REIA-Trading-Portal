@@ -4,7 +4,7 @@ import multer from 'multer';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { logAudit } from '../util.js';
-import { settledLakh } from '../services/nrpcDsa.js';
+import { settledLakh, settlementRupees, luToMwh } from '../services/nrpcDsa.js';
 import { storeDsaPdf, fetchArchiveWeek, pendingArchiveWeeks } from '../services/nrpcDsaIngest.js';
 
 const router = Router();
@@ -17,6 +17,9 @@ const WRITE = ROLE_GROUPS.REIA_WRITE;
 // Held in memory because nothing needs the bytes once they are parsed — what
 // is kept is the digest, so the same file cannot be counted twice.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+
+// The sections of the statement that are SJVN's own stations.
+const SJVN_STATIONS = ['NATHPA JHAKRI HEP', 'RAMPUR HEP', 'SJVN GREEN ENERGY'];
 
 /**
  * Upload this week's Deviation Settlement Account.
@@ -75,10 +78,27 @@ router.get('/accounts', requireRole(...READ), (req, res) => {
 router.get('/accounts/:id', requireRole(...READ), (req, res) => {
   const account = db.prepare('SELECT * FROM nrpc_dsa_accounts WHERE id = ?').get(req.params.id);
   if (!account) return res.status(404).json({ error: 'Statement not found' });
+  // Each entity's week as the statement prints it, and beside it what a
+  // settlement row raised from it would carry — converted by the same two
+  // functions the row is, so the screen can show the figure before it is raised
+  // without doing the arithmetic (or the sign) a second time.
   const totals = db.prepare(
     'SELECT * FROM nrpc_dsa_entity_totals WHERE account_id = ? ORDER BY entity_name',
-  ).all(req.params.id);
-  res.json({ ...account, totals });
+  ).all(req.params.id).map((t) => ({
+    ...t,
+    settled_lakh: settledLakh(t),
+    settlement_rupees: settlementRupees(t),
+    schedule_mwh: luToMwh(t.schedule_lu),
+    actual_mwh: luToMwh(t.actual_lu),
+    sjvn_station: SJVN_STATIONS.includes(t.entity_name),
+  }));
+  // What has already been raised from this statement.
+  const raised = db.prepare(`
+    SELECT d.id, d.dsm_no, d.contract_id, d.dsa_entity_name, d.status, c.contract_no
+    FROM deviation_settlements d LEFT JOIN contracts c ON c.id = d.contract_id
+    WHERE d.dsa_account_id = ? AND d.status != 'CANCELLED'
+  `).all(req.params.id);
+  res.json({ ...account, has_pdf: !!(account.local_file_path && fs.existsSync(account.local_file_path)), totals, raised });
 });
 
 /**

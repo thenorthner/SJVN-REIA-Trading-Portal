@@ -11,7 +11,9 @@ import {
   ValidationCompareModal,
   downloadInvoicePdf,
   INVOICE_STATUS_OPTIONS,
+  PAYABLE_STATUSES,
 } from '../../components/invoiceShared.jsx';
+import { fmtDate, fmtDateTime } from '../../datetime.js';
 import { REASON_CODES, CHARGE_LINES } from '../../disputesMeta.js';
 import SellerInvoiceUpload from './SellerInvoiceUpload.jsx';
 
@@ -30,7 +32,23 @@ const STATUS_LABELS = {
   CANCELLED: 'Cancelled',
 };
 
-const SELLER_STATUS_FILTERS = INVOICE_STATUS_OPTIONS.filter((s) => s !== 'SENT');
+// Every status a seller's bill can be in — SENT included, or a bill SJVN has
+// marked sent for payment could not be filtered for.
+const SELLER_STATUS_FILTERS = INVOICE_STATUS_OPTIONS;
+
+// The tariff is rupees per unit (kWh) and energy is in MWh.
+const UNITS_PER_MWH = 1000;
+export const chargesFor = (mwh, tariff) => Math.round((Number(mwh) || 0) * UNITS_PER_MWH * (Number(tariff) || 0));
+/**
+ * The locked energy a bill of this type runs on: the final figure for a final
+ * bill and the provisional one for a provisional bill, where both are locked.
+ */
+export function energyRowFor(rows, invoiceType) {
+  const list = Array.isArray(rows) ? rows : [];
+  const want = invoiceType === 'PROVISIONAL' ? 'PROVISIONAL' : 'FINAL';
+  return list.find((r) => r.data_type === want) || list.find((r) => r.data_type === 'FINAL') || list[0] || null;
+}
+const errOf = (err, fallback) => err?.response?.data?.error || err?.message || fallback;
 
 const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 function exportCsv(rows) {
@@ -105,6 +123,11 @@ export default function SellerInvoices() {
   const [showCreate, setShowCreate] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [form, setForm] = useState(CREATE_FORM);
+  const [busy, setBusy] = useState('');
+  const [energyRows, setEnergyRows] = useState([]);
+  const [revise, setRevise] = useState(null);       // the figures being corrected on a rejected bill
+  const [reviseEnergy, setReviseEnergy] = useState(null);
+  const [actionError, setActionError] = useState('');
   const [energyPreview, setEnergyPreview] = useState(null);
   const [contractPreview, setContractPreview] = useState(null);
   const [error, setError] = useState('');
@@ -127,18 +150,23 @@ export default function SellerInvoices() {
   useEffect(() => {
     if (form.contract_id && form.period_month) {
       api.energyData.list({ contract_id: form.contract_id, period_month: form.period_month, status: 'LOCKED' })
-        .then((data) => setEnergyPreview(data.length > 0 ? data[0] : null))
-        .catch(() => setEnergyPreview(null));
+        .then((data) => setEnergyRows(Array.isArray(data) ? data : []))
+        .catch(() => setEnergyRows([]));
       const c = contracts.find((c) => c.id === form.contract_id);
       setContractPreview(c || null);
     } else {
-      setEnergyPreview(null);
+      setEnergyRows([]);
       setContractPreview(null);
     }
   }, [form.contract_id, form.period_month, contracts]);
+  // Which locked row the bill runs on follows the invoice type. It used to be
+  // whichever row came back first, whatever type was chosen.
+  useEffect(() => { setEnergyPreview(energyRowFor(energyRows, form.invoice_type)); }, [energyRows, form.invoice_type]);
 
+  // MWh × 1000 × ₹/unit. Without the 1000 the form raised every bill at a
+  // thousandth of its value — ₹43,947 for a month worth ₹4,39,47,000.
   const calculatedCharges = energyPreview && contractPreview
-    ? Math.round(energyPreview.energy_mwh * contractPreview.tariff_per_unit)
+    ? chargesFor(energyPreview.energy_mwh, contractPreview.tariff_per_unit)
     : 0;
   const totalAmount = calculatedCharges
     + (Number(form.transmission_charges) || 0)
@@ -160,12 +188,13 @@ export default function SellerInvoices() {
     && (!text || `${r.invoice_no} ${r.contract_no} ${r.billing_period}`.toLowerCase().includes(text))), [rows, contractFilter, text]);
 
   const totals = useMemo(() => {
-    const live = shown.filter((r) => !['CANCELLED', 'DRAFT', 'PENDING_L2', 'REJECTED'].includes(r.status));
+    // A dispute's credit note is left out: the bill it answers has already come down by the same amount.
+    const live = shown.filter((r) => !['CANCELLED', 'DRAFT', 'PENDING_L2', 'REJECTED'].includes(r.status) && !r.is_dispute_credit);
     const billed = live.reduce((s, r) => s + (Number(r.total_amount) || 0), 0);
     const paid = live.reduce((s, r) => s + (Number(r.paid_total) || 0), 0);
     return {
       billed, paid, outstanding: Math.max(0, billed - paid),
-      overdue: live.filter((r) => r.days_overdue > 0).length,
+      overdue: live.filter((r) => (r.days_past_due || r.days_overdue) > 0).length,
       withSjvn: shown.filter((r) => ['SUBMITTED', 'UNDER_APPROVAL'].includes(r.status)).length,
       toAct: shown.filter((r) => (r.status === 'REJECTED' && canSendToSjvn) || (r.status === 'DRAFT' && isMaker) || (r.status === 'PENDING_L2' && canSendToSjvn)).length,
     };
@@ -194,8 +223,21 @@ export default function SellerInvoices() {
     load();
   }
 
+  function openCreate() {
+    setForm(CREATE_FORM);
+    setError('');
+    setShowCreate(true);
+  }
+  function closeCreate() {
+    setShowCreate(false);
+    setForm(CREATE_FORM);
+    setError('');
+  }
+
   function openDetail(row) {
     api.invoices.get(row.id).then(setSelected);
+    setRevise(null);
+    setActionError('');
     setShowDispute(false);
     setShowValidation(false);
     setValidationResult(null);
@@ -242,11 +284,13 @@ export default function SellerInvoices() {
 
   async function handleCreate(e) {
     e.preventDefault();
+    if (busy) return;
     setError('');
     if (!energyPreview) {
       setError('No locked energy data found for this contract and period. Ask SJVN to validate and lock the energy data first.');
       return;
     }
+    setBusy('create');
     try {
       const body = {
         contract_id: form.contract_id,
@@ -258,35 +302,82 @@ export default function SellerInvoices() {
         transmission_charges: Number(form.transmission_charges) || 0,
         taxes: Number(form.taxes) || 0,
         other_adjustments: Number(form.other_adjustments) || 0,
-        invoice_no: form.own_ref || undefined,
+        adjustment_remarks: Number(form.other_adjustments) ? form.adjustment_remarks.trim() : undefined,
+        invoice_no: form.own_ref.trim() || undefined,
         due_date: null,
       };
       await api.invoices.submit(body);
-      setShowCreate(false);
-      setForm(CREATE_FORM);
+      closeCreate();
       load();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to submit invoice.');
+      setError(errOf(err, 'Failed to submit invoice.'));
+    } finally {
+      setBusy('');
     }
   }
 
   // Every workflow button goes through here, so a refusal is shown rather than
   // lost as an unhandled rejection with the modal sitting unchanged.
   async function act(call, failure) {
+    if (busy) return false;
+    setActionError('');
+    setBusy('act');
     try {
       await call();
       setSelected(await api.invoices.get(selected.id));
       load();
+      return true;
     } catch (err) {
-      alert(err.response?.data?.error || failure);
+      setActionError(errOf(err, failure));
+      return false;
+    } finally {
+      setBusy('');
     }
   }
   const handleSubmitForApproval = () => act(() => api.invoices.submitForApproval(selected.id), 'Could not resubmit the invoice.');
+
+  // Revising a bill SJVN sent back: the figures open for correction, worked
+  // again from the locked energy for the month, before it goes to SJVN again.
+  function openRevise() {
+    const contract = contracts.find((c) => c.id === selected.contract_id);
+    setActionError('');
+    setReviseEnergy(null);
+    setRevise({
+      energy_mwh: selected.energy_mwh, tariff_per_unit: selected.tariff_per_unit, energy_charges: selected.energy_charges,
+      transmission_charges: selected.transmission_charges || '', taxes: selected.taxes || '',
+      other_adjustments: selected.other_adjustments || '', adjustment_remarks: selected.adjustment_remarks || '',
+    });
+    api.energyData.list({ contract_id: selected.contract_id, period_month: selected.billing_period, status: 'LOCKED' })
+      .then((rows) => {
+        const row = energyRowFor(rows, selected.invoice_type);
+        if (!row) return;
+        const tariff = contract?.tariff_per_unit ?? selected.tariff_per_unit;
+        setReviseEnergy({ ...row, tariff, charges: chargesFor(row.energy_mwh, tariff) });
+      })
+      .catch(() => {});
+  }
+  const reviseTotal = revise
+    ? (Number(revise.energy_charges) || 0) + (Number(revise.transmission_charges) || 0) + (Number(revise.taxes) || 0) + (Number(revise.other_adjustments) || 0)
+    : 0;
+  async function saveRevision(andResubmit) {
+    const ok = await act(async () => {
+      await api.invoices.revise(selected.id, {
+        energy_mwh: Number(revise.energy_mwh), tariff_per_unit: Number(revise.tariff_per_unit), energy_charges: Number(revise.energy_charges),
+        transmission_charges: Number(revise.transmission_charges) || 0, taxes: Number(revise.taxes) || 0,
+        other_adjustments: Number(revise.other_adjustments) || 0, adjustment_remarks: String(revise.adjustment_remarks || '').trim(),
+      });
+      if (andResubmit) await api.invoices.submitForApproval(selected.id);
+    }, 'The revision could not be saved.');
+    if (ok) setRevise(null);
+  }
   const handleSendToChecker = () => act(() => api.invoices.submitL2(selected.id), 'Could not send the invoice to your checker.');
   const handleCheckerApprove = () => act(() => api.invoices.approveL2(selected.id), 'Could not approve and submit the invoice.');
 
   async function handleRaiseDispute(e) {
     e.preventDefault();
+    if (busy) return;
+    setActionError('');
+    setBusy('dispute');
     try {
       await api.disputes.create({
         invoice_id: selected.id,
@@ -302,7 +393,9 @@ export default function SellerInvoices() {
       setSelected(fresh);
       load();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to raise dispute');
+      setActionError(errOf(err, 'Failed to raise dispute'));
+    } finally {
+      setBusy('');
     }
   }
 
@@ -324,14 +417,22 @@ export default function SellerInvoices() {
         />
       ) : null),
     },
-    { key: 'invoice_no', header: 'Invoice No.' },
+    {
+      key: 'invoice_no',
+      header: 'Invoice No.',
+      // SJVN's own computation of a month, shown once it is approved, is not
+      // one of the seller's invoices — say so.
+      render: (r) => (r.raised_by_seller === false
+        ? <span>{r.invoice_no}<div style={{ fontSize: 11, color: '#1d4ed8' }}>Raised by SJVN</div></span>
+        : r.invoice_no),
+    },
     { key: 'contract_no', header: 'Contract' },
     { key: 'billing_period', header: 'Period' },
     { key: 'invoice_type', header: 'Type', render: (r) => r.invoice_type || '-' },
     { key: 'energy_mwh', header: 'Energy (MWh)', render: (r) => fmtNumber(r.energy_mwh) },
     { key: 'total_amount', header: 'Amount', render: (r) => fmtCurrency(r.total_amount) },
     { key: 'status', header: 'Status', render: (r) => <InvoiceStatusCell row={r} showValidation /> },
-    { key: 'due_date', header: 'Due Date', render: (r) => r.due_date || '-' },
+    { key: 'due_date', header: 'Due Date', render: (r) => (r.due_date ? fmtDate(r.due_date) : '-') },
     {
       key: 'goes_with',
       header: 'With the bill',
@@ -358,7 +459,7 @@ export default function SellerInvoices() {
             <button className="btn btn-secondary" onClick={() => setShowUpload(true)}>
               Raise from a Sheet
             </button>
-            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+            <button className="btn btn-primary" onClick={openCreate}>
               + Create Invoice
             </button>
           </div>
@@ -406,11 +507,14 @@ export default function SellerInvoices() {
           <option value="">All contracts</option>
           {contracts.map((c) => <option key={c.id} value={c.id}>{c.contract_no}</option>)}
         </select>
-        <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
+        <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} aria-label="Status">
           <option value="">All statuses</option>
-          {SELLER_STATUS_FILTERS.map((s) => <option key={s} value={s}>{s}</option>)}
+          {SELLER_STATUS_FILTERS.map((s) => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}
         </select>
-        <input type="month" value={filters.billing_period} onChange={(e) => setFilters({ ...filters, billing_period: e.target.value })} />
+        <input type="month" value={filters.billing_period} onChange={(e) => setFilters({ ...filters, billing_period: e.target.value })} aria-label="Billing period" />
+        {(q || contractFilter || filters.status || filters.billing_period) && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setQ(''); setContractFilter(''); setFilters({ status: '', billing_period: '' }); }}>Clear filters</button>
+        )}
       </div>
 
       <Card>
@@ -422,7 +526,7 @@ export default function SellerInvoices() {
         />
       </Card>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create New Invoice" width={640}>
+      <Modal open={showCreate} onClose={closeCreate} title="Create New Invoice" width={640}>
         {error && <div className="form-error">{error}</div>}
         <form onSubmit={handleCreate}>
           <div className="form-grid">
@@ -444,7 +548,13 @@ export default function SellerInvoices() {
                 <div className="detail-grid mb-0">
                   <div className="detail-item"><span className="detail-label">Energy Supplied</span><span className="detail-value">{fmtNumber(energyPreview.energy_mwh)} MWh</span></div>
                   <div className="detail-item"><span className="detail-label">PPA Tariff</span><span className="detail-value">₹{contractPreview?.tariff_per_unit}/unit</span></div>
-                  <div className="detail-item"><span className="detail-label">Energy Charges</span><span className="detail-value" style={{ color: 'var(--success)', fontWeight: 600 }}>{fmtCurrency(calculatedCharges)}</span></div>
+                  <div className="detail-item">
+                    <span className="detail-label">Energy Charges</span>
+                    <span className="detail-value" style={{ color: 'var(--success)', fontWeight: 600 }}>
+                      {fmtCurrency(calculatedCharges)}
+                      <div style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-light)' }}>{fmtNumber(energyPreview.energy_mwh)} MWh × 1,000 units × ₹{contractPreview?.tariff_per_unit}</div>
+                    </span>
+                  </div>
                   <div className="detail-item"><span className="detail-label">Data Source</span><span className="detail-value">{energyPreview.source} ({energyPreview.data_type})</span></div>
                 </div>
               ) : (
@@ -475,9 +585,9 @@ export default function SellerInvoices() {
             <Field label="Other Adjustments (₹)">
               <input type="number" placeholder="0" value={form.other_adjustments} onChange={(e) => setForm({ ...form, other_adjustments: e.target.value })} />
             </Field>
-            {form.other_adjustments && (
-              <Field label="Adjustment Remarks">
-                <input placeholder="Reason for adjustment" value={form.adjustment_remarks} onChange={(e) => setForm({ ...form, adjustment_remarks: e.target.value })} />
+            {Number(form.other_adjustments) !== 0 && form.other_adjustments !== '' && (
+              <Field label="Adjustment Remarks" required>
+                <input required placeholder="What the adjustment is for" value={form.adjustment_remarks} onChange={(e) => setForm({ ...form, adjustment_remarks: e.target.value })} />
               </Field>
             )}
           </div>
@@ -497,8 +607,8 @@ export default function SellerInvoices() {
           )}
 
           <div className="form-actions">
-            <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={!energyPreview}>{isMaker ? 'Save draft for your checker' : 'Submit to SJVN'}</button>
+            <button type="button" className="btn btn-ghost" onClick={closeCreate}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={!energyPreview || busy === 'create'}>{busy === 'create' ? 'Submitting…' : isMaker ? 'Save draft for your checker' : 'Submit to SJVN'}</button>
           </div>
         </form>
       </Modal>
@@ -519,6 +629,16 @@ export default function SellerInvoices() {
                 </div>
               );
             })()}
+            {selected.status !== 'REJECTED' && selected.approval_history?.length > 0 && (
+              <p className="inline-note" style={{ marginTop: 10 }}>
+                Sent back earlier: {selected.approval_history.map((h) => `${fmtDateTime(h.at)}${h.comments ? ` — ${h.comments}` : ''}`).join('; ')}
+              </p>
+            )}
+            {selected.raised_by_seller === false && (
+              <p className="inline-note" style={{ marginTop: 10 }}>
+                This is SJVN&apos;s own bill for the month, shown to you now that it is approved. It is not one of the invoices you raised.
+              </p>
+            )}
 
             <div className="detail-grid mb-0" style={{ marginTop: 12 }}>
               <div className="detail-item"><span className="detail-label">Status</span><span className="detail-value"><Badge status={selected.status} /></span></div>
@@ -526,12 +646,12 @@ export default function SellerInvoices() {
               <div className="detail-item"><span className="detail-label">Contract</span><span className="detail-value">{selected.contract_no}</span></div>
               <div className="detail-item"><span className="detail-label">Billing Period</span><span className="detail-value">{selected.billing_period}</span></div>
               <div className="detail-item"><span className="detail-label">Type</span><span className="detail-value">{selected.invoice_type || '-'}</span></div>
-              <div className="detail-item"><span className="detail-label">Due Date</span><span className="detail-value">{selected.due_date || 'Not set'}</span></div>
-              {selected.days_overdue > 0 && (
+              <div className="detail-item"><span className="detail-label">Due Date</span><span className="detail-value">{selected.due_date ? fmtDate(selected.due_date) : 'Not set'}</span></div>
+              {(selected.days_past_due > 0 || selected.days_overdue > 0) && (
                 <div className="detail-item">
                   <span className="detail-label">Overdue / Accrued LPS</span>
                   <span className="detail-value" style={{ color: 'var(--danger)', fontWeight: 600 }}>
-                    {selected.days_overdue} day(s) · {fmtCurrency(selected.accrued_lps)}
+                    {selected.days_past_due || selected.days_overdue} day(s) past due · {fmtCurrency(selected.accrued_lps)}
                   </span>
                 </div>
               )}
@@ -584,23 +704,73 @@ export default function SellerInvoices() {
               </>
             )}
 
+            {actionError && <div className="form-error" role="alert" style={{ marginTop: 14 }}>{actionError}</div>}
+
+            {/* Correcting a bill before it goes to SJVN again. */}
+            {revise && (
+              <div style={{ marginTop: 16, padding: 16, background: 'var(--bg-main)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                <div className="section-title">Revise this bill</div>
+                {reviseEnergy && (
+                  <p className="inline-note" style={{ marginTop: 0 }}>
+                    Locked energy for {selected.billing_period}: <strong>{fmtNumber(reviseEnergy.energy_mwh)} MWh</strong> ({reviseEnergy.source}, {reviseEnergy.data_type}) at ₹{reviseEnergy.tariff}/unit comes to <strong>{fmtCurrency(reviseEnergy.charges)}</strong>.
+                    {Math.abs(reviseEnergy.charges - (Number(revise.energy_charges) || 0)) > 1 && (
+                      <> The bill has {fmtCurrency(revise.energy_charges)}.{' '}
+                        <button type="button" className="btn-link" onClick={() => setRevise({ ...revise, energy_mwh: reviseEnergy.energy_mwh, tariff_per_unit: reviseEnergy.tariff, energy_charges: reviseEnergy.charges })}>Use the locked figure</button>
+                      </>
+                    )}
+                  </p>
+                )}
+                <div className="form-grid">
+                  <Field label="Energy (MWh)"><input type="number" min="0" step="any" value={revise.energy_mwh} onChange={(e) => setRevise({ ...revise, energy_mwh: e.target.value })} /></Field>
+                  <Field label="Tariff (₹/unit)"><input type="number" min="0" step="any" value={revise.tariff_per_unit} onChange={(e) => setRevise({ ...revise, tariff_per_unit: e.target.value })} /></Field>
+                  <Field label="Energy Charges (₹)"><input type="number" min="0" step="any" value={revise.energy_charges} onChange={(e) => setRevise({ ...revise, energy_charges: e.target.value })} /></Field>
+                  <Field label="Transmission Charges (₹)"><input type="number" min="0" step="any" placeholder="0" value={revise.transmission_charges} onChange={(e) => setRevise({ ...revise, transmission_charges: e.target.value })} /></Field>
+                  <Field label="Taxes / GST (₹)"><input type="number" min="0" step="any" placeholder="0" value={revise.taxes} onChange={(e) => setRevise({ ...revise, taxes: e.target.value })} /></Field>
+                  <Field label="Other Adjustments (₹)"><input type="number" step="any" placeholder="0" value={revise.other_adjustments} onChange={(e) => setRevise({ ...revise, other_adjustments: e.target.value })} /></Field>
+                  {Number(revise.other_adjustments) !== 0 && revise.other_adjustments !== '' && (
+                    <Field label="Adjustment Remarks" required><input value={revise.adjustment_remarks} placeholder="What the adjustment is for" onChange={(e) => setRevise({ ...revise, adjustment_remarks: e.target.value })} /></Field>
+                  )}
+                </div>
+                <p className="inline-note">The revised bill comes to <strong>{fmtCurrency(reviseTotal)}</strong> (it was {fmtCurrency(selected.total_amount)}). It is checked against SJVN&apos;s figure again when saved.</p>
+                <div className="form-actions" style={{ flexWrap: 'wrap' }}>
+                  <button type="button" className="btn btn-ghost" disabled={!!busy} onClick={() => setRevise(null)}>Cancel</button>
+                  <button type="button" className="btn btn-secondary" disabled={!!busy} onClick={() => saveRevision(false)}>Save the revision</button>
+                  {selected.status === 'REJECTED' && canSendToSjvn && (
+                    <button type="button" className="btn btn-primary" disabled={!!busy} onClick={() => saveRevision(true)}>{busy ? 'Saving…' : 'Save and resubmit to SJVN'}</button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {!revise && (
             <div className="form-actions" style={{ marginTop: 18, flexWrap: 'wrap' }}>
-              {selected.status === 'DRAFT' && (
-                <button type="button" className="btn btn-primary" onClick={handleSendToChecker}>Send to checker</button>
+              {selected.status === 'DRAFT' && (isMaker
+                ? <button type="button" className="btn btn-primary" disabled={!!busy} onClick={handleSendToChecker}>Send to checker</button>
+                : <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>A draft your maker has not yet sent for checking.</span>)}
+              {selected.status === 'DRAFT' && selected.raised_by_seller !== false && (
+                <button type="button" className="btn btn-secondary" disabled={!!busy} onClick={openRevise}>Revise</button>
               )}
               {selected.status === 'PENDING_L2' && (canSendToSjvn
-                ? <button type="button" className="btn btn-primary" onClick={handleCheckerApprove}>Approve &amp; submit to SJVN</button>
+                ? <button type="button" className="btn btn-primary" disabled={!!busy} onClick={handleCheckerApprove}>Approve &amp; submit to SJVN</button>
                 : <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Waiting for your company&apos;s checker to approve it and submit it to SJVN.</span>)}
-              {selected.status === 'REJECTED' && (canSendToSjvn
-                ? <button type="button" className="btn btn-secondary" onClick={handleSubmitForApproval}>Revise &amp; Resubmit</button>
-                : <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Rejected by SJVN — your company&apos;s checker resubmits it.</span>)}
-              {selected.status !== 'CANCELLED' && (
-                <button type="button" className="btn btn-secondary" onClick={handleValidate}>Validate vs System</button>
+              {selected.status === 'REJECTED' && selected.raised_by_seller !== false && (
+                <>
+                  <button type="button" className="btn btn-primary" disabled={!!busy} onClick={openRevise}>Revise the bill</button>
+                  {canSendToSjvn
+                    ? <button type="button" className="btn btn-secondary" disabled={!!busy} onClick={handleSubmitForApproval}>Resubmit to SJVN</button>
+                    : <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Your company&apos;s checker sends it to SJVN again.</span>}
+                </>
               )}
-              {!['DRAFT', 'PENDING_L2', 'CANCELLED', 'PAID'].includes(selected.status) && (
-                <button type="button" className="btn btn-danger" onClick={() => setShowDispute(true)}>Raise Dispute</button>
+              {selected.status !== 'CANCELLED' && selected.raised_by_seller !== false && (
+                <button type="button" className="btn btn-secondary" disabled={!!busy} onClick={handleValidate}>Validate vs System</button>
+              )}
+              {/* A dispute is with what SJVN has decided on the bill, so there is
+                  one to raise only once SJVN has approved it. */}
+              {PAYABLE_STATUSES.includes(selected.status) && !selected.is_dispute_credit && Number(selected.total_amount) > 0 && (
+                <button type="button" className="btn btn-danger" onClick={() => { setActionError(''); setShowDispute(true); }}>Raise Dispute</button>
               )}
             </div>
+            )}
 
             {showDispute && (
               <div style={{ marginTop: 16, padding: 16, background: 'var(--bg-main)', borderRadius: 8, border: '1px solid var(--danger)' }}>

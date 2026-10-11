@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcryptjs';
 import { catalogForEntityType, summarizeApprovals } from '../regulatoryApprovals.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -2546,6 +2547,86 @@ try {
 }
 
 /**
+ * Widen users.role to include COMMERCIAL_ADMIN, COMMERCIAL_USER, and COMMERCIAL.
+ * Hydro & Thermal billing is managed by the Commercial desk, separate from REIA.
+ */
+function migrateCommercialRole() {
+  const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get()?.sql;
+  if (!ddl || ddl.includes('COMMERCIAL_USER')) return;
+
+  const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  const rows = db.prepare('SELECT * FROM users').all();
+  db.exec('PRAGMA foreign_keys=OFF');
+  try {
+    db.exec('DROP TABLE IF EXISTS users_role_migration');
+    db.exec(`
+      CREATE TABLE users_role_migration (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN (
+          'IT_SUPER_ADMIN','REIA_ADMIN','TRADING_ADMIN','FINANCE_USER',
+          'MANAGEMENT','SELLER_L1','SELLER_L2','SELLER_L3','BUYER_L1','BUYER_L2','BUYER_L3','COMPLIANCE_AUDITOR',
+          'TRADING_CLIENT','TRADING_CLIENT_MAKER','TRADING_CLIENT_CHECKER',
+          'COMMERCIAL_ADMIN','COMMERCIAL_USER','COMMERCIAL',
+          'SJVN_ADMIN', 'SELLER', 'BUYER', 'REIA_USER', 'TRADING_USER'
+        )),
+        linked_entity_id TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    if (rows.length) {
+      const keep = cols.filter((c) => [
+        'id', 'name', 'email', 'password_hash', 'role', 'linked_entity_id', 'is_active', 'created_at',
+      ].includes(c));
+      const ins = db.prepare(`
+        INSERT INTO users_role_migration (${keep.join(',')}) VALUES (${keep.map(() => '?').join(',')})
+      `);
+      const copy = db.transaction(() => { for (const r of rows) ins.run(...keep.map((c) => r[c])); });
+      copy();
+    }
+    db.exec('DROP TABLE users');
+    db.exec('ALTER TABLE users_role_migration RENAME TO users');
+    console.log(`[MIGRATE] users.role widened for Commercial desk roles (${rows.length} user(s) carried over)`);
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
+function seedCommercialUsers() {
+  try {
+    const existing = db.prepare("SELECT id FROM users WHERE email = 'commercial@sjvn.in'").get();
+    const hash = bcrypt.hashSync('password123', 8);
+    if (!existing) {
+      db.prepare(`
+        INSERT INTO users (id, name, email, password_hash, role, linked_entity_id, is_active)
+        VALUES ('USR-COMMERCIAL-01', 'Anand (Commercial Ops)', 'commercial@sjvn.in', ?, 'COMMERCIAL_USER', NULL, 1)
+      `).run(hash);
+      console.log('[SEED] commercial@sjvn.in seeded');
+    }
+    const adminExisting = db.prepare("SELECT id FROM users WHERE email = 'commercial.admin@sjvn.in'").get();
+    if (!adminExisting) {
+      db.prepare(`
+        INSERT INTO users (id, name, email, password_hash, role, linked_entity_id, is_active)
+        VALUES ('USR-COMMERCIAL-02', 'Sunil (Commercial Admin)', 'commercial.admin@sjvn.in', ?, 'COMMERCIAL_ADMIN', NULL, 1)
+      `).run(hash);
+      console.log('[SEED] commercial.admin@sjvn.in seeded');
+    }
+  } catch (e) {
+    console.error('Failed to seed commercial users:', e.message);
+  }
+}
+
+try {
+  migrateCommercialRole();
+  seedCommercialUsers();
+} catch (e) {
+  console.error('Commercial role migration failed:', e.message);
+}
+
+/**
  * Widen document_versions.verification_status to support DRAFT for Seller Maker/Checker.
  */
 function migrateDocumentVersionsStatus() {
@@ -3140,6 +3221,82 @@ try {
   migrateMailBoxFlags();
 } catch (e) {
   console.error('Mail box-flags migration failed:', e.message);
+}
+
+/**
+ * Billing, after the first end-to-end test of it: how much of a payment went to
+ * surcharge (so a receipt applied surcharge-first can show it did), and what a
+ * seller says its "other adjustment" is for.
+ */
+/**
+ * The hourly sweep raised a fresh statement for every provisional period each
+ * time it ran. Of the open, untouched statements for one contract and period,
+ * the newest is kept; nobody had signed, overridden or disputed the others.
+ */
+function collapseDuplicateReconciliations() {
+  const has = (t) => !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(t);
+  if (!has('reconciliations') || !has('recon_items')) return;
+  const stale = db.prepare(`
+    SELECT r.id FROM reconciliations r
+    WHERE r.status NOT IN ('CLOSED','AGREED','DISPUTED') AND r.sjvn_ack_at IS NULL AND r.counterparty_ack_at IS NULL
+      AND NOT EXISTS (SELECT 1 FROM recon_items i WHERE i.reconciliation_id = r.id AND (i.match_status = 'OVERRIDDEN' OR i.dispute_id IS NOT NULL))
+      AND EXISTS (
+        SELECT 1 FROM reconciliations n
+        WHERE n.scope = r.scope AND n.period = r.period AND n.period_type = r.period_type
+          AND COALESCE(n.contract_id, '') = COALESCE(r.contract_id, '') AND COALESCE(n.trading_client_id, '') = COALESCE(r.trading_client_id, '')
+          AND n.status NOT IN ('CLOSED','AGREED') AND n.rowid > r.rowid
+      )
+  `).all().map((r) => r.id);
+  if (!stale.length) return;
+  const children = ['recon_items', 'recon_events', 'recon_statements', 'recon_exceptions', 'recon_reopen_requests'].filter(has);
+  db.transaction(() => {
+    for (const id of stale) {
+      for (const t of children) db.prepare(`DELETE FROM ${t} WHERE reconciliation_id = ?`).run(id);
+      db.prepare('DELETE FROM reconciliations WHERE id = ?').run(id);
+    }
+  })();
+  console.log(`[MIGRATE] reconciliations: removed ${stale.length} duplicate open statement(s) left by the hourly sweep`);
+}
+
+function migrateBillingQaColumns() {
+  const pay = db.pragma('table_info(payments)').map((c) => c.name);
+  if (pay.length && !pay.includes('lps_component')) db.exec('ALTER TABLE payments ADD COLUMN lps_component REAL');
+  const inv = db.pragma('table_info(invoices)').map((c) => c.name);
+  if (inv.length && !inv.includes('adjustment_remarks')) db.exec('ALTER TABLE invoices ADD COLUMN adjustment_remarks TEXT');
+  if (inv.length && !inv.includes('status_before_dispute')) db.exec('ALTER TABLE invoices ADD COLUMN status_before_dispute TEXT');
+  const apr = db.pragma('table_info(invoice_approvals)').map((c) => c.name);
+  if (apr.length && !apr.includes('approver_id')) db.exec('ALTER TABLE invoice_approvals ADD COLUMN approver_id TEXT');
+  // Why a release was refused — the counterparty was told "rejected" and nothing more.
+  const rel = db.pragma('table_info(security_releases)').map((c) => c.name);
+  if (rel.length && !rel.includes('decision_note')) db.exec('ALTER TABLE security_releases ADD COLUMN decision_note TEXT');
+
+  // The credit bill a resolved dispute raises was the one bill of SJVN's with no
+  // breakdown, and a bill on a PPA without one reads as the seller's own.
+  const disputes = db.pragma('table_info(disputes)').map((c) => c.name);
+  if (inv.length && disputes.includes('supplementary_invoice_id')) {
+    const rows = db.prepare(`
+      SELECT i.id, i.total_amount, i.lps, d.dispute_no, p.invoice_no AS parent_no
+      FROM invoices i JOIN disputes d ON d.supplementary_invoice_id = i.id
+      LEFT JOIN invoices p ON p.id = i.parent_invoice_id
+      WHERE TRIM(COALESCE(i.invoice_breakdown_json, '')) = ''
+    `).all();
+    const set = db.prepare('UPDATE invoices SET invoice_breakdown_json = ? WHERE id = ?');
+    for (const r of rows) {
+      const lps = Number(r.lps) || 0;
+      set.run(JSON.stringify([
+        { code: 'CR', label: `Credit on dispute ${r.dispute_no}${r.parent_no ? ` against ${r.parent_no}` : ''}`, value: (Number(r.total_amount) || 0) - lps },
+        ...(lps ? [{ code: 'LPS', label: 'Late payment surcharge on resolution', value: lps }] : []),
+        { code: 'TOTAL', label: 'Supplementary (credit) total', value: Number(r.total_amount) || 0 },
+      ]), r.id);
+    }
+  }
+}
+
+try {
+  migrateBillingQaColumns();
+  collapseDuplicateReconciliations();
+} catch (e) {
+  console.error('Billing QA columns migration failed:', e.message);
 }
 
 try {

@@ -5,7 +5,8 @@
  * auction summary:
  *
  *   tam-gtam            Billing: day-level TAM/GTAM trades, charges, margins
- *   tam-gtam-slot-wise  Billing: the same trades broken into 15-minute slots
+ *   slot-wise           Billing: every product's trades in 15-minute slots,
+ *                       with the STOA charges broken into their components
  *   format-d            Scheduled transactions with counterparties and volumes
  *   member-dor          Day-wise obligation/charges for the member
  *   reverse-auction     Live L1 summary for reverse auctions (no date range)
@@ -29,7 +30,7 @@
  * CONFIRMED by PXIL (Gaurav Tiwari, reply to A1–A5, Sep 2026):
  *   - The daily report is at /PXILPublish/api/tam-gtam/. Every path ends in a
  *     trailing slash, exactly as the revised documents print it.
- *   - Bearer header on TAM-GTAM, TAM-GTAM slot-wise, Format-D and Trade Margin.
+ *   - Bearer header on TAM-GTAM, slot-wise, Format-D and Trade Margin.
  *     Member DOR and Reverse Auction are still "Version 1" and take the token
  *     only as the APITokenNo query parameter, until PXIL upgrades them. The
  *     revised documents still print "Bearer Token" for those two — the email
@@ -38,10 +39,33 @@
  *     for everything to be done on staging first
  *     (https://stagingmypratyaydashboard.pxil.in, same paths, its own token).
  *     Staging data is stale, so it proves connectivity and shapes, not figures.
+ *
+ * CHANGED by PXIL (Avadheshkumar Bari, 30 Sep 2026): the TAM-GTAM slot-wise
+ * endpoint is discontinued. Its replacement is /slot-wise-quantity-and-charges/,
+ * which covers every product, returns rows under SlotWiseQuantityAndCharges
+ * instead of TAMGTAM, and adds ApprovalNo plus ten components of STOACharges
+ * (application, operating and transmission charges). Existing keys are unchanged.
  *   - Both environments filter by source IP, separately. A caller that is not
  *     whitelisted gets HTTP 403 {"message": "Access denied. Your IP is not
  *     allowed.", "your_ip": ...} — not a 401, so it must not be read as a bad
  *     token.
+ *
+ * SEEN LIVE (first calls PXIL answered, production and staging, 5 Oct 2026):
+ *   - An empty range is HTTP 404 {"message":"No data available","statuscode":404}
+ *     on the four billing reports — not a 200 with no rows. It is an empty
+ *     report and is treated as one; any other 404 is still a failure.
+ *   - A range can be refused for its size (HTTP 400): Member DOR beyond 31
+ *     days, and the billing reports with "Data limit exceeded: Rows are greater
+ *     than or equal to 50,000". A refused range is asked again in pieces.
+ *   - Member DOR and Reverse Auction answer 400 "API Token is mandatory" to a
+ *     Bearer header: the query string really is the only way in.
+ *   - PXIL rations calls. After about sixty requests in the day production
+ *     answered every report with HTTP 429 "Request limit exceeded. Please wait
+ *     for 68472 seconds" — nineteen hours. The limit itself is not documented.
+ *     A 429 is remembered and nothing is sent again until the wait is over.
+ *   - The `timestamp` PXIL stamps on a response is host-local and undeclared:
+ *     for calls seconds apart production said 00:18 and staging 10:48, when
+ *     IST was 10:48. It cannot be used as a clock.
  *
  * UNRESOLVED — see docs/PXIL_API_Clarifications_Email_Draft.md:
  *   1. Member DOR's sample Total exceeds the sum of its own Category by
@@ -136,12 +160,83 @@ export function dayFirstConfirmed(values) {
 /* -------------------------------------------------------------- envelopes */
 
 /**
+ * PXIL's answer for a range with nothing in it, as sent by TAM-GTAM, slot-wise,
+ * Format-D and Trade Margin on 5 Oct 2026:
+ *
+ *   HTTP 404 {"message":"No data available","statuscode":404,"timestamp":"..."}
+ *
+ * The message is matched as well as the code, so a 404 that says anything else
+ * — a mistyped path, a retired endpoint — is never mistaken for a quiet period.
+ */
+export function noDataAvailable(payload) {
+  return !!payload && Number(payload.statuscode) === 404
+    && /no data/i.test(String(payload.message || ''));
+}
+
+/**
+ * A range PXIL will not serve in one call. Two refusals, both HTTP 400, both
+ * seen on 5 Oct 2026:
+ *
+ *   Member DOR       "The difference between From Date and To Date cannot exceed 31 days"
+ *   billing reports  "Data limit exceeded: Rows are greater than or equal to 50,000.
+ *                     Please reduce the date range"
+ *
+ * Returns PXIL's message, or null when the payload is anything else.
+ */
+export function rangeRefused(payload) {
+  const message = String(payload?.message || '');
+  return /cannot exceed \d+ days|data limit exceeded/i.test(message) ? message : null;
+}
+
+/**
+ * PXIL's request limit, as met on production on 5 Oct 2026:
+ *
+ *   HTTP 429 {"message":"Request limit exceeded. Please wait for 68472 seconds and try again."}
+ *
+ * Returns the seconds PXIL said to wait — null when it did not say, as on
+ * Member DOR — or undefined when the response is not a rate limit at all.
+ */
+export function rateLimitWait(status, text) {
+  if (status !== 429) return undefined;
+  const m = String(text || '').match(/wait for (\d+) seconds/i);
+  return m ? Number(m[1]) : null;
+}
+
+/** How long to stay away when PXIL answers 429 without saying for how long. */
+const UNSTATED_WAIT_MS = 15 * 60 * 1000;
+
+// When PXIL will answer again. While this is in the future no request is sent:
+// every one would be refused, and nothing says a refused call is not counted.
+let blockedUntil = 0;
+
+/** The moment PXIL's request limit lifts (epoch ms), or null when we are not shut out. */
+export function pxilBlockedUntil() {
+  return Date.now() < blockedUntil ? blockedUntil : null;
+}
+
+/** Forget a remembered request limit — once PXIL confirms it has been lifted, and in tests. */
+export function clearPxilBlock() {
+  blockedUntil = 0;
+}
+
+const istTime = (ms) => `${new Date(ms).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })} IST`;
+
+function rateLimitError(name) {
+  return Object.assign(
+    new Error(`PXIL ${name}: PXIL's request limit is used up — it will not answer again before ${istTime(blockedUntil)}`),
+    { rateLimited: true },
+  );
+}
+
+/**
  * The three document sets wrap their payload three different ways. Normalise to
  * one shape so callers do not each re-learn the differences.
  *
  * A 200 carrying an empty body is a normal outcome — PXIL has no trades on a
  * non-trading day — so `ok` reflects the status code, and emptiness is left for
- * the caller to read off the payload.
+ * the caller to read off the payload. The billing reports say the same thing a
+ * second way, as a 404 "No data available"; that is `ok` too, with a null body
+ * and `empty` set.
  */
 export function normaliseEnvelope(payload) {
   if (!payload || typeof payload !== 'object') {
@@ -151,8 +246,10 @@ export function normaliseEnvelope(payload) {
   // Reverse auction: flat, no wrapper.
   if (payload.statuscode !== undefined || (payload.data !== undefined && payload.ResponseBody === undefined)) {
     const code = payload.statuscode;
+    const empty = noDataAvailable(payload);
     return {
-      ok: Number(code) === 200,
+      ok: Number(code) === 200 || empty,
+      empty,
       code: code ?? null,
       message: payload.message ?? null,
       body: payload.data ?? null,
@@ -205,7 +302,7 @@ const AUTH_QUERY = 'query';
 function endpointPath(name) {
   switch (name) {
     case 'tam-gtam': return 'tam-gtam';
-    case 'tam-gtam-slot-wise': return 'tam-gtam-slot-wise';
+    case 'slot-wise': return 'slot-wise-quantity-and-charges';
     case 'format-d': return 'format-d';
     case 'member-dor': return 'member-dor';
     case 'reverse-auction': return 'reverse-auction/l1-summary';
@@ -215,6 +312,7 @@ function endpointPath(name) {
 }
 
 async function pxilGet(name, params, authStyle) {
+  if (pxilBlockedUntil()) throw rateLimitError(name);
   const cfg = getPxilConfig();
   const search = new URLSearchParams();
   for (const [k, v] of Object.entries(params || {})) {
@@ -247,6 +345,19 @@ async function pxilGet(name, params, authStyle) {
   if (!resp.ok) {
     const ip = ipNotAllowed(resp.status, text);
     if (ip) throw new Error(`PXIL ${name}: this server's IP (${ip}) is not whitelisted with PXIL`);
+    const wait = rateLimitWait(resp.status, text);
+    if (wait !== undefined) {
+      blockedUntil = Date.now() + (wait === null ? UNSTATED_WAIT_MS : wait * 1000);
+      throw rateLimitError(name);
+    }
+    let body = null;
+    try { body = JSON.parse(text); } catch { /* not JSON — falls through to the error below */ }
+    // An empty range arrives as a 404 with a body; hand it on as the report it is.
+    if (noDataAvailable(body)) return body;
+    // Too large to serve in one call is something the caller can act on.
+    if (rangeRefused(body)) {
+      throw Object.assign(new Error(`PXIL ${name}: ${rangeRefused(body)}`), { rangeRefused: true });
+    }
     // The token may be in the query string; never echo the URL into an error.
     throw new Error(`PXIL ${name} HTTP ${resp.status}: ${text.slice(0, 300)}`);
   }
@@ -279,7 +390,7 @@ async function fetchOrStub(name, params, authStyle, stubFactory) {
   try {
     return { ok: true, mode: 'PXIL', raw: await pxilGet(name, params, authStyle) };
   } catch (err) {
-    return { ok: false, mode: 'PXIL', error: err.message };
+    return { ok: false, mode: 'PXIL', error: err.message, rangeRefused: !!err.rangeRefused };
   }
 }
 
@@ -287,7 +398,132 @@ const dateParams = (fromdate, todate, extra = {}) => ({
   fromdate, todate, reportType: 'JSON', ...extra,
 });
 
+const DAY_MS = 24 * 3600 * 1000;
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+/** Consecutive, non-overlapping [from, to] windows of at most `windowDays` days covering the range. */
+export function splitDateRange(fromdate, todate, windowDays) {
+  const end = Date.parse(`${todate}T00:00:00Z`);
+  const windows = [];
+  for (let start = Date.parse(`${fromdate}T00:00:00Z`); start <= end; start += windowDays * DAY_MS) {
+    windows.push([isoDay(start), isoDay(Math.min(start + (windowDays - 1) * DAY_MS, end))]);
+  }
+  // An unparseable date yields nothing; send it as given and let PXIL refuse it.
+  return windows.length ? windows : [[fromdate, todate]];
+}
+
+/** A range cut into two halves, in date order. */
+export function halveDateRange(fromdate, todate) {
+  const start = Date.parse(`${fromdate}T00:00:00Z`);
+  const days = Math.round((Date.parse(`${todate}T00:00:00Z`) - start) / DAY_MS) + 1;
+  const mid = start + (Math.ceil(days / 2) - 1) * DAY_MS;
+  return [[fromdate, isoDay(mid)], [isoDay(mid + DAY_MS), todate]];
+}
+
+/**
+ * The most calls one report may cost. PXIL shut us out for a day after about
+ * sixty, so a single click on a desk screen must never spend more than a
+ * fraction of that: a range that needs more is the user's to narrow.
+ */
+const MAX_RANGE_CALLS = 12;
+
+/**
+ * A ranged report, in as few calls as PXIL will accept.
+ *
+ * The 50,000-row limit is on rows, not days, so no window can be worked out up
+ * front: a refused range is halved and each half asked again, down to a single
+ * day. Member DOR's limit is on days and known, so it starts in windows of that
+ * size (`windowDays`).
+ *
+ * Resolves to the envelopes in date order. A stub is asked once — the sample
+ * is one fixed shape however wide the range.
+ */
+async function fetchRanged(name, label, fromdate, todate, { extra, authStyle, stub, windowDays } = {}) {
+  const queue = getPxilConfig().live && windowDays
+    ? splitDateRange(fromdate, todate, windowDays)
+    : [[fromdate, todate]];
+  const envelopes = [];
+  let mode;
+  let note;
+  let calls = 0;
+  while (queue.length) {
+    const [from, to] = queue.shift();
+    calls += 1;
+    if (calls > MAX_RANGE_CALLS) {
+      return {
+        ok: false,
+        mode,
+        error: `PXIL ${label}: ${fromdate} to ${todate} needs more than ${MAX_RANGE_CALLS} calls at the size PXIL allows — choose a shorter period`,
+      };
+    }
+    const res = await fetchOrStub(name, dateParams(from, to, extra), authStyle, () => stub(from));
+    if (!res.ok) {
+      if (res.rangeRefused && from < to) {
+        queue.unshift(...halveDateRange(from, to));
+        continue;
+      }
+      // Once the range has been cut up, say which piece failed.
+      const piece = from === fromdate && to === todate ? '' : ` (${from} to ${to})`;
+      return { ok: false, mode: res.mode, error: `${res.error}${piece}` };
+    }
+    const env = normaliseEnvelope(res.raw);
+    if (!env.ok) return { ok: false, mode: res.mode, error: `PXIL ${label}: ${env.code} ${env.message}` };
+    envelopes.push(env);
+    mode = res.mode;
+    note = res.note;
+  }
+  return {
+    ok: true,
+    mode,
+    note,
+    envelopes,
+    // The code of a piece that had something in it, if any did.
+    code: (envelopes.find((e) => !e.empty) || envelopes[envelopes.length - 1]).code,
+    windows: envelopes.length,
+  };
+}
+
+/**
+ * Rows PXIL sent in more than one piece of a cut-up range.
+ *
+ * Nothing says a report cannot return an application whose delivery period
+ * straddles two pieces in both of them, and anyone totalling the table would
+ * then count it twice. So repeats are counted and reported — never dropped,
+ * because which copy is the row is PXIL's to say.
+ */
+function repeatsAcross(batches) {
+  const seen = new Set();
+  let repeated = 0;
+  for (const batch of batches) {
+    const keys = batch.map((row) => JSON.stringify(row));
+    repeated += keys.filter((k) => seen.has(k)).length;
+    for (const k of keys) seen.add(k);
+  }
+  return repeated;
+}
+
 /* -------------------------------------------------------------- TAM-GTAM */
+
+/** The money PXIL attaches to one application, keyed alike in the daily and slot-wise reports. */
+function applicationMoney(app) {
+  return {
+    invoice: num(app.Invoice),
+    stoa_charges: num(app.STOACharges),
+    pxil_fees: num(app.PXILFees),
+    igst: num(app.IGST),
+    sgst: num(app.SGST),
+    cgst: num(app.CGST),
+    ugst: num(app.UGST),
+    total_payin_payout: num(app.TotalPayinPayout),
+    // Spelled "InitialMargin(PostTradeMargin)" in the daily and trade-margin
+    // documents, "InitialMargin(Post-Trade Margin)" in the slot-wise one.
+    initial_margin: num(pick(app, 'InitialMargin(PostTradeMargin)', 'InitialMargin(Post-Trade Margin)')),
+    delivery_margin: num(app.DeliveryMargin),
+    applicable_margin: num(app.ApplicableMargin),
+    balance_margin: num(app.BalanceMargin),
+    margin_release: num(app.MarginRelease),
+  };
+}
 
 /**
  * Day-level TAM/GTAM billing rows, flattened to one row per application.
@@ -319,21 +555,7 @@ export function extractTamGtam(body) {
         price_rs_per_mwh: num(app.PriceRsMWh),
         traded_qty_mwh: num(app.TradedQtyMWh),
         trade_value: num(app.TradeValue),
-        invoice: num(app.Invoice),
-        stoa_charges: num(app.STOACharges),
-        pxil_fees: num(app.PXILFees),
-        igst: num(app.IGST),
-        sgst: num(app.SGST),
-        cgst: num(app.CGST),
-        ugst: num(app.UGST),
-        total_payin_payout: num(app.TotalPayinPayout),
-        // Spelled "InitialMargin(PostTradeMargin)" in the daily and trade-margin
-        // documents, "InitialMargin(Post-Trade Margin)" in the slot-wise one.
-        initial_margin: num(pick(app, 'InitialMargin(PostTradeMargin)', 'InitialMargin(Post-Trade Margin)')),
-        delivery_margin: num(app.DeliveryMargin),
-        applicable_margin: num(app.ApplicableMargin),
-        balance_margin: num(app.BalanceMargin),
-        margin_release: num(app.MarginRelease),
+        ...applicationMoney(app),
       });
     }
   }
@@ -341,30 +563,29 @@ export function extractTamGtam(body) {
 }
 
 export async function fetchTamGtam(fromdate, todate, { portfolioId } = {}) {
-  const cfg = getPxilConfig();
-  const res = await fetchOrStub(
-    'tam-gtam',
-    dateParams(fromdate, todate, { portfolioId: portfolioId ?? cfg.portfolioId }),
-    AUTH_HEADER,
-    () => stubTamGtam(fromdate),
-  );
+  const res = await fetchRanged('tam-gtam', 'TAM-GTAM', fromdate, todate, {
+    extra: { portfolioId: portfolioId ?? getPxilConfig().portfolioId },
+    authStyle: AUTH_HEADER,
+    stub: stubTamGtam,
+  });
   if (!res.ok) return res;
 
-  const env = normaliseEnvelope(res.raw);
-  if (!env.ok) return { ok: false, mode: res.mode, error: `PXIL TAM-GTAM: ${env.code} ${env.message}` };
-
-  const rows = extractTamGtam(env.body);
+  const batches = res.envelopes.map((env) => extractTamGtam(env.body));
   return {
     ok: true,
     mode: res.mode,
-    code: env.code,
-    rows,
-    date_order_confirmed: dayFirstConfirmed((env.body?.TAMGTAM || []).map((e) => e.Date)),
+    code: res.code,
+    rows: batches.flat(),
+    date_order_confirmed: dayFirstConfirmed(
+      res.envelopes.flatMap((env) => (env.body?.TAMGTAM || []).map((e) => e.Date)),
+    ),
+    windows: res.windows,
+    repeated_across_windows: repeatsAcross(batches),
     note: res.note,
   };
 }
 
-/* ---------------------------------------------------- TAM-GTAM slot-wise */
+/* -------------------------------------------------------------- slot-wise */
 
 /**
  * Slot rows, kept exactly as PXIL labels them.
@@ -387,9 +608,49 @@ export function extractSlots(app, key) {
   });
 }
 
-export function extractTamGtamSlotWise(body) {
+/**
+ * The ten components PXIL breaks STOACharges into, in the document's order.
+ * DE is how the document spells it; its expansion is not given.
+ */
+const STOA_COMPONENTS = [
+  ['application_nldc', 'ApplicationNLDCCharges'],
+  ['application_rldc', 'ApplicationRLDCCharges'],
+  ['application_sldc', 'ApplicationSLDCCharges'],
+  ['operating_de', 'OperatingDECharges'],
+  ['operating_nldc', 'OperatingNLDCCharges'],
+  ['operating_rldc', 'OperatingRLDCCharges'],
+  ['operating_sldc', 'OperatingSLDCCharges'],
+  ['transmission_det', 'TransmissionDETCharges'],
+  ['transmission_state', 'TransmissionStateTCharges'],
+  ['transmission_zonal', 'TransmissionZonalTCharges'],
+];
+
+/**
+ * STOACharges against the sum of its own components.
+ *
+ * PXIL describes the new keys as a breakup of STOA charges but does not say
+ * they sum to it, and their DOR sample already has a Total that its parts do
+ * not reach. So the gap is computed and carried, never absorbed. When PXIL
+ * sends none of the keys, `reconciles` is null: no breakup is not a mismatch.
+ */
+export function extractStoaBreakup(app) {
+  const present = STOA_COMPONENTS.some(([, key]) => app[key] !== undefined && app[key] !== null);
+  const components = Object.fromEntries(STOA_COMPONENTS.map(([name, key]) => [name, num(app[key])]));
+  const componentSum = Object.values(components).reduce((a, b) => a + b, 0);
+  // Money: compare in paise, not to a float epsilon.
+  const variance = Math.round((num(app.STOACharges) - componentSum) * 100) / 100;
+  return {
+    present,
+    components,
+    component_sum: Math.round(componentSum * 100) / 100,
+    variance: present ? variance : null,
+    reconciles: present ? Math.abs(variance) < 0.01 : null,
+  };
+}
+
+export function extractSlotWise(body) {
   const rows = [];
-  for (const entity of body?.TAMGTAM || []) {
+  for (const entity of body?.SlotWiseQuantityAndCharges || []) {
     for (const app of entity.Applications || []) {
       const trade = extractSlots(app, 'TradeSlotWiseDetails');
       const scheduled = extractSlots(app, 'ScheduledSlotWiseDetails');
@@ -398,15 +659,22 @@ export function extractTamGtamSlotWise(body) {
         entity_id: entity.EntityId ?? null,
         entity_name: entity.EntityName ?? null,
         application_no: app.ApplicationNo ?? null,
+        approval_no: app.ApprovalNo ?? null,
         portfolio_id: app.PortfolioId ?? null,
+        source_type: app.SourceType ?? null,
+        source: app.Source ?? null,
         side: app.BuySell ?? null,
         product_code: app.ProductCode ?? null,
         delivery_date: parsePxilDate(app.DeliveryDate),
+        price_rs_per_mwh: num(app.PriceRsMWh),
         traded_qty_mwh: num(app.TradedQtyMWh),
+        trade_value: num(app.TradeValue),
         scheduling_requested_invoice_qty_mwh: num(app.SchedulingRequestedInvoiceQtyMWH),
         total_scheduled_accepted_invoice_qty_mwh: num(app.TotalScheduledAcceptedInvoiceQtyMWH),
         real_time_curtailment_mwh: num(app.RealTimeCurtailmentMWH),
         final_scheduled_qty_mwh: num(app.FinalscheduledQtyMWH),
+        ...applicationMoney(app),
+        stoa_breakup: extractStoaBreakup(app),
         trade_slots: trade,
         scheduled_slots: scheduled,
         // See UNRESOLVED #2: the sample's first slot starts at 00:15, so we
@@ -420,20 +688,26 @@ export function extractTamGtamSlotWise(body) {
   return rows;
 }
 
-export async function fetchTamGtamSlotWise(fromdate, todate, { portfolioId } = {}) {
-  const cfg = getPxilConfig();
-  const res = await fetchOrStub(
-    'tam-gtam-slot-wise',
-    dateParams(fromdate, todate, { portfolioId: portfolioId ?? cfg.portfolioId }),
-    AUTH_HEADER,
-    () => stubTamGtamSlotWise(fromdate),
-  );
+export async function fetchSlotWise(fromdate, todate, { portfolioId } = {}) {
+  const res = await fetchRanged('slot-wise', 'slot-wise', fromdate, todate, {
+    extra: { portfolioId: portfolioId ?? getPxilConfig().portfolioId },
+    authStyle: AUTH_HEADER,
+    stub: stubSlotWise,
+  });
   if (!res.ok) return res;
 
-  const env = normaliseEnvelope(res.raw);
-  if (!env.ok) return { ok: false, mode: res.mode, error: `PXIL TAM-GTAM slot-wise: ${env.code} ${env.message}` };
-
-  return { ok: true, mode: res.mode, code: env.code, rows: extractTamGtamSlotWise(env.body), note: res.note };
+  const batches = res.envelopes.map((env) => extractSlotWise(env.body));
+  const rows = batches.flat();
+  return {
+    ok: true,
+    mode: res.mode,
+    code: res.code,
+    rows,
+    stoa_unreconciled_count: rows.filter((r) => r.stoa_breakup.reconciles === false).length,
+    windows: res.windows,
+    repeated_across_windows: repeatsAcross(batches),
+    note: res.note,
+  };
 }
 
 /* --------------------------------------------------------------- Format-D */
@@ -457,27 +731,27 @@ export function extractFormatD(body) {
 }
 
 export async function fetchFormatD(fromdate, todate) {
-  const res = await fetchOrStub(
-    'format-d',
-    dateParams(fromdate, todate),
-    AUTH_HEADER,
-    () => stubFormatD(fromdate),
-  );
+  const res = await fetchRanged('format-d', 'Format-D', fromdate, todate, {
+    authStyle: AUTH_HEADER,
+    stub: stubFormatD,
+  });
   if (!res.ok) return res;
 
-  const env = normaliseEnvelope(res.raw);
-  if (!env.ok) return { ok: false, mode: res.mode, error: `PXIL Format-D: ${env.code} ${env.message}` };
-
-  const rows = extractFormatD(env.body);
-  const declared = env.body?.TotalCount;
+  const batches = res.envelopes.map((env) => extractFormatD(env.body));
+  const rows = batches.flat();
+  // PXIL declares its own count on each call; across a cut-up range they add.
+  const counts = res.envelopes.map((env) => env.body?.TotalCount).filter((c) => c !== undefined && c !== null);
+  const declared = counts.length ? counts.reduce((a, c) => a + Number(c), 0) : null;
   return {
     ok: true,
     mode: res.mode,
-    code: env.code,
+    code: res.code,
     rows,
-    // PXIL declares its own count; a mismatch means we lost rows in paging or parsing.
-    total_count_declared: declared ?? null,
-    total_count_matches: declared === undefined || Number(declared) === rows.length,
+    // A mismatch means we lost rows in paging or parsing.
+    total_count_declared: declared,
+    total_count_matches: declared === null || declared === rows.length,
+    windows: res.windows,
+    repeated_across_windows: repeatsAcross(batches),
     note: res.note,
   };
 }
@@ -524,25 +798,32 @@ export function extractDor(body) {
   });
 }
 
+/**
+ * Member DOR refuses a wide range: HTTP 400 "The difference between From Date
+ * and To Date cannot exceed 31 days" (production and staging, 5 Oct 2026).
+ * Whether that difference counts both end days is not stated, so a window is 31
+ * calendar days inclusive, which is within the limit on either reading.
+ */
+export const DOR_WINDOW_DAYS = 31;
+
 export async function fetchMemberDor(fromdate, todate) {
-  const res = await fetchOrStub(
-    'member-dor',
-    dateParams(fromdate, todate),
-    AUTH_QUERY,
-    () => stubDor(fromdate),
-  );
+  const res = await fetchRanged('member-dor', 'Member DOR', fromdate, todate, {
+    authStyle: AUTH_QUERY,
+    stub: stubDor,
+    windowDays: DOR_WINDOW_DAYS,
+  });
   if (!res.ok) return res;
 
-  const env = normaliseEnvelope(res.raw);
-  if (!env.ok) return { ok: false, mode: res.mode, error: `PXIL Member DOR: ${env.code} ${env.message}` };
-
-  const rows = extractDor(env.body);
+  const batches = res.envelopes.map((env) => extractDor(env.body));
+  const rows = batches.flat();
   const unreconciled = rows.filter((r) => !r.total_reconciles);
   return {
     ok: true,
     mode: res.mode,
-    code: env.code,
+    code: res.code,
     rows,
+    windows: res.windows,
+    repeated_across_windows: repeatsAcross(batches),
     unreconciled_count: unreconciled.length,
     unreconciled: unreconciled.map((r) => ({
       application_no: r.application_no,
@@ -596,8 +877,11 @@ export async function fetchReverseAuctionL1() {
     code: env.code,
     auctions,
     // This endpoint has no date filter, so the snapshot time is the only thing
-    // that positions the data in time. Fall back to our own clock if absent.
-    polled_at: env.timestamp || new Date().toISOString(),
+    // that positions the data in time — and PXIL's `timestamp` cannot supply
+    // it: production and staging stamp the same moment ten and a half hours
+    // apart. Our clock places the snapshot; theirs is carried as sent.
+    polled_at: new Date().toISOString(),
+    pxil_timestamp: env.timestamp ?? null,
     note: res.note,
   };
 }
@@ -731,31 +1015,31 @@ export function extractTradeMargin(body) {
 }
 
 export async function fetchTradeMargin(fromdate, todate, { portfolioId } = {}) {
-  const cfg = getPxilConfig();
-  const res = await fetchOrStub(
-    'trade-margin',
-    dateParams(fromdate, todate, { portfolioId: portfolioId ?? cfg.portfolioId }),
-    AUTH_HEADER,
-    () => stubTradeMargin(fromdate),
-  );
+  const res = await fetchRanged('trade-margin', 'Trade Margin', fromdate, todate, {
+    extra: { portfolioId: portfolioId ?? getPxilConfig().portfolioId },
+    authStyle: AUTH_HEADER,
+    stub: stubTradeMargin,
+  });
   if (!res.ok) return res;
 
-  const env = normaliseEnvelope(res.raw);
-  if (!env.ok) return { ok: false, mode: res.mode, error: `PXIL Trade Margin: ${env.code} ${env.message}` };
-
-  const { entities, rows } = extractTradeMargin(env.body);
+  const parts = res.envelopes.map((env) => extractTradeMargin(env.body));
+  const entities = parts.flatMap((part) => part.entities);
   const badPortfolios = entities.flatMap((e) => e.portfolios.filter((p) => !p.sums_reconcile));
 
   return {
     ok: true,
     mode: res.mode,
-    code: env.code,
+    code: res.code,
     entities,
-    rows,
-    date_order_confirmed: dayFirstConfirmed((env.body?.TradeMargin || []).map((e) => e.TradeDate)),
+    rows: parts.flatMap((part) => part.rows),
+    date_order_confirmed: dayFirstConfirmed(
+      res.envelopes.flatMap((env) => (env.body?.TradeMargin || []).map((e) => e.TradeDate)),
+    ),
     unreconciled_portfolios: badPortfolios.length,
     unreconciled_entities: entities.filter((e) => !e.margins_reconcile).length,
     trade_count_mismatches: entities.filter((e) => !e.trade_count_matches).length,
+    windows: res.windows,
+    repeated_across_windows: repeatsAcross(parts.map((part) => part.rows)),
     note: res.note,
   };
 }
@@ -836,13 +1120,27 @@ export function classifyProbe(result, bodyKey) {
   if (result.status === 401 || result.status === 403) {
     return { verdict: 'AUTH_REJECTED', detail: `HTTP ${result.status}` };
   }
-  if (result.status === 404) return { verdict: 'NOT_FOUND', detail: 'HTTP 404 — wrong path' };
+  if (result.status === 429) {
+    const wait = rateLimitWait(429, JSON.stringify(result.json ?? result.snippet ?? ''));
+    return { verdict: 'RATE_LIMITED', detail: wait ? `HTTP 429 — told to wait ${wait} seconds` : 'HTTP 429 — request limit' };
+  }
+  if (result.status === 404 && !noDataAvailable(result.json)) {
+    return { verdict: 'NOT_FOUND', detail: 'HTTP 404 — wrong path' };
+  }
+  // The Version 1 APIs answer a Bearer header as if no token had been sent.
+  if (result.status === 400 && /token is mandatory/i.test(String(result.json?.message || ''))) {
+    return { verdict: 'AUTH_REJECTED', detail: 'HTTP 400 — token must be in the query string' };
+  }
+  if (result.status === 400 && rangeRefused(result.json)) {
+    return { verdict: 'RANGE_TOO_LONG', detail: rangeRefused(result.json) };
+  }
   if (!result.json) {
     return { verdict: 'NOT_JSON', detail: `HTTP ${result.status}, ${result.content_type || 'no content-type'}` };
   }
 
   const env = normaliseEnvelope(result.json);
   if (!env.ok) return { verdict: 'ERROR_ENVELOPE', detail: `${env.code ?? '?'} ${env.message ?? ''}`.trim() };
+  if (env.empty) return { verdict: 'EMPTY', detail: '404 "No data available" — an empty report', code: env.code };
 
   const body = env.body;
   const rows = bodyKey ? body?.[bodyKey] : body;
@@ -887,6 +1185,32 @@ export function summariseSlotLabelling(rows) {
     full_day: counts.some((n) => n === 95 || n === 96),
     mwh_mismatches: all.filter((s) => !s.mwh_matches_mw).length,
     verdict,
+  };
+}
+
+/**
+ * Whether live slot-wise rows break STOACharges down completely.
+ *
+ * PXIL's sample is all zeroes, so it cannot show whether the ten components
+ * are the whole of STOACharges. Rows with a non-zero STOA are the only ones
+ * that can; `rows_with_stoa` says how many there were.
+ */
+export function summariseStoaBreakup(rows) {
+  const list = (rows || []).filter((r) => r.stoa_breakup?.present);
+  const off = list.filter((r) => !r.stoa_breakup.reconciles);
+  const worst = off.reduce((a, r) => (Math.abs(r.stoa_breakup.variance) > Math.abs(a) ? r.stoa_breakup.variance : a), 0);
+  const withStoa = list.filter((r) => r.stoa_charges !== 0);
+  return {
+    rows: (rows || []).length,
+    rows_with_breakup: list.length,
+    rows_with_stoa: withStoa.length,
+    reconciled: list.length - off.length,
+    unreconciled: off.length,
+    largest_variance: worst,
+    verdict: !(rows || []).length ? 'NO_ROWS'
+      : !list.length ? 'NO_BREAKUP'
+        : off.length ? 'GAP'
+          : withStoa.length ? 'RECONCILES' : 'ALL_ZERO',
   };
 }
 
@@ -984,16 +1308,27 @@ function stubTamGtam(fromdate) {
   };
 }
 
-function stubTamGtamSlotWise(fromdate) {
+function stubSlotWise(fromdate) {
   const base = stubTamGtam(fromdate);
   const app = base.ResponseBody.TAMGTAM[0].Applications[0];
   return {
     ResponseStatus: base.ResponseStatus,
     ResponseBody: {
-      TAMGTAM: [{
+      SlotWiseQuantityAndCharges: [{
         ...base.ResponseBody.TAMGTAM[0],
         Applications: [{
           ...app,
+          ApprovalNo: 'NR/2026/00001/C',
+          ApplicationNLDCCharges: 0.0,
+          ApplicationRLDCCharges: 0.0,
+          ApplicationSLDCCharges: 0.0,
+          OperatingDECharges: 0.0,
+          OperatingNLDCCharges: 0.0,
+          OperatingRLDCCharges: 0.0,
+          OperatingSLDCCharges: 0.0,
+          TransmissionDETCharges: 0.0,
+          TransmissionStateTCharges: 0.0,
+          TransmissionZonalTCharges: 0.0,
           SchedulingRequestedInvoiceQtyMWH: 0.0,
           TotalScheduledAcceptedInvoiceQtyMWH: 0,
           RealTimeCurtailmentMWH: 0,

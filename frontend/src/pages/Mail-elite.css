@@ -31,31 +31,32 @@
 }
 
 .mail-compose-btn {
-  background: linear-gradient(135deg, #0b5fff, #0847c4); /* App's primary blue */
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 55%, #1e3a8a 100%);
   color: white;
-  border: none;
-  border-radius: 12px;
-  padding: 12px;
-  font-size: 15px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 14px;
   font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(11, 95, 255, 0.3);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  margin-bottom: 32px;
+  box-shadow: 0 2px 6px rgba(30, 58, 138, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-bottom: 24px;
 }
 .mail-compose-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(11, 95, 255, 0.4);
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 55%, #1d4ed8 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .mail-nav-title {
   font-size: 12px;
   font-weight: 700;
-  text-transform: uppercase;
+  text-transform: none;
   letter-spacing: 1px;
   color: var(--mail-muted);
   margin-bottom: 12px;

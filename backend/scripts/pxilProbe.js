@@ -67,14 +67,13 @@ const meta = {
   tokenLength: cfg.token.length,
 };
 
-// Both auth styles on every endpoint, so an upgrade on PXIL's side shows up
-// without anyone having to ask.
+// One call per report, in the style PXIL documents for it: PXIL rations calls
+// and shut us out for a day after about sixty.
 const attempts = {};
 for (const ep of buildEndpoints(meta)) {
   attempts[ep.key] = {
-    header: await probeRequest({ path: ep.path, params: ep.params, authStyle: 'header' }),
-    query: await probeRequest({ path: ep.path, params: ep.params, authStyle: 'query' }),
+    [ep.documented]: await probeRequest({ path: ep.path, params: ep.params, authStyle: ep.documented }),
   };
 }
 
-renderProbeReport({ meta, attempts });
+renderProbeReport({ meta, attempts, usage: { calls: Object.keys(attempts).length } });

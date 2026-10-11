@@ -200,12 +200,14 @@ async function resolvePython() {
   );
 }
 
-async function parsePdf(filePath, rpcKey) {
+async function parsePdf(filePath, rpcKey, { mode = null } = {}) {
   const config = RPC_SOURCES[rpcKey];
   const scriptPath = path.join(SCRIPTS_DIR, config.parser_script);
   const py = await resolvePython();
+  // `mode` is one of the parser's own fixed names, never text from a request.
+  const modeArg = mode && /^[a-z_]+$/.test(mode) ? ` --mode ${mode}` : '';
   const { error, stdout, stderr } = await new Promise((resolve) => exec(
-    `${py} "${scriptPath}" "${filePath}"`,
+    `${py} "${scriptPath}" "${filePath}"${modeArg}`,
     { maxBuffer: 16 * 1024 * 1024 },
     (e, out, err) => resolve({ error: e, stdout: out, stderr: err }),
   ));

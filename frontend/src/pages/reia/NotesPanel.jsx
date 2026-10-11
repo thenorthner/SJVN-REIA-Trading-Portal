@@ -112,7 +112,9 @@ export default function NotesPanel({ invoice, user, canWrite, onChanged }) {
               return (
                 <tr key={n.id} style={{ opacity: ['CANCELLED', 'REJECTED'].includes(n.status) ? 0.5 : 1 }}>
                   <td>
-                    <strong>{n.status === 'DRAFT' ? 'Draft' : n.note_no}</strong>
+                    {/* A note has no number until it is issued; one withdrawn or
+                        rejected as a draft never gets one. */}
+                    <strong>{n.status === 'DRAFT' || /^DRAFT-/.test(String(n.note_no || '')) ? 'Draft' : n.note_no}</strong>
                     {n.model === 'LEGACY' && <div className="inline-note">folded into this invoice (before approvals)</div>}
                     {n.supplementary_invoice && (
                       <div className="inline-note">billed as {n.supplementary_invoice.invoice_no}, due {n.supplementary_invoice.due_date}</div>

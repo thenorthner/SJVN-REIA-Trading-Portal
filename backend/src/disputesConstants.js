@@ -66,8 +66,11 @@ export const SLA_RESOLVE_DAYS = 15;
 export const SLA_LONG_PENDING_DAYS = 60;
 
 export function addDaysIso(fromDate, days) {
-  const d = new Date(fromDate);
-  d.setDate(d.getDate() + days);
+  // A bare "YYYY-MM-DD HH:MM:SS" is UTC here. Read as local time it put every
+  // due date five and a half hours early on a server keeping Indian time.
+  const bare = typeof fromDate === 'string' && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(fromDate.trim());
+  const d = new Date(bare ? `${fromDate.trim().replace(' ', 'T')}Z` : fromDate);
+  d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 19).replace('T', ' ');
 }
 

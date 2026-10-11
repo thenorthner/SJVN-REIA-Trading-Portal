@@ -34,9 +34,9 @@ export function useCercMonth() {
 export function PeriodSelect({ data, onChange }) {
   if (!data?.periods?.length) return null;
   return (
-    <label className="report-search">
+    <label className="elite-filter-label" style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
       Report month
-      <select className="input" value={data.period} onChange={(e) => onChange(e.target.value)}>
+      <select className="elite-select" value={data.period} onChange={(e) => onChange(e.target.value)}>
         {data.periods.map((p) => <option key={p} value={p}>{periodLabel(p)}</option>)}
       </select>
     </label>

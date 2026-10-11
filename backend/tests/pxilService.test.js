@@ -1,15 +1,24 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   parsePxilDate, parsePxilTimestamp, dayFirstConfirmed, normaliseEnvelope, pick,
-  extractTamGtam, extractTamGtamSlotWise, extractSlots, extractFormatD,
+  extractTamGtam, extractSlotWise, extractSlots, extractStoaBreakup, extractFormatD,
   extractDor, extractReverseAuction,
-  fetchTamGtam, fetchTamGtamSlotWise, fetchFormatD, fetchMemberDor, fetchReverseAuctionL1,
+  fetchTamGtam, fetchSlotWise, fetchFormatD, fetchMemberDor, fetchReverseAuctionL1,
   getPxilConfig,
   extractTradeMargin,
   fetchTradeMargin,
   classifyProbe,
   ipNotAllowed,
+  noDataAvailable,
+  rangeRefused,
+  rateLimitWait,
+  pxilBlockedUntil,
+  clearPxilBlock,
+  splitDateRange,
+  halveDateRange,
+  DOR_WINDOW_DAYS,
   summariseSlotLabelling,
+  summariseStoaBreakup,
   summariseDorReconciliation,
   summariseFormatDFields,
 } from '../src/services/pxilService.js';
@@ -88,6 +97,29 @@ describe('envelope normalisation', () => {
     expect(normaliseEnvelope({ ResponseStatus: { Code: 'CNSAPI-401' } }).ok).toBe(false);
     expect(normaliseEnvelope({ statuscode: 500, message: 'boom' }).ok).toBe(false);
     expect(normaliseEnvelope(null).ok).toBe(false);
+  });
+
+  // Verbatim from production and staging, 5 Oct 2026, on all four billing reports.
+  const NO_DATA = { message: 'No data available', statuscode: 404, timestamp: '05-10-2026 00:18:13' };
+
+  it('reads a 404 "No data available" as an empty report, not a failure', () => {
+    const env = normaliseEnvelope(NO_DATA);
+    expect(env.ok).toBe(true);
+    expect(env.empty).toBe(true);
+    expect(env.code).toBe(404);
+    expect(extractTamGtam(env.body)).toEqual([]);
+    expect(extractSlotWise(env.body)).toEqual([]);
+    expect(extractFormatD(env.body)).toEqual([]);
+    expect(extractTradeMargin(env.body).rows).toEqual([]);
+  });
+
+  it('does not take any other 404 for an empty report', () => {
+    // A mistyped path must stay a failure, or a typo would read as a quiet month.
+    expect(noDataAvailable({ message: 'Not Found', statuscode: 404 })).toBe(false);
+    expect(noDataAvailable({ detail: 'Not found.' })).toBe(false);
+    expect(noDataAvailable({ message: 'No data available', statuscode: 200 })).toBe(false);
+    expect(noDataAvailable(null)).toBe(false);
+    expect(normaliseEnvelope({ message: 'Not Found', statuscode: 404 }).ok).toBe(false);
   });
 
   it('an empty body on a 200 is success, not an error', () => {
@@ -178,8 +210,8 @@ describe('slot-wise extraction', () => {
   });
 
   it('reports slot counts instead of assuming a 96-block day', () => {
-    const rows = extractTamGtamSlotWise({
-      TAMGTAM: [{
+    const rows = extractSlotWise({
+      SlotWiseQuantityAndCharges: [{
         Date: '06-11-2025',
         Applications: [{
           ApplicationNo: 'A1',
@@ -196,6 +228,61 @@ describe('slot-wise extraction', () => {
     expect(rows[0].slot_mwh_mismatches).toBe(1);
     // Times are echoed exactly as labelled — no renumbering onto a block index.
     expect(rows[0].trade_slots[0].from_time).toBe('00:15');
+  });
+
+  it('reads rows only from the renamed body key', () => {
+    // PXIL discontinued the TAM-GTAM slot-wise endpoint on 30 Sep 2026; its
+    // replacement answers under SlotWiseQuantityAndCharges.
+    const app = { ApplicationNo: 'A1', ApprovalNo: 'NR/2026/00001/C' };
+    expect(extractSlotWise({ TAMGTAM: [{ Applications: [app] }] })).toEqual([]);
+    const [row] = extractSlotWise({ SlotWiseQuantityAndCharges: [{ Applications: [app] }] });
+    expect(row.approval_no).toBe('NR/2026/00001/C');
+  });
+});
+
+describe('STOA breakup', () => {
+  const parts = {
+    ApplicationNLDCCharges: 100, ApplicationRLDCCharges: 200, ApplicationSLDCCharges: 300,
+    OperatingDECharges: 10, OperatingNLDCCharges: 20, OperatingRLDCCharges: 30, OperatingSLDCCharges: 40,
+    TransmissionDETCharges: 1000, TransmissionStateTCharges: 2000, TransmissionZonalTCharges: 3000.55,
+  };
+
+  it('reconciles when the ten components are the whole of STOA', () => {
+    const b = extractStoaBreakup({ STOACharges: 6700.55, ...parts });
+    expect(b.component_sum).toBe(6700.55);
+    expect(b.components.transmission_zonal).toBe(3000.55);
+    expect(b.reconciles).toBe(true);
+  });
+
+  it('carries a gap to the paisa instead of absorbing it', () => {
+    const b = extractStoaBreakup({ STOACharges: 7000, ...parts });
+    expect(b.reconciles).toBe(false);
+    expect(b.variance).toBe(299.45);
+  });
+
+  it('does not call a missing breakup a mismatch', () => {
+    const b = extractStoaBreakup({ STOACharges: 500 });
+    expect(b.present).toBe(false);
+    expect(b.reconciles).toBeNull();
+    expect(b.variance).toBeNull();
+  });
+
+  it('puts the breakup and the money on each slot-wise row', () => {
+    const [row] = extractSlotWise({
+      SlotWiseQuantityAndCharges: [{ Applications: [{ ApplicationNo: 'A1', STOACharges: 7000, PXILFees: 12, ...parts }] }],
+    });
+    expect(row.stoa_charges).toBe(7000);
+    expect(row.pxil_fees).toBe(12);
+    expect(row.stoa_breakup.reconciles).toBe(false);
+  });
+
+  it('says when every row had zero STOA and nothing was tested', () => {
+    const zero = extractSlotWise({ SlotWiseQuantityAndCharges: [{ Applications: [{ STOACharges: 0, ApplicationNLDCCharges: 0 }] }] });
+    expect(summariseStoaBreakup(zero).verdict).toBe('ALL_ZERO');
+    // No rows at all is a quiet range, not a sign the old endpoint was called.
+    expect(summariseStoaBreakup([]).verdict).toBe('NO_ROWS');
+    const off = extractSlotWise({ SlotWiseQuantityAndCharges: [{ Applications: [{ STOACharges: 7000, ...parts }] }] });
+    expect(summariseStoaBreakup(off)).toMatchObject({ verdict: 'GAP', unreconciled: 1, largest_variance: 299.45 });
   });
 });
 
@@ -271,6 +358,24 @@ describe('Member DOR reconciliation', () => {
     expect(row.total_reconciles).toBe(true);
   });
 
+  it('splits a wide range into windows PXIL will accept', () => {
+    // "The difference between From Date and To Date cannot exceed 31 days."
+    const windows = splitDateRange('2026-08-01', '2026-09-29', DOR_WINDOW_DAYS);
+    expect(windows).toEqual([['2026-08-01', '2026-08-31'], ['2026-09-01', '2026-09-29']]);
+    // Consecutive and non-overlapping, so no day is asked for twice or skipped.
+    expect(splitDateRange('2026-01-01', '2026-03-10', 31)).toEqual([
+      ['2026-01-01', '2026-01-31'], ['2026-02-01', '2026-03-03'], ['2026-03-04', '2026-03-10'],
+    ]);
+    expect(splitDateRange('2026-09-29', '2026-09-29', 31)).toEqual([['2026-09-29', '2026-09-29']]);
+    expect(splitDateRange('2026-09-01', '2026-10-01', 31)).toEqual([['2026-09-01', '2026-10-01']]);
+  });
+
+  it('halves a range without losing or repeating a day', () => {
+    expect(halveDateRange('2026-04-01', '2026-04-30')).toEqual([['2026-04-01', '2026-04-15'], ['2026-04-16', '2026-04-30']]);
+    expect(halveDateRange('2026-04-01', '2026-04-03')).toEqual([['2026-04-01', '2026-04-02'], ['2026-04-03', '2026-04-03']]);
+    expect(halveDateRange('2026-04-01', '2026-04-02')).toEqual([['2026-04-01', '2026-04-01'], ['2026-04-02', '2026-04-02']]);
+  });
+
   it('surfaces unreconciled rows separately on the fetch result', async () => {
     // Stub mode replays the document sample, so the mismatch must show up here.
     const res = await fetchMemberDor('2026-01-11', '2026-01-12');
@@ -321,7 +426,7 @@ describe('stub mode', () => {
   it('returns the documented shape for every endpoint without a token', async () => {
     const results = await Promise.all([
       fetchTamGtam('2026-01-11', '2026-01-12'),
-      fetchTamGtamSlotWise('2026-01-11', '2026-01-12'),
+      fetchSlotWise('2026-01-11', '2026-01-12'),
       fetchFormatD('2026-01-11', '2026-01-12'),
       fetchMemberDor('2026-01-11', '2026-01-12'),
       fetchReverseAuctionL1(),
@@ -343,9 +448,12 @@ describe('stub mode', () => {
   });
 
   it('reads the hyphenated margin spelling in the slot-wise stub', async () => {
-    const res = await fetchTamGtamSlotWise('2026-01-11', '2026-01-12');
+    const res = await fetchSlotWise('2026-01-11', '2026-01-12');
     expect(res.rows[0].trade_slot_count).toBe(1);
     expect(res.rows[0].trade_slots[0].from_time).toBe('00:15');
+    // The document's sample is all zeroes, so its breakup trivially balances.
+    expect(res.rows[0].stoa_breakup.present).toBe(true);
+    expect(res.stoa_unreconciled_count).toBe(0);
   });
 
   it('checks Format-D against the count PXIL declares', async () => {
@@ -354,10 +462,246 @@ describe('stub mode', () => {
     expect(res.total_count_matches).toBe(true);
   });
 
-  it('stamps a poll time on the reverse auction, which has no date range', async () => {
+  it('stamps a poll time on the reverse auction from our clock, not PXIL\'s', async () => {
+    // Production and staging stamped the same moment 10h30m apart on 5 Oct 2026,
+    // so PXIL's timestamp is carried as sent and never used to place the snapshot.
+    const before = Date.now();
     const res = await fetchReverseAuctionL1();
-    expect(res.polled_at).toBe('2026-01-13T12:54:07');
+    expect(Date.parse(res.polled_at)).toBeGreaterThanOrEqual(before);
+    expect(res.pxil_timestamp).toBe('2026-01-13T12:54:07');
     expect(res.auctions).toHaveLength(1);
+  });
+});
+
+describe('live calls, as PXIL answered on 5 Oct 2026', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    clearPxilBlock();
+  });
+
+  const live = (handler) => {
+    vi.stubEnv('PXIL_ENABLED', 'true');
+    vi.stubEnv('PXIL_API_TOKEN', 'test-token');
+    vi.stubEnv('PXIL_BASE_URL', 'https://pxil.test');
+    const calls = [];
+    vi.stubGlobal('fetch', async (url, init) => {
+      const u = new URL(url);
+      calls.push({ path: u.pathname, params: Object.fromEntries(u.searchParams), headers: init.headers });
+      const { status, body } = handler(u);
+      return { ok: status >= 200 && status < 300, status, text: async () => JSON.stringify(body) };
+    });
+    return calls;
+  };
+
+  const noData = { status: 404, body: { message: 'No data available', statuscode: 404, timestamp: '05-10-2026 00:18:13' } };
+
+  it('returns an empty report for each billing API instead of an error', async () => {
+    const calls = live(() => noData);
+    const results = await Promise.all([
+      fetchTamGtam('2026-08-01', '2026-09-29'),
+      fetchSlotWise('2026-08-01', '2026-09-29'),
+      fetchFormatD('2026-08-01', '2026-09-29'),
+      fetchTradeMargin('2026-08-01', '2026-09-29'),
+    ]);
+    for (const res of results) {
+      expect(res.ok).toBe(true);
+      expect(res.mode).toBe('PXIL');
+      expect(res.code).toBe(404);
+      expect(res.rows).toEqual([]);
+    }
+    expect(calls.map((c) => c.path)).toContain('/PXILPublish/api/slot-wise-quantity-and-charges/');
+    expect(calls.every((c) => c.headers.Authorization === 'Bearer test-token')).toBe(true);
+  });
+
+  it('still fails on a 404 that is not an empty report', async () => {
+    live(() => ({ status: 404, body: { detail: 'Not found.' } }));
+    const res = await fetchTamGtam('2026-08-01', '2026-09-29');
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/HTTP 404/);
+  });
+
+  it('fetches Member DOR in 31-day windows and joins the rows', async () => {
+    const row = (day) => ({
+      ApplicationNo: `A-${day}`, BuySell: 'B', delivery_date_from: day, delivery_date_to: day,
+      Category: { Charges: 0, Fees: 10, IGST: 0, CGST: 0, SGST: 0, CP: 90 }, Total: 100,
+    });
+    const calls = live((u) => {
+      // PXIL's own rule, so a call wider than a window fails the test the way it failed live.
+      const span = (Date.parse(u.searchParams.get('todate')) - Date.parse(u.searchParams.get('fromdate'))) / 86400000;
+      if (span > 31) return { status: 400, body: { message: 'Validation error - The difference between From Date and To Date cannot exceed 31 days', statuscode: 400 } };
+      return u.searchParams.get('fromdate') === '2026-08-01'
+        ? { status: 200, body: { ResponseBody: { DOR: [row('2026-08-15')] }, ResponseStatus: { StatusCode: '200', StatusMessage: 'Success' } } }
+        : noData;
+    });
+    const res = await fetchMemberDor('2026-08-01', '2026-09-29');
+    expect(res.ok).toBe(true);
+    expect(calls.map((c) => [c.params.fromdate, c.params.todate])).toEqual([
+      ['2026-08-01', '2026-08-31'], ['2026-09-01', '2026-09-29'],
+    ]);
+    // Version 1 API: the token travels in the query string, never the header.
+    expect(calls.every((c) => c.params.APITokenNo === 'test-token' && !c.headers.Authorization)).toBe(true);
+    expect(res.windows).toBe(2);
+    expect(res.rows.map((r) => r.application_no)).toEqual(['A-2026-08-15']);
+    expect(res.code).toBe('200');
+    expect(res.repeated_across_windows).toBe(0);
+  });
+
+  it('counts a DOR row PXIL sends in two windows, without dropping it', async () => {
+    const same = {
+      ApplicationNo: 'A-1', BuySell: 'B', delivery_date_from: '2026-08-25', delivery_date_to: '2026-09-05',
+      Category: { Charges: 0, Fees: 10, IGST: 0, CGST: 0, SGST: 0, CP: 90 }, Total: 100,
+    };
+    live(() => ({ status: 200, body: { ResponseBody: { DOR: [same] }, ResponseStatus: { StatusCode: '200' } } }));
+    const res = await fetchMemberDor('2026-08-01', '2026-09-29');
+    expect(res.rows).toHaveLength(2);
+    expect(res.repeated_across_windows).toBe(1);
+  });
+
+  it('names the window when one of several fails', async () => {
+    live((u) => (u.searchParams.get('fromdate') === '2026-09-01'
+      ? { status: 500, body: { message: 'boom' } }
+      : noData));
+    const res = await fetchMemberDor('2026-08-01', '2026-09-29');
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('(2026-09-01 to 2026-09-29)');
+  });
+
+  // Production, 5 Oct 2026, for 1 Apr → 5 Oct and for all of FY 2025-26, on all four billing reports.
+  const TOO_MANY = 'Data limit exceeded: Rows are greater than or equal to 50,000. Please reduce the date range';
+
+  it('recognises both ways PXIL refuses a range for its size', () => {
+    expect(rangeRefused({ message: TOO_MANY, statuscode: 400 })).toBe(TOO_MANY);
+    expect(rangeRefused({ message: 'Validation error - The difference between From Date and To Date cannot exceed 31 days' })).toMatch(/31 days/);
+    expect(rangeRefused({ message: 'Validation error - API Token is mandatory.' })).toBeNull();
+    expect(rangeRefused(null)).toBeNull();
+  });
+
+  /** A PXIL that serves at most `maxDays` per call, with one trade on `tradeDay`. */
+  const limited = (maxDays, tradeDay) => (u) => {
+    const [from, to] = [u.searchParams.get('fromdate'), u.searchParams.get('todate')];
+    if ((Date.parse(to) - Date.parse(from)) / 86400000 + 1 > maxDays) {
+      return { status: 400, body: { message: TOO_MANY, statuscode: 400 } };
+    }
+    if (!(from <= tradeDay && tradeDay <= to)) return noData;
+    return {
+      status: 200,
+      body: {
+        ResponseStatus: { Code: 'CNSAPI-200', Message: 'Success' },
+        ResponseBody: { TAMGTAM: [{ Date: '15-06-2026', EntityId: 'P1', Applications: [{ ApplicationNo: 'A1', TradedQtyMWh: 24 }] }] },
+      },
+    };
+  };
+
+  it('narrows a range PXIL refuses for size until every piece is answered', async () => {
+    const calls = live(limited(50, '2026-06-15'));
+    const res = await fetchTamGtam('2026-04-01', '2026-10-05');
+    expect(res.ok).toBe(true);
+    expect(res.rows.map((r) => r.application_no)).toEqual(['A1']);
+    expect(res.code).toBe('CNSAPI-200');
+    // 15 June can only be a day, and it was found in a piece, not the whole range.
+    expect(res.date_order_confirmed).toBe(true);
+    expect(res.windows).toBeGreaterThan(1);
+
+    // The pieces PXIL answered tile the range exactly: in order, no gap, no overlap.
+    const answered = calls
+      .map((c) => [c.params.fromdate, c.params.todate])
+      .filter(([f, t]) => (Date.parse(t) - Date.parse(f)) / 86400000 + 1 <= 50);
+    expect(answered).toHaveLength(res.windows);
+    expect(answered[0][0]).toBe('2026-04-01');
+    expect(answered[answered.length - 1][1]).toBe('2026-10-05');
+    for (let i = 1; i < answered.length; i += 1) {
+      expect(Date.parse(answered[i][0]) - Date.parse(answered[i - 1][1])).toBe(86400000);
+    }
+  });
+
+  it('gives up plainly when PXIL refuses even a single day', async () => {
+    live(() => ({ status: 400, body: { message: TOO_MANY, statuscode: 400 } }));
+    const res = await fetchSlotWise('2026-09-01', '2026-09-02');
+    expect(res.ok).toBe(false);
+    expect(res.error).toContain('Data limit exceeded');
+    expect(res.error).toContain('(2026-09-01 to 2026-09-01)');
+  });
+
+  it('adds up the counts PXIL declares on each piece of a Format-D range', async () => {
+    live((u) => {
+      const [from, to] = [u.searchParams.get('fromdate'), u.searchParams.get('todate')];
+      if ((Date.parse(to) - Date.parse(from)) / 86400000 + 1 > 31) return { status: 400, body: { message: TOO_MANY, statuscode: 400 } };
+      return { status: 200, body: { ResponseStatus: { Code: 'CNSAPI-200' }, ResponseBody: { TotalCount: 1, Trades: [{ ApplicationNo: `F-${from}` }] } } };
+    });
+    const res = await fetchFormatD('2026-08-01', '2026-09-29');
+    expect(res.rows).toHaveLength(2);
+    expect(res.total_count_declared).toBe(2);
+    expect(res.total_count_matches).toBe(true);
+    expect(res.repeated_across_windows).toBe(0);
+  });
+
+  it('stops rather than hammer PXIL when a range would need too many calls', async () => {
+    const calls = live(limited(1, '2026-01-01'));
+    const res = await fetchTamGtam('2025-04-01', '2026-03-31');
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/choose a shorter period/);
+    // PXIL shut us out for a day after about sixty calls; one click may not spend that.
+    expect(calls.length).toBeLessThanOrEqual(12);
+  });
+
+  // Production, 5 Oct 2026, after roughly sixty calls in the day — on every report at once.
+  const LIMIT = { status: 429, body: { message: 'Request limit exceeded. Please wait for 68472 seconds and try again.', statuscode: 429 } };
+
+  it('reads how long PXIL says to wait, when it says', () => {
+    expect(rateLimitWait(429, JSON.stringify(LIMIT.body))).toBe(68472);
+    // Member DOR answered a bare 429 with no message.
+    expect(rateLimitWait(429, '')).toBeNull();
+    expect(rateLimitWait(404, 'wait for 5 seconds')).toBeUndefined();
+  });
+
+  it('stops calling PXIL once it says the request limit is used up', async () => {
+    vi.useFakeTimers({ now: new Date('2026-10-05T10:18:25Z') });
+    const calls = live(() => LIMIT);
+
+    const first = await fetchTamGtam('2026-09-01', '2026-09-30');
+    expect(first.ok).toBe(false);
+    expect(first.error).toMatch(/request limit is used up/);
+    // 68472 seconds after 15:48 IST is 10:49 IST the next morning.
+    expect(first.error).toContain('6 Oct 2026');
+    expect(first.error).toMatch(/10:49/);
+    expect(calls).toHaveLength(1);
+
+    // Every report is shut out together, and none of them is asked again.
+    for (const again of [await fetchSlotWise('2026-09-01', '2026-09-30'), await fetchMemberDor('2026-08-01', '2026-09-30'), await fetchReverseAuctionL1()]) {
+      expect(again.ok).toBe(false);
+      expect(again.error).toMatch(/request limit is used up/);
+    }
+    expect(calls).toHaveLength(1);
+    expect(new Date(pxilBlockedUntil()).toISOString()).toBe('2026-10-06T05:19:37.000Z');
+
+    // Once the wait is over, calls go out again.
+    vi.setSystemTime(new Date('2026-10-06T05:20:00Z'));
+    expect(pxilBlockedUntil()).toBeNull();
+    await fetchTamGtam('2026-09-01', '2026-09-30');
+    expect(calls).toHaveLength(2);
+  });
+
+  it('does not keep halving a range into a request limit', async () => {
+    let n = 0;
+    const calls = live((u) => {
+      n += 1;
+      if (n > 3) return LIMIT;
+      return { status: 400, body: { message: TOO_MANY, statuscode: 400 } };
+    });
+    const res = await fetchTamGtam('2026-04-01', '2026-10-05');
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/request limit is used up/);
+    expect(calls).toHaveLength(4);
+  });
+
+  it('reads an idle reverse auction as no auctions', async () => {
+    live(() => ({ status: 200, body: { message: 'Auction data not found', statuscode: 200, data: [], error: '', timestamp: '05-10-2026 00:18:14' } }));
+    const res = await fetchReverseAuctionL1();
+    expect(res.ok).toBe(true);
+    expect(res.auctions).toEqual([]);
+    expect(res.pxil_timestamp).toBe('2026-10-05T00:18:14');
   });
 });
 
@@ -492,6 +836,32 @@ describe('probe classification', () => {
     expect(c.verdict).toBe('IP_NOT_WHITELISTED');
     expect(c.detail).toContain('203.0.113.7');
     expect(classifyProbe({ status: 403 }).verdict).toBe('AUTH_REJECTED');
+  });
+
+  // All three verbatim from the first calls PXIL answered, 5 Oct 2026.
+  it('reads PXIL\'s 404 "No data available" as EMPTY, and its two 400s for what they are', () => {
+    const noData = { message: 'No data available', statuscode: 404, timestamp: '05-10-2026 00:18:13' };
+    const c = classifyProbe({ status: 404, json: noData }, 'TAMGTAM');
+    expect(c.verdict).toBe('EMPTY');
+    expect(c.detail).toContain('No data available');
+
+    const noToken = { message: 'Validation error - API Token is mandatory.', statuscode: 400 };
+    expect(classifyProbe({ status: 400, json: noToken }, 'DOR').verdict).toBe('AUTH_REJECTED');
+
+    const tooLong = { message: 'Validation error - The difference between From Date and To Date cannot exceed 31 days', statuscode: 400 };
+    expect(classifyProbe({ status: 400, json: tooLong }, 'DOR').verdict).toBe('RANGE_TOO_LONG');
+
+    const tooMany = { message: 'Data limit exceeded: Rows are greater than or equal to 50,000. Please reduce the date range', statuscode: 400 };
+    expect(classifyProbe({ status: 400, json: tooMany }, 'TAMGTAM').verdict).toBe('RANGE_TOO_LONG');
+
+    const limit = { message: 'Request limit exceeded. Please wait for 68472 seconds and try again.', statuscode: 429 };
+    const limited = classifyProbe({ status: 429, json: limit }, 'TAMGTAM');
+    expect(limited.verdict).toBe('RATE_LIMITED');
+    expect(limited.detail).toContain('68472');
+    expect(classifyProbe({ status: 429, json: null, snippet: '' }, 'DOR').verdict).toBe('RATE_LIMITED');
+
+    const idle = { message: 'Auction data not found', statuscode: 200, data: [], error: '' };
+    expect(classifyProbe({ status: 200, json: idle }, null).verdict).toBe('EMPTY');
   });
 
   // A 200 with no rows is a non-trading day, not a failure. Collapsing the two

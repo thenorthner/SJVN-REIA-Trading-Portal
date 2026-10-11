@@ -22,6 +22,22 @@
  * and analysing many times matters here because a server session has to be
  * arranged, while a corrected analysis should not have to be.
  *
+ * PXIL RATIONS CALLS. On 5 Oct 2026, after about sixty requests in the day,
+ * production answered every report with HTTP 429 "Request limit exceeded.
+ * Please wait for 68472 seconds" — nineteen hours. So this tool is frugal by
+ * default and stops dead at the first 429:
+ *
+ *   - one call per report, with the auth style PXIL documents for it (6 calls)
+ *   - never more than --budget calls in a run (default 20)
+ *   - nothing is retried, and nothing more is sent once PXIL says to wait
+ *
+ * PXIL also refuses a range it finds too large — "Data limit exceeded: Rows
+ * are greater than or equal to 50,000" on the billing reports (188 days was
+ * refused, 60 answered), more than 31 days on Member DOR. Each report is
+ * therefore asked only for the end of the range, in a window PXIL accepts.
+ * --scan walks further back, one window per report at a time, until rows turn
+ * up or the budget runs out.
+ *
  * The token is never printed and never written to the capture: under query auth
  * a URL contains the credential, so no URL is recorded either — only the path
  * and the non-secret parameters. A fingerprint (first 8 hex of its SHA-256) is
@@ -42,6 +58,11 @@
  *   --out=<path>        where to write the capture
  *   --no-ip             skip the outbound-IP echo (one call to ifconfig.me)
  *   --timeout=<ms>      per-request timeout, default 30000
+ *   --budget=<n>        most calls to PXIL in this run, default 20
+ *   --scan[=a,b]        walk back through the range looking for rows — every
+ *                       ranged report, or only the ones named (e.g. tam-gtam)
+ *   --both-auth         try header and query auth on every report (doubles the calls)
+ *   --control           also call a path that does not exist (one call)
  */
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -57,20 +78,32 @@ const PRODUCTION = 'https://dashboard.pxil.in';
  *
  * `documented` is the auth style PXIL's reply specifies, not a preference:
  * Member DOR and Reverse Auction are still Version 1 and take the token only
- * as APITokenNo in the query string. Both styles are tried on every endpoint
- * regardless, so the day PXIL upgrades those two the capture shows it.
+ * as APITokenNo in the query string (a Bearer header gets 400 "API Token is
+ * mandatory"). Only that style is tried unless --both-auth asks for both.
+ *
+ * `maxDays` is the widest range asked for in one call. For Member DOR it is
+ * PXIL's own rule (400 beyond 31 days). For the billing reports it is what
+ * PXIL has been seen to answer: 60 days went through, 188 came back "Data
+ * limit exceeded".
  *
  * backend/tests/pxilProbeReport.test.js pins this list against the backend's
  * own buildEndpoints(), so the two copies cannot drift apart unnoticed.
  */
 export const ENDPOINT_SPECS = [
-  { key: 'tam-gtam', path: 'tam-gtam', ranged: true, bodyKey: 'TAMGTAM', documented: 'header' },
-  { key: 'tam-gtam-slot-wise', path: 'tam-gtam-slot-wise', ranged: true, bodyKey: 'TAMGTAM', documented: 'header' },
-  { key: 'format-d', path: 'format-d', ranged: true, bodyKey: 'Trades', documented: 'header' },
-  { key: 'trade-margin', path: 'trade-margin', ranged: true, bodyKey: 'TradeMargin', documented: 'header' },
-  { key: 'member-dor', path: 'member-dor', ranged: true, bodyKey: 'DOR', documented: 'query' },
+  { key: 'tam-gtam', path: 'tam-gtam', ranged: true, bodyKey: 'TAMGTAM', documented: 'header', maxDays: 60 },
+  { key: 'slot-wise', path: 'slot-wise-quantity-and-charges', ranged: true, bodyKey: 'SlotWiseQuantityAndCharges', documented: 'header', maxDays: 60 },
+  { key: 'format-d', path: 'format-d', ranged: true, bodyKey: 'Trades', documented: 'header', maxDays: 60 },
+  { key: 'trade-margin', path: 'trade-margin', ranged: true, bodyKey: 'TradeMargin', documented: 'header', maxDays: 60 },
+  { key: 'member-dor', path: 'member-dor', ranged: true, bodyKey: 'DOR', documented: 'query', maxDays: 31 },
   { key: 'reverse-auction', path: 'reverse-auction/l1-summary', ranged: false, bodyKey: null, documented: 'query' },
 ];
+
+/**
+ * A path that cannot exist. What PXIL answers here is what a wrong path looks
+ * like — the only way to know that the billing reports' 404 "No data
+ * available" means an empty range and not a missing endpoint.
+ */
+const CONTROL_PATH = 'sjvn-probe-no-such-report';
 
 /* ------------------------------------------------------------- arguments */
 
@@ -175,6 +208,69 @@ function defaultRange() {
   return [from.toISOString().slice(0, 10), to.toISOString().slice(0, 10)];
 }
 
+const DAY_MS = 24 * 3600 * 1000;
+const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
+
+/** Calls to PXIL in one run unless --budget says otherwise. PXIL shut us out after about sixty in a day. */
+const DEFAULT_BUDGET = 20;
+
+/**
+ * PXIL's request limit: HTTP 429 "Request limit exceeded. Please wait for N
+ * seconds and try again." Returns N (null when PXIL does not say), or
+ * undefined when the response is not a rate limit.
+ */
+function waitSeconds(result) {
+  if (result?.status !== 429) return undefined;
+  const m = String(result.json?.message || result.snippet || '').match(/wait for (\d+) seconds/i);
+  return m ? Number(m[1]) : null;
+}
+
+/** PXIL's refusal of a range for its size — too many days, or too many rows. */
+function rangeRefused(json) {
+  const message = String(json?.message || '');
+  return /cannot exceed \d+ days|data limit exceeded/i.test(message) ? message : null;
+}
+
+/** An answer that says "nothing here": a 200 with no rows, or PXIL's 404 "No data available". */
+function answeredEmpty(result, bodyKey) {
+  if (result.status === 404) return /no data/i.test(String(result.json?.message || ''));
+  if (result.status !== 200) return false;
+  const rows = result.json?.ResponseBody?.[bodyKey];
+  return !Array.isArray(rows) || rows.length === 0;
+}
+
+/** `[from, to]` windows of at most `days` days covering the range, newest first. */
+export function windowsNewestFirst(fromdate, todate, days) {
+  const start = Date.parse(`${fromdate}T00:00:00Z`);
+  const windows = [];
+  for (let end = Date.parse(`${todate}T00:00:00Z`); end >= start; end -= days * DAY_MS) {
+    windows.push([isoDay(Math.max(end - (days - 1) * DAY_MS, start)), isoDay(end)]);
+  }
+  return windows;
+}
+
+/** A range cut into two halves, the later half first. */
+export function halveNewestFirst(fromdate, todate) {
+  const start = Date.parse(`${fromdate}T00:00:00Z`);
+  const days = Math.round((Date.parse(`${todate}T00:00:00Z`) - start) / DAY_MS) + 1;
+  const mid = start + (Math.ceil(days / 2) - 1) * DAY_MS;
+  return [[isoDay(mid + DAY_MS), todate], [fromdate, isoDay(mid)]];
+}
+
+/** The later of `fromdate` and the day that makes the range `maxDays` long, inclusive. */
+export function clampFrom(fromdate, todate, maxDays) {
+  const earliest = Date.parse(`${todate}T00:00:00Z`) - (maxDays - 1) * 24 * 3600 * 1000;
+  if (!Number.isFinite(earliest)) return fromdate;
+  const iso = new Date(earliest).toISOString().slice(0, 10);
+  return iso > fromdate ? iso : fromdate;
+}
+
+/** PXIL's own words for a response, whichever of its envelopes they arrive in. */
+function saidBy(json) {
+  const said = json?.message ?? json?.ResponseStatus?.Message ?? json?.ResponseStatus?.StatusMessage;
+  return said ? ` — ${String(said).slice(0, 90)}` : '';
+}
+
 /* ------------------------------------------------------------- requests */
 
 /**
@@ -239,6 +335,55 @@ async function probe({ baseUrl, token, path, params, authStyle, timeoutMs }) {
   }
 }
 
+/**
+ * Look further back for rows, within the call budget.
+ *
+ * Each report's first call covered the end of the range. This walks the rest,
+ * newest first, one window per report in turn so that a small budget is spread
+ * across reports instead of spent on the first. A window PXIL refuses for size
+ * is halved. A report stops being walked at its first window with rows, which
+ * is kept whole (`sample`); otherwise its first empty answer is kept (`empty`)
+ * so the analysis has a body to read. Windows never reached are listed in
+ * `pending`, so "no rows" can never be read as covering more than was asked.
+ */
+async function walk(specs, { fromdate, todate, ranged, call }) {
+  const scans = {};
+  for (const spec of specs) {
+    const before = isoDay(Date.parse(`${clampFrom(fromdate, todate, spec.maxDays)}T00:00:00Z`) - DAY_MS);
+    scans[spec.key] = {
+      style: spec.documented,
+      windows: [],
+      sample: null,
+      empty: null,
+      pending: before >= fromdate ? windowsNewestFirst(fromdate, before, spec.maxDays) : [],
+    };
+  }
+  for (;;) {
+    const open = specs.filter((spec) => !scans[spec.key].sample && scans[spec.key].pending.length);
+    if (!open.length) break;
+    for (const spec of open) {
+      const s = scans[spec.key];
+      const [from, to] = s.pending[0];
+      const result = await call({
+        label: `scan ${spec.key} ${from} → ${to}`, bodyKey: spec.bodyKey,
+        path: spec.path, params: { ...ranged, fromdate: from, todate: to }, authStyle: spec.documented,
+      });
+      // Out of budget, or PXIL has told us to wait: the window stays pending.
+      if (!result) return scans;
+      s.pending.shift();
+      const rows = result.json?.ResponseBody?.[spec.bodyKey];
+      const count = Array.isArray(rows) ? rows.length : 0;
+      const refused = !!rangeRefused(result.json);
+      const empty = answeredEmpty(result, spec.bodyKey);
+      s.windows.push({ fromdate: from, todate: to, status: result.status, rows: count, refused, empty, error: result.error || null });
+      if (refused && from < to) s.pending.unshift(...halveNewestFirst(from, to));
+      else if (count > 0) s.sample = { fromdate: from, todate: to, result };
+      else if (empty && !s.empty) s.empty = { fromdate: from, todate: to, result };
+    }
+  }
+  return scans;
+}
+
 /** What PXIL will see as our source address — the thing they whitelist. */
 async function outboundIp(timeoutMs) {
   const controller = new AbortController();
@@ -292,8 +437,8 @@ async function main() {
       console.error('  PXIL_API_TOKEN=<token>');
     }
     console.error('');
-    console.error('Production and staging have different tokens. Production is');
-    console.error('https://dashboard.pxil.in; the token that has been in backend/.env is staging\'s.');
+    console.error('Production is https://dashboard.pxil.in. PXIL issued one token for both');
+    console.error('environments on 5 Oct 2026; the one from 2 Sep no longer works.');
     process.exit(1);
   }
 
@@ -318,25 +463,84 @@ async function main() {
   else if (!flags['no-ip']) console.log('Outbound IP   could not be determined (no outbound access to the echo service).');
   console.log('');
 
+  const budget = Number(flags.budget) > 0 ? Math.floor(Number(flags.budget)) : DEFAULT_BUDGET;
+  const state = { calls: 0, rateLimit: null, outOfBudget: false };
+
+  /**
+   * The only way a request leaves this tool. Returns null without calling once
+   * the budget is spent or PXIL has said to wait — a 429 is never followed by
+   * another request, because every one after it is refused and may count.
+   */
+  const call = async ({ label, bodyKey, ...request }) => {
+    if (state.rateLimit) return null;
+    if (state.calls >= budget) { state.outOfBudget = true; return null; }
+    state.calls += 1;
+    process.stdout.write(`  ${label} … `);
+    const result = await probe({ ...cfg, timeoutMs, ...request });
+    const rows = bodyKey ? result.json?.ResponseBody?.[bodyKey] : null;
+    const shape = result.error ? result.error
+      : result.ip_not_allowed ? `403 IP not whitelisted (saw ${result.ip_not_allowed})`
+        : `HTTP ${result.status}${Array.isArray(rows) ? `, ${rows.length} row(s)` : ''}${saidBy(result.json)}`;
+    console.log(`${shape}  [${result.ms}ms]`);
+    const wait = waitSeconds(result);
+    if (wait !== undefined) state.rateLimit = { seconds: wait, at: new Date().toISOString(), during: label };
+    return result;
+  };
+
+  const styles = (spec) => (flags['both-auth'] ? ['header', 'query'] : [spec.documented]);
   const attempts = {};
   for (const spec of ENDPOINT_SPECS) {
-    const params = spec.ranged ? ranged : {};
+    const params = !spec.ranged ? {} : { ...ranged, fromdate: clampFrom(fromdate, todate, spec.maxDays) };
     attempts[spec.key] = {};
-    for (const authStyle of ['header', 'query']) {
-      process.stdout.write(`  ${spec.key} (${authStyle}) … `);
-      const result = await probe({ ...cfg, path: spec.path, params, authStyle, timeoutMs });
-      attempts[spec.key][authStyle] = result;
-      const rows = result.json?.ResponseBody?.[spec.bodyKey];
-      const shape = result.error ? result.error
-        : result.ip_not_allowed ? `403 IP not whitelisted (saw ${result.ip_not_allowed})`
-          : `HTTP ${result.status}${Array.isArray(rows) ? `, ${rows.length} row(s)` : ''}`;
-      console.log(`${shape}  [${result.ms}ms]`);
+    for (const authStyle of styles(spec)) {
+      const window = params.fromdate && params.fromdate !== fromdate ? ` ${params.fromdate} → ${todate}` : '';
+      const result = await call({ label: `${spec.key}${window} (${authStyle})`, bodyKey: spec.bodyKey, path: spec.path, params, authStyle });
+      if (result) attempts[spec.key][authStyle] = result;
     }
+  }
+
+  // Only on request: walking back through a long range is what spends calls.
+  let scans = {};
+  if (flags.scan && !state.rateLimit) {
+    const wanted = typeof flags.scan === 'string' ? flags.scan.split(',').map((k) => k.trim()) : null;
+    const unknown = (wanted || []).filter((k) => !ENDPOINT_SPECS.some((spec) => spec.ranged && spec.key === k));
+    if (unknown.length) console.log(`  (--scan: no ranged report called ${unknown.join(', ')} — ignored)`);
+    // A report whose first call already has rows needs no walking.
+    const specs = ENDPOINT_SPECS.filter((spec) => spec.ranged && (!wanted || wanted.includes(spec.key)))
+      .filter((spec) => !(attempts[spec.key][spec.documented]?.json?.ResponseBody?.[spec.bodyKey]?.length > 0));
+    console.log('');
+    console.log(`Walking back through ${fromdate} → ${todate}, newest first (${budget - state.calls} call(s) left in the budget):`);
+    scans = await walk(specs, { fromdate, todate, ranged, call });
+    for (const spec of specs) {
+      const s = scans[spec.key];
+      const answered = s.windows.filter((w) => w.empty || w.rows).length;
+      console.log(s.sample
+        ? `  → ${spec.key}: rows found in ${s.sample.fromdate} → ${s.sample.todate}`
+        : `  → ${spec.key}: no rows in the ${answered} window(s) PXIL answered${s.pending.length ? `; ${s.pending.length} not asked, back to ${s.pending[s.pending.length - 1][0]}` : ''}`);
+    }
+  }
+
+  let control = null;
+  if (flags.control) {
+    control = await call({ label: 'control: a path that does not exist', path: CONTROL_PATH, params: ranged, authStyle: 'header' });
+  }
+
+  console.log('');
+  console.log(`${state.calls} call(s) made to PXIL, budget ${budget}.`);
+  if (state.rateLimit) {
+    const { seconds } = state.rateLimit;
+    console.log('');
+    console.log('PXIL REFUSED WITH A REQUEST LIMIT (HTTP 429). Nothing more was sent.');
+    console.log(seconds
+      ? `It said to wait ${seconds} seconds — do not run this again before ${new Date(Date.now() + seconds * 1000).toString()}.`
+      : 'It did not say for how long. Do not run this again today without asking PXIL.');
+  } else if (state.outOfBudget) {
+    console.log('The budget ran out before everything was asked. Raise --budget only if PXIL has confirmed the daily limit.');
   }
 
   const capture = {
     tool: 'pxil-probe',
-    version: 1,
+    version: 2,
     captured_at: new Date().toISOString(),
     meta: {
       baseUrl: cfg.baseUrl,
@@ -351,6 +555,11 @@ async function main() {
       capturedAt: new Date().toISOString(),
     },
     attempts,
+    controls: control ? { unknown_path: control } : null,
+    scan: scans,
+    calls: state.calls,
+    budget,
+    rate_limited: state.rateLimit,
   };
 
   // Belt and braces: if PXIL ever echoes the token back inside a body, it must

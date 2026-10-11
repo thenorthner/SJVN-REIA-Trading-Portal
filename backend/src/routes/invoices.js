@@ -6,14 +6,14 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES, BUYER_ROLES, counterpartySide } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct, billableCapacityMw, invalidDecision } from '../util.js';
 import { payableNow, lpsBaseAmount, tieredRebatePct, daysBetween } from '../disputesConstants.js';
-import { invoiceLpsAsOf } from '../services/invoiceLps.js';
+import { invoiceLpsAsOf, lpsTermsFor, invoiceBalance } from '../services/invoiceLps.js';
 import { payerStateForInvoice } from '../services/workingCalendar.js';
 import { getParamNumber, getParam } from '../mastersService.js';
 import { resolveBetaRow } from '../services/betaFactor.js';
 import { sendSms } from '../services/smsService.js';
 import { channelsFor, dispatch } from '../services/notificationService.js';
 import { allocationsInForce } from '../services/allocations.js';
-import { contractVisibleTo, invoicePresentedTo, authoredBy, billPresentedOn, PRESENTED_STATUSES } from '../services/counterpartyScope.js';
+import { contractVisibleTo, invoicePresentedTo, authoredBy, billPresentedOn, presentedSql, raisedBySellerSql, raisedBySeller } from '../services/counterpartyScope.js';
 import { asOfFrom, isProjection } from '../services/clock.js';
 import { computeCercHydroBill } from '../services/cercHydroBilling.js';
 import { computeCufPenalty } from '../services/cufPenalty.js';
@@ -120,6 +120,9 @@ function approvalLevelsFor(inv) {
   return minLevels;
 }
 
+/** Whether each approval level of a bill has to be decided by a different person. */
+const distinctApprovers = () => String(getParam('invoice_approval_distinct_approvers', '0')) === '1';
+
 // Validation outcomes that mean the seller's bill and the system's own figure
 // do not agree, or that there was nothing to check it against.
 const UNRESOLVED_VALIDATION = ['PARTIAL', 'MISMATCH', 'NO_COUNTERPART'];
@@ -170,23 +173,65 @@ function otherChargesSum(inv) {
 function withContract(inv, asOf = new Date()) {
   if (!inv) return inv;
   const contract = db.prepare('SELECT contract_no, contract_type, project_type, lps_annual_pct, lps_grace_days FROM contracts WHERE id = ?').get(inv.contract_id);
-  const paid = paidTotalFor(inv.id);
   const settled = ['PAID', 'CANCELLED', 'DRAFT'].includes(inv.status);
-  const accrued = settled
-    ? { days_overdue: 0, lps: 0, base: 0 }
-    : invoiceLpsAsOf(inv, asOf);
+
+  // What is still owed on the bill today. payable_now below is the whole bill
+  // as it stands (total − rebate + surcharge − disputed) and never came down as
+  // money arrived, so the screens showed "Payable Now 12,00,000" on a bill with
+  // 51,000 already settled against it — and disagreed with the buyer's own
+  // "Left to pay", which did the subtraction. One figure, worked in one place.
+  const { paid, accrued, lps_to_date: lpsToDate, balance } = invoiceBalance(inv, asOf);
+
+  // Calendar days past the due date. days_overdue is the days surcharge was
+  // charged for, which leaves out the payer's holidays when the masters say so
+  // — right for the sum, wrong as an answer to "how late is this bill".
+  let daysPastDue = 0;
+  if (!settled && inv.due_date && balance > 0) {
+    const due = new Date(`${String(inv.due_date).slice(0, 10)}T00:00:00Z`);
+    const day = new Date(asOf);
+    const today = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate());
+    if (Number.isFinite(due.getTime())) daysPastDue = Math.max(0, Math.round((today - due.getTime()) / 86400000));
+  }
+  const terms = lpsTermsFor(inv.contract_id);
+
   return {
     ...inv,
     contract_no: contract?.contract_no,
     project_type: contract?.project_type,
     ...payableNow(inv),
     paid_total: paid,
+    lps_to_date: lpsToDate,
+    balance_due: balance,
     accrued_lps: accrued.lps,
     days_overdue: accrued.days_overdue,
+    days_past_due: daysPastDue,
+    lps_annual_pct: terms.annualPct,
+    lps_grace_days: terms.graceDays,
+    raised_by_seller: raisedBySeller(inv),
+    // A credit note raised when a dispute was upheld. The bill it answers has
+    // already come down by the same amount, so a total that adds both counts the credit twice.
+    is_dispute_credit: !!db.prepare('SELECT 1 FROM disputes WHERE supplementary_invoice_id = ?').get(inv.id),
     dev_stage: inv.direction === 'SELLER_TO_SJVN' ? computeDevStage(inv) : null,
     dev_stages: inv.direction === 'SELLER_TO_SJVN' ? DEV_STAGES : null,
     other_charges: parseOtherCharges(inv),
   };
+}
+
+/**
+ * Every rejection a bill has had, oldest first. Resubmitting resets the level
+ * rows for the new round, and the reason the bill was sent back went with them
+ * — the one thing the next approver most wants to read.
+ */
+function approvalHistory(invoiceId) {
+  return db.prepare(`
+    SELECT created_at, user_name, details FROM audit_logs
+    WHERE entity_type = 'invoice' AND entity_id = ? AND action = 'APPROVAL_REJECTED'
+    ORDER BY rowid ASC LIMIT 50
+  `).all(invoiceId).map((r) => {
+    let d = {};
+    try { d = JSON.parse(r.details || '{}') || {}; } catch { /* a row without readable details still happened */ }
+    return { decision: 'REJECTED', level: Number(d.level) || null, comments: d.comments || null, by: r.user_name, at: r.created_at };
+  });
 }
 
 // A counterparty acts only on bills under its own company's contracts. The
@@ -204,17 +249,16 @@ router.get('/', (req, res) => {
   
   // Counterparties see only bills that have actually been issued to them, on
   // the same bar the send route uses for distribution.
-  const presented = ` AND i.status IN (${PRESENTED_STATUSES.map(() => '?').join(',')})`;
   if (req.user.role.startsWith('SELLER')) {
     // A seller's own invoices to SJVN are its documents at every status; the
-    // presented bar is for bills SJVN issues to it. Applied to both, it hid a
-    // seller's submitted and rejected invoices from the seller that raised them.
-    sql = "SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.seller_id = ? AND (i.direction = 'SELLER_TO_SJVN' OR i.status IN ("
-      + PRESENTED_STATUSES.map(() => '?').join(',') + '))';
-    params.push(req.user.linked_entity_id, ...PRESENTED_STATUSES);
+    // presented bar is for bills SJVN issues to it — which includes SJVN's own
+    // computation of the same PPA period. Without telling the two apart the
+    // seller was shown SJVN's drafts as its own invoices.
+    sql = `SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.seller_id = ? AND (${raisedBySellerSql('i')} OR ${presentedSql('i')})`;
+    params.push(req.user.linked_entity_id);
   } else if (req.user.role.startsWith('BUYER')) {
-    sql = 'SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.buyer_id = ?' + presented;
-    params.push(req.user.linked_entity_id, ...PRESENTED_STATUSES);
+    sql = `SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.buyer_id = ? AND ${presentedSql('i')}`;
+    params.push(req.user.linked_entity_id);
   } else {
     sql = 'SELECT i.* FROM invoices i WHERE 1=1';
   }
@@ -224,7 +268,10 @@ router.get('/', (req, res) => {
   if (direction) { sql += ' AND i.direction = ?'; params.push(direction); }
   if (billing_period) { sql += ' AND i.billing_period = ?'; params.push(billing_period); }
   sql += ' ORDER BY i.created_at DESC';
-  res.json(db.prepare(sql).all(...params).map(withContract));
+  // Not .map(withContract): map passes the row's index as the second argument,
+  // which withContract reads as its as-of date. Every row was aged to 1 January
+  // 1970, so no bill in a list was ever overdue and the overdue chip never showed.
+  res.json(db.prepare(sql).all(...params).map((inv) => withContract(inv)));
 });
 
 /**
@@ -237,14 +284,13 @@ router.get('/payments', (req, res) => {
   const { contract_id, direction } = req.query;
   const where = [];
   const params = [];
-  const presented = PRESENTED_STATUSES.map(() => '?').join(',');
   const side = counterpartySide(req.user);
   if (side === 'SELLER') {
-    where.push(`c.seller_id = ? AND (i.direction = 'SELLER_TO_SJVN' OR i.status IN (${presented}))`);
-    params.push(req.user.linked_entity_id, ...PRESENTED_STATUSES);
+    where.push(`c.seller_id = ? AND (${raisedBySellerSql('i')} OR ${presentedSql('i')})`);
+    params.push(req.user.linked_entity_id);
   } else if (side === 'BUYER') {
-    where.push(`c.buyer_id = ? AND i.status IN (${presented})`);
-    params.push(req.user.linked_entity_id, ...PRESENTED_STATUSES);
+    where.push(`c.buyer_id = ? AND ${presentedSql('i')}`);
+    params.push(req.user.linked_entity_id);
   }
   if (contract_id) { where.push('i.contract_id = ?'); params.push(String(contract_id)); }
   if (direction) { where.push('i.direction = ?'); params.push(String(direction)); }
@@ -309,7 +355,7 @@ router.get('/:id/pdf', async (req, res) => {
   }
 
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `attachment; filename=Invoice_${inv.invoice_no}.pdf`);
+  res.setHeader('Content-Disposition', `attachment; filename=Invoice_${String(inv.invoice_no).replace(/[^\w.-]+/g, '_')}.pdf`);
 
   try {
     await generateInvoicePdf(inv, contract, seller, buyer, res, beneficiaries);
@@ -398,9 +444,15 @@ router.get('/:id', (req, res) => {
   let asOf;
   try { asOf = asOfFrom(req); } catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
 
+  // The parent bill by the number a person knows it by, not its row id.
+  const parent = inv.parent_invoice_id
+    ? db.prepare('SELECT invoice_no FROM invoices WHERE id = ?').get(inv.parent_invoice_id) : null;
+
   res.json({
     ...withContract(inv, asOf),
-    approvals, payments, disputes, generator_realization, access_log,
+    parent_invoice_no: parent?.invoice_no || null,
+    approvals, approval_history: approvalHistory(inv.id), approval_rules: { distinct_approvers: distinctApprovers() },
+    payments, disputes, generator_realization, access_log,
     ...(isProjection(req) ? { projected_as_of: asOf.toISOString().slice(0, 10) } : {}),
   });
 });
@@ -446,6 +498,19 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     }
   }
 
+  // Nor before the contract itself begins. The COD check above only fires
+  // where a COD is recorded; a contract without one answered a month years
+  // before its tenure with "no energy data found", as though data were missing.
+  if (contract.tenure_start && period_month) {
+    const periodEnd = `${period_month}-31`;
+    if (String(contract.tenure_start) > periodEnd) {
+      throw refuse(400, {
+        error: `Cannot bill ${period_month}: the contract only starts on ${contract.tenure_start}.`,
+        tenure_start: contract.tenure_start,
+      });
+    }
+  }
+
   // And nothing is billable after the contract has run out. EXPIRED is a
   // billable status on purpose — a final or revised bill for a period the
   // contract did cover often lands after it has ended — but nothing checked the
@@ -478,6 +543,7 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   // month across two splits is a pricing decision nobody has made.
   let ppa_id = contract_id;
   let alloc_percent = 100;
+  let psaUnallocated = false;
   if (contract.contract_type === 'PSA') {
     const periodStart = `${period_month}-01`;
     const alloc = db.prepare(`
@@ -503,6 +569,9 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
           period_month,
         });
       }
+      // Never allocated at all. Its own energy rows are still tried below, for
+      // a PSA whose energy is recorded on it directly.
+      psaUnallocated = true;
     }
   }
 
@@ -511,13 +580,41 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     ORDER BY
       CASE WHEN ? = 'FINAL' THEN (data_type = 'FINAL') ELSE (data_type = 'PROVISIONAL') END DESC,
       (data_type = 'FINAL') DESC,
+      -- of two sources for the month, the one that was locked
+      (status = 'LOCKED') DESC,
       created_at DESC
     LIMIT 1
   `).get(ppa_id, period_month, invoice_type || 'PROVISIONAL');
   
+  if (!energy && psaUnallocated) {
+    // The commonest reason a PSA cannot be billed, and "no energy data" sent
+    // people to look for a file that was never missing.
+    throw refuse(400, {
+      error: `${contract.contract_no} is not linked to any PPA — it holds no allocation, so there is no energy to bill it for. Open the source PPA under Contracts (PPA/PSA), allocate this PSA its share, then generate again.`,
+      reason: 'PSA_NOT_ALLOCATED',
+    });
+  }
   if (!energy) throw refuse(400, { error: 'No energy data found for this contract (or parent PPA)/period. Upload energy data first.' });
 
   const resolvedType = invoice_type || (energy.data_type === 'FINAL' ? 'FINAL' : 'PROVISIONAL');
+
+  // One bill of a kind per contract and month. Nothing checked, so a second
+  // click on Generate — or a second person on the same morning — raised the same
+  // month twice, each one a demand on the counterparty. A correction to a bill
+  // that exists is a supplementary, which says so; a bill raised in error is
+  // cancelled first, with its reason.
+  const twin = db.prepare(`
+    SELECT invoice_no, status FROM invoices
+    WHERE contract_id = ? AND billing_period = ? AND direction = ? AND invoice_type = ?
+      AND status != 'CANCELLED' AND TRIM(COALESCE(invoice_breakdown_json, '')) != ''
+    ORDER BY created_at DESC LIMIT 1
+  `).get(contract_id, period_month, directionForContract(contract), resolvedType);
+  if (twin) {
+    throw refuse(409, {
+      error: `${contract.contract_no} already has a ${resolvedType} bill for ${period_month} — ${twin.invoice_no} (${twin.status.replace(/_/g, ' ')}). Cancel that one first, or raise a Supplementary for a correction.`,
+      existing_invoice_no: twin.invoice_no,
+    });
+  }
 
   // A provisional bill may run on provisional energy — that is what makes it
   // provisional. It may not run on energy validation actively flagged. Only a
@@ -843,6 +940,16 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   return db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
 }
 
+/**
+ * A LIKE pattern for a breakdown line that ends in exactly this reason — the
+ * line is written as "<label> — <reason>" and stored as JSON, so the reason is
+ * matched in its JSON form and up to the closing quote.
+ */
+function reasonLike(reason) {
+  const json = JSON.stringify(String(reason).trim()).slice(1, -1);
+  return `%— ${json.replace(/[\\%_]/g, '\\$&')}"%`;
+}
+
 // Arrear bill — a manual recovery bill for a past period (charges missed / under-billed
 // earlier, e.g. retrospective tariff order, delayed adjustment). Mirrors SAP bill type 'A'.
 
@@ -899,11 +1006,30 @@ router.post('/arrear', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const amt = Number(amount);
   if (!arrear_period) return res.status(400).json({ error: 'arrear_period (YYYY-MM being recovered) is required' });
   if (!Number.isFinite(amt) || amt === 0) return res.status(400).json({ error: 'A non-zero arrear amount is required' });
+  // An arrear recovers money; it took −100 and raised a negative bill. Money
+  // owed back to the counterparty is a credit note or a negative supplementary.
+  if (amt < 0) return res.status(400).json({ error: 'An arrear bill recovers an amount, so it cannot be negative. For money owed back, raise a credit note or a negative Supplementary.' });
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(arrear_period))) return res.status(400).json({ error: 'arrear_period must be YYYY-MM' });
   if (!reason || !reason.trim()) return res.status(400).json({ error: 'A reason for the arrear is required' });
 
   const taxAmt = Number(taxes) || 0;
+  if (taxAmt < 0) return res.status(400).json({ error: 'Taxes on an arrear cannot be negative' });
   const total = Math.round(amt + taxAmt);
   const direction = directionForContract(contract);
+
+  // The same arrear, to the rupee and the word, is a second click rather than a
+  // second claim.
+  const sameArrear = db.prepare(`
+    SELECT invoice_no FROM invoices
+    WHERE contract_id = ? AND billing_period = ? AND invoice_type = 'ARREAR' AND status != 'CANCELLED'
+      AND total_amount = ? AND invoice_breakdown_json LIKE ? ESCAPE '\\'
+  `).get(contract_id, arrear_period, total, reasonLike(reason));
+  if (sameArrear) {
+    return res.status(409).json({
+      error: `This arrear is already raised as ${sameArrear.invoice_no} — same contract, period, amount and reason. Cancel that one first if it was raised in error.`,
+      existing_invoice_no: sameArrear.invoice_no,
+    });
+  }
   const billingFamilyRef = buildBillingFamilyRef(contract.contract_no, arrear_period, direction);
   const id = newId('INV');
   const breakdown = [
@@ -1007,6 +1133,19 @@ router.post('/supplementary', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res)
   const total = Math.round(amt + taxAmt + txAmt);
   const direction = directionForContract(contract);
   const billingFamilyRef = buildBillingFamilyRef(contract.contract_no, billing_period, direction);
+
+  const sameSupp = db.prepare(`
+    SELECT invoice_no FROM invoices
+    WHERE contract_id = ? AND billing_period = ? AND invoice_type = 'SUPPLEMENTARY' AND status != 'CANCELLED'
+      AND total_amount = ? AND invoice_breakdown_json LIKE ? ESCAPE '\\'
+  `).get(contract_id, billing_period, total, reasonLike(reason));
+  if (sameSupp) {
+    return res.status(409).json({
+      error: `This supplementary is already raised as ${sameSupp.invoice_no} — same contract, period, amount and reason. Cancel that one first if it was raised in error.`,
+      existing_invoice_no: sameSupp.invoice_no,
+    });
+  }
+
   const id = newId('INV');
   const reasonLabel = {
     REVISED_REA: 'Revised / amended REA true-up',
@@ -1142,6 +1281,7 @@ function checkInvoiceRow(raw, user, contractCache, seenKeys) {
         SELECT invoice_no FROM invoices
         WHERE contract_id = ? AND billing_period = ? AND direction = 'SELLER_TO_SJVN'
           AND invoice_type = 'FINAL' AND status != 'CANCELLED'
+          AND TRIM(COALESCE(invoice_breakdown_json, '')) = ''
       `).get(contract.id, row.billing_period);
       if (existing) errors.push(`${row.contract_no} ${row.billing_period} is already billed by ${existing.invoice_no}`);
     }
@@ -1293,6 +1433,43 @@ router.post('/', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), (req, 
   // A seller bills only on its own PPAs. Nothing checked this, so any seller
   // could raise an invoice against another company's contract.
   if (!contract || !contractVisibleTo(req.user, contract)) return res.status(404).json({ error: 'Contract not found' });
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(b.billing_period || ''))) {
+    return res.status(400).json({ error: 'billing_period must be YYYY-MM' });
+  }
+  if (!(total > 0)) return res.status(400).json({ error: 'The bill totals zero or less.' });
+
+  // The seller's own reference is the invoice number, and the number is unique.
+  // A repeat reached the database and came back as "UNIQUE constraint failed:
+  // invoices.invoice_no" in the middle of the form.
+  const ownRef = String(b.invoice_no || '').trim();
+  if (ownRef && db.prepare('SELECT 1 FROM invoices WHERE invoice_no = ?').get(ownRef)) {
+    return res.status(409).json({ error: `Invoice number ${ownRef} is already on record. Use a different reference, or leave it blank to have one assigned.` });
+  }
+
+  // One FINAL bill per contract and month — the rule the sheet upload has always
+  // held the seller to, and the form did not.
+  const invoiceType = b.invoice_type || 'FINAL';
+  if (invoiceType === 'FINAL') {
+    const existing = db.prepare(`
+      SELECT invoice_no, status FROM invoices
+      WHERE contract_id = ? AND billing_period = ? AND direction = 'SELLER_TO_SJVN'
+        AND invoice_type = 'FINAL' AND status != 'CANCELLED'
+        AND TRIM(COALESCE(invoice_breakdown_json, '')) = ''
+    `).get(contract.id, b.billing_period);
+    if (existing) {
+      return res.status(409).json({
+        error: `${contract.contract_no} ${b.billing_period} is already billed by ${existing.invoice_no} (${existing.status.replace(/_/g, ' ')}). ${existing.status === 'REJECTED' ? 'Revise and resubmit that bill' : 'Raise a Supplementary for a correction'} rather than a second FINAL.`,
+        existing_invoice_no: existing.invoice_no,
+      });
+    }
+  }
+
+  // What an adjustment is for is the first thing SJVN's desk asks about it.
+  const adjustmentRemarks = String(b.adjustment_remarks || '').trim().slice(0, 300);
+  if (Number(b.other_adjustments) && !adjustmentRemarks) {
+    return res.status(400).json({ error: 'Say what the other adjustment is for.' });
+  }
+
   // The company's maker (L1) prepares a draft, which its checker sends to SJVN
   // through submit-l2 and approve-l2. The company admin and checkers submit directly.
   const initialStatus = req.user.role === 'SELLER_L1' ? 'DRAFT' : 'SUBMITTED';
@@ -1305,15 +1482,16 @@ router.post('/', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), (req, 
   db.prepare(`
     INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh,
       tariff_per_unit, energy_charges, transmission_charges, rebate, lps, penalty, trading_margin, taxes,
-      other_adjustments, total_amount, due_date, status, billing_family_ref, energy_data_id, parent_invoice_id, created_by, created_by_id)
+      other_adjustments, adjustment_remarks, total_amount, due_date, status, billing_family_ref, energy_data_id, parent_invoice_id, created_by, created_by_id)
     VALUES (@id, @invoice_no, @contract_id, @invoice_type, @direction, @billing_period, @energy_mwh,
       @tariff_per_unit, @energy_charges, @transmission_charges, @rebate, @lps, @penalty, @trading_margin, @taxes,
-      @other_adjustments, @total_amount, @due_date, @status, @billing_family_ref, @energy_data_id, @parent_invoice_id, @created_by, @created_by_id)
+      @other_adjustments, @adjustment_remarks, @total_amount, @due_date, @status, @billing_family_ref, @energy_data_id, @parent_invoice_id, @created_by, @created_by_id)
   `).run({
     id,
-    invoice_no: b.invoice_no || genInvoiceNo('SELLER-INV'),
+    invoice_no: ownRef || genInvoiceNo('SELLER-INV'),
+    adjustment_remarks: adjustmentRemarks || null,
     contract_id: b.contract_id,
-    invoice_type: b.invoice_type || 'FINAL',
+    invoice_type: invoiceType,
     direction,
     billing_period: b.billing_period,
     energy_mwh: b.energy_mwh,
@@ -1353,8 +1531,75 @@ router.post('/', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), (req, 
   const isDraft = initialStatus === 'DRAFT';
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: isDraft ? 'CREATE' : 'SUBMIT', module: 'REIA', entityType: 'invoice', entityId: id, details: { ...b, validation_status: created.validation_status } });
   // SJVN hears of a maker's draft only when the company's checker sends it on.
-  if (!isDraft) pushNotification({ role: 'REIA_USER', type: 'INVOICE_SUBMITTED', message: `Seller invoice ${b.invoice_no || id} submitted for review` });
+  if (!isDraft) pushNotification({ role: 'REIA_USER', type: 'INVOICE_SUBMITTED', message: `Seller invoice ${created.invoice_no} submitted for review` });
   res.status(201).json(created);
+});
+
+/**
+ * A seller revising its own bill — a draft, or one SJVN has sent back.
+ *
+ * "Revise & Resubmit" resubmitted and revised nothing: the bill went back to
+ * SJVN at the figure it had just been rejected for. This is the revising. The
+ * figures are the seller's claim, as on the form that raised the bill, and are
+ * checked against SJVN's own computation again afterwards. Sending it on is
+ * still a separate act, by whoever in the company may do that.
+ */
+router.put('/:id/revise', requireRole(...SELLER_ROLES), (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv || !ownsInvoice(req.user, inv) || !raisedBySeller(inv)) return res.status(404).json({ error: 'Invoice not found' });
+  if (!['DRAFT', 'REJECTED'].includes(inv.status)) {
+    return res.status(400).json({ error: `Only a draft or a bill SJVN has sent back can be revised — this one is ${inv.status.replace(/_/g, ' ')}.` });
+  }
+  const b = req.body || {};
+  const pick = (key) => (b[key] === undefined || b[key] === null || b[key] === '' ? Number(inv[key]) || 0 : Number(b[key]));
+  const next = {
+    energy_mwh: pick('energy_mwh'),
+    tariff_per_unit: pick('tariff_per_unit'),
+    energy_charges: pick('energy_charges'),
+    transmission_charges: pick('transmission_charges'),
+    taxes: pick('taxes'),
+    other_adjustments: pick('other_adjustments'),
+  };
+  for (const [k, v] of Object.entries(next)) {
+    if (!Number.isFinite(v)) return res.status(400).json({ error: `${k} must be a number` });
+    if (k !== 'other_adjustments' && v < 0) return res.status(400).json({ error: `${k} cannot be negative` });
+  }
+  if (!(next.energy_mwh > 0)) return res.status(400).json({ error: 'energy_mwh must be greater than zero' });
+  const remarks = b.adjustment_remarks === undefined ? (inv.adjustment_remarks || '') : String(b.adjustment_remarks || '').trim().slice(0, 300);
+  if (next.other_adjustments && !remarks) return res.status(400).json({ error: 'Say what the other adjustment is for.' });
+
+  const total = next.energy_charges + next.transmission_charges + (Number(inv.trading_margin) || 0) + next.taxes
+    - (Number(inv.rebate) || 0) + (Number(inv.lps) || 0) + (Number(inv.penalty) || 0) + next.other_adjustments;
+  if (!(total > 0)) return res.status(400).json({ error: 'The bill totals zero or less.' });
+
+  db.prepare(`
+    UPDATE invoices SET energy_mwh = @energy_mwh, tariff_per_unit = @tariff_per_unit, energy_charges = @energy_charges,
+      transmission_charges = @transmission_charges, taxes = @taxes, other_adjustments = @other_adjustments,
+      adjustment_remarks = @remarks, total_amount = @total, version = COALESCE(version, 1) + 1, updated_at = datetime('now')
+    WHERE id = @id
+  `).run({ ...next, remarks: remarks || null, total, id: inv.id });
+
+  // Against SJVN's figure again: the old result described the old bill.
+  let revised = db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id);
+  const counterpart = findSystemCounterpart(revised);
+  if (counterpart) {
+    revised = persistValidation(inv.id, compareSellerToSystem(revised, counterpart), { userName: req.user.name || 'revise' });
+  } else {
+    db.prepare(`UPDATE invoices SET validation_status = 'PENDING', validation_json = NULL, updated_at = datetime('now') WHERE id = ?`).run(inv.id);
+    revised = db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id);
+  }
+
+  const figures = (row) => ({
+    energy_mwh: row.energy_mwh, tariff_per_unit: row.tariff_per_unit, energy_charges: row.energy_charges,
+    transmission_charges: row.transmission_charges, taxes: row.taxes, other_adjustments: row.other_adjustments,
+    total_amount: row.total_amount,
+  });
+  logAudit({
+    req, user: req.user, action: 'REVISE', module: 'REIA', entityType: 'invoice', entityId: inv.id,
+    beforeValue: figures(inv), afterValue: figures(revised),
+    details: { invoice_no: inv.invoice_no, status: inv.status, validation_status: revised.validation_status },
+  });
+  res.json(withContract(revised));
 });
 
 // Cancel / reverse — REIA only; safe pre-settlement statuses
@@ -1534,19 +1779,27 @@ router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, '
     });
   }
   db.prepare(`UPDATE invoices SET status = 'UNDER_APPROVAL', updated_at = datetime('now') WHERE id = ?`).run(inv.id);
+
+  // The chain is sized here, every time, to what the bill is worth now.
+  //
+  // It used to be sized only where no approval row existed yet — and an arrear,
+  // a supplementary and every seller's bill are given one row the moment they
+  // are raised. So the bands applied to generated bills alone: a 12,00,000
+  // arrear went to APPROVED on a single signature. Whatever rows exist are reset
+  // for the new round, the missing levels are added, and any level beyond what
+  // the amount calls for is dropped.
   const levels = approvalLevelsFor(inv);
-  const existingLevels = db.prepare('SELECT COUNT(*) c FROM invoice_approvals WHERE invoice_id = ?').get(inv.id).c;
-  if (existingLevels === 0) {
+  db.transaction(() => {
+    db.prepare(`UPDATE invoice_approvals SET status = 'PENDING', comments = NULL, acted_at = NULL, approver_name = NULL, approver_id = NULL WHERE invoice_id = ?`).run(inv.id);
+    const have = new Set(db.prepare('SELECT level FROM invoice_approvals WHERE invoice_id = ?').all(inv.id).map((a) => a.level));
     const ins = db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, ?, ?)');
-    for (let lvl = 1; lvl <= levels; lvl += 1) ins.run(newId('APR'), inv.id, lvl, 'PENDING');
-  } else {
-    // Reset existing approvals back to PENDING for resubmission
-    db.prepare(`UPDATE invoice_approvals SET status = 'PENDING', comments = NULL, acted_at = NULL, approver_name = NULL WHERE invoice_id = ?`).run(inv.id);
-  }
+    for (let lvl = 1; lvl <= levels; lvl += 1) if (!have.has(lvl)) ins.run(newId('APR'), inv.id, lvl, 'PENDING');
+    db.prepare('DELETE FROM invoice_approvals WHERE invoice_id = ? AND level > ?').run(inv.id, levels);
+  })();
   logAudit({
     req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SUBMIT_FOR_APPROVAL',
     module: 'REIA', entityType: 'invoice', entityId: inv.id,
-    details: { total_amount: inv.total_amount, approval_levels: existingLevels === 0 ? levels : existingLevels },
+    details: { total_amount: inv.total_amount, approval_levels: levels },
   });
   res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
 });
@@ -1560,6 +1813,23 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
   const { decision, comments } = req.body; // APPROVED | REJECTED
   const badDecision = invalidDecision(decision);
   if (badDecision) return res.status(400).json({ error: badDecision });
+
+  // A bill is approved out of the approval stage and nowhere else. The level
+  // rows exist from the moment a bill is raised, and nothing looked at where the
+  // bill stood, so a draft nobody had submitted could be approved — on its one
+  // creation-time level, whatever its amount. Sending a seller's bill back is
+  // the desk's call from the moment it arrives, so a rejection is also taken
+  // while the bill is still SUBMITTED.
+  const actable = decision === 'REJECTED' ? ['SUBMITTED', 'UNDER_APPROVAL'] : ['UNDER_APPROVAL'];
+  if (!actable.includes(inv.status)) {
+    const state = inv.status.replace(/_/g, ' ');
+    return res.status(400).json({
+      error: ['DRAFT', 'SUBMITTED', 'REJECTED', 'PENDING_L2'].includes(inv.status)
+        ? `This invoice is ${state} — submit it for approval first.`
+        : `This invoice is already ${state}; there is nothing left to ${decision === 'REJECTED' ? 'reject' : 'approve'}.`,
+      invoice_status: inv.status,
+    });
+  }
 
   const conflict = makerCheckerConflict(inv, req.user);
   if (conflict) return res.status(403).json({ error: conflict });
@@ -1576,16 +1846,44 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
 
   const approval = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? AND level = ?').get(req.params.id, req.params.level);
   if (!approval) return res.status(404).json({ error: 'Approval step not found' });
-  db.prepare(`UPDATE invoice_approvals SET status = ?, approver_name = ?, comments = ?, acted_at = datetime('now') WHERE id = ?`)
-    .run(decision, req.user.name, comments ?? null, approval.id);
+  if (approval.status !== 'PENDING') {
+    return res.status(400).json({ error: `Level ${approval.level} has already been ${approval.status.toLowerCase()}${approval.approver_name ? ` by ${approval.approver_name}` : ''}.` });
+  }
+  // Levels are taken in order: level 2 signs what level 1 has passed.
+  const next = db.prepare(`SELECT MIN(level) l FROM invoice_approvals WHERE invoice_id = ? AND status = 'PENDING'`).get(req.params.id).l;
+  if (next !== approval.level) {
+    return res.status(400).json({ error: `Level ${next} has to decide before level ${approval.level}.` });
+  }
+  // One person per level, where SJVN has switched that on. Several levels are
+  // several people's judgement; one person clicking through all of them is one
+  // approval recorded three times. Sending a bill back is open to anyone who
+  // may approve, including someone who signed an earlier level.
+  if (decision === 'APPROVED' && distinctApprovers()) {
+    const mine = db.prepare(`SELECT level, approver_id, approver_name FROM invoice_approvals WHERE invoice_id = ? AND status = 'APPROVED' ORDER BY level`).all(req.params.id)
+      .find((a) => (a.approver_id ? a.approver_id === req.user.id : a.approver_name === req.user.name));
+    if (mine) {
+      return res.status(403).json({
+        error: `You approved level ${mine.level} of this bill. Each level needs a different person, so level ${approval.level} is for someone else to decide.`,
+      });
+    }
+  }
+  db.prepare(`UPDATE invoice_approvals SET status = ?, approver_name = ?, approver_id = ?, comments = ?, acted_at = datetime('now') WHERE id = ?`)
+    .run(decision, req.user.name, req.user.id || null, comments ?? null, approval.id);
 
   if (decision === 'REJECTED') {
     db.prepare(`UPDATE invoices SET status = 'REJECTED', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
+    if (inv.direction === 'SELLER_TO_SJVN') {
+      pushNotification({ role: 'SELLER', type: 'INVOICE_REJECTED', message: `Invoice ${inv.invoice_no} was returned by SJVN${comments ? `: ${String(comments).slice(0, 200)}` : ''}` });
+    }
   } else {
     const pending = db.prepare(`SELECT COUNT(*) c FROM invoice_approvals WHERE invoice_id = ? AND status = 'PENDING'`).get(req.params.id).c;
     if (pending === 0) {
       db.prepare(`UPDATE invoices SET status = 'APPROVED', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
-      pushNotification({ role: 'BUYER', type: 'INVOICE_APPROVED', message: `Invoice ${req.params.id} approved and ready for dispatch` });
+      // By its number, and to the party the bill is actually for.
+      pushNotification({
+        role: inv.direction === 'SJVN_TO_BUYER' ? 'BUYER' : 'SELLER', type: 'INVOICE_APPROVED',
+        message: `Invoice ${inv.invoice_no} has been approved by SJVN`,
+      });
     }
   }
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: `APPROVAL_${decision}`, module: 'REIA', entityType: 'invoice', entityId: req.params.id, details: { level: req.params.level, comments } });
@@ -1816,10 +2114,10 @@ function generatorRealization(devInvoiceId) {
 
 // Record a payment against an invoice and roll up rebate / LPS / status. Shared
 // by buyer payment recording and generator pay-out release.
-export function applyInvoicePayment(inv, { amount, payment_date, mode, reference, deduction, release_source, breakup = null }, req) {
+export function applyInvoicePayment(inv, { amount, payment_date, mode, reference, deduction, release_source, breakup = null, lps_component = null }, req) {
   const id = newId('PAY');
-  db.prepare(`INSERT INTO payments (id, invoice_id, amount, payment_date, mode, reference, deduction, release_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, inv.id, amount, payment_date, mode ?? null, reference ?? null, deduction || 0, release_source ?? null);
+  db.prepare(`INSERT INTO payments (id, invoice_id, amount, payment_date, mode, reference, deduction, release_source, lps_component) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, inv.id, amount, payment_date, mode ?? null, reference ?? null, deduction || 0, release_source ?? null, lps_component > 0 ? lps_component : null);
 
   // Advanced Logic: Rebate and LPS
   let newRebate = inv.rebate;
@@ -1892,7 +2190,13 @@ export function applyInvoicePayment(inv, { amount, payment_date, mode, reference
   return db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id);
 }
 
-// Outstanding position of a buyer's bills, oldest first — LPS accrued + principal.
+// Outstanding position of a buyer's bills, oldest first — surcharge and principal.
+//
+// Surcharge here is what the bill has earned to date less what has already been
+// paid towards it. It used to be the whole accrual every time, with every
+// payment taken off principal — so a receipt the waterfall had applied to
+// surcharge left the surcharge figure where it was and the principal lower,
+// which is the opposite of what PSA Art. 6.3 and the screen both say.
 function buyerOutstanding(buyerId) {
   const invs = db.prepare(`
     SELECT i.* FROM invoices i JOIN contracts c ON c.id = i.contract_id
@@ -1901,47 +2205,61 @@ function buyerOutstanding(buyerId) {
     ORDER BY i.billing_period ASC, i.created_at ASC
   `).all(buyerId);
   return invs.map((inv) => {
-    const contract = db.prepare('SELECT lps_annual_pct, lps_grace_days FROM contracts WHERE id = ?').get(inv.contract_id);
     const paid = paidTotalFor(inv.id);
-    // Everything the bill has earned to date; principal below excludes LPS.
-    const lps = invoiceLpsAsOf(inv, new Date()).lps;
-    const principal = Math.max(0, (inv.total_amount || 0) - (inv.disputed_amount || 0) - paid);
+    const lpsPaid = db.prepare('SELECT COALESCE(SUM(lps_component), 0) s FROM payments WHERE invoice_id = ?').get(inv.id).s;
+    const earned = Math.max(Number(inv.lps) || 0, invoiceLpsAsOf(inv, new Date()).lps || 0);
+    const lps = Math.max(0, earned - lpsPaid);
+    const principal = Math.max(0, (inv.total_amount || 0) - (inv.disputed_amount || 0) - (paid - lpsPaid));
     return { inv, lps: Math.round(lps), principal: Math.round(principal) };
   }).filter((x) => x.lps > 0 || x.principal > 0);
 }
 
 // Waterfall payment (PSA Art. 6.3): a buyer's lump payment is applied first to
 // Late Payment Surcharge (oldest bill first), then to the oldest bill's
-// principal and so on.
+// principal and so on. Each payment it records says how much of it was
+// surcharge, so the bill, the outstanding position and the next accrual all
+// read the same split.
 router.post('/waterfall-payment', requireRole(...ROLE_GROUPS.FINANCE, ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const { buyer_id, amount, payment_date, reference } = req.body;
   if (!buyer_id) return res.status(400).json({ error: 'buyer_id is required' });
   const amt = Number(amount);
   if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'A positive payment amount is required' });
+  const payDate = payment_date || new Date().toISOString().split('T')[0];
+  // Today as the desk's calendar has it (IST), so a receipt entered after
+  // midnight here is not refused for being tomorrow in UTC.
+  const todayIst = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().split('T')[0];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(payDate) || payDate > todayIst) {
+    return res.status(400).json({ error: 'The payment date must be a date not in the future' });
+  }
 
   const items = buyerOutstanding(buyer_id);
   if (!items.length) return res.status(400).json({ error: 'No outstanding bills for this buyer' });
 
-  const alloc = new Map();
+  const toLps = new Map();
+  const toPrincipal = new Map();
   let remaining = amt;
   // Pass 1: LPS, oldest first.
-  for (const it of items) { if (remaining <= 0) break; const a = Math.min(remaining, it.lps); if (a > 0) { alloc.set(it.inv.id, (alloc.get(it.inv.id) || 0) + a); remaining -= a; } }
+  for (const it of items) { if (remaining <= 0) break; const a = Math.min(remaining, it.lps); if (a > 0) { toLps.set(it.inv.id, a); remaining -= a; } }
   // Pass 2: principal, oldest first.
-  for (const it of items) { if (remaining <= 0) break; const a = Math.min(remaining, it.principal); if (a > 0) { alloc.set(it.inv.id, (alloc.get(it.inv.id) || 0) + a); remaining -= a; } }
+  for (const it of items) { if (remaining <= 0) break; const a = Math.min(remaining, it.principal); if (a > 0) { toPrincipal.set(it.inv.id, a); remaining -= a; } }
 
-  const payDate = payment_date || new Date().toISOString().split('T')[0];
   const allocations = [];
   const run = db.transaction(() => {
     for (const it of items) {
-      const a = alloc.get(it.inv.id);
-      if (!a) continue;
-      const updated = applyInvoicePayment(it.inv, { amount: Math.round(a), payment_date: payDate, mode: 'WATERFALL', reference: reference || null, deduction: 0 }, req);
-      allocations.push({ invoice_no: it.inv.invoice_no, billing_period: it.inv.billing_period, lps_due: it.lps, principal_due: it.principal, allocated: Math.round(a), status: updated.status });
+      const lpsPart = Math.round((toLps.get(it.inv.id) || 0) * 100) / 100;
+      const principalPart = Math.round((toPrincipal.get(it.inv.id) || 0) * 100) / 100;
+      const a = Math.round((lpsPart + principalPart) * 100) / 100;
+      if (!(a > 0)) continue;
+      const updated = applyInvoicePayment(it.inv, { amount: a, payment_date: payDate, mode: 'WATERFALL', reference: reference || null, deduction: 0, lps_component: lpsPart }, req);
+      allocations.push({
+        invoice_no: it.inv.invoice_no, billing_period: it.inv.billing_period, lps_due: it.lps, principal_due: it.principal,
+        to_lps: lpsPart, to_principal: principalPart, allocated: a, status: updated.status,
+      });
     }
   });
   run();
   logAudit({ req, user: req.user, action: 'WATERFALL_PAYMENT', module: 'REIA', entityType: 'entity', entityId: buyer_id, details: { amount: amt, allocations } });
-  res.status(201).json({ received: Math.round(amt), allocated: Math.round(amt - remaining), unallocated: Math.round(remaining), allocations });
+  res.status(201).json({ received: Math.round(amt * 100) / 100, allocated: Math.round((amt - remaining) * 100) / 100, unallocated: Math.round(remaining * 100) / 100, allocations });
 });
 
 // Every user of a buyer company may notify a payment, not only its admin — and
@@ -2076,7 +2394,15 @@ router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...
 router.post('/:id/other-charges', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
-  if (['PAID', 'CANCELLED'].includes(inv.status)) return res.status(400).json({ error: `Cannot edit charges on a ${inv.status} invoice` });
+  // These change the bill's total. Once it is in approval or past it, that
+  // total is what somebody has signed — it stayed editable right up to PAID,
+  // which let an approved bill be re-priced without going back for approval.
+  if (!['DRAFT', 'PENDING_L2', 'SUBMITTED', 'REJECTED'].includes(inv.status)) {
+    return res.status(400).json({
+      error: `Charges cannot be edited on a bill that is ${inv.status.replace(/_/g, ' ')}. ${['UNDER_APPROVAL'].includes(inv.status) ? 'Reject it back first, or r' : 'R'}aise a debit or credit note for the difference.`,
+      invoice_status: inv.status,
+    });
+  }
   const input = Array.isArray(req.body.charges) ? req.body.charges : [];
   const charges = [];
   for (const c of input) {

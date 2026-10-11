@@ -28,7 +28,7 @@ describe('S23 An approve/reject endpoint needs an actual decision', () => {
     beforeEach(() => {
       const maker = makeUser('REIA_USER', { name: 'Maker P4' });
       const c = makeContract({ status: 'ACTIVE' });
-      inv = makeInvoice({ contract_id: c.id, status: 'SUBMITTED', created_by: maker.name, created_by_id: maker.id });
+      inv = makeInvoice({ contract_id: c.id, status: 'UNDER_APPROVAL', created_by: maker.name, created_by_id: maker.id });
       db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES ('AP-P4', ?, 1, 'PENDING')`).run(inv.id);
     });
     const act = (body) => request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(auth(reia)).send(body);
@@ -37,13 +37,13 @@ describe('S23 An approve/reject endpoint needs an actual decision', () => {
     it('does not approve a bill because the rejection was lowercase', async () => {
       const r = await act({ decision: 'rejected', comments: 'no' });
       expect(r.status, 'a mistyped rejection approved the invoice').toBe(400);
-      expect(statusOf()).toBe('SUBMITTED');
+      expect(statusOf()).toBe('UNDER_APPROVAL');
     });
 
     it('does not approve a bill because the field was left out', async () => {
       const r = await act({ comments: 'oops' });
       expect(r.status).toBe(400);
-      expect(statusOf()).toBe('SUBMITTED');
+      expect(statusOf()).toBe('UNDER_APPROVAL');
     });
 
     it('still approves on APPROVED', async () => {

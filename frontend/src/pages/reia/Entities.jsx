@@ -110,10 +110,10 @@ export default function Entities() {
     }
   }
 
-  async function handleApprove(decision) {
+  async function handleApprove(decision, directAdmit = false) {
     setApproveError('');
     try {
-      await api.entities.approve(selected.id, decision, remarks);
+      await api.entities.approve(selected.id, decision, remarks, directAdmit ? { admin_direct_admit: true } : {});
       setSelected(null);
       load();
     } catch (err) {
@@ -512,9 +512,8 @@ export default function Entities() {
                   {(() => {
                     const proof = docForCode(item.approval_code);
                     const vs = proof?.verification_status;
-                    // Internal reviewers can't upload VERIFY proofs (SoD) — the
-                    // stakeholder does that from their own portal.
-                    const canUpload = !['SJVN_ADMIN', 'REIA_USER', 'FINANCE_USER', 'TRADING_USER'].includes(user?.role);
+                    // SJVN Admin and REIA users can directly upload and verify proofs; stakeholders can also upload from portal.
+                    const canUpload = ['SJVN_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role) || !['FINANCE_USER', 'TRADING_USER'].includes(user?.role);
                     return (
                       <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         {proof ? (
@@ -656,8 +655,22 @@ export default function Entities() {
               <Field label="Remarks">
                 <input value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Required for rejection" />
               </Field>
-              <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-                <button className="btn btn-primary" onClick={() => handleApprove('APPROVED')}>Approve Stakeholder</button>
+              <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+                {['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN'].includes(user?.role) && (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ background: 'linear-gradient(135deg, #059669 0%, #047857 100%)', boxShadow: '0 2px 6px rgba(5, 150, 105, 0.35)' }}
+                    onClick={() => {
+                      if (window.confirm('Directly admit & activate this stakeholder? This will clear mandatory regulatory items and activate their account immediately.')) {
+                        handleApprove('APPROVED', true);
+                      }
+                    }}
+                  >
+                    Direct Admit & Activate Stakeholder
+                  </button>
+                )}
+                <button className="btn btn-secondary" onClick={() => handleApprove('APPROVED')}>Standard Approval</button>
                 <button className="btn btn-danger" onClick={() => handleApprove('REJECTED')}>Reject</button>
               </div>
             </div>

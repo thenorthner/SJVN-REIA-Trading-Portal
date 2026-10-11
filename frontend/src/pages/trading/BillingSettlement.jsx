@@ -486,19 +486,19 @@ export default function BillingSettlement() {
             {noteSummary && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
                 <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 16px' }}>
-                  <div style={{ fontSize: 11, color: '#991b1b', fontWeight: 600, textTransform: 'uppercase' }}>Total Debit Notes (+ve)</div>
+                  <div style={{ fontSize: 11, color: '#991b1b', fontWeight: 600, textTransform: 'none' }}>Total Debit Notes (+ve)</div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: '#dc2626', marginTop: 4 }}>+₹{fmtNumber(noteSummary.total_debit || 0)}</div>
                   <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 2 }}>Shortfall market purchases / additions</div>
                 </div>
 
                 <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '12px 16px' }}>
-                  <div style={{ fontSize: 11, color: '#166534', fontWeight: 600, textTransform: 'uppercase' }}>Total Credit Notes (-ve)</div>
+                  <div style={{ fontSize: 11, color: '#166534', fontWeight: 600, textTransform: 'none' }}>Total Credit Notes (-ve)</div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: '#16a34a', marginTop: 4 }}>-₹{fmtNumber(noteSummary.total_credit || 0)}</div>
                   <div style={{ fontSize: 11, color: '#15803d', marginTop: 2 }}>Rebates / cheaper replacements</div>
                 </div>
 
                 <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: '12px 16px' }}>
-                  <div style={{ fontSize: 11, color: '#475569', fontWeight: 600, textTransform: 'uppercase' }}>Net Reconciled Differential</div>
+                  <div style={{ fontSize: 11, color: '#475569', fontWeight: 600, textTransform: 'none' }}>Net Reconciled Differential</div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: noteSummary.net_payable >= 0 ? '#dc2626' : '#16a34a', marginTop: 4 }}>
                     {noteSummary.net_payable >= 0 ? '+' : ''}₹{fmtNumber(noteSummary.net_payable || 0)}
                   </div>
@@ -506,7 +506,7 @@ export default function BillingSettlement() {
                 </div>
 
                 <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: '12px 16px' }}>
-                  <div style={{ fontSize: 11, color: '#475569', fontWeight: 600, textTransform: 'uppercase' }}>Total Active Notes</div>
+                  <div style={{ fontSize: 11, color: '#475569', fontWeight: 600, textTransform: 'none' }}>Total Active Notes</div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginTop: 4 }}>{noteSummary.note_count || 0}</div>
                   <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>PTC & Exchange broker adjustments</div>
                 </div>

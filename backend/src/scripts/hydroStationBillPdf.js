@@ -258,6 +258,193 @@ export function drawHydroStationBill(doc, { bill, lines, contract }) {
   pageNumbers(doc);
 }
 
+// ─────────────────────────── The beneficiary's own bill ──────────────────────
+
+const ONES = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven',
+  'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+const TENS = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+const below100 = (n) => (n < 20 ? ONES[n] : `${TENS[Math.floor(n / 10)]}${n % 10 ? ` ${ONES[n % 10]}` : ''}`);
+const below1000 = (n) => [n >= 100 ? `${ONES[Math.floor(n / 100)]} Hundred` : '', below100(n % 100)].filter(Boolean).join(' ');
+
+/** An amount as a cheque writes it: crore, lakh, thousand — and the paise. */
+export function rupeesInWords(amount) {
+  const paiseTotal = Math.round(Math.abs(Number(amount) || 0) * 100);
+  let rupees = Math.floor(paiseTotal / 100);
+  const paise = paiseTotal % 100;
+  const parts = [];
+  const crore = Math.floor(rupees / 10000000); rupees %= 10000000;
+  const lakh = Math.floor(rupees / 100000); rupees %= 100000;
+  const thousand = Math.floor(rupees / 1000); rupees %= 1000;
+  // Above 99 crore the crores are themselves counted in hundreds and thousands.
+  if (crore) parts.push(`${crore >= 1000 ? `${below100(Math.floor(crore / 1000))} Thousand ` : ''}${below1000(crore % 1000)}`.trim() + ' Crore');
+  if (lakh) parts.push(`${below100(lakh)} Lakh`);
+  if (thousand) parts.push(`${below100(thousand)} Thousand`);
+  if (rupees) parts.push(below1000(rupees));
+  const words = parts.length ? parts.join(' ') : 'Zero';
+  return `Rupees ${words}${paise ? ` and ${below100(paise)} Paise` : ''} Only`;
+}
+
+/** "2026-09" as a bill names its month: "September 2026". */
+export function monthLabel(month) {
+  const [y, m] = String(month).split('-').map(Number);
+  const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
+    'October', 'November', 'December'];
+  return names[m - 1] ? `${names[m - 1]} ${y}` : String(month);
+}
+
+/**
+ * One beneficiary's bill, on one page.
+ *
+ * The station bill is the working: the whole station's charges and how they
+ * divide. What a beneficiary pays against is its own row of that — so this
+ * page states the station figures the row was worked from, the beneficiary's
+ * share, and the one amount payable, in figures and in words. Every number on
+ * it is taken from the station bill's own line; nothing is worked out again
+ * here, so the two cannot disagree.
+ */
+function drawBeneficiaryPage(doc, { bill, lines }, line) {
+  const kind = String(bill.bill_kind || 'PROVISIONAL').toLowerCase();
+  const Kind = `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
+  const ref = `${bill.bill_no}/${String(line.sr_no).padStart(2, '0')}`;
+  const ctx = {
+    vertical: 'Commercial & System Operation Department',
+    title: `${Kind} bill for energy supply from ${bill.station_name}`,
+    subtitle: `${ref}  ·  ${monthLabel(bill.billing_month)}  ·  F.Y. ${bill.financial_year}`
+      + (bill.rea_reference ? `  ·  ${bill.rea_reference}` : ''),
+    generatedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+  };
+  header(doc, ctx);
+  let y = 84;
+
+  // Who it is for, and which bill it is a part of.
+  roundedRect(doc, M, y, CONTENT_W, 46, 3, '#eef2f8');
+  doc.fillColor(MUTED).font('Helvetica').fontSize(7).text('BILL TO', M + 10, y + 8, { lineBreak: false });
+  doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(13)
+    .text(line.beneficiary_name + (line.parent_state ? ` (${line.parent_state})` : ''), M + 10, y + 19, { width: CONTENT_W - 220, lineBreak: false });
+  doc.fillColor(MUTED).font('Helvetica').fontSize(7).text('BILL NO.', M + CONTENT_W - 200, y + 8, { width: 190, align: 'right', lineBreak: false });
+  doc.fillColor(INK).font('Helvetica-Bold').fontSize(10).text(ref, M + CONTENT_W - 200, y + 19, { width: 190, align: 'right', lineBreak: false });
+  doc.fillColor(MUTED).font('Helvetica').fontSize(7)
+    .text(`Station bill ${bill.bill_no}, sr. no. ${line.sr_no} of ${lines.length}`, M + CONTENT_W - 200, y + 33, { width: 190, align: 'right', lineBreak: false });
+  y += 58;
+
+  y = sectionTitle(doc, y, `Station charges for ${monthLabel(bill.billing_month)}`, 'As per the station bill, sheet 1');
+  y = blockRows(doc, y, ctx, [
+    { code: 'A1', label: 'Annual Fixed Charges "AFC" as approved by CERC', value: money0(bill.a1_afc) },
+    { code: 'A11', label: 'Normative Annual Plant Availability Factor, % (NAPAF)', value: `${bill.a11_napaf_pct}` },
+    { code: 'C1', label: 'Plant Availability Factor achieved during the month (PAFM)', value: `${bill.c1_pafm_pct}` },
+    { code: 'C5', label: 'Total Capacity Charges of the station including Beta incentive', value: money0(bill.c5_total_capacity_charge) },
+    { code: 'E3', label: 'Ex-bus Saleable Scheduled Energy of the station for the month in kwh', value: n1(bill.e3_saleable_scheduled_kwh) },
+    { code: 'A12', label: 'Energy Charge Rate (ECR) upto Annual Ex-bus Saleable Design Energy, Rs/kwh', value: `${bill.a12_ecr}` },
+    { code: 'A13', label: 'Energy Charge Rate for energy in excess of it, Rs/kwh', value: `${bill.a13_ecr_excess}` },
+  ]);
+  y += 8;
+
+  y = sectionTitle(doc, y, 'Weighted average % capacity allocation', 'As per the station bill, sheet 2');
+  y = blockRows(doc, y, ctx, [
+    { code: '', label: 'Allocation as per REA, %', value: pct6(line.pct_rea) },
+    { code: '', label: `Allocation excluding ${bill.a4_fehs_pct}% free power to the home state, %`, value: pct6(line.pct_excl_free) },
+    { code: 'A', label: 'Proportionate allocation on which the charges are apportioned, %', value: pct6(line.pct_proportionate), strong: true },
+  ]);
+  y += 8;
+
+  y = sectionTitle(doc, y, 'Charges payable', 'As per the station bill, beneficiary-wise breakup');
+  const regulated = Number(line.deducted_scheduled_energy_kwh) > 0;
+  y = blockRows(doc, y, ctx, [
+    { code: 'B', label: 'Capacity charges  [C5 x A]', value: money0(line.capacity_charge) },
+    ...(regulated ? [
+      { code: '', label: 'Energy scheduled in kwh', value: n1(line.actual_scheduled_energy_kwh) },
+      { code: '', label: 'Energy deducted on regulation in kwh', value: n1(line.deducted_scheduled_energy_kwh) },
+    ] : []),
+    { code: 'C', label: regulated ? 'Energy billed in kwh' : 'Saleable energy in kwh  [E3 x A]', value: n1(line.saleable_energy_kwh) },
+    { code: 'D', label: 'Energy upto the Annual Ex-bus Saleable Design Energy in kwh', value: n1(line.energy_upto_design_kwh) },
+    { code: 'E', label: 'Energy in excess of it in kwh', value: n1(line.energy_excess_kwh) },
+    { code: 'F', label: 'Energy charges upto the design energy  [D x A12]', value: money0(line.energy_charge_upto) },
+    { code: 'G', label: 'Energy charges for energy in excess  [E x A13]', value: money0(line.energy_charge_excess) },
+    { code: 'H', label: 'Total energy charges  [F + G]', value: money0(line.energy_charge_total) },
+  ]);
+  y += 4;
+  y = totalStrip(doc, y, 'Amount payable in Rupees  (B + H)', money0(line.total_charges));
+  doc.fillColor(INK).font('Helvetica-Bold').fontSize(8)
+    .text(rupeesInWords(line.total_charges), M, y, { width: CONTENT_W });
+  y = doc.y + 8;
+
+  if (Number(line.nrldc_fee) > 0) {
+    y = blockRows(doc, y, ctx, [{
+      code: '', label: 'NRLDC Fees & Charges issued by POSOCO (billed through, outside the amount above)', value: money0(line.nrldc_fee),
+    }]);
+    y += 6;
+  }
+
+  y = notes(doc, y, [
+    `This bill is the beneficiary's part of station bill ${bill.bill_no} for ${bill.station_name}; the station total is Rs ${money0(bill.total_charges)}.`,
+    bill.c3_beta_factor == null
+      ? 'The Beta factor for the month has not yet been certified; the incentive on it, if any, will be billed on certification.'
+      : `Beta factor as per REA: ${Number(bill.c3_beta_factor).toFixed(3)}.`,
+    ...(kind === 'provisional' ? ['Provisional, on the provisional Regional Energy Account; subject to revision on the final account.'] : []),
+    ...(bill.status === 'DRAFT' ? ['DRAFT — not issued.'] : []),
+  ]);
+
+  y += 12;
+  const colW = CONTENT_W / 3;
+  ['Prepared by', 'Checked by', 'Issued by'].forEach((label, i) => {
+    const who = [bill.prepared_by, bill.checked_by, bill.issued_by][i];
+    doc.fillColor(INK).font('Helvetica-Bold').fontSize(7.5).text(label, M + colW * i, y, { width: colW - 10, lineBreak: false });
+    doc.fillColor(MUTED).font('Helvetica').text(who || '', M + colW * i, y + 12, { width: colW - 10, lineBreak: false });
+    doc.text('Signature:', M + colW * i, y + 26, { width: colW - 10, lineBreak: false });
+  });
+}
+
+/**
+ * The beneficiary bills of a station bill — one page each, in the order of the
+ * breakup. Pass `lineId` for a single beneficiary's page.
+ */
+export function drawHydroBeneficiaryBills(doc, payload, lineId = null) {
+  const chosen = lineId ? payload.lines.filter((l) => l.id === lineId) : payload.lines;
+  chosen.forEach((line, i) => {
+    if (i > 0) doc.addPage();
+    drawBeneficiaryPage(doc, payload, line);
+  });
+  return chosen.length;
+}
+
+/** Stream the beneficiary bills to an HTTP response. */
+export async function generateHydroBeneficiaryBillsPdf(res, payload, lineId = null) {
+  const one = lineId ? payload.lines.find((l) => l.id === lineId) : null;
+  const base = String(payload.bill.bill_no).replace(/[^\w.-]+/g, '_');
+  const filename = one
+    ? `${base}_${String(one.sr_no).padStart(2, '0')}_${String(one.beneficiary_name).replace(/[^\w.-]+/g, '_')}.pdf`
+    : `${base}_beneficiary_bills.pdf`;
+  const doc = newDoc(res, `Hydro beneficiary bills ${payload.bill.bill_no}`, filename);
+  drawHydroBeneficiaryBills(doc, payload, lineId);
+  doc.end();
+}
+
+/**
+ * One beneficiary's bill as a buffer, for an email attachment: its own page
+ * first, then the station bill's sheets it was worked from — so what arrives is
+ * the amount and the working behind it in one file.
+ */
+export async function hydroBeneficiaryBillPdfBuffer(payload, lineId) {
+  const { PassThrough } = await import('stream');
+  return new Promise((resolve, reject) => {
+    const stream = new PassThrough();
+    stream.setHeader = () => {};
+    const chunks = [];
+    stream.on('data', (c) => chunks.push(c));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
+    try {
+      const doc = newDoc(stream, `Hydro bill ${payload.bill.bill_no}`, 'bill.pdf');
+      drawHydroBeneficiaryBills(doc, payload, lineId);
+      doc.addPage();
+      drawHydroStationBill(doc, payload);
+      doc.end();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
 /** Stream the bill to an HTTP response. */
 export async function generateHydroStationBillPdf(res, payload) {
   const filename = `${String(payload.bill.bill_no).replace(/[^\w.-]+/g, '_')}.pdf`;

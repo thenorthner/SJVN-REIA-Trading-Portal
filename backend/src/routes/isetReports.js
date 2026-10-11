@@ -6,6 +6,10 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId } from '../util.js';
 import { PENDING_REPORT_CATALOG, ALL_PENDING_KINDS, pendingReportRows } from '../data/pendingReportCatalog.js';
+import multer from 'multer';
+import { processCapacityBuffer, processSupplyBuffer } from '../services/ceaScraper.js';
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router = Router();
 router.use(requireAuth);
@@ -232,6 +236,13 @@ function listKind(kind, q) {
     }
     case 'api-details':
       return db.prepare('SELECT id, name, link, fetched_upto FROM cea_api_catalog ORDER BY sort_order, name').all();
+    case 'cea-installed-capacity-month':
+    case 'cea-installed-capacity-state':
+      return db.prepare('SELECT month_year, state, sector, capacity_mw FROM cea_installed_capacity ORDER BY month_year DESC, state ASC LIMIT 1000').all();
+    case 'cea-supply-position-energy':
+      return db.prepare('SELECT month_year, state, energy_req, energy_avail FROM cea_power_supply ORDER BY month_year DESC, state ASC LIMIT 1000').all();
+    case 'cea-supply-position-peak':
+      return db.prepare('SELECT month_year, state, peak_demand, peak_met FROM cea_power_supply ORDER BY month_year DESC, state ASC LIMIT 1000').all();
     case 'registration':
       return db.prepare(`
         SELECT id, client_name, reference_no, short_name, registered_company_name,
@@ -399,6 +410,33 @@ router.get('/noar-approvals/:applicationNo', requireRole(...ROLE_GROUPS.TRADING_
       actual_tds_paid: tds.actual_tds_paid,
     } : null,
   });
+});
+
+router.post('/upload-cea', requireRole(...ROLE_GROUPS.TRADING_WRITE), upload.single('file'), (req, res) => {
+  try {
+    const { month, year, category } = req.body;
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    if (!month || !year || !category) return res.status(400).json({ error: 'Missing month, year, or category' });
+
+    const periodStr = `${year}-${String(month).padStart(2, '0')}`;
+    
+    if (category === 'INSTALLED_CAPACITY') {
+      processCapacityBuffer(req.file.buffer, periodStr);
+    } else if (category === 'POWER_SUPPLY') {
+      processSupplyBuffer(req.file.buffer, periodStr);
+    } else {
+      return res.status(400).json({ error: 'Invalid category' });
+    }
+
+    // Record success
+    db.prepare('INSERT OR IGNORE INTO cea_scraped_reports (id, month, year, category, file_path) VALUES (?, ?, ?, ?, ?)')
+      .run(newId('CSR'), Number(month), Number(year), category, 'MANUAL_UPLOAD');
+
+    res.json({ success: true, message: `Successfully processed ${category} for ${periodStr}` });
+  } catch (err) {
+    console.error('Upload CEA error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.get('/:kind', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {

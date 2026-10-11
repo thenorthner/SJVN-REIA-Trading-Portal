@@ -64,8 +64,8 @@ export default function StaffUsers() {
           <p>{d.sees_everyone ? 'SJVN\'s own officers on the platform, the role each holds, and what that role reaches.' : 'The users of your desk. The platform\'s administrators manage the other desks.'}</p>
         </div>
         <div className="elite-header-actions">
-          <button type="button" className="elite-ghost-btn" onClick={() => api.staff.exportCsv().then((b) => saveBlob(b, `sjvn-users-${new Date().toISOString().slice(0, 10)}.csv`)).catch((e) => setError(errText(e)))}><Download size={16} /> Export</button>
-          <button type="button" className="elite-add-btn" onClick={() => { setError(''); setModal({ kind: 'add' }); }}><UserPlus size={18} /> Add User</button>
+          <button type="button" className="btn btn-secondary elite-ghost-btn" onClick={() => api.staff.exportCsv().then((b) => saveBlob(b, `sjvn-users-${new Date().toISOString().slice(0, 10)}.csv`)).catch((e) => setError(errText(e)))}><Download size={16} /> Export</button>
+          <button type="button" className="btn btn-primary elite-add-btn" onClick={() => { setError(''); setModal({ kind: 'add' }); }}><UserPlus size={18} /> Add User</button>
         </div>
       </div>
 

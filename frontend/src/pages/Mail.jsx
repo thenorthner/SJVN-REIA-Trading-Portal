@@ -434,7 +434,7 @@ function Compose({ draft, onClose, onSent }) {
           </label>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 24, alignItems: 'center' }}>
-          <button type="submit" className="btn btn-primary" disabled={busy || uploading} style={{ background: 'linear-gradient(135deg, #3b82f6, #6366f1)', border: 'none' }}>
+          <button type="submit" className="btn btn-primary" disabled={busy || uploading}>
             {busy ? 'Sending…' : 'Send Message'}
           </button>
           <button type="button" className="btn" onClick={close} disabled={busy || uploading}>Save &amp; close</button>
@@ -465,7 +465,7 @@ function SignatureSettings({ value, onClose, onSaved }) {
   }
 
   return (
-    <Modal open onClose={onClose} title="Mail settings" width={560}>
+    <Modal open onClose={onClose} title="Quick Connect settings" width={560}>
       <form onSubmit={submit}>
         {error && <div className="alert alert-error" role="alert">{error}</div>}
         <Field label="Signature">
@@ -750,7 +750,7 @@ export default function Mail() {
 
   return (
     <div>
-      <PageHeader title="Mail" subtitle="Messages between people on the portal. Nothing here is sent outside it." />
+      <PageHeader title="Quick Connect" subtitle="Messages between people on the portal. Nothing here is sent outside it." />
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
@@ -763,7 +763,7 @@ export default function Mail() {
           </button>
 
           <div className="mail-nav-title">Folders</div>
-          <nav aria-label="Mail folders">
+          <nav aria-label="Quick Connect folders">
             {FOLDERS.map((f) => (
               <div
                 key={f.key}

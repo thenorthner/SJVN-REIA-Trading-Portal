@@ -16,8 +16,9 @@ import { Router } from 'express';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import {
   getPxilConfig,
+  pxilBlockedUntil,
   fetchTamGtam,
-  fetchTamGtamSlotWise,
+  fetchSlotWise,
   fetchFormatD,
   fetchMemberDor,
   fetchReverseAuctionL1,
@@ -80,13 +81,16 @@ router.get('/status', requireRole(...PXIL_READ), (req, res) => {
     token_present: !!cfg.token,
     base_url: cfg.baseUrl,
     portfolio_id: cfg.portfolioId || null,
+    // PXIL rations calls; while it has shut us out nothing is sent, and the
+    // desk should know when it can try again.
+    rate_limited_until: pxilBlockedUntil() ? new Date(pxilBlockedUntil()).toISOString() : null,
     // PXIL's first daily document printed the slot-wise path; they have since
     // confirmed this one in writing.
     tam_gtam_path: 'tam-gtam',
     tam_gtam_path_confirmed: true,
     endpoints: [
       { key: 'tam-gtam', label: 'Billing — TAM/GTAM (daily)', ranged: true },
-      { key: 'tam-gtam-slot-wise', label: 'Billing — TAM/GTAM (15-min slots)', ranged: true },
+      { key: 'slot-wise', label: 'Billing — slot-wise quantities and charges (15-min)', ranged: true },
       { key: 'format-d', label: 'Format-D — scheduled transactions', ranged: true },
       { key: 'member-dor', label: 'Member DOR — day-wise obligations', ranged: true },
       { key: 'reverse-auction', label: 'Reverse Auction L1 summary (live)', ranged: false },
@@ -99,8 +103,8 @@ router.get('/tam-gtam', requireRole(...PXIL_READ), ranged(
   ({ fromdate, todate }, req) => fetchTamGtam(fromdate, todate, { portfolioId: req.query.portfolioId }),
 ));
 
-router.get('/tam-gtam/slot-wise', requireRole(...PXIL_READ), ranged(
-  ({ fromdate, todate }, req) => fetchTamGtamSlotWise(fromdate, todate, { portfolioId: req.query.portfolioId }),
+router.get('/slot-wise', requireRole(...PXIL_READ), ranged(
+  ({ fromdate, todate }, req) => fetchSlotWise(fromdate, todate, { portfolioId: req.query.portfolioId }),
 ));
 
 router.get('/format-d', requireRole(...PXIL_READ), ranged(

@@ -31,7 +31,11 @@ const OUTSTANDING_SQL = `
   )
 `;
 
-const OPEN = `i.status NOT IN ('PAID','CANCELLED')`;
+// A bill is owed once it has been approved and presented, and until it is paid.
+// "Not PAID or CANCELLED" also took in drafts, bills still in approval and bills
+// that had been rejected — so a draft nobody had been sent was ageing debt, and
+// a rejected bill went on being chased as money outstanding.
+const OPEN = `i.status IN ('APPROVED','SENT','PARTIALLY_PAID','DISPUTED')`;
 
 function sum(where, params = []) {
   return db.prepare(`SELECT COALESCE(SUM(${OUTSTANDING_SQL}), 0) s FROM invoices i WHERE ${where}`).get(...params).s;

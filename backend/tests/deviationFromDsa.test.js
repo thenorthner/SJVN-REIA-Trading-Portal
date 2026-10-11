@@ -23,7 +23,7 @@ beforeEach(() => {
   db.prepare('DELETE FROM deviation_settlements').run();
   db.prepare('DELETE FROM nrpc_dsa_accounts').run();
   writer = tokenFor('REIA_USER');
-  contract = makeContract({ project_type: 'Hydro' });
+  contract = makeContract({ project_type: 'Hydro', contract_no: `PPA/SJVN/NJHPS/T-${Math.random().toString(36).slice(2, 8)}` });
 });
 
 /**
@@ -84,8 +84,9 @@ describe('POST /api/deviation/from-dsa', () => {
 
   it('turns a statement positive into a payable', async () => {
     const acct = storeStatement({ entity: 'SJVN GREEN ENERGY', net: 28.56544 });
+    const sgel = makeContract({ project_type: 'Solar', contract_no: `PPA/SJVN/SGEL/T-${Math.random().toString(36).slice(2, 8)}` });
     const res = await promote(writer, {
-      contract_id: contract.id, dsa_account_id: acct.account_id, entity_name: 'SJVN GREEN ENERGY',
+      contract_id: sgel.id, dsa_account_id: acct.account_id, entity_name: 'SJVN GREEN ENERGY',
     });
     expect(res.body.deviation_amount).toBe(-2856544);
   });
@@ -123,7 +124,7 @@ describe('POST /api/deviation/from-dsa', () => {
   it('refuses an entity the statement does not carry', async () => {
     const acct = storeStatement();
     const res = await promote(writer, {
-      contract_id: contract.id, dsa_account_id: acct.account_id, entity_name: 'RAMPUR HPS',
+      contract_id: makeContract({ project_type: 'Solar' }).id, dsa_account_id: acct.account_id, entity_name: 'RAMPUR HPS',
     });
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/no entity named/i);

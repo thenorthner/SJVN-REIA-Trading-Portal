@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../../api/client.js';
 import { PageHeader, Card, StatCard, Table, Badge, Modal, Field, fmtCurrency } from '../../components/ui.jsx';
 import DisputeExtrasPanel, { SlaTag } from '../../components/DisputeExtrasPanel.jsx';
@@ -39,9 +39,15 @@ export default function MyDisputes({ role, direction }) {
   const [evidenceFile, setEvidenceFile] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusyState] = useState(false);
+  // A second click on Submit before the first has gone raised the dispute twice.
+  const lock = useRef(false);
+  const setBusy = (on) => { lock.current = on; setBusyState(on); };
   const [detail, setDetail] = useState(null);
   const [comment, setComment] = useState('');
+  const [detailError, setDetailError] = useState('');
+  const [pageError, setPageError] = useState('');
+  const errOf = (err, fallback) => err?.response?.data?.error || err?.message || fallback;
 
   function load() {
     setLoading(true);
@@ -49,7 +55,8 @@ export default function MyDisputes({ role, direction }) {
   }
   useEffect(load, []);
   useEffect(() => {
-    api.invoices.list({ direction }).then((list) => setInvoices(list.filter((i) => !['DRAFT', 'PENDING_L2', 'CANCELLED'].includes(i.status)))).catch(() => {});
+    // Bills SJVN has approved: there is nothing of SJVN's to dispute on a bill before that.
+    api.invoices.list({ direction }).then((list) => setInvoices(list.filter((i) => ['APPROVED', 'SENT', 'PARTIALLY_PAID', 'DISPUTED', 'PAID'].includes(i.status) && !i.is_dispute_credit && Number(i.total_amount) > 0))).catch(() => {});
   }, [direction]);
 
   // Arriving with ?invoice=… from another screen: open the form on that bill, filled in.
@@ -69,6 +76,7 @@ export default function MyDisputes({ role, direction }) {
 
   async function handleCreate(e) {
     e.preventDefault();
+    if (lock.current) return;
     setError('');
     if (!chosen.length) { setError('Choose at least one invoice.'); return; }
     if (chosen.some((i) => !(Number(picked[i.id]) > 0))) { setError('Give the amount disputed on each invoice chosen.'); return; }
@@ -108,9 +116,17 @@ export default function MyDisputes({ role, direction }) {
     setEvidenceFile(null);
   }
 
+  // A refusal is shown in the dispute it was about. A file SJVN could not
+  // read, or a message that did not go, used to fail without a word.
   async function openDetail(row) {
-    setDetail(await api.disputes.get(row.id));
+    setDetailError('');
+    setPageError('');
     setComment('');
+    try {
+      setDetail(await api.disputes.get(row.id));
+    } catch (err) {
+      setPageError(errOf(err, 'The dispute could not be opened.'));
+    }
   }
   async function refreshDetail() {
     if (detail) setDetail(await api.disputes.get(detail.id));
@@ -119,25 +135,41 @@ export default function MyDisputes({ role, direction }) {
   async function postComment(e) {
     e.preventDefault();
     if (!comment.trim()) return;
-    await api.disputes.comment(detail.id, comment, false);
-    setComment('');
-    refreshDetail();
+    setDetailError('');
+    try {
+      await api.disputes.comment(detail.id, comment, false);
+      setComment('');
+      refreshDetail();
+    } catch (err) {
+      setDetailError(errOf(err, 'The message could not be sent.'));
+    }
   }
   async function uploadEvidence(e) {
     const file = e.target.files?.[0];
     if (!file || !detail) return;
-    await api.disputes.uploadEvidence(detail.id, file);
-    e.target.value = '';
-    refreshDetail();
+    setDetailError('');
+    try {
+      await api.disputes.uploadEvidence(detail.id, file);
+      refreshDetail();
+    } catch (err) {
+      setDetailError(errOf(err, 'The file could not be added.'));
+    } finally {
+      e.target.value = '';
+    }
   }
   async function downloadEvidence(d) {
-    const blob = await api.disputes.downloadEvidence(detail.id, d.filename);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = d.original_name || d.filename;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setDetailError('');
+    try {
+      const blob = await api.disputes.downloadEvidence(detail.id, d.filename);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = d.original_name || d.filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setDetailError(err?.response?.status === 404 ? 'That file is no longer on the server.' : 'The file could not be downloaded.');
+    }
   }
 
   const text = q.trim().toLowerCase();
@@ -175,6 +207,7 @@ export default function MyDisputes({ role, direction }) {
       />
 
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
+      {pageError && <div className="form-error" role="alert">{pageError}</div>}
 
       {totals && (
         <div className="kpi-grid">
@@ -208,7 +241,7 @@ export default function MyDisputes({ role, direction }) {
                 const on = picked[i.id] !== undefined;
                 return (
                   <label key={i.id} style={{ display: 'grid', gridTemplateColumns: '20px 1fr 170px', gap: 10, alignItems: 'center', padding: '7px 10px', borderBottom: '1px solid var(--slate-100)', fontSize: 13, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={on} onChange={() => setPicked((p) => { const n = { ...p }; if (on) delete n[i.id]; else n[i.id] = ''; return n; })} />
+                    <input type="checkbox" checked={on} onChange={() => { setError(''); setPicked((p) => { const n = { ...p }; if (on) delete n[i.id]; else n[i.id] = ''; return n; }); }} />
                     <span>
                       <strong>{i.invoice_no}</strong> · {i.billing_period} · {fmtCurrency(i.total_amount)}
                       {on && <div style={{ fontSize: 11.5, color: 'var(--slate-500)' }}>{chargeLabel(form.charge_line)} on this bill: {fmtCurrency(breakdownOf(i)[form.charge_line] || 0)}</div>}
@@ -261,9 +294,10 @@ export default function MyDisputes({ role, direction }) {
               <div className="detail-item"><span className="detail-label">Category</span><span className="detail-value">{reasonLabel(detail.reason_code)}</span></div>
               <div className="detail-item"><span className="detail-label">Charge line</span><span className="detail-value">{chargeLabel(detail.charge_line)}</span></div>
               <div className="detail-item"><span className="detail-label">Disputed</span><span className="detail-value">{fmtCurrency(detail.disputed_amount)}</span></div>
-              <div className="detail-item"><span className="detail-label">Payable now on the bill</span><span className="detail-value">{fmtCurrency(detail.invoice?.payable_now)}</span></div>
+              <div className="detail-item"><span className="detail-label">Left to pay on the bill</span><span className="detail-value">{fmtCurrency(detail.invoice?.balance_due ?? detail.invoice?.payable_now)}</span></div>
             </div>
             {detail.issue_description && <p style={{ whiteSpace: 'pre-wrap' }}>{detail.issue_description}</p>}
+            {detailError && <div className="form-error" role="alert">{detailError}</div>}
 
             <DisputeExtrasPanel key={`${detail.id}-${detail.updated_at}`} disputeId={detail.id} onChanged={refreshDetail} />
 
@@ -298,10 +332,10 @@ export default function MyDisputes({ role, direction }) {
 
             {(detail.events || []).length > 0 && (
               <details style={{ marginTop: 12, fontSize: 13 }}>
-                <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--primary)' }}>Timeline ({detail.events.length} events)</summary>
+                <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--primary)' }}>Timeline ({detail.events.filter((e) => e.event_type !== 'INTERNAL_COMMENT').length} events)</summary>
                 <ul style={{ paddingLeft: 18, marginTop: 6 }}>
                   {detail.events.filter((e) => e.event_type !== 'INTERNAL_COMMENT').map((e) => (
-                    <li key={e.id}>{fmtDateTime(e.created_at)} · {e.actor_name} · {e.event_type.replace(/_/g, ' ').toLowerCase()}{e.to_status && e.from_status !== e.to_status ? ` → ${e.to_status.replace(/_/g, ' ').toLowerCase()}` : ''}</li>
+                    <li key={e.id}>{fmtDateTime(e.created_at)} · {e.actor_name} · {e.event_type.replace(/_/g, ' ').toLowerCase()}{e.to_status && e.from_status && e.from_status !== e.to_status ? ` → ${e.to_status.replace(/_/g, ' ').toLowerCase()}` : ''}</li>
                   ))}
                 </ul>
               </details>

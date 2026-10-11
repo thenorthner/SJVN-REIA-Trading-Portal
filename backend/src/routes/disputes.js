@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide, SELLER_ROLES, BUYER_ROLES } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, genInvoiceNo } from '../util.js';
+import { notifyCounterparty, notifyDesk } from '../paymentSecurityEngine.js';
 import { dispatch } from '../services/notificationService.js';
 import {
   REASON_CODES,
@@ -20,10 +21,12 @@ import {
   payableNow,
   genDisputeNo,
   ALLOWED_TRANSITIONS,
+  CHARGE_LABELS,
   daysBetween,
 } from '../disputesConstants.js';
 import { getParamNumber } from '../mastersService.js';
-import { invoicePresentedTo, billPresentedOn } from '../services/counterpartyScope.js';
+import { invoicePresentedTo, billPresentedOn, authoredBy, isPresented } from '../services/counterpartyScope.js';
+import { invoiceBalance } from '../services/invoiceLps.js';
 import { asOfFrom } from '../services/clock.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -43,6 +46,16 @@ const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
 
 const router = Router();
 router.use(requireAuth);
+
+/**
+ * Tell the company that raised a dispute — and only it. These went to a role, so
+ * every buyer heard how a seller's dispute ended, with the invoice number.
+ */
+function tellRaiser(dispute, type, message) {
+  const inv = db.prepare('SELECT contract_id FROM invoices WHERE id = ?').get(dispute.invoice_id);
+  if (inv && ['SELLER', 'BUYER'].includes(dispute.raised_by_role)) notifyCounterparty(inv.contract_id, dispute.raised_by_role, type, message);
+}
+
 
 const REIA_ROLES = ROLE_GROUPS.REIA_ALL;
 const REIA_WRITE = ROLE_GROUPS.REIA_WRITE;
@@ -136,22 +149,46 @@ function openDisputeAmountOnCharge(invoiceId, chargeLine, excludeId = null) {
   return db.prepare(sql).get(...params).s;
 }
 
+/**
+ * Keep a bill's disputed amount and status in step with the disputes open on it.
+ *
+ * While anything on it is in dispute the bill reads DISPUTED and that amount is
+ * held out of what is payable. When the last dispute closes it goes back to
+ * where it stands on the facts — and that used to be SENT, always: a bill that
+ * was part-paid before the dispute came back as though nothing had been paid on
+ * it, a paid one as unpaid, and one approved but never emailed as sent. The
+ * status it had going in is kept, and what has been settled since decides the
+ * rest.
+ */
 function setInvoiceOpenDispute(invoiceId) {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
+  if (!inv) return;
   const openSum = db.prepare(`
     SELECT COALESCE(SUM(disputed_amount), 0) s FROM disputes
     WHERE invoice_id = ? AND status IN (${OPEN_STATUSES.map(() => '?').join(',')})
   `).get(invoiceId, ...OPEN_STATUSES).s;
 
   if (openSum > 0) {
-    db.prepare(`UPDATE invoices SET disputed_amount = ?, status = 'DISPUTED', updated_at = datetime('now') WHERE id = ?`)
-      .run(openSum, invoiceId);
-  } else {
     db.prepare(`
-      UPDATE invoices SET disputed_amount = 0,
-        status = CASE WHEN status = 'DISPUTED' THEN 'SENT' ELSE status END,
+      UPDATE invoices SET disputed_amount = ?, status = 'DISPUTED',
+        status_before_dispute = CASE WHEN status = 'DISPUTED' THEN status_before_dispute ELSE status END,
         updated_at = datetime('now') WHERE id = ?
-    `).run(invoiceId);
+    `).run(openSum, invoiceId);
+    return;
   }
+
+  let next = inv.status;
+  if (inv.status === 'DISPUTED') {
+    const before = inv.status_before_dispute || 'SENT';
+    const cleared = { ...inv, disputed_amount: 0 };
+    const paid = db.prepare('SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)), 0) s FROM payments WHERE invoice_id = ?').get(invoiceId).s;
+    const payable = payableNow(cleared).payable_now;
+    if (paid > 0 && paid >= payable - 0.005) next = 'PAID';
+    else if (paid > 0) next = 'PARTIALLY_PAID';
+    else next = ['APPROVED', 'SENT'].includes(before) ? before : (inv.issued_at ? 'SENT' : 'APPROVED');
+  }
+  db.prepare(`UPDATE invoices SET disputed_amount = 0, status = ?, status_before_dispute = NULL, updated_at = datetime('now') WHERE id = ?`)
+    .run(next, invoiceId);
 }
 
 export function runSlaEscalations() {
@@ -206,11 +243,7 @@ export function runSlaEscalations() {
         message: `Resolve SLA approaching for ${d.dispute_no} (due ${d.sla_resolve_due})`,
       });
     } else {
-      pushNotification({
-        role: 'REIA_USER',
-        type: 'DISPUTE_SLA_APPROACHING',
-        message: `Resolve SLA approaching for ${d.dispute_no} (due ${d.sla_resolve_due})`,
-      });
+      notifyDesk('DISPUTE_SLA_APPROACHING', `Resolve SLA approaching for ${d.dispute_no} (due ${d.sla_resolve_due})`);
     }
   }
 
@@ -383,7 +416,8 @@ router.get('/:id', (req, res) => {
   commentsSql += ' ORDER BY created_at ASC';
   const comments = db.prepare(commentsSql).all(dispute.id);
 
-  const events = db.prepare('SELECT * FROM dispute_events WHERE dispute_id = ? ORDER BY created_at ASC').all(dispute.id);
+  const events = db.prepare('SELECT * FROM dispute_events WHERE dispute_id = ? ORDER BY created_at ASC').all(dispute.id)
+    .filter((e) => isReia(req.user) || e.event_type !== 'INTERNAL_COMMENT');
   const assignee = dispute.assigned_to
     ? db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(dispute.assigned_to)
     : null;
@@ -394,7 +428,10 @@ router.get('/:id', (req, res) => {
   // PSA Art. 6.7.3: an accepted (over-billed) claim is refunded with interest at
   // the LPS rate. Suggest that interest on the disputed amount, from bill date to now.
   const lpsPct = getParamNumber('lps_annual_pct', 15);
-  const interestDays = Math.max(0, daysBetween(new Date(invoice.created_at), new Date()));
+  // Interest is on money that was paid and has to come back. On a bill nobody
+  // has paid there is nothing to refund, and a day's interest was offered anyway.
+  const firstPaid = db.prepare('SELECT MIN(payment_date) d FROM payments WHERE invoice_id = ?').get(invoice.id)?.d || null;
+  const interestDays = firstPaid ? Math.max(0, daysBetween(new Date(firstPaid), new Date())) : 0;
   const refundInterest = Math.round((Number(dispute.disputed_amount) || 0) * (lpsPct / 100 / 365) * interestDays);
 
   res.json({
@@ -403,6 +440,8 @@ router.get('/:id', (req, res) => {
       ...invoice,
       charge_breakdown: invoiceChargeBreakdown(invoice),
       ...payableNow(invoice),
+      // What is still owed on it — payable_now does not come down as money arrives.
+      balance_due: invoiceBalance(invoice).balance,
     },
     refund_interest_guidance: { lps_annual_pct: lpsPct, days: interestDays, amount: refundInterest },
     comments,
@@ -442,6 +481,16 @@ router.post('/', requireRole(...SELLER_ROLES, ...BUYER_ROLES, ...REIA_WRITE), (r
     JOIN contracts c ON c.id = i.contract_id WHERE i.id = ?
   `).get(invoice_id);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+  // A credit note is the answer to a dispute, not a bill to raise one on.
+  if (Number(invoice.total_amount) <= 0 || db.prepare('SELECT 1 FROM disputes WHERE supplementary_invoice_id = ?').get(invoice.id)) {
+    return res.status(400).json({ error: `${invoice.invoice_no} is a credit note. A dispute is raised on the bill it was credited against.` });
+  }
+  // The same claim sent twice in the same moment — a second click — is one claim.
+  const twin = db.prepare(`
+    SELECT dispute_no FROM disputes WHERE invoice_id = ? AND charge_line = ? AND disputed_amount = ? AND raised_by_user_id = ?
+      AND status NOT IN ('CLOSED') AND created_at >= datetime('now', '-30 seconds')
+  `).get(invoice.id, charge_line, Number(disputed_amount), req.user.id);
+  if (twin) return res.status(409).json({ error: `${twin.dispute_no} was raised a moment ago for the same amount on this bill. It has not been raised again.` });
 
   // Every seller or buyer user, company admin or not. Naming only SELLER and
   // BUYER here would let their L1–L3 users past the dispute window below.
@@ -451,10 +500,28 @@ router.post('/', requireRole(...SELLER_ROLES, ...BUYER_ROLES, ...REIA_WRITE), (r
   // still in approval were open to being disputed by the counterparty, which
   // also started the clock below on a bill that had not been presented.
   if (raisedByCounterparty && !invoicePresentedTo(req.user, invoice)) {
+    // A seller's own bill that SJVN has not approved yet is no secret to the
+    // seller, and "Invoice not found" on a bill it was looking at told it
+    // nothing. There is just nothing of SJVN's on it to dispute yet.
+    if (authoredBy(req.user, invoice) && invoice.seller_id === req.user.linked_entity_id) {
+      return res.status(400).json({
+        error: `${invoice.invoice_no} is still ${invoice.status.replace(/_/g, ' ')} — SJVN has not approved or paid it yet, so there is nothing to dispute. A dispute can be raised once SJVN has approved the bill.`,
+        invoice_status: invoice.status,
+      });
+    }
     return res.status(404).json({ error: 'Invoice not found' });
   }
   if (invoice.status === 'CANCELLED') {
     return res.status(400).json({ error: 'This bill has been cancelled — there is nothing left to dispute.' });
+  }
+  // The desk may raise one on a counterparty's behalf, but on a bill that has
+  // been presented. Raised on a draft it turned the draft DISPUTED, and closing
+  // it then left a bill nobody had approved standing as SENT.
+  if (!raisedByCounterparty && !isPresented(invoice)) {
+    return res.status(400).json({
+      error: `${invoice.invoice_no} is still ${invoice.status.replace(/_/g, ' ')} — a dispute is raised on a bill once it has been approved.`,
+      invoice_status: invoice.status,
+    });
   }
 
   // PSA Art. 6.7.1: a bill not disputed within 15 days of presentation becomes
@@ -469,11 +536,20 @@ router.post('/', requireRole(...SELLER_ROLES, ...BUYER_ROLES, ...REIA_WRITE), (r
     return res.status(400).json({ error: `This bill is now conclusive — the ${windowDays}-day dispute window (from ${String(presentedOn).split('T')[0]}) has passed.` });
   }
 
+  // A dispute belongs to the party the bill is with: the seller on its own
+  // invoice to SJVN, the buyer on SJVN's bill to it. The caller used to name the
+  // side freely, so the desk's form — which defaults to Buyer — could file a
+  // "buyer" dispute on a seller's invoice, which neither side could then answer.
   const userSide = counterpartySide(req.user);
-  const role = raised_by_role || raised_by || userSide;
-  if (!role || !['BUYER', 'SELLER'].includes(role)) {
-    return res.status(400).json({ error: 'raised_by_role must be BUYER or SELLER' });
+  const billSide = invoice.direction === 'SELLER_TO_SJVN' ? 'SELLER' : 'BUYER';
+  const named = raised_by_role || raised_by;
+  if (userSide && userSide !== billSide) {
+    return res.status(403).json({ error: `This bill is between SJVN and the ${billSide.toLowerCase()}; only the ${billSide.toLowerCase()} can dispute it.` });
   }
+  if (!userSide && ['BUYER', 'SELLER'].includes(named) && named !== billSide) {
+    return res.status(400).json({ error: `${invoice.invoice_no} is the ${billSide.toLowerCase()}'s bill, so a dispute on it is raised for the ${billSide.toLowerCase()}.` });
+  }
+  const role = billSide;
 
   if (userSide === 'SELLER' && invoice.seller_id !== req.user.linked_entity_id) {
     return res.status(403).json({ error: 'Cannot dispute another seller\'s invoice' });
@@ -489,8 +565,10 @@ router.post('/', requireRole(...SELLER_ROLES, ...BUYER_ROLES, ...REIA_WRITE), (r
   const alreadyOpen = openDisputeAmountOnCharge(invoice_id, charge_line);
   const remaining = chargeValue - alreadyOpen;
   if (amount > remaining + 0.01) {
+    // In the words the form uses for the line, not the column it is stored in.
+    const line = CHARGE_LABELS[charge_line] || charge_line;
     return res.status(400).json({
-      error: `Disputed amount ₹${amount} exceeds remaining disputable on ${charge_line} (₹${Math.max(0, remaining)})`,
+      error: `Disputed amount ₹${amount.toLocaleString('en-IN')} exceeds remaining disputable on ${line} (₹${Math.max(0, remaining).toLocaleString('en-IN')})`,
     });
   }
 
@@ -530,11 +608,7 @@ router.post('/', requireRole(...SELLER_ROLES, ...BUYER_ROLES, ...REIA_WRITE), (r
     details: { dispute_no: disputeNo, invoice_id, reason_code, charge_line, amount },
   });
 
-  pushNotification({
-    role: 'REIA_USER',
-    type: 'DISPUTE',
-    message: `New dispute ${disputeNo} raised on invoice ${invoice.invoice_no} (₹${amount.toLocaleString('en-IN')})`,
-  });
+  notifyDesk('DISPUTE', `New dispute ${disputeNo} raised by ${req.user.name} on invoice ${invoice.invoice_no} (₹${amount.toLocaleString('en-IN')})`);
   pushNotification({
     userId: req.user.id,
     type: 'DISPUTE_ACKNOWLEDGED',
@@ -556,27 +630,17 @@ router.post('/:id/transition', (req, res) => {
     return res.status(400).json({ error: `Cannot transition from ${dispute.status} to ${toStatus}` });
   }
 
-  // Role gates
-  if (['UNDER_REVIEW', 'INFO_REQUESTED', 'ESCALATED', 'CLOSED'].includes(toStatus) && !isReia(req.user) && toStatus !== 'UNDER_REVIEW') {
-    if (toStatus === 'CLOSED' && !REIA_WRITE.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Only SJVN team can close disputes' });
-    }
-  }
-  if (toStatus === 'UNDER_REVIEW' && dispute.status === 'INFO_REQUESTED') {
-    // Submitter reply path — buyer/seller or REIA
-    const isSubmitter = counterpartySide(req.user) === dispute.raised_by_role;
-    if (!isSubmitter && !isReia(req.user)) {
-      return res.status(403).json({ error: 'Only submitter or SJVN can return from Info Requested' });
-    }
-  } else if (['INFO_REQUESTED', 'UNDER_REVIEW', 'ESCALATED', 'CLOSED', 'ACKNOWLEDGED'].includes(toStatus)) {
-    if (!isReia(req.user) && !(toStatus === 'UNDER_REVIEW' && dispute.status === 'INFO_REQUESTED')) {
-      if (!REIA_WRITE.includes(req.user.role) && !isReia(req.user)) {
-        // Buyer/Seller can only move INFO_REQUESTED -> UNDER_REVIEW
-        if (!(dispute.status === 'INFO_REQUESTED' && toStatus === 'UNDER_REVIEW')) {
-          return res.status(403).json({ error: 'Not authorized for this transition' });
-        }
-      }
-    }
+  // Moving a dispute on is the REIA desk's. The one move that is the
+  // submitter's is answering a request for information, which returns it to
+  // review. The checks here used to let any SJVN role through — Finance and
+  // Management read disputes but could close one or ask for information by
+  // calling this directly.
+  const submitterReply = dispute.status === 'INFO_REQUESTED' && toStatus === 'UNDER_REVIEW'
+    && counterpartySide(req.user) === dispute.raised_by_role;
+  if (!submitterReply && !REIA_WRITE.includes(req.user.role)) {
+    return res.status(403).json({
+      error: toStatus === 'CLOSED' ? 'Only SJVN team can close disputes' : 'Only the REIA desk moves a dispute on',
+    });
   }
 
   if (['RESOLVED_ACCEPTED', 'RESOLVED_REJECTED'].includes(toStatus)) {
@@ -606,11 +670,7 @@ router.post('/:id/transition', (req, res) => {
         message: `Additional information requested on dispute ${dispute.dispute_no}`,
       });
     } else {
-      pushNotification({
-        role: dispute.raised_by_role,
-        type: 'DISPUTE_INFO_REQUESTED',
-        message: `Additional information requested on dispute ${dispute.dispute_no}`,
-      });
+      tellRaiser(dispute, 'DISPUTE_INFO_REQUESTED', `Additional information requested on dispute ${dispute.dispute_no}`);
     }
     if (note) {
       db.prepare(`
@@ -683,7 +743,10 @@ router.post('/:id/resolve', requireRole(...REIA_WRITE), (req, res) => {
 
   if (credit > 0) {
     // Adjust parent invoice total and optionally add resolution LPS
-    afterTotal = Math.max(0, beforeTotal - credit + lpsRes);
+    // The total comes down by the credit. Anything added on resolution sits in
+    // the surcharge column alone — it was added to the total as well, so the
+    // bill asked for it twice.
+    afterTotal = Math.max(0, beforeTotal - credit);
     db.prepare(`
       UPDATE invoices SET total_amount = ?, lps = lps + ?, other_adjustments = other_adjustments - ?,
         updated_at = datetime('now') WHERE id = ?
@@ -696,8 +759,9 @@ router.post('/:id/resolve', requireRole(...REIA_WRITE), (req, res) => {
       INSERT INTO invoices (
         id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh,
         tariff_per_unit, energy_charges, transmission_charges, rebate, lps, penalty, trading_margin, taxes,
-        other_adjustments, total_amount, disputed_amount, due_date, status, parent_invoice_id, created_by
-      ) VALUES (?, ?, ?, 'SUPPLEMENTARY', ?, ?, 0, 0, 0, 0, 0, ?, 0, 0, 0, ?, ?, 0, date('now'), 'APPROVED', ?, ?)
+        other_adjustments, total_amount, disputed_amount, due_date, status, parent_invoice_id, created_by,
+        invoice_breakdown_json
+      ) VALUES (?, ?, ?, 'SUPPLEMENTARY', ?, ?, 0, 0, 0, 0, 0, ?, 0, 0, 0, ?, ?, 0, date('now'), 'APPROVED', ?, ?, ?)
     `).run(
       suppId,
       suppNo,
@@ -708,14 +772,17 @@ router.post('/:id/resolve', requireRole(...REIA_WRITE), (req, res) => {
       -credit,
       -credit + lpsRes,
       invoice.id,
-      req.user.name
+      req.user.name,
+      // What the credit is made of. Every bill SJVN raises carries its lines —
+      // it is also how a bill on a PPA is told from the seller's own.
+      JSON.stringify([
+        { code: 'CR', label: `Credit on dispute ${dispute.dispute_no} against ${invoice.invoice_no}`, value: -credit },
+        ...(lpsRes ? [{ code: 'LPS', label: 'Late payment surcharge on resolution', value: lpsRes }] : []),
+        { code: 'TOTAL', label: 'Supplementary (credit) total', value: -credit + lpsRes },
+      ])
     );
 
-    pushNotification({
-      role: dispute.raised_by_role,
-      type: 'SUPPLEMENTARY_INVOICE',
-      message: `Supplementary invoice ${suppNo} generated for dispute ${dispute.dispute_no} (credit ₹${credit.toLocaleString('en-IN')})`,
-    });
+    tellRaiser(dispute, 'SUPPLEMENTARY_INVOICE', `Credit note ${suppNo} raised for dispute ${dispute.dispute_no} (credit ₹${credit.toLocaleString('en-IN')})`);
   }
 
   db.prepare(`
@@ -747,17 +814,8 @@ router.post('/:id/resolve', requireRole(...REIA_WRITE), (req, res) => {
     details: { outcome, accepted, credit, supplementary_invoice_id: suppId },
   });
 
-  pushNotification({
-    role: dispute.raised_by_role,
-    type: 'DISPUTE_RESOLVED',
-    message: `Dispute ${dispute.dispute_no} resolved: ${outcome.replaceAll('_', ' ')}`,
-  });
-  const counterRole = dispute.raised_by_role === 'BUYER' ? 'SELLER' : 'BUYER';
-  pushNotification({
-    role: counterRole,
-    type: 'DISPUTE_RESOLVED',
-    message: `Dispute ${dispute.dispute_no} on invoice ${invoice.invoice_no} resolved: ${outcome.replaceAll('_', ' ')}`,
-  });
+  // The other side of the desk is no party to this bill and is told nothing.
+  tellRaiser(dispute, 'DISPUTE_RESOLVED', `Dispute ${dispute.dispute_no} on invoice ${invoice.invoice_no} resolved: ${outcome.replaceAll('_', ' ').toLowerCase()}. Accept it, or escalate, under My Disputes.`);
 
   res.json(enrichDispute(db.prepare('SELECT * FROM disputes WHERE id = ?').get(dispute.id)));
 });
@@ -785,18 +843,16 @@ router.post('/:id/comments', (req, res) => {
   recordEvent(dispute.id, req.user, internal ? 'INTERNAL_COMMENT' : 'COMMENT', dispute.status, dispute.status, null);
 
   // Public reply from submitter on INFO_REQUESTED moves back to Under Review
+  // Anyone from the company that raised it, not only its admin login: a reply
+  // from a team member (BUYER_L1, SELLER_L2 …) used to leave the dispute waiting.
   if (
     !internal &&
     dispute.status === 'INFO_REQUESTED' &&
-    (req.user.role === dispute.raised_by_role || req.user.id === dispute.raised_by_user_id)
+    (counterpartySide(req.user) === dispute.raised_by_role || req.user.id === dispute.raised_by_user_id)
   ) {
     db.prepare(`UPDATE disputes SET status = 'UNDER_REVIEW', updated_at = datetime('now') WHERE id = ?`).run(dispute.id);
     recordEvent(dispute.id, req.user, 'STATUS_CHANGE', 'INFO_REQUESTED', 'UNDER_REVIEW', { via: 'comment_reply' });
-    pushNotification({
-      role: 'REIA_USER',
-      type: 'DISPUTE',
-      message: `Submitter replied on ${dispute.dispute_no} — back Under Review`,
-    });
+    notifyDesk('DISPUTE', `${req.user.name} replied on ${dispute.dispute_no} — it is back under review`);
   }
 
   const comment = db.prepare('SELECT * FROM dispute_comments WHERE id = ?').get(id);

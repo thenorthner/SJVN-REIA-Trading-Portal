@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import api from '../api/client.js';
 import { Badge, Field, fmtNumber } from './ui.jsx';
@@ -74,6 +74,7 @@ function Summary({ d, run, onPreview, setError }) {
           ? <>{fmtNumber(d.cuf_percent)}%{d.cuf_computed ? <span style={{ fontSize: 11, color: 'var(--slate-500)' }}> (worked out from energy and capacity)</span> : ''}</>
           : '—')}
         {d.min_cuf_percent != null && item('Contractual minimum CUF', `${fmtNumber(d.min_cuf_percent)}%`)}
+        {d.lock_override_reason && item('Locked with a reason', <>{d.lock_override_reason}{d.lock_override_by ? <span style={{ fontSize: 11, color: 'var(--slate-500)' }}> — {d.lock_override_by}</span> : ''}</>)}
         {item('Availability', d.availability_percent != null ? `${fmtNumber(d.availability_percent)}%` : '—')}
         {item('Source', d.source)}
         {item('Bill', d.invoice ? `${d.invoice.invoice_no} (${d.invoice.status})` : 'Not billed yet')}
@@ -206,8 +207,8 @@ function Blocks({ d, reload, setError }) {
                 <YAxis tick={{ fontSize: 11 }} width={48} />
                 <Tooltip formatter={(v) => `${fmtNumber(v, 3)} MWh`} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="scheduled_mwh" name="Scheduled" fill="#94a3b8" isAnimationActive={false} />
-                <Bar dataKey="actual_mwh" name="Actual" fill="#2563eb" isAnimationActive={false} />
+                <Bar dataKey="scheduled_mwh" name="Scheduled" fill="url(#eliteSlate)" isAnimationActive={false} />
+                <Bar dataKey="actual_mwh" name="Actual" fill="url(#eliteBlue)" isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -383,7 +384,11 @@ export default function EnergyRecordDetail({ id, onChanged, startTab = 'SUMMARY'
   const load = useCallback(() => api.energyRecords.get(id).then(setD).catch((e) => setError(errText(e))), [id]);
   useEffect(() => { load(); }, [load]);
 
+  const lockRef = useRef(false);
   const run = useCallback(async (fn, after) => {
+    // A second click before the first has answered must not send the action again.
+    if (lockRef.current) return;
+    lockRef.current = true;
     try {
       await fn();
       setError('');
@@ -392,6 +397,8 @@ export default function EnergyRecordDetail({ id, onChanged, startTab = 'SUMMARY'
       onChanged?.();
     } catch (e) {
       setError(errText(e));
+    } finally {
+      lockRef.current = false;
     }
   }, [load, onChanged]);
 

@@ -58,7 +58,7 @@ describe('status', () => {
 });
 
 describe('date range validation', () => {
-  const ranged = ['/tam-gtam', '/tam-gtam/slot-wise', '/format-d', '/member-dor', '/trade-margin'];
+  const ranged = ['/tam-gtam', '/slot-wise', '/format-d', '/member-dor', '/trade-margin'];
 
   for (const path of ranged) {
     it(`${path} requires both dates`, async () => {
@@ -94,7 +94,7 @@ describe('reports in stub mode', () => {
   });
 
   it('returns slot rows without renumbering them', async () => {
-    const r = await q('/tam-gtam/slot-wise');
+    const r = await q('/slot-wise');
     expect(r.status).toBe(200);
     const row = r.body.rows[0];
     expect(row.trade_slots[0].from_time).toBe('00:15');

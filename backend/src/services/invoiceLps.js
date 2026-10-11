@@ -1,5 +1,5 @@
 import db from '../db/index.js';
-import { accruedLpsTimeline } from '../disputesConstants.js';
+import { accruedLpsTimeline, payableNow } from '../disputesConstants.js';
 import { getParamNumber } from '../mastersService.js';
 import { computeDueDate } from '../util.js';
 import { payerStateForInvoice } from './workingCalendar.js';
@@ -20,10 +20,15 @@ export function lpsTermsFor(contractId) {
   };
 }
 
-/** Payments against an invoice, as dated amounts (deductions count as paid). */
+/**
+ * Payments against an invoice, as dated amounts off what surcharge is charged
+ * on (deductions count as paid). The part of a receipt that was applied to
+ * surcharge itself is left out: it paid the surcharge, not the bill, so the
+ * bill goes on earning on what is still unpaid of it.
+ */
 export function invoicePayments(invoiceId) {
   return db.prepare(`
-    SELECT amount + COALESCE(deduction, 0) AS amount, payment_date AS date
+    SELECT amount + COALESCE(deduction, 0) - COALESCE(lps_component, 0) AS amount, payment_date AS date
     FROM payments WHERE invoice_id = ? AND payment_date IS NOT NULL
   `).all(invoiceId);
 }
@@ -57,4 +62,26 @@ export function invoiceLpsAsOf(inv, asOf = new Date()) {
     asOf,
     state: payerStateForInvoice(inv),
   });
+}
+
+/**
+ * What is still owed on a bill today, and the pieces that figure is made of.
+ *
+ * payable_now is the whole bill as it stands — total, less rebate, plus
+ * surcharge, less what is disputed — and does not come down as money arrives.
+ * This does the rest: surcharge as the bill has earned it to `asOf` rather than
+ * as it was frozen at the last payment, less everything recorded against the
+ * bill (payments, deductions, credit notes). The invoice screens, the buyer's
+ * "left to pay" and the notification board all read it from here, so they
+ * cannot give three answers for one bill.
+ */
+export function invoiceBalance(inv, asOf = new Date()) {
+  if (!inv) return { paid: 0, accrued: { days_overdue: 0, lps: 0, base: 0 }, lps_to_date: 0, balance: 0 };
+  const paid = db.prepare('SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)), 0) s FROM payments WHERE invoice_id = ?').get(inv.id).s;
+  const closed = ['PAID', 'CANCELLED', 'DRAFT'].includes(inv.status);
+  const accrued = closed ? { days_overdue: 0, lps: 0, base: 0 } : invoiceLpsAsOf(inv, asOf);
+  const lpsToDate = closed ? (Number(inv.lps) || 0) : Math.max(Number(inv.lps) || 0, Number(accrued.lps) || 0);
+  const gross = payableNow({ ...inv, lps: lpsToDate }).payable_now;
+  const balance = ['PAID', 'CANCELLED'].includes(inv.status) ? 0 : Math.max(0, Math.round((gross - paid) * 100) / 100);
+  return { paid, accrued, lps_to_date: lpsToDate, balance };
 }

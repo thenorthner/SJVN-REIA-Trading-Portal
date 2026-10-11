@@ -24,6 +24,7 @@ import { ZipArchive } from 'archiver';
 import db from '../db/index.js';
 import { requireAuth, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
 import { pushNotification, nextSeriesNo } from '../util.js';
+import { notifyCounterparty, notifyDesk } from '../paymentSecurityEngine.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { getParamNumber } from '../mastersService.js';
 import { OPEN_STATUSES, REASON_LABELS, CHARGE_LABELS } from '../disputesConstants.js';
@@ -220,7 +221,7 @@ router.post('/:id/respond', (req, res) => send(res, () => {
     setInvoiceOpenDispute(d.invoice_id);
     recordEvent(d.id, req.user, 'RESOLUTION_ACCEPTED', d.status, 'CLOSED', note ? { note } : null);
     audit(req, 'DISPUTE_RESOLUTION_ACCEPTED', d.id);
-    pushNotification({ role: 'REIA_USER', type: 'DISPUTE', message: `${d.dispute_no}: ${req.user.name} accepted the resolution — closed.` });
+    notifyDesk('DISPUTE', `${d.dispute_no}: ${req.user.name} accepted the resolution — closed.`);
   } else if (response === 'ESCALATE') {
     const forum = String(req.body.forum || '').toUpperCase();
     if (!FORUMS[forum]) throw fail(400, `forum must be one of ${Object.keys(FORUMS).join(', ')}`);
@@ -236,7 +237,7 @@ router.post('/:id/respond', (req, res) => send(res, () => {
     `).run(req.user.name, note, forum, money(amount), d.id);
     recordEvent(d.id, req.user, 'RESOLUTION_CONTESTED', d.status, d.status, { forum, contested_amount: money(amount), note });
     audit(req, 'DISPUTE_RESOLUTION_CONTESTED', d.id, { afterValue: { forum, contested_amount: money(amount) }, reason: note });
-    for (const role of ['REIA_USER', 'MANAGEMENT']) {
+    for (const role of [...new Set([...ROLE_GROUPS.REIA_WRITE, 'MANAGEMENT'])]) {
       pushNotification({ role, type: 'DISPUTE', message: `${d.dispute_no}: ${req.user.name} does not accept the resolution and is taking Rs ${inr(amount)} to ${FORUMS[forum]}.` });
     }
   } else {
@@ -256,7 +257,7 @@ router.post('/:id/conclude', (req, res) => send(res, () => {
   setInvoiceOpenDispute(d.invoice_id);
   recordEvent(d.id, req.user, 'ESCALATION_CONCLUDED', d.status, 'CLOSED', { note });
   audit(req, 'DISPUTE_ESCALATION_CONCLUDED', d.id, { reason: note });
-  pushNotification({ role: d.raised_by_role, type: 'DISPUTE', message: `${d.dispute_no}: the escalation has been concluded — ${note}` });
+  if (['SELLER', 'BUYER'].includes(d.raised_by_role)) notifyCounterparty(d.contract_id, d.raised_by_role, 'DISPUTE', `${d.dispute_no}: the escalation has been concluded — ${note}`);
   return view(req.user, disputeFor(req.user, d.id));
 }));
 
@@ -275,7 +276,7 @@ router.post('/:id/withdraw', (req, res) => send(res, () => {
   setInvoiceOpenDispute(d.invoice_id);
   recordEvent(d.id, req.user, 'WITHDRAWN', d.status, 'CLOSED', { note });
   audit(req, 'DISPUTE_WITHDRAWN', d.id, { reason: note });
-  pushNotification({ role: 'REIA_USER', type: 'DISPUTE', message: `${d.dispute_no} withdrawn by ${req.user.name}: ${note}` });
+  notifyDesk('DISPUTE', `${d.dispute_no} withdrawn by ${req.user.name}: ${note}`);
   return view(req.user, disputeFor(req.user, d.id));
 }));
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../../api/client.js';
 import { PageHeader, Card, Badge, StatCard, Tabs, Tab, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
@@ -36,6 +36,7 @@ function delayBadge(days) {
 }
 
 export default function PaymentMonitoring() {
+  const navigate = useNavigate();
   const [view, setView] = useState('main');
   const [side, setSide] = useState('RECEIVABLE');
   const [data, setData] = useState(null);
@@ -45,10 +46,13 @@ export default function PaymentMonitoring() {
   const [counterparty, setCounterparty] = useState('');
   // How many buyer payments are waiting to be matched to the bank.
   const [pending, setPending] = useState(0);
+  // Bumped when a payment is confirmed or returned, so the count on the tab and
+  // the outstanding behind it are read again rather than left as they were.
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     // The count is a courtesy on the tab; the outstanding view does not depend on it.
     Promise.resolve(api.buyerBills?.intimations?.({ status: 'SUBMITTED' })).then((r) => setPending(r?.intimations?.length || 0)).catch(() => {});
-  }, [view]);
+  }, [view, tick]);
 
   useEffect(() => {
     setLoading(true);
@@ -60,7 +64,7 @@ export default function PaymentMonitoring() {
         setData(null);
       })
       .finally(() => setLoading(false));
-  }, [side]);
+  }, [side, tick]);
 
   const bills = useMemo(() => {
     const list = data?.bills || [];
@@ -89,7 +93,7 @@ export default function PaymentMonitoring() {
       </Tabs>
 
       {view === 'fyi' && <ModuleGuide guide={getGuide('monitoring')} />}
-      {view === 'confirm' && <Card><PaymentConfirmationDesk /></Card>}
+      {view === 'confirm' && <Card><PaymentConfirmationDesk onChanged={() => setTick((t) => t + 1)} /></Card>}
 
       {view === 'main' && (
       <>
@@ -192,6 +196,10 @@ export default function PaymentMonitoring() {
                         key={c.counterparty_id || c.counterparty_name}
                         className={counterparty === c.counterparty_id ? 'clickable selected' : 'clickable'}
                         onClick={() => setCounterparty(counterparty === c.counterparty_id ? '' : c.counterparty_id)}
+                        tabIndex={0}
+                        role="button"
+                        aria-pressed={counterparty === c.counterparty_id}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCounterparty(counterparty === c.counterparty_id ? '' : c.counterparty_id); } }}
                       >
                         <td>{c.counterparty_name}</td>
                         <td className="num">{fmtCurrency(c.outstanding)}</td>
@@ -236,7 +244,12 @@ export default function PaymentMonitoring() {
                       </td>
                     </tr>
                   ) : bills.map((b) => (
-                    <tr key={b.id}>
+                    <tr 
+                      key={b.id} 
+                      onClick={() => navigate('/reia/invoices', { state: { openInvoiceId: b.id } })}
+                      style={{ cursor: 'pointer' }}
+                      className="clickable-row"
+                    >
                       <td>{b.invoice_no}</td>
                       <td>{b.counterparty_name || '—'}</td>
                       <td>{b.contract_no || '—'}</td>
@@ -249,7 +262,7 @@ export default function PaymentMonitoring() {
                         {b.lps_accrued_unbilled ? fmtCurrency(b.lps_accrued_unbilled) : '—'}
                         {b.surcharge_days > 0 && <div className="audit-muted">{b.surcharge_days} chargeable days</div>}
                       </td>
-                      <td><Badge status={b.status}>{b.status}</Badge></td>
+                      <td><Badge status={b.status} /></td>
                     </tr>
                   ))}
                 </tbody>

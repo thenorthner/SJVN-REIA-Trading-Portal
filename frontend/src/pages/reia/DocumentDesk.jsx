@@ -13,7 +13,6 @@ import { fmtDate, fmtDateTime } from '../../datetime.js';
 const TABS = [
   { key: 'QUEUE', label: 'Waiting for review' },
   { key: 'REPORT', label: 'KYC status' },
-  { key: 'REQUESTS', label: 'Document requests' },
 ];
 
 const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -45,65 +44,191 @@ function Progress({ pct }) {
   );
 }
 
-function RequestModal({ companies, preset, onClose, onDone }) {
-  const [form, setForm] = useState({ entity_id: preset || '', document_type: '', note: '', due_date: '' });
-  const [types, setTypes] = useState([]);
-  const [error, setError] = useState('');
+const FALLBACK_KYC_DOC_TYPES = [
+  { value: 'PAN_CARD', label: 'PAN Card' },
+  { value: 'GST_CERTIFICATE', label: 'GST Certificate' },
+  { value: 'BANK_MANDATE', label: 'Bank Mandate / Cancelled Cheque' },
+  { value: 'BOARD_RESOLUTION', label: 'Board Resolution / Power of Attorney' },
+  { value: 'AUDITED_FINANCIALS', label: 'Audited Financial Statements' },
+  { value: 'GRID_CONNECTIVITY_APPROVAL', label: 'Grid Connectivity Approval' },
+  { value: 'PPA_PSA_CONTRACT', label: 'PPA / PSA Agreement' },
+  { value: 'RLDC_REGISTRATION', label: 'RLDC / SLDC Registration' },
+  { value: 'POWER_SALE_LICENSE', label: 'Trading / Generation License' },
+  { value: 'OTHER', label: 'Other Regulatory Document' },
+];
+
+function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDone }) {
+  const [entityId, setEntityId] = useState(presetEntityId || '');
+  const [types, setTypes] = useState(FALLBACK_KYC_DOC_TYPES);
+  const [docType, setDocType] = useState('PAN_CARD');
+  const [title, setTitle] = useState('');
+  const [file, setFile] = useState(null);
+  const [expiry, setExpiry] = useState('');
+  const [autoVerify, setAutoVerify] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (presetEntityId) setEntityId(presetEntityId);
+    else if (!entityId && companies.length > 0) setEntityId(companies[0].entity_id);
+  }, [presetEntityId, companies]);
 
   useEffect(() => {
     api.masters.documentTypes({ module: 'STAKEHOLDERS' })
-      .then((rows) => setTypes((rows || []).filter((t) => t.category === 'VERIFY')))
-      .catch(() => setTypes([]));
+      .then((rows) => {
+        if (Array.isArray(rows) && rows.length > 0) {
+          const verifyTypes = rows.filter((r) => r.category === 'VERIFY' || !r.category);
+          if (verifyTypes.length > 0) {
+            setTypes(verifyTypes.map((r) => ({ value: r.code, label: r.label })));
+            if (!docType || !verifyTypes.some((t) => t.code === docType)) {
+              setDocType(verifyTypes[0].code);
+            }
+          }
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const comp = companies.find((c) => String(c.entity_id) === String(entityId));
+    const dt = types.find((t) => t.value === docType) || { label: docType };
+    if (comp && dt) {
+      setTitle(`${dt.label} - ${comp.name}`);
+    } else if (dt) {
+      setTitle(dt.label);
+    }
+  }, [entityId, docType, companies, types]);
 
   async function submit(e) {
     e.preventDefault();
+    if (!file) {
+      setError('Please choose a document file to upload.');
+      return;
+    }
+    if (!entityId) {
+      setError('Please select a stakeholder company.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('The selected document exceeds 10MB limit. Please compress and try again.');
+      return;
+    }
+
     setSaving(true);
+    setError('');
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('entity_id', entityId);
+    formData.append('document_type', docType);
+    formData.append('category', 'VERIFY');
+    formData.append('title', title || 'Regulatory Document');
+    if (expiry) formData.append('expiry_date', expiry);
+    if (autoVerify) formData.append('auto_verify', 'true');
+
     try {
-      await api.documents.createRequest(form);
+      const res = await api.documents.upload(formData);
+      const wrong = (res.extracted?.checks || []).filter((c) => !c.ok);
+      if (wrong.length) {
+        alert(`Document uploaded. Note OCR findings:\n\n${wrong.map((c) => `• ${c.text}`).join('\n')}`);
+      }
       onDone();
     } catch (err) {
-      setError(err.response?.data?.error || err.message);
+      setError(err.response?.data?.error || err.message || 'Upload failed');
     } finally {
       setSaving(false);
     }
   }
 
-  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  if (!open) return null;
 
   return (
-    <Modal open onClose={onClose} title="Ask a company for a document">
+    <Modal open onClose={onClose} title="Direct upload & verify compliance document" width={720}>
       <form onSubmit={submit}>
         {error && <div className="alert alert-error" role="alert">{error}</div>}
-        <Field label="Company" required>
-          <select required value={form.entity_id} onChange={set('entity_id')}>
-            <option value="">Choose…</option>
-            {companies.map((c) => <option key={c.entity_id} value={c.entity_id}>{c.name}</option>)}
+
+        <div style={{ background: 'var(--slate-50, #f8fafc)', border: '1px solid var(--slate-200, #e2e8f0)', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#0369a1', fontWeight: 600, fontSize: 13.5 }}>
+            <span>⚡ SJVN Admin direct stakeholder onboarding</span>
+          </div>
+          <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--slate-600)' }}>
+            Directly upload regulatory and compliance proofs on behalf of stakeholders to instantly complete KYC verification requirements without counterparty maker-checker delays.
+          </p>
+        </div>
+
+        <Field label="Stakeholder company" required>
+          <select required value={entityId} onChange={(e) => setEntityId(e.target.value)}>
+            <option value="">Choose company…</option>
+            {companies.map((c) => (
+              <option key={c.entity_id} value={c.entity_id}>
+                {c.name} ({c.entity_type || 'Stakeholder'}) {c.onboarding_status === 'PENDING' ? '· [Pending]' : ''}
+              </option>
+            ))}
           </select>
         </Field>
-        <Field label="Document needed" required>
-          {types.length > 0 ? (
-            <select required value={form.document_type} onChange={set('document_type')}>
-              <option value="">Choose…</option>
-              {types.map((t) => <option key={t.code} value={t.code}>{t.label}</option>)}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <Field label="Document type" required>
+            <select required value={docType} onChange={(e) => setDocType(e.target.value)}>
+              {types.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
             </select>
-          ) : (
-            <input required value={form.document_type} onChange={set('document_type')} placeholder="e.g. GST_CERTIFICATE" />
-          )}
+          </Field>
+
+          <Field label="Valid until (optional)">
+            <input type="date" value={expiry} onChange={(e) => setExpiry(e.target.value)} />
+          </Field>
+        </div>
+
+        <Field label="Document title" required>
+          <input required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. PAN Card - SunSource Energy" />
         </Field>
-        <Field label="Needed by (optional)">
-          <input type="date" value={form.due_date} onChange={set('due_date')} />
+
+        <Field label="Document file (PDF, PNG, JPG, Excel · Max 10MB)" required>
+          <input
+            type="file"
+            required
+            accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv"
+            onChange={(e) => setFile(e.target.files[0])}
+          />
         </Field>
-        <Field label="Note for the company (optional)">
-          <textarea rows={3} value={form.note} onChange={set('note')} placeholder="e.g. The one on file expires next month — please send the renewed licence." />
-        </Field>
-        <p className="inline-note">
-          The company sees this on its My Documents page and in its notifications. The request closes by itself when a document of this type is uploaded.
-        </p>
-        <div className="form-actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Sending…' : 'Send request'}</button>
+
+        <div style={{
+          background: 'rgba(5, 150, 105, 0.08)',
+          border: '1px solid rgba(5, 150, 105, 0.25)',
+          borderRadius: 8,
+          padding: '12px 14px',
+          margin: '16px 0',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 12,
+        }}>
+          <input
+            type="checkbox"
+            id="admin_auto_verify_kyc"
+            checked={autoVerify}
+            onChange={(e) => setAutoVerify(e.target.checked)}
+            style={{ marginTop: 3, width: 18, height: 18, accentColor: '#059669' }}
+          />
+          <label htmlFor="admin_auto_verify_kyc" style={{ margin: 0, fontSize: 13, cursor: 'pointer', color: 'var(--slate-800)' }}>
+            <strong>Auto-verify & clear regulatory checklist item</strong>
+            <div style={{ fontSize: 12, color: 'var(--slate-600)', marginTop: 2 }}>
+              Marks this document as Verified immediately and updates the company's regulatory onboarding checklist to valid.
+            </div>
+          </label>
+        </div>
+
+        <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+          <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            style={{ background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' }}
+            disabled={saving || !file || !entityId}
+          >
+            {saving ? 'Uploading & verifying…' : (autoVerify ? 'Upload & auto-verify' : 'Upload document')}
+          </button>
         </div>
       </form>
     </Modal>
@@ -113,25 +238,27 @@ function RequestModal({ companies, preset, onClose, onDone }) {
 export default function DocumentDesk() {
   const { user } = useAuth();
   const canReview = canReviewDocuments(user?.role);
+  const canDirectAdmit = ['SJVN_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role);
+  const canAdminUpload = ['SJVN_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role);
+
   const [tab, setTab] = useState(canReview ? 'QUEUE' : 'REPORT');
   const [queue, setQueue] = useState([]);
   const [report, setReport] = useState([]);
-  const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
   const [review, setReview] = useState(null);
   const [preview, setPreview] = useState(null);
-  const [asking, setAsking] = useState(null);
+  const [directUploadEntityId, setDirectUploadEntityId] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
       canReview ? api.documents.queue() : Promise.resolve([]),
       api.documents.kycReport(),
-      api.documents.requests(),
     ])
-      .then(([a, b, c]) => { setQueue(a); setReport(b); setRequests(c); setError(''); })
+      .then(([a, b]) => { setQueue(a); setReport(b); setError(''); })
       .catch((e) => setError(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
   }, [canReview]);
@@ -147,16 +274,39 @@ export default function DocumentDesk() {
     () => queue.filter((d) => !text || `${d.entity_name} ${d.contract_no} ${d.title} ${d.document_type}`.toLowerCase().includes(text)),
     [queue, text],
   );
-  const openRequests = requests.filter((r) => r.status === 'OPEN');
   const sum = (k) => report.reduce((s, r) => s + (r[k] || 0), 0);
+  const activeCount = report.filter((r) => r.onboarding_status === 'APPROVED' || r.onboarding_status === 'ACTIVE').length;
+  const pendingCount = report.filter((r) => r.onboarding_status === 'PENDING').length;
 
-  async function cancelRequest(r) {
-    if (!window.confirm(`Withdraw the request to ${r.entity_name} for ${r.document_type}?`)) return;
+  async function handleQuickVerify(d) {
+    const bad = (d.extracted?.checks || []).filter((c) => !c.ok).length;
+    const msg = bad > 0
+      ? `Notice: This document has ${bad} file check mismatch(es).\n\nAre you sure you want to verify "${d.title}" for ${d.entity_name || 'this stakeholder'}?`
+      : `Verify "${d.title}" for ${d.entity_name || 'this stakeholder'}?`;
+    if (!window.confirm(msg)) return;
+    setActionLoading(true);
     try {
-      await api.documents.cancelRequest(r.id);
+      await api.documents.verify(d.latest_version_id);
       load();
-    } catch (e) {
-      setError(e.response?.data?.error || e.message);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Verification failed');
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleDirectAdmit(r) {
+    if (!window.confirm(`Directly admit and activate stakeholder "${r.name}"?\n\nThis will clear pending mandatory checklist items, confirm penny drop bank verification, and immediately activate their account.`)) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      await api.entities.approve(r.entity_id, 'APPROVED', 'Admitted directly from KYC Desk by SJVN Admin', { admin_direct_admit: true });
+      load();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Direct admission failed');
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -164,8 +314,18 @@ export default function DocumentDesk() {
     <div>
       <PageHeader
         title="Documents & KYC Desk"
-        subtitle="What is waiting to be verified, where each company stands, and what SJVN has asked for"
-        actions={canReview && <button className="btn btn-primary" onClick={() => setAsking('')}>+ Ask for a document</button>}
+        subtitle="Verification queue, company compliance status, and direct SJVN stakeholder onboarding & admission"
+        actions={
+          canAdminUpload && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setDirectUploadEntityId('')}
+            >
+              + Direct Upload Document
+            </button>
+          )
+        }
       />
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}
@@ -174,7 +334,7 @@ export default function DocumentDesk() {
         <StatCard label="Waiting for review" value={canReview ? queue.length : sum('pending')} tone={sum('pending') ? 'amber' : 'green'} hint={queue[0] ? `Oldest: ${queue[0].waiting_days} day(s)` : 'Nothing waiting'} />
         <StatCard label="Expired" value={sum('expired')} tone={sum('expired') ? 'red' : 'green'} hint="Verified proofs past their date" />
         <StatCard label="Expiring in 30 days" value={sum('expiring')} tone={sum('expiring') ? 'amber' : 'default'} />
-        <StatCard label="Open requests" value={openRequests.length} hint={openRequests.some((r) => r.overdue) ? `${openRequests.filter((r) => r.overdue).length} overdue` : 'Asked of companies'} />
+        <StatCard label="Active stakeholders" value={activeCount} hint={pendingCount ? `${pendingCount} pending admission` : 'All stakeholders verified'} />
       </div>
 
       <div className="nb-tabs" role="tablist">
@@ -185,14 +345,12 @@ export default function DocumentDesk() {
         ))}
       </div>
 
-      {tab !== 'REQUESTS' && (
-        <div className="nb-toolbar">
-          <input type="search" placeholder={tab === 'QUEUE' ? 'Search company or document…' : 'Search company…'} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search" />
-          {tab === 'REPORT' && (
-            <button type="button" className="nb-link-btn" disabled={!shownReport.length} onClick={() => exportReport(shownReport)}>Export CSV</button>
-          )}
-        </div>
-      )}
+      <div className="nb-toolbar">
+        <input type="search" placeholder={tab === 'QUEUE' ? 'Search company or document…' : 'Search company…'} value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search" />
+        {tab === 'REPORT' && (
+          <button type="button" className="nb-link-btn" disabled={!shownReport.length} onClick={() => exportReport(shownReport)}>Export CSV</button>
+        )}
+      </div>
 
       {tab === 'QUEUE' && (
         <Card>
@@ -237,9 +395,21 @@ export default function DocumentDesk() {
                         {bad === 0 && good === 0 && <span style={{ color: 'var(--slate-500)', fontWeight: 400 }}>Not checked</span>}
                       </td>
                       <td>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button className="btn btn-secondary btn-sm" onClick={() => setPreview(d)}>View</button>
-                          <button className="btn btn-primary btn-sm" onClick={() => setReview(d)}>Review</button>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPreview(d)}>View</button>
+                          <button type="button" className="btn btn-primary btn-sm" onClick={() => setReview(d)}>Review</button>
+                          {canReview && (
+                            <button
+                              type="button"
+                              className="btn btn-success btn-sm"
+                              style={{ background: 'linear-gradient(135deg, #059669 0%, #047857 100%)', color: '#fff' }}
+                              title="Quick 1-click verify this document"
+                              disabled={actionLoading}
+                              onClick={() => handleQuickVerify(d)}
+                            >
+                              Verify
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -293,9 +463,38 @@ export default function DocumentDesk() {
                       {num(r.expired, '#b91c1c')}
                       <td>{r.next_expiry ? fmtDate(r.next_expiry) : '—'}</td>
                       <td>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <button className="btn btn-secondary btn-sm" disabled={!r.documents} title="Latest version of every document, in one zip" onClick={() => downloadAllDocuments({ entity_id: r.entity_id })}>ZIP</button>
-                          {canReview && <button className="btn btn-secondary btn-sm" onClick={() => setAsking(r.entity_id)}>Ask</button>}
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                          {canAdminUpload && (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              title="Directly upload compliance proof for this company"
+                              onClick={() => setDirectUploadEntityId(r.entity_id)}
+                            >
+                              Upload Proof
+                            </button>
+                          )}
+                          {canDirectAdmit && r.onboarding_status === 'PENDING' && (
+                            <button
+                              type="button"
+                              className="btn btn-success btn-sm"
+                              style={{ background: 'linear-gradient(135deg, #059669 0%, #047857 100%)', color: '#fff' }}
+                              title="Directly admit & activate this stakeholder"
+                              disabled={actionLoading}
+                              onClick={() => handleDirectAdmit(r)}
+                            >
+                              Direct Admit
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            disabled={!r.documents}
+                            title="Latest version of every document, in one zip"
+                            onClick={() => downloadAllDocuments({ entity_id: r.entity_id })}
+                          >
+                            ZIP
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -307,61 +506,16 @@ export default function DocumentDesk() {
         </Card>
       )}
 
-      {tab === 'REQUESTS' && (
-        <Card>
-          <div className="table-wrap">
-            <table className="data-table" style={{ margin: 0 }}>
-              <thead>
-                <tr>
-                  <th scope="col">Company</th>
-                  <th scope="col">Document</th>
-                  <th scope="col">Asked</th>
-                  <th scope="col">Needed by</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!requests.length && (
-                  <tr><td colSpan={6} className="empty-cell">{loading ? 'Loading…' : 'No document has been asked for yet.'}</td></tr>
-                )}
-                {requests.map((r) => (
-                  <tr key={r.id}>
-                    <td><strong>{r.entity_name}</strong></td>
-                    <td>
-                      {r.document_type}
-                      {r.note && <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{r.note}</div>}
-                    </td>
-                    <td>
-                      {fmtDate(r.created_at)}
-                      <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{r.requested_by_name || '—'}</div>
-                    </td>
-                    <td style={{ color: r.overdue ? '#b91c1c' : 'inherit', fontWeight: r.overdue ? 700 : 400 }}>
-                      {r.due_date ? fmtDate(r.due_date) : '—'}{r.overdue ? ' · overdue' : ''}
-                    </td>
-                    <td>
-                      <Badge
-                        status={r.status === 'OPEN' ? 'PENDING' : r.status === 'FULFILLED' ? 'ACTIVE' : 'DRAFT'}
-                        label={r.status === 'OPEN' ? 'Waiting' : r.status === 'FULFILLED' ? 'Received' : 'Withdrawn'}
-                      />
-                    </td>
-                    <td>
-                      {canReview && r.status === 'OPEN' && (
-                        <button className="btn btn-secondary btn-sm" onClick={() => cancelRequest(r)}>Withdraw</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
       <ReviewModal open={!!review} doc={review} onClose={() => setReview(null)} onSuccess={load} />
       <PreviewModal open={!!preview} versionId={preview?.latest_version_id} fileName={preview?.file_name} onClose={() => setPreview(null)} />
-      {asking !== null && (
-        <RequestModal companies={report} preset={asking} onClose={() => setAsking(null)} onDone={() => { setAsking(null); setTab('REQUESTS'); load(); }} />
+      {directUploadEntityId !== null && (
+        <AdminDirectUploadModal
+          open
+          companies={report}
+          presetEntityId={directUploadEntityId}
+          onClose={() => setDirectUploadEntityId(null)}
+          onDone={() => { setDirectUploadEntityId(null); load(); }}
+        />
       )}
     </div>
   );

@@ -185,7 +185,7 @@ router.get('/blocks-template', (req, res) => {
 });
 
 /** Everything about one record that the list does not carry. */
-function detailOf(row, contract, side) {
+function detailOf(row, contract, side, user = null) {
   const siblings = db.prepare(`
     SELECT id, data_type, source, energy_mwh, cuf_percent, status, created_at FROM energy_data
     WHERE contract_id = ? AND period_month = ? ORDER BY created_at
@@ -228,8 +228,10 @@ function detailOf(row, contract, side) {
     cuf_computed: computed,
     min_cuf_percent: contract.min_cuf_percent,
     side,
-    can_manage: side === 'SJVN',
-    can_respond: side !== 'SJVN' && ['VALIDATED', 'LOCKED', 'DISPUTED'].includes(row.status) && row.response_status !== 'ACCEPTED',
+    can_manage: side === 'SJVN' && (!user || canManage(user)),
+    lock_override_by: row.lock_override_by || null,
+    // A locked figure nobody answered is past answering: the bill is where it is taken up.
+    can_respond: side !== 'SJVN' && (['VALIDATED', 'DISPUTED'].includes(row.status) || (row.status === 'LOCKED' && row.response_status === 'OBJECTED')) && row.response_status !== 'ACCEPTED',
     response_by_name: names(row.response_by),
     objection_resolved_by_name: names(row.objection_resolved_by),
     comparison: prov && fin ? {
@@ -247,7 +249,7 @@ function detailOf(row, contract, side) {
 // GET /:id — one record in full.
 router.get('/:id', (req, res) => send(res, () => {
   const { row, contract, side } = recordFor(req.user, req.params.id);
-  return detailOf(row, contract, side);
+  return detailOf(row, contract, side, req.user);
 }));
 
 // GET /:id/blocks?date= — the month day by day, and one day's 96 blocks.
@@ -375,7 +377,7 @@ router.post('/:id/source-document', (req, res) => send(res, () => {
   if (!v) throw fail(400, 'That file is not one of this contract\'s documents');
   db.prepare(`UPDATE energy_data SET source_version_id = ?, updated_at = datetime('now') WHERE id = ?`).run(v.id, row.id);
   audit(req, 'ENERGY_SOURCE_ATTACHED', row.id, { afterValue: { source_version_id: v.id } });
-  return detailOf(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id), contract, side);
+  return detailOf(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id), contract, side, req.user);
 }));
 
 // POST /:id/respond { response: ACCEPTED|OBJECTED, note, claimed_mwh, attachment_version_id }
@@ -415,7 +417,7 @@ router.post('/:id/respond', (req, res) => send(res, () => {
   notifyDesk(response === 'ACCEPTED'
     ? `${contract.contract_no}: ${req.user.name} has accepted the energy for ${row.period_month} (${row.energy_mwh} MWh).`
     : `${contract.contract_no}: ${req.user.name} objects to the energy for ${row.period_month}${claimed != null ? ` — holds ${claimed} MWh against ${row.energy_mwh}` : ''}: ${note}`);
-  return detailOf(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id), contract, side);
+  return detailOf(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id), contract, side, req.user);
 }));
 
 // POST /:id/resolve-objection { outcome: UPHELD|REJECTED, note } — SJVN's answer to an objection.
@@ -435,7 +437,7 @@ router.post('/:id/resolve-objection', (req, res) => send(res, () => {
   notifyCounterparty(contract, outcome === 'UPHELD'
     ? `${contract.contract_no}: SJVN agrees with your objection to the energy for ${row.period_month} and will correct the record — ${note}`
     : `${contract.contract_no}: SJVN has not accepted your objection to the energy for ${row.period_month} — ${note}`);
-  return detailOf(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id), contract, side);
+  return detailOf(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id), contract, side, req.user);
 }));
 
 export default router;

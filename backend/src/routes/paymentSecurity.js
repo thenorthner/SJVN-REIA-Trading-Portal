@@ -16,6 +16,10 @@ import {
   recordSecurityEvent,
   genInstrumentNo,
   refreshAvailable,
+  releasePosition,
+  standingStatus,
+  notifyCounterparty,
+  notifyDesk,
 } from '../paymentSecurityEngine.js';
 import { ACTIVE_STATUSES, WATERFALL_DEFAULTS } from '../paymentSecurityConstants.js';
 import { takeAmendmentOnRecord } from './securityDesk.js';
@@ -41,6 +45,36 @@ function isReia(user) {
   return REIA_ALL.includes(user.role) || user.role === 'SJVN_ADMIN';
 }
 
+// Who may read the register across every contract: the REIA desk, Finance,
+// Management and the auditor. A seller or a buyer reads its own contracts'.
+// Anyone else — a trading client, say — used to fall through both checks and
+// was handed every instrument on the platform.
+const INTERNAL_READ = [...new Set([...REIA_ALL, 'COMPLIANCE_AUDITOR'])];
+/** `null` when the caller may read nothing here; otherwise the SQL that narrows a contract alias to what it may. */
+function readScope(user, alias = 'c') {
+  if (INTERNAL_READ.includes(user?.role)) return { where: '', params: [] };
+  const side = counterpartySide(user);
+  if (side === 'SELLER') return { where: ` AND ${alias}.seller_id = ?`, params: [user.linked_entity_id] };
+  if (side === 'BUYER') return { where: ` AND ${alias}.buyer_id = ?`, params: [user.linked_entity_id] };
+  return null;
+}
+function canReadContract(user, contract) {
+  if (INTERNAL_READ.includes(user?.role)) return true;
+  const side = counterpartySide(user);
+  if (side === 'SELLER') return !!contract.seller_id && contract.seller_id === user.linked_entity_id;
+  if (side === 'BUYER') return !!contract.buyer_id && contract.buyer_id === user.linked_entity_id;
+  return false;
+}
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const today = () => new Date().toISOString().slice(0, 10);
+const rupees = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
+const words = (status) => String(status || '').toLowerCase().replace(/_/g, ' ');
+const MECHANISMS = Object.keys(WATERFALL_DEFAULTS);
+const BG_SUBTYPES = ['EMD', 'PBG', 'OTHER_BG'];
+/** Whose default a contract's security answers for when nobody says: the buyer pays under a PSA, the seller performs under a PPA. */
+const defaultSideOf = (contract) => (contract?.contract_type === 'PPA' ? 'SELLER' : 'BUYER');
+
 function canAccessInstrument(user, ps) {
   if (isReia(user)) return true;
   const c = db.prepare('SELECT seller_id, buyer_id FROM contracts WHERE id = ?').get(ps.contract_id);
@@ -53,7 +87,7 @@ function canAccessInstrument(user, ps) {
 
 function enrich(ps) {
   if (!ps) return ps;
-  const available = refreshAvailable(ps);
+  const available = ['CLOSED', 'RELEASED'].includes(ps.status) ? 0 : refreshAvailable(ps);
   const coverage = computeCoverage(ps.contract_id);
   const daysToExpiry = ps.validity_end
     ? Math.ceil((new Date(ps.validity_end).getTime() - Date.now()) / 86400000)
@@ -155,14 +189,10 @@ router.get('/expiring', (req, res) => {
       AND julianday(ps.validity_end) - julianday('now') <= ?
   `;
   const params = [days];
-  const expSide = counterpartySide(req.user);
-  if (expSide === 'SELLER') {
-    sql += ' AND c.seller_id = ?';
-    params.push(req.user.linked_entity_id);
-  } else if (expSide === 'BUYER') {
-    sql += ' AND c.buyer_id = ?';
-    params.push(req.user.linked_entity_id);
-  }
+  const scope = readScope(req.user);
+  if (!scope) return res.status(403).json({ error: 'Not authorized' });
+  sql += scope.where;
+  params.push(...scope.params);
   sql += ' ORDER BY ps.validity_end ASC';
   res.json(db.prepare(sql).all(...params).map(enrich));
 });
@@ -189,6 +219,10 @@ router.get('/invocations/:id/pdf', requireRole(...REIA_ALL), (req, res) => {
 });
 
 router.get('/adequacy/:contractId', (req, res) => {
+  // The trading desk reads this before it bids; a counterparty reads its own.
+  const c = db.prepare('SELECT seller_id, buyer_id FROM contracts WHERE id = ?').get(req.params.contractId);
+  const internal = INTERNAL_READ.includes(req.user.role) || ROLE_GROUPS.TRADING_ALL.includes(req.user.role);
+  if (!internal && !(c && canReadContract(req.user, c))) return res.status(403).json({ error: 'Not authorized' });
   res.json(checkAdequacy({ contractId: req.params.contractId }));
 });
 
@@ -196,12 +230,12 @@ router.get('/reopen-requests', (_req, res) => res.json([])); // compat placehold
 
 router.get('/releases', requireRole(...REIA_ALL), (_req, res) => {
   res.json(db.prepare(`
-    SELECT sr.*, ps.instrument_no, c.contract_no
+    SELECT sr.*, ps.instrument_no, ps.mechanism_type, ps.bg_subtype, ps.limit_amount, c.contract_no
     FROM security_releases sr
     JOIN payment_security ps ON ps.id = sr.payment_security_id
     JOIN contracts c ON c.id = sr.contract_id
     ORDER BY sr.created_at DESC
-  `).all());
+  `).all().map((r) => (r.status === 'PENDING' ? { ...r, position: releasePosition(r.contract_id) } : r)));
 });
 
 router.get('/overrides', requireRole(...REIA_ALL), (_req, res) => {
@@ -215,15 +249,7 @@ router.get('/overrides', requireRole(...REIA_ALL), (_req, res) => {
 router.get('/requirements/:contractId', (req, res) => {
   const c = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.contractId);
   if (!c) return res.status(404).json({ error: 'Contract not found' });
-  if (!isReia(req.user)) {
-    const reqSide = counterpartySide(req.user);
-    if (reqSide === 'SELLER' && c.seller_id !== req.user.linked_entity_id) {
-      return res.status(403).json({ error: 'Not authorized' });
-    }
-    if (reqSide === 'BUYER' && c.buyer_id !== req.user.linked_entity_id) {
-      return res.status(403).json({ error: 'Not authorized' });
-    }
-  }
+  if (!canReadContract(req.user, c)) return res.status(403).json({ error: 'Not authorized' });
   res.json(db.prepare('SELECT * FROM security_requirements WHERE contract_id = ?').all(req.params.contractId));
 });
 
@@ -233,7 +259,7 @@ router.get('/invocations', requireRole(...REIA_ALL), (req, res) => {
   const params = [];
   if (contract_id) { sql += ' AND si.contract_id = ?'; params.push(contract_id); }
   if (status) { sql += ' AND si.status = ?'; params.push(status); }
-  sql += ' ORDER BY si.created_at DESC';
+  sql += ' ORDER BY si.created_at DESC, si.rowid DESC';
   res.json(db.prepare(sql).all(...params));
 });
 
@@ -244,14 +270,10 @@ router.get('/', (req, res) => {
     FROM payment_security ps JOIN contracts c ON c.id = ps.contract_id WHERE 1=1
   `;
   const params = [];
-  const listSide = counterpartySide(req.user);
-  if (listSide === 'SELLER') {
-    sql += ' AND c.seller_id = ?';
-    params.push(req.user.linked_entity_id);
-  } else if (listSide === 'BUYER') {
-    sql += ' AND c.buyer_id = ?';
-    params.push(req.user.linked_entity_id);
-  }
+  const scope = readScope(req.user);
+  if (!scope) return res.status(403).json({ error: 'Not authorized' });
+  sql += scope.where;
+  params.push(...scope.params);
   if (contract_id) { sql += ' AND ps.contract_id = ?'; params.push(contract_id); }
   if (status) { sql += ' AND ps.status = ?'; params.push(status); }
   if (mechanism_type) { sql += ' AND ps.mechanism_type = ?'; params.push(mechanism_type); }
@@ -270,10 +292,17 @@ router.get('/:id', (req, res) => {
     JOIN contracts c ON c.id = ps.contract_id WHERE ps.id = ?
   `).get(req.params.id);
   if (!ps) return res.status(404).json({ error: 'Not found' });
-  if (!canAccessInstrument(req.user, ps)) return res.status(403).json({ error: 'Not authorized' });
+  if (!INTERNAL_READ.includes(req.user.role) && !canAccessInstrument(req.user, ps)) return res.status(403).json({ error: 'Not authorized' });
 
-  const events = db.prepare('SELECT * FROM security_events WHERE payment_security_id = ? ORDER BY created_at').all(ps.id);
-  const invocations = db.prepare('SELECT * FROM security_invocations WHERE payment_security_id = ? OR contract_id = ? ORDER BY created_at DESC').all(ps.id, ps.contract_id);
+  const events = db.prepare('SELECT * FROM security_events WHERE payment_security_id = ? ORDER BY created_at, rowid').all(ps.id);
+  // The invocations that drew on this instrument. Every invocation on the
+  // contract used to be listed, so an instrument the waterfall never reached
+  // showed a demand letter for money taken from another one.
+  const invocations = db.prepare('SELECT * FROM security_invocations WHERE contract_id = ? ORDER BY created_at DESC, rowid DESC').all(ps.contract_id)
+    .filter((inv) => {
+      if (inv.payment_security_id === ps.id) return true;
+      try { return JSON.parse(inv.waterfall_used || '[]').some((w) => w.id === ps.id); } catch { return false; }
+    });
   const alerts = db.prepare('SELECT * FROM security_alerts WHERE payment_security_id = ? ORDER BY created_at DESC LIMIT 20').all(ps.id);
   const releases = db.prepare('SELECT * FROM security_releases WHERE payment_security_id = ? ORDER BY created_at DESC').all(ps.id);
   const requirements = db.prepare('SELECT * FROM security_requirements WHERE contract_id = ?').all(ps.contract_id);
@@ -293,31 +322,54 @@ router.get('/:id', (req, res) => {
 });
 
 router.post('/', requireRole(...REIA_WRITE), (req, res) => {
-  const b = req.body;
-  if (!b.contract_id || !b.mechanism_type || b.limit_amount == null && b.amount == null) {
-    return res.status(400).json({ error: 'contract_id, mechanism_type, limit_amount required' });
+  const b = req.body || {};
+  if (!b.contract_id) return res.status(400).json({ error: 'Choose the contract this instrument secures' });
+  const c = db.prepare('SELECT * FROM contracts WHERE id = ?').get(String(b.contract_id));
+  if (!c) return res.status(404).json({ error: 'Contract not found' });
+  if (!MECHANISMS.includes(b.mechanism_type)) {
+    return res.status(400).json({ error: `Say what kind of instrument this is: ${MECHANISMS.join(', ')}` });
   }
   const limit = Number(b.limit_amount ?? b.amount);
+  if (!(limit > 0)) return res.status(400).json({ error: 'The limit must be more than zero' });
+  const isBg = b.mechanism_type === 'BANK_GUARANTEE';
+  if (isBg && b.bg_subtype && !BG_SUBTYPES.includes(b.bg_subtype)) {
+    return res.status(400).json({ error: 'A bank guarantee is an EMD, a PBG or another guarantee (OTHER_BG)' });
+  }
+  const validityStart = String(b.validity_start || '').trim() || null;
+  const validityEnd = String(b.validity_end || '').trim() || null;
+  for (const [label, v] of [['Validity start', validityStart], ['Validity end', validityEnd]]) {
+    if (v && !DAY.test(v)) return res.status(400).json({ error: `${label} must be a date (YYYY-MM-DD)` });
+  }
+  if (validityStart && validityEnd && validityEnd < validityStart) {
+    return res.status(400).json({ error: 'The validity cannot end before it starts' });
+  }
+  const instrumentNo = String(b.instrument_no || '').trim()
+    || genInstrumentNo(isBg ? (b.bg_subtype || 'BG') : b.mechanism_type);
+  if (db.prepare('SELECT 1 FROM payment_security WHERE instrument_no = ?').get(instrumentNo)) {
+    return res.status(409).json({ error: `${instrumentNo} is already on record` });
+  }
+
   const id = newId('PSC');
-  const c = db.prepare('SELECT * FROM contracts WHERE id = ?').get(b.contract_id);
-  const entityId = b.entity_id || (c?.contract_type === 'PSA' ? c.buyer_id : c?.seller_id);
+  const entityId = b.entity_id || (c.contract_type === 'PSA' ? c.buyer_id : c.seller_id);
   const priority = b.waterfall_priority ?? WATERFALL_DEFAULTS[b.mechanism_type] ?? 100;
   const isRevolving = b.is_revolving != null ? (b.is_revolving ? 1 : 0) : (b.mechanism_type === 'LC' ? 1 : 0);
-  const required = b.required_amount ?? computeCoverage(b.contract_id).required_amount;
+  const required = b.required_amount ?? computeCoverage(c.id).required_amount;
+  // Entered after it had already lapsed, it is on the register as what it is.
+  const status = validityEnd && validityEnd < today() ? 'EXPIRED' : 'ACTIVE';
 
   db.prepare(`
     INSERT INTO payment_security (
       id, instrument_no, contract_id, entity_id, mechanism_type, bg_subtype, is_revolving,
       limit_amount, utilized_amount, available_amount, required_amount, waterfall_priority,
       issuing_bank, beneficiary, validity_start, validity_end, status, remarks
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
-    b.instrument_no || genInstrumentNo(b.mechanism_type === 'BANK_GUARANTEE' ? (b.bg_subtype || 'BG') : b.mechanism_type),
-    b.contract_id,
+    instrumentNo,
+    c.id,
     entityId,
     b.mechanism_type,
-    b.bg_subtype || null,
+    isBg ? (b.bg_subtype || null) : null,
     isRevolving,
     limit,
     limit,
@@ -325,17 +377,21 @@ router.post('/', requireRole(...REIA_WRITE), (req, res) => {
     priority,
     b.issuing_bank || null,
     b.beneficiary || 'SJVN Limited',
-    b.validity_start || null,
-    b.validity_end || null,
+    validityStart,
+    validityEnd,
+    status,
     b.remarks || null
   );
 
-  recordSecurityEvent({ instrumentId: id, contractId: b.contract_id, user: req.user, eventType: 'CREATE', details: b });
+  recordSecurityEvent({ instrumentId: id, contractId: c.id, user: req.user, eventType: 'CREATE', details: b });
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CREATE', module: 'REIA', entityType: 'payment_security', entityId: id, details: b });
   res.status(201).json(enrich(db.prepare('SELECT * FROM payment_security WHERE id = ?').get(id)));
 });
 
 router.post('/from-contract/:contractId', requireRole(...REIA_WRITE), (req, res) => {
+  if (!db.prepare('SELECT 1 FROM contracts WHERE id = ?').get(req.params.contractId)) {
+    return res.status(404).json({ error: 'Contract not found' });
+  }
   syncRequirementsFromContract(req.params.contractId);
   const created = createInstrumentsFromRequirements(req.params.contractId, req.user);
   res.status(201).json({ created: created.map(enrich), requirements: db.prepare('SELECT * FROM security_requirements WHERE contract_id = ?').all(req.params.contractId) });
@@ -346,8 +402,17 @@ router.post('/alerts/run', requireRole(...REIA_WRITE, 'MANAGEMENT'), (_req, res)
 });
 
 router.post('/overrides', requireRole(...REIA_WRITE, 'MANAGEMENT', 'SJVN_ADMIN'), (req, res) => {
-  const { contract_id, reason, valid_until } = req.body;
-  if (!contract_id || !reason) return res.status(400).json({ error: 'contract_id and reason required' });
+  const { contract_id, valid_until } = req.body;
+  const reason = String(req.body.reason || '').trim();
+  if (!contract_id || !reason) return res.status(400).json({ error: 'Choose the contract and say why its security is being treated as adequate' });
+  const overridden = db.prepare('SELECT contract_no FROM contracts WHERE id = ?').get(String(contract_id));
+  if (!overridden) return res.status(404).json({ error: 'Contract not found' });
+  if (valid_until && (!DAY.test(String(valid_until)) || String(valid_until) < today())) {
+    return res.status(400).json({ error: 'Valid until must be a date from today onwards' });
+  }
+  const twin = db.prepare(`SELECT 1 FROM security_adequacy_overrides WHERE contract_id = ? AND reason = ? AND COALESCE(valid_until, '') = ? AND (valid_until IS NULL OR valid_until >= date('now'))`)
+    .get(String(contract_id), reason, valid_until || '');
+  if (twin) return res.status(409).json({ error: `This override is already on record for ${overridden.contract_no}` });
   const id = newId('SOV');
   db.prepare(`
     INSERT INTO security_adequacy_overrides (id, contract_id, reason, approved_by, valid_until)
@@ -355,48 +420,77 @@ router.post('/overrides', requireRole(...REIA_WRITE, 'MANAGEMENT', 'SJVN_ADMIN')
   `).run(id, contract_id, reason, req.user.name, valid_until || null);
   recordSecurityEvent({ contractId: contract_id, user: req.user, eventType: 'ADEQUACY_OVERRIDE', details: { reason, valid_until } });
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'SECURITY_OVERRIDE', module: 'REIA', entityType: 'contract', entityId: contract_id, details: req.body });
-  pushNotification({ role: 'MANAGEMENT', type: 'SECURITY_OVERRIDE', message: `Adequacy override on ${contract_id}: ${reason}` });
+  pushNotification({ role: 'MANAGEMENT', type: 'SECURITY_OVERRIDE', message: `Adequacy override on ${overridden.contract_no} by ${req.user.name}: ${reason}` });
   res.status(201).json(db.prepare('SELECT * FROM security_adequacy_overrides WHERE id = ?').get(id));
 });
 
 router.post('/invocations', requireRole(...REIA_WRITE), (req, res) => {
   const { contract_id, amount, invoice_ids, side } = req.body;
-  if (!contract_id) return res.status(400).json({ error: 'contract_id required' });
-  const defaultingSide = String(side || 'BUYER').toUpperCase();
-  if (!['BUYER', 'SELLER'].includes(defaultingSide)) {
+  if (!contract_id) return res.status(400).json({ error: 'Choose the contract whose security is being invoked' });
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(String(contract_id));
+  if (!contract) return res.status(404).json({ error: 'Contract not found' });
+  // Whose default: said outright, or read off the contract. The form names no
+  // side, and this always ran the buyer's — so invoking on a PPA, where the
+  // only cover is the seller's guarantee, drew nothing and still filed a notice.
+  const given = String(side || '').toUpperCase();
+  if (given && !['BUYER', 'SELLER'].includes(given)) {
     return res.status(400).json({ error: "side must be BUYER or SELLER" });
   }
-  const elig = evaluateInvocationEligibility(contract_id);
-  const amt = amount != null ? Number(amount) : elig.amount;
-  if (!(amt > 0)) return res.status(400).json({ error: 'No eligible overdue amount to invoke' });
-  const inv = invokeWaterfall(contract_id, amt, invoice_ids || elig.overdue_invoices, req.user, defaultingSide);
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'INVOKE_WATERFALL', module: 'REIA', entityType: 'security_invocation', entityId: inv.id, details: { amount: amt } });
+  const defaultingSide = given || defaultSideOf(contract);
+  const elig = evaluateInvocationEligibility(contract.id);
+  const stated = amount != null && amount !== '';
+  const amt = stated ? Number(amount) : elig.amount;
+  if (stated && !(amt > 0)) return res.status(400).json({ error: 'The amount to invoke must be more than zero' });
+  if (!(amt > 0)) {
+    return res.status(400).json({ error: `Nothing on ${contract.contract_no} is overdue by ${elig.rule_days} days or more. Enter the amount to invoke.` });
+  }
+  const inv = invokeWaterfall(contract.id, amt, Array.isArray(invoice_ids) ? invoice_ids : elig.overdue_invoices, req.user, defaultingSide);
+  if (!inv) {
+    return res.status(400).json({
+      error: `Nothing could be drawn for a ${defaultingSide.toLowerCase()} default on ${contract.contract_no} — no live ${defaultingSide === 'SELLER' ? 'guarantee' : 'letter of credit'} or pooled cover with a balance. No demand notice was raised.`,
+      side: defaultingSide,
+    });
+  }
+  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'INVOKE_WATERFALL', module: 'REIA', entityType: 'security_invocation', entityId: inv.id, details: { amount: amt, side: defaultingSide, drawn: inv.amount } });
   res.status(201).json(inv);
 });
 
+// A demand moves one way: notice, claim lodged with the bank, funds in. It
+// could be sent to any status from any other, so one already paid could be put
+// back to a notice.
+const INVOCATION_NEXT = {
+  ELIGIBLE: ['NOTICE_ISSUED'],
+  NOTICE_ISSUED: ['CLAIMED', 'REJECTED'],
+  CLAIMED: ['FUNDS_RECEIVED', 'REJECTED'],
+  FUNDS_RECEIVED: [],
+  REJECTED: [],
+};
+
 router.post('/invocations/:id/transition', requireRole(...REIA_WRITE), (req, res) => {
   const { status, notes } = req.body;
-  const allowed = ['NOTICE_ISSUED', 'CLAIMED', 'FUNDS_RECEIVED', 'REJECTED'];
-  if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  if (!Object.keys(INVOCATION_NEXT).includes(status)) return res.status(400).json({ error: 'Invalid status' });
   const inv = db.prepare('SELECT * FROM security_invocations WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Not found' });
+  if (!(INVOCATION_NEXT[inv.status] || []).includes(status)) {
+    return res.status(400).json({ error: `${inv.invocation_no} is at "${words(inv.status)}" — it cannot move to "${words(status)}".` });
+  }
 
   db.prepare(`UPDATE security_invocations SET status = ?, notes = COALESCE(?, notes), updated_at = datetime('now') WHERE id = ?`)
     .run(status, notes ?? null, inv.id);
 
   if (status === 'FUNDS_RECEIVED') {
-    pushNotification({
-      role: 'BUYER',
-      type: 'SECURITY_REPLENISH_DEMAND',
-      message: `Replenish revolving LC after funds received on ${inv.invocation_no}`,
-    });
+    let side = 'BUYER';
+    try { side = JSON.parse(inv.demand_letter_json || '{}').side || side; } catch { /* an older notice names no side */ }
+    const contractNo = db.prepare('SELECT contract_no FROM contracts WHERE id = ?').get(inv.contract_id)?.contract_no || inv.contract_id;
+    notifyCounterparty(inv.contract_id, side, 'SECURITY_REPLENISH_DEMAND',
+      `${contractNo}: SJVN has received ${rupees(inv.amount)} under ${inv.invocation_no}.${side === 'BUYER' ? ' Have the letter of credit reinstated to its full value.' : ''}`);
   }
   recordSecurityEvent({
     instrumentId: inv.payment_security_id,
     contractId: inv.contract_id,
     user: req.user,
     eventType: `INVOCATION_${status}`,
-    details: { invocation_id: inv.id, notes },
+    details: { invocation_id: inv.id, invocation_no: inv.invocation_no, notes },
   });
   res.json(db.prepare('SELECT * FROM security_invocations WHERE id = ?').get(inv.id));
 });
@@ -407,53 +501,71 @@ router.post('/releases/:id/act', requireRole(...REIA_WRITE, 'FINANCE_USER'), (re
   if (badDecision) return res.status(400).json({ error: badDecision });
   const rel = db.prepare('SELECT * FROM security_releases WHERE id = ?').get(req.params.id);
   if (!rel) return res.status(404).json({ error: 'Not found' });
-  if (rel.status !== 'PENDING') return res.status(400).json({ error: 'Already acted' });
+  if (rel.status !== 'PENDING') {
+    return res.status(400).json({ error: `This release request has already been ${rel.status === 'RELEASED' ? 'approved' : words(rel.status)}` });
+  }
+  const ps = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(rel.payment_security_id);
+  const contractNo = db.prepare('SELECT contract_no FROM contracts WHERE id = ?').get(rel.contract_id)?.contract_no || rel.contract_id;
+  const note = String(req.body.note ?? '').trim().slice(0, 1000);
+  // Whose instrument it is, so the party that asked hears what was decided.
+  const side = ps?.mechanism_type === 'LC' ? 'BUYER' : ps?.mechanism_type === 'BANK_GUARANTEE' ? 'SELLER' : null;
+  const tell = (message) => {
+    if (side) notifyCounterparty(rel.contract_id, side, 'SECURITY_RELEASED', message);
+    else for (const s of ['SELLER', 'BUYER']) notifyCounterparty(rel.contract_id, s, 'SECURITY_RELEASED', message);
+  };
 
   if (decision === 'REJECTED') {
-    db.prepare(`UPDATE security_releases SET status = 'REJECTED', acted_by = ?, acted_at = datetime('now') WHERE id = ?`)
-      .run(req.user.name, rel.id);
-    db.prepare(`UPDATE payment_security SET status = 'ACTIVE', updated_at = datetime('now') WHERE id = ?`).run(rel.payment_security_id);
+    if (!note) return res.status(400).json({ error: 'Say why the release is refused' });
+    db.transaction(() => {
+      db.prepare(`UPDATE security_releases SET status = 'REJECTED', decision_note = ?, acted_by = ?, acted_at = datetime('now') WHERE id = ?`)
+        .run(note, req.user.name, rel.id);
+      // Back to where it stood on its own facts. It went to ACTIVE whatever it
+      // had been, so a guarantee that had lapsed, or one half drawn, came back
+      // from a refused release reading as whole and in force.
+      if (ps) {
+        db.prepare(`UPDATE payment_security SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(standingStatus(ps), ps.id);
+      }
+      recordSecurityEvent({ instrumentId: rel.payment_security_id, contractId: rel.contract_id, user: req.user, eventType: 'RELEASE_REJECTED', details: { note } });
+    })();
+    logAudit({ req, user: req.user, action: 'SECURITY_RELEASE_REJECTED', module: 'REIA', entityType: 'payment_security', entityId: rel.payment_security_id, details: { release_id: rel.id, note } });
+    tell(`${ps?.instrument_no || 'Your instrument'} (${contractNo}): SJVN has refused the release — ${note}`);
     return res.json(db.prepare('SELECT * FROM security_releases WHERE id = ?').get(rel.id));
   }
 
-  if (!rel.checklist_no_dues || !rel.checklist_no_disputes) {
-    return res.status(400).json({ error: 'Checklist incomplete: no dues and no disputes required' });
-  }
-
-  // The checklist is a declaration; this is the check. Releasing security while
-  // money is still owed or a dispute is open removes the only cover for it, so
-  // the ticked box is verified against the actual position before release.
-  const outstanding = db.prepare(`
-    SELECT COUNT(*) AS n, COALESCE(SUM(total_amount), 0) AS amount FROM invoices
-    WHERE contract_id = ? AND status NOT IN ('PAID', 'CANCELLED', 'REJECTED')
-  `).get(rel.contract_id);
-  const openDisputes = db.prepare(`
-    SELECT COUNT(*) AS n FROM disputes d
-    LEFT JOIN invoices i ON i.id = d.invoice_id
-    WHERE d.status NOT IN ('CLOSED', 'RESOLVED_ACCEPTED', 'RESOLVED_REJECTED')
-      AND (i.contract_id = ? OR d.invoice_id IS NULL)
-  `).get(rel.contract_id);
-
-  if (outstanding.n > 0 || openDisputes.n > 0) {
+  // The position as it is now, not as it was stamped when the request was
+  // raised. Releasing security while money is still owed or a dispute is open
+  // removes the only cover for it — and a request raised with dues open stayed
+  // "checklist incomplete" for good, even after every bill had been paid.
+  const position = releasePosition(rel.contract_id);
+  db.prepare('UPDATE security_releases SET checklist_no_dues = ?, checklist_no_disputes = ? WHERE id = ?')
+    .run(position.outstanding_dues > 0 ? 0 : 1, position.open_disputes === 0 ? 1 : 0, rel.id);
+  if (!position.clear) {
+    const blockers = [
+      position.outstanding_dues > 0 && `${rupees(position.outstanding_dues)} is still outstanding`,
+      position.open_disputes > 0 && `${position.open_disputes} dispute${position.open_disputes === 1 ? ' is' : 's are'} still open`,
+    ].filter(Boolean).join(' and ');
     return res.status(400).json({
-      error: 'Cannot release: the contract still has unsettled invoices or open disputes.',
-      outstanding_invoices: outstanding.n,
-      outstanding_amount: outstanding.amount,
-      open_disputes: openDisputes.n,
+      error: `Cannot release ${ps?.instrument_no || 'this instrument'}: on ${contractNo}, ${blockers}. Release it once that is settled, or refuse the request.`,
+      outstanding_amount: position.outstanding_dues,
+      open_disputes: position.open_disputes,
     });
   }
-  db.prepare(`UPDATE security_releases SET status = 'RELEASED', acted_by = ?, acted_at = datetime('now') WHERE id = ?`)
-    .run(req.user.name, rel.id);
-  db.prepare(`UPDATE payment_security SET status = 'RELEASED', updated_at = datetime('now') WHERE id = ?`)
-    .run(rel.payment_security_id);
-  recordSecurityEvent({
-    instrumentId: rel.payment_security_id,
-    contractId: rel.contract_id,
-    user: req.user,
-    eventType: 'RELEASED',
-    details: null,
-  });
-  pushNotification({ role: 'REIA_USER', type: 'SECURITY_RELEASED', message: `Security instrument released` });
+  db.transaction(() => {
+    db.prepare(`UPDATE security_releases SET status = 'RELEASED', decision_note = ?, acted_by = ?, acted_at = datetime('now') WHERE id = ?`)
+      .run(note || null, req.user.name, rel.id);
+    db.prepare(`UPDATE payment_security SET status = 'RELEASED', updated_at = datetime('now') WHERE id = ?`)
+      .run(rel.payment_security_id);
+    recordSecurityEvent({
+      instrumentId: rel.payment_security_id,
+      contractId: rel.contract_id,
+      user: req.user,
+      eventType: 'RELEASED',
+      details: note ? { note } : null,
+    });
+  })();
+  logAudit({ req, user: req.user, action: 'SECURITY_RELEASED', module: 'REIA', entityType: 'payment_security', entityId: rel.payment_security_id, details: { release_id: rel.id } });
+  notifyDesk('SECURITY_RELEASED', `${ps?.instrument_no || 'An instrument'} (${contractNo}) has been released by ${req.user.name}.`, ['FINANCE_USER']);
+  tell(`${ps?.instrument_no || 'Your instrument'} (${contractNo}) has been released by SJVN. The original can be collected / the bank advised to cancel it.`);
   res.json(db.prepare('SELECT * FROM security_releases WHERE id = ?').get(rel.id));
 });
 
@@ -474,8 +586,18 @@ router.post('/:id/utilize', requireRole(...REIA_WRITE), (req, res) => {
   const amount = Number(req.body.amount);
   const ps = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(req.params.id);
   if (!ps) return res.status(404).json({ error: 'Not found' });
-  if (!(amount > 0) || amount > refreshAvailable(ps)) {
-    return res.status(400).json({ error: 'Invalid amount / exceeds available' });
+  // Only an instrument in force can be drawn on. One still awaiting acceptance,
+  // one released, one refused — each took a draw, and the register then showed
+  // money taken from security SJVN did not hold.
+  if (!ACTIVE_STATUSES.includes(ps.status)) {
+    return res.status(400).json({ error: `${ps.instrument_no} is ${words(ps.status === 'DRAFT' ? 'awaiting acceptance' : ps.status)} — it cannot be drawn on` });
+  }
+  if (ps.validity_end && String(ps.validity_end).slice(0, 10) < today()) {
+    return res.status(400).json({ error: `${ps.instrument_no} expired on ${ps.validity_end} — it cannot be drawn on. Record the bank's extension first.` });
+  }
+  if (!(amount > 0)) return res.status(400).json({ error: 'The amount to draw must be more than zero' });
+  if (amount > refreshAvailable(ps)) {
+    return res.status(400).json({ error: `Only ${rupees(refreshAvailable(ps))} is available on ${ps.instrument_no}` });
   }
   db.prepare(`UPDATE payment_security SET utilized_amount = utilized_amount + ?, updated_at = datetime('now') WHERE id = ?`)
     .run(amount, ps.id);
@@ -491,12 +613,16 @@ router.post('/:id/utilize', requireRole(...REIA_WRITE), (req, res) => {
       utilized_before: ps.utilized_amount || 0, utilized_after: fresh.utilized_amount || 0,
     },
   });
-  if (ps.is_revolving && refreshAvailable(fresh) < fresh.required_amount) {
-    pushNotification({
-      role: 'BUYER',
-      type: 'SECURITY_REPLENISH_DEMAND',
-      message: `LC ${fresh.instrument_no} below required cover — replenish demanded`,
-    });
+  logAudit({ req, user: req.user, action: 'SECURITY_UTILIZED', module: 'REIA', entityType: 'payment_security', entityId: ps.id, details: { amount, reason: (req.body.reason || '').trim() || undefined } });
+  {
+    // Whose instrument it is hears of every draw. Only a draw that left a
+    // revolving LC short was announced, so money taken from any other
+    // instrument was something its owner found out by looking.
+    const contract = db.prepare('SELECT contract_no, contract_type FROM contracts WHERE id = ?').get(ps.contract_id);
+    const side = ps.mechanism_type === 'LC' ? 'BUYER' : ps.mechanism_type === 'BANK_GUARANTEE' ? 'SELLER' : defaultSideOf(contract);
+    const short = ps.is_revolving && refreshAvailable(fresh) < fresh.required_amount;
+    notifyCounterparty(ps.contract_id, side, 'SECURITY_REPLENISH_DEMAND',
+      `${contract?.contract_no || ps.contract_id}: ${rupees(amount)} has been drawn on ${fresh.instrument_no}, leaving ${rupees(refreshAvailable(fresh))}${short ? ` against ${rupees(fresh.required_amount)} required. Have the letter of credit reinstated.` : '.'}`);
   }
   res.json(enrich(fresh));
 });
@@ -509,12 +635,17 @@ router.post('/:id/replenish', requireRole(...REIA_WRITE, ...BUYER_ROLES), (req, 
   const ps = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(req.params.id);
   if (!ps) return res.status(404).json({ error: 'Not found' });
   if (!canAccessInstrument(req.user, ps)) return res.status(403).json({ error: 'Not authorized' });
-  if (!(amount > 0)) return res.status(400).json({ error: 'amount required' });
+  if (!(amount > 0)) return res.status(400).json({ error: 'The amount reinstated must be more than zero' });
+  if (['RELEASED', 'CLOSED', 'DRAFT'].includes(ps.status)) {
+    return res.status(400).json({ error: `${ps.instrument_no} is ${words(ps.status === 'DRAFT' ? 'awaiting acceptance' : ps.status)} — there is nothing on it to reinstate` });
+  }
 
   const drawn = ps.utilized_amount || 0;
   if (amount > drawn) {
     return res.status(400).json({
-      error: `Only ${drawn} has been drawn on this instrument — replenishing ${amount} would restore cover that was never used. Raise the limit with /renew instead.`,
+      error: drawn > 0
+        ? `Only ${rupees(drawn)} has been drawn on ${ps.instrument_no}, so ${rupees(amount)} cannot be reinstated. To raise its value, record the bank's amendment instead.`
+        : `Nothing has been drawn on ${ps.instrument_no}, so there is nothing to reinstate. To raise its value, record the bank's amendment instead.`,
       drawn,
     });
   }
@@ -540,6 +671,17 @@ router.post('/:id/replenish', requireRole(...REIA_WRITE, ...BUYER_ROLES), (req, 
     instrumentId: ps.id, contractId: ps.contract_id, user: req.user, eventType: 'REPLENISH',
     details: { amount, is_revolving: ps.is_revolving ? 1 : 0, reason: reason || undefined, drawn_before: drawn },
   });
+  // A buyer reinstating its own letter of credit restores cover on its say-so;
+  // the desk is at least told, so it can be checked against the bank's advice.
+  if (!counterpartySide(req.user)) {
+    const contract = db.prepare('SELECT contract_no, contract_type FROM contracts WHERE id = ?').get(ps.contract_id);
+    const side = ps.mechanism_type === 'LC' ? 'BUYER' : ps.mechanism_type === 'BANK_GUARANTEE' ? 'SELLER' : defaultSideOf(contract);
+    notifyCounterparty(ps.contract_id, side, 'SECURITY', `${contract?.contract_no || ps.contract_id}: SJVN has recorded ${rupees(amount)} reinstated on ${ps.instrument_no}.`);
+  }
+  if (counterpartySide(req.user)) {
+    const contractNo = db.prepare('SELECT contract_no FROM contracts WHERE id = ?').get(ps.contract_id)?.contract_no || ps.contract_id;
+    notifyDesk('SECURITY', `${contractNo}: ${req.user.name} has recorded ${rupees(amount)} reinstated on ${ps.instrument_no}. Check it against the bank's advice.`);
+  }
   res.json(enrich(fresh));
 });
 
@@ -611,8 +753,8 @@ router.post('/:id/invoke', requireRole(...REIA_WRITE), (req, res) => {
   // A notice that drew nothing is a demand on the file for something that never
   // happened. Two of them were recorded during testing, both against a guarantee
   // the buyer-side waterfall could never have touched.
-  if (!draws.length) {
-    db.prepare('DELETE FROM security_invocations WHERE id = ?').run(inv.id);
+  if (!inv || !draws.length) {
+    if (inv) db.prepare('DELETE FROM security_invocations WHERE id = ?').run(inv.id);
     return res.status(400).json({
       error: `Nothing could be drawn for a ${side} default on this contract — no live ${side === 'SELLER' ? 'guarantee' : 'letter of credit'} or pooled cover with a balance. No demand notice was raised.`,
       side,
@@ -637,11 +779,8 @@ router.post('/:id/release-request', (req, res) => {
     return res.status(400).json({ error: ps.status === 'RELEASE_PENDING' ? 'A release request on this instrument is already with SJVN' : `An instrument that is ${ps.status.toLowerCase().replace(/_/g, ' ')} cannot be released` });
   }
 
-  const outstanding = computeCoverage(ps.contract_id).outstanding_dues;
-  const openDisputes = db.prepare(`
-    SELECT COUNT(*) c FROM disputes d JOIN invoices i ON i.id = d.invoice_id
-    WHERE i.contract_id = ? AND d.status IN ('RAISED','ACKNOWLEDGED','UNDER_REVIEW','INFO_REQUESTED','ESCALATED')
-  `).get(ps.contract_id).c;
+  const position = releasePosition(ps.contract_id);
+  const reason = String(req.body.reason ?? '').trim().slice(0, 1000) || 'Contract completion release';
 
   const id = newId('SRL');
   db.prepare(`
@@ -650,13 +789,15 @@ router.post('/:id/release-request', (req, res) => {
     ) VALUES (?, ?, ?, 'PENDING', ?, ?, ?, ?)
   `).run(
     id, ps.id, ps.contract_id,
-    outstanding <= 0 ? 1 : 0,
-    openDisputes === 0 ? 1 : 0,
-    req.body.reason || 'Contract completion release',
+    position.outstanding_dues > 0 ? 0 : 1,
+    position.open_disputes === 0 ? 1 : 0,
+    reason,
     req.user.name
   );
   db.prepare(`UPDATE payment_security SET status = 'RELEASE_PENDING', updated_at = datetime('now') WHERE id = ?`).run(ps.id);
-  recordSecurityEvent({ instrumentId: ps.id, contractId: ps.contract_id, user: req.user, eventType: 'RELEASE_REQUESTED', details: { outstanding, openDisputes } });
+  recordSecurityEvent({ instrumentId: ps.id, contractId: ps.contract_id, user: req.user, eventType: 'RELEASE_REQUESTED', details: { outstanding: position.outstanding_dues, openDisputes: position.open_disputes, reason } });
+  const contractNo = db.prepare('SELECT contract_no FROM contracts WHERE id = ?').get(ps.contract_id)?.contract_no || ps.contract_id;
+  notifyDesk('SECURITY', `${contractNo}: ${req.user.name} has asked for ${ps.instrument_no} to be released — ${reason}`, ['FINANCE_USER']);
   res.status(201).json(db.prepare('SELECT * FROM security_releases WHERE id = ?').get(id));
 });
 

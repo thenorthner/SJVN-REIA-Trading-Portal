@@ -2,6 +2,7 @@ import db from './db/index.js';
 import { newId, pushNotification } from './util.js';
 import { payableNow, OPEN_STATUSES as OPEN_DISPUTE_STATUSES } from './disputesConstants.js';
 import { baselineCufFor, getParamNumber } from './mastersService.js';
+import { ROLE_GROUPS } from './middleware/auth.js';
 import {
   INVOCATION_OVERDUE_DAYS,
   DEFAULT_MONTHS_COVER,
@@ -12,6 +13,7 @@ import {
   genInstrumentNo,
   genInvocationNo,
   refreshAvailable,
+  dayInWords,
 } from './paymentSecurityConstants.js';
 
 export function recordSecurityEvent({ instrumentId = null, contractId = null, user, eventType, details }) {
@@ -27,6 +29,46 @@ export function recordSecurityEvent({ instrumentId = null, contractId = null, us
     eventType,
     details ? JSON.stringify(details) : null
   );
+}
+
+const today = () => new Date().toISOString().slice(0, 10);
+const daysUntil = (iso) => Math.round((new Date(`${String(iso).slice(0, 10)}T00:00:00Z`) - new Date(`${today()}T00:00:00Z`)) / 86400000);
+
+/**
+ * Tell the party on one side of a contract, and nobody else.
+ *
+ * A demand on one buyer's letter of credit went to every user with the role
+ * BUYER — every other DISCOM on the platform was told to replenish security it
+ * had not been asked for, and a seller whose guarantee was invoked was told
+ * nothing at all.
+ */
+export function notifyCounterparty(contractId, side, type, message) {
+  try {
+    const c = db.prepare('SELECT seller_id, buyer_id FROM contracts WHERE id = ?').get(contractId);
+    const entityId = side === 'SELLER' ? c?.seller_id : c?.buyer_id;
+    if (!entityId) return 0;
+    const users = db.prepare('SELECT id FROM users WHERE linked_entity_id = ? AND is_active = 1').all(entityId);
+    for (const u of users) pushNotification({ userId: u.id, type, message });
+    return users.length;
+  } catch { return 0; }
+}
+
+/** The REIA desk — every role that can act on security, not REIA_USER alone. */
+export function notifyDesk(type, message, extraRoles = []) {
+  try {
+    for (const role of new Set([...ROLE_GROUPS.REIA_WRITE, ...extraRoles])) pushNotification({ role, type, message });
+  } catch { /* what was done stands; the bell is a courtesy */ }
+}
+
+/**
+ * The status an instrument stands at on its own facts: lapsed, drawn in part,
+ * drawn in full, or whole. What it goes back to when a hold on it is lifted.
+ */
+export function standingStatus(row, asOf = today()) {
+  if (row.validity_end && String(row.validity_end).slice(0, 10) < asOf) return 'EXPIRED';
+  const used = Number(row.utilized_amount) || 0;
+  if (used <= 0) return 'ACTIVE';
+  return used >= (Number(row.limit_amount) || 0) ? 'INVOKED' : 'PARTIALLY_UTILIZED';
 }
 
 export function syncInstrumentAvailable(id) {
@@ -122,10 +164,12 @@ export function syncRequirementsFromContract(contractId) {
 }
 
 export function trailingMonthlyBilledAvg(contractId, months = 3) {
+  // A rejected bill is replaced by the one raised after it; counted, the month
+  // it belongs to came out at twice its size and the cover sized off it with it.
   const rows = db.prepare(`
     SELECT billing_period, SUM(total_amount) as total
     FROM invoices
-    WHERE contract_id = ? AND status NOT IN ('CANCELLED','DRAFT')
+    WHERE contract_id = ? AND status NOT IN ('CANCELLED','DRAFT','REJECTED')
     GROUP BY billing_period
     ORDER BY billing_period DESC
     LIMIT ?
@@ -153,10 +197,25 @@ export function computeRequiredAmount(contractId) {
   return Math.round(required);
 }
 
+/**
+ * A bill is money owed once it has been approved and presented, and until it is
+ * paid. One still in approval has been presented to nobody, and one rejected is
+ * not payable at all — both used to count as dues, so cover was measured against
+ * money nobody had been asked for and a letter of credit could be invoked for a
+ * bill SJVN had itself turned down.
+ *
+ * And it is money owed to SJVN. A seller's invoice on SJVN is the other way
+ * round: counted here, SJVN being late in paying a seller made the seller's own
+ * guarantee look short, held up its release, and — with no amount typed —
+ * would have drawn on that guarantee for SJVN's own unpaid bill.
+ */
+const OWED_STATUSES = ['APPROVED', 'SENT', 'PARTIALLY_PAID', 'DISPUTED'];
+const OWED_SQL = `status IN (${OWED_STATUSES.map((s) => `'${s}'`).join(',')}) AND direction = 'SJVN_TO_BUYER'`;
+
 export function outstandingDues(contractId) {
   const invoices = db.prepare(`
     SELECT * FROM invoices
-    WHERE contract_id = ? AND status NOT IN ('PAID','CANCELLED','DRAFT')
+    WHERE contract_id = ? AND ${OWED_SQL}
   `).all(contractId);
   return invoices.reduce((s, inv) => {
     const paid = db.prepare(`SELECT COALESCE(SUM(amount + COALESCE(deduction,0)),0) s FROM payments WHERE invoice_id = ?`).get(inv.id).s;
@@ -167,6 +226,25 @@ export function outstandingDues(contractId) {
 
 export function projectedNextBill(contractId) {
   return trailingMonthlyBilledAvg(contractId, 3);
+}
+
+/**
+ * What stands between an instrument and its release: money still owed on the
+ * contract, and disputes still open on its bills.
+ *
+ * Three places asked this and each had its own answer. The counterparty was
+ * told nothing was outstanding, the request was stamped clear when it was
+ * raised, and the desk's Release button then refused it — for a draft bill
+ * nobody had presented, or because the stamp was a week old. One answer,
+ * worked out at the moment it is asked.
+ */
+export function releasePosition(contractId) {
+  const outstanding = Math.round(outstandingDues(contractId) || 0);
+  const openDisputes = db.prepare(`
+    SELECT COUNT(*) c FROM disputes d JOIN invoices i ON i.id = d.invoice_id
+    WHERE i.contract_id = ? AND d.status IN (${OPEN_DISPUTE_STATUSES.map(() => '?').join(',')})
+  `).get(contractId, ...OPEN_DISPUTE_STATUSES).c;
+  return { outstanding_dues: outstanding, open_disputes: openDisputes, clear: !(outstanding > 0) && openDisputes === 0 };
 }
 
 /**
@@ -312,7 +390,7 @@ export function checkPortfolioAdequacy() {
 export function evaluateInvocationEligibility(contractId) {
   const overdue = db.prepare(`
     SELECT * FROM invoices
-    WHERE contract_id = ? AND status NOT IN ('PAID','CANCELLED','DRAFT')
+    WHERE contract_id = ? AND ${OWED_SQL}
       AND due_date IS NOT NULL
       AND julianday('now') - julianday(due_date) >= ?
   `).all(contractId, INVOCATION_OVERDUE_DAYS);
@@ -347,6 +425,7 @@ export function invokeWaterfall(contractId, amount, invoiceIds = [], user = { na
     // refuse — after the money was already counted as recovered.
     .filter((r) => isLiveToday(r));
 
+  invoiceIds = Array.isArray(invoiceIds) ? invoiceIds : [];
   let remaining = amount;
   const used = [];
   for (const inst of instruments) {
@@ -368,18 +447,31 @@ export function invokeWaterfall(contractId, amount, invoiceIds = [], user = { na
     });
   }
 
+  // A notice that drew nothing is a demand on the file for something that never
+  // happened, and a "replenish" sent to a counterparty for a draw of nothing.
+  if (!used.length) return null;
+
+  const contract = db.prepare('SELECT contract_no FROM contracts WHERE id = ?').get(contractId);
+  const contractNo = contract?.contract_no || contractId;
+  const invoiceNos = invoiceIds.length
+    ? db.prepare(`SELECT invoice_no FROM invoices WHERE id IN (${invoiceIds.map(() => '?').join(',')})`).all(...invoiceIds).map((r) => r.invoice_no)
+    : [];
+  const drawn = amount - remaining;
   const invId = newId('SIV');
   const letter = {
     to: 'Issuing Bank / Counterparty',
-    subject: `Demand for payment under security — ${contractId}`,
-    amount: amount - remaining,
+    subject: `Demand for payment under security — ${contractNo}`,
+    side,
+    amount: drawn,
     requested: amount,
     shortfall_uncovered: remaining,
     invoices: invoiceIds,
+    invoice_nos: invoiceNos,
     waterfall: used,
     issued_at: new Date().toISOString(),
   };
 
+  const invocationNo = genInvocationNo();
   db.prepare(`
     INSERT INTO security_invocations (
       id, invocation_no, contract_id, payment_security_id, amount, invoice_ids, status,
@@ -387,26 +479,21 @@ export function invokeWaterfall(contractId, amount, invoiceIds = [], user = { na
     ) VALUES (?, ?, ?, ?, ?, ?, 'NOTICE_ISSUED', ?, ?, ?)
   `).run(
     invId,
-    genInvocationNo(),
+    invocationNo,
     contractId,
-    used[0]?.id || null,
-    amount - remaining,
+    used[0].id,
+    drawn,
     JSON.stringify(invoiceIds),
     JSON.stringify(letter),
     JSON.stringify(used),
     user?.name ?? 'system'
   );
 
-  pushNotification({
-    role: 'REIA_USER',
-    type: 'SECURITY_INVOCATION',
-    message: `Invocation started on ${contractId}: ₹${(amount - remaining).toLocaleString('en-IN')} drawn via waterfall`,
-  });
-  pushNotification({
-    role: 'BUYER',
-    type: 'SECURITY_REPLENISH_DEMAND',
-    message: `Replenish payment security for contract — invocation of ₹${(amount - remaining).toLocaleString('en-IN')}`,
-  });
+  const rupees = `₹${drawn.toLocaleString('en-IN')}`;
+  const from = used.map((u) => u.instrument_no).join(', ');
+  notifyDesk('SECURITY_INVOCATION', `${invocationNo}: ${rupees} drawn on ${from} under ${contractNo}${remaining > 0 ? ` — ₹${remaining.toLocaleString('en-IN')} of the demand is not covered by any security` : ''}.`);
+  notifyCounterparty(contractId, side, 'SECURITY_REPLENISH_DEMAND',
+    `${contractNo}: SJVN has invoked your payment security — ${rupees} drawn on ${from} (notice ${invocationNo}).${side === 'BUYER' ? ' Have the letter of credit reinstated.' : ''}`);
 
   return db.prepare('SELECT * FROM security_invocations WHERE id = ?').get(invId);
 }
@@ -420,41 +507,42 @@ export function runAlertCascade() {
       AND ps.validity_end IS NOT NULL
   `).all();
 
+  const already = db.prepare(`SELECT id FROM security_alerts WHERE payment_security_id = ? AND alert_type = 'EXPIRY' AND days_before = ?`);
   for (const ps of instruments) {
-    const daysLeft = Math.ceil(
-      (new Date(ps.validity_end).getTime() - Date.now()) / (86400000)
-    );
-    for (const d of ALERT_CASCADE_DAYS) {
-      if (daysLeft > d) continue;
-      // send once per (instrument, days_before, type)
-      const exists = db.prepare(`
-        SELECT id FROM security_alerts
-        WHERE payment_security_id = ? AND alert_type = 'EXPIRY' AND days_before = ?
-      `).get(ps.id, d);
-      if (exists) continue;
+    const daysLeft = daysUntil(ps.validity_end);
+    // Only the tightest threshold crossed speaks. An instrument first seen five
+    // days from expiry used to be announced four times in one run — a reminder,
+    // an urgent, an escalation and a final warning, all saying the same thing.
+    const crossed = ALERT_CASCADE_DAYS.filter((d) => daysLeft <= d);
+    if (!crossed.length) continue;
+    const d = Math.min(...crossed);
+    if (already.get(ps.id, d)) continue;
 
-      let role = 'REIA_USER';
-      let prefix = 'Reminder';
-      if (d <= 30) { role = 'REIA_USER'; prefix = 'Urgent'; }
-      if (d <= 15) { role = 'MANAGEMENT'; prefix = 'Escalation'; }
-      if (d <= 7) { role = 'MANAGEMENT'; prefix = 'Final warning'; }
-      if (d === 0) { role = 'MANAGEMENT'; prefix = 'CRITICAL expired/expiry day'; }
+    let role = 'REIA_USER';
+    let prefix = 'Reminder';
+    if (d <= 30) { role = 'REIA_USER'; prefix = 'Urgent'; }
+    if (d <= 15) { role = 'MANAGEMENT'; prefix = 'Escalation'; }
+    if (d <= 7) { role = 'MANAGEMENT'; prefix = 'Final warning'; }
+    if (d === 0) { role = 'MANAGEMENT'; prefix = daysLeft < 0 ? 'Expired' : 'Expires today'; }
 
-      const message = `${prefix}: ${ps.instrument_no} (${ps.contract_no}) expires in ${daysLeft} day(s) on ${ps.validity_end}`;
-      db.prepare(`
-        INSERT INTO security_alerts (id, payment_security_id, contract_id, alert_type, days_before, sent_to, message)
-        VALUES (?, ?, ?, 'EXPIRY', ?, ?, ?)
-      `).run(newId('PSA'), ps.id, ps.contract_id, d, role, message);
-      pushNotification({ role, type: 'SECURITY_EXPIRY', message });
-      if (d <= 7) {
-        pushNotification({
-          role: 'TRADING_USER',
-          type: 'SECURITY_SCHEDULING_HOLD',
-          message: `Potential scheduling hold: ${ps.instrument_no} near expiry`,
-        });
-      }
-      sent += 1;
+    const days = (n) => `${n} day${n === 1 ? '' : 's'}`;
+    const when = daysLeft < 0 ? `expired ${days(-daysLeft)} ago, on ${dayInWords(ps.validity_end)}`
+      : daysLeft === 0 ? `expires today, ${dayInWords(ps.validity_end)}`
+        : `expires in ${days(daysLeft)}, on ${dayInWords(ps.validity_end)}`;
+    const message = `${prefix}: ${ps.instrument_no} (${ps.contract_no}) ${when}`;
+    db.prepare(`
+      INSERT INTO security_alerts (id, payment_security_id, contract_id, alert_type, days_before, sent_to, message)
+      VALUES (?, ?, ?, 'EXPIRY', ?, ?, ?)
+    `).run(newId('PSA'), ps.id, ps.contract_id, d, role, message);
+    pushNotification({ role, type: 'SECURITY_EXPIRY', message });
+    if (d <= 7) {
+      pushNotification({
+        role: 'TRADING_USER',
+        type: 'SECURITY_SCHEDULING_HOLD',
+        message: `Potential scheduling hold: ${ps.instrument_no} (${ps.contract_no}) ${when}`,
+      });
     }
+    sent += 1;
   }
 
   // Coverage red flags per PSA
@@ -478,13 +566,13 @@ export function runAlertCascade() {
   }
 
   // Mark expired
-  db.prepare(`
+  const expired = db.prepare(`
     UPDATE payment_security SET status = 'EXPIRED', updated_at = datetime('now')
     WHERE status IN ('ACTIVE','PARTIALLY_UTILIZED','RENEWED')
       AND validity_end IS NOT NULL AND date(validity_end) < date('now')
-  `).run();
+  `).run().changes;
 
-  return { sent };
+  return { sent, expired };
 }
 
 export function createInstrumentsFromRequirements(contractId, user) {

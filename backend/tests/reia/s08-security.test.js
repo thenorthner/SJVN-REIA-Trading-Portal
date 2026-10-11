@@ -207,13 +207,33 @@ describe('S8 A bill is not the counterparty’s until it is issued', () => {
   });
 
   it('refuses a dispute on a cancelled bill', async () => {
+    // One that had been issued before it was withdrawn — the only kind of
+    // cancelled bill the buyer ever held.
     const cancelled = makeInvoice({ contract_id: contractRow.id, status: 'CANCELLED' });
+    db.prepare(`UPDATE invoices SET issued_at = datetime('now', '-2 days') WHERE id = ?`).run(cancelled.id);
     const r = await request(app).post('/api/disputes').set(auth(buyerToken)).send({
       invoice_id: cancelled.id, reason_code: 'ENERGY_DATA_MISMATCH',
       charge_line: 'energy_charges', disputed_amount: 1000,
     });
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/cancelled/i);
+  });
+
+  it('does not show the buyer a draft SJVN cancelled before issuing it', async () => {
+    // Cancelling is only allowed before approval, so nearly every cancelled row
+    // is a draft that was thrown away. Listing those showed the buyer bills it
+    // was never sent.
+    const thrownAway = makeInvoice({ contract_id: contractRow.id, status: 'CANCELLED' });
+    const withdrawn = makeInvoice({ contract_id: contractRow.id, status: 'CANCELLED' });
+    db.prepare(`UPDATE invoices SET issued_at = datetime('now', '-2 days') WHERE id = ?`).run(withdrawn.id);
+
+    const list = await request(app).get('/api/invoices').set(auth(buyerToken));
+    const ids = list.body.map((i) => i.id);
+    expect(ids, 'a never-issued cancelled draft was listed to the buyer').not.toContain(thrownAway.id);
+    expect(ids).toContain(withdrawn.id);
+    expect((await request(app).get(`/api/invoices/${thrownAway.id}`).set(auth(buyerToken))).status).toBe(404);
+    const bills = await request(app).get('/api/buyer-bills').set(auth(buyerToken));
+    expect(bills.body.bills.map((b) => b.id)).not.toContain(thrownAway.id);
   });
 
   it('runs the dispute window from issue, not from when the row was created', async () => {

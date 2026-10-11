@@ -6,8 +6,12 @@ Supports two parsing modes (auto-detected):
   1. NRPC REA (Regional Energy Account) — Station-level PAF + Energy
   2. State SLDC SEA (State Energy Account) — DISCOM-level allocations (BRPL, BYPL, TPDDL, etc.)
 
+and one that is only ever asked for by name:
+  3. delhi_sea — Delhi SLDC's State Energy Account, Annexure-2 table C: each
+     Delhi licensee's weighted average entitlement in the ISGS stations.
+
 Usage:
-  python parse_rea.py <pdf_path> [--mode rea|sldc]
+  python parse_rea.py <pdf_path> [--mode rea|sldc|delhi_sea]
 
 Output: JSON to stdout
 """
@@ -31,18 +35,21 @@ STATIONS = {
         'search_paf': r'NATHPA\s*JHAKRI\s*HEP\s+([\d\.]+)',
         'search_energy': r'TOTAL\s*NATHPA\s*JHAKRI\s*HEP\s+([\d\.]+)',
         'd2_block': r'NATHPA\s*JHAKRI\s*HEP\s*:-([\s\S]*?)TOTAL\s*NATHPA',
+        'c1_row': r'NATHPA\s*JHAKRI\s*HEP',
     },
     'RAMPUR': {
         'name': 'Rampur HEP',
         'search_paf': r'RAMPUR\s*HEP\s+([\d\.]+)',
         'search_energy': r'TOTAL\s*RAMPUR\s*HEP\s+([\d\.]+)',
         'd2_block': r'RAMPUR\s*HEP\s*:-([\s\S]*?)TOTAL\s*RAMPUR',
+        'c1_row': r'RAMPUR\s*HEP',
     },
     'LUHRI': {
         'name': 'Luhri HEP',
         'search_paf': r'LUHRI\s*HEP\s+([\d\.]+)',
         'search_energy': r'TOTAL\s*LUHRI\s*HEP\s+([\d\.]+)',
         'd2_block': r'LUHRI\s*HEP\s*:-([\s\S]*?)TOTAL\s*LUHRI',
+        'c1_row': r'LUHRI\s*HEP',
     }
 }
 
@@ -94,9 +101,66 @@ def account_period(text):
     return '%s-%02d' % (m.group(2), MONTHS.index(m.group(1).upper()) + 1)
 
 
+def parse_c1_entitlements(text):
+    """
+    Table C1 — each utility's weighted average entitlement in the month, in %.
+
+    The bill apportions on these figures, and they move from month to month (a
+    state's share is surrendered, re-allocated, restored), so they are read off
+    the account the energy came from rather than carried from an earlier sheet.
+
+    The table runs over several pages, each with its own header: one utility per
+    line after the word "Station". A station's row is matched to the header of
+    the page it sits on, and a row whose figures do not line up with that header
+    one for one is left out — a wrong column is worse than no column.
+    """
+    start = text.find('Table - C1')
+    end = text.find('Table - C2')
+    if start < 0:
+        return {}
+    section = text[start:end if end > start else len(text)]
+    out = {}
+    header = []
+    reading_header = False
+    row_re = re.compile(r'^(.*?)\s+((?:\d+\.\d+\s*)+)$')
+    for raw in section.split('\n'):
+        line = raw.strip()
+        if line == 'Station':
+            header = []
+            reading_header = True
+            continue
+        if not line:
+            continue
+        m = row_re.match(line)
+        if m:
+            reading_header = False
+            for key, config in STATIONS.items():
+                if key in out:
+                    continue
+                if not re.fullmatch(config['c1_row'], m.group(1).strip()):
+                    continue
+                figures = [float(x) for x in m.group(2).split()]
+                if len(figures) != len(header):
+                    continue
+                out[key] = {name: pct for name, pct in zip(header, figures) if pct > 0}
+            continue
+        if reading_header:
+            header.append(re.sub(r'\s+', ' ', line).upper())
+    return out
+
+
+def parse_d2_schedule(block_text):
+    """Each beneficiary's scheduled energy in a station's Table D2 block, in LU."""
+    out = {}
+    for name, lu in re.findall(r'^\s*([A-Z][A-Z &().-]*?)\s+(\d+\.\d+)(?:\s+\d+\.\d+)?\s*$', block_text, re.M):
+        out[re.sub(r'\s+', ' ', name).strip()] = float(lu)
+    return out
+
+
 def parse_rea(text):
     """Parse NRPC REA — extract station-level energy and PAF data."""
     results = []
+    entitlements = parse_c1_entitlements(text)
     
     for key, config in STATIONS.items():
         paf_match = re.search(config['search_paf'], text)
@@ -112,8 +176,10 @@ def parse_rea(text):
         # free power is the second figure on its row ("GOHP NJHEP 877.390350
         # 877.390350"). The bill's E2 is this figure, not FEHS% of E1.
         free_lu = None
+        scheduled = {}
         block = re.search(config.get('d2_block', r'(?!)'), text)
         if block:
+            scheduled = parse_d2_schedule(block.group(1))
             rows = re.findall(r'^\s*[A-Z][A-Z &().-]*?\s+([\d.]+)\s+([\d.]+)\s*$', block.group(1), re.M)
             if rows:
                 free_lu = round(sum(float(b) for _, b in rows), 6)
@@ -128,6 +194,10 @@ def parse_rea(text):
                 'energy_mwh': energy_mwh,
                 'free_energy_lu': free_lu,
                 'free_energy_mwh': free_mwh,
+                # Table C1 (% by utility) and Table D2 (LU by beneficiary): what
+                # the month's allocation sheet is derived from and checked against.
+                'entitlement_pct': entitlements.get(key),
+                'scheduled_lu': scheduled or None,
             })
     
     return results
@@ -217,9 +287,58 @@ def parse_sldc_sea(text):
     }
 
 
+DELHI_SEA_STATIONS = {
+    'NATHPA_JHAKRI': r'NATHPA\s*JHAKRI',
+    'RAMPUR': r'RAMPUR',
+}
+DELHI_SEA_LICENSEES = ['BRPL', 'BYPL', 'TPDDL', 'NDMC', 'MES']
+
+
+def delhi_sea_period(text):
+    """The month a Delhi State Energy Account says it is for, as YYYY-MM."""
+    m = re.search(r'for\s+the\s+month\s+of\s+([A-Za-z]+)[\s\'’`-]*(\d{4}|\d{2})\b', text, re.I)
+    if not m or m.group(1).upper() not in MONTHS:
+        return None
+    year = m.group(2)
+    if len(year) == 2:
+        year = '20' + year
+    return '%s-%02d' % (year, MONTHS.index(m.group(1).upper()) + 1)
+
+
+def parse_delhi_sea(text):
+    """
+    Annexure-2, table C of Delhi SLDC's State Energy Account: the month's
+    weighted average entitlement of each Delhi licensee in the ISGS stations.
+
+    NRPC's account gives Delhi one figure per station; this is where that figure
+    is divided among BRPL, BYPL and TPDDL, to the same six decimals. Table D
+    (cumulative for the year) follows it with the same station names, so only
+    the text between the two headings is read.
+    """
+    start = re.search(r'C\)\s*Weighted\s+Avg\.?\s+entitlement\s+of\s+Distribution\s+Licensees\s+from\s+ISGS', text, re.I)
+    if not start:
+        return {}
+    rest = text[start.end():]
+    stop = re.search(r'D\)\s*Cum', rest, re.I)
+    section = rest[:stop.start()] if stop else rest
+    out = {}
+    for key, pattern in DELHI_SEA_STATIONS.items():
+        m = re.search(r'^\s*' + pattern + r'\s+((?:\d+\.\d+\s*)+)$', section, re.I | re.M)
+        if not m:
+            continue
+        figures = [float(x) for x in m.group(1).split()]
+        if len(figures) < 2:
+            continue
+        row = {'total': figures[0]}
+        for i, name in enumerate(DELHI_SEA_LICENSEES):
+            row[name] = figures[i + 1] if i + 1 < len(figures) else 0.0
+        out[key] = row
+    return out
+
+
 def main():
     if len(sys.argv) < 2:
-        print(json.dumps({'success': False, 'error': 'Usage: python parse_rea.py <pdf_path> [--mode rea|sldc]'}))
+        print(json.dumps({'success': False, 'error': 'Usage: python parse_rea.py <pdf_path> [--mode rea|sldc|delhi_sea]'}))
         sys.exit(1)
     
     pdf_path = sys.argv[1]
@@ -240,7 +359,15 @@ def main():
         
         mode = forced_mode or detect_mode(text)
         
-        if mode == 'sldc':
+        if mode == 'delhi_sea':
+            print(json.dumps({
+                'success': True,
+                'mode': 'delhi_sea',
+                'description': 'Delhi State Energy Account (licensee entitlement in ISGS stations)',
+                'period': delhi_sea_period(text),
+                'data': parse_delhi_sea(text)
+            }, indent=2))
+        elif mode == 'sldc':
             data = parse_sldc_sea(text)
             print(json.dumps({
                 'success': True,

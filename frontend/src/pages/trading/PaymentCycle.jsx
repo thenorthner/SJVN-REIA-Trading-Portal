@@ -35,21 +35,21 @@ function CashTimeline({ points }) {
           return (
             <g key={p.date}>
               {p.inflow > 0 && (
-                <rect x={x - barW / 2} y={zeroY - barH(p.inflow)} width={barW} height={barH(p.inflow)} fill="#16a34a" opacity="0.75">
+                <rect x={x - barW / 2} y={zeroY - barH(p.inflow)} width={barW} height={barH(p.inflow)} fill="url(#eliteGreen)" opacity="0.75">
                   <title>{`${p.date}\nIn: ${fmtCurrency(p.inflow)}`}</title>
                 </rect>
               )}
               {p.outflow > 0 && (
-                <rect x={x - barW / 2} y={zeroY} width={barW} height={barH(p.outflow)} fill="#dc2626" opacity="0.75">
+                <rect x={x - barW / 2} y={zeroY} width={barW} height={barH(p.outflow)} fill="url(#eliteRed)" opacity="0.75">
                   <title>{`${p.date}\nOut: ${fmtCurrency(p.outflow)}`}</title>
                 </rect>
               )}
             </g>
           );
         })}
-        <path d={path} fill="none" stroke="#2563eb" strokeWidth="2" />
+        <path d={path} fill="none" stroke="url(#eliteBlue)" strokeWidth="2" />
         {points.map((p, i) => (
-          <circle key={p.date} cx={PAD.l + bandW * i + bandW / 2} cy={balY(p.running_balance)} r="3" fill="#2563eb">
+          <circle key={p.date} cx={PAD.l + bandW * i + bandW / 2} cy={balY(p.running_balance)} r="3" fill="url(#eliteBlue)">
             <title>{`${p.date}\nBalance: ${fmtCurrency(p.running_balance)}`}</title>
           </circle>
         ))}

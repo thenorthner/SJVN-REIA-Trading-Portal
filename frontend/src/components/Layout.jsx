@@ -100,13 +100,14 @@ const NAV_INTERNAL = [
       { to: '/trading/cea-reports', label: 'CEA Reports Dashboard' },
       { to: '/trading', label: 'Trading Dashboard', end: true },
       { to: '/reia', label: 'REIA Dashboard', end: true },
+      { to: '/hydro-thermal', label: 'Hydro & Thermal Dashboard', end: true },
     ],
   },
   {
     section: 'Alerts',
-    roles: [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.TRADING_ALL])],
+    roles: [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.TRADING_ALL])],
     links: [
-      { to: '/mail', label: 'Mail' },
+      { to: '/mail', label: 'Quick Connect' },
       { to: '/notification-board', label: 'Notification Board' },
     ],
   },
@@ -144,11 +145,11 @@ const NAV_INTERNAL = [
       // so nobody sees the same link twice.
       { to: '/trading/generator-billing', label: 'Generator Billing & Settlement', roles: ['REIA_USER', 'REIA_ADMIN'] },
       { to: '/reia/reconciliation', label: 'Reconciliation' },
-      { to: '/reia/deviation', label: 'Deviation Settlement (DSA)' },
+      { to: '/reia/deviation', label: 'Deviation Settlement (DSM)' },
     ],
   },
   {
-    section: 'Hydro & Thermal Billing',
+    section: 'Commercial (Hydro & Thermal)',
     roles: ROLE_GROUPS.HYDRO_THERMAL_ALL,
     links: [
       { to: '/hydro-thermal', label: 'Hydro & Thermal Dashboard', end: true },
@@ -177,10 +178,10 @@ const NAV_INTERNAL = [
   },
   {
     section: 'Platform',
-    roles: [...new Set([...ROLE_GROUPS.AUDITOR, ...ROLE_GROUPS.MASTERS_READ, ...ROLE_GROUPS.TRADING_ALL, 'REIA_ADMIN', 'TRADING_ADMIN', 'IT_SUPER_ADMIN'])],
+    roles: [...new Set([...ROLE_GROUPS.AUDITOR, ...ROLE_GROUPS.MASTERS_READ, ...ROLE_GROUPS.TRADING_ALL, 'COMMERCIAL_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN', 'IT_SUPER_ADMIN'])],
     links: [
       // SJVN's own officers on the platform; an administrator's page.
-      { to: '/admin/users', label: 'SJVN Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN'] },
+      { to: '/admin/users', label: 'SJVN Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMMERCIAL_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN'] },
       { to: '/master/portfolio-registry', label: 'Portfolio Registry', roles: ROLE_GROUPS.TRADING_ALL },
       { to: '/masters', label: 'Master Data', roles: ROLE_GROUPS.MASTERS_READ },
       { to: '/audit-logs', label: 'Audit Trail', roles: ROLE_GROUPS.AUDITOR },
@@ -194,7 +195,7 @@ const NAV_SELLER = [
     roles: null,
     links: [
       { to: '/seller', label: 'My Dashboard', end: true },
-      { to: '/mail', label: 'Mail' },
+      { to: '/mail', label: 'Quick Connect' },
       { to: '/notification-board', label: 'Notification Board' },
       { to: '/seller/team', label: 'My Team' },
       { to: '/seller/documents', label: 'My Documents & KYC' },
@@ -215,7 +216,7 @@ const NAV_BUYER = [
     roles: null,
     links: [
       { to: '/buyer', label: 'My Dashboard', end: true },
-      { to: '/mail', label: 'Mail' },
+      { to: '/mail', label: 'Quick Connect' },
       { to: '/notification-board', label: 'Notification Board' },
       { to: '/buyer/team', label: 'My Team' },
       { to: '/buyer/documents', label: 'My Documents & KYC' },
@@ -239,7 +240,7 @@ const NAV_TRADING_CLIENT = [
       // the bidding engine, the bilateral desk, Billing & Settlement — which a
       // client can open but whose every call the API refuses.
       { to: '/trading/home', label: 'Home Dashboard', end: true },
-      { to: '/mail', label: 'Mail' },
+      { to: '/mail', label: 'Quick Connect' },
       { to: '/trading/my-profile', label: 'My Profile & Portfolio' },
       { to: '/trading/my-bids', label: 'My Bids' },
       { to: '/trading/my-deals', label: 'My Deals' },
@@ -274,12 +275,12 @@ const NavSubGroup = ({ group, user }) => {
         onClick={() => setIsOpen(!isOpen)}
         className="nav-subgroup-title"
         style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center',
-                 justifyContent: 'space-between', padding: '5px 12px 5px 14px',
-                 fontSize: 11, fontWeight: 600, letterSpacing: '.02em', opacity: 0.75 }}
+                 justifyContent: 'space-between', padding: '8px 14px',
+                 fontSize: 12.5, fontWeight: 600, letterSpacing: '.02em', color: '#aab9d1' }}
         title={pending ? `${pending} of ${links.length} not built yet` : undefined}
       >
         <span>{group.group}</span>
-        <span style={{ fontSize: 9, opacity: 0.6 }}>{isOpen ? '▼' : '▶'}</span>
+        <span style={{ fontSize: 10, opacity: 0.8 }}>{isOpen ? '▼' : '▶'}</span>
       </div>
       {isOpen && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -289,7 +290,10 @@ const NavSubGroup = ({ group, user }) => {
               to={l.to}
               end={l.end}
               className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}
-              style={{ paddingLeft: 26 }}
+              style={({ isActive }) => ({ 
+                paddingLeft: 26, fontSize: '13.5px', padding: '8px 14px 8px 26px', borderRadius: '8px', 
+                color: isActive ? '#fff' : '#c7d2e6', margin: '2px 6px' 
+              })}
             >
               <span style={{ opacity: l.pending ? 0.55 : 1 }}>{l.label}</span>
               {/* A screen that is only planned says so in the menu, so nobody
@@ -320,11 +324,15 @@ const NavGroup = ({ section, user }) => {
       <div 
         className="nav-section-title" 
         onClick={() => setIsOpen(!isOpen)} 
-        style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', userSelect: 'none' }}
+        style={{ 
+          cursor: 'pointer', display: 'flex', justifyContent: 'space-between', 
+          alignItems: 'center', userSelect: 'none', 
+          fontSize: '12.5px', color: '#a2afc7', padding: '10px 14px', letterSpacing: '0.04em'
+        }}
         title={isOpen ? "Collapse section" : "Expand section"}
       >
         <span>{section.section}</span>
-        <span style={{ fontSize: '10px', opacity: 0.6 }}>{isOpen ? '▼' : '▶'}</span>
+        <span style={{ fontSize: '10px', opacity: 0.8 }}>{isOpen ? '▼' : '▶'}</span>
       </div>
       {isOpen && (
         <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -337,7 +345,11 @@ const NavGroup = ({ section, user }) => {
                 to={isKycLocked ? '#' : l.to}
                 end={l.end}
                 className={({ isActive }) => 'nav-link' + (isActive && !isKycLocked ? ' active' : '') + (isKycLocked ? ' locked' : '')}
-                style={isKycLocked ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                style={({ isActive }) => ({
+                  ...(isKycLocked ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
+                  fontSize: '14px', padding: '9px 14px', borderRadius: '8px', 
+                  color: isActive ? '#fff' : '#c7d2e6', margin: '2px 6px'
+                })}
                 onClick={(e) => {
                   if (isKycLocked) {
                     e.preventDefault();
@@ -363,7 +375,20 @@ export default function Layout() {
   const [showNotif, setShowNotif] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  // On a phone the menu would take two thirds of the screen, so it starts
+  // closed there and closes again once a page has been picked from it.
+  const isNarrow = () => typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 760px)').matches;
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(isNarrow);
+  useEffect(() => { if (isNarrow()) setIsSidebarCollapsed(true); }, [location.pathname]);
+  // And when a wide window is made narrow: the menu stayed open and took the
+  // whole width, leaving the page a sliver beside it.
+  useEffect(() => {
+    const mq = window.matchMedia?.('(max-width: 760px)');
+    if (!mq) return undefined;
+    const onChange = (e) => { if (e.matches) setIsSidebarCollapsed(true); };
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
   const notifRef = useRef(null);
   const profileRef = useRef(null);
 
@@ -525,8 +550,8 @@ export default function Layout() {
             <button
               className="icon-btn"
               onClick={() => navigate('/mail')}
-              aria-label={unreadMail ? `Mail, ${unreadMail} unread` : 'Mail'}
-              title="Mail"
+              aria-label={unreadMail ? `Quick Connect, ${unreadMail} unread` : 'Quick Connect'}
+              title="Quick Connect"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <rect x="3" y="5" width="18" height="14" rx="2" />

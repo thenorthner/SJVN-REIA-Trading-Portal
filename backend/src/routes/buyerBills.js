@@ -25,7 +25,7 @@ import { newId, pushNotification } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { payableNow } from '../disputesConstants.js';
 import { invoiceLpsAsOf } from '../services/invoiceLps.js';
-import { PRESENTED_STATUSES } from '../services/counterpartyScope.js';
+import { presentedSql, isPresented } from '../services/counterpartyScope.js';
 import { generateInvoicePdfBuffer } from '../scripts/invoicePdf.js';
 import { applyInvoicePayment } from './invoices.js';
 
@@ -33,6 +33,7 @@ const router = Router();
 router.use(requireAuth);
 
 const INTERNAL_READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE, 'COMPLIANCE_AUDITOR'])];
+import { dayInWords } from '../paymentSecurityConstants.js';
 const canConfirm = (user) => ROLE_GROUPS.FINANCE.includes(user?.role);
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const send = (res, fn) => {
@@ -81,7 +82,7 @@ function billFor(user, id) {
     SELECT i.*, c.contract_no, c.buyer_id, c.seller_id FROM invoices i JOIN contracts c ON c.id = i.contract_id WHERE i.id = ?
   `).get(String(id || ''));
   if (!inv || inv.direction !== 'SJVN_TO_BUYER') throw fail(404, 'Bill not found');
-  if (scope.side === 'BUYER' && (inv.buyer_id !== scope.entityId || !PRESENTED_STATUSES.includes(inv.status))) throw fail(404, 'Bill not found');
+  if (scope.side === 'BUYER' && (inv.buyer_id !== scope.entityId || !isPresented(inv))) throw fail(404, 'Bill not found');
   return { inv, scope };
 }
 
@@ -135,8 +136,10 @@ const notifyFinance = (message) => {
 function billsOf(user, q = {}) {
   const scope = scopeOf(user);
   if (scope.side !== 'BUYER') throw fail(400, 'This is the buyer\'s own view of its bills');
-  const where = [`c.buyer_id = ?`, `i.direction = 'SJVN_TO_BUYER'`, `i.status IN (${PRESENTED_STATUSES.map(() => '?').join(',')})`];
-  const params = [scope.entityId, ...PRESENTED_STATUSES];
+  // Presented bills only — and a cancelled one only if it had been issued, so a
+  // draft SJVN threw away is not shown to the buyer as a bill it once received.
+  const where = [`c.buyer_id = ?`, `i.direction = 'SJVN_TO_BUYER'`, presentedSql('i')];
+  const params = [scope.entityId];
   if (q.contract_id) { where.push('i.contract_id = ?'); params.push(String(q.contract_id)); }
   if (q.billing_period) { where.push('i.billing_period = ?'); params.push(String(q.billing_period)); }
   const rows = db.prepare(`
@@ -303,7 +306,7 @@ export function createIntimation(req, invoiceId, body) {
     gross > left - onTheWay + 1 ? 1 : 0);
   audit(req, 'PAYMENT_INTIMATED', 'payment_intimation', id, { afterValue: { invoice_no: inv.invoice_no, amount, tds_amount: tds, other_deduction: other, reference, payment_date: date } });
   if (maker) notifyBuyer(scope.entityId, `${user.name} has prepared a payment intimation of ${rupees(gross)} against ${inv.invoice_no}. It needs a checker's approval before it goes to SJVN.`, true);
-  else notifyFinance(`${inv.contract_no}: the buyer reports a payment of ${rupees(amount)}${tds > 0 ? ` (plus TDS ${rupees(tds)})` : ''} against ${inv.invoice_no}, UTR ${reference}, dated ${date}. Confirm it against the bank statement.`);
+  else notifyFinance(`${inv.contract_no}: the buyer reports a payment of ${rupees(amount)}${tds > 0 ? ` (plus TDS ${rupees(tds)})` : ''} against ${inv.invoice_no}, UTR ${reference}, dated ${dayInWords(date)}. Confirm it against the bank statement.`);
   return intimation(id);
 }
 
@@ -363,7 +366,7 @@ router.post('/intimations/:id/approve', (req, res) => send(res, () => {
   db.prepare(`UPDATE payment_intimations SET status = 'SUBMITTED', approved_by = ?, approved_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`).run(req.user.id, r.id);
   audit(req, 'PAYMENT_INTIMATION_APPROVED', 'payment_intimation', r.id, { beforeValue: { status: 'PENDING_CHECKER' }, afterValue: { status: 'SUBMITTED' } });
   const v = intimation(r.id);
-  notifyFinance(`${v.contract_no}: the buyer reports a payment of ${rupees(v.amount)}${v.tds_amount > 0 ? ` (plus TDS ${rupees(v.tds_amount)})` : ''} against ${v.invoice_no}, UTR ${v.reference}, dated ${v.payment_date}. Confirm it against the bank statement.`);
+  notifyFinance(`${v.contract_no}: the buyer reports a payment of ${rupees(v.amount)}${v.tds_amount > 0 ? ` (plus TDS ${rupees(v.tds_amount)})` : ''} against ${v.invoice_no}, UTR ${v.reference}, dated ${dayInWords(v.payment_date)}. Confirm it against the bank statement.`);
   return v;
 }));
 
@@ -406,7 +409,7 @@ router.post('/intimations/:id/confirm', (req, res) => send(res, () => {
   })();
   const after = db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status;
   audit(req, 'PAYMENT_INTIMATION_CONFIRMED', 'payment_intimation', r.id, { beforeValue: { status: 'SUBMITTED', invoice_status: inv.status }, afterValue: { status: 'CONFIRMED', invoice_status: after, payment_id: paymentId, value_date: valueDate }, reason: note || undefined });
-  notifyBuyer(r.entity_id, `SJVN Finance has confirmed your payment of ${rupees(r.amount)} against ${inv.invoice_no} (UTR ${r.reference})${valueDate !== r.payment_date ? `, with value date ${valueDate}` : ''}. The bill is now ${after.replace(/_/g, ' ').toLowerCase()}.`);
+  notifyBuyer(r.entity_id, `SJVN Finance has confirmed your payment of ${rupees(r.amount)} against ${inv.invoice_no} (UTR ${r.reference})${valueDate !== r.payment_date ? `, with value date ${dayInWords(valueDate)}` : ''}. The bill is now ${after.replace(/_/g, ' ').toLowerCase()}.`);
   return intimation(r.id);
 }));
 

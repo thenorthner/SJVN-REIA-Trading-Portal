@@ -59,23 +59,21 @@ export default function IntradayMarketTab() {
   return (
     <>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
-      <Card>
-        <div className="report-criteria">
-          <label className="report-search">
-            Exchange
-            <select className="input" value={exchange} onChange={(e) => { setExchange(e.target.value); setDate(''); }}>
-              {['IEX', 'PXIL', 'HPX'].map((x) => <option key={x}>{x}</option>)}
-            </select>
-          </label>
-          <label className="report-search">
-            Delivery date
-            <select className="input" value={data?.date || ''} onChange={(e) => setDate(e.target.value)} disabled={!data?.available_dates.length}>
-              {!data?.available_dates.length && <option value="">No block-wise days</option>}
-              {data?.available_dates.map((d) => <option key={d} value={d}>{fmtDate(d)}</option>)}
-            </select>
-          </label>
-        </div>
-      </Card>
+      <div className="elite-filter-bar" style={{ marginBottom: 24 }}>
+        <label className="elite-filter-label">
+          Exchange
+          <select className="elite-select" value={exchange} onChange={(e) => { setExchange(e.target.value); setDate(''); }}>
+            {['IEX', 'PXIL', 'HPX'].map((x) => <option key={x}>{x}</option>)}
+          </select>
+        </label>
+        <label className="elite-filter-label">
+          Delivery date
+          <select className="elite-select" value={data?.date || ''} onChange={(e) => setDate(e.target.value)} disabled={!data?.available_dates.length}>
+            {!data?.available_dates.length && <option value="">No block-wise days</option>}
+            {data?.available_dates.map((d) => <option key={d} value={d}>{fmtDate(d)}</option>)}
+          </select>
+        </label>
+      </div>
 
       {data && !present.length ? (
         <Card>

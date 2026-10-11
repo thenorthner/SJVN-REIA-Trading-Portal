@@ -50,6 +50,8 @@ export const STAFF_ROLES = {
   IT_SUPER_ADMIN: { label: 'IT Super Administrator', desk: 'Administration', does: 'Runs the platform: every section, every user, system settings.' },
   SJVN_ADMIN: { label: 'SJVN Administrator', desk: 'Administration', does: 'Every section across REIA, trading and finance, and manages SJVN\'s and the companies\' users.' },
   MANAGEMENT: { label: 'Management', desk: 'Management', does: 'Dashboards and reports across the verticals, and the approvals reserved for management. Does not enter data.' },
+  COMMERCIAL_ADMIN: { label: 'Commercial Administrator', desk: 'Commercial', does: 'Everything the Commercial desk does, and manages the Commercial desk\'s users.' },
+  COMMERCIAL_USER: { label: 'Commercial Desk', desk: 'Commercial', does: 'Hydro & Thermal station billing, PAF, energy statements, beneficiary allocations and ledgers.' },
   REIA_ADMIN: { label: 'REIA Administrator', desk: 'REIA', does: 'Everything the REIA desk does, and manages the REIA desk\'s users and companies\' admin accounts.' },
   REIA_USER: { label: 'REIA Desk', desk: 'REIA', does: 'Contracts, energy data, billing, disputes, payment security and reconciliation with sellers and buyers.' },
   FINANCE_USER: { label: 'Finance', desk: 'Finance', does: 'Payments and their confirmation against the bank, releases, TDS certificates and the SAP hand-over.' },
@@ -63,17 +65,19 @@ const TOP = ['IT_SUPER_ADMIN', 'SJVN_ADMIN'];
 const MANAGES = {
   IT_SUPER_ADMIN: ROLES,
   SJVN_ADMIN: ROLES.filter((r) => r !== 'IT_SUPER_ADMIN'),
+  COMMERCIAL_ADMIN: ['COMMERCIAL_USER'],
   REIA_ADMIN: ['REIA_USER'],
   TRADING_ADMIN: ['TRADING_USER'],
 };
 
 /** What each role reaches, section by section, as the navigation and the routes enforce it. */
 const ACCESS = [
+  ['Hydro & Thermal billing — PAF, station billing, allocations, ledgers', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', MANAGEMENT: 'Read', COMMERCIAL_ADMIN: 'Full', COMMERCIAL_USER: 'Full', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
   ['REIA billing & settlement — contracts, energy, invoices, disputes, security', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', MANAGEMENT: 'Read', REIA_ADMIN: 'Full', REIA_USER: 'Full', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
   ['Payments — recording, confirming a buyer\'s payment, releases', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', REIA_USER: 'Full', FINANCE_USER: 'Full' }],
   ['Power trading — bids, exchange, clients', { SJVN_ADMIN: 'Full', MANAGEMENT: 'Read', FINANCE_USER: 'Read', TRADING_ADMIN: 'Full', TRADING_USER: 'Full' }],
   ['Companies\' users — reset or switch off a company admin', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', REIA_ADMIN: 'Full' }],
-  ['SJVN\'s own users — this page', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'All but IT admins', REIA_ADMIN: 'REIA desk', TRADING_ADMIN: 'Trading desk' }],
+  ['SJVN\'s own users — this page', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'All but IT admins', COMMERCIAL_ADMIN: 'Commercial desk', REIA_ADMIN: 'REIA desk', TRADING_ADMIN: 'Trading desk' }],
   ['Audit trail', { IT_SUPER_ADMIN: 'Read', SJVN_ADMIN: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
 ].map(([what, by]) => ({ what, by }));
 

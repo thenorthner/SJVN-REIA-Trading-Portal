@@ -5,7 +5,7 @@ import api from '../../api/client.js';
 import SjvnDeskCard from '../../components/SjvnDeskCard.jsx';
 import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Modal, Table } from '../../components/ui.jsx';
 
-const COLORS = ['var(--primary)', 'var(--green)', '#b3760a', 'var(--red)', '#1f5cd6', '#7a5bd6'];
+const COLORS = ['url(#eliteBlue)', 'url(#eliteGreen)', 'url(#eliteOrange)', 'url(#eliteRed)', 'url(#elitePurple)', 'url(#eliteTeal)'];
 
 export default function ReiaDashboard() {
   const navigate = useNavigate();

@@ -79,7 +79,7 @@ export default function MyEnergyData({ title, subtitle, contractType, contractLa
         : '-'),
     }] : []),
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
-    { key: 'response', header: 'Your answer', render: (r) => (r.is_superseded && !r.response_status ? <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>Replaced by final</span> : <ResponseBadge row={r} />) },
+    { key: 'response', header: 'Your answer', render: (r) => (r.is_superseded ? <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>Replaced by final{r.response_status === 'OBJECTED' ? ' · objected' : r.response_status === 'ACCEPTED' ? ' · accepted' : ''}</span> : <ResponseBadge row={r} />) },
     {
       key: 'actions',
       header: 'Actions',
@@ -120,7 +120,7 @@ export default function MyEnergyData({ title, subtitle, contractType, contractLa
 
       {t && (
         <div className="kpi-grid">
-          <StatCard label={`${energyLabel} — last ${t.months} month${t.months === 1 ? '' : 's'}`} value={`${fmtNumber(t.energy_mwh)} MWh`} tone="blue" />
+          <StatCard label={t.months > 0 ? `${energyLabel} — last ${t.months} month${t.months === 1 ? '' : 's'}` : energyLabel} value={`${fmtNumber(t.energy_mwh)} MWh`} tone="blue" />
           {showCuf && <StatCard label="Average CUF" value={t.avg_cuf_percent != null ? `${fmtNumber(t.avg_cuf_percent)}%` : '—'} hint={minCuf != null ? `Contractual minimum ${fmtNumber(minCuf)}%` : undefined} tone={minCuf != null && t.avg_cuf_percent != null && t.avg_cuf_percent < minCuf ? 'red' : 'green'} />}
           <StatCard label="Best month" value={t.best_month ? monthLabel(t.best_month.period) : '—'} hint={t.best_month ? `${fmtNumber(t.best_month.energy_mwh)} MWh` : undefined} />
           {showCuf && <StatCard label="Months below minimum CUF" value={t.months_below_min} tone={t.months_below_min ? 'red' : 'green'} hint={minCuf == null ? 'No minimum set on the contract' : undefined} />}
@@ -150,11 +150,11 @@ export default function MyEnergyData({ title, subtitle, contractType, contractLa
                     formatter={(v, name) => (name === 'CUF' ? [`${fmtNumber(v)}%`, name] : [`${fmtNumber(v)} MWh`, name])}
                   />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar yAxisId="mwh" dataKey="energy_mwh" name={energyLabel} fill="#2563eb" radius={[3, 3, 0, 0]} isAnimationActive={false}>
+                  <Bar yAxisId="mwh" dataKey="energy_mwh" name={energyLabel} fill="url(#eliteBlue)" radius={[3, 3, 0, 0]} isAnimationActive={false}>
                     {series.map((s) => <Cell key={s.period} fill={s.provisional ? '#93c5fd' : '#2563eb'} />)}
                   </Bar>
-                  {showCuf && <Line yAxisId="cuf" type="monotone" dataKey="cuf_percent" name="CUF" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} connectNulls isAnimationActive={false} />}
-                  {showCuf && minCuf != null && <ReferenceLine yAxisId="cuf" y={minCuf} stroke="#dc2626" strokeDasharray="5 4" label={{ value: `Min CUF ${minCuf}%`, position: 'insideTopRight', fontSize: 11, fill: '#dc2626' }} />}
+                  {showCuf && <Line yAxisId="cuf" type="monotone" dataKey="cuf_percent" name="CUF" stroke="url(#eliteOrange)" strokeWidth={2} dot={{ r: 3 }} connectNulls isAnimationActive={false} />}
+                  {showCuf && minCuf != null && <ReferenceLine yAxisId="cuf" y={minCuf} stroke="url(#eliteRed)" strokeDasharray="5 4" label={{ value: `Min CUF ${minCuf}%`, position: 'insideTopRight', fontSize: 11, fill: '#dc2626' }} />}
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -173,7 +173,7 @@ export default function MyEnergyData({ title, subtitle, contractType, contractLa
         <input type="month" value={filters.period_month} onChange={(e) => setFilters({ ...filters, period_month: e.target.value })} aria-label="Period" />
         <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} aria-label="Status">
           <option value="">All statuses</option>
-          {['DRAFT', 'VALIDATED', 'LOCKED', 'DISPUTED'].map((s) => <option key={s} value={s}>{s}</option>)}
+          {['VALIDATED', 'LOCKED', 'DISPUTED'].map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
           <input type="checkbox" checked={onlyAwaiting} onChange={(e) => setOnlyAwaiting(e.target.checked)} />

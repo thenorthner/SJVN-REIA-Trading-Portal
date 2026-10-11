@@ -8,7 +8,13 @@ import { ROLE_GROUPS as UI } from '../../frontend/src/roles.js';
 // the UI offered IT_SUPER_ADMIN the trading desk the API refused it, hid the
 // REIA module from REIA_ADMIN whom the API allowed, and listed four
 // trading-client sub-roles the users table would not accept.
-const SHARED = ['REIA_ALL', 'REIA_WRITE', 'TRADING_ALL', 'TRADING_WRITE', 'EXECUTIVE', 'AUDITOR'];
+const SHARED = [
+  'REIA_ALL', 'REIA_WRITE',
+  'COMMERCIAL_ALL', 'COMMERCIAL_WRITE',
+  'HYDRO_THERMAL_ALL', 'HYDRO_THERMAL_WRITE',
+  'TRADING_ALL', 'TRADING_WRITE',
+  'EXECUTIVE', 'AUDITOR',
+];
 
 /** The roles users.role will actually accept, read from its CHECK constraint. */
 function rolesTheDatabaseAccepts() {

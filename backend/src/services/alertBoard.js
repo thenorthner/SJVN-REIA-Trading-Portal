@@ -18,6 +18,8 @@ import { newId } from '../util.js';
 import { ROLE_GROUPS } from '../middleware/auth.js';
 import { deliverDirect } from './notificationService.js';
 import { getSmsConfig, templateIdFor } from './smsService.js';
+import { invoiceBalance } from './invoiceLps.js';
+import { raisedBySellerSql } from './counterpartyScope.js';
 
 export const GROUPS = {
   BILLING: 'Billing & Payments',
@@ -85,39 +87,50 @@ export function computeAlerts(scope) {
   const invFilter = contractSub ? ` AND contract_id IN ${contractSub}` : '';
   const disputeFilter = contractSub ? ` AND invoice_id IN (SELECT id FROM invoices WHERE contract_id IN ${contractSub})` : '';
 
+  // What is still owed on a set of bills, bill by bill, on the figure the
+  // invoice screens show. These two cards summed total_amount, so a bill with
+  // 3.83 crore banked against 3.91 crore read as 3.91 crore overdue — and a
+  // credit bill for −8,000 counted as an invoice past due.
+  const owing = (rows) => rows.map((r) => {
+    try { return invoiceBalance(r).balance; } catch { return Number(r.total_amount) || 0; }
+  }).filter((b) => b > 0);
+  const rupees = (list) => `₹${Math.round(list.reduce((a, b) => a + b, 0)).toLocaleString('en-IN')}`;
+
   // 1. Overdue payments (past due, still unpaid)
-  const overdue = safeGet(`
-    SELECT COUNT(*) count, COALESCE(SUM(total_amount),0) amount
-    FROM invoices
+  const overdue = owing(safeAll(`
+    SELECT * FROM invoices
     WHERE status IN ('SENT','APPROVED','PARTIALLY_PAID','DISPUTED')
       AND due_date IS NOT NULL AND date(due_date) < date('now')${invFilter}
-  `, ...scopeParams);
+  `, ...scopeParams));
   add({
     key: 'overdue-payments', group: 'BILLING', category: 'Overdue Payment', severity: 'CRITICAL',
     title: 'Overdue payments',
-    detail: `${overdue.count} invoice(s) past due · ₹${Number(overdue.amount || 0).toLocaleString('en-IN')} outstanding`,
-    count: overdue.count || 0, link: `${P}/invoices`,
+    detail: `${overdue.length} invoice(s) past due · ${rupees(overdue)} outstanding`,
+    count: overdue.length, link: `${P}/invoices`,
   });
 
   // 2. Payment due dates (falling due in the next 7 days)
-  const dueSoon = safeGet(`
-    SELECT COUNT(*) count, COALESCE(SUM(total_amount),0) amount
-    FROM invoices
+  const dueSoon = owing(safeAll(`
+    SELECT * FROM invoices
     WHERE status IN ('SENT','APPROVED','PARTIALLY_PAID')
       AND due_date IS NOT NULL
       AND date(due_date) BETWEEN date('now') AND date('now','+7 day')${invFilter}
-  `, ...scopeParams);
+  `, ...scopeParams));
   add({
     key: 'due-soon', group: 'BILLING', category: 'Payment Due', severity: 'WARNING',
     title: 'Payments due this week',
-    detail: `${dueSoon.count} invoice(s) due within 7 days · ₹${Number(dueSoon.amount || 0).toLocaleString('en-IN')}`,
-    count: dueSoon.count || 0, link: `${P}/invoices`,
+    detail: `${dueSoon.length} invoice(s) due within 7 days · ${rupees(dueSoon)}`,
+    count: dueSoon.length, link: `${P}/invoices`,
   });
 
-  // 3. Invoice approvals pending
-  const approvals = safeGet(`
+  // 3. Invoice approvals pending. A buyer is shown none: a bill still in
+  // approval is SJVN's working paper, not yet the buyer's to know about. A
+  // seller is shown its own invoices waiting on SJVN, not SJVN's computation of
+  // the same months.
+  const approvalScope = scope.kind === 'SELLER' ? ` AND ${raisedBySellerSql('invoices')}` : '';
+  const approvals = scope.kind === 'BUYER' ? { count: 0 } : safeGet(`
     SELECT COUNT(*) count FROM invoices
-    WHERE status IN ('SUBMITTED','UNDER_APPROVAL','PENDING_L2')${invFilter}
+    WHERE status IN ('SUBMITTED','UNDER_APPROVAL','PENDING_L2')${invFilter}${approvalScope}
   `, ...scopeParams);
   add({
     key: 'invoice-approvals', group: 'BILLING', category: 'Invoice Approval', severity: 'WARNING',
@@ -141,14 +154,14 @@ export function computeAlerts(scope) {
 
   // 4b. Security shortfall (cover below requirement)
   const shortfall = safeGet(`
-    SELECT COUNT(*) count, COALESCE(SUM(required_amount - available_amount),0) gap
+    SELECT COUNT(DISTINCT contract_id) count, COUNT(*) instruments, COALESCE(SUM(required_amount - available_amount),0) gap
     FROM payment_security
     WHERE status = 'ACTIVE' AND required_amount > 0 AND available_amount < required_amount${invFilter}
   `, ...scopeParams);
   add({
     key: 'security-shortfall', group: 'SECURITY', category: 'Security Shortfall', severity: 'CRITICAL',
     title: 'Payment security shortfall',
-    detail: `${shortfall.count} contract(s) under-secured · ₹${Number(shortfall.gap || 0).toLocaleString('en-IN')} gap`,
+    detail: `${shortfall.count} contract(s) under-secured${shortfall.instruments > shortfall.count ? ` across ${shortfall.instruments} instruments` : ''} · ₹${Number(shortfall.gap || 0).toLocaleString('en-IN')} gap`,
     count: shortfall.count || 0, link: `${P}/payment-security`,
   });
 

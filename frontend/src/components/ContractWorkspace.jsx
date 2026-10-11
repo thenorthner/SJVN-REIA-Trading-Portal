@@ -144,11 +144,11 @@ function Milestones({ ws, meta, run, raiseExtension }) {
           <table className="data-table" style={{ margin: 0 }}>
             <thead>
               <tr>
-                <th scope="col">Milestone</th>
-                <th scope="col">Due</th>
-                <th scope="col">Status</th>
-                <th scope="col">Achieved</th>
-                <th scope="col">Actions</th>
+                <th scope="col" style={{ width: '24%' }}>Milestone</th>
+                <th scope="col" style={{ width: '20%' }}>Due</th>
+                <th scope="col" style={{ width: '24%' }}>Status</th>
+                <th scope="col" style={{ width: '12%' }}>Achieved</th>
+                <th scope="col" style={{ width: '20%' }}>Actions</th>
               </tr>
             </thead>
             <tbody>

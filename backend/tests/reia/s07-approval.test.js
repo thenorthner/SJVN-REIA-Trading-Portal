@@ -18,7 +18,7 @@ describe('S7 Invoice approval and distribution', () => {
   });
 
   it('marks the invoice approved once every level signs off', async () => {
-    const inv = makeInvoice({ contract_id: contract.id, status: 'SUBMITTED' });
+    const inv = makeInvoice({ contract_id: contract.id, status: 'UNDER_APPROVAL' });
     db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES ('AP-2', ?, 1, 'PENDING')`).run(inv.id);
     const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(auth(reia)).send({ decision: 'APPROVED' });
     expect(r.status).toBe(200);
@@ -58,21 +58,21 @@ describe('S7 Invoice approval and distribution', () => {
   it('stops the same user both creating and approving an invoice', async () => {
     const maker = makeUser('REIA_USER', { name: 'Maker' });
     const inv = makeInvoice({
-      contract_id: contract.id, status: 'SUBMITTED',
+      contract_id: contract.id, status: 'UNDER_APPROVAL',
       created_by: maker.name, created_by_id: maker.id,   // what generate() writes
     });
     pending(inv.id);
     const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`)
       .set(auth(signToken(maker))).send({ decision: 'APPROVED' });
     expect(r.status, 'the invoice creator was allowed to approve their own invoice').toBe(403);
-    expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('SUBMITTED');
+    expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('UNDER_APPROVAL');
   });
 
   it('still lets a different person approve it', async () => {
     const maker = makeUser('REIA_USER', { name: 'Maker Two' });
     const checker = makeUser('REIA_USER', { name: 'Checker Two' });
     const inv = makeInvoice({
-      contract_id: contract.id, status: 'SUBMITTED',
+      contract_id: contract.id, status: 'UNDER_APPROVAL',
       created_by: maker.name, created_by_id: maker.id,
     });
     pending(inv.id, 'AP-5');
@@ -85,7 +85,7 @@ describe('S7 Invoice approval and distribution', () => {
     // Backfill resolves most of these, but a name that matched no user leaves
     // the column null. The bill is still someone's to not approve.
     const maker = makeUser('REIA_USER', { name: 'Legacy Maker' });
-    const inv = makeInvoice({ contract_id: contract.id, status: 'SUBMITTED', created_by: maker.name });
+    const inv = makeInvoice({ contract_id: contract.id, status: 'UNDER_APPROVAL', created_by: maker.name });
     db.prepare('UPDATE invoices SET created_by_id = NULL WHERE id = ?').run(inv.id);
     pending(inv.id, 'AP-6');
     const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`)
@@ -116,7 +116,7 @@ describe('S7 A found validation problem blocks approval', () => {
   // it just was not required for anything.
 
   const submitted = (validation_status) => {
-    const inv = makeInvoice({ contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'SUBMITTED', total_amount: 180000 });
+    const inv = makeInvoice({ contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'UNDER_APPROVAL', total_amount: 180000 });
     if (validation_status) db.prepare('UPDATE invoices SET validation_status = ? WHERE id = ?').run(validation_status, inv.id);
     db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, 'PENDING')`).run(`APV-${inv.id}`, inv.id);
     return inv;
@@ -155,6 +155,151 @@ describe('S7 A found validation problem blocks approval', () => {
     const r = await act(submitted('PARTIAL'), 'REJECTED');
     expect(r.status, 'a flagged invoice could not even be sent back').toBeLessThan(400);
     expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(r.body.id ?? '').status ?? 'REJECTED').toBeTruthy();
+  });
+});
+
+describe('S7 A bill is approved out of the approval stage, level by level', () => {
+  // The level rows exist from the moment a bill is raised, and nothing looked at
+  // where the bill stood: a draft nobody had submitted could be approved, on its
+  // one creation-time level, whatever it was worth.
+  const withLevels = (status, n = 1, extra = {}) => {
+    const inv = makeInvoice({ contract_id: contract.id, status, ...extra });
+    for (let l = 1; l <= n; l += 1) {
+      db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, ?, 'PENDING')`).run(`AL-${inv.id}-${l}`, inv.id, l);
+    }
+    return inv;
+  };
+  const act = (inv, level, decision = 'APPROVED') =>
+    request(app).post(`/api/invoices/${inv.id}/approvals/${level}/act`).set(auth(reia)).send({ decision, comments: 'x' });
+  const statusOf = (inv) => db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status;
+
+  for (const status of ['DRAFT', 'SUBMITTED', 'REJECTED', 'PENDING_L2']) {
+    it(`will not approve a bill that is still ${status}`, async () => {
+      const inv = withLevels(status);
+      const r = await act(inv, 1);
+      expect(r.status, `a ${status} bill was approved without being submitted for approval`).toBe(400);
+      expect(r.body.error).toMatch(/submit it for approval first/);
+      expect(statusOf(inv)).toBe(status);
+    });
+  }
+
+  it('will not act again on a bill that is already approved', async () => {
+    const inv = withLevels('APPROVED');
+    expect((await act(inv, 1, 'REJECTED')).status).toBe(400);
+    expect(statusOf(inv)).toBe('APPROVED');
+  });
+
+  it('lets the desk send a seller bill back as soon as it arrives', async () => {
+    const inv = withLevels('SUBMITTED', 1, { direction: 'SELLER_TO_SJVN' });
+    expect((await act(inv, 1, 'REJECTED')).status).toBe(200);
+    expect(statusOf(inv)).toBe('REJECTED');
+  });
+
+  it('takes the levels in order', async () => {
+    const inv = withLevels('UNDER_APPROVAL', 3);
+    const skipped = await act(inv, 3);
+    expect(skipped.status, 'level 3 signed before level 1').toBe(400);
+    expect(skipped.body.error).toMatch(/Level 1 has to decide before level 3/);
+    expect((await act(inv, 1)).status).toBe(200);
+    expect(statusOf(inv)).toBe('UNDER_APPROVAL');
+    expect((await act(inv, 1)).status, 'a level was decided twice').toBe(400);
+    expect((await act(inv, 2)).status).toBe(200);
+    expect((await act(inv, 3)).status).toBe(200);
+    expect(statusOf(inv)).toBe('APPROVED');
+  });
+
+  it('sizes the chain by the amount even when a level already exists', async () => {
+    // An arrear, a supplementary and every seller bill are given one level the
+    // moment they are raised. The bands were only applied where none existed,
+    // so a 12,00,000 arrear went to APPROVED on a single signature.
+    const inv = withLevels('DRAFT', 1, { total_amount: 1200000 });
+    const r = await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(reia)).send({});
+    expect(r.status).toBe(200);
+    const rows = db.prepare('SELECT level, status FROM invoice_approvals WHERE invoice_id = ? ORDER BY level').all(inv.id);
+    expect(rows.map((x) => x.level)).toEqual([1, 2, 3]);
+    expect(rows.every((x) => x.status === 'PENDING')).toBe(true);
+  });
+
+  it('drops the levels a smaller bill no longer needs on resubmission', async () => {
+    const inv = withLevels('REJECTED', 3, { total_amount: 50000 });
+    await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(reia)).send({});
+    expect(db.prepare('SELECT COUNT(*) c FROM invoice_approvals WHERE invoice_id = ?').get(inv.id).c).toBe(1);
+  });
+
+  it('keeps the reason a bill was sent back after it is resubmitted', async () => {
+    const inv = withLevels('UNDER_APPROVAL', 1);
+    await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(auth(reia)).send({ decision: 'REJECTED', comments: 'wrong tariff' });
+    await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(reia)).send({});
+    const got = await request(app).get(`/api/invoices/${inv.id}`).set(auth(reia));
+    expect(got.body.approvals[0]).toMatchObject({ status: 'PENDING', comments: null });
+    expect(got.body.approval_history).toHaveLength(1);
+    expect(got.body.approval_history[0]).toMatchObject({ decision: 'REJECTED', level: 1, comments: 'wrong tariff' });
+  });
+});
+
+describe('S7 A different person at each level, where SJVN asks for it', () => {
+  // Several levels are several people's judgement. Without this, one approver
+  // signed level 1 and was handed the button for level 2.
+  const SWITCH = 'invoice_approval_distinct_approvers';
+  const set = (v) => { db.prepare('UPDATE system_parameters SET param_value = ? WHERE param_key = ?').run(String(v), SWITCH); invalidateParamCache(); };
+  afterEach(() => set(0));
+
+  const threeLevels = () => {
+    const inv = makeInvoice({ contract_id: contract.id, status: 'UNDER_APPROVAL', total_amount: 36494000 });
+    for (let l = 1; l <= 3; l += 1) {
+      db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, ?, 'PENDING')`).run(`DA-${inv.id}-${l}`, inv.id, l);
+    }
+    return inv;
+  };
+  const act = (inv, level, who, decision = 'APPROVED') =>
+    request(app).post(`/api/invoices/${inv.id}/approvals/${level}/act`).set(auth(signToken(who))).send({ decision, comments: 'x' });
+
+  it('is off unless switched on, so one approver can still clear a bill', async () => {
+    const solo = makeUser('REIA_USER', { name: 'Only Approver' });
+    const inv = threeLevels();
+    for (const level of [1, 2, 3]) expect((await act(inv, level, solo)).status).toBe(200);
+    expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('APPROVED');
+  });
+
+  it('stops one person signing two levels once it is on', async () => {
+    set(1);
+    const a = makeUser('REIA_USER', { name: 'Approver A' });
+    const b = makeUser('FINANCE_USER', { name: 'Approver B' });
+    const c = makeUser('REIA_ADMIN', { name: 'Approver C' });
+    const inv = threeLevels();
+
+    expect((await act(inv, 1, a)).status).toBe(200);
+    const again = await act(inv, 2, a);
+    expect(again.status, 'the same person signed a second level').toBe(403);
+    expect(again.body.error).toMatch(/You approved level 1/);
+    expect((await act(inv, 2, b)).status).toBe(200);
+    expect((await act(inv, 3, a)).status).toBe(403);
+    expect((await act(inv, 3, b)).status).toBe(403);
+    expect((await act(inv, 3, c)).status).toBe(200);
+    expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('APPROVED');
+    expect(db.prepare('SELECT approver_id FROM invoice_approvals WHERE invoice_id = ? ORDER BY level').all(inv.id).map((r) => r.approver_id))
+      .toEqual([a.id, b.id, c.id]);
+  });
+
+  it('still lets someone who signed an earlier level send the bill back', async () => {
+    set(1);
+    const a = makeUser('REIA_USER', { name: 'Approver A2' });
+    const inv = threeLevels();
+    await act(inv, 1, a);
+    expect((await act(inv, 2, a, 'REJECTED')).status).toBe(200);
+    expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('REJECTED');
+  });
+
+  it('starts a resubmitted bill with nobody having signed', async () => {
+    set(1);
+    const a = makeUser('REIA_USER', { name: 'Approver A3' });
+    const inv = threeLevels();
+    await act(inv, 1, a);
+    await act(inv, 2, a, 'REJECTED');
+    await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(reia)).send({});
+    expect((await act(inv, 1, a)).status, 'a signature from the earlier round still counted').toBe(200);
+    const got = await request(app).get(`/api/invoices/${inv.id}`).set(auth(reia));
+    expect(got.body.approval_rules).toEqual({ distinct_approvers: true });
   });
 });
 

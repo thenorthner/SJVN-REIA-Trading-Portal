@@ -213,8 +213,8 @@ export default function EnergySchedule({ product = 'DAM' }) {
                         return `Block ${label}`;
                       }}
                     />
-                    <Area type="stepAfter" dataKey="bid_mw" name="Bid (MW)" stroke="#94a3b8" fillOpacity={0} />
-                    <Area type="stepAfter" dataKey="cleared_mw" name="Cleared (MW)" stroke="#10b981" fillOpacity={1} fill="url(#colorCleared)" />
+                    <Area type="stepAfter" dataKey="bid_mw" name="Bid (MW)" stroke="url(#eliteSlate)" fillOpacity={0} />
+                    <Area type="stepAfter" dataKey="cleared_mw" name="Cleared (MW)" stroke="url(#eliteGreen)" fillOpacity={1} fill="url(#colorCleared)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>

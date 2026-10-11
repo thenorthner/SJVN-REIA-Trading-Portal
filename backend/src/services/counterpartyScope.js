@@ -32,16 +32,57 @@ export function contractVisibleTo(user, contract) {
 
 // Statuses at which a bill has actually been put in front of its counterparty.
 // The send route has always used APPROVED as the bar for distribution; anything
-// short of it is SJVN still working on the bill. CANCELLED stays visible because
-// a withdrawn bill is one the counterparty did receive and should be able to see
-// — it just cannot be disputed any more.
+// short of it is SJVN still working on the bill. CANCELLED stays in the list
+// because a withdrawn bill is one the counterparty did receive and should be
+// able to see — it just cannot be disputed any more. Whether a particular
+// cancelled bill ever was received is a separate question, answered below.
 export const PRESENTED_STATUSES = ['APPROVED', 'SENT', 'DISPUTED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'];
+const LIVE_PRESENTED = PRESENTED_STATUSES.filter((s) => s !== 'CANCELLED');
+
+/**
+ * Whether a bill has been presented, as SQL over an invoices alias.
+ *
+ * A status alone cannot say it for a cancelled bill. Cancelling is only allowed
+ * before approval, so almost every CANCELLED row is a draft SJVN threw away —
+ * and listing those to the buyer showed it bills it was never sent, a negative
+ * test arrear among them. A cancelled bill is the counterparty's to see only if
+ * it had been issued first, which issued_at records.
+ */
+export function presentedSql(alias = 'i') {
+  return `(${alias}.status IN (${LIVE_PRESENTED.map((s) => `'${s}'`).join(',')})`
+    + ` OR (${alias}.status = 'CANCELLED' AND ${alias}.issued_at IS NOT NULL))`;
+}
+
+/** The same rule for one invoice row. */
+export function isPresented(invoice) {
+  if (!invoice) return false;
+  if (invoice.status === 'CANCELLED') return !!invoice.issued_at;
+  return LIVE_PRESENTED.includes(invoice.status);
+}
 
 /** Whether a counterparty is entitled to see this invoice at all yet. */
 export function invoicePresentedTo(user, invoice) {
   if (!invoice) return false;
   if (counterpartySide(user) === null) return true;   // SJVN sees its own drafts
-  return PRESENTED_STATUSES.includes(invoice.status);
+  return isPresented(invoice);
+}
+
+/**
+ * Whether a bill on a PPA is the seller's own, as against SJVN's computation of
+ * the same period.
+ *
+ * Both run Seller → SJVN, so direction cannot tell them apart. What can: every
+ * bill SJVN raises (generated, arrear, supplementary, debit note) carries the
+ * line-by-line breakdown it was computed from, and a bill a seller keys in or
+ * loads from its sheet never does. findSystemCounterpart reads the same mark.
+ */
+export function raisedBySeller(invoice) {
+  return !!invoice && invoice.direction === 'SELLER_TO_SJVN' && !String(invoice.invoice_breakdown_json || '').trim();
+}
+
+/** raisedBySeller as SQL over an invoices alias. */
+export function raisedBySellerSql(alias = 'i') {
+  return `(${alias}.direction = 'SELLER_TO_SJVN' AND TRIM(COALESCE(${alias}.invoice_breakdown_json, '')) = '')`;
 }
 
 /**
@@ -51,9 +92,13 @@ export function invoicePresentedTo(user, invoice) {
  * saved; the presented bar above is for bills SJVN issues to a counterparty.
  * Applied to both, it hid a seller's submitted and rejected invoices from the
  * seller that raised them. Ownership is checked separately, by contractVisibleTo.
+ *
+ * It used to answer yes for anything Seller → SJVN, which handed the seller
+ * SJVN's own draft of the period — listed as the seller's invoice, with "Send
+ * to checker" on it.
  */
 export function authoredBy(user, invoice) {
-  return !!invoice && counterpartySide(user) === 'SELLER' && invoice.direction === 'SELLER_TO_SJVN';
+  return counterpartySide(user) === 'SELLER' && raisedBySeller(invoice);
 }
 
 /**

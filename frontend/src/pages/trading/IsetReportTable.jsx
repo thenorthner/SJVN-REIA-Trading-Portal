@@ -136,6 +136,56 @@ export default function IsetReportTable({
     w.print();
   }
 
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadData, setUploadData] = useState({ month: '', year: new Date().getFullYear(), file: null });
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+
+  const isCea = kind.startsWith('cea-');
+
+  async function handleUpload(e) {
+    e.preventDefault();
+    setUploadError('');
+    if (!uploadData.file || !uploadData.month || !uploadData.year) {
+      setUploadError('Please select a file, month, and year.');
+      return;
+    }
+    const category = kind.includes('capacity') ? 'INSTALLED_CAPACITY' : 'POWER_SUPPLY';
+    
+    const formData = new FormData();
+    formData.append('file', uploadData.file);
+    formData.append('month', uploadData.month);
+    formData.append('year', uploadData.year);
+    formData.append('category', category);
+
+    setUploading(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const res = await fetch('/api/iset-reports/upload-cea', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      
+      // Reset and close
+      setShowUploadModal(false);
+      setUploadData({ month: '', year: new Date().getFullYear(), file: null });
+      // Reload table
+      setLoading(true);
+      const rowsData = await api.isetReports.list(kind);
+      setRows(Array.isArray(rowsData) ? rowsData : rowsData?.rows || []);
+      setLoading(false);
+    } catch (err) {
+      setUploadError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
   // Header, zebra rows and export chrome all come from the shared .report-table
   // rules, so an ISET report and an ERP format report look like one grid.
   const colCount = columns.length + (showSr ? 1 : 0);

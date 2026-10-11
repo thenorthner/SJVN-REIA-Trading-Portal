@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FileText, Zap, AlertCircle, FileSearch, CheckCircle, PieChart, TrendingUp, BarChart3, Clock, ShieldCheck, Activity, LineChart, FileSpreadsheet, Sparkles } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import api from '../api/client.js';
 import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Badge, Modal } from '../components/ui.jsx';
@@ -7,137 +8,28 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../roles.js';
 
 const REPORT_ICONS = {
-  billing: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
-      <line x1="10" y1="9" x2="8" y2="9" />
-    </svg>
-  ),
-  energy: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-    </svg>
-  ),
-  dispute: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m14 13 5 5" />
-      <path d="m3 21 5-5" />
-      <path d="m10 8 3 3" />
-      <path d="m6 12 3 3" />
-      <path d="m11 3 3 3" />
-      <path d="m15 7 3 3" />
-    </svg>
-  ),
-  recon: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21.5 2v6h-6" />
-      <path d="M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
-    </svg>
-  ),
-  contract: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-    </svg>
-  ),
-  reiaSnapshot: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-      <path d="M22 12A10 10 0 0 0 12 2v10z" />
-    </svg>
-  ),
-  tradingSnapshot: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-      <polyline points="17 6 23 6 23 12" />
-    </svg>
-  ),
-  analytics: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="20" x2="12" y2="10" />
-      <line x1="18" y1="20" x2="18" y2="4" />
-      <line x1="6" y1="20" x2="6" y2="16" />
-    </svg>
-  ),
-  financial: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 3h12" />
-      <path d="M6 8h12" />
-      <path d="M6 13h8" />
-      <path d="M6 13c3.5 0 6 2.5 6 6" />
-      <path d="M6 3v10" />
-    </svg>
-  ),
-  noar: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-      <polyline points="9 14 11 16 15 12" />
-    </svg>
-  ),
-  activity: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  ),
-  regulatory: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <path d="M9 15l2 2 4-4" />
-    </svg>
-  ),
-  audit: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      <path d="m9 12 2 2 4-4" />
-    </svg>
-  ),
-  mis: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M9 17V9" /><path d="M13 17V5" /><path d="M17 17v-4" />
-    </svg>
-  ),
+  billing: <FileText size={20} strokeWidth={2} />,
+  energy: <Zap size={20} strokeWidth={2} />,
+  dispute: <AlertCircle size={20} strokeWidth={2} />,
+  recon: <FileSearch size={20} strokeWidth={2} />,
+  contract: <CheckCircle size={20} strokeWidth={2} />,
+  reiaSnapshot: <PieChart size={20} strokeWidth={2} />,
+  tradingSnapshot: <TrendingUp size={20} strokeWidth={2} />,
+  analytics: <BarChart3 size={20} strokeWidth={2} />,
+  financial: <LineChart size={20} strokeWidth={2} />,
+  noar: <Clock size={20} strokeWidth={2} />,
+  activity: <Activity size={20} strokeWidth={2} />,
+  regulatory: <ShieldCheck size={20} strokeWidth={2} />,
+  audit: <ShieldCheck size={20} strokeWidth={2} />,
+  mis: <FileSpreadsheet size={20} strokeWidth={2} />,
 };
 
 const SECTION_ICONS = {
-  REIA: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
-    </svg>
-  ),
-  TRADING: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-    </svg>
-  ),
-  GOVERNANCE: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    </svg>
-  ),
-  COMPLIANCE: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      <polyline points="9 12 11 14 15 10" />
-    </svg>
-  ),
-  MANAGEMENT: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M9 17V9" /><path d="M13 17V5" /><path d="M17 17v-4" />
-    </svg>
-  ),
+  REIA: <FileText size={18} strokeWidth={2} color="var(--primary)" />,
+  TRADING: <Zap size={18} strokeWidth={2} color="var(--primary)" />,
+  GOVERNANCE: <ShieldCheck size={18} strokeWidth={2} color="var(--primary)" />,
+  COMPLIANCE: <CheckCircle size={18} strokeWidth={2} color="var(--primary)" />,
+  MANAGEMENT: <FileSpreadsheet size={18} strokeWidth={2} color="var(--primary)" />,
 };
 
 const REPORT_GROUPS = [
@@ -270,16 +162,67 @@ export default function ConsolidatedDashboard() {
         <hr style={{ margin: '20px 0' }} />
       </div>
 
-      {/* Auto-generated Executive Summary */}
-      <Card style={{ marginBottom: 20, backgroundColor: '#f8faff', borderLeft: '4px solid var(--primary)' }}>
-        <h4 style={{ margin: '0 0 10px 0', color: '#1c2536' }}>Executive Summary</h4>
-        <p style={{ margin: 0, fontSize: 16, lineHeight: 1.5, color: '#333' }}>
+      {/* Auto-generated Executive Summary Hero */}
+      <div className="elite-hero-banner animate-fade-in-up stagger-1" style={{ marginBottom: 24 }}>
+        <div className="elite-hero-header">
+          <div className="elite-hero-title-group">
+            <div className="elite-hero-icon-badge">
+              <Sparkles size={18} strokeWidth={2.2} />
+            </div>
+            <div>
+              <h2 className="elite-hero-title">Executive Summary & Strategic Brief</h2>
+              <div className="elite-hero-subtitle">Real-time cross-module portfolio synthesis & risk rollup</div>
+            </div>
+          </div>
+          {data.totalUnresolvedExposure > 500000 ? (
+            <div className="elite-hero-badge warning">
+              <AlertCircle size={13} strokeWidth={2.5} /> Attention Required: Risk Exposure
+            </div>
+          ) : (
+            <div className="elite-hero-badge success">
+              <CheckCircle size={13} strokeWidth={2.5} /> Portfolio Operations Nominal
+            </div>
+          )}
+        </div>
+
+        <p className="elite-hero-text">
           {data.executiveSummary}
         </p>
-      </Card>
+
+        <div className="elite-hero-metrics">
+          <div className="elite-hero-metric-card">
+            <div className="elite-hero-metric-label">Contracted RE Capacity</div>
+            <div className="elite-hero-metric-val">
+              {fmtNumber(data.reiaContractedCapacity)} <span style={{ fontSize: 13, fontWeight: 500, color: '#94a3b8' }}>MW</span>
+            </div>
+            <div className="elite-hero-metric-sub">
+              {capacityProgress.toFixed(1)}% of 20 GW Target ({fmtNumber(data.targetCapacity)} MW)
+            </div>
+          </div>
+
+          <div className="elite-hero-metric-card">
+            <div className="elite-hero-metric-label">Billing Momentum</div>
+            <div className="elite-hero-metric-val" style={{ color: data.revenueTrend >= 0 ? '#4ade80' : '#f87171' }}>
+              <TrendingUp size={16} strokeWidth={2.5} style={{ transform: data.revenueTrend < 0 ? 'rotate(180deg)' : 'none' }} />
+              {data.revenueTrend >= 0 ? '+' : ''}{data.revenueTrend.toFixed(1)}%
+            </div>
+            <div className="elite-hero-metric-sub">Month-on-Month Revenue Velocity</div>
+          </div>
+
+          <div className="elite-hero-metric-card" style={{ borderColor: data.totalUnresolvedExposure > 500000 ? 'rgba(239, 68, 68, 0.25)' : undefined }}>
+            <div className="elite-hero-metric-label">Cross-Module Exposure</div>
+            <div className="elite-hero-metric-val" style={{ color: data.totalUnresolvedExposure > 500000 ? '#fca5a5' : '#f8fafc' }}>
+              ₹{(data.totalUnresolvedExposure / 1e7).toFixed(2)} <span style={{ fontSize: 13, fontWeight: 500, color: '#94a3b8' }}>Cr</span>
+            </div>
+            <div className="elite-hero-metric-sub">
+              {data.totalUnresolvedExposure > 500000 ? 'Disputed & overdue exposure pending resolution' : 'Contained within operational threshold'}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Cross-Module Risk & Target Panel */}
-      <div className="grid-2" style={{ marginBottom: 20 }}>
+      <div className="grid-2 animate-fade-in-up stagger-2" style={{ marginBottom: 24 }}>
         <Card title="Enterprise Risk Rollup">
           <div className="detail-grid">
             <div className="detail-item">
@@ -317,16 +260,16 @@ export default function ConsolidatedDashboard() {
         </Card>
       </div>
 
-      <h3 style={{ margin: '30px 0 15px 0', color: '#1c2536', borderBottom: '1px solid #eee', paddingBottom: 10 }}>Portfolio Overview</h3>
-      <div className="kpi-grid">
+      <h3 className="animate-fade-in-up stagger-3" style={{ margin: '30px 0 15px 0', color: '#1c2536', borderBottom: '1px solid #eee', paddingBottom: 10 }}>Portfolio Overview</h3>
+      <div className="kpi-grid animate-fade-in-up stagger-3">
         <StatCard label="Total Portfolio Billed Value" value={fmtCurrency(data.totalPortfolioValue)} tone="blue" hint={<div>MoM Trend: {getTrendIcon(data.revenueTrend)}</div>} onClick={() => navigate('/reia')} />
         <StatCard label="Overall Trading Profitability" value={fmtCurrency(data.overallProfitability)} tone="green" hint="SJVN trading margin across all trades" onClick={() => navigate('/trading')} />
       </div>
 
       {canViewReia && (
         <>
-          <h3 style={{ margin: '30px 0 15px 0', color: '#1c2536', borderBottom: '1px solid #eee', paddingBottom: 10 }}>REIA Billing & Settlement</h3>
-          <div className="kpi-grid">
+          <h3 className="animate-fade-in-up stagger-4" style={{ margin: '30px 0 15px 0', color: '#1c2536', borderBottom: '1px solid #eee', paddingBottom: 10 }}>REIA Billing & Settlement</h3>
+          <div className="kpi-grid animate-fade-in-up stagger-4">
             <StatCard label="Contracted RE Capacity" value={`${fmtNumber(data.reiaContractedCapacity)} MW`} onClick={() => navigate('/reia/contracts')} />
             <StatCard label="REIA Receivables" value={fmtCurrency(data.reiaReceivables)} hint="Unpaid from buyers" onClick={() => navigate('/reia/invoices')} />
             <StatCard label="REIA Overdue" value={fmtCurrency(data.reiaOverdue)} tone={data.reiaOverdue > 100000 ? 'red' : 'amber'} hint="Past due date" onClick={() => navigate('/reia/invoices')} />
@@ -339,8 +282,8 @@ export default function ConsolidatedDashboard() {
 
       {canViewTrading && (
         <>
-          <h3 style={{ margin: '30px 0 15px 0', color: '#1c2536', borderBottom: '1px solid #eee', paddingBottom: 10 }}>Power Trading Operations</h3>
-          <div className="kpi-grid">
+          <h3 className="animate-fade-in-up stagger-5" style={{ margin: '30px 0 15px 0', color: '#1c2536', borderBottom: '1px solid #eee', paddingBottom: 10 }}>Power Trading Operations</h3>
+          <div className="kpi-grid animate-fade-in-up stagger-5">
             <StatCard label="Trading Revenue" value={fmtCurrency(data.tradingRevenue)} tone="blue" onClick={() => navigate('/trading/billing-settlement')} />
             <StatCard label="Trading Margin" value={fmtCurrency(data.tradingMargin)} tone="green" onClick={() => navigate('/trading/market-analytics')} />
             <StatCard label="Trading Outstanding" value={fmtCurrency(data.tradingOutstanding)} tone={data.tradingOutstanding > 500000 ? 'red' : 'amber'} hint="Unpaid trading invoices" onClick={() => navigate('/trading/billing-settlement')} />
@@ -349,17 +292,22 @@ export default function ConsolidatedDashboard() {
         </>
       )}
 
-      <div className="grid-2" style={{ marginTop: 24 }}>
+      <div className="grid-2 animate-fade-in-up stagger-4" style={{ marginTop: 28 }}>
         <Card title="Business Vertical Revenue Comparison">
           <div className="chart-box">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={revenueChart}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${(v / 1e7).toFixed(1)}Cr`} />
-                <Tooltip formatter={(v) => fmtCurrency(v)} />
+                <defs>
+                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.9}/>
+                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.6}/>
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${(v / 1e7).toFixed(1)}Cr`} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(v) => fmtCurrency(v)} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
                 <Legend />
-                <Bar dataKey="Value" fill="var(--primary)" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Value" fill="url(#colorValue)" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -367,7 +315,7 @@ export default function ConsolidatedDashboard() {
       </div>
 
       {/* Reports & Dashboards Section */}
-      <div className="no-print" style={{ marginTop: 32 }}>
+      <div className="no-print animate-fade-in-up stagger-5" style={{ marginTop: 32 }}>
         {/* Banner Card with Header & Decorative Graphic */}
         <div style={{
           background: '#ffffff',
@@ -402,7 +350,7 @@ export default function ConsolidatedDashboard() {
               <rect x="87" y="30" width="22" height="3" rx="1.5" fill="var(--slate-400)" />
               <rect x="87" y="36" width="24" height="3" rx="1.5" fill="var(--slate-300)" />
               <rect x="87" y="42" width="16" height="3" rx="1.5" fill="#60a5fa" />
-              <circle cx="106" cy="53" r="5" fill="#10b981" />
+              <circle cx="106" cy="53" r="5" fill="url(#eliteGreen)" />
               <path d="M104 53L105.5 54.5L108 52" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>

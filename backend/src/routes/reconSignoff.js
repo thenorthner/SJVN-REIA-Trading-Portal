@@ -36,6 +36,7 @@ import {
   M, CONTENT_W, PAGE_W, PAGE_H, INK, MUTED,
 } from '../scripts/reportPdfKit.js';
 
+import { notifyCounterparty } from '../paymentSecurityEngine.js';
 const router = Router();
 router.use(requireAuth);
 
@@ -245,6 +246,11 @@ router.post('/:id/sign', (req, res) => send(res, () => {
     if (recon.counterparty_ack_at) throw fail(400, `This statement was already signed for your company by ${recon.counterparty_ack_by}`);
   } else {
     if (recon.sjvn_ack_at) throw fail(400, `This statement was already signed for SJVN by ${recon.sjvn_ack_by}`);
+    if (!ROLE_GROUPS.REIA_WRITE.includes(req.user.role)) throw fail(403, 'Only the REIA desk signs a statement for SJVN');
+    // "Request sign-off" refuses a statement with a line still unexplained;
+    // signing it outright went round that, and a second signature then closed it.
+    const open = db.prepare(`SELECT COUNT(*) c FROM recon_items WHERE reconciliation_id = ? AND match_status IN ('EXCEPTION','CARRIED') AND dispute_id IS NULL`).get(recon.id).c;
+    if (open > 0) throw fail(400, `${open} line${open === 1 ? ' has' : 's have'} not matched. Override ${open === 1 ? 'it' : 'each'} with the reason, or raise a dispute on it, before SJVN signs.`);
     if (partial) throw fail(400, 'Exceptions are the counterparty\'s to raise; SJVN signs the statement it issued');
   }
   const remarks = String(req.body.remarks || '').trim().slice(0, 1000);
@@ -368,7 +374,10 @@ router.post('/exceptions/:id/resolve', (req, res) => send(res, () => {
   }
   recordEvent(recon.id, req.user, 'EXCEPTION_SETTLED', { label: x.label, amount: x.amount, outcome, note });
   audit(req, `RECON_EXCEPTION_${outcome}`, recon.id, { afterValue: { label: x.label, amount: x.amount }, reason: note });
-  pushNotification({ role: recon.counterparty_role, type: 'RECON_EXCEPTION', message: `${recon.recon_no}: your exception "${x.label}" (Rs ${inr(x.amount)}) was ${outcome === 'ACCEPTED' ? 'accepted' : 'not accepted'} — ${note}` });
+  // To the company that raised it — this went to every company with that role.
+  const told = `${recon.recon_no}: your exception "${x.label}" (Rs ${inr(x.amount)}) was ${outcome === 'ACCEPTED' ? 'accepted' : 'not accepted'} — ${note}`;
+  if (recon.contract_id && ['SELLER', 'BUYER'].includes(recon.counterparty_role)) notifyCounterparty(recon.contract_id, recon.counterparty_role, 'RECON_EXCEPTION', told);
+  else pushNotification({ role: 'TRADING_USER', type: 'RECON_EXCEPTION', message: told });
   return detailOf(req.user, db.prepare('SELECT r.*, c.contract_no, c.seller_id, c.buyer_id FROM reconciliations r LEFT JOIN contracts c ON c.id = r.contract_id WHERE r.id = ?').get(recon.id));
 }));
 

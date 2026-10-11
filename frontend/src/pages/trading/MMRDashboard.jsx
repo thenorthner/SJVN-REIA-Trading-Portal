@@ -16,18 +16,18 @@ import { useCercMonth, PeriodSelect, NoReport, periodLabel, mu } from './cercMon
 
 // Validated (dataviz, all pairs): bilateral blue, exchanges green, DSM orange.
 const MIX = [
-  { key: 'bilateral_mu', label: 'Bilateral', colour: 'var(--primary)' },
-  { key: 'exchanges_mu', label: 'Power exchanges', colour: 'var(--green)' },
-  { key: 'dsm_mu', label: 'Through DSM', colour: '#c2410c' },
+  { key: 'bilateral_mu', label: 'Bilateral', colour: 'url(#eliteBlue)' },
+  { key: 'exchanges_mu', label: 'Power exchanges', colour: 'url(#eliteGreen)' },
+  { key: 'dsm_mu', label: 'Through DSM', colour: 'url(#eliteOrange)' },
 ];
 
 function ExchangeCard({ month, exchange }) {
   const ex = month.exchanges.find((e) => e.exchange === exchange);
   const rows = ex.volumes.filter((v) => v.volume_mu != null);
   return (
-    <Card title={`${exchange} — ${mu(ex.total_mu)} MU`}>
-      <div className="report-table-wrap">
-        <table className="report-table">
+    <Card title={`${exchange} — ${mu(ex.total_mu)} MU`} className="elite-hoverable">
+      <div className="elite-table-wrap">
+        <table className="elite-table">
           <thead><tr><th scope="col">Product</th><th scope="col" className="num">Volume MU</th><th scope="col" className="num">Share</th></tr></thead>
           <tbody>
             {rows.length === 0 ? (
@@ -56,24 +56,23 @@ export default function MMRDashboard() {
   }, []);
 
   return (
-    <div className="page">
+    <div className="page animate-fade-in-up stagger-1">
       <PageHeader title="MMR Dashboard" subtitle="CERC Market Monitoring Report — short-term market volumes by month" />
       {error && <div className="alert alert-error" role="alert">{error}</div>}
 
       {!data ? <Card><div className="audit-placeholder">Loading…</div></Card> : !data.period ? <NoReport /> : (
         <>
-          <Card>
-            <div className="report-criteria"><PeriodSelect data={data} onChange={setPeriod} /></div>
-          </Card>
+          <div className="elite-filter-bar animate-fade-in-up stagger-2" style={{ marginBottom: 24 }}>
+            <PeriodSelect data={data} onChange={setPeriod} />
+          </div>
 
-          <Card title={`Short-term transactions and DSM — ${periodLabel(data.period)} (MU)`}>
+          <Card title={`Short-term transactions and DSM — ${periodLabel(data.period)} (MU)`} className="animate-fade-in-up stagger-3 elite-hoverable">
             <div style={{ width: '100%', height: 240 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={MIX.map((m) => ({ label: m.label, volume: data.short_term[m.key], fill: m.colour }))} layout="vertical" margin={{ top: 8, right: 24, left: 24, bottom: 0 }}>
-                  <CartesianGrid stroke="var(--border)" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-                  <YAxis type="category" dataKey="label" width={120} tick={{ fontSize: 12, fill: 'var(--text)' }} />
-                  <Tooltip formatter={(v) => [`${mu(v)} MU`, 'Volume']} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="label" width={120} tick={{ fontSize: 12, fill: 'var(--text)' }} axisLine={false} tickLine={false} />
+                  <Tooltip formatter={(v) => [`${mu(v)} MU`, 'Volume']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} cursor={{ fill: 'rgba(0,0,0,0.02)' }} />
                   <Bar dataKey="volume" name="Volume" maxBarSize={24} radius={[0, 4, 4, 0]} isAnimationActive={false}>
                     {MIX.map((m) => <Cell key={m.key} fill={m.colour} />)}
                   </Bar>
@@ -86,24 +85,23 @@ export default function MMRDashboard() {
             <SourceNote source="CERC Market Monitoring Report" period={periodLabel(data.period)} />
           </Card>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+          <div className="animate-fade-in-up stagger-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
             {['IEX', 'PXIL', 'HPX'].map((ex) => <ExchangeCard key={ex} month={data} exchange={ex} />)}
           </div>
         </>
       )}
 
       {history.length > 1 && (
-        <Card title="Month by month (MU)">
+        <Card title="Month by month (MU)" className="animate-fade-in-up stagger-5 elite-hoverable">
           <div style={{ width: '100%', height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={history} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="period" tickFormatter={periodLabel} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} minTickGap={16} />
-                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={56} />
-                <Tooltip labelFormatter={periodLabel} formatter={(v, name) => [v == null ? '—' : `${mu(v)} MU`, name]} />
+                <XAxis dataKey="period" tickFormatter={periodLabel} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} minTickGap={16} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={56} axisLine={false} tickLine={false} />
+                <Tooltip labelFormatter={periodLabel} formatter={(v, name) => [v == null ? '—' : `${mu(v)} MU`, name]} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
                 <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
                 {MIX.map((m) => (
-                  <Line key={m.key} dataKey={m.key} name={m.label} stroke={m.colour} strokeWidth={2} dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />
+                  <Line type="monotone" key={m.key} dataKey={m.key} name={m.label} stroke={m.colour} strokeWidth={3} dot={false} activeDot={{ r: 6, strokeWidth: 0 }} connectNulls={false} isAnimationActive={false} />
                 ))}
               </LineChart>
             </ResponsiveContainer>

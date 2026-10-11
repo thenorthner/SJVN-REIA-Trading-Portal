@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  ComposedChart, Line, Area, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import api from '../../api/client.js';
 import { Card } from '../ui.jsx';
@@ -37,14 +37,19 @@ export default function ACPTrendWidget({ exchange = 'IEX', product = 'DAM' }) {
           <div style={{ width: '100%', height: 280 }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="rate_date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} />
-                <Tooltip labelFormatter={shortDate} formatter={(v, name) => [v == null ? '—' : `${rs(v)}/kWh`, name]} />
+                <defs>
+                  <linearGradient id="colorMcp" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="rate_date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} axisLine={false} tickLine={false} />
+                <Tooltip labelFormatter={shortDate} formatter={(v, name) => [v == null ? '—' : `${rs(v)}/kWh`, name]} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
                 <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
-                <Line dataKey="mcp_rate" name="Day price" stroke="var(--primary)" strokeWidth={2} dot={false} isAnimationActive={false} />
-                {hasRange && <Line dataKey="max_rate" name="Highest block" stroke="var(--text-muted)" strokeWidth={1} strokeDasharray="4 3" dot={false} connectNulls={false} isAnimationActive={false} />}
-                {hasRange && <Line dataKey="min_rate" name="Lowest block" stroke="var(--text-muted)" strokeWidth={1} strokeDasharray="1 3" dot={false} connectNulls={false} isAnimationActive={false} />}
+                <Area type="monotone" dataKey="mcp_rate" name="Day price" stroke="var(--primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorMcp)" isAnimationActive={false} />
+                {hasRange && <Line type="monotone" dataKey="max_rate" name="Highest block" stroke="var(--text-muted)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls={false} isAnimationActive={false} />}
+                {hasRange && <Line type="monotone" dataKey="min_rate" name="Lowest block" stroke="var(--text-muted)" strokeWidth={1.5} strokeDasharray="1 3" dot={false} connectNulls={false} isAnimationActive={false} />}
               </ComposedChart>
             </ResponsiveContainer>
           </div>

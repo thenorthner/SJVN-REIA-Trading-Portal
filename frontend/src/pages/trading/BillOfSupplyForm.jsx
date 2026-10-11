@@ -158,11 +158,11 @@ export default function BillOfSupplyForm() {
 
           <div style={{ marginTop: 14, padding: '10px 14px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8, display: 'flex', gap: 28, fontSize: 13 }}>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase' }}>Amount</div>
+              <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none' }}>Amount</div>
               <strong style={{ fontSize: 16 }}>₹{fmtNumber(computed.amount, 2)}</strong>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'uppercase' }}>After rebate</div>
+              <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none' }}>After rebate</div>
               <strong style={{ fontSize: 16 }}>₹{fmtNumber(computed.after, 2)}</strong>
             </div>
             <div style={{ alignSelf: 'center', color: 'var(--slate-500)', fontSize: 12 }}>

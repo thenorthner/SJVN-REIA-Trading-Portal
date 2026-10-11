@@ -30,6 +30,11 @@ backend/outbox/*
 # lines — ignore both locations, not just the one under backend/.
 outbox/
 backend/rea_downloads/
+backend/cea_downloads/
+backend/test_cea.html
+hydro-bills-*/
+frontend/update_css.py
+frontend/new_mail_styles.css
 # NRPC Deviation Settlement Account PDFs, kept so a bill can be traced back to
 # the document it came from. Re-uploadable, and several hundred megabytes once
 # the archive is in, so they stay out of the repository.

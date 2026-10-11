@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { buildBillingFamilyRef, directionForContract } from '../util.js';
+import { contractVisibleTo, raisedBySeller } from '../services/counterpartyScope.js';
 import { resolveBetaRow, computeBetaFromAnnualAfc, billedIncentiveTotal } from '../services/betaFactor.js';
 import { resolveAnnualAfc } from '../services/cercHydroBilling.js';
 
@@ -18,29 +19,38 @@ function paidOnInvoices(invoiceIds) {
   return row?.paid || 0;
 }
 
-function energyContractIdsForInvoice(contract) {
-  // Energy lives on PPA; PSA invoices resolve via allocations
-  if (contract.contract_type === 'PSA') {
-    const alloc = db.prepare('SELECT ppa_id FROM contract_allocations WHERE psa_id = ?').get(contract.id);
-    return alloc?.ppa_id ? [alloc.ppa_id, contract.id] : [contract.id];
-  }
-  return [contract.id];
+// Energy lives on the PPA; a PSA's bill resolves to it through the allocation
+// in force for the period — the same row billing reads — and failing that
+// through any allocation the PSA has ever held.
+function energySourceFor(contract, period) {
+  if (contract.contract_type !== 'PSA') return { ids: [contract.id], unallocated: false };
+  const start = `${period}-01`;
+  const alloc = db.prepare(`
+    SELECT ppa_id FROM contract_allocations
+    WHERE psa_id = ? AND COALESCE(effective_from, '0000-01-01') <= ? AND COALESCE(effective_to, '9999-12-31') >= ?
+    ORDER BY COALESCE(effective_from, '0000-01-01') DESC LIMIT 1
+  `).get(contract.id, start, start)
+    || db.prepare('SELECT ppa_id FROM contract_allocations WHERE psa_id = ? ORDER BY COALESCE(effective_from, \'0000-01-01\') DESC LIMIT 1').get(contract.id);
+  return alloc?.ppa_id ? { ids: [alloc.ppa_id, contract.id], unallocated: false } : { ids: [contract.id], unallocated: true };
 }
 
-function buildTrail({ bfr, contract, period, direction }) {
-  const contractIds = energyContractIdsForInvoice(contract);
+function buildTrail({ bfr, contract, period, direction, focus = null }) {
+  const source = energySourceFor(contract, period);
+  const contractIds = source.ids;
   const energyPlaceholders = contractIds.map(() => '?').join(',');
 
   const provisionalEnergy = db.prepare(`
     SELECT * FROM energy_data
     WHERE contract_id IN (${energyPlaceholders}) AND period_month = ? AND data_type = 'PROVISIONAL'
-    ORDER BY created_at ASC LIMIT 1
+    -- Two sources can stand for one month. The one in force is the one that was
+    -- locked — the oldest row was shown, which could be the figure validation threw out.
+    ORDER BY (status = 'LOCKED') DESC, (status = 'VALIDATED') DESC, created_at DESC LIMIT 1
   `).get(...contractIds, period);
 
   const finalEnergy = db.prepare(`
     SELECT * FROM energy_data
     WHERE contract_id IN (${energyPlaceholders}) AND period_month = ? AND data_type = 'FINAL'
-    ORDER BY created_at DESC LIMIT 1
+    ORDER BY (status = 'LOCKED') DESC, (status = 'VALIDATED') DESC, created_at DESC LIMIT 1
   `).get(...contractIds, period);
 
   const provisionalInvoices = db.prepare(`
@@ -50,18 +60,40 @@ function buildTrail({ bfr, contract, period, direction }) {
     ORDER BY created_at ASC
   `).all(contract.id, period, direction);
 
+  // Everything raised for the period after the provisional: the final bill,
+  // and any supplementary or arrear that adjusts it.
   const finalInvoices = db.prepare(`
     SELECT * FROM invoices
     WHERE contract_id = ? AND billing_period = ? AND direction = ?
-      AND invoice_type IN ('FINAL', 'SUPPLEMENTARY') AND status != 'CANCELLED'
+      AND invoice_type IN ('FINAL', 'SUPPLEMENTARY', 'ARREAR') AND status != 'CANCELLED'
     ORDER BY created_at ASC
   `).all(contract.id, period, direction);
 
   const provIds = provisionalInvoices.map((i) => i.id);
   const alreadyPaid = paidOnInvoices(provIds);
   const provisionalBilled = provisionalInvoices.reduce((s, i) => s + (i.total_amount || 0), 0);
+  // What has been paid on the period as a whole. "Already paid" above is only
+  // what was paid on provisional bills — the figure a final bill nets off — and
+  // read as zero on a final bill that had been paid crores.
+  const paidOnPeriod = paidOnInvoices([...provIds, ...finalInvoices.map((i) => i.id)]);
+  const paidById = (id) => paidOnInvoices([id]);
 
-  const primaryFinal = finalInvoices[0] || null;
+  // The final bill itself. A supplementary or an arrear is an adjustment to
+  // one; with no FINAL raised there is no "net due (final)" to state.
+  //
+  // On a PPA the family holds two kinds of bill for the same month: SJVN's own
+  // computation and the invoice the seller raised. Taking whichever FINAL came
+  // first gave SJVN's 3.65 crore bill a "net due (final)" of 36,494 — the
+  // seller's. The trail is opened from a bill, so it speaks for that bill where
+  // it is a FINAL, then for a FINAL from the same side; opened from the family
+  // reference alone it speaks for SJVN's computation, which is what the
+  // provisional-to-final true-up is worked on.
+  const finals = finalInvoices.filter((i) => i.invoice_type === 'FINAL');
+  const focusIsSellers = focus ? raisedBySeller(focus) : false;
+  const primaryFinal = (focus && finals.find((i) => i.id === focus.id))
+    || finals.find((i) => raisedBySeller(i) === focusIsSellers)
+    || finals[0] || null;
+  const tag = (i) => ({ ...i, paid_total: paidById(i.id), raised_by_seller: raisedBySeller(i) });
 
   const deltaMwh = (finalEnergy?.energy_mwh ?? null) != null && provisionalEnergy
     ? Math.round(((finalEnergy.energy_mwh || 0) - (provisionalEnergy.energy_mwh || 0)) * 100) / 100
@@ -98,10 +130,15 @@ function buildTrail({ bfr, contract, period, direction }) {
     provisional_energy: provisionalEnergy || null,
     final_energy: finalEnergy || null,
     delta_mwh: deltaMwh,
-    provisional_invoices: provisionalInvoices,
-    final_invoices: finalInvoices,
+    provisional_invoices: provisionalInvoices.map(tag),
+    final_invoices: finalInvoices.map(tag),
+    net_due_invoice_no: primaryFinal?.invoice_no || null,
     provisional_billed: provisionalBilled,
     already_paid: alreadyPaid,
+    paid_on_period: paidOnPeriod,
+    // A PSA with no allocation has no PPA to draw energy from; say so rather
+    // than leave the energy boxes reading as though the data were late.
+    psa_unallocated: source.unallocated,
     final_billable_before_adjustment: primaryFinal
       ? (primaryFinal.total_amount || 0) - (primaryFinal.other_adjustments || 0)
       : null,
@@ -130,12 +167,14 @@ router.get('/', (req, res) => {
   try {
     let bfr = req.query.bfr || null;
     let contract = null;
+    let focus = null;
     let period = req.query.period_month || null;
     let direction = req.query.direction || null;
 
     if (req.query.invoice_id) {
       const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.query.invoice_id);
       if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+      focus = inv;
       contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(inv.contract_id);
       period = inv.billing_period;
       direction = inv.direction;
@@ -186,8 +225,10 @@ router.get('/', (req, res) => {
     if (!contract || !period || !direction) {
       return res.status(400).json({ error: 'Could not resolve billing family' });
     }
+    // A counterparty reads the trail of its own contracts only.
+    if (!contractVisibleTo(req.user, contract)) return res.status(404).json({ error: 'Billing family not found' });
 
-    res.json(buildTrail({ bfr, contract, period, direction }));
+    res.json(buildTrail({ bfr, contract, period, direction, focus }));
   } catch (err) {
     console.error('Billing trail error:', err);
     res.status(500).json({ error: err.message });

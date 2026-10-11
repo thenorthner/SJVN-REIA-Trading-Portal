@@ -2,6 +2,14 @@ import { nextSeriesNo } from './util.js';
 
 const pad5 = (n) => String(n).padStart(5, '0');
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** 2026-10-12 as "12 Oct 2026" — a bell message is read by a person, beside screens that write dates this way. */
+export function dayInWords(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : String(iso || '');
+}
+export const datesInWords = (text) => String(text || '').replace(/\d{4}-\d{2}-\d{2}/g, dayInWords);
+
 /** Payment Security constants */
 
 export const INVOCATION_OVERDUE_DAYS = 30;

@@ -100,15 +100,15 @@ export default function TAMObligationDetailsModal({ record, product = 'TAM', onC
         <div style={{ padding: 20 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px 20px', marginBottom: 24 }}>
             <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Client</div>
+              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Client</div>
               <div style={{ fontSize: 14 }}>{record.client_name}</div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Exchange</div>
+              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Exchange</div>
               <div style={{ fontSize: 14 }}>{record.exchange}</div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Contract</div>
+              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Contract</div>
               <div style={{ fontSize: 14 }}>
                 {record.contract_id
                   ? <Link to={`/trading/exchange/contracts/${record.contract_id}`}>{record.contract_id}</Link>
@@ -116,15 +116,15 @@ export default function TAMObligationDetailsModal({ record, product = 'TAM', onC
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Status</div>
+              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Status</div>
               <div style={{ fontSize: 14 }}>{record.status}</div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Cleared energy</div>
+              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Cleared energy</div>
               <div style={{ fontSize: 14, fontWeight: 'bold' }}>{fmtNumber(totalMwh, 3)} MWh</div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'uppercase' }}>Value</div>
+              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Value</div>
               <div style={{ fontSize: 14, fontWeight: 'bold' }}>₹{fmtNumber(totalValue, 2)}</div>
             </div>
           </div>

@@ -26,9 +26,9 @@ import { newId, pushNotification, nextSeriesNo } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { getParamNumber } from '../mastersService.js';
 import {
-  recordSecurityEvent, syncInstrumentAvailable, computeCoverage, trailingMonthlyBilledAvg, estimatedMonthlyBill,
+  recordSecurityEvent, syncInstrumentAvailable, computeCoverage, trailingMonthlyBilledAvg, estimatedMonthlyBill, releasePosition,
 } from '../paymentSecurityEngine.js';
-import { genInstrumentNo, WATERFALL_DEFAULTS } from '../paymentSecurityConstants.js';
+import { genInstrumentNo, WATERFALL_DEFAULTS, dayInWords, datesInWords } from '../paymentSecurityConstants.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -124,7 +124,8 @@ function fileName(versionId) {
   } catch { return null; }
 }
 
-function notifySide(contract, toSide, message) {
+function notifySide(contract, toSide, rawMessage) {
+  const message = datesInWords(rawMessage);
   try {
     if (toSide === 'SJVN') {
       for (const role of ROLE_GROUPS.REIA_WRITE) pushNotification({ role, type: 'SECURITY', message });
@@ -207,6 +208,7 @@ function instrumentView(ps, { withChain = false } = {}) {
     status: ps.status,
     rejection_note: ps.rejection_note,
     submitted_by_side: ps.submitted_by_side,
+    submitted_by_name: ps.submitted_by_side && ps.entity_id ? (db.prepare('SELECT name FROM entities WHERE id = ?').get(ps.entity_id)?.name || null) : null,
     is_ebg: !!ps.is_ebg,
     ebg_reference: ps.ebg_reference,
     expiry,
@@ -352,6 +354,12 @@ function lcView(lc, { withEvents = false } = {}) {
   return out;
 }
 
+/** Everything SJVN has open in the seller's favour on a PPA — what the requirement is measured against. */
+function lcOpenOn(contractId) {
+  return db.prepare(`SELECT l.*, c.contract_no FROM sjvn_lcs l JOIN contracts c ON c.id = l.contract_id WHERE l.contract_id = ?`).all(contractId)
+    .map((l) => lcView(l)).filter((l) => l.live).reduce((sum, l) => sum + l.available_amount, 0);
+}
+
 function lcEvent(lcId, user, type, details) {
   db.prepare('INSERT INTO sjvn_lc_events (id, lc_id, event_type, details, actor_name) VALUES (?, ?, ?, ?, ?)')
     .run(newId('LCE'), lcId, type, details ? JSON.stringify(details) : null, user?.name || 'system');
@@ -451,7 +459,7 @@ router.get('/register.xlsx', (req, res) => {
       'Bank reference': i.bank_reference_no || '', Bank: i.issuing_bank || '', Branch: i.issuing_branch || '',
       'Amount (Rs)': i.limit_amount, 'Drawn (Rs)': i.utilized_amount, 'Issue date': i.issue_date || '', 'Valid from': i.validity_start || '',
       'Valid until': i.validity_end || '', 'Claim until': i.claim_deadline || '', 'Days to expiry': i.expiry.days ?? '',
-      Status: i.status, 'SFMS confirmed': i.sfms.confirmed ? 'Yes' : 'No', 'SFMS message': i.sfms.message_type || '',
+      Status: String(i.status).replace(/_/g, ' '), 'SFMS confirmed': i.sfms.confirmed ? 'Yes' : 'No', 'SFMS message': i.sfms.message_type || '',
       'SFMS date': i.sfms.date || '', 'SFMS reference': i.sfms.reference || '', 'e-BG': i.is_ebg ? 'Yes' : 'No',
       Amendments: i.amendment_count, 'Document on file': i.document ? 'Yes' : 'No',
     }))), 'Instruments');
@@ -483,15 +491,19 @@ router.get('/register.xlsx', (req, res) => {
 
 function detail(user, id) {
   const { ps, contract, side } = instrumentFor(user, id);
-  const outstanding = computeCoverage(ps.contract_id).outstanding_dues;
-  const openDisputes = db.prepare(`
-    SELECT COUNT(*) c FROM disputes d JOIN invoices i ON i.id = d.invoice_id
-    WHERE i.contract_id = ? AND d.status IN ('RAISED','ACKNOWLEDGED','UNDER_REVIEW','INFO_REQUESTED','ESCALATED')
-  `).get(ps.contract_id).c;
+  const position = releasePosition(ps.contract_id);
+  // Every invocation that drew on it — the waterfall names only the first
+  // instrument it reached on the row, so the second one drawn was told nothing.
   const invocations = db.prepare(`
-    SELECT id, invocation_no, amount, status, created_at FROM security_invocations
-    WHERE payment_security_id = ? ORDER BY created_at DESC
-  `).all(ps.id);
+    SELECT id, invocation_no, amount, status, created_at, payment_security_id, waterfall_used FROM security_invocations
+    WHERE contract_id = ? ORDER BY created_at DESC, rowid DESC
+  `).all(ps.contract_id).map((inv) => {
+    let draws = [];
+    try { draws = JSON.parse(inv.waterfall_used || '[]'); } catch { draws = []; }
+    const mine = draws.find((w) => w.id === ps.id);
+    if (!mine && inv.payment_security_id !== ps.id) return null;
+    return { id: inv.id, invocation_no: inv.invocation_no, amount: mine ? mine.amount : inv.amount, status: inv.status, created_at: inv.created_at };
+  }).filter(Boolean);
   return {
     ...instrumentView(ps, { withChain: true }),
     side,
@@ -501,12 +513,7 @@ function detail(user, id) {
     releases: db.prepare('SELECT * FROM security_releases WHERE payment_security_id = ? ORDER BY created_at DESC').all(ps.id),
     invocations,
     // What a release would be checked against, so nobody asks for one that cannot be given.
-    release_check: {
-      outstanding_dues: Math.round(outstanding || 0),
-      open_disputes: openDisputes,
-      clear: !(outstanding > 0) && openDisputes === 0,
-      can_request: [...LIVE, 'EXPIRED'].includes(ps.status),
-    },
+    release_check: { ...position, can_request: [...LIVE, 'EXPIRED'].includes(ps.status) },
   };
 }
 
@@ -751,7 +758,7 @@ router.post('/amendments/:id/withdraw', (req, res) => send(res, () => {
 
 router.get('/lcs/:id', (req, res) => send(res, () => {
   const { lc, contract } = lcFor(req.user, req.params.id);
-  return { ...lcView(lc, { withEvents: true }), required_amount: lcRequired(contract), can_manage_lc: canManageLc(req.user) };
+  return { ...lcView(lc, { withEvents: true }), required_amount: lcRequired(contract), open_on_contract: lcOpenOn(contract.id), can_manage_lc: canManageLc(req.user) };
 }));
 
 router.post('/lcs', (req, res) => send(res, () => {
@@ -778,7 +785,7 @@ router.post('/lcs', (req, res) => send(res, () => {
   lcEvent(id, req.user, 'OPENED', { amount, validity_end: validityEnd });
   audit(req, 'SJVN_LC_OPENED', 'sjvn_lcs', id, { afterValue: { lc_no: lcNo, amount, validity_end: validityEnd } });
   notifySide(contract, 'SELLER', `${contract.contract_no}: SJVN has opened letter of credit ${lcNo} in your favour for ${rupees(amount)}, valid until ${validityEnd}.`);
-  return { ...lcView(db.prepare('SELECT l.*, c.contract_no FROM sjvn_lcs l JOIN contracts c ON c.id = l.contract_id WHERE l.id = ?').get(id), { withEvents: true }), required_amount: lcRequired(contract) };
+  return { ...lcView(db.prepare('SELECT l.*, c.contract_no FROM sjvn_lcs l JOIN contracts c ON c.id = l.contract_id WHERE l.id = ?').get(id), { withEvents: true }), required_amount: lcRequired(contract), open_on_contract: lcOpenOn(contract.id) };
 }));
 
 // POST /lcs/:id/amend — value, validity, the bank's advice or the copy on file.
@@ -811,7 +818,7 @@ router.post('/lcs/:id/amend', (req, res) => send(res, () => {
   if (changes.amount || changes.validity_end) {
     notifySide(contract, 'SELLER', `${lc.lc_no}: SJVN has amended the letter of credit in your favour — now ${rupees(amount)}, valid until ${validityEnd}.`);
   }
-  return { ...lcView(db.prepare('SELECT l.*, c.contract_no FROM sjvn_lcs l JOIN contracts c ON c.id = l.contract_id WHERE l.id = ?').get(lc.id), { withEvents: true }), required_amount: lcRequired(contract) };
+  return { ...lcView(db.prepare('SELECT l.*, c.contract_no FROM sjvn_lcs l JOIN contracts c ON c.id = l.contract_id WHERE l.id = ?').get(lc.id), { withEvents: true }), required_amount: lcRequired(contract), open_on_contract: lcOpenOn(contract.id) };
 }));
 
 router.post('/lcs/:id/close', (req, res) => send(res, () => {
@@ -875,7 +882,7 @@ export function remindExpiringSecurity() {
     if (step == null || days < 0) continue;
     if (already.get(lc.id, 'LC_EXPIRY', step)) continue;
     const message = `Letter of credit ${lc.lc_no} in the seller's favour (${lc.contract_no}) expires ${days === 0 ? 'today' : `in ${days} day${days === 1 ? '' : 's'}`}, on ${lc.validity_end}. Renew it to keep the PPA's payment security in place.`;
-    for (const role of [...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER']) pushNotification({ role, type: 'SECURITY', message });
+    for (const role of [...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER']) pushNotification({ role, type: 'SECURITY', message: datesInWords(message) });
     for (const s of steps.filter((x) => x >= step)) {
       if (!already.get(lc.id, 'LC_EXPIRY', s)) log.run(newId('PSA'), lc.id, lc.contract_id, 'LC_EXPIRY', s, 'SJVN', message);
     }

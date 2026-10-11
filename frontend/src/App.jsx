@@ -4,6 +4,7 @@ import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from './roles.js';
 import { useAuth } from './context/AuthContext.jsx';
+import { EliteChartGradients } from './components/EliteChartGradients.jsx';
 
 const Login = lazy(() => import('./pages/Login.jsx'));
 const ConsolidatedDashboard = lazy(() => import('./pages/ConsolidatedDashboard.jsx'));
@@ -100,6 +101,7 @@ const RldcScheduleUploader = lazy(() => import('./pages/trading/RldcScheduleUplo
 const RefundReportUploader = lazy(() => import('./pages/trading/RefundReportUploader.jsx'));
 const LatestRefundUploader = lazy(() => import('./pages/trading/LatestRefundUploader.jsx'));
 const MmrExcelUploader = lazy(() => import('./pages/trading/MmrExcelUploader.jsx'));
+const CeaExcelUploader = lazy(() => import('./pages/trading/CeaExcelUploader.jsx'));
 const PxilOrderCreation = lazy(() => import('./pages/trading/PxilOrderCreation.jsx'));
 const PxilOrderSummary = lazy(() => import('./pages/trading/PxilOrderSummary.jsx'));
 const PxilReports = lazy(() => import('./pages/trading/PxilReports.jsx'));
@@ -204,7 +206,10 @@ function HomeRoute() {
   if (isBuyerRole(role)) return <Navigate to="/buyer" replace />;
   if (isTradingClientRole(role)) return <Navigate to="/trading/my-profile" replace />;
   if (role === 'TRADING_USER') return <Navigate to="/trading" replace />;
-  if (role === 'REIA_USER') return <Navigate to="/reia" replace />;
+  if (['COMMERCIAL_USER', 'COMMERCIAL_ADMIN', 'COMMERCIAL'].includes(role)) return <Navigate to="/hydro-thermal" replace />;
+  // The REIA admin works the same desk; without this it landed on the executive
+  // dashboard, which it may not see, and met an "access restricted" wall.
+  if (role === 'REIA_USER' || role === 'REIA_ADMIN') return <Navigate to="/reia" replace />;
   if (role === 'COMPLIANCE_AUDITOR') return <Navigate to="/audit-logs" replace />;
 
   return (
@@ -232,6 +237,7 @@ function RouteFallback() {
 export default function App() {
   return (
     <Suspense fallback={<RouteFallback />}>
+      <EliteChartGradients />
     <Routes>
       <Route path="/login" element={<Login />} />
 
@@ -248,7 +254,7 @@ export default function App() {
         <Route path="reia" element={<ProtectedRoute roles={REIA_ROLES}><ReiaDashboard /></ProtectedRoute>} />
         <Route path="reia/entities" element={<ProtectedRoute roles={REIA_ROLES}><Entities /></ProtectedRoute>} />
         <Route path="reia/document-desk" element={<ProtectedRoute roles={REIA_ROLES}><DocumentDesk /></ProtectedRoute>} />
-        <Route path="admin/users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN']}><StaffUsers /></ProtectedRoute>} />
+        <Route path="admin/users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMMERCIAL_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN']}><StaffUsers /></ProtectedRoute>} />
         <Route path="reia/company-users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN']}><CompanyUsers /></ProtectedRoute>} />
         <Route path="reia/seller-ledgers" element={<ProtectedRoute roles={REIA_ROLES}><SellerLedgers /></ProtectedRoute>} />
         <Route path="reia/contracts" element={<ProtectedRoute roles={REIA_ROLES}><Contracts /></ProtectedRoute>} />
@@ -436,6 +442,7 @@ export default function App() {
         <Route path="uploader/refund-report" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RefundReportUploader /></ProtectedRoute>} />
         <Route path="uploader/refund-report-latest" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><LatestRefundUploader /></ProtectedRoute>} />
         <Route path="uploader/mmr-excel" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><MmrExcelUploader /></ProtectedRoute>} />
+        <Route path="uploader/cea-excel" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><CeaExcelUploader /></ProtectedRoute>} />
         <Route path="reports/api-details" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><ApiDetailsReport /></ProtectedRoute>} />
         <Route path="reports/registration" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RegistrationReport /></ProtectedRoute>} />
         <Route path="reports/registration-category" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><RegistrationCategoryReport /></ProtectedRoute>} />

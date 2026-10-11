@@ -55,7 +55,7 @@ function openBills(direction) {
       END AS days_past_due
     FROM invoices i
     ${COUNTERPARTY_JOIN}
-    WHERE i.direction = ? AND i.status NOT IN ('PAID','CANCELLED') AND ${OUTSTANDING_SQL} > 0
+    WHERE i.direction = ? AND i.status IN ('APPROVED','SENT','PARTIALLY_PAID','DISPUTED') AND ${OUTSTANDING_SQL} > 0
     ORDER BY (i.due_date IS NULL), i.due_date
   `).all(direction);
 }

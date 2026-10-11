@@ -76,7 +76,7 @@ beforeEach(() => {
   `).run(contract.id);
   contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract.id);
 
-  reia = tokenFor('REIA_USER');
+  reia = tokenFor('COMMERCIAL_USER');
   viewer = tokenFor('MANAGEMENT');
 });
 
@@ -84,6 +84,12 @@ const post = (url, token, body) => request(app).post(url).set(auth(token)).send(
 const get = (url, token) => request(app).get(url).set(auth(token));
 
 describe('stations', () => {
+  it('rejects REIA users from hydro billing endpoints', async () => {
+    const reiaUser = tokenFor('REIA_USER');
+    const r = await post('/api/hydro-billing', reiaUser, { contract_id: contract.id, ...JUNE });
+    expect(r.status).toBe(403);
+  });
+
   it('lists hydro stations with what each still needs', async () => {
     const r = await get('/api/hydro-billing/stations', viewer);
     expect(r.status).toBe(200);
@@ -459,10 +465,10 @@ describe('approval chain before a bill can be issued', () => {
   let makerTok, tok1, tok2, finalTok;
 
   beforeEach(() => {
-    maker = makeUser('REIA_USER', { name: 'Maker' });
-    approver1 = makeUser('REIA_USER', { name: 'Approver One' });
-    approver2 = makeUser('REIA_USER', { name: 'Approver Two' });
-    final = makeUser('REIA_ADMIN', { name: 'HOD' });
+    maker = makeUser('COMMERCIAL_USER', { name: 'Maker' });
+    approver1 = makeUser('COMMERCIAL_USER', { name: 'Approver One' });
+    approver2 = makeUser('COMMERCIAL_USER', { name: 'Approver Two' });
+    final = makeUser('COMMERCIAL_ADMIN', { name: 'HOD' });
     makerTok = signFor(maker); tok1 = signFor(approver1);
     tok2 = signFor(approver2); finalTok = signFor(final);
   });
@@ -611,8 +617,8 @@ describe('the beneficiary ledger once a bill is issued', () => {
   let billId;
 
   async function issueApproved() {
-    const maker = makeUser('REIA_USER', { name: 'Ledger Maker' });
-    const hod = makeUser('REIA_ADMIN', { name: 'Ledger HOD' });
+    const maker = makeUser('COMMERCIAL_USER', { name: 'Ledger Maker' });
+    const hod = makeUser('COMMERCIAL_ADMIN', { name: 'Ledger HOD' });
     const b = await post('/api/hydro-billing', signFor(maker), { contract_id: contract.id, ...JUNE });
     await post(`/api/hydro-billing/${b.body.id}/send-for-approval`, signFor(maker), {
       next_approver_id: hod.id, final_approver_id: hod.id, comments: 'go',
@@ -755,7 +761,7 @@ describe('issue and cancel', () => {
   it('issues an approved bill once, and posts it to the beneficiary ledger', async () => {
     const b = await create();
     // Issuing is gated on approval now, so the bill goes up the chain first.
-    const hod = makeUser('REIA_ADMIN', { name: 'Issue HOD' });
+    const hod = makeUser('COMMERCIAL_ADMIN', { name: 'Issue HOD' });
     await post(`/api/hydro-billing/${b.body.id}/send-for-approval`, reia, {
       next_approver_id: hod.id, final_approver_id: hod.id, comments: 'go',
     });
@@ -804,8 +810,8 @@ describe('release, print and despatch', () => {
   let billId;
 
   async function issued() {
-    const maker = makeUser('REIA_USER', { name: 'Despatch Maker' });
-    const hod = makeUser('REIA_ADMIN', { name: 'Despatch HOD' });
+    const maker = makeUser('COMMERCIAL_USER', { name: 'Despatch Maker' });
+    const hod = makeUser('COMMERCIAL_ADMIN', { name: 'Despatch HOD' });
     const b = await post('/api/hydro-billing', signFor(maker), { contract_id: contract.id, ...JUNE });
     await post(`/api/hydro-billing/${b.body.id}/send-for-approval`, signFor(maker), {
       next_approver_id: hod.id, final_approver_id: hod.id, comments: 'go',

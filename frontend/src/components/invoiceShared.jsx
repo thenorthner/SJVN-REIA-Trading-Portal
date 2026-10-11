@@ -3,9 +3,20 @@ import { Badge, Modal, fmtCurrency, fmtNumber } from './ui.jsx';
 
 /** Status options for invoice list filters (role pages may subset). */
 export const INVOICE_STATUS_OPTIONS = [
-  'DRAFT', 'SUBMITTED', 'UNDER_APPROVAL', 'APPROVED', 'REJECTED',
+  'DRAFT', 'PENDING_L2', 'SUBMITTED', 'UNDER_APPROVAL', 'APPROVED', 'REJECTED',
   'SENT', 'DISPUTED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED',
 ];
+
+/** Statuses at which a bill has been approved and can be paid, noted or disputed. */
+export const PAYABLE_STATUSES = ['APPROVED', 'SENT', 'PARTIALLY_PAID', 'DISPUTED'];
+
+/** What is still owed on a bill: the server's figure, or the same sum worked here. */
+export function calcBalanceDue(inv) {
+  if (inv == null) return 0;
+  if (inv.balance_due != null && !Number.isNaN(Number(inv.balance_due))) return Number(inv.balance_due);
+  if (['PAID', 'CANCELLED'].includes(inv.status)) return 0;
+  return Math.max(0, calcPayableNow(inv) - (Number(inv.paid_total) || 0));
+}
 
 export function calcPayableNow(inv) {
   if (inv == null) return 0;
@@ -21,6 +32,10 @@ export function calcPayableNow(inv) {
 export function formatBreakdownValue(item) {
   if (!item) return '—';
   const { code, value, format } = item;
+  // A line that is a heading or a source note carries no figure.
+  if (value == null || value === '') return '';
+  // A deviation bill's energy lines; older ones were stored without a format.
+  if (format === 'mwh' || ['SCH', 'ACT', 'DEV'].includes(code)) return `${fmtNumber(value, 3)} MWh`;
   if (format === 'beta' || code === 'C3') return Number(value).toFixed(2);
   if (format === 'pct' || ['A3', 'A4', 'A11'].includes(code)) return `${fmtNumber(value)}%`;
   if (format === 'ecr' || code === 'A12') return `₹${Number(value).toFixed(3)}/kWh`;
@@ -40,15 +55,15 @@ export function InvoiceStatusCell({ row, showValidation = false }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
       <Badge status={row.status} />
       {valVisible && <Badge status={row.validation_status} label={`Val: ${row.validation_status}`} />}
-      {row.days_overdue > 0 && (
+      {(row.days_past_due > 0 || row.days_overdue > 0) && (
         <span
-          title={`Overdue ${row.days_overdue} day(s) · accruing LPS`}
+          title={`Overdue ${row.days_past_due || row.days_overdue} day(s) · accruing LPS`}
           style={{
             fontSize: 11, fontWeight: 600, color: 'var(--red-deep)', background: '#fee2e2',
             border: '1px solid #fecaca', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap',
           }}
         >
-          Overdue {row.days_overdue}d · LPS {fmtCurrency(row.accrued_lps)}
+          Overdue {row.days_past_due || row.days_overdue}d · LPS {fmtCurrency(row.accrued_lps)}
         </span>
       )}
     </div>
@@ -164,8 +179,14 @@ export function InvoiceBreakdown({ invoice, title = 'Invoice Breakdown' }) {
 /** Shared financial strip: total, disputed, rebate (seller), LPS, payable now. */
 export function InvoiceFinancialStrip({ invoice }) {
   if (!invoice) return null;
-  const payable = calcPayableNow(invoice);
   const isSellerDir = invoice.direction === 'SELLER_TO_SJVN';
+  // Surcharge as the bill has earned it to today, not as it stood at its last
+  // payment — the same figure the "Overdue" line above the strip gives.
+  const lps = Number(invoice.lps_to_date ?? invoice.lps) || 0;
+  const settled = Number(invoice.paid_total) || 0;
+  const balance = calcBalanceDue(invoice);
+  const lpsRate = invoice.lps_annual_pct != null ? `${Number(invoice.lps_annual_pct)}% a year` : 'The contract rate';
+  const grace = Number(invoice.lps_grace_days) > 0 ? `, after ${invoice.lps_grace_days} grace day(s)` : '';
 
   return (
     <div className="detail-grid mb-0" style={{ marginTop: 12 }}>
@@ -187,7 +208,7 @@ export function InvoiceFinancialStrip({ invoice }) {
           <span className="detail-label">
             Early Pay Rebate
             <div style={{ fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal' }}>
-              Formula: 2% of Energy Charges if paid early
+              Earned by each payment on the part of the bill it settles early, at the contract&apos;s rate
             </div>
           </span>
           <span className="detail-value" style={{ color: 'var(--success)' }}>-{fmtCurrency(invoice.rebate || 0)}</span>
@@ -197,19 +218,28 @@ export function InvoiceFinancialStrip({ invoice }) {
         <span className="detail-label">
           Late Pay Surcharge (LPS)
           <div style={{ fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal' }}>
-            15% p.a. on undisputed amount only while dispute is open
+            {lpsRate} on the undisputed amount unpaid past the due date{grace} — to date
           </div>
         </span>
-        <span className="detail-value" style={{ color: 'var(--danger)' }}>+{fmtCurrency(invoice.lps || 0)}</span>
+        <span className="detail-value" style={{ color: 'var(--danger)' }}>+{fmtCurrency(lps)}</span>
       </div>
       <div className="detail-item">
         <span className="detail-label">
-          Payable Now
+          Settled So Far
           <div style={{ fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal' }}>
-            Disputed: {fmtCurrency(invoice.disputed_amount || 0)} · Undisputed balance due by due date
+            Payments, tax and other deductions, and credit notes recorded on this bill
           </div>
         </span>
-        <span className="detail-value" style={{ fontSize: 16, fontWeight: 700 }}>{fmtCurrency(payable)}</span>
+        <span className="detail-value" style={{ color: 'var(--success)' }}>-{fmtCurrency(settled)}</span>
+      </div>
+      <div className="detail-item">
+        <span className="detail-label">
+          Balance Payable Now
+          <div style={{ fontSize: 11, color: 'var(--text-light)', fontWeight: 'normal' }}>
+            What is left after everything above{Number(invoice.disputed_amount) > 0 ? ' — the disputed part is held out until it is decided' : ''}
+          </div>
+        </span>
+        <span className="detail-value" style={{ fontSize: 16, fontWeight: 700 }}>{fmtCurrency(balance)}</span>
       </div>
     </div>
   );
@@ -352,7 +382,8 @@ export async function downloadInvoicePdf(api, invoice) {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `Invoice_${invoice.invoice_no}.pdf`;
+  // An invoice number carries slashes, which a file name cannot.
+  a.download = `Invoice_${String(invoice.invoice_no).replace(/[^\w.-]+/g, '_')}.pdf`;
   document.body.appendChild(a);
   a.click();
   a.remove();

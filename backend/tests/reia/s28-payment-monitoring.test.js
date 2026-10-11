@@ -136,3 +136,21 @@ describe('S28 Payment monitoring', () => {
     expect((await request(app).get('/api/reports/payment-monitoring').set(auth(sellerUser))).status).toBe(403);
   });
 });
+
+describe('S28 Only a bill that has been presented is owed', () => {
+  it('leaves drafts, bills in approval and rejected bills out of the outstanding', async () => {
+    // "Not PAID or CANCELLED" took all of these in, so a draft nobody had been
+    // sent was ageing debt and a rejected bill was chased as money outstanding.
+    const before = (await request(app).get('/api/reports/payment-monitoring?side=RECEIVABLE').set(auth(reia))).body;
+    const c = makeContract({ status: 'ACTIVE' });
+    for (const [n, status] of ['DRAFT', 'SUBMITTED', 'UNDER_APPROVAL', 'REJECTED'].entries()) {
+      makeInvoice({ contract_id: c.id, direction: 'SJVN_TO_BUYER', status, billing_period: `2026-0${n + 1}`, total_amount: 100000, energy_charges: 100000, due_date: '2026-01-01' });
+    }
+    const sent = makeInvoice({ contract_id: c.id, direction: 'SJVN_TO_BUYER', status: 'SENT', billing_period: '2026-06', total_amount: 70000, energy_charges: 70000, due_date: '2026-01-01' });
+    const after = (await request(app).get('/api/reports/payment-monitoring?side=RECEIVABLE').set(auth(reia))).body;
+    expect(after.totals.invoices - before.totals.invoices).toBe(1);
+    expect(after.totals.outstanding - before.totals.outstanding).toBe(70000);
+    expect(after.bills.filter((b) => b.contract_id === c.id).map((b) => b.id)).toEqual([sent.id]);
+    expect(after.ageing.reduce((s, b) => s + b.amount, 0)).toBeCloseTo(after.totals.outstanding, 2);
+  });
+});

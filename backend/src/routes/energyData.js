@@ -8,6 +8,7 @@ import {
   importEnergyAccount, accountTemplate, ACCOUNT_TYPES, UNITS, AccountImportError,
 } from '../services/energyAccountImport.js';
 import { announceValidated } from './energyRecords.js';
+import { notifyCounterparty } from '../paymentSecurityEngine.js';
 import { PRESENTED_STATUSES } from '../services/counterpartyScope.js';
 import multer from 'multer';
 import { exec } from 'child_process';
@@ -64,6 +65,9 @@ router.get('/', (req, res) => {
   } else if (side === 'BUYER') {
     sql += ' AND c.buyer_id = ?';
     params.push(req.user.linked_entity_id);
+  } else if (![...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'].includes(req.user.role)) {
+    // Neither SJVN nor a party to any contract: this used to fall through and return every record.
+    return res.status(403).json({ error: 'Not authorized' });
   }
   
   if (contract_id) { sql += ' AND ed.contract_id = ?'; params.push(contract_id); }
@@ -185,8 +189,41 @@ router.post(
 router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const b = req.body;
   const dataType = b.data_type || 'PROVISIONAL';
+  if (!['PROVISIONAL', 'FINAL'].includes(dataType)) return res.status(400).json({ error: 'Data type is Provisional or Final' });
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(b.period_month || ''))) return res.status(400).json({ error: 'The period is a month, written YYYY-MM' });
+  // A month that has not ended has no energy account yet.
+  if (String(b.period_month) > new Date().toISOString().slice(0, 7)) return res.status(400).json({ error: 'Energy cannot be recorded for a month that has not begun' });
+  const energy = Number(b.energy_mwh);
+  if (b.energy_mwh === '' || b.energy_mwh == null || !Number.isFinite(energy) || energy < 0) return res.status(400).json({ error: 'Energy must be a number of MWh, zero or more' });
+  for (const [key, label] of [['cuf_percent', 'CUF'], ['availability_percent', 'Availability'], ['peak_availability_percent', 'Peak-window availability']]) {
+    if (b[key] == null || b[key] === '') continue;
+    const v = Number(b[key]);
+    if (!Number.isFinite(v) || v < 0 || v > 100) return res.status(400).json({ error: `${label} is a percentage between 0 and 100` });
+  }
   const resolved = resolveEnergyBfr(b.contract_id, b.period_month, dataType);
   if (!resolved) return res.status(400).json({ error: 'Contract not found' });
+  // Energy belongs to a month the contract was in force.
+  const from = String(resolved.contract.tenure_start || '').slice(0, 7);
+  const to = String(resolved.contract.tenure_end || '').slice(0, 7);
+  if ((from && b.period_month < from) || (to && b.period_month > to)) {
+    return res.status(400).json({ error: `${resolved.contract.contract_no} runs from ${from || '—'} to ${to || '—'}; ${b.period_month} is outside it` });
+  }
+  const source = b.source || 'MANUAL';
+  // The same account entered twice was two rows, each of which could be validated and locked.
+  const twin = db.prepare(`SELECT id, status FROM energy_data WHERE contract_id = ? AND period_month = ? AND data_type = ? AND COALESCE(source, 'MANUAL') = ?`)
+    .get(b.contract_id, b.period_month, dataType, source);
+  if (twin && !['DRAFT', 'DISPUTED'].includes(twin.status)) {
+    return res.status(409).json({ error: `${resolved.contract.contract_no} already has a ${dataType.toLowerCase()} ${source} figure for ${b.period_month} (${twin.status.toLowerCase()}). Record a different source, or the final figure, rather than the same one again.` });
+  }
+  // A figure not yet validated, or one validation threw out, is corrected by
+  // recording it again — there is no other way to mend a mistyped draft.
+  if (twin) {
+    db.prepare(`UPDATE energy_data SET energy_mwh = ?, deemed_generation_mwh = ?, cuf_percent = ?, availability_percent = ?, peak_availability_percent = ?,
+      status = 'DRAFT', deviation_notes = NULL, updated_at = datetime('now') WHERE id = ?`)
+      .run(energy, Number(b.deemed_generation_mwh) || 0, b.cuf_percent ?? null, b.availability_percent ?? null, b.peak_availability_percent ?? null, twin.id);
+    logAudit({ req, user: req.user, action: 'UPDATE', module: 'REIA', entityType: 'energy_data', entityId: twin.id, details: { ...b, replaced_status: twin.status } });
+    return res.status(200).json({ ...db.prepare('SELECT * FROM energy_data WHERE id = ?').get(twin.id), replaced: true });
+  }
 
   const id = newId('ENG');
   db.prepare(`
@@ -197,8 +234,8 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     contract_id: b.contract_id,
     period_month: b.period_month,
     data_type: dataType,
-    source: b.source || 'MANUAL',
-    energy_mwh: b.energy_mwh,
+    source,
+    energy_mwh: energy,
 
     deemed_generation_mwh: Number(b.deemed_generation_mwh) || 0,
     cuf_percent: b.cuf_percent ?? null,
@@ -216,6 +253,9 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
 router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const row = db.prepare('SELECT * FROM energy_data WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Energy data not found' });
+  // A locked period is what the bill was raised on. Validating it again used to
+  // take it back out of LOCKED.
+  if (row.status === 'LOCKED') return res.status(400).json({ error: 'This period is locked for billing and cannot be validated again' });
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(row.contract_id);
   
   // Shared with the security engine, which sizes a letter of credit off the same
@@ -228,7 +268,14 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
   // are not built yet, and measuring it against the full contracted capacity let
   // a 10 MW plant file a month's output for 25 MW and be called clean.
   const ratedMw = billableCapacityMw(contract);
-  const expected = ratedMw * 24 * 30 * baseCuf;
+  // The month's own hours: every month was taken as 30 days, so February was
+  // held to the same output as March.
+  const [py, pm] = String(row.period_month).split('-').map(Number);
+  const daysInMonth = py && pm ? new Date(Date.UTC(py, pm, 0)).getUTCDate() : 30;
+  const expected = ratedMw * 24 * daysInMonth * baseCuf;
+  if (!(expected > 0)) {
+    return res.status(400).json({ error: `${contract.contract_no} has no commissioned capacity on record, so there is nothing to validate the energy against. Enter the capacity on the contract first.` });
+  }
   const deviationPct = Math.abs(row.energy_mwh - expected) / expected * 100;
   
   // Case-insensitive for the same reason as the CUF above: "HYDRO" and "Hydro"
@@ -241,7 +288,7 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
   const capNote = ratedMw !== Number(contract.capacity_mw)
     ? ` on ${ratedMw} MW commissioned of ${contract.capacity_mw} MW contracted`
     : '';
-  let note = `Deviation ${deviationPct.toFixed(1)}% vs expected ${expected.toFixed(0)} MWh (${(baseCuf * 100).toFixed(0)}% CUF${capNote}) - Tolerance: ${tolerance}%`;
+  let note = `Deviation ${deviationPct.toFixed(1)}% vs expected ${expected.toFixed(0)} MWh (${(baseCuf * 100).toFixed(0)}% CUF over ${daysInMonth} days${capNote}) - Tolerance: ${tolerance}%`;
 
   // Cross-source check. A plausible total can still be wrong: if the seller's
   // own figure and the SEA/meter figure for the same period disagree, one of
@@ -257,7 +304,8 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
   const disagreeing = [];
   for (const other of others) {
     if (!(other.energy_mwh > 0)) continue;
-    const gapPct = Math.abs(row.energy_mwh - other.energy_mwh) / other.energy_mwh * 100;
+    // Measured against the larger figure, so the pair reads the same from either row.
+    const gapPct = Math.abs(row.energy_mwh - other.energy_mwh) / Math.max(row.energy_mwh, other.energy_mwh) * 100;
     if (gapPct > crossTolerance) {
       disagreeing.push(`${other.source} ${other.energy_mwh} MWh (${gapPct.toFixed(1)}% apart)`);
     }
@@ -281,7 +329,7 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
 router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const row = db.prepare('SELECT * FROM energy_data WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Energy data not found' });
-  if (row.status === 'LOCKED') return res.status(400).json({ error: 'Already locked' });
+  if (row.status === 'LOCKED') return res.status(400).json({ error: 'This period is already locked' });
 
   // Locking is what makes a period billable, so it is the last point at which a
   // validation result can still mean anything. Until now it meant nothing: a
@@ -304,6 +352,17 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
       energy_status: row.status,
       objection: row.response_note,
       hint: 'Answer the objection first, or pass override_reason to lock the period as it stands.',
+    });
+  }
+
+  // SJVN has agreed the figure is wrong. Locking it unchanged bills the figure
+  // both sides say is not right — allowed, but not without saying why.
+  if (row.response_status === 'OBJECTED' && row.objection_outcome === 'UPHELD' && !override) {
+    return res.status(400).json({
+      error: 'SJVN upheld the counterparty\'s objection to this figure, and the figure has not changed since.',
+      energy_status: row.status,
+      objection: row.response_note,
+      hint: 'Record the corrected figure and lock that, or pass override_reason to lock this one as it stands.',
     });
   }
 
@@ -330,7 +389,7 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     }
   }
 
-  const overrodeFlag = (row.status === 'DISPUTED' || (row.response_status === 'OBJECTED' && !row.objection_outcome)) && !!override;
+  const overrodeFlag = (row.status === 'DISPUTED' || (row.response_status === 'OBJECTED' && row.objection_outcome !== 'REJECTED')) && !!override;
   db.prepare(`
     UPDATE energy_data
     SET status = 'LOCKED', locked_at = datetime('now'),
@@ -348,11 +407,22 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
 
   // A period billed over its own validation flag is worth someone else seeing.
   if (overrodeFlag) {
-    pushNotification({
-      role: 'REIA_USER',
-      type: 'ENERGY_LOCK_OVERRIDE',
-      message: `${row.period_month} locked despite failing validation: ${override}`,
-    });
+    const cno = db.prepare('SELECT contract_no FROM contracts WHERE id = ?').get(row.contract_id)?.contract_no || row.contract_id;
+    for (const role of ROLE_GROUPS.REIA_WRITE) {
+      pushNotification({
+        role,
+        type: 'ENERGY_LOCK_OVERRIDE',
+        message: `${cno}: energy for ${row.period_month} was locked by ${req.user?.name || 'the desk'} over ${row.status === 'DISPUTED' ? 'a failed validation' : row.objection_outcome === 'UPHELD' ? 'an objection SJVN upheld' : 'an unanswered objection'} — ${override}`,
+      });
+    }
+  }
+
+  // Locked before the counterparty answered: it was left holding "ready for your
+  // confirmation" for a figure it could no longer confirm.
+  if (row.response_status !== 'ACCEPTED') {
+    const contract = db.prepare('SELECT contract_no, contract_type FROM contracts WHERE id = ?').get(row.contract_id);
+    notifyCounterparty(row.contract_id, contract?.contract_type === 'PSA' ? 'BUYER' : 'SELLER', 'ENERGY_LOCKED',
+      `${contract?.contract_no || row.contract_id}: SJVN has locked ${row.energy_mwh} MWh (${String(row.data_type).toLowerCase()}, ${row.source || 'manual'}) for ${row.period_month} for billing${row.response_status ? '' : ' without waiting for your confirmation'}. If the figure is wrong, raise a dispute on the bill.`);
   }
 
   // FINAL lock → re-run reconciliation from provisional basis if one exists
@@ -409,7 +479,7 @@ router.get('/rea-log', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
 });
 
 // POST /rea-trigger — Manually trigger scrape
-router.post('/rea-trigger', requireRole('SJVN_ADMIN', 'REIA_USER'), async (req, res) => {
+router.post('/rea-trigger', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res) => {
   const { rpc, period_month, data_type } = req.body;
   
   if (!rpc || !period_month) {
@@ -435,7 +505,7 @@ router.post('/rea-trigger', requireRole('SJVN_ADMIN', 'REIA_USER'), async (req, 
 });
 
 // POST /rea-scan — Trigger full scan for all RPCs (or one specific RPC)
-router.post('/rea-scan', requireRole('SJVN_ADMIN'), async (req, res) => {
+router.post('/rea-scan', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res) => {
   const { rpc } = req.body;
   
   try {

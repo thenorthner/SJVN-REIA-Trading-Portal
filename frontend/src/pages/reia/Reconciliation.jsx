@@ -1,25 +1,46 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ReconSignoffPanel from '../../components/ReconSignoffPanel.jsx';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, fmtCurrency, StatementViewer } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, fmtCurrency, fmtNumber, StatementViewer } from '../../components/ui.jsx';
+import { ROLE_GROUPS } from '../../roles.js';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { fmtDateTime } from '../../datetime.js';
 
-const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER', 'MANAGEMENT'];
-const CAN_APPROVE_REOPEN = ['SJVN_ADMIN', 'FINANCE_USER', 'REIA_USER'];
+// Who the API lets do what. Management was offered Override, Dispute and
+// Sign-off, each of which it is refused; REIA Admin, who may do all of it, was
+// offered nothing.
+const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
+const CAN_REGENERATE = [...ROLE_GROUPS.REIA_WRITE, 'MANAGEMENT'];
+const CAN_APPROVE_REOPEN = [...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER'];
 
-const RUN_FORM = {
+const lastMonth = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const runForm0 = () => ({
   scope: 'REIA_CONTRACT', contract_id: '', trading_client_id: '',
-  period_type: 'MONTHLY', period: '2025-05',
+  period_type: 'MONTHLY', period: lastMonth(),
+});
+const RUN_FORM = runForm0();
+const errOf = (err, fallback) => err?.response?.data?.error || err?.message || fallback;
+const EVENT_WORDS = {
+  RUN: 'Reconciliation run', OVERRIDE: 'Line variance overridden', DISPUTE_LINKED: 'Dispute raised from a line', REQUEST_SIGNOFF: 'Sign-off requested',
+  ACKNOWLEDGE: 'Signed off', ACKNOWLEDGE_WITH_EXCEPTIONS: 'Signed off with exceptions', DISAGREE: 'Disagreed', CLOSED: 'Closed',
+  REOPEN_REQUESTED: 'Reopen requested', REOPEN_APPROVED: 'Reopen approved', REOPEN_REJECTED: 'Reopen refused',
+  STATEMENT_REGENERATED: 'Statement regenerated', RESOLVED_CLOSED: 'Closed by the desk', EXCEPTION_SETTLED: 'Exception settled', SIGNED_COPY_ATTACHED: 'Signed copy attached',
+};
+const eventWords = (t) => EVENT_WORDS[t] || String(t || '').replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+/** A figure on a line, with its unit — it was printed as the bare number the database held. */
+const figure = (v, unit) => {
+  if (v == null) return '—';
+  if (unit === 'INR' || unit === '₹') return fmtCurrency(v);
+  return `${fmtNumber(v, 3)}${unit ? ` ${unit}` : ''}`;
 };
 
 function StatPill({ label, value, sub }) {
   return (
     <div style={{ padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, minWidth: 120 }}>
-      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
+      <div style={{ fontSize: 11, textTransform: 'none', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: 'var(--text)' }}>{value}</div>
       {sub != null && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
     </div>
@@ -61,6 +82,17 @@ export default function Reconciliation() {
   const [detail, setDetail] = useState(null);
   const [overrideReason, setOverrideReason] = useState('');
   const [reopenReason, setReopenReason] = useState('');
+  // What went wrong, said in the page rather than in a browser pop-up.
+  const [pageError, setPageError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [ackError, setAckError] = useState('');
+  // A second click before the next render must not run the action twice.
+  const lock = useRef(false);
+  const once = async (fn) => {
+    if (lock.current) return;
+    lock.current = true;
+    try { await fn(); } finally { lock.current = false; }
+  };
 
   // Acknowledgement & Regeneration States
   const [ackModal, setAckModal] = useState({
@@ -80,7 +112,7 @@ export default function Reconciliation() {
       if (filters.status) params.status = filters.status;
       await api.reports.reconSummaryPdf(params);
     } catch (err) {
-      alert(err.message || 'Failed to download reconciliation PDF');
+      setPageError(errOf(err, 'Failed to download reconciliation PDF'));
     } finally {
       setPdfLoading(false);
     }
@@ -98,7 +130,7 @@ export default function Reconciliation() {
       setRows(list);
       setStats(s);
       setReopenQueue((rq || []).filter((r) => r.status === 'PENDING'));
-    }).finally(() => setLoading(false));
+    }).catch((err) => setPageError(errOf(err, 'The statements could not be loaded.'))).finally(() => setLoading(false));
   }
 
   useEffect(load, [filters.status, filters.period_type, filters.scope, filters.aging]);
@@ -108,7 +140,14 @@ export default function Reconciliation() {
   }, []);
 
   async function openDetail(row) {
-    setDetail(await api.reconciliation.get(row.id));
+    setPageError('');
+    setActionError('');
+    try {
+      setDetail(await api.reconciliation.get(row.id));
+    } catch (err) {
+      setPageError(errOf(err, 'That statement could not be opened.'));
+      return;
+    }
     setOverrideReason('');
     setReopenReason('');
     setAckFeedback(null);
@@ -122,8 +161,10 @@ export default function Reconciliation() {
     return fresh;
   }
 
-  async function handleRun(e) {
-    e.preventDefault();
+  function openRun() { setRunForm(runForm0()); setError(''); setShowRun(true); }
+
+  const handleRun = (e) => { e.preventDefault(); return once(runNow); };
+  async function runNow() {
     setError('');
     try {
       const body = {
@@ -133,17 +174,19 @@ export default function Reconciliation() {
         contract_id: runForm.scope === 'REIA_CONTRACT' ? runForm.contract_id : undefined,
         trading_client_id: runForm.scope === 'TRADING_CLIENT' ? runForm.trading_client_id : undefined,
       };
-      await api.reconciliation.run(body);
+      const made = await api.reconciliation.run(body);
       setShowRun(false);
-      setRunForm(RUN_FORM);
-      load();
+      setRunForm(runForm0());
+      await load();
+      if (made?.id) openDetail(made);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to run reconciliation.');
     }
   }
 
-  async function handleOverride(itemId) {
-    if (!overrideReason.trim()) return alert('Override reason required');
+  const handleOverride = (itemId) => once(async () => {
+    setActionError('');
+    if (!overrideReason.trim()) { setActionError('Write the reason in "Override reason" below the table first.'); return; }
     try {
       await api.reconciliation.override(detail.id, itemId, overrideReason);
       setOverrideReason('');
@@ -154,11 +197,12 @@ export default function Reconciliation() {
       });
       await refreshDetail();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to override');
+      setActionError(errOf(err, 'Failed to override'));
     }
-  }
+  });
 
-  async function handleRaiseDispute(itemId) {
+  const handleRaiseDispute = (itemId) => once(async () => {
+    setActionError('');
     try {
       await api.reconciliation.raiseDispute(detail.id, {
         item_id: itemId,
@@ -172,11 +216,12 @@ export default function Reconciliation() {
       });
       await refreshDetail();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to raise dispute');
+      setActionError(errOf(err, 'Failed to raise dispute'));
     }
-  }
+  });
 
-  async function handleSignoffRequest() {
+  const handleSignoffRequest = () => once(async () => {
+    setActionError('');
     try {
       await api.reconciliation.requestSignoff(detail.id);
       setAckFeedback({
@@ -186,13 +231,14 @@ export default function Reconciliation() {
       });
       await refreshDetail();
     } catch (err) {
-      const msg = err.response?.data?.error || err.message || 'Failed to request sign-off';
-      alert(msg);
+      setActionError(errOf(err, 'Failed to request sign-off'));
     }
-  }
+  });
 
   // Open Acknowledgement Modal
   function triggerAckModal(decision) {
+    setAckError('');
+    setActionError('');
     setAckModal({
       open: true,
       decision,
@@ -202,13 +248,14 @@ export default function Reconciliation() {
   }
 
   // Submit Acknowledgement
-  async function submitAcknowledgement() {
+  const submitAcknowledgement = () => once(async () => {
+    setAckError('');
     if (ackModal.decision === 'DISAGREE' && !ackModal.remarks.trim()) {
-      alert('Please provide the reason / discrepancy notes for disagreement.');
+      setAckError('Say what is not agreed.');
       return;
     }
     if (ackModal.decision === 'AGREE' && !ackModal.confirmed) {
-      alert('Please check the confirmation box before signing off.');
+      setAckError('Tick the confirmation before signing off.');
       return;
     }
 
@@ -231,15 +278,15 @@ export default function Reconciliation() {
       setAckModal({ open: false, decision: 'AGREE', remarks: '', confirmed: false });
       await refreshDetail();
     } catch (err) {
-      const msg = err.response?.data?.error || err.message || 'Failed to process acknowledgement';
-      alert(msg);
+      setAckError(errOf(err, 'Failed to process acknowledgement'));
     } finally {
       setAckLoading(false);
     }
-  }
+  });
 
   // Handle Regenerate Statement
-  async function handleRegenerate() {
+  const handleRegenerate = () => once(async () => {
+    setActionError('');
     setRegenerateLoading(true);
     setAckFeedback(null);
     try {
@@ -259,10 +306,11 @@ export default function Reconciliation() {
     } finally {
       setRegenerateLoading(false);
     }
-  }
+  });
 
-  async function handleReopenRequest() {
-    if (!reopenReason.trim()) return alert('Reason required');
+  const handleReopenRequest = () => once(async () => {
+    setActionError('');
+    if (!reopenReason.trim()) { setActionError('Say why the period should be reopened.'); return; }
     try {
       await api.reconciliation.reopenRequest(detail.id, reopenReason);
       setReopenReason('');
@@ -273,14 +321,19 @@ export default function Reconciliation() {
       });
       await refreshDetail();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to submit reopen request');
+      setActionError(errOf(err, 'Failed to submit reopen request'));
     }
-  }
+  });
 
-  async function actReopen(id, decision) {
-    await api.reconciliation.actReopen(id, decision);
+  const actReopen = (id, decision) => once(async () => {
+    setPageError('');
+    try {
+      await api.reconciliation.actReopen(id, decision);
+    } catch (err) {
+      setPageError(errOf(err, 'The reopen request could not be decided.'));
+    }
     load();
-  }
+  });
 
   const columns = [
     { key: 'recon_no', header: 'Recon #' },
@@ -304,7 +357,7 @@ export default function Reconciliation() {
               {pdfLoading ? 'Preparing PDF…' : 'Download PDF Report'}
             </button>
             {CAN_WRITE.includes(user?.role) && (
-              <button className="btn btn-secondary" onClick={() => setShowRun(true)}>+ Run Reconciliation</button>
+              <button className="btn btn-secondary" onClick={openRun}>+ Run Reconciliation</button>
             )}
           </div>
         )}
@@ -319,6 +372,7 @@ export default function Reconciliation() {
 
       {view === 'main' && (
       <>
+      {pageError && <div className="form-error" role="alert">{pageError}</div>}
       {stats && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
           <StatPill label="Auto-match avg" value={`${stats.avg_auto_match_pct}%`} />
@@ -420,12 +474,14 @@ export default function Reconciliation() {
           )}
           <div className="form-grid">
             <Field label="Period type">
-              <select value={runForm.period_type} onChange={(e) => setRunForm({ ...runForm, period_type: e.target.value })}>
+              <select value={runForm.period_type} onChange={(e) => setRunForm({ ...runForm, period_type: e.target.value, period: e.target.value === 'MONTHLY' ? lastMonth() : '' })}>
                 {['MONTHLY', 'QUARTERLY', 'ANNUAL'].map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
             </Field>
             <Field label="Period">
-              <input required placeholder="YYYY-MM" value={runForm.period} onChange={(e) => setRunForm({ ...runForm, period: e.target.value })} />
+              {runForm.period_type === 'MONTHLY'
+                ? <input required type="month" value={runForm.period} onChange={(e) => setRunForm({ ...runForm, period: e.target.value })} />
+                : <input required placeholder={runForm.period_type === 'QUARTERLY' ? 'YYYY-Qn, e.g. 2026-Q2' : 'Financial year, e.g. 2026-27'} value={runForm.period} onChange={(e) => setRunForm({ ...runForm, period: e.target.value })} />}
             </Field>
           </div>
           <div className="form-actions">
@@ -455,6 +511,8 @@ export default function Reconciliation() {
                 <div>{ackFeedback.message}</div>
               </div>
             )}
+
+            {actionError && <div className="form-error" role="alert">{actionError}</div>}
 
             {/* Quick Metrics Grid */}
             <div className="detail-grid">
@@ -499,7 +557,7 @@ export default function Reconciliation() {
                   border: `1px solid ${detail.sjvn_ack_at ? '#a7f3d0' : 'var(--border)'}`,
                   borderRadius: 6,
                 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: detail.sjvn_ack_at ? '#065f46' : 'var(--text-muted)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'none', color: detail.sjvn_ack_at ? '#065f46' : 'var(--text-muted)' }}>
                     🏛️ SJVN REIA Desk Sign-Off
                   </div>
                   {detail.sjvn_ack_at ? (
@@ -521,7 +579,7 @@ export default function Reconciliation() {
                   border: `1px solid ${detail.counterparty_ack_at ? '#a7f3d0' : 'var(--border)'}`,
                   borderRadius: 6,
                 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: detail.counterparty_ack_at ? '#065f46' : 'var(--text-muted)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'none', color: detail.counterparty_ack_at ? '#065f46' : 'var(--text-muted)' }}>
                     🏢 Counterparty (Buyer/Seller) Sign-Off
                   </div>
                   {detail.counterparty_ack_at ? (
@@ -560,13 +618,13 @@ export default function Reconciliation() {
                       {!!it.pattern_flag && <div style={{ color: 'var(--error)', fontSize: 11 }}>Pattern flag — systemic?</div>}
                       {it.notes && <div style={{ opacity: 0.6, fontSize: 11 }}>{it.notes}</div>}
                     </td>
-                    <td>{it.metered_value ?? '—'}</td>
-                    <td>{it.billed_value ?? '—'}</td>
-                    <td>{it.paid_value ?? it.sap_reference_amount ?? '—'}</td>
-                    <td>{it.variance}</td>
+                    <td>{figure(it.metered_value, it.unit)}</td>
+                    <td>{figure(it.billed_value, it.unit)}</td>
+                    <td>{figure(it.paid_value ?? it.sap_reference_amount, it.unit)}</td>
+                    <td>{figure(it.variance, it.unit)}</td>
                     <td><MatchCell status={it.match_status} /></td>
                     <td>
-                      {CAN_WRITE.includes(user?.role) && ['EXCEPTION', 'CARRIED'].includes(it.match_status) && (
+                      {CAN_WRITE.includes(user?.role) && ['EXCEPTION', 'CARRIED'].includes(it.match_status) && !it.dispute_id && !['CLOSED', 'AGREED', 'DISPUTED'].includes(detail.status) && (
                         <div className="cell-actions">
                           <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleOverride(it.id)}>Override</button>
                           <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRaiseDispute(it.id)}>→ Dispute</button>
@@ -579,7 +637,7 @@ export default function Reconciliation() {
               </tbody>
             </table>
             </div>
-            {CAN_WRITE.includes(user?.role) && (
+            {CAN_WRITE.includes(user?.role) && (detail.items || []).some((it) => ['EXCEPTION', 'CARRIED'].includes(it.match_status) && !it.dispute_id) && !['CLOSED', 'AGREED', 'DISPUTED'].includes(detail.status) && (
               <Field label="Override reason (required before Override)">
                 <input value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Why accepting variance..." />
               </Field>
@@ -607,16 +665,18 @@ export default function Reconciliation() {
 
               {CAN_WRITE.includes(user?.role) && ['PENDING_SIGN_OFF', 'AUTO_MATCHED', 'NEEDS_REVIEW'].includes(detail.status) && (
                 <>
+                  {!detail.sjvn_ack_at && (
                   <button type="button" className="btn btn-success" onClick={() => triggerAckModal('AGREE')}>
                     ✓ SJVN Agree & Sign-Off
                   </button>
+                  )}
                   <button type="button" className="btn btn-danger" onClick={() => triggerAckModal('DISAGREE')}>
                     ✗ Disagree & Flag Dispute
                   </button>
                 </>
               )}
 
-              {CAN_WRITE.includes(user?.role) && (
+              {CAN_REGENERATE.includes(user?.role) && !['CLOSED', 'AGREED'].includes(detail.status) && !detail.sjvn_ack_at && !detail.counterparty_ack_at && (
                 <button
                   type="button"
                   className="btn btn-ghost"
@@ -639,6 +699,8 @@ export default function Reconciliation() {
             <div style={{ marginTop: 24, marginBottom: 24 }}>
               <DocumentManager 
                 moduleName="RECONCILIATION"
+                contractId={detail.contract_id}
+                canUpload={CAN_WRITE.includes(user?.role)}
                 title="Reconciliation Evidence & Approvals" 
               />
             </div>
@@ -646,7 +708,7 @@ export default function Reconciliation() {
             <div className="section-title" style={{ marginTop: 14 }}>Audit trail</div>
             <ul style={{ paddingLeft: 18, fontSize: 13 }}>
               {(detail.events || []).map((ev) => (
-                <li key={ev.id}>{fmtDateTime(ev.created_at)} — {ev.event_type} by {ev.actor_name}</li>
+                <li key={ev.id}>{fmtDateTime(ev.created_at)} — {eventWords(ev.event_type)} by {ev.actor_name}</li>
               ))}
             </ul>
           </div>
@@ -661,6 +723,7 @@ export default function Reconciliation() {
         width={560}
       >
         <div>
+          {ackError && <div className="form-error" role="alert">{ackError}</div>}
           {ackModal.decision === 'AGREE' ? (
             <div>
               <div style={{
@@ -680,7 +743,7 @@ export default function Reconciliation() {
                 <div><strong>Period:</strong> {detail?.period} ({detail?.data_basis})</div>
                 <div><strong>Entity:</strong> {detail?.contract_no || detail?.trading_client_name}</div>
                 <div><strong>Auto-Match Accuracy:</strong> {detail?.auto_match_pct}%</div>
-                <div><strong>Signatory:</strong> {user?.name} ({user?.role})</div>
+                <div><strong>Signatory:</strong> {user?.name} ({String(user?.role || '').replaceAll('_', ' ')})</div>
               </div>
 
               <Field label="Sign-off Remarks / Notes (optional)">

@@ -541,7 +541,7 @@ router.post('/:id/penny-drop', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res
 });
 
 router.post('/:id/approve', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
-  const { decision, remarks } = req.body;
+  const { decision, remarks, admin_direct_admit } = req.body;
   // Unvalidated, this wrote `status = decision` — an omitted field tripped the
   // NOT NULL constraint and came back a 500 rather than saying what was wrong.
   const badDecision = invalidDecision(decision);
@@ -551,6 +551,18 @@ router.post('/:id/approve', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =
 
   if (decision === 'APPROVED') {
     seedRegulatoryChecklist(entity.id, entity.entity_type);
+
+    if (admin_direct_admit && ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN'].includes(req.user.role)) {
+      db.prepare(`
+        UPDATE entity_regulatory_approvals
+        SET status = 'VERIFIED', verified_by = ?, verified_at = datetime('now'), notes = COALESCE(notes, 'Admitted & cleared directly by SJVN Admin')
+        WHERE entity_id = ? AND is_mandatory = 1 AND status != 'VERIFIED'
+      `).run(req.user.name || req.user.username || 'SJVN Admin', entity.id);
+
+      db.prepare(`UPDATE entities SET is_penny_drop_verified = 1 WHERE id = ?`).run(entity.id);
+      entity.is_penny_drop_verified = 1;
+    }
+
     const { summary } = refreshRegulatorySummary(entity.id);
     if (!summary.ready_for_approval) {
       return res.status(400).json({
@@ -568,7 +580,7 @@ router.post('/:id/approve', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =
   }
 
   db.prepare(`UPDATE entities SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(decision, req.params.id);
-  logAudit({ req, user: req.user, action: `ENTITY_${decision}`, module: 'REIA', entityType: 'entity', entityId: entity.id, details: { remarks } });
+  logAudit({ req, user: req.user, action: `ENTITY_${decision}`, module: 'REIA', entityType: 'entity', entityId: entity.id, details: { remarks, admin_direct_admit: !!admin_direct_admit } });
   res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id)));
 });
 

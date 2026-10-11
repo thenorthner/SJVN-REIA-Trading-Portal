@@ -1,0 +1,13 @@
+{
+  "name": "functional-tree",
+  "private": true,
+  "description": "Builds the functional-tree PDF and its summary deck",
+  "type": "module",
+  "scripts": {
+    "pdf": "node build.mjs",
+    "deck": "node build-deck.mjs"
+  },
+  "dependencies": {
+    "pptxgenjs": "^4.0.1"
+  }
+}

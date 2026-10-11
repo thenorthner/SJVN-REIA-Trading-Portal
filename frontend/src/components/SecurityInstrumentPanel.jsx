@@ -14,6 +14,18 @@ export const SFMS_TYPES = [
   ['MT760', 'MT760 / IFN 760 COV — guarantee issued'], ['MT767', 'MT767 / IFN 767 COV — guarantee amended'],
   ['MT700', 'MT700 — letter of credit issued'], ['MT707', 'MT707 — letter of credit amended'], ['OTHER', 'Other bank confirmation'],
 ];
+/** What happened to an instrument, in words — the same on SJVN's screen and the counterparty's. */
+export const EVENT_LABEL = {
+  CREATE: 'Recorded by SJVN', SUBMITTED: 'Submitted', SUBMISSION_ACCEPTED: 'Accepted by SJVN', SUBMISSION_REJECTED: 'Refused by SJVN',
+  VERIFIED: 'Bank confirmation recorded', DOCUMENT_ATTACHED: 'Document attached', AMENDMENT_SUBMITTED: 'Amendment submitted',
+  AMENDMENT_ACCEPTED: 'Amendment taken on record', AMENDMENT_REJECTED: 'Amendment refused', AMENDMENT_WITHDRAWN: 'Amendment withdrawn',
+  RENEW: 'Renewed', RELEASE_REQUESTED: 'Release requested', RELEASE_REJECTED: 'Release refused', RELEASED: 'Released',
+  UTILIZE: 'Drawn on', REPLENISH: 'Replenished', ADEQUACY_OVERRIDE: 'Adequacy override',
+  INVOCATION_NOTICE_ISSUED: 'Demand notice issued', INVOCATION_CLAIMED: 'Claim lodged with the bank',
+  INVOCATION_FUNDS_RECEIVED: 'Funds received under the demand', INVOCATION_REJECTED: 'Demand refused by the bank',
+};
+export const eventLabel = (type) => EVENT_LABEL[type] || String(type || '').replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+
 /** An amendment's changes in words, with the dates as people write them. */
 export const changeText = (changes) => (changes || []).map((c) => c.text.replace(/\d{4}-\d{2}-\d{2}/g, (d) => fmtDate(d))).join('; ');
 const TONE = { EXPIRED: ['#fef2f2', '#b91c1c'], CRITICAL: ['#fef2f2', '#b91c1c'], WARN: ['#fffbeb', '#b45309'], OK: ['#f0fdf4', '#15803d'] };
@@ -285,7 +297,7 @@ export default function SecurityInstrumentPanel({ instrumentId, onChanged }) {
             {d.bank_reference_no && <> Bank's reference on record: <strong>{d.bank_reference_no}</strong>.</>}
           </p>
         )}
-        {sjvn && d.can_manage && d.status !== 'DRAFT' && mode !== 'sfms' && (
+        {sjvn && d.can_manage && !['DRAFT', 'CLOSED', 'RELEASED'].includes(d.status) && mode !== 'sfms' && (
           <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 10 }} onClick={() => setMode('sfms')}>{d.sfms.confirmed ? 'Update SFMS details' : 'Record SFMS advice'}</button>
         )}
         {mode === 'sfms' && <SfmsForm d={d} onDone={took} onCancel={() => setMode(null)} />}
