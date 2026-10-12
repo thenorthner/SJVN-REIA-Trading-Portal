@@ -7,7 +7,7 @@ import { PageHeader, Modal, Field } from '../components/ui.jsx';
 import {
   Inbox, Send, Archive, Search, Reply, ReplyAll, Forward, ArchiveRestore, Trash2, Paperclip, X,
   Mail as MailIcon, MailOpen, Plus, FileText, Settings, ArrowDownUp, Star, RotateCcw, Printer,
-  Table as TableIcon, Download, CheckCheck,
+  Table as TableIcon, Download, CheckCheck, AlertTriangle, Info, ShieldAlert, Scale,
 } from 'lucide-react';
 import './Mail-elite.css';
 
@@ -121,9 +121,14 @@ function printThread(thread, printedBy) {
     .body td, .body th { border: 1px solid #000; padding: 3px 8px; }
     footer { margin-top: 12px; font: 9pt Arial, sans-serif; color: #444; }
   </style></head><body>
-    <header><small>SJVN — RE Commercial &amp; Trading Platform · In-portal mail</small><h1>${esc(subject)}</h1></header>
+    <header><small>SJVN — RE Commercial &amp; Trading Platform · Quick Connect (Informal Operational Facility)</small><h1>${esc(subject)}</h1></header>
     ${messages}
-    <footer>Printed by ${esc(printedBy)} on ${esc(new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }))} · ${thread.messages.length} message${thread.messages.length === 1 ? '' : 's'}</footer>
+    <footer>
+      <div style="margin: 12px 0 6px; padding: 8px 12px; border: 1px dashed #777; font-size: 8.5pt; color: #444; background: #fafafa; border-radius: 4px;">
+        <strong>Legal &amp; Contractual Notice:</strong> Quick Connect is an in-portal operational coordination facility and does NOT constitute an official, statutory, or legal mode of communication under PPA/PSA agreements or CERC regulations. Formal contractual notices must be served through designated official channels.
+      </div>
+      Printed by ${esc(printedBy)} on ${esc(new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }))} · ${thread.messages.length} message${thread.messages.length === 1 ? '' : 's'}
+    </footer>
   </body></html>`;
 
   const frame = document.createElement('iframe');
@@ -366,6 +371,27 @@ function Compose({ draft, onClose, onSent }) {
     <Modal open onClose={close} title={draft.title || 'New message'} width={760}>
       <form onSubmit={submit} className="mail-compose">
         {error && <div className="alert alert-error" role="alert">{error}</div>}
+
+        <div className="mail-compose-disclaimer" style={{
+          padding: '10px 14px',
+          background: 'rgba(59, 130, 246, 0.05)',
+          border: '1px solid rgba(59, 130, 246, 0.2)',
+          borderRadius: '6px',
+          fontSize: '12px',
+          color: '#475569',
+          lineHeight: 1.45,
+          marginBottom: '14px',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '10px'
+        }}>
+          <ShieldAlert size={16} style={{ color: '#2563eb', flexShrink: 0, marginTop: '2px' }} />
+          <div>
+            <strong>Informal Operational Facility:</strong> Quick Connect messages are internal operational notes between portal users.{' '}
+            <span style={{ color: '#b91c1c', fontWeight: 600 }}>Do not use this facility for official contractual or statutory notices</span> (e.g. force majeure, payment default, billing disputes, or termination notices), which must follow prescribed formal contractual procedure.
+          </div>
+        </div>
+
         <Field label="To" htmlFor="mail-to">
           <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
@@ -475,6 +501,9 @@ function SignatureSettings({ value, onClose, onSaved }) {
           />
         </Field>
         <div className="mail-draft-note">Added under every new message, reply and forward. Leave it empty for none.</div>
+        <div className="mail-draft-note" style={{ marginTop: 6, fontSize: '11px', color: '#64748b' }}>
+          Note: Quick Connect is an informal operational facility for day-to-day desk queries, not an official legal communication channel.
+        </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
           <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save'}</button>
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
@@ -750,7 +779,31 @@ export default function Mail() {
 
   return (
     <div>
-      <PageHeader title="Quick Connect" subtitle="Messages between people on the portal. Nothing here is sent outside it." />
+      <PageHeader
+        title="Quick Connect"
+        subtitle="Informal desk-to-desk messaging facility for operational coordination and technical queries. (Not an official legal or contractual mode of communication under PPA/PSA/CERC rules.)"
+      />
+
+      <div className="mail-legal-advisory-banner" style={{
+        margin: '0 0 16px 0',
+        padding: '12px 18px',
+        background: 'linear-gradient(90deg, rgba(245, 158, 11, 0.08) 0%, rgba(245, 158, 11, 0.03) 100%)',
+        border: '1px solid rgba(245, 158, 11, 0.28)',
+        borderRadius: '8px',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '12px',
+        color: '#92400e',
+        fontSize: '13px',
+        lineHeight: '1.5'
+      }}>
+        <AlertTriangle size={18} style={{ color: '#d97706', flexShrink: 0, marginTop: '2px' }} />
+        <div style={{ flex: 1 }}>
+          <strong style={{ color: '#b45309', fontWeight: 700 }}>Operational Facilitation Notice:</strong>{' '}
+          Quick Connect is provided solely as an in-portal operational facility to streamline day-to-day desk inquiries, technical queries, and informal coordination between registered portal stakeholders.{' '}
+          <strong>Please note that this does NOT constitute an official, statutory, or legal mode of communication</strong> under PPA/PSA contracts, CERC regulations, or Indian contract law. Formal notices, dispute intimations, default notices, force majeure claims, or billing disputes must be served exclusively through designated contractual channels (registered post / official signed communication).
+        </div>
+      </div>
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
@@ -994,6 +1047,25 @@ export default function Mail() {
                     )}
                   </div>
                 ))}
+              </div>
+
+              <div className="mail-thread-disclaimer" style={{
+                margin: '14px 0 10px',
+                padding: '8px 14px',
+                background: 'rgba(100, 116, 139, 0.05)',
+                border: '1px dashed rgba(100, 116, 139, 0.22)',
+                borderRadius: '6px',
+                fontSize: '11.5px',
+                color: '#64748b',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}>
+                <Scale size={14} style={{ opacity: 0.7, flexShrink: 0 }} />
+                <span>
+                  <strong>Legal Disclaimer:</strong> Quick Connect is an informal operational facility for desk coordination only and is not an official legal or contractual mode of communication under PPA/PSA terms.
+                </span>
               </div>
 
               {!thread.trashed && (

@@ -2597,22 +2597,18 @@ function migrateCommercialRole() {
 
 function seedCommercialUsers() {
   try {
+    // Ensure existing commercial users are consolidated under COMMERCIAL_ADMIN
+    db.prepare(`UPDATE users SET role = 'COMMERCIAL_ADMIN', name = 'Sunil (Commercial Admin)' WHERE email IN ('commercial@sjvn.in', 'commercial.admin@sjvn.in')`).run();
+    db.prepare(`UPDATE users SET role = 'COMMERCIAL_ADMIN' WHERE role = 'COMMERCIAL_USER'`).run();
+
     const existing = db.prepare("SELECT id FROM users WHERE email = 'commercial@sjvn.in'").get();
     const hash = bcrypt.hashSync('password123', 8);
     if (!existing) {
       db.prepare(`
         INSERT INTO users (id, name, email, password_hash, role, linked_entity_id, is_active)
-        VALUES ('USR-COMMERCIAL-01', 'Anand (Commercial Ops)', 'commercial@sjvn.in', ?, 'COMMERCIAL_USER', NULL, 1)
+        VALUES ('USR-COMMERCIAL-01', 'Sunil (Commercial Admin)', 'commercial@sjvn.in', ?, 'COMMERCIAL_ADMIN', NULL, 1)
       `).run(hash);
-      console.log('[SEED] commercial@sjvn.in seeded');
-    }
-    const adminExisting = db.prepare("SELECT id FROM users WHERE email = 'commercial.admin@sjvn.in'").get();
-    if (!adminExisting) {
-      db.prepare(`
-        INSERT INTO users (id, name, email, password_hash, role, linked_entity_id, is_active)
-        VALUES ('USR-COMMERCIAL-02', 'Sunil (Commercial Admin)', 'commercial.admin@sjvn.in', ?, 'COMMERCIAL_ADMIN', NULL, 1)
-      `).run(hash);
-      console.log('[SEED] commercial.admin@sjvn.in seeded');
+      console.log('[SEED] commercial@sjvn.in seeded as COMMERCIAL_ADMIN');
     }
   } catch (e) {
     console.error('Failed to seed commercial users:', e.message);

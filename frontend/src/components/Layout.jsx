@@ -107,7 +107,7 @@ const NAV_INTERNAL = [
     section: 'Alerts',
     roles: [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.TRADING_ALL])],
     links: [
-      { to: '/mail', label: 'Quick Connect' },
+      { to: '/mail', label: 'Quick Connect', badge: 'Informal Desk', tooltip: 'Quick Connect — Operational desk facilitation only. Not an official legal / contractual mode of communication under PPA/PSA/CERC rules.' },
       { to: '/notification-board', label: 'Notification Board' },
     ],
   },
@@ -195,7 +195,7 @@ const NAV_SELLER = [
     roles: null,
     links: [
       { to: '/seller', label: 'My Dashboard', end: true },
-      { to: '/mail', label: 'Quick Connect' },
+      { to: '/mail', label: 'Quick Connect', badge: 'Informal Desk', tooltip: 'Quick Connect — Operational desk facilitation only. Not an official legal / contractual mode of communication under PPA/PSA/CERC rules.' },
       { to: '/notification-board', label: 'Notification Board' },
       { to: '/seller/team', label: 'My Team' },
       { to: '/seller/documents', label: 'My Documents & KYC' },
@@ -216,7 +216,7 @@ const NAV_BUYER = [
     roles: null,
     links: [
       { to: '/buyer', label: 'My Dashboard', end: true },
-      { to: '/mail', label: 'Quick Connect' },
+      { to: '/mail', label: 'Quick Connect', badge: 'Informal Desk', tooltip: 'Quick Connect — Operational desk facilitation only. Not an official legal / contractual mode of communication under PPA/PSA/CERC rules.' },
       { to: '/notification-board', label: 'Notification Board' },
       { to: '/buyer/team', label: 'My Team' },
       { to: '/buyer/documents', label: 'My Documents & KYC' },
@@ -240,7 +240,7 @@ const NAV_TRADING_CLIENT = [
       // the bidding engine, the bilateral desk, Billing & Settlement — which a
       // client can open but whose every call the API refuses.
       { to: '/trading/home', label: 'Home Dashboard', end: true },
-      { to: '/mail', label: 'Quick Connect' },
+      { to: '/mail', label: 'Quick Connect', badge: 'Informal Desk', tooltip: 'Quick Connect — Operational desk facilitation only. Not an official legal / contractual mode of communication under PPA/PSA/CERC rules.' },
       { to: '/trading/my-profile', label: 'My Profile & Portfolio' },
       { to: '/trading/my-bids', label: 'My Bids' },
       { to: '/trading/my-deals', label: 'My Deals' },
@@ -348,15 +348,32 @@ const NavGroup = ({ section, user }) => {
                 style={({ isActive }) => ({
                   ...(isKycLocked ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
                   fontSize: '14px', padding: '9px 14px', borderRadius: '8px', 
-                  color: isActive ? '#fff' : '#c7d2e6', margin: '2px 6px'
+                  color: isActive ? '#fff' : '#c7d2e6', margin: '2px 6px',
+                  display: 'flex', alignItems: 'center'
                 })}
+                title={l.tooltip || (l.to === '/mail' ? 'Quick Connect — Operational query desk only. Not an official legal / contractual mode of communication.' : undefined)}
                 onClick={(e) => {
                   if (isKycLocked) {
                     e.preventDefault();
                   }
                 }}
               >
-                {l.label}
+                <span>{l.label}</span>
+                {l.badge && (
+                  <span style={{
+                    marginLeft: 'auto',
+                    fontSize: '9.5px',
+                    padding: '1px 6px',
+                    borderRadius: '4px',
+                    background: 'rgba(234, 179, 8, 0.15)',
+                    color: '#fbbf24',
+                    fontWeight: 600,
+                    letterSpacing: '0.03em',
+                    textTransform: 'uppercase'
+                  }}>
+                    {l.badge}
+                  </span>
+                )}
                 {isKycLocked && <Lock size={12} style={{ marginLeft: 'auto', opacity: 0.5 }} />}
               </NavLink>
             );
@@ -550,8 +567,8 @@ export default function Layout() {
             <button
               className="icon-btn"
               onClick={() => navigate('/mail')}
-              aria-label={unreadMail ? `Quick Connect, ${unreadMail} unread` : 'Quick Connect'}
-              title="Quick Connect"
+              aria-label={unreadMail ? `Quick Connect (Operational Desk), ${unreadMail} unread` : 'Quick Connect (Operational Desk)'}
+              title="Quick Connect — Operational desk coordination facility (Not an official legal or contractual mode of communication)"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <rect x="3" y="5" width="18" height="14" rx="2" />

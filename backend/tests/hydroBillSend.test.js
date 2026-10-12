@@ -66,7 +66,7 @@ beforeEach(() => {
     WHERE contract_no = 'PPA/SJVN/NJHPS/001'
   `).run();
   contract = db.prepare(`SELECT * FROM contracts WHERE contract_no = 'PPA/SJVN/NJHPS/001'`).get();
-  reia = tokenFor('COMMERCIAL_USER');
+  reia = tokenFor('COMMERCIAL_ADMIN');
   viewer = tokenFor('MANAGEMENT');
 });
 
@@ -74,7 +74,7 @@ const post = (url, token, body) => request(app).post(url).set(auth(token)).send(
 const get = (url, token) => request(app).get(url).set(auth(token));
 
 async function draft() {
-  const maker = makeUser('COMMERCIAL_USER', { name: 'Send Maker' });
+  const maker = makeUser('COMMERCIAL_ADMIN', { name: 'Send Maker' });
   const b = await post('/api/hydro-billing', signToken(maker), { contract_id: contract.id, ...JUNE });
   return { id: b.body.id, maker };
 }

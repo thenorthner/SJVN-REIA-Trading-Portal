@@ -1182,16 +1182,16 @@ export async function runDelhiSplitConfirmation() {
   const results = await confirmProvisionalDelhiSplits({ actor: AUTO_DRAFT_ACTOR });
   for (const r of results) {
     if (r.status === 'CONFIRMED') {
-      pushNotification({ role: 'COMMERCIAL_USER', type: 'HYDRO_BILL_AUTO_DRAFT', message: `Delhi SLDC's account for ${r.month} is out and agrees with the Delhi split used for ${r.contract_no} — nothing to change.` });
+      pushNotification({ role: 'COMMERCIAL_ADMIN', type: 'HYDRO_BILL_AUTO_DRAFT', message: `Delhi SLDC's account for ${r.month} is out and agrees with the Delhi split used for ${r.contract_no} — nothing to change.` });
     } else if (r.status === 'CORRECTED') {
       pushNotification({
-        role: 'COMMERCIAL_USER',
+        role: 'COMMERCIAL_ADMIN',
         type: 'HYDRO_BILL_AUTO_DRAFT',
         message: `Delhi SLDC's account for ${r.month} is out and the Delhi split for ${r.contract_no} differs from the carried one: ${r.changes.join('; ')}. The allocation sheet has been corrected.`
           + (r.bill ? ` ${r.bill.bill_no} (${r.bill.status}) was drafted on the carried split — cancel it and draft again.` : ''),
       });
     } else if (r.status === 'DISAGREES') {
-      noteOnce('COMMERCIAL_USER', `Delhi SLDC's account for ${r.month} could not be applied to ${r.contract_no}: ${r.reason}. Check the Delhi rows of the allocation sheet by hand.`);
+      noteOnce('COMMERCIAL_ADMIN', `Delhi SLDC's account for ${r.month} could not be applied to ${r.contract_no}: ${r.reason}. Check the Delhi rows of the allocation sheet by hand.`);
     }
   }
   return results;
@@ -1251,18 +1251,18 @@ export async function runReaAutoDraft({ rpc = 'NRPC', lookbackMonths = 3, now = 
     const failed = bills.filter((b) => b.status === 'FAILED');
     const blocked = bills.filter((b) => b.status !== 'CREATED' && b.status !== 'EXISTS' && b.reason && !b.cascade);
     if (created.length) {
-      noteOnce('COMMERCIAL_USER', `${created.length} hydro station bill(s) drafted from the ${rpc} REA for ${from}${to === from ? '' : `..${to}`} — review and send for approval: ${created.map((b) => b.bill_no).join(', ')}`);
+      noteOnce('COMMERCIAL_ADMIN', `${created.length} hydro station bill(s) drafted from the ${rpc} REA for ${from}${to === from ? '' : `..${to}`} — review and send for approval: ${created.map((b) => b.bill_no).join(', ')}`);
     }
     // A month whose account has landed and which still did not get billed is
     // the desk's to fix — a missing allocation, an unbilled earlier month. Said
     // plainly, because the whole promise of drafting without being asked is
     // that silence means the bills are there.
     if (blocked.length) {
-      noteOnce('COMMERCIAL_USER', `Auto-draft left ${blocked.length} station-month(s) unbilled: ${reasons(blocked)}`);
+      noteOnce('COMMERCIAL_ADMIN', `Auto-draft left ${blocked.length} station-month(s) unbilled: ${reasons(blocked)}`);
     }
     for (const b of created) {
       const said = allocationNotice(b);
-      if (said) noteOnce('COMMERCIAL_USER', said);
+      if (said) noteOnce('COMMERCIAL_ADMIN', said);
     }
     // A station that threw is a fault in the platform, not a gap in the inputs.
     if (failed.length) {

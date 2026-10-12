@@ -357,8 +357,7 @@ const users = [
   { name: 'Sunrise Solar Pvt Ltd', email: 'seller@sunrise-solar.in', role: 'SELLER' },
   { name: 'State DISCOM Buyer', email: 'buyer@discom.gov.in', role: 'BUYER' },
   { name: 'ABC Trading Client', email: 'client@abctrading.in', role: 'TRADING_CLIENT' },
-  { name: 'Anand (Commercial Ops)', email: 'commercial@sjvn.in', role: 'COMMERCIAL_USER' },
-  { name: 'Sunil (Commercial Admin)', email: 'commercial.admin@sjvn.in', role: 'COMMERCIAL_ADMIN' },
+  { name: 'Sunil (Commercial Admin)', email: 'commercial@sjvn.in', role: 'COMMERCIAL_ADMIN' },
 ];
 
 const userIds = {};

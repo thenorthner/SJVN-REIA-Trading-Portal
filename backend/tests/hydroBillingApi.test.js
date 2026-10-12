@@ -76,7 +76,7 @@ beforeEach(() => {
   `).run(contract.id);
   contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract.id);
 
-  reia = tokenFor('COMMERCIAL_USER');
+  reia = tokenFor('COMMERCIAL_ADMIN');
   viewer = tokenFor('MANAGEMENT');
 });
 
@@ -465,9 +465,9 @@ describe('approval chain before a bill can be issued', () => {
   let makerTok, tok1, tok2, finalTok;
 
   beforeEach(() => {
-    maker = makeUser('COMMERCIAL_USER', { name: 'Maker' });
-    approver1 = makeUser('COMMERCIAL_USER', { name: 'Approver One' });
-    approver2 = makeUser('COMMERCIAL_USER', { name: 'Approver Two' });
+    maker = makeUser('COMMERCIAL_ADMIN', { name: 'Maker' });
+    approver1 = makeUser('COMMERCIAL_ADMIN', { name: 'Approver One' });
+    approver2 = makeUser('COMMERCIAL_ADMIN', { name: 'Approver Two' });
     final = makeUser('COMMERCIAL_ADMIN', { name: 'HOD' });
     makerTok = signFor(maker); tok1 = signFor(approver1);
     tok2 = signFor(approver2); finalTok = signFor(final);
@@ -617,7 +617,7 @@ describe('the beneficiary ledger once a bill is issued', () => {
   let billId;
 
   async function issueApproved() {
-    const maker = makeUser('COMMERCIAL_USER', { name: 'Ledger Maker' });
+    const maker = makeUser('COMMERCIAL_ADMIN', { name: 'Ledger Maker' });
     const hod = makeUser('COMMERCIAL_ADMIN', { name: 'Ledger HOD' });
     const b = await post('/api/hydro-billing', signFor(maker), { contract_id: contract.id, ...JUNE });
     await post(`/api/hydro-billing/${b.body.id}/send-for-approval`, signFor(maker), {
@@ -810,7 +810,7 @@ describe('release, print and despatch', () => {
   let billId;
 
   async function issued() {
-    const maker = makeUser('COMMERCIAL_USER', { name: 'Despatch Maker' });
+    const maker = makeUser('COMMERCIAL_ADMIN', { name: 'Despatch Maker' });
     const hod = makeUser('COMMERCIAL_ADMIN', { name: 'Despatch HOD' });
     const b = await post('/api/hydro-billing', signFor(maker), { contract_id: contract.id, ...JUNE });
     await post(`/api/hydro-billing/${b.body.id}/send-for-approval`, signFor(maker), {

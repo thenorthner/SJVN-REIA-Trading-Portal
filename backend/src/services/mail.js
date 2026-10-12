@@ -270,7 +270,7 @@ export function sendMessage(sender, {
   // The bell tells them something arrived; the message itself stays in Mail.
   for (const uid of allIds) {
     try {
-      pushNotification({ userId: uid, type: 'MAIL', message: `New mail from ${sender.name}: ${cleanSubject}` });
+      pushNotification({ userId: uid, type: 'MAIL', message: `Quick Connect (Operational): New message from ${sender.name}: ${cleanSubject}` });
     } catch { /* the message is already delivered; the bell is a courtesy */ }
   }
 

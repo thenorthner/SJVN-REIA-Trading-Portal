@@ -206,7 +206,7 @@ function HomeRoute() {
   if (isBuyerRole(role)) return <Navigate to="/buyer" replace />;
   if (isTradingClientRole(role)) return <Navigate to="/trading/my-profile" replace />;
   if (role === 'TRADING_USER') return <Navigate to="/trading" replace />;
-  if (['COMMERCIAL_USER', 'COMMERCIAL_ADMIN', 'COMMERCIAL'].includes(role)) return <Navigate to="/hydro-thermal" replace />;
+  if (['COMMERCIAL_ADMIN', 'COMMERCIAL'].includes(role)) return <Navigate to="/hydro-thermal" replace />;
   // The REIA admin works the same desk; without this it landed on the executive
   // dashboard, which it may not see, and met an "access restricted" wall.
   if (role === 'REIA_USER' || role === 'REIA_ADMIN') return <Navigate to="/reia" replace />;
