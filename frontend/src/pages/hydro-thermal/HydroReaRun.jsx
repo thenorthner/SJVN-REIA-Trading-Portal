@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
+import { HelpCircle } from 'lucide-react';
 import api from '../../api/client.js';
-import { Card, Table, Badge, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { Card, Table, Badge, Field, Modal, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 
 // Draft a run of months' hydro bills straight from the Regional Energy Account.
 //
@@ -118,6 +119,7 @@ export default function HydroReaRun({ onDone }) {
   const [result, setResult] = useState(null);
   const [progress, setProgress] = useState('');
   const [auto, setAuto] = useState(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   // The sweep's own state, reloaded after a manual run because that run is what
   // the next sweep will find already billed.
@@ -182,15 +184,33 @@ export default function HydroReaRun({ onDone }) {
   })));
 
   return (
-    <Card title="Bills from the Regional Energy Account">
-      <p style={{ marginTop: 0 }}>
-        Fetches each month&apos;s REA from NRPC, records the station energy, availability and free power it
-        accounts, and drafts that month&apos;s bill for every station ready to bill. Months run oldest first
-        so each bill carries the year&apos;s cumulative energy; nothing is issued. On nrpc.gov.in open
-        Commercial → Regional Energy Accounts → Provisional REA, copy the PDF link of each month and paste
-        them below — one per line. The same run happens by itself after each scheduled REA scan; this page is
-        for the months it could not reach, and for a link the scan does not have.
-      </p>
+    <Card
+      title="Bills from the Regional Energy Account"
+      actions={
+        <button
+          type="button"
+          className="btn btn-outline"
+          onClick={() => setShowGuide(true)}
+          title="View REA Fetch & Billing Instructions"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '5px 12px',
+            fontSize: '12px',
+            fontWeight: 500,
+            borderRadius: '6px',
+            color: '#475569',
+            border: '1px solid #cbd5e1',
+            background: '#ffffff',
+            cursor: 'pointer',
+          }}
+        >
+          <HelpCircle size={14} style={{ color: '#0284c7' }} />
+          <span>Instructions</span>
+        </button>
+      }
+    >
       <AutoDraftPanel status={auto} />
       <form onSubmit={run}>
         <Field label="REA PDF links (nrpc.gov.in)" htmlFor="rea-links">
@@ -219,9 +239,8 @@ export default function HydroReaRun({ onDone }) {
             {running ? 'Fetching REA and drafting…' : 'Fetch REA and draft bills'}
           </button>
         </div>
-        <p style={{ margin: '6px 0 0', fontSize: 12 }}>
-          Leave the months blank to bill exactly the months of the pasted links. Start from the first month of the
-          financial year that is not yet billed — a later month is only drafted once every month before it is.
+        <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-light)' }}>
+          Leave the months blank to bill exactly the months of the pasted links. Start from the first unbilled month of the financial year.
         </p>
       </form>
 
@@ -251,6 +270,52 @@ export default function HydroReaRun({ onDone }) {
             </p>
           )}
         </div>
+      )}
+
+      {showGuide && (
+        <Modal
+          open={showGuide}
+          onClose={() => setShowGuide(false)}
+          title="Bills from Regional Energy Account — Instructions & Process Guide"
+          width={600}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: '13.5px', lineHeight: 1.6, color: '#334155' }}>
+            <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '12px 14px' }}>
+              <h4 style={{ margin: '0 0 6px', fontSize: '14px', color: '#0369a1', fontWeight: 600 }}>
+                Purpose & Scope
+              </h4>
+              <p style={{ margin: 0 }}>
+                Fetches each month&apos;s REA from NRPC, records station energy, availability and free power accounts, and drafts that month&apos;s bill for every station ready to bill. Months run oldest first so each bill carries the year&apos;s cumulative energy; nothing is issued directly.
+              </p>
+            </div>
+
+            <div>
+              <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>
+                How to copy REA PDF links from NRPC
+              </h4>
+              <ol style={{ margin: 0, paddingLeft: 20 }}>
+                <li>Open <strong>nrpc.gov.in</strong> in your browser.</li>
+                <li>Navigate to <strong>Commercial → Regional Energy Accounts → Provisional REA</strong>.</li>
+                <li>Copy the PDF link of each month (e.g. <code>https://nrpc.gov.in/allfile/...REA0826_P.pdf</code>).</li>
+                <li>Paste the copied links into the text box above — one per line.</li>
+              </ol>
+            </div>
+
+            <div>
+              <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>
+                Date Range & Billing Sequence
+              </h4>
+              <ul style={{ margin: 0, paddingLeft: 20 }}>
+                <li>Leave the months blank to bill exactly the months of the pasted links.</li>
+                <li>Or choose From/To months starting from the first month of the financial year that is not yet billed — a later month is only drafted once every preceding month has been drafted.</li>
+              </ul>
+            </div>
+
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', fontSize: '12.5px', color: '#64748b' }}>
+              <strong>Automatic Sweep:</strong> The same run happens automatically after each scheduled REA scan. This desk form is reserved for months the automated scan could not reach, or for links the scan does not yet have.
+            </div>
+          </div>
+        </Modal>
       )}
     </Card>
   );
