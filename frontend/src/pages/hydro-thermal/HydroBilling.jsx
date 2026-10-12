@@ -605,7 +605,7 @@ export default function HydroBilling() {
   // Page-level view. `tab` is already taken by the preview's inner tabs.
   const [view, setView] = useState('billing');
   const { user } = useAuth();
-  const canWrite = ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+  const canWrite = ROLE_GROUPS.HYDRO_THERMAL_WRITE.includes(user?.role);
 
   const [stations, setStations] = useState([]);
   const [stationId, setStationId] = useState('');

@@ -38,7 +38,7 @@ function DocType({ row }) {
 
 export default function HydroLedger() {
   const { user } = useAuth();
-  const canWrite = ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+  const canWrite = ROLE_GROUPS.HYDRO_THERMAL_WRITE.includes(user?.role);
 
   const [stations, setStations] = useState([]);
   const [stationId, setStationId] = useState('');
