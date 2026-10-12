@@ -3,8 +3,10 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import {
-  PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtCurrency, fmtNumber,
+  PageHeader, Card, Table, Badge, Modal, Field, StatCard, Tabs, Tab, fmtCurrency, fmtNumber,
 } from '../../components/ui.jsx';
+import ModuleGuide from '../../components/ModuleGuide.jsx';
+import { getGuide } from '../../content/guides/index.js';
 
 // Sale bills a hydro station raises on the trader it sells through (PTC India).
 //
@@ -37,6 +39,7 @@ export default function HydroPtc() {
   const { user } = useAuth();
   const canWrite = ROLE_GROUPS.HYDRO_THERMAL_WRITE.includes(user?.role);
 
+  const [tab, setTab] = useState('bills');
   const [stations, setStations] = useState([]);
   const [stationId, setStationId] = useState('');
   const [bills, setBills] = useState([]);
@@ -108,76 +111,91 @@ export default function HydroPtc() {
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
 
-      <Card
-        title="Station"
-        actions={canWrite && (
-          <button
-            type="button" className="btn btn-primary"
-            onClick={() => setForm({ ...EMPTY, from_date: '', to_date: '', due_date: '' })}
+      <Tabs>
+        <Tab active={tab === 'bills'} onClick={() => setTab('bills')}>
+          PTC Sale bills{bills.length ? ` (${bills.length})` : ''}
+        </Tab>
+        <Tab active={tab === 'fyi'} onClick={() => setTab('fyi')}>
+          FYI
+        </Tab>
+      </Tabs>
+
+      {tab === 'fyi' && <ModuleGuide guide={getGuide('hydro-ptc')} />}
+
+      {tab === 'bills' && (
+        <>
+          <Card
+            title="Station"
+            actions={canWrite && (
+              <button
+                type="button" className="btn btn-primary"
+                onClick={() => setForm({ ...EMPTY, from_date: '', to_date: '', due_date: '' })}
+              >
+                Raise a PTC sale bill
+              </button>
+            )}
           >
-            Raise a PTC sale bill
-          </button>
-        )}
-      >
-        <Field label="Station" htmlFor="pt-station">
-          <select id="pt-station" value={stationId} onChange={(e) => setStationId(e.target.value)}>
-            {stations.map((s) => (
-              <option key={s.id} value={s.id}>{s.station_name} — {s.contract_no}</option>
-            ))}
-          </select>
-        </Field>
-      </Card>
+            <Field label="Station" htmlFor="pt-station">
+              <select id="pt-station" value={stationId} onChange={(e) => setStationId(e.target.value)}>
+                {stations.map((s) => (
+                  <option key={s.id} value={s.id}>{s.station_name} — {s.contract_no}</option>
+                ))}
+              </select>
+            </Field>
+          </Card>
 
-      {bills.length > 0 && (
-        <div className="stat-grid">
-          <StatCard label="Trades billed" value={outstanding.length} hint="on this station" />
-          <StatCard label="Energy traded" value={`${fmtNumber(totalEnergy / 1e6, 2)} MU`} hint="across those trades" />
-          <StatCard label="Net billed" value={fmtCurrency(totalNet)} tone="primary" hint="gross sale less trading expense" />
-        </div>
+          {bills.length > 0 && (
+            <div className="stat-grid">
+              <StatCard label="Trades billed" value={outstanding.length} hint="on this station" />
+              <StatCard label="Energy traded" value={`${fmtNumber(totalEnergy / 1e6, 2)} MU`} hint="across those trades" />
+              <StatCard label="Net billed" value={fmtCurrency(totalNet)} tone="primary" hint="gross sale less trading expense" />
+            </div>
+          )}
+
+          <Card title={`PTC sale bills for ${station?.station_name || 'this station'}`}>
+            <Table
+              columns={[
+                { key: 'bill_no', header: 'Bill no.' },
+                { key: 'exchange_beneficiary', header: 'Counterparty' },
+                {
+                  key: 'from_date',
+                  header: 'Trade window',
+                  render: (r) => `${r.from_date} → ${r.to_date}`,
+                },
+                { key: 'energy_kwh', header: 'Energy', render: (r) => `${fmtNumber(r.energy_kwh / 1e6, 2)} MU` },
+                { key: 'gross_sale', header: 'Gross sale', render: (r) => fmtCurrency(r.gross_sale) },
+                {
+                  key: 'trading_expense',
+                  header: 'Trading expense',
+                  render: (r) => (Number(r.trading_expense) ? `− ${fmtCurrency(r.trading_expense)}` : '—'),
+                },
+                { key: 'net_amount', header: 'Net', render: (r) => <strong>{fmtCurrency(r.net_amount)}</strong> },
+                { key: 'due_date', header: 'Due', render: (r) => r.due_date || '—' },
+                {
+                  key: 'status',
+                  header: 'Status',
+                  render: (r) => (
+                    <span>
+                      <Badge status={r.status} label={r.status} />
+                      <span style={{ display: 'block', fontSize: 11, color: 'var(--text-light)' }}>
+                        {r.approval_status === 'APPROVED' ? 'approved' : r.approval_status?.toLowerCase().replace('_', ' ')}
+                        {r.dispatched_at ? ' · despatched' : r.released_at ? ' · released' : ''}
+                      </span>
+                    </span>
+                  ),
+                },
+              ]}
+              rows={bills}
+              emptyMessage="No PTC sale bill has been raised on this station."
+            />
+            <p style={{ color: 'var(--text-light)', fontSize: 12, marginTop: 10 }}>
+              A PTC sale bill goes up the same approval chain as a tariff bill, and once issued it opens
+              an account for the counterparty on the Hydro Account Display — where its payment, any
+              reversal and its surcharge are handled exactly the same way.
+            </p>
+          </Card>
+        </>
       )}
-
-      <Card title={`PTC sale bills for ${station?.station_name || 'this station'}`}>
-        <Table
-          columns={[
-            { key: 'bill_no', header: 'Bill no.' },
-            { key: 'exchange_beneficiary', header: 'Counterparty' },
-            {
-              key: 'from_date',
-              header: 'Trade window',
-              render: (r) => `${r.from_date} → ${r.to_date}`,
-            },
-            { key: 'energy_kwh', header: 'Energy', render: (r) => `${fmtNumber(r.energy_kwh / 1e6, 2)} MU` },
-            { key: 'gross_sale', header: 'Gross sale', render: (r) => fmtCurrency(r.gross_sale) },
-            {
-              key: 'trading_expense',
-              header: 'Trading expense',
-              render: (r) => (Number(r.trading_expense) ? `− ${fmtCurrency(r.trading_expense)}` : '—'),
-            },
-            { key: 'net_amount', header: 'Net', render: (r) => <strong>{fmtCurrency(r.net_amount)}</strong> },
-            { key: 'due_date', header: 'Due', render: (r) => r.due_date || '—' },
-            {
-              key: 'status',
-              header: 'Status',
-              render: (r) => (
-                <span>
-                  <Badge status={r.status} label={r.status} />
-                  <span style={{ display: 'block', fontSize: 11, color: 'var(--text-light)' }}>
-                    {r.approval_status === 'APPROVED' ? 'approved' : r.approval_status?.toLowerCase().replace('_', ' ')}
-                    {r.dispatched_at ? ' · despatched' : r.released_at ? ' · released' : ''}
-                  </span>
-                </span>
-              ),
-            },
-          ]}
-          rows={bills}
-          emptyMessage="No PTC sale bill has been raised on this station."
-        />
-        <p style={{ color: 'var(--text-light)', fontSize: 12, marginTop: 10 }}>
-          A PTC sale bill goes up the same approval chain as a tariff bill, and once issued it opens
-          an account for the counterparty on the Hydro Account Display — where its payment, any
-          reversal and its surcharge are handled exactly the same way.
-        </p>
-      </Card>
 
       <Modal open={!!form} onClose={() => { setForm(null); setNet(null); }} title="Raise a PTC sale bill" width={660}>
         {form && (

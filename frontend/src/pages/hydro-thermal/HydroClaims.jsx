@@ -6,6 +6,8 @@ import {
   PageHeader, Card, Table, Badge, Modal, Field, StatCard, Tabs, Tab,
   fmtCurrency, fmtNumber,
 } from '../../components/ui.jsx';
+import ModuleGuide from '../../components/ModuleGuide.jsx';
+import { getGuide } from '../../content/guides/index.js';
 
 // What a hydro station bills besides its monthly energy bill.
 //
@@ -168,7 +170,12 @@ export default function HydroClaims() {
         <Tab active={tab === 'tcs'} onClick={() => setTab('tcs')}>
           TCS{tcs.length ? ` (${tcs.length})` : ''}
         </Tab>
+        <Tab active={tab === 'fyi'} onClick={() => setTab('fyi')}>
+          FYI
+        </Tab>
       </Tabs>
+
+      {tab === 'fyi' && <ModuleGuide guide={getGuide('hydro-claims')} />}
 
       {tab === 'charges' && (
         <>
