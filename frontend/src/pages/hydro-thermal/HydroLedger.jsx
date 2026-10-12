@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
@@ -214,10 +215,30 @@ export default function HydroLedger() {
         </div>
 
         {accounts.length === 0 && (
-          <p style={{ color: 'var(--text-light)', fontSize: 13 }}>
-            An account opens for each beneficiary when a bill is issued. Nothing has been issued for
-            this station yet.
-          </p>
+          <div style={{
+            marginTop: 16,
+            padding: '16px 20px',
+            background: 'var(--slate-50, #f8fafc)',
+            border: '1px solid var(--border, #e2e8f0)',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+          }}>
+            <div>
+              <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 14, marginBottom: 4 }}>
+                No Issued Bills Yet for this Station
+              </div>
+              <div style={{ color: 'var(--text-light)', fontSize: 13, maxWidth: 640, lineHeight: 1.5 }}>
+                Beneficiary running accounts (PB debit documents) are created automatically as soon as a station bill is <strong>Approved and Issued</strong>. Once issued, each beneficiary&apos;s allocation share, outstanding balance, and payment ledger appear here.
+              </div>
+            </div>
+            <Link to="/hydro-thermal/hydro-billing" className="btn btn-outline btn-sm" style={{ whiteSpace: 'nowrap' }}>
+              Go to Hydro Billing →
+            </Link>
+          </div>
         )}
       </Card>
 
