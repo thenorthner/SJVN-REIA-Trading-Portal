@@ -427,24 +427,33 @@ a:hover { text-decoration: underline; }
 
 .nav { padding: 14px 10px 24px; flex: 1; }
 
-.nav-section { margin-bottom: 18px; }
+.nav-section { margin-bottom: 14px; }
 
 .nav-section-title {
-  font-size: 13.5px;
+  font-size: 15px;
   text-transform: none;
   letter-spacing: 0.01em;
-  color: #9cb2d4;
+  color: #e2e8f0;
   padding: 10px 14px;
-  font-weight: 600;
+  font-weight: 650;
+  border-radius: 8px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.nav-section-title:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .nav-link {
-  display: block;
-  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  padding: 8px 14px 8px 22px;
   border-radius: 8px;
-  color: #c7d2e6;
-  font-size: 16px;
-  margin: 2px 6px;
+  color: #cbd5e1;
+  font-size: 13.5px;
+  font-weight: 450;
+  margin: 1px 6px;
   transition: background 0.15s ease, color 0.15s ease;
 }
 

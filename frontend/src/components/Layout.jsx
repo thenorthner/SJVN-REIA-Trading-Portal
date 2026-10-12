@@ -275,8 +275,8 @@ const NavSubGroup = ({ group, user }) => {
         onClick={() => setIsOpen(!isOpen)}
         className="nav-subgroup-title"
         style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center',
-                 justifyContent: 'space-between', padding: '8px 14px',
-                 fontSize: 12.5, fontWeight: 600, letterSpacing: '.02em', color: '#aab9d1' }}
+                 justifyContent: 'space-between', padding: '8px 14px 8px 18px',
+                 fontSize: '13px', fontWeight: 600, letterSpacing: '.01em', color: '#94a3b8' }}
         title={pending ? `${pending} of ${links.length} not built yet` : undefined}
       >
         <span>{group.group}</span>
@@ -291,8 +291,8 @@ const NavSubGroup = ({ group, user }) => {
               end={l.end}
               className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}
               style={({ isActive }) => ({ 
-                paddingLeft: 26, fontSize: '13.5px', padding: '8px 14px 8px 26px', borderRadius: '8px', 
-                color: isActive ? '#fff' : '#c7d2e6', margin: '2px 6px' 
+                paddingLeft: 30, fontSize: '13px', padding: '7px 14px 7px 30px', borderRadius: '8px', 
+                color: isActive ? '#fff' : '#cbd5e1', margin: '1px 6px' 
               })}
             >
               <span style={{ opacity: l.pending ? 0.55 : 1 }}>{l.label}</span>
@@ -327,12 +327,12 @@ const NavGroup = ({ section, user }) => {
         style={{ 
           cursor: 'pointer', display: 'flex', justifyContent: 'space-between', 
           alignItems: 'center', userSelect: 'none', 
-          fontSize: '12.5px', color: '#a2afc7', padding: '10px 14px', letterSpacing: '0.04em'
+          fontSize: '15px', fontWeight: 650, color: '#e2e8f0', padding: '10px 14px', letterSpacing: '0.01em'
         }}
         title={isOpen ? "Collapse section" : "Expand section"}
       >
         <span>{section.section}</span>
-        <span style={{ fontSize: '10px', opacity: 0.8 }}>{isOpen ? '▼' : '▶'}</span>
+        <span style={{ fontSize: '11px', opacity: 0.85 }}>{isOpen ? '▼' : '▶'}</span>
       </div>
       {isOpen && (
         <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -347,8 +347,8 @@ const NavGroup = ({ section, user }) => {
                 className={({ isActive }) => 'nav-link' + (isActive && !isKycLocked ? ' active' : '') + (isKycLocked ? ' locked' : '')}
                 style={({ isActive }) => ({
                   ...(isKycLocked ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
-                  fontSize: '14px', padding: '9px 14px', borderRadius: '8px', 
-                  color: isActive ? '#fff' : '#c7d2e6', margin: '2px 6px',
+                  fontSize: '13.5px', padding: '8px 14px 8px 22px', borderRadius: '8px', 
+                  color: isActive ? '#fff' : '#cbd5e1', margin: '1px 6px',
                   display: 'flex', alignItems: 'center'
                 })}
                 title={l.tooltip || (l.to === '/mail' ? 'Quick Connect — Operational query desk only. Not an official legal / contractual mode of communication.' : undefined)}
