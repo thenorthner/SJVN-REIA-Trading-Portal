@@ -20,9 +20,11 @@ import { deliverDirect } from './notificationService.js';
 import { getSmsConfig, templateIdFor } from './smsService.js';
 import { invoiceBalance } from './invoiceLps.js';
 import { raisedBySellerSql } from './counterpartyScope.js';
+import { outstandingOf } from './hydroLedger.js';
 
 export const GROUPS = {
   BILLING: 'Billing & Payments',
+  HYDRO: 'Hydro & Thermal Stations',
   SECURITY: 'Payment Security',
   RECONCILIATION: 'Reconciliation',
   DISPUTES: 'Disputes',
@@ -40,10 +42,12 @@ const fail = (status, message) => Object.assign(new Error(message), { status });
 
 export const COUNTERPARTY_ROLES = ['SELLER', 'SELLER_L1', 'SELLER_L2', 'SELLER_L3', 'BUYER', 'BUYER_L1', 'BUYER_L2', 'BUYER_L3'];
 export const BOARD_READ = [...new Set([
-  ...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.TRADING_ALL, 'COMPLIANCE_AUDITOR',
+  ...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.TRADING_ALL, 'COMPLIANCE_AUDITOR',
   ...COUNTERPARTY_ROLES,
 ])];
-export const BOARD_WRITE = ROLE_GROUPS.REIA_WRITE; // who can post/remove broadcasts
+export const BOARD_WRITE = [...new Set([
+  ...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE,
+])];
 
 /** Safe single-row query — returns {} if the table is missing on this DB. */
 export function safeGet(sql, ...params) {
@@ -59,14 +63,145 @@ export function safeAll(sql, ...params) {
  * since sellers/buyers navigate inside their own portal, not /reia.
  */
 export function scopeFor(user) {
-  const role = user.role || '';
+  const role = user?.role || '';
   if (role.startsWith('SELLER')) {
     return { kind: 'SELLER', entityId: user.linked_entity_id || null, prefix: '/seller', audiences: ['ALL', 'SELLERS'] };
   }
   if (role.startsWith('BUYER')) {
     return { kind: 'BUYER', entityId: user.linked_entity_id || null, prefix: '/buyer', audiences: ['ALL', 'BUYERS'] };
   }
+  if (['COMMERCIAL_ADMIN', 'COMMERCIAL'].includes(role)) {
+    return { kind: 'COMMERCIAL', entityId: null, prefix: '/hydro-thermal', audiences: null };
+  }
   return { kind: 'INTERNAL', entityId: null, prefix: '/reia', audiences: null };
+}
+
+/**
+ * Builds live alert feed for Hydro and Thermal generating stations.
+ * Includes station bill approvals, drafts, beneficiary overdue ledger debits,
+ * dues this week, provisional Delhi splits, and tariff parameter readiness.
+ */
+export function computeHydroAlerts(add, P = '/hydro-thermal') {
+  // 1. Hydro station bills awaiting approval (IN_APPROVAL or PENDING)
+  const hydroApprovals = safeGet(`
+    SELECT COUNT(*) count FROM hydro_station_bills
+    WHERE approval_status IN ('IN_APPROVAL', 'PENDING')
+  `);
+  add({
+    key: 'hydro-bills-pending-approval', group: 'HYDRO', category: 'Hydro Bill Approval', severity: 'WARNING',
+    title: 'Hydro bills awaiting approval',
+    detail: `${hydroApprovals.count} station bill(s) pending in approval workflow`,
+    count: hydroApprovals.count || 0, link: `${P}/hydro-billing`,
+  });
+
+  // 2. Draft station bills ready for review / submission
+  const hydroDrafts = safeGet(`
+    SELECT COUNT(*) count FROM hydro_station_bills
+    WHERE status = 'DRAFT' AND (approval_status IS NULL OR approval_status = 'NOT_SENT')
+  `);
+  add({
+    key: 'hydro-draft-bills', group: 'HYDRO', category: 'Station Billing', severity: 'INFO',
+    title: 'Draft hydro station bills',
+    detail: `${hydroDrafts.count} station bill(s) in draft ready for review and submission`,
+    count: hydroDrafts.count || 0, link: `${P}/hydro-billing`,
+  });
+
+  // 3. Rejected station bills needing revision
+  const hydroRejected = safeGet(`
+    SELECT COUNT(*) count FROM hydro_station_bills
+    WHERE approval_status = 'REJECTED'
+  `);
+  add({
+    key: 'hydro-bills-rejected', group: 'HYDRO', category: 'Hydro Bill Rejected', severity: 'CRITICAL',
+    title: 'Hydro bills rejected in approval',
+    detail: `${hydroRejected.count} station bill(s) returned / rejected by approver — revision needed`,
+    count: hydroRejected.count || 0, link: `${P}/hydro-billing`,
+  });
+
+  // 4. Beneficiary overdue ledger debits
+  const hydroOverdueRows = safeAll(`
+    SELECT d.*, c.contract_no
+    FROM hydro_ledger_docs d
+    LEFT JOIN contracts c ON c.id = d.contract_id
+    WHERE d.status = 'OPEN' AND d.doc_type IN ('PB', 'LPS')
+      AND d.due_date IS NOT NULL AND date(d.due_date) < date('now')
+  `);
+  const hydroOverdueOwing = hydroOverdueRows.map((r) => {
+    try { return outstandingOf(r.id); } catch { return Number(r.amount) || 0; }
+  }).filter((b) => b > 0);
+  add({
+    key: 'hydro-beneficiary-overdue', group: 'HYDRO', category: 'Beneficiary Payment Overdue', severity: 'CRITICAL',
+    title: 'Hydro beneficiary overdue payments',
+    detail: `${hydroOverdueOwing.length} beneficiary bill(s) past due · ₹${Math.round(hydroOverdueOwing.reduce((a, b) => a + b, 0)).toLocaleString('en-IN')} outstanding`,
+    count: hydroOverdueOwing.length, link: `${P}/hydro-ledger`,
+  });
+
+  // 5. Beneficiary dues coming up this week
+  const hydroDueSoonRows = safeAll(`
+    SELECT d.*
+    FROM hydro_ledger_docs d
+    WHERE d.status = 'OPEN' AND d.doc_type IN ('PB', 'LPS')
+      AND d.due_date IS NOT NULL AND date(d.due_date) BETWEEN date('now') AND date('now', '+7 day')
+  `);
+  const hydroDueSoonOwing = hydroDueSoonRows.map((r) => {
+    try { return outstandingOf(r.id); } catch { return Number(r.amount) || 0; }
+  }).filter((b) => b > 0);
+  add({
+    key: 'hydro-beneficiary-due-soon', group: 'HYDRO', category: 'Beneficiary Payment Due', severity: 'WARNING',
+    title: 'Hydro beneficiary dues this week',
+    detail: `${hydroDueSoonOwing.length} beneficiary bill(s) due within 7 days · ₹${Math.round(hydroDueSoonOwing.reduce((a, b) => a + b, 0)).toLocaleString('en-IN')}`,
+    count: hydroDueSoonOwing.length, link: `${P}/hydro-ledger`,
+  });
+
+  // 6. Provisional Delhi SLDC allocations
+  const provisionalDelhi = safeGet(`
+    SELECT COUNT(DISTINCT contract_id) count FROM hydro_beneficiary_allocations
+    WHERE is_active = 1 AND source_note LIKE '%Delhi split provisional%'
+  `);
+  add({
+    key: 'hydro-delhi-provisional-splits', group: 'HYDRO', category: 'Delhi SLDC Split', severity: 'WARNING',
+    title: 'Provisional Delhi SLDC splits',
+    detail: `${provisionalDelhi.count} station allocation(s) using provisional Delhi split awaiting SLDC confirmation`,
+    count: provisionalDelhi.count || 0, link: `${P}/hydro-billing`,
+  });
+
+  // 7. Provisional REA station allocations
+  const provisionalRea = safeGet(`
+    SELECT COUNT(DISTINCT contract_id) count FROM hydro_beneficiary_allocations
+    WHERE is_active = 1 AND source_note LIKE '%Provisional REA%'
+  `);
+  add({
+    key: 'hydro-provisional-rea', group: 'HYDRO', category: 'Provisional REA', severity: 'INFO',
+    title: 'Provisional REA allocations active',
+    detail: `${provisionalRea.count} station(s) billed on Provisional REA shares — will reconcile upon Final REA`,
+    count: provisionalRea.count || 0, link: `${P}/hydro-billing`,
+  });
+
+  // 8. Hydro stations missing tariff parameters
+  const unreadyStations = safeAll(`
+    SELECT id, contract_no FROM contracts
+    WHERE project_type = 'Hydro' AND status = 'ACTIVE'
+      AND ((annual_afc IS NULL OR annual_afc <= 0) AND (capacity_charges_total IS NULL OR capacity_charges_total <= 0)
+        OR napaf_percent IS NULL OR napaf_percent <= 0)
+  `);
+  add({
+    key: 'hydro-stations-unready', group: 'HYDRO', category: 'Tariff Master Readiness', severity: 'WARNING',
+    title: 'Hydro stations missing tariff parameters',
+    detail: `${unreadyStations.length} hydro station(s) missing AFC / NAPAF required for monthly billing`,
+    count: unreadyStations.length, link: `${P}`,
+  });
+
+  // 9. Unclaimed additional charges (water cess, electricity duty, etc.)
+  const unclaimed = safeGet(`
+    SELECT COUNT(*) count, COALESCE(SUM(amount), 0) amount FROM hydro_additional_charges
+    WHERE status = 'UNCLAIMED'
+  `);
+  add({
+    key: 'hydro-unclaimed-charges', group: 'HYDRO', category: 'Additional Charges', severity: 'INFO',
+    title: 'Unclaimed statutory / additional charges',
+    detail: `${unclaimed.count} additional charge(s) (₹${Math.round(Number(unclaimed.amount || 0)).toLocaleString('en-IN')}) waiting to be claimed in next station bill`,
+    count: unclaimed.count || 0, link: `${P}/hydro-claims`,
+  });
 }
 
 /** Builds the live alert feed, restricted to the viewer's own contracts when scoped. */
@@ -74,6 +209,13 @@ export function computeAlerts(scope) {
   const alerts = [];
   const add = (a) => { if (a && a.count > 0) alerts.push({ id: a.key, ...a }); };
   const P = scope.prefix;
+
+  if (scope.kind === 'COMMERCIAL') {
+    computeHydroAlerts(add, P);
+    const order = { CRITICAL: 0, WARNING: 1, INFO: 2 };
+    alerts.sort((a, b) => order[a.severity] - order[b.severity]);
+    return alerts;
+  }
 
   // Contract-ownership filters. Internal staff see everything (empty filter);
   // counterparties are pinned to contracts where they are the seller/buyer.
@@ -320,7 +462,13 @@ export function activeBroadcasts(audiences) {
 }
 
 
-const scopeKey = (scope) => (scope.kind === 'INTERNAL' ? 'INTERNAL' : `${scope.kind}:${scope.entityId || 'UNLINKED'}`);
+const scopeKey = (scope) => (
+  scope.kind === 'INTERNAL'
+    ? 'INTERNAL'
+    : scope.kind === 'COMMERCIAL'
+      ? 'COMMERCIAL'
+      : `${scope.kind}:${scope.entityId || 'UNLINKED'}`
+);
 
 // ── Episodes: the board's memory ────────────────────────────────────────────
 
@@ -373,8 +521,15 @@ export function syncEpisodes(scope, alerts) {
 
 /** The active logins that share a board. */
 function usersInScope(scope) {
+  if (scope.kind === 'COMMERCIAL') {
+    const roles = ['COMMERCIAL_ADMIN', 'COMMERCIAL'];
+    return db.prepare(`
+      SELECT id, name, email, phone FROM users
+      WHERE is_active = 1 AND role IN (${roles.map(() => '?').join(',')})
+    `).all(...roles);
+  }
   if (scope.kind === 'INTERNAL') {
-    const roles = BOARD_READ.filter((r) => !COUNTERPARTY_ROLES.includes(r));
+    const roles = BOARD_READ.filter((r) => !COUNTERPARTY_ROLES.includes(r) && !['COMMERCIAL_ADMIN', 'COMMERCIAL'].includes(r));
     return db.prepare(`
       SELECT id, name, email, phone FROM users
       WHERE is_active = 1 AND role IN (${roles.map(() => '?').join(',')})
@@ -429,7 +584,10 @@ function refresh(scope) {
  * overnight still reaches the people who asked to be told.
  */
 export function sweepBoards() {
-  const scopes = [{ kind: 'INTERNAL', entityId: null, prefix: '/reia', audiences: null }];
+  const scopes = [
+    { kind: 'INTERNAL', entityId: null, prefix: '/reia', audiences: null },
+    { kind: 'COMMERCIAL', entityId: null, prefix: '/hydro-thermal', audiences: null },
+  ];
   const linked = db.prepare(`
     SELECT DISTINCT role, linked_entity_id FROM users
     WHERE is_active = 1 AND linked_entity_id IS NOT NULL AND (role LIKE 'SELLER%' OR role LIKE 'BUYER%')

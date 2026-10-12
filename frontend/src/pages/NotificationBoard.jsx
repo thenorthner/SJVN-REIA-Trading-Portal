@@ -210,7 +210,7 @@ function History({ groups }) {
 export default function NotificationBoard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const canPost = ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+  const canPost = ROLE_GROUPS.REIA_WRITE.includes(user?.role) || ROLE_GROUPS.HYDRO_THERMAL_WRITE?.includes(user?.role);
 
   const [tab, setTab] = useState('LIVE');
   const [board, setBoard] = useState({ broadcasts: [], alerts: [], summary: {}, groups: {} });

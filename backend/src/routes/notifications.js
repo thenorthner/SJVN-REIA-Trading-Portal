@@ -9,6 +9,7 @@ router.use(requireAuth);
 
 const TEST_MAIL_ROLES = [...new Set([
   ...ROLE_GROUPS.REIA_ALL,
+  ...ROLE_GROUPS.HYDRO_THERMAL_ALL,
   ...ROLE_GROUPS.TRADING_ALL,
 ])];
 

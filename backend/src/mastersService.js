@@ -107,6 +107,31 @@ const DEFAULT_PARAMS = [
     HYDRO_BILL_CANCELLED: ['INAPP', 'EMAIL', 'SMS'],
     DEFAULT: ['INAPP'],
   }), data_type: 'JSON', unit: '', description: 'Which channels each notification event uses, keyed by event type. Events not listed fall back to DEFAULT (in-app only). Channels: INAPP, EMAIL, SMS. Edit to add or silence a channel without a code change.' },
+  {
+    category: 'GENERAL',
+    param_key: 'quick_connect_disclaimer',
+    param_value: JSON.stringify({
+      title: 'Quick Connect — Operational & Legal Disclaimer',
+      notice: 'Quick Connect is strictly an informal in-portal operational coordination facility. It does NOT constitute an official, statutory, or legal mode of communication under PPA/PSA contracts, CERC regulations, or Indian contract law.',
+      sections: [
+        {
+          heading: '1. Purpose of Quick Connect',
+          body: 'This messaging feature is provided solely for rapid operational desk-to-desk coordination, technical queries, daily clarifications, and convenient communication between registered stakeholders (SJVN internal desks, sellers, buyers, and trading clients).'
+        },
+        {
+          heading: '2. Formal & Contractual Notices',
+          body: 'Any formal contractual notices, statutory dispute intimations, default notices, event of default / force majeure claims, commercial invoices, or termination notices must NOT be served via Quick Connect. All such binding communications must strictly follow the formal modes stipulated in the respective Power Purchase Agreements (PPAs) or Power Sale Agreements (PSAs) (e.g., registered speed post, official authorized corporate email, or formal letter).'
+        },
+        {
+          heading: '3. Evidentiary Limitation',
+          body: 'Messages, attachments, and informal exchanges made within Quick Connect carry no contractual force and shall not be construed as contractual admissions, waivers, or amendments to any PPA/PSA terms.'
+        }
+      ]
+    }),
+    data_type: 'JSON',
+    unit: '',
+    description: 'Configurable operational and legal disclaimer text displayed across the Quick Connect portal.'
+  },
   { category: 'TRADING', param_key: 'iex_enabled', param_value: 'false', data_type: 'TEXT', unit: '', description: 'Master switch for the IEX exchange API. "true" pulls live cleared results and market prices (needs iex_api_token and iex_login_user_id; hosts are built in per segment); anything else runs in stub mode. Bid submission stays manual either way.' },
   { category: 'TRADING', param_key: 'iex_api_token', param_value: '', data_type: 'TEXT', unit: '', description: 'IEX member authentication token, sent as "Authorization: Bearer <token>" (the spec says Authentication; the gateway only accepts Authorization) (or IEX_API_TOKEN env). Issued by the exchange to each member.' },
   { category: 'TRADING', param_key: 'iex_base_url', param_value: '', data_type: 'TEXT', unit: '', description: 'Overrides the built-in IEX host for EVERY segment at once — normally blank. IEX serves each segment from its own host (iDAM, HPDAM, RTM, REC), and those are built into the client and selected by iex_environment. Set this only to point at a mock.' },
