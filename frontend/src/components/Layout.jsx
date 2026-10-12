@@ -178,10 +178,10 @@ const NAV_INTERNAL = [
   },
   {
     section: 'Platform',
-    roles: [...new Set([...ROLE_GROUPS.AUDITOR, ...ROLE_GROUPS.MASTERS_READ, ...ROLE_GROUPS.TRADING_ALL, 'COMMERCIAL_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN', 'IT_SUPER_ADMIN'])],
+    roles: [...new Set([...ROLE_GROUPS.AUDITOR, ...ROLE_GROUPS.MASTERS_READ, ...ROLE_GROUPS.TRADING_ALL, 'REIA_ADMIN', 'TRADING_ADMIN', 'IT_SUPER_ADMIN'])],
     links: [
       // SJVN's own officers on the platform; an administrator's page.
-      { to: '/admin/users', label: 'SJVN Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMMERCIAL_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN'] },
+      { to: '/admin/users', label: 'SJVN Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN'] },
       { to: '/master/portfolio-registry', label: 'Portfolio Registry', roles: ROLE_GROUPS.TRADING_ALL },
       { to: '/masters', label: 'Master Data', roles: ROLE_GROUPS.MASTERS_READ },
       { to: '/audit-logs', label: 'Audit Trail', roles: ROLE_GROUPS.AUDITOR },

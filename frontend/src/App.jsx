@@ -254,7 +254,7 @@ export default function App() {
         <Route path="reia" element={<ProtectedRoute roles={REIA_ROLES}><ReiaDashboard /></ProtectedRoute>} />
         <Route path="reia/entities" element={<ProtectedRoute roles={REIA_ROLES}><Entities /></ProtectedRoute>} />
         <Route path="reia/document-desk" element={<ProtectedRoute roles={REIA_ROLES}><DocumentDesk /></ProtectedRoute>} />
-        <Route path="admin/users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMMERCIAL_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN']}><StaffUsers /></ProtectedRoute>} />
+        <Route path="admin/users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN']}><StaffUsers /></ProtectedRoute>} />
         <Route path="reia/company-users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN']}><CompanyUsers /></ProtectedRoute>} />
         <Route path="reia/seller-ledgers" element={<ProtectedRoute roles={REIA_ROLES}><SellerLedgers /></ProtectedRoute>} />
         <Route path="reia/contracts" element={<ProtectedRoute roles={REIA_ROLES}><Contracts /></ProtectedRoute>} />
