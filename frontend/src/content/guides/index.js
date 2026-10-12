@@ -11,14 +11,15 @@ import compliance from './compliance.js';
 import dsm from './dsm.js';
 import energy from './energy.js';
 import hydro from './hydro.js';
+import hydroLedger from './hydroLedger.js';
 import monitoring from './monitoring.js';
 import reconciliation from './reconciliation.js';
 import security from './security.js';
 import verification from './verification.js';
 
 export const GUIDES = {
-  cerc, compliance, dsm, energy, hydro, monitoring, reconciliation, security,
-  verification,
+  cerc, compliance, dsm, energy, hydro, 'hydro-ledger': hydroLedger, hydroLedger,
+  monitoring, reconciliation, security, verification,
 };
 
 export function getGuide(key) {

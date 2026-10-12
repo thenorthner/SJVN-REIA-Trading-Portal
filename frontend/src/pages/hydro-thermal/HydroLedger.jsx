@@ -4,8 +4,10 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import {
-  PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtCurrency,
+  PageHeader, Card, Table, Badge, Modal, Field, StatCard, Tabs, Tab, fmtCurrency,
 } from '../../components/ui.jsx';
+import ModuleGuide from '../../components/ModuleGuide.jsx';
+import { getGuide } from '../../content/guides/index.js';
 
 // One beneficiary's running account against a hydro station — the screen SJVN's
 // desk knows as Account Display.
@@ -38,6 +40,7 @@ function DocType({ row }) {
 }
 
 export default function HydroLedger() {
+  const [view, setView] = useState('account');
   const { user } = useAuth();
   const canWrite = ROLE_GROUPS.HYDRO_THERMAL_WRITE.includes(user?.role);
 
@@ -192,8 +195,17 @@ export default function HydroLedger() {
         subtitle="What each beneficiary of a hydro station owes, what it has paid, and what is overdue"
       />
 
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
-      {notice && <div className="alert alert-success" role="status">{notice}</div>}
+      <Tabs style={{ marginBottom: 18 }}>
+        <Tab active={view === 'account'} onClick={() => setView('account')}>Account Display</Tab>
+        <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
+      </Tabs>
+
+      {view === 'fyi' && <ModuleGuide guide={getGuide('hydro-ledger')} />}
+
+      {view === 'account' && (
+        <>
+          {error && <div className="alert alert-error" role="alert">{error}</div>}
+          {notice && <div className="alert alert-success" role="status">{notice}</div>}
 
       <Card title="Account">
         <div className="form-grid">
@@ -378,6 +390,8 @@ export default function HydroLedger() {
           </div>
         </form>
       </Modal>
+      </>
+      )}
     </div>
   );
 }
