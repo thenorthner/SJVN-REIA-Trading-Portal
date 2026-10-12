@@ -275,15 +275,15 @@ const NavSubGroup = ({ group, user }) => {
         onClick={() => setIsOpen(!isOpen)}
         className="nav-subgroup-title"
         style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center',
-                 justifyContent: 'space-between', padding: '8px 14px 8px 18px',
-                 fontSize: '13px', fontWeight: 600, letterSpacing: '.01em', color: '#94a3b8' }}
+                 justifyContent: 'space-between', padding: '10px 14px 8px 18px',
+                 fontSize: '18px', fontWeight: 650, letterSpacing: '.01em', color: '#cbd5e1' }}
         title={pending ? `${pending} of ${links.length} not built yet` : undefined}
       >
         <span>{group.group}</span>
-        <span style={{ fontSize: 10, opacity: 0.8 }}>{isOpen ? '▼' : '▶'}</span>
+        <span style={{ fontSize: 13, opacity: 0.85 }}>{isOpen ? '▼' : '▶'}</span>
       </div>
       {isOpen && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {links.map((l) => (
             <NavLink
               key={l.to}
@@ -291,15 +291,15 @@ const NavSubGroup = ({ group, user }) => {
               end={l.end}
               className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}
               style={({ isActive }) => ({ 
-                paddingLeft: 30, fontSize: '12px', padding: '6px 14px 6px 30px', borderRadius: '8px', 
-                color: isActive ? '#fff' : '#94a3b8', margin: '1px 6px' 
+                paddingLeft: 34, fontSize: '17px', padding: '8px 14px 8px 34px', borderRadius: '8px', 
+                color: isActive ? '#fff' : '#cbd5e1', margin: '2px 6px' 
               })}
             >
               <span style={{ opacity: l.pending ? 0.55 : 1 }}>{l.label}</span>
               {/* A screen that is only planned says so in the menu, so nobody
                   opens it expecting data and files a bug when there is none. */}
               {l.pending && (
-                <span style={{ marginLeft: 6, fontSize: 9, opacity: 0.5, fontStyle: 'italic' }}>soon</span>
+                <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.5, fontStyle: 'italic' }}>soon</span>
               )}
             </NavLink>
           ))}
@@ -327,15 +327,15 @@ const NavGroup = ({ section, user }) => {
         style={{ 
           cursor: 'pointer', display: 'flex', justifyContent: 'space-between', 
           alignItems: 'center', userSelect: 'none', 
-          fontSize: '16.5px', fontWeight: 700, color: '#ffffff', padding: '12px 14px 6px', letterSpacing: '0.01em'
+          fontSize: '21.5px', fontWeight: 750, color: '#ffffff', padding: '12px 14px 8px', letterSpacing: '0.01em'
         }}
         title={isOpen ? "Collapse section" : "Expand section"}
       >
-        <span style={{ fontSize: '16.5px', fontWeight: 700, color: '#ffffff' }}>{section.section}</span>
-        <span style={{ fontSize: '11px', opacity: 0.9, color: '#94a3b8' }}>{isOpen ? '▼' : '▶'}</span>
+        <span style={{ fontSize: '21.5px', fontWeight: 750, color: '#ffffff' }}>{section.section}</span>
+        <span style={{ fontSize: '13px', opacity: 0.9, color: '#cbd5e1' }}>{isOpen ? '▼' : '▶'}</span>
       </div>
       {isOpen && (
-        <div style={{ marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
           {subGroups.map((g) => <NavSubGroup key={g.group} group={g} user={user} />)}
           {links.map((l) => {
             const isKycLocked = l.requiresKyc && user?.entity && user.entity.status !== 'APPROVED';
@@ -347,8 +347,8 @@ const NavGroup = ({ section, user }) => {
                 className={({ isActive }) => 'nav-link' + (isActive && !isKycLocked ? ' active' : '') + (isKycLocked ? ' locked' : '')}
                 style={({ isActive }) => ({
                   ...(isKycLocked ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
-                  fontSize: '12.5px', padding: '6px 14px 6px 26px', borderRadius: '8px', 
-                  color: isActive ? '#fff' : '#94a3b8', margin: '1px 6px',
+                  fontSize: '17.5px', padding: '8px 14px 8px 28px', borderRadius: '8px', 
+                  color: isActive ? '#fff' : '#cbd5e1', margin: '2px 6px',
                   display: 'flex', alignItems: 'center'
                 })}
                 title={l.tooltip || (l.to === '/mail' ? 'Quick Connect — Operational query desk only. Not an official legal / contractual mode of communication.' : undefined)}
@@ -362,8 +362,8 @@ const NavGroup = ({ section, user }) => {
                 {l.badge && (
                   <span style={{
                     marginLeft: 'auto',
-                    fontSize: '9.5px',
-                    padding: '1px 6px',
+                    fontSize: '11px',
+                    padding: '2px 7px',
                     borderRadius: '4px',
                     background: 'rgba(234, 179, 8, 0.15)',
                     color: '#fbbf24',
@@ -374,7 +374,7 @@ const NavGroup = ({ section, user }) => {
                     {l.badge}
                   </span>
                 )}
-                {isKycLocked && <Lock size={12} style={{ marginLeft: 'auto', opacity: 0.5 }} />}
+                {isKycLocked && <Lock size={15} style={{ marginLeft: 'auto', opacity: 0.5 }} />}
               </NavLink>
             );
           })}
