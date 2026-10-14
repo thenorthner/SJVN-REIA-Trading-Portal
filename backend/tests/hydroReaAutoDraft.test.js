@@ -82,7 +82,7 @@ const bills = () => db.prepare(`
 `).all(njhps.id);
 const autoNotes = () => db.prepare(`SELECT * FROM notifications WHERE type = 'HYDRO_BILL_AUTO_DRAFT' ORDER BY rowid`).all();
 const runs = () => db.prepare('SELECT * FROM hydro_auto_draft_runs ORDER BY rowid').all();
-const status = (role = 'REIA_USER') => request(app).get('/api/hydro-billing/from-rea/auto').set(auth(tokenFor(role)));
+const status = (role = 'COMMERCIAL_ADMIN') => request(app).get('/api/hydro-billing/from-rea/auto').set(auth(tokenFor(role)));
 
 beforeAll(() => {
   snapshot = TOUCHED.map((no) => db.prepare('SELECT * FROM contracts WHERE contract_no = ?').get(no)).filter(Boolean);
@@ -128,7 +128,7 @@ describe('runReaAutoDraft', () => {
     expect(saved[2].e4_cum_scheduled_kwh).toBe(1445627500);
 
     const note = autoNotes();
-    expect(note[0].role).toBe('REIA_USER');
+    expect(note[0].role).toBe('COMMERCIAL_ADMIN');
     expect(note[0].message).toContain(saved[0].bill_no);
     // Rampur has no line in this account, so it is named once — not once a
     // month for as long as the run keeps reaching back over it.
@@ -198,7 +198,7 @@ describe('runReaAutoDraft', () => {
     // must not mean.
     const note = autoNotes();
     expect(note).toHaveLength(1);
-    expect(note[0].role).toBe('REIA_USER');
+    expect(note[0].role).toBe('COMMERCIAL_ADMIN');
     expect(note[0].message).toMatch(/unbilled/);
     expect(note[0].message).toMatch(/2026-05 PPA\/SJVN\/NJHPS\/001/);
   });

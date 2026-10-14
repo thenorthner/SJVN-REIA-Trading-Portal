@@ -109,6 +109,7 @@ export function generateBillingReportPdf(report, meta, res) {
     size: [PAGE_W, PAGE_H],
     margins: { top: M, bottom: M, left: M, right: M },
     bufferPages: true,
+    font: 'Helvetica',
     info: {
       Title: 'SJVN Billing & Invoicing Report',
       Author: 'SJVN Limited',
@@ -116,6 +117,7 @@ export function generateBillingReportPdf(report, meta, res) {
       Creator: 'SJVN Energy Platform',
     },
   });
+  doc.font('Helvetica');
 
   const filename = `SJVN_Billing_Report_${from || 'all'}_to_${to || 'all'}.pdf`;
   res.setHeader('Content-Type', 'application/pdf');

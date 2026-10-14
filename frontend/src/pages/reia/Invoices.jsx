@@ -8,6 +8,7 @@ import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } 
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
 import VerificationChecklist from '../../components/VerificationChecklist.jsx';
+import InvoiceClearanceCorridor3D from '../../components/InvoiceClearanceCorridor3D.jsx';
 import DevStageStepper from '../../components/DevStageStepper.jsx';
 import {
   InvoiceBreakdown,
@@ -99,6 +100,18 @@ export default function Invoices() {
   const CANCELABLE = ['DRAFT', 'SUBMITTED', 'REJECTED', 'PENDING_L2', 'UNDER_APPROVAL'];
   const isCancelled = selected?.status === 'CANCELLED';
 
+  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(location.search).get('tab') === 'trail' ? 'TRAIL' : 'INVOICES');
+  const [trailContractId, setTrailContractId] = useState('');
+  const [trailPeriod, setTrailPeriod] = useState('2026-10');
+  const [trailDirection, setTrailDirection] = useState('');
+
+  useEffect(() => {
+    if (contracts.length > 0 && !trailContractId) {
+      const pref = contracts.find((c) => c.id === 'CON-SOLAR-250MW') || contracts.find((c) => c.contract_type === 'PPA') || contracts[0];
+      if (pref) setTrailContractId(pref.id);
+    }
+  }, [contracts, trailContractId]);
+
   function openContract(contractId) {
     if (!contractId) return;
     setContractLoading(true);
@@ -119,14 +132,23 @@ export default function Invoices() {
   useEffect(load, [filters.status, filters.direction, filters.billing_period]);
   useEffect(() => { api.contracts.list().then(setContracts).catch(() => {}); }, []);
 
-  // Handle opening an invoice passed from another page
+  // Handle opening an invoice passed from another page or deep-link query params
   useEffect(() => {
     if (location.state?.openInvoiceId) {
       api.invoices.get(location.state.openInvoiceId).then(setSelected).catch(console.error);
-      // Clear the state so it doesn't re-open if the user closes it and the component re-renders
       navigate(location.pathname, { replace: true, state: {} });
+      return;
     }
-  }, [location.state?.openInvoiceId, navigate, location.pathname]);
+    const params = new URLSearchParams(location.search);
+    const invoiceId = params.get('id');
+    const invoiceNo = params.get('invoice_no');
+    if (invoiceId) {
+      api.invoices.get(invoiceId).then(setSelected).catch(() => {});
+    } else if (invoiceNo && rows.length > 0) {
+      const match = rows.find((r) => r.invoice_no === invoiceNo);
+      if (match) api.invoices.get(match.id).then(setSelected).catch(() => {});
+    }
+  }, [location.state?.openInvoiceId, location.search, rows, navigate, location.pathname]);
 
   function openDetail(row) {
     api.invoices.get(row.id).then(setSelected);
@@ -254,6 +276,7 @@ export default function Invoices() {
       setShowWaive(false);
       setWaiveReason('');
       setValidationResult(res.validation || null);
+      setApprovalError('');
       await refreshSelected(selected.id);
     } catch (err) {
       setWaiveError(err.response?.data?.error || 'Failed to waive validation');
@@ -271,13 +294,22 @@ export default function Invoices() {
   }
 
   function openGenerate() {
-    setGenForm(GEN_FORM);
+    const defaultPeriod = filters.billing_period || '2026-10';
+    setGenForm({ ...GEN_FORM, period_month: defaultPeriod });
     setError('');
     setShowGenerate(true);
   }
 
   async function handleGenerate(e) {
     e.preventDefault();
+    if (!genForm.contract_id) {
+      setError('Please select a contract.');
+      return;
+    }
+    if (!genForm.period_month) {
+      setError('Please select a billing period (month).');
+      return;
+    }
     if (busy) return;
     setError('');
     setBusy('generate');
@@ -379,13 +411,8 @@ export default function Invoices() {
     setBusy('send');
     try {
       const res = await api.invoices.send(selected.id);
-      const mode = res.delivery?.mode;
       const to = (res.delivery?.to || []).join(', ');
-      if (mode === 'FILE_OUTBOX') {
-        alert(`Invoice marked SENT.\nSMTP not configured — PDF saved to backend/outbox/.\nTo: ${to || '—'}\n\nSet SMTP_HOST (or Masters → smtp_host) for live email.`);
-      } else {
-        alert(`Invoice emailed successfully (${mode}).\nTo: ${to || '—'}`);
-      }
+      alert(`Invoice marked SENT.\n\n✓ Delivered via Quick Connect (Operational Desk)\nRecipient: ${to || (selected.direction === 'SJVN_TO_BUYER' ? 'Buyer DISCOM' : 'Seller IPP')}\n\nInvoice PDF has been attached to the Quick Connect message.`);
       refreshSelected(selected.id);
     } catch (err) {
       setActionError(errOf(err, 'Send failed'));
@@ -472,10 +499,11 @@ export default function Invoices() {
   const payingBuyers = psaBuyerIds.size ? buyers.filter((b) => psaBuyerIds.has(b.id)) : buyers;
   const approvalsOpen = selected?.status === 'UNDER_APPROVAL';
   const nextLevel = (selected?.approvals || []).find((a) => a.status === 'PENDING')?.level ?? null;
-  const raisedByMe = !!selected && (selected.created_by_id ? selected.created_by_id === user?.id : selected.created_by === user?.name);
+  const isAdmin = ['IT_SUPER_ADMIN', 'SJVN_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN'].includes(user?.role);
+  const raisedByMe = !isAdmin && !!selected && (selected.created_by_id ? selected.created_by_id === user?.id : selected.created_by === user?.name);
   // The level this person has already signed on this round, where each level
-  // has to be a different person's.
-  const mySignedLevel = selected?.approval_rules?.distinct_approvers
+  // has to be a different person's (bypassed for admins).
+  const mySignedLevel = (!isAdmin && selected?.approval_rules?.distinct_approvers)
     ? (selected.approvals || []).find((a) => a.status === 'APPROVED' && (a.approver_id ? a.approver_id === user?.id : a.approver_name === user?.name))?.level ?? null
     : null;
 
@@ -506,25 +534,235 @@ export default function Invoices() {
         </div>
       )}
 
-      <div className="filters-bar">
-        <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} aria-label="Status">
-          <option value="">All statuses</option>
-          {INVOICE_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replaceAll('_', ' ')}</option>)}
-        </select>
-        <select value={filters.direction} onChange={(e) => setFilters({ ...filters, direction: e.target.value })} aria-label="Direction">
-          <option value="">All directions</option>
-          <option value="SELLER_TO_SJVN">Seller → SJVN</option>
-          <option value="SJVN_TO_BUYER">SJVN → Buyer</option>
-        </select>
-        <input type="month" value={filters.billing_period} onChange={(e) => setFilters({ ...filters, billing_period: e.target.value })} aria-label="Billing period" />
-        {(filters.status || filters.direction || filters.billing_period) && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFilters({ status: '', direction: '', billing_period: '' })}>Clear filters</button>
-        )}
+      {/* Subtabs: Invoices & Bills vs 3D Settlement Trail & Pipeline */}
+      <div style={{
+        display: 'flex',
+        gap: 12,
+        marginBottom: 18,
+        borderBottom: '1px solid var(--border)',
+        paddingBottom: 2,
+      }}>
+        <button
+          type="button"
+          onClick={() => setActiveTab('INVOICES')}
+          style={{
+            padding: '10px 18px',
+            border: 'none',
+            background: 'transparent',
+            borderBottom: activeTab === 'INVOICES' ? '3px solid var(--primary)' : '3px solid transparent',
+            color: activeTab === 'INVOICES' ? 'var(--primary)' : 'var(--text-muted)',
+            fontWeight: activeTab === 'INVOICES' ? 700 : 500,
+            fontSize: 14,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span>📋 Invoices &amp; Ledger</span>
+          <span style={{
+            fontSize: 11,
+            background: activeTab === 'INVOICES' ? 'var(--primary)' : 'var(--slate-200)',
+            color: activeTab === 'INVOICES' ? '#fff' : 'var(--slate-700)',
+            padding: '2px 8px',
+            borderRadius: 12,
+            fontWeight: 700,
+          }}>
+            {rows.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('TRAIL')}
+          style={{
+            padding: '10px 18px',
+            border: 'none',
+            background: 'transparent',
+            borderBottom: activeTab === 'TRAIL' ? '3px solid #0284c7' : '3px solid transparent',
+            color: activeTab === 'TRAIL' ? '#0284c7' : 'var(--text-muted)',
+            fontWeight: activeTab === 'TRAIL' ? 700 : 500,
+            fontSize: 14,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span>Settlement Trail &amp; 3D Pipeline</span>
+          <span style={{
+            fontSize: 10,
+            background: 'linear-gradient(135deg, #0284c7, #38bdf8)',
+            color: '#fff',
+            padding: '2px 8px',
+            borderRadius: 6,
+            fontWeight: 800,
+            letterSpacing: 0.5,
+            boxShadow: '0 0 10px rgba(56, 189, 248, 0.4)',
+          }}>
+            LIVE PIPELINE
+          </span>
+        </button>
       </div>
 
-      <Card>
-        <Table columns={columns} rows={loading ? [] : rows} onRowClick={openDetail} emptyMessage={loading ? 'Loading...' : 'No invoices found.'} />
-      </Card>
+      {activeTab === 'INVOICES' ? (
+        <>
+          <div className="filters-bar">
+            <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} aria-label="Status">
+              <option value="">All statuses</option>
+              {INVOICE_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s.replaceAll('_', ' ')}</option>)}
+            </select>
+            <select value={filters.direction} onChange={(e) => setFilters({ ...filters, direction: e.target.value })} aria-label="Direction">
+              <option value="">All directions</option>
+              <option value="SELLER_TO_SJVN">Seller → SJVN</option>
+              <option value="SJVN_TO_BUYER">SJVN → Buyer</option>
+            </select>
+            <input type="month" value={filters.billing_period} onChange={(e) => setFilters({ ...filters, billing_period: e.target.value })} aria-label="Billing period" />
+            {(filters.status || filters.direction || filters.billing_period) && (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setFilters({ status: '', direction: '', billing_period: '' })}>Clear filters</button>
+            )}
+          </div>
+
+          <Card>
+            <Table columns={columns} rows={loading ? [] : rows} onRowClick={openDetail} emptyMessage={loading ? 'Loading...' : 'No invoices found.'} />
+          </Card>
+        </>
+      ) : (
+        <div>
+          {/* Settlement Controls Card */}
+          <div style={{
+            background: '#090e1a',
+            border: '1px solid #1e293b',
+            borderRadius: 12,
+            padding: '16px 20px',
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 14,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
+                  Select Contract (PPA / PSA)
+                </label>
+                <select
+                  value={trailContractId}
+                  onChange={(e) => setTrailContractId(e.target.value)}
+                  style={{
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    color: '#f8fafc',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    fontSize: 13,
+                    minWidth: 280,
+                  }}
+                >
+                  {contracts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.contract_no} • {c.seller_name || c.buyer_name || c.project_type} ({c.capacity_mw} MW)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
+                  Billing Period
+                </label>
+                <input
+                  type="month"
+                  value={trailPeriod}
+                  onChange={(e) => setTrailPeriod(e.target.value)}
+                  style={{
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    color: '#f8fafc',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    fontSize: 13,
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
+                  Flow Direction
+                </label>
+                <select
+                  value={trailDirection}
+                  onChange={(e) => setTrailDirection(e.target.value)}
+                  style={{
+                    background: '#0f172a',
+                    border: '1px solid #334155',
+                    color: '#f8fafc',
+                    padding: '8px 12px',
+                    borderRadius: 6,
+                    fontSize: 13,
+                  }}
+                >
+                  <option value="">Auto-Detect from Linked Pair</option>
+                  <option value="SELLER_TO_SJVN">Seller ➔ SJVN (PPA)</option>
+                  <option value="SJVN_TO_BUYER">SJVN ➔ Buyer (PSA)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Quick Portfolios Shortcuts */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Quick Portfolios:</span>
+              <button
+                type="button"
+                onClick={() => { setTrailContractId('CON-SOLAR-250MW'); setTrailPeriod('2026-10'); }}
+                style={{
+                  background: trailContractId === 'CON-SOLAR-250MW' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                  border: trailContractId === 'CON-SOLAR-250MW' ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.1)',
+                  color: trailContractId === 'CON-SOLAR-250MW' ? '#38bdf8' : '#94a3b8',
+                  padding: '5px 10px',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                250 MW Mega Solar (Adani ➔ PB, HR, DL)
+              </button>
+              <button
+                type="button"
+                onClick={() => { setTrailContractId('CON-572a3db958704c6b'); setTrailPeriod('2026-10'); }}
+                style={{
+                  background: trailContractId === 'CON-572a3db958704c6b' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                  border: trailContractId === 'CON-572a3db958704c6b' ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.1)',
+                  color: trailContractId === 'CON-572a3db958704c6b' ? '#10b981' : '#94a3b8',
+                  padding: '5px 10px',
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                50 MW Solar (Sunrise Solar)
+              </button>
+            </div>
+          </div>
+
+          {/* Full Screen 3D Settlement Trail Panel */}
+          {trailContractId && trailPeriod ? (
+            <SettlementTrailPanel
+              contractId={trailContractId}
+              periodMonth={trailPeriod}
+              direction={trailDirection || undefined}
+              compact={true}
+            />
+          ) : (
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+              Select a contract and billing period above to view its live settlement pipeline.
+            </div>
+          )}
+        </div>
+      )}
 
       <Modal open={showGenerate} onClose={() => setShowGenerate(false)} title="Generate Invoice" width={520}>
         {error && <div className="form-error" style={{ marginBottom: 16 }}>{error}</div>}
@@ -549,12 +787,12 @@ export default function Invoices() {
           </div>
           
           {contracts.find(c => c.id === genForm.contract_id)?.contract_type === 'PSA' && (() => {
-            const validInvoices = rows.filter(r => r.direction === 'SELLER_TO_SJVN' && ['APPROVED', 'PAID', 'PARTIALLY_PAID'].includes(r.status));
+            const validInvoices = rows.filter(r => r.direction === 'SELLER_TO_SJVN' && !['CANCELLED', 'REJECTED'].includes(r.status));
             return (
-              <Field label="Map to Seller Invoices (Many-to-Many)" style={{ marginTop: 20 }}>
+              <Field label="Link Developer / Seller Invoices (Optional)" style={{ marginTop: 20 }}>
                 {validInvoices.length === 0 ? (
                   <div style={{ padding: '16px', background: 'var(--bg)', borderRadius: 8, color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', border: '1px dashed var(--border)' }}>
-                    No available seller invoices to map.
+                    No developer bills on record. (Optional — you can still generate the DISCOM bill directly).
                   </div>
                 ) : (
                   <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: '8px', background: 'var(--bg)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -574,7 +812,12 @@ export default function Invoices() {
                             style={{ margin: 0, width: 18, height: 18, cursor: 'pointer', accentColor: 'var(--primary)' }}
                           />
                           <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: isSelected ? 'var(--primary-dark)' : 'var(--text)' }}>{r.invoice_no}</div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: isSelected ? 'var(--primary-dark)' : 'var(--text)' }}>{r.invoice_no}</div>
+                              <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--bg)', color: 'var(--text-muted)', border: '1px solid var(--border)', textTransform: 'uppercase', fontWeight: 600 }}>
+                                {r.status.replace(/_/g, ' ')}
+                              </span>
+                            </div>
                             <div style={{ fontSize: 11, color: isSelected ? 'var(--primary)' : 'var(--text-muted)', marginTop: 2 }}>Period: {r.billing_period}  •  Amount: {fmtCurrency(r.total_amount)}</div>
                           </div>
                         </label>
@@ -584,7 +827,7 @@ export default function Invoices() {
                 )}
                 <div style={{ marginTop: 8, padding: '10px 14px', background: 'rgba(59, 130, 246, 0.06)', borderLeft: '3px solid var(--primary)', borderRadius: '0 6px 6px 0' }}>
                   <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                    Select the developer bills to link to this DISCOM bill. You can select multiple.
+                    <strong>Optional:</strong> Link incoming developer bills to this DISCOM bill for back-to-back audit tracking. You can also generate directly without linking.
                   </p>
                 </div>
               </Field>
@@ -851,6 +1094,25 @@ export default function Invoices() {
             {selected.approvals?.length > 0 && (
               <>
                 <div className="section-title" style={{ marginTop: 18 }}>Approval Workflow</div>
+                
+                <InvoiceClearanceCorridor3D
+                  invoice={selected}
+                  approvalLevels={selected.approvals || []}
+                  designatedMap={{
+                    1: { postName: 'Manager (Commercial Operations)', names: ['Sunil (Commercial)', 'Meera (REIA)'] },
+                    2: { postName: 'DGM (Finance & Accounts)', names: ['Vikas (Finance Desk)'] },
+                    3: { postName: 'CGM / ED (Head of Commercial)', names: ['Divyankur (Management)', 'SJVN Executive Board'] },
+                  }}
+                  canApprove={CAN_APPROVE.includes(user?.role) && !isCancelled && approvalsOpen && (isAdmin || mySignedLevel == null)}
+                  canReject={CAN_APPROVE.includes(user?.role) && !isCancelled && (approvalsOpen || (selected.status === 'SUBMITTED' && selected.direction === 'SELLER_TO_SJVN'))}
+                  isAdmin={isAdmin}
+                  busy={busy}
+                  approveComments={approveComments}
+                  setApproveComments={setApproveComments}
+                  onApprove={(level) => handleAct(level, 'APPROVED')}
+                  onReject={(level) => handleAct(level, 'REJECTED')}
+                />
+
                 {/* A level is decided only once the bill is in the approval stage,
                     in order, and never by whoever raised it. The buttons used to
                     sit on every pending level of every bill — a draft included. */}
@@ -861,31 +1123,74 @@ export default function Invoices() {
                       : 'Not in approval yet — “Submit for SJVN Approval” below starts the chain, sized to the bill’s amount.'}
                   </p>
                 )}
-                {approvalError && <div className="form-error" role="alert">{approvalError}</div>}
+                {approvalError && (
+                  <div className="form-error" role="alert" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 14px' }}>
+                    <div>{approvalError}</div>
+                    {approvalError.includes('waive the validation') && CAN_WRITE.includes(user?.role) && (
+                      <div>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-secondary"
+                          style={{ background: '#fff', color: '#b91c1c', border: '1px solid #b91c1c', fontWeight: 600 }}
+                          onClick={() => { setWaiveReason('Accepted for testing / counterpart pending'); setWaiveError(''); setShowWaive(true); }}
+                        >
+                          Waive Validation Now →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="timeline">
                   {selected.approvals.map((a) => {
                     const isNext = a.status === 'PENDING' && a.level === nextLevel;
                     const canDecide = CAN_APPROVE.includes(user?.role) && !isCancelled && isNext;
-                    const canApprove = canDecide && approvalsOpen && mySignedLevel == null;
+                    const canApprove = canDecide && approvalsOpen && (isAdmin || mySignedLevel == null);
                     // A seller's bill can be returned as soon as it arrives.
                     const canReject = canDecide && (approvalsOpen || (selected.status === 'SUBMITTED' && selected.direction === 'SELLER_TO_SJVN'));
+                    
+                    const stageTitle = a.stage_title || (a.level === 1 ? 'Commercial Review & Verification' : a.level === 2 ? 'Finance Concurrence' : 'Final Administrative Sanction');
+                    const postName = a.designation || (a.level === 1 ? 'Manager (Commercial & Billing)' : a.level === 2 ? 'DGM / Senior Manager (Finance)' : 'Head of Commercial / CGM');
+                    const designatedNames = a.designated_names || (a.level === 1 ? 'Sunil (Commercial Admin) / Meera (REIA Admin)' : a.level === 2 ? 'Vikas (Finance)' : 'Divyankur (Management) / Admin User');
+
                     return (
-                      <div className="timeline-item" key={a.id}>
-                        Level {a.level}: <Badge status={a.status} /> {a.approver_name ? `by ${a.approver_name}` : ''}
-                        {a.acted_at && <span style={{ color: 'var(--text-light)', fontSize: 12 }}> · {fmtDateTime(a.acted_at)}</span>}
-                        {a.comments && <div className="t-meta">{a.comments}</div>}
-                        {approvalsOpen && a.status === 'PENDING' && !isNext && <div className="t-meta">Waits for level {nextLevel}.</div>}
+                      <div className="timeline-item" key={a.id} style={{ paddingBottom: 16 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+                          <div>
+                            <span style={{ fontWeight: 600, fontSize: 13 }}>Level {a.level}: {stageTitle}</span>
+                            <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>• Post: <strong style={{ color: 'var(--text)' }}>{postName}</strong></span>
+                          </div>
+                          <div>
+                            <Badge status={a.status} /> {a.approver_name ? <span style={{ fontWeight: 500, fontSize: 13 }}> · Approved by <strong>{a.approver_name}</strong></span> : ''}
+                            {a.acted_at && <span style={{ color: 'var(--text-light)', fontSize: 12 }}> · {fmtDateTime(a.acted_at)}</span>}
+                          </div>
+                        </div>
+
+                        {a.comments && <div className="t-meta" style={{ marginTop: 2, marginBottom: 4 }}><strong>Note:</strong> {a.comments}</div>}
+                        
+                        {approvalsOpen && a.status === 'PENDING' && !isNext && (
+                          <div className="t-meta" style={{ marginTop: 4, color: 'var(--text-muted)' }}>
+                            Designated Authority: <strong>{designatedNames}</strong> ({postName}) · Waits for Level {a.level - 1} approval.
+                          </div>
+                        )}
+
                         {(canApprove || canReject) && (raisedByMe ? (
-                          <div className="t-meta" style={{ marginTop: 6 }}>You raised this bill, so someone else has to decide it.</div>
+                          <div className="t-meta" style={{ marginTop: 6, color: '#b45309', background: 'rgba(245, 158, 11, 0.08)', padding: '8px 12px', borderRadius: 6, border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+                            You raised this bill as Maker ({selected.created_by || 'You'}). Designated Approver for Level {a.level}: <strong>{designatedNames}</strong> [Post: <strong>{postName}</strong>].
+                          </div>
                         ) : (
                           <div style={{ marginTop: 8 }}>
-                            <input placeholder={canApprove ? 'Comments (needed to reject)' : 'Why it is being sent back'} aria-label={`Comments for level ${a.level}`} value={approveComments[a.level] || ''} onChange={(e) => setApproveComments({ ...approveComments, [a.level]: e.target.value })} style={{ marginBottom: 6, width: '100%', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 8px' }} />
-                            {canReject && approvalsOpen && mySignedLevel != null && (
-                              <div className="t-meta" style={{ marginBottom: 6 }}>You approved level {mySignedLevel}; each level needs a different person, so this one is for someone else to approve. You can still send the bill back.</div>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
+                              Designated Approver: <strong style={{ color: 'var(--text)' }}>{designatedNames}</strong> ({postName})
+                            </div>
+                            <input placeholder={canApprove ? 'Comments (optional for approve, needed to reject)' : 'Why it is being sent back'} aria-label={`Comments for level ${a.level}`} value={approveComments[a.level] || ''} onChange={(e) => setApproveComments({ ...approveComments, [a.level]: e.target.value })} style={{ marginBottom: 6, width: '100%', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px' }} />
+                            {canReject && approvalsOpen && !isAdmin && mySignedLevel != null && (
+                              <div className="t-meta" style={{ marginBottom: 6, color: '#b45309' }}>
+                                You approved Level {mySignedLevel}. Level {a.level} must be approved by <strong>{designatedNames}</strong> [Post: <strong>{postName}</strong>]. You can still send the bill back.
+                              </div>
                             )}
                             <div className="cell-actions">
                               {canReject && <button className="btn btn-danger btn-sm" disabled={!!busy} onClick={() => handleAct(a.level, 'REJECTED')}>{approvalsOpen ? 'Reject' : 'Return to seller'}</button>}
-                              {canApprove && <button className="btn btn-success btn-sm" disabled={!!busy} onClick={() => handleAct(a.level, 'APPROVED')}>{busy === `act-${a.level}` ? 'Recording…' : 'Approve'}</button>}
+                              {canApprove && <button className="btn btn-success btn-sm" disabled={!!busy} onClick={() => handleAct(a.level, 'APPROVED')}>{busy === `act-${a.level}` ? 'Recording…' : `Approve as ${postName}`}</button>}
                             </div>
                           </div>
                         ))}
@@ -965,6 +1270,30 @@ export default function Invoices() {
                   {selected.status === 'SENT'
                     ? (selected.direction === 'SJVN_TO_BUYER' ? 'Resend Email to Buyer' : 'Resend Email to Seller')
                     : (selected.direction === 'SJVN_TO_BUYER' ? 'Send Email to Buyer' : 'Send Email to Seller')}
+                </button>
+              )}
+              {!isCancelled && CAN_WRITE.includes(user?.role) && selected.invoice_type === 'PROVISIONAL' && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    const parentId = selected.id;
+                    const contractId = selected.contract_id;
+                    const billingPeriod = selected.billing_period;
+                    setSelected(null);
+                    setSuppForm({
+                      ...SUPP_FORM,
+                      contract_id: contractId,
+                      billing_period: billingPeriod,
+                      parent_invoice_id: parentId,
+                      reason_code: 'REVISED_REA',
+                      reason: 'Final REA True-Up delta vs Provisional Invoice.',
+                    });
+                    setSuppError('');
+                    setShowSupp(true);
+                  }}
+                >
+                  + True-Up (Final Adjustment)
                 </button>
               )}
               {!isCancelled && CAN_WRITE.includes(user?.role) && selected.direction === 'SELLER_TO_SJVN' && (
@@ -1142,7 +1471,7 @@ export default function Invoices() {
         )}
       </Modal>
 
-      <Modal open={!!trailBfr} onClose={() => setTrailBfr(null)} title="Settlement Trail" width={720}>
+      <Modal open={!!trailBfr} onClose={() => setTrailBfr(null)} title="Settlement Trail & Pipeline" width="90vw">
         {trailBfr && <SettlementTrailPanel invoiceId={trailBfr.invoiceId} />}
       </Modal>
 

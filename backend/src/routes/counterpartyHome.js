@@ -84,8 +84,8 @@ function scopeOf(user) {
     // as the seller's bill, and is the seller's to see only once presented —
     // its drafts were being counted into the seller's billed and overdue figures.
     billWhere: seller
-      ? `i.status <> 'CANCELLED' AND (${raisedBySellerSql('i')} OR ${presentedSql('i')})`
-      : `${presentedSql('i')} AND i.status <> 'CANCELLED'`,
+      ? `i.status <> 'CANCELLED' AND (${raisedBySellerSql('i')} OR (${presentedSql('i')} AND NOT EXISTS (SELECT 1 FROM invoices s WHERE s.contract_id = i.contract_id AND s.billing_period = i.billing_period AND s.id != i.id AND ${raisedBySellerSql('s')} AND s.status != 'CANCELLED')))`
+      : `${presentedSql('i')} AND i.status <> 'CANCELLED' AND i.direction = 'SJVN_TO_BUYER'`,
   };
 }
 
@@ -142,12 +142,12 @@ function todoOf(user, s) {
   add({ key: 'recon', level: 'amber', count: recon.n, title: `${recon.n} reconciliation statement${recon.n === 1 ? '' : 's'} to sign`, detail: 'Check the figures against your books and sign, or record the items you do not agree.', link: `${P}/reconciliation` });
 
   const requests = one(`SELECT COUNT(*) n, MIN(due_date) first FROM document_requests WHERE entity_id = ? AND status = 'OPEN'`, s.entityId);
-  add({ key: 'doc-requests', level: requests.first && requests.first < today() ? 'red' : 'amber', count: requests.n, title: `SJVN has asked for ${requests.n} document${requests.n === 1 ? '' : 's'}`, detail: requests.first ? `The earliest is wanted by ${requests.first}.` : 'Upload them under My Documents & KYC.', link: `${P}/documents`, due: requests.first });
+  add({ key: 'doc-requests', level: requests.first && requests.first < today() ? 'red' : 'amber', count: requests.n, title: `SJVN has asked for ${requests.n} document${requests.n === 1 ? '' : 's'}`, detail: requests.first ? `The earliest physical copy is wanted by ${requests.first} at SJVN office.` : 'Submit hard-copy to SJVN REIA desk.', link: null, due: requests.first });
 
   const rejected = one(`SELECT COUNT(*) n FROM documents d JOIN document_versions v ON v.document_id = d.id
     WHERE d.entity_id = ? AND d.status = 'ACTIVE' AND v.verification_status = 'REJECTED'
       AND v.version_number = (SELECT MAX(version_number) FROM document_versions WHERE document_id = d.id)`, s.entityId);
-  add({ key: 'doc-rejected', level: 'red', count: rejected.n, title: `${rejected.n} document${rejected.n === 1 ? ' was' : 's were'} rejected by SJVN`, detail: 'See the reason and upload a corrected copy.', link: `${P}/documents` });
+  add({ key: 'doc-rejected', level: 'red', count: rejected.n, title: `${rejected.n} document${rejected.n === 1 ? ' was' : 's were'} rejected by SJVN`, detail: 'Submit revised physical copy to SJVN office for re-verification.', link: null });
 
   const warn = getParamNumber('security_expiry_warn_days', 60);
   const bgs = all(`SELECT ps.instrument_no, ps.validity_end FROM payment_security ps
@@ -205,7 +205,7 @@ function calendarOf(s, days = 60) {
     out.push({ date: r.response_due, kind: 'NOTICE', title: `Response due — ${r.subject}`, detail: 'Notice from SJVN', link: `${s.prefix}/contracts` });
   }
   for (const r of all(`SELECT document_type, due_date FROM document_requests WHERE entity_id = ? AND status = 'OPEN' AND due_date BETWEEN ? AND ?`, s.entityId, today(), until)) {
-    out.push({ date: r.due_date, kind: 'DOCUMENT', title: `Document wanted — ${String(r.document_type).replace(/_/g, ' ').toLowerCase()}`, detail: 'Requested by SJVN', link: `${s.prefix}/documents` });
+    out.push({ date: r.due_date, kind: 'DOCUMENT', title: `Document wanted — ${String(r.document_type).replace(/_/g, ' ').toLowerCase()}`, detail: 'Physical submission requested by SJVN', link: null });
   }
   for (const c of s.contracts) {
     if (c.tenure_end && c.tenure_end >= today() && c.tenure_end <= until) out.push({ date: c.tenure_end, kind: 'CONTRACT', title: `${c.contract_no} reaches the end of its term`, detail: '', link: `${s.prefix}/contracts` });

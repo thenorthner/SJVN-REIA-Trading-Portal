@@ -1,6 +1,8 @@
 # Email draft — IEX UAT: reply to Sandeep's answers of 25-Sep-2026
 
-> **STATUS: DRAFT — not sent.**
+> **STATUS: DRAFT — not sent. Dates refreshed 14-Oct-2026** (was 29/30-Sep,
+> which passed unsent). Test window moved to Thu 22 / Fri 23-Oct-2026 — clear of
+> Dussehra (Tue 20-Oct); check the holiday calendar before sending.
 > This answers IEX's point-by-point reply on the thread *RE: IEX FO API
 > (UAT/Alpha) — base URL, token validity and REC/ESCerts documents — SJVN
 > Limited (N2DL0SJV0000)*. Reply **in that thread** so the whole record stays
@@ -17,8 +19,9 @@ nikhil.sharma34@sjvn.nic.in; praveen.kalta@sjvn.nic.in — same list as the thre
 
 Dear Sandeep ji,
 
-Thank you for the detailed answers. They close almost everything we had open,
-and we have already made the changes at our end. Below is first what we have
+Thank you for the detailed answers of 25-Sep, and our apologies for the delay
+in replying. They close almost everything we had open, and we have already made
+the changes at our end. Below is first what we have
 taken as settled, then the four things we still need from you — the first of
 which is the test window you asked us to propose.
 
@@ -29,8 +32,8 @@ the following. It is two consecutive working days and covers all four segments:
 
 | Segment | Trading day | Delivery date | What we would like run |
 |---|---|---|---|
-| DAM, GDAM, HPDAM | Tue 29-Sep-2026 | Wed 30-Sep-2026 | Final calculation and publish after the session closes |
-| RTM | Wed 30-Sep-2026 | Wed 30-Sep-2026 | Four consecutive sessions, 31 to 34 (15:00–17:00 IST) |
+| DAM, GDAM, HPDAM | Thu 22-Oct-2026 | Fri 23-Oct-2026 | Final calculation and publish after the session closes |
+| RTM | Fri 23-Oct-2026 | Fri 23-Oct-2026 | Four consecutive sessions, 31 to 34 (15:00–17:00 IST) |
 
 Please confirm the slot and the session timings you will keep open, and the name
 of the person who will run it, so we can be on the call while it happens. If
@@ -48,7 +51,7 @@ Two points on what that window will and will not prove:
 
   - **(i)** we enable submission for that window only and place a token bid —
     in which case please confirm the acceptable segment, quantum, price band and
-    the exact bid window for 29-Sep, and we will keep it to the minimum
+    the exact bid window for 22-Oct, and we will keep it to the minimum
     tradeable quantity on one portfolio; or
   - **(ii)** we place the test bid through the Alpha web terminal instead, if
     our UAT credentials permit that login — please confirm the URL; or

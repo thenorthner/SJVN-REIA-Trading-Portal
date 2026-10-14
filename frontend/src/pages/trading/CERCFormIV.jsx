@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
@@ -66,6 +67,29 @@ export default function CERCFormIV() {
   }, []);
 
   useEffect(load, [load]);
+
+  // Arriving from the filing calendar with a period in the URL: open that
+  // period's return if there is one, otherwise start it. Runs once, after the
+  // register has loaded, so a later reload does not reopen a closed modal.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const linkHandled = useRef(false);
+  useEffect(() => {
+    const period = searchParams.get('period');
+    if (!period || loading || linkHandled.current) return;
+    linkHandled.current = true;
+    const periodType = searchParams.get('period_type') === 'ANNUAL' ? 'ANNUAL' : 'MONTHLY';
+    const existing = rows.find((r) => r.period_type === periodType && r.period === period);
+    if (existing) {
+      openDetail(existing);
+    } else if (canWrite) {
+      setForm({ ...EMPTY_FORM, period_type: periodType, period });
+      setFormError('');
+      setShowNew(true);
+    } else {
+      setError(`No Form-IV has been started for ${period}, and your role cannot create one.`);
+    }
+    setSearchParams({}, { replace: true });
+  }, [searchParams, loading, rows]);
 
   // Every write endpoint returns the full form, so the modal and the list stay
   // in step without a second round-trip.
@@ -329,6 +353,13 @@ export default function CERCFormIV() {
               )}
               {editable && <button className="btn btn-outline" onClick={() => openLine(null)}>+ Add transaction</button>}
               <button className="btn btn-ghost" onClick={() => api.formIv.exportCsv(detail.id, detail.form_no)}>Export CSV</button>
+              <button
+                className="btn btn-outline"
+                title="One sheet per form (IV-A, IV-B, …) in the layout filed with the Commission"
+                onClick={() => api.reports.cercAnnexuresXlsx(detail.period_type, detail.period).catch((err) => alert(err.message || 'Could not build the Form-IV workbook.'))}
+              >
+                CERC Excel (annexures)
+              </button>
               <button className="btn btn-outline" onClick={() => api.formIv.downloadPdf(detail.id, detail.form_no).catch((err) => alert(err.message || 'Could not generate the Form-IV PDF.'))}>Download PDF</button>
               {editable && blockers.length === 0 && (
                 <button className="btn btn-primary" disabled={busy} onClick={() => runOnDetail(() => api.formIv.submit(detail.id, {}), 'Failed to submit the filing.')}>

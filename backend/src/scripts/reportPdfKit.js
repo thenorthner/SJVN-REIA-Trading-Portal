@@ -200,8 +200,10 @@ export function newDoc(res, docTitle, filename) {
     size: [PAGE_W, PAGE_H],
     margins: { top: M, bottom: 20, left: M, right: M },
     bufferPages: true,
+    font: 'Helvetica',
     info: { Title: docTitle, Author: 'SJVN Limited', Creator: 'SJVN Energy Platform' },
   });
+  doc.font('Helvetica');
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   doc.pipe(res);

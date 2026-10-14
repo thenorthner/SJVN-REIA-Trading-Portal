@@ -114,7 +114,7 @@ export default function ExchangeBiddingDetailReport() {
     const body = data.map((r) => `<tr>${COLUMNS.map((c) => `<td>${r[c.label] ?? ''}</td>`).join('')}</tr>`).join('');
     w.document.write(`<!doctype html><html><head><title>Bid Details Report</title>
       <style>
-        body{font-family:Arial,sans-serif;padding:16px;font-size:10px}
+        body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;padding:16px;font-size:10px}
         h1{font-size:16px}
         table{border-collapse:collapse;width:100%}
         th,td{border:1px solid #ccc;padding:4px;white-space:nowrap}

@@ -123,8 +123,8 @@ export async function dispatch(o) {
   let notificationId = null;
   if (channels.includes('INAPP')) {
     notificationId = newId('NTF');
-    db.prepare('INSERT INTO notifications (id, user_id, role, type, message) VALUES (?, ?, ?, ?, ?)')
-      .run(notificationId, o.userId || null, o.role || null, o.event, message);
+    db.prepare('INSERT INTO notifications (id, user_id, role, type, message, link) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(notificationId, o.userId || null, o.role || null, o.event, message, o.link || null);
   }
 
   const wantEmail = channels.includes('EMAIL');

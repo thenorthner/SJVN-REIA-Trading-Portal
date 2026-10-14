@@ -213,49 +213,39 @@ const documents = (side) => {
   return {
     eyebrow: 'How this page works',
     title: 'My Documents & KYC',
-    summary: `Where you give SJVN the documents that prove who ${w.you} is — registration, PAN, GST, bank details, licences — and keep your other records. SJVN checks each KYC document and marks it verified or sends it back with a reason.`,
+    summary: `Physical submission policy: All KYC proofs, company registrations, licences, and regulatory clearances are submitted as physical hard-copies directly to the SJVN REIA Office. SJVN Administration scans, uploads, and verifies them on your company's profile.`,
     facts: [
-      { label: 'KYC', value: 'Must be approved', hint: 'To open the other sections' },
-      { label: 'Each upload', value: 'A new version', hint: 'Old versions are kept' },
-      { label: 'Rejected', value: 'Reason is shown', hint: 'Upload a corrected copy' },
-      { label: 'Expiry', value: 'Tracked by the portal', hint: 'You are reminded' },
+      { label: 'Submission', value: 'Physical Hard-Copy', hint: 'Submit directly to SJVN Office' },
+      { label: 'Intake & Scan', value: 'SJVN Administration', hint: 'Admin scans & verifies proofs' },
+      { label: 'KYC Status', value: 'Must be approved', hint: 'To open operational sections' },
+      { label: 'Expiry', value: 'Tracked by the portal', hint: 'You are reminded in advance' },
     ],
     quickRef: { title: 'Statuses', items: [
-      { k: 'Pending', v: 'Uploaded, SJVN has not checked yet' },
-      { k: 'Verified', v: 'SJVN has accepted it' },
-      { k: 'Rejected', v: 'Sent back — see the reason' },
-      { k: 'Expired', v: 'Its validity date has passed' },
+      { k: 'Pending', v: 'Physical copy under review by SJVN' },
+      { k: 'Verified', v: 'SJVN has accepted the document' },
+      { k: 'Rejected', v: 'Remarks given — submit revised copy' },
+      { k: 'Expired', v: 'Validity date has passed' },
     ] },
     sections: [
       { id: 'k-why', heading: 'Why this page matters', blocks: [
-        { type: 'p', text: `Until SJVN approves your KYC, the sections for ${w.contracts}, energy, bills, payments, disputes, security and reconciliation stay closed. The banner at the top of the portal tells you what is still missing.` },
+        { type: 'p', text: `Until SJVN physically verifies and approves your KYC, operational sections for ${w.contracts}, energy, bills, payments, disputes, security and reconciliation stay closed. You can track verified items on this page.` },
       ] },
-      { id: 'k-how', heading: 'Uploading a document', blocks: [
+      { id: 'k-how', heading: 'Physical Submission Process', blocks: [
         { type: 'steps', items: [
-          { title: 'Click Upload Document', detail: 'Pick the document type that matches — for example "PAN Card" or "GST Certificate". Add the expiry date if the document has one.' },
-          { title: 'A maker\'s upload goes to the checker', detail: 'If a Level 1 user uploads a KYC document, a checker or the admin has to submit it to SJVN.' },
-          { title: 'SJVN verifies', detail: 'The document shows Pending until SJVN checks it. Then it turns Verified, or Rejected with a reason.' },
-          { title: 'If rejected, upload again', detail: 'Correct the problem and upload a new copy. It becomes the next version of the same document.' },
-        ] },
-        { type: 'note', tone: 'info', title: 'The portal reads your PAN and GSTIN', text: 'When you upload a PAN card or GST certificate as a text PDF, the portal reads the number from it and compares it with your company record. A mismatch is shown to you and to SJVN.' },
-      ] },
-      { id: 'k-rules', heading: 'What is not accepted', blocks: [
-        { type: 'table', columns: ['The portal refuses', 'Why'], rows: [
-          ['The same file that was just rejected', 'It is still the file that was turned down. Upload a corrected one.'],
-          ['An empty or damaged PDF', 'Nobody could open it. Export or scan it again.'],
-          ['A file already used by another company', 'It is flagged to SJVN, because one document should not belong to two companies.'],
+          { title: 'Submit physical hard-copy', detail: 'Deliver physical signed/attested documents (PAN, GST, Bank Mandate, Licences) to the SJVN REIA desk.' },
+          { title: 'SJVN Admin scans & indexes', detail: 'The SJVN administrative team receives the physical documents, scans them, and uploads them to your digital record.' },
+          { title: 'Verification & Approval', detail: 'SJVN reviews the scanned proofs against regulatory checklists. Verified items immediately reflect on your portal.' },
+          { title: 'If remarks given, re-submit physical copy', detail: 'If any discrepancy is found, SJVN records the remarks. Deliver the revised physical proof to SJVN.' },
         ] },
       ] },
       { id: 'k-req', heading: 'When SJVN asks for a document', blocks: [
-        { type: 'p', text: 'SJVN can request a specific document with a due date. The request appears on this page and on your dashboard. Upload the document against the request and it closes on its own.' },
-        { type: 'p', text: 'You can also download all your documents together as one ZIP file.' },
+        { type: 'p', text: 'SJVN can request a specific document with a due date. Please deliver the requested hard-copy to SJVN REIA office within the specified timeframe.' },
+        { type: 'p', text: 'You can also download all your verified documents together as one ZIP file.' },
       ] },
       { id: 'k-faq', heading: 'Common questions', blocks: [
-        { type: 'faq', items: [
-          { q: 'Can SJVN upload my KYC document for me?', a: 'No. KYC documents must come from your company, so that the same person never uploads and verifies a document.' },
-          { q: 'My document is about to expire.', a: 'Upload the renewed one as a new version before the expiry date. The portal reminds you ahead of time.' },
-          { q: 'What do the watermarks in the preview mean?', a: 'Every preview is stamped with the viewer\'s name and date. It discourages screenshots being passed around.' },
-        ] },
+        { q: 'How do I submit my KYC documents?', a: 'Physical copies must be delivered directly to the SJVN REIA Office. Direct web uploading by counterparties is disabled to ensure strict custody and verification of physical originals.' },
+        { q: 'My document is about to expire.', a: 'Submit the renewed physical copy to SJVN before the expiry date so the desk can update your record.' },
+        { q: 'What do the watermarks in the preview mean?', a: 'Every preview is stamped with the viewer\'s name and date. It discourages screenshots being passed around.' },
       ] },
     ],
   };

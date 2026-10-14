@@ -121,10 +121,12 @@ describe('S22 Onboarding asks for what each kind of counterparty has', () => {
   const post = (body) => request(app).post('/api/entities').set(auth(reia)).send(body);
   const uniq = () => Math.random().toString(36).slice(2, 7).toUpperCase();
 
-  const seller = (over = {}) => ({ entity_type: 'SELLER', category: 'IPP', name: `S ${uniq()}`,
-    pan_no: `AAACS${uniq()}`, gst_no: `24AAACS${uniq()}1ZQ`, capacity_mw: 25, ...over });
-  const buyer = (over = {}) => ({ entity_type: 'BUYER', category: 'DISCOM', name: `B ${uniq()}`,
-    pan_no: `AAACD${uniq()}`, gst_no: `02AAACD${uniq()}1ZR`, contracted_capacity_mw: 200, ...over });
+  // A well-formed PAN, and the GSTIN that carries it — onboarding checks both.
+  const pan = (prefix) => `${prefix}${String(Math.floor(1000 + Math.random() * 9000))}K`;
+  const seller = (over = {}) => { const p = pan('AAACS'); return { entity_type: 'SELLER', category: 'IPP', name: `S ${uniq()}`,
+    pan_no: p, gst_no: `24${p}1ZQ`, capacity_mw: 25, ...over }; };
+  const buyer = (over = {}) => { const p = pan('AAACD'); return { entity_type: 'BUYER', category: 'DISCOM', name: `B ${uniq()}`,
+    pan_no: p, gst_no: `02${p}1ZR`, contracted_capacity_mw: 200, ...over }; };
 
   it('accepts a complete seller', async () => {
     expect((await post(seller())).status).toBe(201);
@@ -172,12 +174,13 @@ describe('S22 A signatory has somewhere to go', () => {
   // contact_type allowed COMMERCIAL, TECHNICAL, DISPUTE and EMERGENCY, so the
   // authorised signatory — the person who binds the counterparty, and the one
   // onboarding asks for by name — had nowhere to be recorded with an email.
-  const post = (contacts) => request(app).post('/api/entities').set(auth(reia)).send({
-    entity_type: 'SELLER', category: 'IPP', name: `Sig ${Math.random().toString(36).slice(2, 7)}`,
-    pan_no: `AAACS${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
-    gst_no: `24AAACS${Math.random().toString(36).slice(2, 7).toUpperCase()}1ZQ`,
-    capacity_mw: 10, contacts,
-  });
+  const post = (contacts) => {
+    const pan = `AAACS${String(Math.floor(1000 + Math.random() * 9000))}M`;
+    return request(app).post('/api/entities').set(auth(reia)).send({
+      entity_type: 'SELLER', category: 'IPP', name: `Sig ${Math.random().toString(36).slice(2, 7)}`,
+      pan_no: pan, gst_no: `24${pan}1ZQ`, capacity_mw: 10, contacts,
+    });
+  };
 
   it('accepts an authorised signatory', async () => {
     const r = await post([{ contact_type: 'AUTHORIZED_SIGNATORY', name: 'A. Sharma', email: 'a@x.test', phone: '9999999999', is_primary: 1 }]);

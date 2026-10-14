@@ -112,12 +112,17 @@ export function announceValidated(row) {
 router.get('/analytics', (req, res) => send(res, () => {
   const { side, contracts } = contractsFor(req.user, req.query.contract_id);
   const months = Math.min(Math.max(Number(req.query.months) || 24, 1), 120);
-  const byId = new Map(contracts.map((c) => [c.id, c]));
-  if (!contracts.length) return { series: [], totals: null, contracts: [] };
+  // When aggregating across all contracts, do not double-count back-to-back PSAs
+  // whose energy is already accounted for in the parent PPA.
+  const effectiveContracts = req.query.contract_id
+    ? contracts
+    : contracts.filter((c) => c.contract_type === 'PPA' || !db.prepare('SELECT 1 FROM contract_allocations WHERE psa_id = ?').get(c.id));
+  const byId = new Map(effectiveContracts.map((c) => [c.id, c]));
+  if (!effectiveContracts.length) return { series: [], totals: null, contracts: [] };
 
   const rows = db.prepare(`
-    SELECT * FROM energy_data WHERE contract_id IN (${contracts.map(() => '?').join(',')})
-  `).all(...contracts.map((c) => c.id));
+    SELECT * FROM energy_data WHERE contract_id IN (${effectiveContracts.map(() => '?').join(',')})
+  `).all(...effectiveContracts.map((c) => c.id));
 
   // One standing record per contract per period, then the periods summed across contracts.
   const groups = new Map();

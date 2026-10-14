@@ -201,8 +201,14 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   // waited on.
   for (const [role, entityId] of [['seller', b.seller_id], ['buyer', b.buyer_id]]) {
     if (!entityId) continue;
-    const e = db.prepare('SELECT id, name, status FROM entities WHERE id = ?').get(entityId);
+    const e = db.prepare('SELECT id, name, status, is_blacklisted, blacklist_reason FROM entities WHERE id = ?').get(entityId);
     if (!e) return res.status(404).json({ error: `${role} ${entityId} not found` });
+    if (e.is_blacklisted) {
+      return res.status(400).json({
+        error: `${e.name} is blacklisted${e.blacklist_reason ? ` (${e.blacklist_reason})` : ''} — a new contract cannot be raised against it.`,
+        entity_id: e.id,
+      });
+    }
     if (e.status !== 'APPROVED') {
       return res.status(400).json({
         error: `${e.name} is ${e.status}, not APPROVED — a contract cannot be raised against a counterparty that has not completed onboarding.`,
@@ -302,6 +308,24 @@ router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     });
   }
   
+  // A contract is "signed" because there is a signed agreement, and that
+  // agreement has to be on file before the record may say so. One could be
+  // created, signed and made live with no document behind it at all — a
+  // billable contract whose terms nobody could check against the paper.
+  if (['SIGNED', 'PENDING_REGULATORY_APPROVAL', 'ACTIVE'].includes(status)
+      && ['DRAFT', 'UNDER_NEGOTIATION', 'SIGNED', 'PENDING_REGULATORY_APPROVAL'].includes(contract.status)) {
+    const onFile = db.prepare(`
+      SELECT COUNT(*) AS n FROM documents
+      WHERE status = 'ACTIVE' AND contract_id IN (?, ?)
+    `).get(contract.id, contract.parent_contract_id ?? contract.id).n;
+    if (!onFile) {
+      return res.status(400).json({
+        error: `${contract.contract_no} has no agreement document on file. Upload the signed contract PDF (working file → Documents) before moving it to ${status}.`,
+        missing_document: true,
+      });
+    }
+  }
+
   // Ending a contract is where the money question gets asked, so it is asked
   // here rather than left to whoever remembers. Terminating only wrote a status,
   // a reason and a date — a contract could be ended with lakhs unbilled against
@@ -395,9 +419,10 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
       error: `effective_from ${effectiveFrom} is before the contract began (${original.tenure_start}) — an amendment cannot reach back past the contract itself.`,
     });
   }
-  if (original.tenure_end && effectiveFrom > String(original.tenure_end)) {
+  const tenureEnd = req.body.tenure_end || original.tenure_end;
+  if (tenureEnd && effectiveFrom > String(tenureEnd)) {
     return res.status(400).json({
-      error: `effective_from ${effectiveFrom} is after the contract ends (${original.tenure_end}) — there would be nothing left for it to apply to.`,
+      error: `effective_from ${effectiveFrom} is after the contract ends (${tenureEnd}) — there would be nothing left for it to apply to.`,
     });
   }
 
@@ -485,16 +510,28 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
   res.status(201).json(fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(newVersionId)));
 });
 
-// PPA to PSA Allocations
+// PPA to PSA Allocations. Read from either end: a PPA lists the PSAs it
+// supplies, a PSA lists the PPAs it draws from. The link could only be seen —
+// and made — from the PPA, so opening a PSA said nothing about where its energy
+// came from.
 router.get('/:id/allocations', (req, res) => {
+  const contract = db.prepare('SELECT id, contract_type, seller_id, buyer_id FROM contracts WHERE id = ?').get(req.params.id);
+  if (!contract || !contractVisibleTo(req.user, contract)) return res.status(404).json({ error: 'Contract not found' });
+  const side = contract.contract_type === 'PSA' ? 'a.psa_id' : 'a.ppa_id';
   const allocations = db.prepare(`
-    SELECT a.*, c.contract_no as psa_no, e.name as buyer_name
+    SELECT a.*, psa.contract_no AS psa_no, eb.name AS buyer_name,
+           ppa.contract_no AS ppa_no, es.name AS seller_name,
+           ppa.capacity_mw AS ppa_capacity_mw, ppa.project_type AS ppa_project_type,
+           psa.capacity_mw AS psa_capacity_mw, psa.tariff_per_unit AS psa_tariff,
+           ppa.tariff_per_unit AS ppa_tariff
     FROM contract_allocations a
-    JOIN contracts c ON a.psa_id = c.id
-    JOIN entities e ON c.buyer_id = e.id
-    WHERE a.ppa_id = ?
+    JOIN contracts psa ON a.psa_id = psa.id
+    JOIN contracts ppa ON a.ppa_id = ppa.id
+    LEFT JOIN entities eb ON psa.buyer_id = eb.id
+    LEFT JOIN entities es ON ppa.seller_id = es.id
+    WHERE ${side} = ?
     ORDER BY a.created_at DESC
-  `).all(req.params.id);
+  `).all(contract.id);
   res.json(allocations);
 });
 
@@ -563,6 +600,11 @@ router.post('/:id/allocations', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, re
   if (!ppa) return res.status(404).json({ error: 'PPA not found' });
   
   const { psa_id, allocation_percent, effective_from, effective_to } = req.body;
+
+  // The other end has to be a PSA that exists. Unchecked, a mistyped id fell
+  // through to the foreign key and came back a 500.
+  const psa = psa_id ? db.prepare(`SELECT id, contract_no FROM contracts WHERE id = ? AND contract_type = 'PSA'`).get(psa_id) : null;
+  if (!psa) return res.status(400).json({ error: 'psa_id must name an existing PSA' });
 
   const percent = Number(allocation_percent);
   if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
@@ -775,10 +817,11 @@ function checkBulkRow(raw, entityCache, seenNumbers) {
   for (const [side, entityId] of [['seller', row.seller_id], ['buyer', row.buyer_id]]) {
     if (!entityId) continue;
     if (!entityCache.has(entityId)) {
-      entityCache.set(entityId, db.prepare('SELECT id, name, entity_type, status FROM entities WHERE id = ?').get(entityId));
+      entityCache.set(entityId, db.prepare('SELECT id, name, entity_type, status, is_blacklisted FROM entities WHERE id = ?').get(entityId));
     }
     const entity = entityCache.get(entityId);
     if (!entity) { errors.push(`${side} ${entityId} not found`); continue; }
+    if (entity.is_blacklisted) errors.push(`${side} ${entity.name} is blacklisted`);
     if (entity.status !== 'APPROVED') {
       errors.push(`${side} ${entity.name} is ${entity.status}, not APPROVED — onboarding is not complete`);
     }

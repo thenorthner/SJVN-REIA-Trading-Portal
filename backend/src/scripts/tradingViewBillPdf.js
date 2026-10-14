@@ -13,7 +13,8 @@ function dateText(v) {
 }
 
 export function generateTradingViewBillPdf(invoice, notes, res) {
-  const doc = new PDFDocument({ size: 'A4', margin: 42 });
+  const doc = new PDFDocument({ size: 'A4', margin: 42, font: 'Helvetica' });
+  doc.font('Helvetica');
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${String(invoice.invoice_no || invoice.id).replace(/[^A-Za-z0-9._-]/g, '_')}.pdf"`);
   doc.pipe(res);
@@ -23,9 +24,10 @@ export function generateTradingViewBillPdf(invoice, notes, res) {
   })();
   const lineItems = Array.isArray(breakup.line_items) ? breakup.line_items : [];
 
-  doc.fontSize(18).text('SJVN Trading Invoice', { align: 'center' });
+  doc.font('Helvetica-Bold').fontSize(18).text('SJVN Trading Invoice', { align: 'center' });
   doc.moveDown(0.5);
-  doc.fontSize(10).text(`Invoice No: ${invoice.invoice_no || invoice.id}`);
+  doc.font('Helvetica-Bold').fontSize(10).text(`Invoice No: ${invoice.invoice_no || invoice.id}`);
+  doc.font('Helvetica').fontSize(10);
   doc.text(`Client: ${invoice.client_name || '—'}`);
   doc.text(`Bill Type: ${invoice.bill_type}`);
   doc.text(`Settlement Basis: ${invoice.settlement_basis || '—'}`);
@@ -38,8 +40,8 @@ export function generateTradingViewBillPdf(invoice, notes, res) {
   doc.text(`Generated On: ${invoice.invoice_generated_on || '—'}`);
   doc.moveDown();
 
-  doc.fontSize(12).text('Commercial Summary');
-  doc.fontSize(10);
+  doc.font('Helvetica-Bold').fontSize(12).text('Commercial Summary');
+  doc.font('Helvetica').fontSize(10);
   doc.text(`Quantum: ${invoice.quantum_mwh != null ? Number(invoice.quantum_mwh).toFixed(3) : '—'} MWh`);
   doc.text(`Rate: ${invoice.rate_per_unit != null ? `Rs. ${Number(invoice.rate_per_unit).toFixed(4)}/kWh` : '—'}`);
   doc.text(`GST: Rs. ${money(invoice.gst_amount)}`);
@@ -50,8 +52,8 @@ export function generateTradingViewBillPdf(invoice, notes, res) {
   }
   doc.moveDown();
 
-  doc.fontSize(12).text('Line Items');
-  doc.fontSize(10);
+  doc.font('Helvetica-Bold').fontSize(12).text('Line Items');
+  doc.font('Helvetica').fontSize(10);
   if (!lineItems.length) {
     doc.text('No itemized breakup stored.');
   } else {
@@ -62,8 +64,8 @@ export function generateTradingViewBillPdf(invoice, notes, res) {
 
   if (notes.length) {
     doc.moveDown();
-    doc.fontSize(12).text('Debit / Credit Notes');
-    doc.fontSize(10);
+    doc.font('Helvetica-Bold').fontSize(12).text('Debit / Credit Notes');
+    doc.font('Helvetica').fontSize(10);
     for (const note of notes) {
       const dir = note.note_type === 'DEBIT' ? '+' : '-';
       doc.text(`${note.note_no}  ${note.note_type}  ${note.reason_code}  ${dir}Rs. ${money(note.amount)}  (${note.status})`);
@@ -72,8 +74,8 @@ export function generateTradingViewBillPdf(invoice, notes, res) {
 
   if (invoice.remarks) {
     doc.moveDown();
-    doc.fontSize(12).text('Remarks');
-    doc.fontSize(10).text(invoice.remarks);
+    doc.font('Helvetica-Bold').fontSize(12).text('Remarks');
+    doc.font('Helvetica').fontSize(10).text(invoice.remarks);
   }
 
   doc.end();

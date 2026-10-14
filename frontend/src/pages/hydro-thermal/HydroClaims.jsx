@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import api from '../../api/client.js';
+import { writeRolesFor, pathFor, deskLabel } from '../../lib/stationVertical.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import {
@@ -28,9 +29,9 @@ const EMPTY_TCS = {
   amount_received: '', tcs_applicable_amount: '', tcs_rate_pct: '0.1', remarks: '',
 };
 
-export default function HydroClaims() {
+export default function HydroClaims({ vertical = 'HYDRO' }) {
   const { user } = useAuth();
-  const canWrite = ROLE_GROUPS.HYDRO_THERMAL_WRITE.includes(user?.role);
+  const canWrite = writeRolesFor(vertical).includes(user?.role);
 
   const [stations, setStations] = useState([]);
   const [stationId, setStationId] = useState('');
@@ -52,7 +53,7 @@ export default function HydroClaims() {
   const station = useMemo(() => stations.find((s) => s.id === stationId), [stations, stationId]);
 
   useEffect(() => {
-    api.hydroBilling.stations()
+    api.hydroBilling.stations({ vertical })
       .then((list) => {
         setStations(list || []);
         if (list?.length) setStationId((cur) => cur || list[0].id);
@@ -147,7 +148,7 @@ export default function HydroClaims() {
     <div>
       <PageHeader
         title="Additional Charges & TCS"
-        subtitle="What a hydro station bills besides its monthly energy bill"
+        subtitle={`What a ${deskLabel(vertical).toLowerCase()} station bills besides its monthly energy bill`}
       />
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}

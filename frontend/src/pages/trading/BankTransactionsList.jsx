@@ -57,7 +57,7 @@ export default function BankTransactionsList() {
   };
 
   return (
-    <div style={{ padding: 20, maxWidth: 1400, margin: '0 auto' }}>
+    <div style={{ padding: 20 }}>
       <PageHeader title="BANK TRANSACTION LIST (Ledger)" />
 
       <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>

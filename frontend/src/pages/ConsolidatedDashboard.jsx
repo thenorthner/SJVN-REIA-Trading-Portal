@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FileText, Zap, AlertCircle, FileSearch, CheckCircle, PieChart, TrendingUp, BarChart3, Clock, ShieldCheck, Activity, LineChart, FileSpreadsheet, Sparkles } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import api from '../api/client.js';
-import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Badge, Modal } from '../components/ui.jsx';
+import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Badge } from '../components/ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../roles.js';
 
@@ -85,7 +85,6 @@ export default function ConsolidatedDashboard() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
-  const [showGlossary, setShowGlossary] = useState(false);
   const [busyReport, setBusyReport] = useState(null);
   const [reportError, setReportError] = useState('');
 
@@ -145,7 +144,6 @@ export default function ConsolidatedDashboard() {
           subtitle="Enterprise-wide portfolio view, risk rollup, and MIS"
           actions={
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn btn-outline" onClick={() => setShowGlossary(true)}>KPI Glossary</button>
               <button className="btn btn-outline" disabled={busyReport === '/reports/mis/pdf'}
                 onClick={() => pullReport({ path: '/reports/mis/pdf', file: 'SJVN_Internal_MIS.pdf', title: 'Internal MIS' })}>
                 {busyReport === '/reports/mis/pdf' ? 'Preparing…' : 'Internal MIS (PDF)'}
@@ -454,35 +452,9 @@ export default function ConsolidatedDashboard() {
         ))}
       </div>
 
-      {showGlossary && (
-        <Modal open={true} onClose={() => setShowGlossary(false)} title="KPI Dictionary & Glossary" width={600}>
-          <div style={{ padding: 10 }}>
-            <h4 style={{ marginBottom: 5 }}>Enterprise Risk Rollup</h4>
-            <ul style={{ marginBottom: 15, paddingLeft: 20 }}>
-              <li><strong>Total Unresolved Exposure:</strong> Sum of (REIA Overdue Receivables + Trading Outstanding Invoices + REIA Open Disputed Amounts).</li>
-              <li><strong>Payment Security Coverage:</strong> (Total Active/Renewed Payment Security Amount) / (Total Unresolved Exposure) * 100. Target is &gt;= 100%.</li>
-              <li><strong>Data Validation Completeness:</strong> Percentage of Energy Data records that are in `LOCKED` (validated) status vs total records.</li>
-            </ul>
-
-            <h4 style={{ marginBottom: 5 }}>REIA Definitions</h4>
-            <ul style={{ marginBottom: 15, paddingLeft: 20 }}>
-              <li><strong>Receivables:</strong> Total value of invoices sent to Buyers that are not fully PAID or CANCELLED.</li>
-              <li><strong>Overdue:</strong> Portion of Receivables where the current date is past the `due_date`.</li>
-              <li><strong>Disputed Amount:</strong> Financial value associated with Disputes in an open state (excluding CLOSED or fully RESOLVED).</li>
-            </ul>
-
-            <h4 style={{ marginBottom: 5 }}>Trading Definitions</h4>
-            <ul style={{ paddingLeft: 20 }}>
-              <li><strong>Trading Revenue:</strong> Total gross amount from all trading invoices.</li>
-              <li><strong>Trading Margin / Profitability:</strong> SJVN's specific cut/margin (`sjvn_margin`) applied to executed trades. Realized and Unrealized margins are combined here.</li>
-              <li><strong>Outstanding:</strong> Value of trading invoices that are not PAID or SETTLED_VIA_NETTING.</li>
-            </ul>
-          </div>
-        </Modal>
-      )}
-
       <style>{`
         @media print {
+          * { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important; }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
           .dashboard-container { padding: 0; background: white; }

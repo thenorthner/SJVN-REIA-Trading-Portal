@@ -167,6 +167,16 @@ export function Table({
   );
 }
 
+/**
+ * Take the page back to the top. The page scrolls inside .main-col, not the
+ * window, so window.scrollTo does nothing here.
+ */
+export function scrollPageTop(behavior = 'auto') {
+  const scroller = document.querySelector('.main-col');
+  if (scroller?.scrollTo) scroller.scrollTo({ top: 0, behavior });
+  else window.scrollTo({ top: 0, behavior });
+}
+
 let modalSeq = 0;
 
 export function Modal({ open, onClose, title, children, width = 640 }) {
@@ -192,8 +202,10 @@ export function Modal({ open, onClose, title, children, width = 640 }) {
   }, [open]);
 
   // Scaled modal width: User requested "aisi har window thodi si badha de"
-  // Increases every modal window size across the application by ~18-20% for optimal readability & breathing room
   const computedMaxWidth = React.useMemo(() => {
+    if (typeof width === 'string' && (width.endsWith('vw') || width.endsWith('%') || width.endsWith('vh') || width.includes('calc'))) {
+      return width;
+    }
     let numWidth = typeof width === 'number' ? width : parseInt(width, 10);
     if (!isNaN(numWidth)) {
       const scaled = Math.round(Math.max(numWidth * 1.18, 640));
@@ -203,11 +215,16 @@ export function Modal({ open, onClose, title, children, width = 640 }) {
   }, [width]);
 
   if (!open) return null;
+  const isWide = typeof width === 'string' && (width.includes('90') || width.includes('92') || width.includes('95'));
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={onClose} style={isWide ? { padding: '5vh 5vw' } : undefined}>
       <div
         className="modal"
-        style={{ maxWidth: computedMaxWidth }}
+        style={{
+          width: typeof width === 'string' && (width.endsWith('vw') || width.endsWith('%')) ? width : '100%',
+          maxWidth: computedMaxWidth,
+          ...(isWide ? { maxHeight: '90vh' } : {}),
+        }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -222,6 +239,115 @@ export function Modal({ open, onClose, title, children, width = 640 }) {
           </button>
         </div>
         <div className="modal-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A message the user has to see before going on: a validation failure, a
+ * refusal from the server, or a confirmation. It sits above any open modal and
+ * takes the Escape key for itself, so dismissing it does not also close the
+ * form underneath.
+ *
+ * `items` is an optional list of { label, message, onClick } — one per problem,
+ * each of which can take the user to the field it is about.
+ */
+export function AlertPopup({ open, tone = 'error', title, message, items, actions, onClose, okLabel }) {
+  const okRef = React.useRef(null);
+  const onCloseRef = React.useRef(onClose);
+  onCloseRef.current = onClose;
+
+  React.useEffect(() => {
+    if (!open) return undefined;
+    okRef.current?.focus();
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      onCloseRef.current?.();
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [open]);
+
+  if (!open) return null;
+  const icon = { error: '!', warning: '!', success: '✓', info: 'i' }[tone] || '!';
+  const defaultLabel = actions
+    ? 'Close'
+    : (items?.length > 0
+        ? 'Review & Fix'
+        : (tone === 'warning' || tone === 'info' ? 'Acknowledge' : (tone === 'success' ? 'OK' : 'Acknowledge')));
+  const buttonText = okLabel || defaultLabel;
+
+  return (
+    <div className="alert-popup-backdrop" onClick={onClose}>
+      <div
+        className={`alert-popup ${tone}`}
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="alert-popup-head">
+          <span className="alert-popup-icon" aria-hidden="true">{icon}</span>
+          <h3>{title}</h3>
+        </div>
+        <div className="alert-popup-body">
+          {message && <p>{message}</p>}
+          {items?.length > 0 && (
+            <ul
+              style={
+                typeof items[0] === 'string'
+                  ? {
+                      listStyleType: 'disc',
+                      paddingLeft: 24,
+                      margin: '10px 0 14px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                    }
+                  : undefined
+              }
+            >
+              {items.map((it, i) => (
+                <li
+                  key={i}
+                  style={
+                    typeof it === 'string'
+                      ? {
+                          display: 'list-item',
+                          listStyleType: 'disc',
+                          fontSize: 13.5,
+                          lineHeight: 1.5,
+                          color: 'var(--text)',
+                        }
+                      : undefined
+                  }
+                >
+                  {typeof it === 'string' ? (
+                    <span>{it}</span>
+                  ) : it.onClick ? (
+                    <button type="button" className="alert-popup-item" onClick={it.onClick}>
+                      <strong>{it.label}</strong>
+                      <span>{it.message}</span>
+                    </button>
+                  ) : (
+                    <div className="alert-popup-item">
+                      {it.label && <strong>{it.label}</strong>}
+                      <span>{it.message}</span>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="alert-popup-actions">
+          {actions}
+          <button type="button" className="btn btn-primary" ref={okRef} onClick={onClose}>
+            {buttonText}
+          </button>
+        </div>
       </div>
     </div>
   );

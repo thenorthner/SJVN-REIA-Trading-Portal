@@ -56,7 +56,7 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
   };
 
   return (
-    <div style={{ padding: '0 20px 20px', maxWidth: 1600, margin: '0 auto' }}>
+    <div style={{ padding: '0 20px 20px' }}>
       
       {/* Top Compliance Alerts */}
       <ComplianceStatusBar />

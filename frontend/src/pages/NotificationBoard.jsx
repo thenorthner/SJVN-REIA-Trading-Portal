@@ -7,6 +7,7 @@ import { ROLE_GROUPS } from '../roles.js';
 import { PageHeader, Card, StatCard, Modal, Field } from '../components/ui.jsx';
 import KYCBanner from '../components/KYCBanner.jsx';
 import { fmtDateTime } from '../datetime.js';
+import { getNotificationAction } from '../lib/notificationRouting.js';
 
 const SEV = {
   CRITICAL: { label: 'Critical', cls: 'sev-critical', dot: 'var(--red-strong)' },
@@ -407,7 +408,9 @@ export default function NotificationBoard() {
                     <span className="nb-group-count">{list.length}</span>
                   </div>
                   <div className="nb-alert-grid">
-                    {list.slice(0, open ? undefined : GROUP_PAGE).map((a) => (
+                    {list.slice(0, open ? undefined : GROUP_PAGE).map((a) => {
+                      const action = a.link ? { url: a.link, label: 'View →' } : getNotificationAction({ type: a.category, message: `${a.title || ''} ${a.detail || ''}` }, user);
+                      return (
                       <div key={a.id} className={`nb-alert ${SEV[sev].cls}`}>
                         <div className="nb-alert-top">
                           <span className="nb-alert-cat">{a.category}</span>
@@ -417,11 +420,12 @@ export default function NotificationBoard() {
                         <div className="nb-alert-detail">{a.detail}</div>
                         {a.since && <div className="nb-alert-since">On the board since {fmtDateTime(a.since)}</div>}
                         <div className="nb-alert-actions">
-                          {a.link && <button type="button" className="primary" onClick={() => navigate(a.link)}>View →</button>}
+                          {action?.url && <button type="button" className="primary" onClick={() => navigate(action.url)}>{action.label || 'View →'}</button>}
                           <button type="button" className="ack" title="Seen it — take it off my board until it gets worse" onClick={() => acknowledge('ALERT', a.id)}>Acknowledge</button>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   {list.length > GROUP_PAGE && !open && (
                     <button type="button" className="btn nb-more" onClick={() => setExpanded({ ...expanded, [sev]: true })}>

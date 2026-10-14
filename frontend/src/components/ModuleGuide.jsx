@@ -183,8 +183,10 @@ function useActiveSection(ids) {
       setActive(current);
     };
     onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    // Captured on the document: the page scrolls inside .main-col, and scroll
+    // events from an element do not bubble up to the window.
+    document.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    return () => document.removeEventListener('scroll', onScroll, { capture: true });
   }, [ids]);
   return active;
 }

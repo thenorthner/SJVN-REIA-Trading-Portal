@@ -193,8 +193,32 @@ export function priorCumulative(contractId, periodMonth, { excludeBillId = null 
  * scheduled energy, the achieved availability, the certified beta — is passed
  * in, because it comes off the Regional Energy Account rather than the contract.
  */
+/** Availability is paid for up to this and no further, whatever the station achieved. */
+export const PAFM_CAP_PCT = 110;
+
+const YEAR_TARIFF_FIELDS = ['annual_afc', 'ecr_excess_rate', 'napaf_percent', 'annual_design_energy_mwh', 'normative_aux'];
+
+/** The tariff row on file for a station and the financial year a month falls in, if any. */
+export function stationTariffFor(contractId, periodMonth) {
+  if (!contractId) return null;
+  return db.prepare('SELECT * FROM hydro_station_tariffs WHERE contract_id = ? AND financial_year = ?')
+    .get(contractId, financialYearOf(periodMonth)) || null;
+}
+
+/**
+ * The contract as it bills in a given month: its own constants, with the
+ * financial year's figures over them where the year has any on file.
+ */
+export function contractForMonth(contract, periodMonth) {
+  const year = stationTariffFor(contract?.id, periodMonth);
+  if (!year) return contract;
+  const out = { ...contract };
+  for (const f of YEAR_TARIFF_FIELDS) if (year[f] != null) out[f] = year[f];
+  return out;
+}
+
 export function computeStationBill({
-  contract,
+  contract: contractAsHeld,
   periodMonth,
   exBusScheduledKwh,
   freePowerKwh,
@@ -210,6 +234,7 @@ export function computeStationBill({
     throw new Error(`billing_month must be YYYY-MM, got "${periodMonth}"`);
   }
 
+  const contract = contractForMonth(contractAsHeld, periodMonth);
   const afc = resolveAnnualAfc(contract);
   const de = num(contract.annual_design_energy_mwh);
   const aux = num(contract.normative_aux);
@@ -240,7 +265,9 @@ export function computeStationBill({
   // ─── C block: capacity charges, inclusive of the beta incentive ───
   // PAFM defaults to NAPAF so a month whose availability has not yet been
   // certified bills at normative rather than at zero.
-  const pafm = pafmPercent == null || pafmPercent === '' ? napaf : num(pafmPercent);
+  // The REA publishes PAFM already capped; the cap is applied here too so a
+  // figure keyed in by hand cannot bill availability beyond it.
+  const pafm = Math.min(pafmPercent == null || pafmPercent === '' ? napaf : num(pafmPercent), PAFM_CAP_PCT);
   const c2 = money(afc * 0.5 * (ndm / ndy) * (pafm / napaf));
   const beta = computeBetaFromAnnualAfc(afc, betaValue, contract.project_type);
   const c4 = money(beta.incentive);

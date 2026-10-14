@@ -57,7 +57,10 @@ const upload = multer({
 
 const EXTERNAL_ROLES = [...SELLER_ROLES, ...BUYER_ROLES, 'TRADING_CLIENT', 'TRADING_CLIENT_MAKER', 'TRADING_CLIENT_CHECKER'];
 const isExternal = (user) => EXTERNAL_ROLES.includes(user?.role);
-const canVerify = (user) => ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+// The desks that onboard stakeholders — REIA, Commercial (hydro) and Thermal —
+// each take in and verify their own stakeholders' papers.
+const INTAKE_ROLES = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
+const canVerify = (user) => INTAKE_ROLES.includes(user?.role);
 
 /** The entity ids an outside login stands for. A trading client's login may
  *  point at the client row or at the entity behind it; both are honoured. */
@@ -405,13 +408,16 @@ router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
   }
   if (expiry_date && !/^\d{4}-\d{2}-\d{2}$/.test(expiry_date)) return refuse(400, 'expiry_date must be YYYY-MM-DD');
 
-  // Segregation of duties: counterparty users upload their own documents.
-  // SJVN Admin and REIA desk officers are also authorized to directly intake
-  // and upload stakeholder compliance/KYC documents on behalf of stakeholders.
+  // Physical document submission policy:
+  // Counterparties submit physical documents directly to SJVN REIA office.
+  // SJVN Admin and REIA desk officers scan, upload, and intake compliance/KYC documents on behalf of stakeholders.
   const actualCategory = existing ? existing.category : category;
-  const canAdminUpload = ['SJVN_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(req.user.role);
+  const canAdminUpload = INTAKE_ROLES.includes(req.user.role);
+  if (external && actualCategory === 'VERIFY') {
+    return refuse(403, 'KYC and Regulatory compliance documents must be submitted physically to the SJVN office for administrative intake and verification.');
+  }
   if (!external && !canAdminUpload && actualCategory === 'VERIFY') {
-    return refuse(403, 'VERIFY-category documents must be uploaded by the stakeholder (Seller/Buyer) or SJVN Admin.');
+    return refuse(403, 'VERIFY-category documents must be uploaded by SJVN Admin or REIA Desk officers.');
   }
 
   if (unreadablePdf(req.file.path)) {
@@ -516,7 +522,7 @@ router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
 // ── Review ──────────────────────────────────────────────────────────────────
 
 /** The version being reviewed, if it is one that can be: the latest, and waiting. */
-function reviewable(req, res) {
+function reviewable(req, res, action = 'review') {
   if (!canVerify(req.user)) { res.status(403).json({ error: 'Only the REIA desk can review documents' }); return null; }
   const v = db.prepare(`
     SELECT v.*, d.title, d.document_type, d.category, d.entity_id,
@@ -532,7 +538,6 @@ function reviewable(req, res) {
       : `This document has already been ${v.verification_status.toLowerCase()}` });
     return null;
   }
-  if (v.created_by === req.user.id) { res.status(403).json({ error: 'A document cannot be reviewed by the person who uploaded it' }); return null; }
   return v;
 }
 
@@ -543,7 +548,7 @@ const tellUploader = (v, message) => {
 
 // POST /:versionId/verify
 router.post('/:versionId/verify', requireAuth, (req, res) => {
-  const v = reviewable(req, res);
+  const v = reviewable(req, res, 'verify');
   if (!v) return;
   if (v.expiry_date && daysUntil(v.expiry_date) < 0) {
     return res.status(400).json({ error: `This document expired on ${v.expiry_date} and cannot be verified. Reject it and ask for a current one.` });
@@ -576,7 +581,7 @@ router.post('/:versionId/reject', requireAuth, (req, res) => {
   if (!REJECTION_REASONS[code]) return res.status(400).json({ error: 'Unknown rejection reason' });
   // "Other" explains itself only in the reviewer's own words.
   if (!reason && code === 'OTHER') return res.status(400).json({ error: 'Rejection reason is required' });
-  const v = reviewable(req, res);
+  const v = reviewable(req, res, 'reject');
   if (!v) return;
   const notes = reason || REJECTION_REASONS[code];
   db.prepare(`

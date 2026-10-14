@@ -221,7 +221,7 @@ export default function TAMManagement({ marketType = 'TAM' }) {
   }
 
   return (
-    <div style={{ padding: '0 20px 20px', maxWidth: 1600, margin: '0 auto' }}>
+    <div style={{ padding: '0 20px 20px' }}>
       <PageHeader
         title={`${product} Obligation List`}
         actions={

@@ -1,22 +1,30 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager, PreviewModal, UploadModal } from '../../components/DocumentManager.jsx';
 import { fmtDate } from '../../datetime.js';
-import { catalogForEntityType, APPROVAL_STATUS_LABELS } from '../../constants/regulatoryApprovals.js';
+import { catalogForEntityType, APPROVAL_STATUS_LABELS, getRegulatoryItemLabel } from '../../constants/regulatoryApprovals.js';
+import { ROLE_GROUPS } from '../../roles.js';
+import {
+  KYC_RULES, FIELD_LABELS, normaliseKycInput, fieldError, validateStakeholderForm,
+  CATEGORY_OPTIONS, CREDIT_RATING_OPTIONS, TECHNOLOGY_OPTIONS, SUPPLY_CRITERIA_OPTIONS, VERTICAL_LABELS,
+} from '../../lib/kycValidation.js';
 
-const CAN_APPROVE = ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN', 'REIA_ADMIN'];
-// SELLER and BUYER were on this list, which reads as though a counterparty
-// edits its record here — this screen is the REIA desk's, and the route that
-// serves it is guarded to REIA roles, so those two never reached it. A
-// company's own login edits its profile through the API; its sub-users do not
-// edit it at all.
-const CAN_WRITE = ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN', 'REIA_ADMIN'];
-const CAN_VERIFY = ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN', 'REIA_ADMIN'];
+// The desks that onboard: REIA for its sellers and buyers, Commercial for a
+// hydro or thermal station's beneficiaries. Mirrors ENTITY_WRITE on the server,
+// which is what actually decides. A counterparty's own login edits its profile
+// through the API, not on this screen.
+const CAN_WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
+const CAN_APPROVE = CAN_WRITE;
+const CAN_VERIFY = CAN_WRITE;
+const CAN_DIRECT_ADMIT = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
+// Barring a counterparty is an administrator's decision.
+const CAN_BLACKLIST = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
 
-const EMPTY_FORM = {
-  parent_entity_id: '', entity_type: 'SELLER', category: '', name: '',
+const emptyForm = (vertical) => ({
+  // A station's stakeholders are the beneficiaries it bills; REIA onboards both sides.
+  parent_entity_id: '', entity_type: vertical === 'REIA' ? 'SELLER' : 'BUYER', category: '', name: '',
   pan_no: '', gst_no: '', cin: '', credit_rating: '',
   capacity_mw: '', technology: '', contracted_capacity_mw: '',
   psa_tariff: '', supply_criteria: '', organization_details: '',
@@ -26,37 +34,159 @@ const EMPTY_FORM = {
   contacts: [{ contact_type: 'COMMERCIAL', name: '', email: '', phone: '', is_primary: true }],
   documents: [],
   regulatory_na: {}, // approval_code -> notes when marked N/A at create
-};
+});
 
-export default function Entities() {
+/** A form field that can show what is wrong with it, under the control. */
+function KField({ id, label, required, error, hint, children }) {
+  return (
+    <label className={'field' + (error ? ' has-error' : '')} htmlFor={id}>
+      <span className="field-label">
+        {label}
+        {required && <span aria-hidden="true" style={{ color: 'var(--red)' }}> *</span>}
+      </span>
+      {children}
+      {error
+        ? <span className="field-error" role="alert">{error}</span>
+        : hint ? <span className="field-hint">{hint}</span> : null}
+    </label>
+  );
+}
+
+export default function Entities({ vertical = 'REIA' }) {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [parents, setParents] = useState([]);
   const [filters, setFilters] = useState({ entity_type: '', status: '' });
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [error, setError] = useState('');
+  const [form, setForm] = useState(() => emptyForm(vertical));
+  const [fieldErrors, setFieldErrors] = useState({});
+  // The one message on screen that has to be read: { tone, title, message, items, actions }.
+  const [popup, setPopup] = useState(null);
+  // The last value each field was flagged for, so leaving a field that is still
+  // wrong does not raise the same popup a second time.
+  const alerted = useRef({});
+  const [submitting, setSubmitting] = useState(false);
   const [selected, setSelected] = useState(null);
   const [remarks, setRemarks] = useState('');
   const [editApproval, setEditApproval] = useState(null);
   const [approvalForm, setApprovalForm] = useState({});
-  const [approveError, setApproveError] = useState('');
+  const [blacklistForm, setBlacklistForm] = useState(null); // { blacklisted, reason }
+  const [editModal, setEditModal] = useState(null);
+  const [editFormData, setEditFormData] = useState({});
+  const [editSubmitting, setEditSubmitting] = useState(false);
   // Proof documents linked to each regulatory approval (matched by shared code).
   const [entityDocs, setEntityDocs] = useState([]);
   const [docPreview, setDocPreview] = useState(null);   // { versionId, fileName }
   const [uploadFor, setUploadFor] = useState(null);      // { code, label }
 
+  const notify = (tone, title, message, items = null) => setPopup({ tone, title, message, items });
+  const fail = (title, err, fallback) => {
+    const data = err?.response?.data;
+    let message = data?.error || fallback;
+    let items = null;
+
+    if (data?.blocking_items?.length) {
+      message = 'Cannot approve stakeholder. The following mandatory regulatory items are pending verification:';
+      items = data.blocking_items;
+    } else if (data?.regulatory_summary?.blocking?.length) {
+      message = 'Cannot approve stakeholder. The following mandatory regulatory items are pending verification:';
+      items = data.regulatory_summary.blocking.map(getRegulatoryItemLabel);
+    } else if (typeof message === 'string' && (message.includes('mandatory regulatory items pending') || message.includes('Cannot approve: mandatory'))) {
+      const match = message.match(/\(([^)]+)\)/);
+      if (match) {
+        items = match[1].split(',').map((s) => s.trim()).filter(Boolean);
+        message = 'Cannot approve stakeholder. The following mandatory regulatory items are pending verification:';
+      }
+    }
+
+    notify('error', title, message, items);
+  };
+
+  function startEdit(entity) {
+    setEditFormData({
+      name: entity.name || '',
+      category: entity.category || '',
+      parent_entity_id: entity.parent_entity_id || '',
+      entity_type: entity.entity_type || 'SELLER',
+      pan_no: entity.pan_no || '',
+      gst_no: entity.gst_no || '',
+      tan_no: entity.tan_no || '',
+      cin: entity.cin || '',
+      corporate_email: entity.corporate_email || '',
+      corporate_phone: entity.corporate_phone || '',
+      corporate_website: entity.corporate_website || '',
+      address: entity.address || '',
+      credit_rating: entity.credit_rating || '',
+      signatory_name: entity.signatory_name || '',
+      signatory_designation: entity.signatory_designation || '',
+      technology: entity.technology || '',
+      capacity_mw: entity.capacity_mw != null ? String(entity.capacity_mw) : '',
+      contracted_capacity_mw: entity.contracted_capacity_mw != null ? String(entity.contracted_capacity_mw) : '',
+      psa_tariff: entity.psa_tariff != null ? String(entity.psa_tariff) : '',
+      supply_criteria: entity.supply_criteria || '',
+      bank_name: entity.bank_name || '',
+      account_no: entity.account_no || '',
+      ifsc_code: entity.ifsc_code || '',
+      branch_address: entity.branch_address || '',
+    });
+    setEditModal(entity);
+  }
+
+  async function handleUpdate(e) {
+    e.preventDefault();
+    setEditSubmitting(true);
+    try {
+      const payload = {
+        name: editFormData.name,
+        category: editFormData.category,
+        parent_entity_id: editFormData.parent_entity_id || null,
+        pan_no: editFormData.pan_no ? editFormData.pan_no.trim().toUpperCase() : null,
+        gst_no: editFormData.gst_no ? editFormData.gst_no.trim().toUpperCase() : null,
+        tan_no: editFormData.tan_no ? editFormData.tan_no.trim().toUpperCase() : null,
+        cin: editFormData.cin ? editFormData.cin.trim().toUpperCase() : null,
+        corporate_email: editFormData.corporate_email?.trim() || null,
+        corporate_phone: editFormData.corporate_phone?.trim() || null,
+        corporate_website: editFormData.corporate_website?.trim() || null,
+        address: editFormData.address?.trim() || null,
+        credit_rating: editFormData.credit_rating || null,
+        signatory_name: editFormData.signatory_name?.trim() || null,
+        signatory_designation: editFormData.signatory_designation?.trim() || null,
+        bank_name: editFormData.bank_name?.trim() || null,
+        account_no: editFormData.account_no?.trim() || null,
+        ifsc_code: editFormData.ifsc_code ? editFormData.ifsc_code.trim().toUpperCase() : null,
+        branch_address: editFormData.branch_address?.trim() || null,
+        technology: editFormData.technology || null,
+        capacity_mw: editFormData.capacity_mw ? Number(editFormData.capacity_mw) : null,
+        contracted_capacity_mw: editFormData.contracted_capacity_mw ? Number(editFormData.contracted_capacity_mw) : null,
+        psa_tariff: editFormData.psa_tariff ? Number(editFormData.psa_tariff) : null,
+        supply_criteria: editFormData.supply_criteria || null,
+      };
+      await api.entities.update(editModal.id, payload);
+      const updated = await api.entities.get(editModal.id);
+      if (selected && selected.id === editModal.id) {
+        setSelected(updated);
+      }
+      setEditModal(null);
+      load();
+      notify('success', 'Stakeholder updated', `${updated.name} details have been saved.`);
+    } catch (err) {
+      fail('Could not update stakeholder', err, 'Failed to update details');
+    } finally {
+      setEditSubmitting(false);
+    }
+  }
+
   function load() {
     setLoading(true);
-    api.entities.list({ entity_type: filters.entity_type || undefined, status: filters.status || undefined })
+    api.entities.list({ vertical, entity_type: filters.entity_type || undefined, status: filters.status || undefined })
       .then(res => {
         setRows(res);
         setParents(res.filter(r => !r.parent_entity_id));
       }).finally(() => setLoading(false));
   }
 
-  useEffect(load, [filters.entity_type, filters.status]);
+  useEffect(load, [vertical, filters.entity_type, filters.status]);
 
   // Pull this entity's proof documents so each regulatory approval row can show
   // its linked file (document_type === approval_code) inline.
@@ -77,13 +207,126 @@ export default function Entities() {
   function openDetail(row) {
     api.entities.get(row.id).then(setSelected);
     setRemarks('');
-    setApproveError('');
     setEditApproval(null);
+  }
+
+  function openCreate() {
+    setForm(emptyForm(vertical));
+    setFieldErrors({});
+    alerted.current = {};
+    setShowCreate(true);
+  }
+
+  // ── Onboarding form: fields, and what is wrong with them ──────────────────
+
+  function focusField(field) {
+    setPopup(null);
+    // After the popup has gone, or the focus lands back on its button.
+    setTimeout(() => {
+      const el = document.getElementById(`sk-${field}`);
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el?.focus({ preventScroll: true });
+    }, 60);
+  }
+
+  function setField(field, raw) {
+    const value = normaliseKycInput(field, raw);
+    setForm((prev) => ({ ...prev, [field]: value }));
+    if (fieldErrors[field]) setFieldErrors((prev) => ({ ...prev, [field]: null }));
+  }
+
+  // Leaving a field checks it there and then. A wrong PAN is said as the user
+  // moves on to the GSTIN, not after the whole form has been filled.
+  function checkField(field) {
+    const message = fieldError(field, form);
+    setFieldErrors((prev) => ({
+      ...prev,
+      [field]: message,
+      // The GSTIN is judged against the PAN, so correcting the PAN re-judges it.
+      ...(field === 'pan_no' && form.gst_no ? { gst_no: fieldError('gst_no', form) } : {}),
+    }));
+    if (message && alerted.current[field] !== form[field]) {
+      alerted.current[field] = form[field];
+      setPopup({
+        tone: 'error',
+        title: `${FIELD_LABELS[field] || field} is not valid`,
+        items: [{ label: FIELD_LABELS[field] || field, message, onClick: () => focusField(field) }],
+      });
+    }
+  }
+
+  const kInput = (field, label, { required, hint, ...inputProps } = {}) => (
+    <KField
+      id={`sk-${field}`}
+      label={label}
+      required={required}
+      error={fieldErrors[field]}
+      hint={hint ?? (KYC_RULES[field] ? `Format: ${KYC_RULES[field].example}` : undefined)}
+    >
+      <input
+        id={`sk-${field}`}
+        value={form[field] ?? ''}
+        maxLength={KYC_RULES[field]?.maxLength}
+        autoComplete="off"
+        spellCheck={false}
+        aria-invalid={!!fieldErrors[field]}
+        onChange={(e) => setField(field, e.target.value)}
+        onBlur={() => checkField(field)}
+        {...inputProps}
+      />
+    </KField>
+  );
+
+  const kSelect = (field, label, options, { required, placeholder = 'Select…' } = {}) => (
+    <KField id={`sk-${field}`} label={label} required={required} error={fieldErrors[field]}>
+      <select id={`sk-${field}`} value={form[field] ?? ''} onChange={(e) => setField(field, e.target.value)}>
+        <option value="">{placeholder}</option>
+        {/* A value already on record that is not in today's list is still shown. */}
+        {form[field] && !options.includes(form[field]) && <option value={form[field]}>{form[field]}</option>}
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </KField>
+  );
+
+  const setContact = (key, value) => {
+    setForm((prev) => ({ ...prev, contacts: [{ ...prev.contacts[0], [key]: value }] }));
+    if (fieldErrors[`contact_${key}`]) setFieldErrors((prev) => ({ ...prev, [`contact_${key}`]: null }));
+  };
+
+  /** Show every problem at once, each one a link to its field. */
+  function showFormErrors(title, errors, extra = {}) {
+    setFieldErrors(Object.fromEntries(errors.map((e) => [e.field, e.message])));
+    setPopup({
+      tone: 'error',
+      title,
+      message: errors.length > 1
+        ? `${errors.length} fields need attention. Click one to go to it.`
+        : 'Click it to go to the field.',
+      items: errors.map((e) => ({
+        label: e.label || FIELD_LABELS[e.field] || e.field,
+        message: e.message,
+        onClick: () => focusField(e.field),
+      })),
+      ...extra,
+    });
   }
 
   async function handleCreate(e) {
     e.preventDefault();
-    setError('');
+
+    const errors = validateStakeholderForm(form);
+    for (const [code, notes] of Object.entries(form.regulatory_na || {})) {
+      if (!String(notes || '').trim()) {
+        const item = catalogForEntityType(form.entity_type).find((c) => c.code === code);
+        errors.push({ field: `na-${code}`, label: item?.label || code, message: 'Say why this approval is not applicable.' });
+      }
+    }
+    if (errors.length) {
+      showFormErrors('The stakeholder cannot be saved yet', errors);
+      return;
+    }
+
+    setSubmitting(true);
     try {
       const regulatory_checklist_init = Object.entries(form.regulatory_na || {})
         .filter(([, notes]) => notes != null)
@@ -95,6 +338,7 @@ export default function Entities() {
 
       const createdEntity = await api.entities.create({
         ...form,
+        vertical,
         capacity_mw: form.capacity_mw ? Number(form.capacity_mw) : null,
         contracted_capacity_mw: form.contracted_capacity_mw ? Number(form.contracted_capacity_mw) : null,
         psa_tariff: form.psa_tariff ? Number(form.psa_tariff) : null,
@@ -102,22 +346,51 @@ export default function Entities() {
         regulatory_checklist_init,
       });
       setShowCreate(false);
-      setForm(EMPTY_FORM);
       load();
       openDetail(createdEntity);
+      notify('success', 'Stakeholder saved', `${createdEntity.name} is onboarded as PENDING. Upload its KYC documents next.`);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to create stakeholder.');
+      const data = err.response?.data || {};
+      const dup = data.duplicate_of;
+      const serverErrors = (data.field_errors || []).map((fe) => ({ ...fe, label: FIELD_LABELS[fe.field] }));
+      const actions = dup?.can_link ? (
+        <button type="button" className="btn btn-secondary" onClick={() => linkExisting(dup)}>
+          Link “{dup.name}” to {VERTICAL_LABELS[vertical]}
+        </button>
+      ) : undefined;
+      if (serverErrors.length) {
+        showFormErrors(dup ? 'This stakeholder is already onboarded' : 'The server refused these details', serverErrors, {
+          message: data.error, actions,
+        });
+      } else {
+        setPopup({ tone: 'error', title: 'Could not save the stakeholder', message: data.error || 'Failed to create stakeholder.', actions });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // The same legal entity, already on record under another vertical: register
+  // that record here rather than onboarding its PAN a second time.
+  async function linkExisting(dup) {
+    try {
+      const linked = await api.entities.linkVertical(dup.id, vertical);
+      setShowCreate(false);
+      load();
+      openDetail(linked);
+      notify('success', 'Stakeholder linked', `${linked.name} is now registered under ${VERTICAL_LABELS[vertical]}. Its KYC and approval carry over.`);
+    } catch (err) {
+      fail('Could not link the stakeholder', err, 'Linking failed.');
     }
   }
 
   async function handleApprove(decision, directAdmit = false) {
-    setApproveError('');
     try {
       await api.entities.approve(selected.id, decision, remarks, directAdmit ? { admin_direct_admit: true } : {});
       setSelected(null);
       load();
     } catch (err) {
-      setApproveError(err.response?.data?.error || 'Approval failed');
+      fail(decision === 'APPROVED' ? 'Approval was refused' : 'Rejection was refused', err, 'Approval failed');
     }
   }
 
@@ -146,7 +419,7 @@ export default function Entities() {
       setEditApproval(null);
       load();
     } catch (err) {
-      alert(err.response?.data?.error || 'Failed to update approval');
+      fail('Could not update the approval', err, 'Failed to update approval');
     }
   }
 
@@ -158,49 +431,48 @@ export default function Entities() {
       return { ...prev, regulatory_na: next };
     });
   }
-  
-  async function handlePennyDrop() {
-    try {
-      await api.client.post(`/entities/${selected.id}/penny-drop`);
-      api.entities.get(selected.id).then(setSelected);
-      load();
-    } catch(err) {
-      alert('Penny drop failed');
-    }
-  }
-
-  async function handleInvoiceTemplateSave(templateStr) {
-    try {
-      await api.client.put(`/entities/${selected.id}`, { invoice_template_json: templateStr });
-      alert('Invoice configuration saved.');
-      api.entities.get(selected.id).then(setSelected);
-      load();
-    } catch(err) {
-      alert('Failed to save invoice configuration');
-    }
-  }
 
   async function handleLogoUpload(e) {
     if (!e.target.files[0]) return;
     try {
       await api.entities.uploadLogo(selected.id, e.target.files[0]);
-      alert('Logo uploaded successfully.');
       api.entities.get(selected.id).then(setSelected);
       load();
+      notify('success', 'Logo uploaded', 'It will appear at the top left of this seller’s invoices.');
     } catch (err) {
-      alert('Failed to upload logo');
+      fail('Logo upload failed', err, 'Failed to upload logo');
     }
   }
 
-  async function handleSignatureUpload(e) {
-    if (!e.target.files[0]) return;
+  // An officer's confirmation that the account matches the cancelled cheque on
+  // file. No money is sent — there is no penny-drop integration behind this.
+  async function confirmBank() {
+    if (!window.confirm(`Confirm that ${selected.name}'s bank account matches the bank proof on file? Payments can be released to it after this.`)) return;
     try {
-      await api.entities.uploadSignature(selected.id, e.target.files[0]);
-      alert('Signature uploaded successfully.');
+      await api.client.post(`/entities/${selected.id}/verify-bank`);
       api.entities.get(selected.id).then(setSelected);
       load();
     } catch (err) {
-      alert('Failed to upload signature');
+      fail('Bank account was not verified', err, 'Verification failed');
+    }
+  }
+
+  async function saveBlacklist(e) {
+    e.preventDefault();
+    try {
+      const updated = await api.entities.setBlacklist(selected.id, blacklistForm.blacklisted, blacklistForm.reason);
+      setSelected({ ...selected, ...updated });
+      setBlacklistForm(null);
+      load();
+      notify(
+        blacklistForm.blacklisted ? 'warning' : 'success',
+        blacklistForm.blacklisted ? 'Stakeholder blacklisted' : 'Blacklist cleared',
+        blacklistForm.blacklisted
+          ? `${updated.name} can no longer be approved or given a new contract. Contracts already running are not affected.`
+          : `${updated.name} can be approved and contracted with again.`,
+      );
+    } catch (err) {
+      fail('Blacklist status was not changed', err, 'Failed to update blacklist status');
     }
   }
 
@@ -229,16 +501,31 @@ export default function Entities() {
       );
     }},
     { key: 'capacity', header: 'Capacity (MW)', render: (r) => fmtNumber(r.contracted_capacity_mw ?? r.capacity_mw) },
-    { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
+    { key: 'status', header: 'Status', render: (r) => (
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <Badge status={r.status} />
+        {!!r.is_blacklisted && <Badge status="REJECTED" label="BLACKLISTED" />}
+      </div>
+    )},
     { key: 'created_at', header: 'Onboarded', render: (r) => fmtDate(r.created_at) },
+    { key: 'actions', header: 'Actions', render: (r) => (
+      <div style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="btn btn-xs btn-outline" onClick={() => openDetail(r)}>View</button>
+        {CAN_WRITE.includes(user?.role) && (
+          <button type="button" className="btn btn-xs btn-outline" onClick={() => startEdit(r)}>Edit</button>
+        )}
+      </div>
+    )},
   ];
 
   return (
     <div>
       <PageHeader
-        title="Stakeholder Onboarding"
-        subtitle="Manage RE Generators, DISCOMs, SPVs, KYC and Regulatory Approvals"
-        actions={CAN_WRITE.includes(user?.role) && <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ Onboard Stakeholder</button>}
+        title={vertical === 'REIA' ? 'Stakeholder Onboarding' : `Stakeholder Onboarding — ${VERTICAL_LABELS[vertical]}`}
+        subtitle={vertical === 'REIA'
+          ? 'Manage RE Generators, DISCOMs, SPVs, KYC and Regulatory Approvals'
+          : `Beneficiaries and generating companies billed under ${VERTICAL_LABELS[vertical]} — KYC, bank and regulatory approvals`}
+        actions={CAN_WRITE.includes(user?.role) && <button className="btn btn-primary" onClick={openCreate}>+ Onboard Stakeholder</button>}
       />
 
       <div className="filters-bar">
@@ -259,9 +546,10 @@ export default function Entities() {
         <Table columns={columns} rows={loading ? [] : rows} onRowClick={openDetail} emptyMessage={loading ? 'Loading...' : 'No stakeholders found.'} />
       </Card>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Onboard New Stakeholder" width={800}>
-        {error && <div className="form-error">{error}</div>}
-        <form onSubmit={handleCreate}>
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title={`Onboard New Stakeholder — ${VERTICAL_LABELS[vertical]}`} width={900}>
+        {/* noValidate: the checks below run in one pass and report in a popup,
+            instead of the browser stopping at the first empty box. */}
+        <form onSubmit={handleCreate} noValidate>
           <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 12px 0' }}>1. Entity Hierarchy & Type</h4>
             <div className="form-grid">
@@ -271,35 +559,51 @@ export default function Entities() {
                   {parents.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </Field>
-              <Field label="Entity Type">
-                <select value={form.entity_type} onChange={(e) => setForm({ ...form, entity_type: e.target.value, regulatory_na: {} })}>
-                  <option value="SELLER">Seller</option>
-                  <option value="BUYER">Buyer</option>
+              <Field label="Entity Type" required>
+                <select
+                  value={form.entity_type}
+                  // The categories and the checklist both follow the type, so they reset with it.
+                  onChange={(e) => setForm({ ...form, entity_type: e.target.value, category: '', regulatory_na: {} })}
+                >
+                  <option value="SELLER">Seller (Generator)</option>
+                  <option value="BUYER">Buyer (Beneficiary / DISCOM)</option>
                 </select>
               </Field>
-              <Field label="Name">
-                <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-              </Field>
-              <Field label="Category">
-                <input required placeholder="RE Generator / DISCOM / C&I" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-              </Field>
+              {kInput('name', 'Name', { required: true, placeholder: 'Registered name of the company' })}
+              {kSelect('category', 'Category', CATEGORY_OPTIONS[form.entity_type] || [], { required: true, placeholder: 'Select category…' })}
             </div>
           </div>
 
           <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 12px 0' }}>2. Corporate & KYC</h4>
             <div className="form-grid">
-              <Field label="PAN No"><input value={form.pan_no} onChange={e => setForm({...form, pan_no: e.target.value})} /></Field>
-              <Field label="GST No"><input value={form.gst_no} onChange={e => setForm({...form, gst_no: e.target.value})} /></Field>
-              <Field label="TAN No"><input value={form.tan_no} onChange={e => setForm({...form, tan_no: e.target.value})} /></Field>
-              <Field label="CIN"><input value={form.cin} onChange={e => setForm({...form, cin: e.target.value})} /></Field>
-              <Field label="Corporate Email"><input type="email" value={form.corporate_email} onChange={e => setForm({...form, corporate_email: e.target.value})} /></Field>
-              <Field label="Corporate Phone"><input value={form.corporate_phone} onChange={e => setForm({...form, corporate_phone: e.target.value})} /></Field>
-              <Field label="Corporate Website"><input value={form.corporate_website} onChange={e => setForm({...form, corporate_website: e.target.value})} /></Field>
+              {kInput('pan_no', 'PAN No', { required: true, placeholder: 'ABCDE1234F' })}
+              {kInput('gst_no', 'GST No', {
+                required: true,
+                placeholder: '08ABCDE1234F1Z5',
+                hint: form.pan_no && KYC_RULES.pan_no.pattern.test(form.pan_no)
+                  ? `Characters 3–12 must be ${form.pan_no}`
+                  : 'State code + PAN + entity code + Z + check character',
+              })}
+              {kInput('tan_no', 'TAN No (Optional)', { placeholder: 'DELA12345B' })}
+              {kInput('cin', 'CIN (Optional)', { placeholder: 'U40106RJ2016PTC012345' })}
+              {kInput('corporate_email', 'Corporate Email', { type: 'email', hint: null })}
+              {kInput('corporate_phone', 'Corporate Phone', { inputMode: 'tel', hint: null })}
+              {kInput('corporate_website', 'Corporate Website', { placeholder: 'www.company.in', hint: null })}
               <Field label="Address"><input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></Field>
-              <Field label="Credit Rating"><input value={form.credit_rating} onChange={e => setForm({...form, credit_rating: e.target.value})} /></Field>
-              <Field label="Authorised Signatory Name"><input placeholder="Name shown on invoice signature" value={form.signatory_name} onChange={e => setForm({...form, signatory_name: e.target.value})} /></Field>
-              <Field label="Signatory Designation"><input placeholder="e.g. Authorised Signatory / DGM (Finance)" value={form.signatory_designation} onChange={e => setForm({...form, signatory_designation: e.target.value})} /></Field>
+              {kSelect('credit_rating', 'Credit Rating', CREDIT_RATING_OPTIONS, { placeholder: 'Select rating…' })}
+              <Field label="Authorised Signatory Name"><input placeholder="Named in the invoice authentication seal" value={form.signatory_name} onChange={e => setForm({...form, signatory_name: e.target.value})} /></Field>
+              <Field label="Signatory Designation"><input placeholder="e.g. DGM (Finance)" value={form.signatory_designation} onChange={e => setForm({...form, signatory_designation: e.target.value})} /></Field>
+              {/* The server needs a named commercial contact; without these the form could never be saved. */}
+              <KField id="sk-contact_name" label="Commercial Contact Name" required error={fieldErrors.contact_name}>
+                <input id="sk-contact_name" placeholder="Person SJVN writes to about bills" value={form.contacts[0].name} onChange={e => setContact('name', e.target.value)} />
+              </KField>
+              <KField id="sk-contact_email" label="Commercial Contact Email" error={fieldErrors.contact_email}>
+                <input id="sk-contact_email" type="email" value={form.contacts[0].email} onChange={e => setContact('email', e.target.value)} />
+              </KField>
+              <KField id="sk-contact_phone" label="Commercial Contact Phone" error={fieldErrors.contact_phone}>
+                <input id="sk-contact_phone" inputMode="tel" value={form.contacts[0].phone} onChange={e => setContact('phone', e.target.value)} />
+              </KField>
             </div>
           </div>
 
@@ -308,27 +612,21 @@ export default function Entities() {
             <div className="form-grid">
               {form.entity_type === 'SELLER' && (
                 <>
-                  <Field label="Technology"><input placeholder="Solar / Wind" value={form.technology} onChange={(e) => setForm({ ...form, technology: e.target.value })} /></Field>
-                  <Field label="Capacity (MW)"><input type="number" step="0.01" value={form.capacity_mw} onChange={(e) => setForm({ ...form, capacity_mw: e.target.value })} /></Field>
+                  {kSelect('technology', 'Technology', TECHNOLOGY_OPTIONS, { placeholder: 'Select technology…' })}
+                  {kInput('capacity_mw', 'Capacity (MW)', { required: true, type: 'number', step: '0.01', min: '0' })}
                 </>
               )}
               {form.entity_type === 'BUYER' && (
                 <>
-                  <Field label="Contracted Capacity (MW)"><input type="number" step="0.01" value={form.contracted_capacity_mw} onChange={(e) => setForm({ ...form, contracted_capacity_mw: e.target.value })} /></Field>
-                  <Field label="PSA Tariff (₹/kWh)"><input type="number" step="0.01" value={form.psa_tariff} onChange={(e) => setForm({ ...form, psa_tariff: e.target.value })} /></Field>
-                  <Field label="Criteria for Supply of Power">
-                    <input
-                      placeholder="e.g. Round the clock / Peak / Off-peak"
-                      value={form.supply_criteria}
-                      onChange={(e) => setForm({ ...form, supply_criteria: e.target.value })}
-                    />
-                  </Field>
+                  {kInput('contracted_capacity_mw', 'Contracted Capacity (MW)', { required: true, type: 'number', step: '0.01', min: '0' })}
+                  {kInput('psa_tariff', 'PSA Tariff (₹/kWh)', { type: 'number', step: '0.01', min: '0' })}
+                  {kSelect('supply_criteria', 'Criteria for Supply of Power', SUPPLY_CRITERIA_OPTIONS, { placeholder: 'Select criteria…' })}
                 </>
               )}
-              <Field label="Bank Name"><input required value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })} /></Field>
-              <Field label="Account No"><input required value={form.account_no} onChange={(e) => setForm({ ...form, account_no: e.target.value })} /></Field>
-              <Field label="IFSC Code"><input required value={form.ifsc_code} onChange={(e) => setForm({ ...form, ifsc_code: e.target.value })} /></Field>
-              <Field label="Branch Address"><input required value={form.branch_address} onChange={(e) => setForm({ ...form, branch_address: e.target.value })} /></Field>
+              {kInput('bank_name', 'Bank Name', { required: true })}
+              {kInput('account_no', 'Account No', { required: true, inputMode: 'numeric', placeholder: '9 to 18 digits', hint: 'Digits only, 9 to 18' })}
+              {kInput('ifsc_code', 'IFSC Code', { required: true, placeholder: 'SBIN0001234', hint: '11 characters — the 5th is always 0' })}
+              {kInput('branch_address', 'Branch Address', { required: true })}
             </div>
           </div>
 
@@ -376,7 +674,7 @@ export default function Entities() {
                     {na && (
                       <Field label="Why not applicable?">
                         <input
-                          required
+                          id={`sk-na-${item.code}`}
                           placeholder="e.g. COD not yet — plant under construction"
                           value={form.regulatory_na[item.code] || ''}
                           onChange={(e) => setForm({
@@ -393,18 +691,33 @@ export default function Entities() {
           </div>
 
           <div style={{ padding: '12px 16px', background: '#eef2ff', borderRadius: 6, color: '#4f46e5', fontSize: 13, marginBottom: 20 }}>
-            <strong>Next:</strong> After save, upload KYC / license PDFs under Documents, then REIA marks each checklist item Verified. Stakeholder approval is blocked until all mandatory items are Verified (or properly N/A) and bank penny-drop is done.
+            <strong>Next:</strong> After save, upload KYC / licence PDFs under Documents, then each checklist item is marked Verified. Approval is blocked until all mandatory items are Verified (or properly N/A). The bank account is verified against the cancelled cheque and becomes payable on approval.
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
             <button type="button" className="btn btn-outline" onClick={() => setShowCreate(false)}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Save & Proceed to Documents</button>
+            <button type="submit" className="btn btn-primary" disabled={submitting}>{submitting ? 'Saving…' : 'Save & Proceed to Documents'}</button>
           </div>
         </form>
       </Modal>
 
       {selected && (
         <Modal open={true} onClose={() => setSelected(null)} title={`Stakeholder: ${selected.name}`} width={800}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>
+              {selected.parent_name ? `SPV of ${selected.parent_name}` : 'Parent Entity'} · {selected.category || 'General'}
+            </span>
+            {CAN_WRITE.includes(user?.role) && (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                onClick={() => startEdit(selected)}
+              >
+                ✏️ Edit Stakeholder Details
+              </button>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 20 }}>
             <div style={{ flex: 1, minWidth: 300 }}>
               <table className="detail-table">
@@ -421,7 +734,32 @@ export default function Entities() {
                   <tr><td>Phone</td><td>{selected.corporate_phone || '-'}</td></tr>
                   <tr><td>Website</td><td>{selected.corporate_website || '-'}</td></tr>
                   <tr><td>Credit Rating</td><td>{selected.credit_rating || '-'}</td></tr>
-                  <tr><td>Blacklist Status</td><td>{selected.is_blacklisted ? <Badge status="REJECTED" label="BLACKLISTED" /> : <Badge status="ACTIVE" label="Clear" />}</td></tr>
+                  <tr><td>Registered Under</td><td>{String(selected.verticals || 'REIA').split(',').map((v) => VERTICAL_LABELS[v] || v).join(', ')}</td></tr>
+                  <tr>
+                    <td>Blacklist Status</td>
+                    <td>
+                      {selected.is_blacklisted ? <Badge status="REJECTED" label="BLACKLISTED" /> : <Badge status="ACTIVE" label="Clear" />}
+                      {(selected.blacklist_reason || selected.blacklisted_by) && (
+                        <div style={{ fontSize: 11.5, color: 'var(--slate-500)', marginTop: 4 }}>
+                          {selected.is_blacklisted ? 'Blacklisted' : 'Cleared'}
+                          {selected.blacklisted_by ? ` by ${selected.blacklisted_by}` : ''}
+                          {selected.blacklisted_at ? ` on ${fmtDate(selected.blacklisted_at)}` : ''}
+                          {selected.blacklist_reason ? ` — ${selected.blacklist_reason}` : ''}
+                        </div>
+                      )}
+                      {CAN_BLACKLIST.includes(user?.role) && (
+                        <div style={{ marginTop: 6 }}>
+                          <button
+                            type="button"
+                            className={selected.is_blacklisted ? 'btn btn-sm btn-outline' : 'btn btn-sm btn-danger'}
+                            onClick={() => setBlacklistForm({ blacklisted: !selected.is_blacklisted, reason: '' })}
+                          >
+                            {selected.is_blacklisted ? 'Clear blacklist' : 'Blacklist stakeholder'}
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -435,10 +773,22 @@ export default function Entities() {
                       <div>{selected.account_no || '-'}, {selected.bank_name || '-'}</div>
                       <div style={{fontSize: 11, color: '#666'}}>IFSC: {selected.ifsc_code || '-'} | Branch: {selected.branch_address || '-'}</div>
                       <div style={{ marginTop: 6 }}>
-                        <button className="btn btn-sm btn-outline" onClick={handlePennyDrop} disabled={selected.is_penny_drop_verified}>
-                          {selected.is_penny_drop_verified ? 'Verified ' : 'Verify Penny Drop (₹1)'}
-                        </button>
+                        {selected.is_penny_drop_verified
+                          ? <Badge status="ACTIVE" label="Bank verified" />
+                          : <Badge status="PENDING" label={selected.status === 'APPROVED' ? 'Bank not verified' : 'Verified on approval'} />}
+                        {/* A record approved before approval started confirming the account
+                            has no other way to be cleared for payment. */}
+                        {!selected.is_penny_drop_verified && selected.status === 'APPROVED' && CAN_WRITE.includes(user?.role) && (
+                          <button type="button" className="btn btn-sm btn-outline" style={{ marginLeft: 8 }} onClick={confirmBank}>
+                            Confirm against bank proof
+                          </button>
+                        )}
                       </div>
+                      {selected.pending_bank_json && (
+                        <div style={{ fontSize: 11.5, color: 'var(--amber-strong)', marginTop: 4 }}>
+                          A change of bank account is waiting. It becomes the live account when this record is re-approved.
+                        </div>
+                      )}
                     </td>
                   </tr>
                   {selected.entity_type === 'SELLER' && (
@@ -572,23 +922,13 @@ export default function Entities() {
               )}
 
               <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--slate-200)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <h4 style={{ margin: '0 0 8px 0', color: 'var(--slate-700)' }}>Digital Signature</h4>
-                    <p style={{ fontSize: 13, color: 'var(--slate-500)', margin: 0 }}>
-                      Upload the authorised signatory's signature image. It appears in the "For &amp; on behalf of" box on the invoice, with the signatory name and date as a digital-signature stamp.
-                    </p>
-                  </div>
-                  <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
-                    Upload Signature
-                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleSignatureUpload} />
-                  </label>
-                </div>
-                {selected.signature_url && (
-                  <div style={{ marginTop: 16 }}>
-                    <img src={`http://localhost:4000${selected.signature_url}`} alt="Signature" style={{ maxHeight: 50, objectFit: 'contain', background: '#fff', padding: 4, border: '1px solid var(--slate-200)', borderRadius: 4 }} />
-                  </div>
-                )}
+                <h4 style={{ margin: '0 0 8px 0', color: 'var(--slate-700)' }}>Invoice Authentication</h4>
+                <p style={{ fontSize: 13, color: 'var(--slate-500)', margin: 0 }}>
+                  No signature image is stored or printed. An approved invoice carries a system authentication seal in the
+                  “For &amp; on behalf of” box instead: the authorised signatory named below, the date and time of approval (IST),
+                  a SHA-256 hash of the invoice figures and an audit reference — so a copy that has been altered no longer matches,
+                  and nobody’s handwritten signature can be lifted off a PDF and reused.
+                </p>
                 <div style={{ display: 'flex', gap: 12, marginTop: 12, alignItems: 'flex-end' }}>
                   <Field label="Signatory Name">
                     <input
@@ -611,11 +951,11 @@ export default function Entities() {
                           signatory_name: selected.signatory_name || '',
                           signatory_designation: selected.signatory_designation || '',
                         });
-                        alert('Signatory details saved.');
+                        notify('success', 'Signatory details saved', 'They appear in the authentication seal on this seller’s invoices.');
                         api.entities.get(selected.id).then(setSelected);
                         load();
                       } catch (err) {
-                        alert('Failed to save signatory details');
+                        fail('Signatory details were not saved', err, 'Failed to save signatory details');
                       }
                     }}
                   >
@@ -638,25 +978,71 @@ export default function Entities() {
             <div style={{ marginTop: 20, padding: 16, background: 'var(--slate-50)', borderRadius: 8, border: '1px solid var(--slate-200)' }}>
               <h4 style={{ margin: '0 0 8px 0' }}>Approval Action</h4>
               {!selected.regulatory_summary?.ready_for_approval && (
-                <div style={{ fontSize: 13, color: 'var(--amber-strong)', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 10px', marginBottom: 10 }}>
-                  Mandatory regulatory items still pending
-                  {selected.regulatory_summary?.blocking?.length
-                    ? `: ${selected.regulatory_summary.blocking.join(', ')}`
-                    : '.'}
-                  {' '}Approve will be blocked until they are Verified or properly marked N/A.
+                <div
+                  style={{
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    borderRadius: 8,
+                    padding: '12px 14px',
+                    marginBottom: 14,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 16 }}>⚠️</span>
+                      <strong style={{ fontSize: 13, color: '#92400e' }}>
+                        Mandatory Regulatory Clearances Pending
+                      </strong>
+                    </div>
+                    {selected.regulatory_summary?.blocking?.length > 0 && (
+                      <span
+                        style={{
+                          fontSize: 11.5,
+                          fontWeight: 600,
+                          color: '#b45309',
+                          background: '#fef3c7',
+                          padding: '2px 8px',
+                          borderRadius: 12,
+                          border: '1px solid #fcd34d',
+                        }}
+                      >
+                        {selected.regulatory_summary.blocking.length} pending
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: '#78350f', lineHeight: 1.45 }}>
+                    Standard approval will remain on hold until mandatory regulatory clearances are verified or marked N/A in the checklist above.
+                  </div>
+                  {selected.regulatory_summary?.blocking?.length > 0 && (
+                    <ul
+                      style={{
+                        margin: '10px 0 2px 0',
+                        paddingLeft: 22,
+                        listStyleType: 'disc',
+                        color: '#92400e',
+                        fontSize: 13,
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      {selected.regulatory_summary.blocking.map((code) => (
+                        <li key={code}>
+                          <span style={{ color: '#78350f', fontWeight: 500 }}>{getRegulatoryItemLabel(code)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               )}
-              {!selected.is_penny_drop_verified && (
-                <div style={{ fontSize: 13, color: 'var(--amber-strong)', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 10px', marginBottom: 10 }}>
-                  Bank penny-drop verification is required before approval.
+              {!!selected.is_blacklisted && (
+                <div style={{ fontSize: 13, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '8px 10px', marginBottom: 10 }}>
+                  This stakeholder is blacklisted and cannot be approved until the blacklist is cleared.
                 </div>
               )}
-              {approveError && <div className="form-error" style={{ marginBottom: 10 }}>{approveError}</div>}
               <Field label="Remarks">
                 <input value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Required for rejection" />
               </Field>
               <div style={{ display: 'flex', gap: 12, marginTop: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-                {['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN'].includes(user?.role) && (
+                {CAN_DIRECT_ADMIT.includes(user?.role) && (
                   <button
                     type="button"
                     className="btn btn-primary"
@@ -724,6 +1110,39 @@ export default function Entities() {
         )}
       </Modal>
 
+      <Modal
+        open={!!blacklistForm}
+        onClose={() => setBlacklistForm(null)}
+        title={blacklistForm?.blacklisted ? `Blacklist ${selected?.name || ''}` : `Clear blacklist on ${selected?.name || ''}`}
+        width={520}
+      >
+        {blacklistForm && (
+          <form onSubmit={saveBlacklist}>
+            <p style={{ fontSize: 13, color: 'var(--slate-600)', marginTop: 0 }}>
+              {blacklistForm.blacklisted
+                ? 'A blacklisted stakeholder cannot be approved and cannot be given a new contract. Contracts already running, and money owed under them, are not affected.'
+                : 'Clearing the blacklist lets this stakeholder be approved and contracted with again.'}
+            </p>
+            <Field label="Reason (recorded in the audit trail)" required>
+              <textarea
+                required
+                minLength={10}
+                rows={3}
+                value={blacklistForm.reason}
+                onChange={(e) => setBlacklistForm({ ...blacklistForm, reason: e.target.value })}
+                placeholder={blacklistForm.blacklisted ? 'e.g. Debarred by MNRE order no. … dated …' : 'e.g. Debarment order withdrawn on …'}
+              />
+            </Field>
+            <div className="form-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setBlacklistForm(null)}>Cancel</button>
+              <button type="submit" className={blacklistForm.blacklisted ? 'btn btn-danger' : 'btn btn-primary'}>
+                {blacklistForm.blacklisted ? 'Blacklist' : 'Clear blacklist'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
       {/* Inline proof: preview a linked approval document */}
       <PreviewModal
         open={!!docPreview}
@@ -741,6 +1160,143 @@ export default function Entities() {
         entityId={selected?.id}
         presetDocType={uploadFor?.code}
         presetTitle={uploadFor?.label}
+      />
+
+      {editModal && (
+        <Modal open={true} onClose={() => setEditModal(null)} title={`Edit Stakeholder — ${editModal.name}`} width={900}>
+          <form onSubmit={handleUpdate} noValidate>
+            <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+              <h4 style={{ margin: '0 0 12px 0' }}>1. Entity Hierarchy & Type</h4>
+              <div className="form-grid">
+                <Field label="Parent Group (Optional)">
+                  <select value={editFormData.parent_entity_id} onChange={(e) => setEditFormData({ ...editFormData, parent_entity_id: e.target.value })}>
+                    <option value="">-- None (This is a Parent Group) --</option>
+                    {parents.filter(p => p.id !== editModal.id).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Entity Type">
+                  <input value={editFormData.entity_type === 'SELLER' ? 'Seller (Generator)' : 'Buyer (Beneficiary / DISCOM)'} disabled style={{ background: 'var(--slate-100)', color: 'var(--slate-600)' }} />
+                </Field>
+                <Field label="Name" required>
+                  <input value={editFormData.name} onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })} required />
+                </Field>
+                <Field label="Category" required>
+                  <select value={editFormData.category} onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}>
+                    <option value="">Select category…</option>
+                    {(CATEGORY_OPTIONS[editFormData.entity_type] || []).map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </Field>
+              </div>
+            </div>
+
+            <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+              <h4 style={{ margin: '0 0 12px 0' }}>2. Corporate & KYC</h4>
+              <div className="form-grid">
+                <Field label="PAN No">
+                  <input value={editFormData.pan_no} onChange={(e) => setEditFormData({ ...editFormData, pan_no: e.target.value.toUpperCase() })} placeholder="ABCDE1234F" />
+                </Field>
+                <Field label="GST No">
+                  <input value={editFormData.gst_no} onChange={(e) => setEditFormData({ ...editFormData, gst_no: e.target.value.toUpperCase() })} placeholder="08ABCDE1234F1Z5" />
+                </Field>
+                <Field label="TAN No (Optional)">
+                  <input value={editFormData.tan_no} onChange={(e) => setEditFormData({ ...editFormData, tan_no: e.target.value.toUpperCase() })} placeholder="DELA12345B" />
+                </Field>
+                <Field label="CIN (Optional)">
+                  <input value={editFormData.cin} onChange={(e) => setEditFormData({ ...editFormData, cin: e.target.value.toUpperCase() })} placeholder="U40106RJ2016PTC012345" />
+                </Field>
+                <Field label="Corporate Email">
+                  <input type="email" value={editFormData.corporate_email} onChange={(e) => setEditFormData({ ...editFormData, corporate_email: e.target.value })} />
+                </Field>
+                <Field label="Corporate Phone">
+                  <input inputMode="tel" value={editFormData.corporate_phone} onChange={(e) => setEditFormData({ ...editFormData, corporate_phone: e.target.value })} />
+                </Field>
+                <Field label="Corporate Website">
+                  <input value={editFormData.corporate_website} onChange={(e) => setEditFormData({ ...editFormData, corporate_website: e.target.value })} placeholder="www.company.in" />
+                </Field>
+                <Field label="Address">
+                  <input value={editFormData.address} onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })} />
+                </Field>
+                <Field label="Credit Rating">
+                  <select value={editFormData.credit_rating} onChange={(e) => setEditFormData({ ...editFormData, credit_rating: e.target.value })}>
+                    <option value="">Select rating…</option>
+                    {CREDIT_RATING_OPTIONS.map(cr => <option key={cr} value={cr}>{cr}</option>)}
+                  </select>
+                </Field>
+                <Field label="Authorised Signatory Name">
+                  <input value={editFormData.signatory_name} onChange={(e) => setEditFormData({ ...editFormData, signatory_name: e.target.value })} placeholder="Named in the invoice authentication seal" />
+                </Field>
+                <Field label="Signatory Designation">
+                  <input value={editFormData.signatory_designation} onChange={(e) => setEditFormData({ ...editFormData, signatory_designation: e.target.value })} placeholder="e.g. DGM (Finance)" />
+                </Field>
+              </div>
+            </div>
+
+            <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+              <h4 style={{ margin: '0 0 12px 0' }}>3. Technical & Banking</h4>
+              <div className="form-grid">
+                {editFormData.entity_type === 'SELLER' && (
+                  <>
+                    <Field label="Technology">
+                      <select value={editFormData.technology} onChange={(e) => setEditFormData({ ...editFormData, technology: e.target.value })}>
+                        <option value="">Select technology…</option>
+                        {TECHNOLOGY_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Capacity (MW)">
+                      <input type="number" step="0.01" min="0" value={editFormData.capacity_mw} onChange={(e) => setEditFormData({ ...editFormData, capacity_mw: e.target.value })} />
+                    </Field>
+                  </>
+                )}
+                {editFormData.entity_type === 'BUYER' && (
+                  <>
+                    <Field label="Contracted Capacity (MW)">
+                      <input type="number" step="0.01" min="0" value={editFormData.contracted_capacity_mw} onChange={(e) => setEditFormData({ ...editFormData, contracted_capacity_mw: e.target.value })} />
+                    </Field>
+                    <Field label="PSA Tariff (₹/kWh)">
+                      <input type="number" step="0.01" min="0" value={editFormData.psa_tariff} onChange={(e) => setEditFormData({ ...editFormData, psa_tariff: e.target.value })} />
+                    </Field>
+                    <Field label="Criteria for Supply of Power">
+                      <select value={editFormData.supply_criteria} onChange={(e) => setEditFormData({ ...editFormData, supply_criteria: e.target.value })}>
+                        <option value="">Select criteria…</option>
+                        {SUPPLY_CRITERIA_OPTIONS.map(sc => <option key={sc} value={sc}>{sc}</option>)}
+                      </select>
+                    </Field>
+                  </>
+                )}
+                <Field label="Bank Name">
+                  <input value={editFormData.bank_name} onChange={(e) => setEditFormData({ ...editFormData, bank_name: e.target.value })} />
+                </Field>
+                <Field label="Account No">
+                  <input inputMode="numeric" value={editFormData.account_no} onChange={(e) => setEditFormData({ ...editFormData, account_no: e.target.value })} placeholder="9 to 18 digits" />
+                </Field>
+                <Field label="IFSC Code">
+                  <input value={editFormData.ifsc_code} onChange={(e) => setEditFormData({ ...editFormData, ifsc_code: e.target.value.toUpperCase() })} placeholder="SBIN0001234" />
+                </Field>
+                <Field label="Branch Address">
+                  <input value={editFormData.branch_address} onChange={(e) => setEditFormData({ ...editFormData, branch_address: e.target.value })} />
+                </Field>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button type="button" className="btn btn-outline" onClick={() => setEditModal(null)}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={editSubmitting}>
+                {editSubmitting ? 'Saving Changes…' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      <AlertPopup
+        open={!!popup}
+        tone={popup?.tone}
+        title={popup?.title}
+        message={popup?.message}
+        items={popup?.items}
+        actions={popup?.actions}
+        okLabel={popup?.okLabel}
+        onClose={() => setPopup(null)}
       />
     </div>
   );

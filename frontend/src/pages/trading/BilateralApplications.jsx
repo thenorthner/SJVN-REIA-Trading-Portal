@@ -125,7 +125,7 @@ export default function BilateralApplications() {
       </tr>`).join('');
     w.document.write(`<!doctype html><html><head><title>Bilateral Applications</title>
       <style>
-        body { font-family: Arial, sans-serif; padding: 24px; }
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 24px; }
         h1 { font-size: 18px; margin-bottom: 16px; }
         table { width: 100%; border-collapse: collapse; font-size: 11px; }
         th { background: #101a2e; color: #fff; text-align: left; padding: 8px; }

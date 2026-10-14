@@ -275,7 +275,7 @@ export default function BilateralBidding() {
   const disabledStyle = { background: '#f1f5f9' };
 
   return (
-    <div style={{ padding: 20, maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ padding: 20 }}>
       <Card>
         <form onSubmit={handleSubmit}>
           <FormSection title="Application For Format Generation">

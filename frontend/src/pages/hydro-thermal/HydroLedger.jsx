@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/client.js';
+import { writeRolesFor, pathFor, deskLabel } from '../../lib/stationVertical.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import {
@@ -23,6 +24,9 @@ const DOC_TONE = {
   PMT: { label: 'Payment', color: 'var(--green, #276749)' },
   ADV: { label: 'Advance', color: 'var(--blue, #2b6cb0)' },
   RBT: { label: 'Rebate', color: 'var(--green, #276749)' },
+  DN: { label: 'Debit note', color: 'var(--amber, #b7791f)' },
+  CN: { label: 'Credit note', color: 'var(--green, #276749)' },
+  TDS: { label: 'TDS deducted', color: 'var(--blue, #2b6cb0)' },
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -39,15 +43,16 @@ function DocType({ row }) {
   );
 }
 
-export default function HydroLedger() {
+export default function HydroLedger({ vertical = 'HYDRO' }) {
   const [view, setView] = useState('account');
   const { user } = useAuth();
-  const canWrite = ROLE_GROUPS.HYDRO_THERMAL_WRITE.includes(user?.role);
+  const canWrite = writeRolesFor(vertical).includes(user?.role);
 
   const [stations, setStations] = useState([]);
   const [stationId, setStationId] = useState('');
   const [accounts, setAccounts] = useState([]);
-  const [beneficiary, setBeneficiary] = useState('');
+  // A link from payment monitoring or the dashboard opens that beneficiary's account.
+  const [beneficiary, setBeneficiary] = useState(() => new URLSearchParams(window.location.search).get('beneficiary') || '');
   const [account, setAccount] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -59,7 +64,7 @@ export default function HydroLedger() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api.hydroBilling.stations()
+    api.hydroBilling.stations({ vertical })
       .then((list) => {
         setStations(list || []);
         if (list?.length) setStationId((cur) => cur || list[0].id);
@@ -191,8 +196,8 @@ export default function HydroLedger() {
   return (
     <div>
       <PageHeader
-        title="Hydro Account Display"
-        subtitle="What each beneficiary of a hydro station owes, what it has paid, and what is overdue"
+        title={`${deskLabel(vertical)} Account Display`}
+        subtitle={`What each beneficiary of a ${deskLabel(vertical).toLowerCase()} station owes, what it has paid, and what is overdue`}
       />
 
       <Tabs style={{ marginBottom: 18 }}>
@@ -247,7 +252,7 @@ export default function HydroLedger() {
                 Beneficiary running accounts (PB debit documents) are created automatically as soon as a station bill is <strong>Approved and Issued</strong>. Once issued, each beneficiary&apos;s allocation share, outstanding balance, and payment ledger appear here.
               </div>
             </div>
-            <Link to="/hydro-thermal/hydro-billing" className="btn btn-outline btn-sm" style={{ whiteSpace: 'nowrap' }}>
+            <Link to={pathFor(vertical, 'billing')} className="btn btn-outline btn-sm" style={{ whiteSpace: 'nowrap' }}>
               Go to Hydro Billing →
             </Link>
           </div>
@@ -316,7 +321,7 @@ export default function HydroLedger() {
               fontVariantNumeric: 'tabular-nums', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
             }}>
               <span style={{ color: 'var(--text-light)' }}>
-                PB bill · LPS surcharge · PMT payment · ADV advance not yet applied
+                PB bill · LPS surcharge · DN debit note · PMT payment · CN credit note · RBT rebate · TDS tax deducted · ADV advance not yet applied
               </span>
               <span>
                 Balance <strong>{fmtCurrency(totals.balance)}</strong>

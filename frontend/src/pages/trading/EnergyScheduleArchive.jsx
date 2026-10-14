@@ -85,7 +85,7 @@ export default function EnergyScheduleArchive() {
   ];
 
   return (
-    <div style={{ padding: 20, maxWidth: 1400, margin: '0 auto', display: 'flex', position: 'relative' }}>
+    <div style={{ padding: 20, display: 'flex', position: 'relative' }}>
       <div style={{ flex: 1, marginRight: drawerOpen ? 300 : 0, transition: 'margin 0.3s' }}>
         {/* The archive is the upload register now, so an empty one means nothing
             has been uploaded — which is worth saying plainly. */}

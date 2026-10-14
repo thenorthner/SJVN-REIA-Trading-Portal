@@ -101,7 +101,7 @@ export const REGULATORY_APPROVAL_CATALOG = [
     is_mandatory: true,
     doc_type: 'BANK_ACCOUNT_PROOF',
     sort_order: 9,
-    help: 'Required with penny-drop verification',
+    help: 'Cancelled cheque or bank letter — the account is verified against it',
   },
 ];
 
@@ -130,3 +130,12 @@ export function summarizeApprovals(rows = []) {
       : 'No checklist',
   };
 }
+
+export function getRegulatoryLabel(code) {
+  if (!code) return 'Clearance';
+  const found = REGULATORY_APPROVAL_CATALOG.find((a) => a.code === code);
+  if (found) return found.label.split('(')[0].trim() || found.label;
+  return code.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+

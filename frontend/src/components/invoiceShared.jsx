@@ -47,8 +47,9 @@ export function formatBreakdownValue(item) {
 
 /** Status + optional validation + overdue chips for list cells. */
 export function InvoiceStatusCell({ row, showValidation = false }) {
-  // Seller lists are direction-filtered (no direction field needed); REIA only shows Val for seller bills.
+  // REIA only shows Val for seller bills, and NO_COUNTERPART/PENDING should never be displayed as an alarming badge.
   const valVisible = showValidation && row.validation_status
+    && !['NO_COUNTERPART', 'PENDING'].includes(row.validation_status)
     && (row.direction == null || row.direction === 'SELLER_TO_SJVN');
 
   return (

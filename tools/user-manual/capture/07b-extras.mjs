@@ -1,0 +1,34 @@
+import { chromium, open, login, settle, shot, dumpTo, soft, field, sidebar, closeTop, BASE } from '../lib/browser.mjs';
+const browser = await chromium.launch();
+const { page } = await open(browser); const main = page.locator('main'); const top = () => page.locator('.modal').last();
+await login(page, 'SJVN Admin'); await page.goto(BASE + '/reia/invoices'); await settle(page, 1000);
+const B = (n) => main.getByRole('button', { name: n });
+await B('+ Supplementary').click(); await settle(page, 500); let m = top();
+await field(m, 'Contract').selectOption({ label: 'PSA/SJVN/2024/101 (Solar)' }); await field(m, 'Billing Period').fill('2026-09'); await field(m, 'Reason Category').selectOption({ label: 'Transmission charges' }); await field(m, 'Adjustment Amount').fill('125000'); await field(m, 'Reason / Reference').fill('ISTS transmission charges for Sept 2026 as per RTA bill no. NR/RTA/09/2026');
+await settle(page, 400);
+await shot(page, '07-supp', { tall: 1400, crop: m, margin: 16, marks: [{ at: field(m, 'Contract'), n: 1, pos: 'l' }, { at: field(m, 'Billing Period'), n: 2, pos: 'l' }, { at: field(m, 'Reason Category'), n: 3, pos: 'l' }, { at: field(m, 'Adjustment Amount'), n: 4, pos: 'l' }, { at: field(m, 'Link to Parent'), n: 5, pos: 'l' }, { at: field(m, 'Reason / Reference'), n: 6, pos: 'l' }, { at: m.getByRole('button', { name: 'Create Supplementary' }), n: 7, pos: 'b' }] });
+await closeTop(page);
+await B('+ Arrear Bill').click(); await settle(page, 500); m = top();
+await field(m, 'Contract').selectOption({ label: 'PSA/SJVN/2024/101 (Solar)' }); await field(m, 'Arrear Period').fill('2026-05'); await field(m, 'Arrear Amount').fill('250000'); await field(m, 'Reason for arrear').fill('Tariff revised from 1 May 2026 as per CERC order dated 20 Sept 2026');
+await shot(page, '07-arrear', { tall: 1400, crop: m, margin: 16, marks: [{ at: field(m, 'Contract'), n: 1, pos: 'l' }, { at: field(m, 'Arrear Period'), n: 2, pos: 'l' }, { at: field(m, 'Arrear Amount'), n: 3, pos: 'l' }, { at: field(m, 'Reason for arrear'), n: 4, pos: 'l' }, { at: m.getByRole('button', { name: 'Raise Arrear' }), n: 5, pos: 'b' }] });
+await closeTop(page);
+await B('Receive Buyer Payment').click(); await settle(page, 500); m = top();
+await field(m, 'Buyer').selectOption({ index: 1 }); await field(m, 'Amount Received').fill('10000000'); await field(m, 'Payment Date').fill('2026-10-15'); await field(m, 'Reference').fill('PUNBR52026101500112'); await settle(page, 600);
+await shot(page, '07-receive', { tall: 1400, crop: m, margin: 16, marks: [{ at: field(m, 'Buyer'), n: 1, pos: 'l' }, { at: field(m, 'Amount Received'), n: 2, pos: 'l' }, { at: field(m, 'Payment Date'), n: 3, pos: 'l' }, { at: field(m, 'Reference'), n: 4, pos: 'l' }, { at: m.getByRole('button', { name: 'Apply Payment' }), n: 5, pos: 'b' }] });
+await closeTop(page);
+// PSA bill after part payment: record payment + IRN
+await main.locator('tbody tr', { hasText: 'INV-PSA/2026' }).first().locator('td').first().click(); await settle(page, 1400); let d = top();
+await shot(page, '07-psa-after-full', { tall: 6000, crop: d, margin: 10 });
+await shot(page, '07-psa-record', { tall: 6000, widthOf: d, margin: 8, crop: [d.getByText(/^Record Payment \(Incoming/), d.getByRole('button', { name: 'Record Payment' })], marks: [{ at: field(d, 'Amount (₹)'), n: 1, pos: 'b' }, { at: field(d, 'Payment Date'), n: 2, pos: 'b' }, { at: field(d, 'Mode'), n: 3, pos: 'b' }, { at: field(d, 'Reference'), n: 4, pos: 'b' }, { at: field(d, 'Deduction'), n: 5, pos: 'b' }, { at: d.getByRole('button', { name: 'Record Payment' }), n: 6, pos: 'r' }] });
+await soft('irn', async () => { await d.getByRole('button', { name: 'Add IRN & QR' }).click(); await settle(page, 500); await dumpTo(page, 'x-irn', 'top'); await shot(page, '07-irn', { tall: 6000, widthOf: d, margin: 8, crop: [d.getByText('E-invoice (IRN & QR)'), d.getByText('Digitally signed copy')] }); });
+await closeTop(page);
+// Invoice Verification
+await page.goto(BASE + '/reia/verification'); await settle(page, 1000);
+await shot(page, '08-ver-open', { marks: [{ at: page.getByRole('link', { name: 'Invoice Verification' }), n: 1, pos: 'r', pad: 2 }] });
+await sidebar(page, false);
+const card = (t) => main.getByText(t, { exact: true }).first().locator('xpath=ancestor::div[1]');
+await shot(page, '08-ver-list', { marks: [{ at: card('Failed a check'), n: 1, pos: 'tl' }, { at: card('In progress'), n: 2, pos: 'tl' }, { at: card('Not started'), n: 3, pos: 'tl' }, { at: card('Value awaiting verification'), n: 4, pos: 'tl' }, { at: main.getByRole('button', { name: 'Everything' }), n: 5, pos: 'b' }, { at: main.locator('tbody tr').first(), n: 6, pos: 'tl', pad: 0 }] });
+await dumpTo(page, 'x-ver');
+await main.locator('tbody tr').first().click(); await settle(page, 900);
+await dumpTo(page, 'x-ver-row'); await shot(page, '08-ver-detail', { tall: 1700, crop: 'main', margin: 0 });
+await browser.close();

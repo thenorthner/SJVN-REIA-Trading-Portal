@@ -75,10 +75,15 @@ function SourceBadge({ row }) {
   );
 }
 
-export default function DeviationSettlements() {
+// Which stations a desk's DSM screen shows. REIA's screen shows every station,
+// as it always has; the Hydro and Thermal desks see their own.
+const VERTICAL_TYPES = { HYDRO: ['Hydro', 'PSP'], THERMAL: ['Thermal'] };
+const VERTICAL_WRITE = { REIA: ROLE_GROUPS.REIA_WRITE, HYDRO: ROLE_GROUPS.HYDRO_THERMAL_WRITE, THERMAL: ROLE_GROUPS.THERMAL_WRITE };
+
+export default function DeviationSettlements({ vertical = 'REIA' }) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const canWrite = ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+  const canWrite = (VERTICAL_WRITE[vertical] || ROLE_GROUPS.REIA_WRITE).includes(user?.role);
   const [rows, setRows] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [summary, setSummary] = useState({});
@@ -114,7 +119,7 @@ export default function DeviationSettlements() {
 
   const load = useCallback(() => {
     setLoading(true);
-    const params = {};
+    const params = vertical === 'REIA' ? {} : { vertical };
     if (filters.contract_id) params.contract_id = filters.contract_id;
     if (filters.period_month) params.period_month = filters.period_month;
     const listParams = filters.status ? { ...params, status: filters.status } : params;
@@ -124,10 +129,15 @@ export default function DeviationSettlements() {
     ]).then(([list, sum]) => { setRows(list); setSummary(sum || {}); })
       .catch((err) => setPageError(errOf(err, 'The deviation weeks could not be loaded.')))
       .finally(() => setLoading(false));
-  }, [filters.contract_id, filters.period_month, filters.status]);
+  }, [vertical, filters.contract_id, filters.period_month, filters.status]);
 
   useEffect(load, [load]);
-  useEffect(() => { api.contracts.list().then(setContracts).catch(() => {}); }, []);
+  useEffect(() => {
+    api.contracts.list().then((all) => {
+      const types = VERTICAL_TYPES[vertical];
+      setContracts(types ? (all || []).filter((c) => types.includes(c.project_type)) : (all || []));
+    }).catch(() => {});
+  }, [vertical]);
 
   const devPreview = (Number(form.actual_mwh) || 0) - (Number(form.scheduled_mwh) || 0);
   const amtPreview = Math.round(devPreview * (Number(form.deviation_rate) || 0));
@@ -389,8 +399,10 @@ export default function DeviationSettlements() {
   return (
     <div>
       <PageHeader
-        title="Deviation Settlement (DSM)"
-        subtitle="Weekly grid deviation charges/credits per NRPC — schedule vs actual, plant-wise"
+        title={vertical === 'HYDRO' ? 'Deviation Settlement (DSM) — Hydro stations' : vertical === 'THERMAL' ? 'Deviation Settlement (DSM) — Thermal stations' : 'Deviation Settlement (DSM)'}
+        subtitle={vertical === 'REIA'
+          ? 'Weekly grid deviation charges/credits per NRPC — schedule vs actual, plant-wise'
+          : 'Each station\'s weekly deviation account from the regional DSA — payable to or receivable from the pool, week by week'}
         actions={tab === 'weeks' && canWrite && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-primary" onClick={openRaise}>

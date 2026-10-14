@@ -123,7 +123,7 @@ export default function EnergySchedule({ product = 'DAM' }) {
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 1400, margin: '0 auto' }}>
+    <div style={{ padding: 20 }}>
       <PageHeader
         title={`${product} Energy Schedule`}
         actions={

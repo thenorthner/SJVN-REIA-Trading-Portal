@@ -91,6 +91,7 @@ export function generateReiaDashboardPdf(report, meta, res) {
     size: [PAGE_W, PAGE_H],
     margins: { top: M, bottom: M, left: M, right: M },
     bufferPages: true,
+    font: 'Helvetica',
     info: {
       Title: 'SJVN REIA Dashboard Snapshot',
       Author: 'SJVN Limited',
@@ -98,6 +99,7 @@ export function generateReiaDashboardPdf(report, meta, res) {
       Creator: 'SJVN Energy Platform',
     },
   });
+  doc.font('Helvetica');
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="SJVN_REIA_Dashboard_Snapshot_${nowStamp().replace(/[.: ]/g, '-')}.pdf"`);

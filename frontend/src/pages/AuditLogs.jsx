@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import api from '../api/client.js';
-import { PageHeader, Card, Badge, Modal, StatCard } from '../components/ui.jsx';
+import { PageHeader, Card, Badge, Modal, StatCard, scrollPageTop } from '../components/ui.jsx';
 import {
   actionMeta, moduleLabel, entityLabel, humanize, formatValue, safeParse,
   computeDiff, summarizeDetails, detailsFieldCount, describeEvent, groupSummary,
@@ -550,7 +550,7 @@ export default function AuditLogs() {
   const pivot = useCallback((key, value) => {
     setExpandedId(null);
     setFilter({ [key]: value });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollPageTop('smooth');
   }, [setFilter]);
 
   const days = useMemo(() => groupEvents(rows), [rows]);

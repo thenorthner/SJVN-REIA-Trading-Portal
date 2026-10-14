@@ -789,6 +789,18 @@ function migrateEntityCorporateDetails() {
   if (!refreshed.includes('signatory_designation')) {
     db.exec(`ALTER TABLE entities ADD COLUMN signatory_designation TEXT`);
   }
+  // Which verticals a counterparty is registered under (REIA / HYDRO / THERMAL,
+  // comma-separated), and the who-when-why of a blacklisting.
+  if (!refreshed.includes('verticals')) {
+    db.exec(`ALTER TABLE entities ADD COLUMN verticals TEXT NOT NULL DEFAULT 'REIA'`);
+  }
+  if (!refreshed.includes('blacklist_reason')) {
+    db.exec(`
+      ALTER TABLE entities ADD COLUMN blacklist_reason TEXT;
+      ALTER TABLE entities ADD COLUMN blacklisted_by TEXT;
+      ALTER TABLE entities ADD COLUMN blacklisted_at TEXT;
+    `);
+  }
 }
 
 try {
@@ -1181,6 +1193,48 @@ try {
   migrateHydroBillClaimKinds();
 } catch (e) {
   console.error('Hydro bill claim-kind migration failed:', e.message);
+}
+
+/**
+ * Admit ARREAR and SUPPLEMENTARY hydro bills. Same rebuild as above; the unique
+ * index is put back by hand because the rebuild leaves the old one on the
+ * renamed table, where it is dropped with it.
+ */
+function migrateHydroArrearKinds() {
+  const t = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='hydro_station_bills'",
+  ).get();
+  if (!t || t.sql.includes("'ARREAR'")) return;
+
+  db.exec('PRAGMA foreign_keys=OFF');
+  db.exec('PRAGMA legacy_alter_table=ON');
+  try {
+    rebuildTableFromSchema('hydro_station_bills');
+    db.exec('DROP INDEX IF EXISTS idx_hydro_bill_station_month');
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_hydro_bill_station_month
+      ON hydro_station_bills (contract_id, billing_month, bill_kind)
+      WHERE bill_kind NOT IN ('REVISION','ARREAR','SUPPLEMENTARY') AND status <> 'CANCELLED'`);
+  } finally {
+    db.exec('PRAGMA legacy_alter_table=OFF');
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
+try {
+  migrateHydroArrearKinds();
+} catch (e) {
+  console.error('Hydro arrear-kind migration failed:', e.message);
+}
+
+// A thermal bill keeps the month's fuel inputs and the norms it was computed
+// on, so it can be reprinted, revised or put on an arrear without guessing.
+try {
+  const cols = db.prepare('PRAGMA table_info(hydro_station_bills)').all().map((c) => c.name);
+  if (cols.length && !cols.includes('thermal_inputs_json')) {
+    db.exec('ALTER TABLE hydro_station_bills ADD COLUMN thermal_inputs_json TEXT');
+  }
+} catch (e) {
+  console.error('Thermal bill column migration failed:', e.message);
 }
 
 function migrateHydroBillLifecycle() {
@@ -2610,6 +2664,15 @@ function seedCommercialUsers() {
       `).run(hash);
       console.log('[SEED] commercial@sjvn.in seeded as COMMERCIAL_ADMIN');
     }
+    // A second officer on the hydro desk. A bill cannot be approved by whoever
+    // raised it, so with one login the approval chain could never be finished.
+    if (!db.prepare("SELECT id FROM users WHERE email = 'hydro.hod@sjvn.in'").get()) {
+      db.prepare(`
+        INSERT INTO users (id, name, email, password_hash, role, linked_entity_id, is_active)
+        VALUES ('USR-HYDRO-HOD-01', 'Meera (Hydro HoD — Approver)', 'hydro.hod@sjvn.in', ?, 'COMMERCIAL', NULL, 1)
+      `).run(hash);
+      console.log('[SEED] hydro.hod@sjvn.in seeded as COMMERCIAL (approver)');
+    }
   } catch (e) {
     console.error('Failed to seed commercial users:', e.message);
   }
@@ -2620,6 +2683,84 @@ try {
   seedCommercialUsers();
 } catch (e) {
   console.error('Commercial role migration failed:', e.message);
+}
+
+/**
+ * Widen users.role for the Thermal desk. Thermal billing has its own logins,
+ * apart from the Commercial (hydro) desk, so each sees only its own section.
+ */
+function migrateThermalRole() {
+  const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get()?.sql;
+  if (!ddl || ddl.includes('THERMAL_ADMIN')) return;
+
+  const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+  const rows = db.prepare('SELECT * FROM users').all();
+  db.exec('PRAGMA foreign_keys=OFF');
+  try {
+    db.exec('DROP TABLE IF EXISTS users_role_migration');
+    db.exec(`
+      CREATE TABLE users_role_migration (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN (
+          'IT_SUPER_ADMIN','REIA_ADMIN','TRADING_ADMIN','FINANCE_USER',
+          'MANAGEMENT','SELLER_L1','SELLER_L2','SELLER_L3','BUYER_L1','BUYER_L2','BUYER_L3','COMPLIANCE_AUDITOR',
+          'TRADING_CLIENT','TRADING_CLIENT_MAKER','TRADING_CLIENT_CHECKER',
+          'COMMERCIAL_ADMIN','COMMERCIAL_USER','COMMERCIAL',
+          'THERMAL_ADMIN','THERMAL_USER',
+          'SJVN_ADMIN', 'SELLER', 'BUYER', 'REIA_USER', 'TRADING_USER'
+        )),
+        linked_entity_id TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      )
+    `);
+    if (rows.length) {
+      const keep = cols.filter((c) => [
+        'id', 'name', 'email', 'password_hash', 'role', 'linked_entity_id', 'is_active', 'created_at',
+      ].includes(c));
+      const ins = db.prepare(`
+        INSERT INTO users_role_migration (${keep.join(',')}) VALUES (${keep.map(() => '?').join(',')})
+      `);
+      const copy = db.transaction(() => { for (const r of rows) ins.run(...keep.map((c) => r[c])); });
+      copy();
+    }
+    db.exec('DROP TABLE users');
+    db.exec('ALTER TABLE users_role_migration RENAME TO users');
+    console.log(`[MIGRATE] users.role widened for Thermal desk roles (${rows.length} user(s) carried over)`);
+  } finally {
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
+function seedThermalUsers() {
+  // The thermal desk's administrator, and a second officer on the desk so a
+  // bill can be raised by one and approved by the other.
+  const users = [
+    ['USR-THERMAL-01', 'Ravi (Thermal Admin)', 'thermal@sjvn.in', 'THERMAL_ADMIN'],
+    ['USR-THERMAL-02', 'Anil (Thermal Desk)', 'thermal.desk@sjvn.in', 'THERMAL_USER'],
+  ];
+  for (const [id, name, email, role] of users) {
+    try {
+      if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) continue;
+      db.prepare(`
+        INSERT INTO users (id, name, email, password_hash, role, linked_entity_id, is_active)
+        VALUES (?, ?, ?, ?, ?, NULL, 1)
+      `).run(id, name, email, bcrypt.hashSync('password123', 8), role);
+      console.log(`[SEED] ${email} seeded as ${role}`);
+    } catch (e) {
+      console.error(`Failed to seed ${email}:`, e.message);
+    }
+  }
+}
+
+try {
+  migrateThermalRole();
+  seedThermalUsers();
+} catch (e) {
+  console.error('Thermal role migration failed:', e.message);
 }
 
 /**
@@ -3291,6 +3432,10 @@ function migrateBillingQaColumns() {
 try {
   migrateBillingQaColumns();
   collapseDuplicateReconciliations();
+  const notifCols = db.pragma('table_info(notifications)').map((c) => c.name);
+  if (notifCols.length && !notifCols.includes('link')) {
+    db.exec('ALTER TABLE notifications ADD COLUMN link TEXT;');
+  }
 } catch (e) {
   console.error('Billing QA columns migration failed:', e.message);
 }

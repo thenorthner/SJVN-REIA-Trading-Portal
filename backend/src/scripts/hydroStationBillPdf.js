@@ -51,7 +51,136 @@ function totalStrip(doc, y, label, value) {
  * Kept separate from the streaming wrapper so the same pages can be rendered to
  * a buffer for an email attachment without a response object in hand.
  */
-export function drawHydroStationBill(doc, { bill, lines, contract }) {
+/**
+ * An arrear or supplementary bill: no station blocks to print, only what is
+ * billed and why — and for an arrear, the month-by-month working behind it,
+ * since that is what a beneficiary will check the figure against.
+ */
+function drawAdjustmentBill(doc, { bill, lines, arrearMonths = [] }) {
+  const isArrear = bill.bill_kind === 'ARREAR';
+  const ctx = {
+    vertical: 'Commercial & System Operation Department',
+    title: `${isArrear ? 'Arrear' : 'Supplementary'} bill — ${bill.station_name}`,
+    subtitle: `${bill.bill_no}  ·  ${isArrear ? `${monthLabel(bill.arrear_from_month)} to ${monthLabel(bill.arrear_to_month)}` : monthLabel(bill.billing_month)}`
+      + (bill.rea_reference ? `  ·  ${bill.rea_reference}` : ''),
+    generatedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+  };
+  header(doc, ctx);
+  let y = 84;
+  y = sectionTitle(doc, y, isArrear ? 'Why this arrear arises' : 'What this bill is for');
+  doc.font('Helvetica').fontSize(8).fillColor(INK).text(bill.revision_reason || '—', M, y, { width: CONTENT_W });
+  y = doc.y + 10;
+
+  if (isArrear && arrearMonths.length) {
+    y = sectionTitle(doc, y, 'Month-wise working (revised tariff applied to the energy, availability and allocation already billed)');
+    y = table(doc, y, [
+      { label: 'Month', w: 70, value: (r) => monthLabel(r.billing_month) },
+      { label: 'Billed on', w: 95, value: (r) => r.basis_bill_no },
+      { label: 'Already billed (Rs)', w: 95, align: 'right', value: (r) => money0(r.previously_billed) },
+      { label: 'On revised tariff (Rs)', w: 100, align: 'right', value: (r) => money0(r.revised_amount) },
+      { label: 'Capacity diff.', w: 75, align: 'right', value: (r) => money0(r.capacity_differential) },
+      { label: 'Arrear (Rs)', w: CONTENT_W - 435, align: 'right', value: (r) => money0(r.differential) },
+    ], arrearMonths, ctx, { fontSize: 7 });
+    y += 8;
+  }
+
+  y = sectionTitle(doc, y, 'Beneficiary-wise');
+  y = table(doc, y, [
+    { label: 'Sr', w: 28, value: (r) => r.sr_no },
+    { label: 'Beneficiary', w: 190, value: (r) => r.beneficiary_name },
+    { label: isArrear ? 'Capacity charge diff. (Rs)' : 'Share %', w: 110, align: 'right', value: (r) => (isArrear ? money0(r.capacity_charge) : Number(r.pct_proportionate).toFixed(4)) },
+    { label: isArrear ? 'Energy charge diff. (Rs)' : '', w: 110, align: 'right', value: (r) => (isArrear ? money0(r.energy_charge_total) : ' ') },
+    { label: 'Amount (Rs)', w: CONTENT_W - 438, align: 'right', value: (r) => money0(r.total_charges) },
+  ], lines, ctx, { fontSize: 7 });
+  y += 4;
+  const total = Number(bill.total_charges);
+  y = totalStrip(doc, y, total < 0 ? 'Total credit to the beneficiaries (Rs)' : 'Total amount payable (Rs)', money0(Math.abs(total)));
+  doc.font('Helvetica').fontSize(7.5).fillColor(MUTED)
+    .text(`Rupees ${rupeesInWords(Math.abs(total))} only.`, M, y, { width: CONTENT_W });
+  y = doc.y + 6;
+  notes(doc, y, [
+    isArrear
+      ? 'An amount shown negative is a credit: it is set against the beneficiary\'s open bills on issue.'
+      : 'Payable within the period allowed by the PPA; late payment attracts surcharge as per the LPS Rules.',
+    'Bill authenticated electronically on approval; physical signature not required.',
+  ]);
+}
+
+/**
+ * A thermal station's bill: the tariff and norms, the month's fuel and the
+ * energy charge rate worked from them, the two charges, and the beneficiary
+ * split. One sheet for the station, one for the beneficiaries.
+ */
+function drawThermalBill(doc, { bill, lines }) {
+  const t = JSON.parse(bill.thermal_inputs_json || '{}');
+  const tariff = t.tariff || {};
+  const fuel = t.fuel || {};
+  const kind = String(bill.bill_kind || 'PROVISIONAL').toLowerCase();
+  const ctx = {
+    vertical: 'Commercial Department — Thermal',
+    title: `${kind.charAt(0).toUpperCase()}${kind.slice(1)} bill for energy supply from ${bill.station_name}`,
+    subtitle: `${bill.bill_no}  ·  ${monthLabel(bill.billing_month)}  ·  F.Y. ${bill.financial_year}${tariff.order_ref ? `  ·  ${tariff.order_ref}` : ''}`,
+    generatedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+  };
+  header(doc, ctx);
+  let y = 84;
+  y = sectionTitle(doc, y, 'Tariff and norms (CERC)');
+  y = blockRows(doc, y, ctx, [
+    { code: 'T1', label: 'Annual Fixed Charges (AFC)', value: money0(tariff.annual_afc) },
+    { code: 'T2', label: 'Normative Annual Plant Availability Factor (NAPAF), %', value: `${tariff.napaf_percent ?? '—'}` },
+    { code: 'T3', label: 'Gross Station Heat Rate (GHR), kCal/kWh', value: `${tariff.gross_heat_rate ?? '—'}` },
+    { code: 'T4', label: 'Normative Auxiliary Energy Consumption (AUX), %', value: `${tariff.aux_pct ?? '—'}` },
+    { code: 'T5', label: 'Specific Secondary Fuel Oil Consumption (SFC), ml/kWh', value: `${tariff.sfc_ml_per_kwh ?? 0}` },
+    { code: 'T6', label: 'Calorific value of secondary fuel (CVSF), kCal/ml', value: `${tariff.cv_secondary_kcal_per_ml ?? '—'}` },
+  ]);
+  y += 8;
+  y = sectionTitle(doc, y, 'Fuel for the month and the energy charge rate');
+  y = blockRows(doc, y, ctx, [
+    { code: 'F1', label: 'Gross calorific value of coal (CVPF), kCal/kg', value: `${fuel.gcv_kcal_per_kg ?? '—'}` },
+    { code: 'F2', label: 'Landed price of coal (LPPF), Rs/tonne', value: money0(fuel.coal_rs_per_tonne) },
+    { code: 'F3', label: 'Landed price of secondary fuel oil, Rs/kL', value: money0(fuel.oil_rs_per_kl) },
+    { code: 'ECR', label: 'ECR = [(GHR - SFC x CVSF) x LPPF / CVPF + SFC x LPSFi] x 100 / (100 - AUX), Rs/kWh', value: `${bill.a12_ecr}`, strong: true },
+  ]);
+  y += 8;
+  y = sectionTitle(doc, y, 'Charges for the month');
+  y = blockRows(doc, y, ctx, [
+    { code: 'C1', label: 'Plant Availability Factor achieved in the month (PAFM), %', value: `${bill.c1_pafm_pct}` },
+    { code: 'C2', label: `Capacity charge = AFC x NDM/NDY x PAFM/NAPAF  (${bill.a8_days_in_month}/${bill.a9_days_in_year} days)`, value: money0(bill.c5_total_capacity_charge) },
+    { code: 'E1', label: 'Ex-bus scheduled energy, kWh', value: n1(bill.e1_ex_bus_scheduled_kwh) },
+    { code: 'EC', label: 'Energy charge = ECR x E1', value: money0(bill.ee1_energy_charge) },
+  ]);
+  y += 4;
+  y = totalStrip(doc, y, 'Total Charges in Rupees  (C2 + EC)', money0(bill.total_charges));
+  if (Number(bill.nrldc_total_fee) > 0) {
+    y = blockRows(doc, y, ctx, [{ code: '', label: 'RLDC fees & charges (billed through, outside the total above)', value: money0(bill.nrldc_total_fee) }]);
+  }
+  notes(doc, y + 4, [t.not_modelled || '', 'Bill authenticated electronically on approval; physical signature not required.'].filter(Boolean));
+
+  doc.addPage();
+  header(doc, { ...ctx, title: `Beneficiary-wise breakup — ${bill.station_name}` });
+  y = 84;
+  y = table(doc, y, [
+    { label: 'Sr', w: 26, value: (r) => r.sr_no },
+    { label: 'Beneficiary', w: 150, value: (r) => r.beneficiary_name },
+    { label: 'Share %', w: 55, align: 'right', value: (r) => Number(r.pct_proportionate).toFixed(4) },
+    { label: 'Capacity charge', w: 95, align: 'right', value: (r) => money0(r.capacity_charge) },
+    { label: 'Energy (kWh)', w: 90, align: 'right', value: (r) => n1(r.saleable_energy_kwh) },
+    { label: 'Energy charge', w: 95, align: 'right', value: (r) => money0(r.energy_charge_total) },
+    { label: 'Total (Rs)', w: CONTENT_W - 511, align: 'right', value: (r) => money0(r.total_charges) },
+  ], lines, ctx, { fontSize: 7 });
+}
+
+export function drawHydroStationBill(doc, { bill, lines, contract, arrearMonths }) {
+  if (['ARREAR', 'SUPPLEMENTARY'].includes(bill.bill_kind)) {
+    drawAdjustmentBill(doc, { bill, lines, arrearMonths });
+    pageNumbers(doc);
+    return;
+  }
+  if (bill.thermal_inputs_json) {
+    drawThermalBill(doc, { bill, lines });
+    pageNumbers(doc);
+    return;
+  }
   const kind = String(bill.bill_kind || 'PROVISIONAL').toLowerCase();
   const ctx = {
     vertical: 'Commercial & System Operation Department',
@@ -400,9 +529,32 @@ function drawBeneficiaryPage(doc, { bill, lines }, line) {
  */
 export function drawHydroBeneficiaryBills(doc, payload, lineId = null) {
   const chosen = lineId ? payload.lines.filter((l) => l.id === lineId) : payload.lines;
+  const adjustment = ['ARREAR', 'SUPPLEMENTARY'].includes(payload.bill.bill_kind);
   chosen.forEach((line, i) => {
     if (i > 0) doc.addPage();
-    drawBeneficiaryPage(doc, payload, line);
+    // An arrear or supplementary bill has no energy columns to break out, so a
+    // beneficiary's copy is the same bill showing its own line and amount.
+    if (payload.bill.thermal_inputs_json && !adjustment) {
+      // A thermal beneficiary's copy: its own line of the breakup.
+      drawThermalBill(doc, {
+        bill: {
+          ...payload.bill, total_charges: line.total_charges, c5_total_capacity_charge: line.capacity_charge,
+          ee1_energy_charge: line.energy_charge_total, e1_ex_bus_scheduled_kwh: line.saleable_energy_kwh, nrldc_total_fee: line.nrldc_fee,
+        },
+        lines: [line],
+      });
+    } else if (adjustment) {
+      drawAdjustmentBill(doc, {
+        bill: { ...payload.bill, total_charges: line.total_charges },
+        lines: [line],
+        arrearMonths: (payload.arrearMonths || []).map((m) => {
+          const own = JSON.parse(m.lines_json || '[]').find((x) => x.beneficiary_name === line.beneficiary_name);
+          return { ...m, differential: own?.differential ?? 0, previously_billed: null, revised_amount: null, capacity_differential: null };
+        }),
+      });
+    } else {
+      drawBeneficiaryPage(doc, payload, line);
+    }
   });
   return chosen.length;
 }

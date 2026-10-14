@@ -124,7 +124,7 @@ describe('S7 A found validation problem blocks approval', () => {
   const act = (inv, decision = 'APPROVED') =>
     request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(auth(reia)).send({ decision, comments: 'x' });
 
-  for (const status of ['PARTIAL', 'MISMATCH', 'NO_COUNTERPART']) {
+  for (const status of ['PARTIAL', 'MISMATCH']) {
     it(`refuses to clear one flagged ${status}`, async () => {
       const inv = submitted(status);
       const r = await act(inv);
@@ -271,7 +271,7 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
     expect((await act(inv, 1, a)).status).toBe(200);
     const again = await act(inv, 2, a);
     expect(again.status, 'the same person signed a second level').toBe(403);
-    expect(again.body.error).toMatch(/You approved level 1/);
+    expect(again.body.error).toMatch(/You approved level 1/i);
     expect((await act(inv, 2, b)).status).toBe(200);
     expect((await act(inv, 3, a)).status).toBe(403);
     expect((await act(inv, 3, b)).status).toBe(403);

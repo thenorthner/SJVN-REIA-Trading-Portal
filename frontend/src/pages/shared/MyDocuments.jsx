@@ -2,50 +2,46 @@ import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Badge } from '../../components/ui.jsx';
-import { DocumentManager, UploadModal, ExpiryTag } from '../../components/DocumentManager.jsx';
+import { DocumentManager, ExpiryTag } from '../../components/DocumentManager.jsx';
 import { fmtDate } from '../../datetime.js';
 import { APPROVAL_STATUS_LABELS } from '../../constants/regulatoryApprovals.js';
 
-// Seller/Buyer-facing document centre. The counterparty uploads their own
-// KYC + regulatory proofs here (VERIFY category) — the one place the backend
-// actually lets them do it. SJVN's REIA desk then verifies each one, and the
-// result shows up beside every regulatory approval on the stakeholder record.
+// Seller/Buyer-facing document centre.
+// Physical Document Policy: Counterparties submit hard copies of their KYC,
+// registration, and regulatory proofs directly to SJVN REIA Office. SJVN Admin
+// scans, uploads, and verifies each proof. This page allows counterparties to
+// track verification status and view their records without direct uploading.
 export default function MyDocuments() {
   const { user } = useAuth();
   const entity = user?.entity;
   const [checklist, setChecklist] = useState([]);
   const [docs, setDocs] = useState([]);
   const [requests, setRequests] = useState([]);
-  const [renew, setRenew] = useState(null);
-  const [answer, setAnswer] = useState(null);
-  // Bumped after an upload made from this page, so the list below reloads too.
-  const [round, setRound] = useState(0);
-  // Bumped when the list below changes something, so the cards above re-read.
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
     if (!entity?.id) return;
     api.documents.list({ entity_id: entity.id }).then(setDocs).catch(() => setDocs([]));
     api.documents.requests({ status: 'OPEN' }).then(setRequests).catch(() => setRequests([]));
-  }, [entity?.id, round, tick]);
+  }, [entity?.id, tick]);
 
-  // Pull the entity's regulatory checklist so the user can see, at a glance,
-  // which clearances still need a proof and which are already verified.
+  // Pull the entity's regulatory checklist so the user can see which clearances
+  // are verified by SJVN and which are still awaiting physical submission.
   useEffect(() => {
     if (!entity?.id) return;
     api.entities.get(entity.id)
       .then((e) => setChecklist(e.regulatory_checklist || []))
       .catch(() => setChecklist([]));
-  }, [entity?.id, round, tick]);
+  }, [entity?.id, tick]);
 
   if (!entity?.id) {
     return (
       <div>
-        <PageHeader title="My Documents & KYC" subtitle="Upload your registration, licences and regulatory proofs" />
+        <PageHeader title="My Documents & KYC" subtitle="Verification status of physical registration, licences and regulatory proofs" />
         <Card>
           <p style={{ margin: 0, color: 'var(--slate-500)' }}>
             Your login isn't linked to a company record yet. Please ask the SJVN REIA team to link your
-            account to your entity before uploading documents.
+            account to your entity before viewing documents.
           </p>
         </Card>
       </div>
@@ -53,7 +49,6 @@ export default function MyDocuments() {
   }
 
   const pending = checklist.filter((c) => c.is_mandatory && c.status !== 'VERIFIED' && c.status !== 'NOT_APPLICABLE');
-  // Progress is counted over what is mandatory and applies to this company.
   const required = checklist.filter((c) => c.is_mandatory && c.status !== 'NOT_APPLICABLE');
   const done = required.length - pending.length;
   const pct = required.length ? Math.round((done / required.length) * 100) : null;
@@ -64,19 +59,18 @@ export default function MyDocuments() {
     <div>
       <PageHeader
         title="My Documents & KYC"
-        subtitle="Upload your registration, licences, guarantees and regulatory proofs. SJVN will verify each one."
+        subtitle="Verification status of registration, licences, guarantees and regulatory proofs submitted to SJVN."
       />
 
       <Card>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <span style={{ fontSize: 20 }}></span>
+          <span style={{ fontSize: 20 }}>📋</span>
           <div>
-            <strong style={{ fontSize: 14 }}>How this works</strong>
+            <strong style={{ fontSize: 14 }}>Physical Document Submission Process</strong>
             <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'var(--slate-600)', lineHeight: 1.55 }}>
-              Use <strong>Upload Document</strong> below and pick the matching document type (e.g. Generation
-              License, Company Registration). These are <strong>Verify</strong> documents — once uploaded they
-              go to SJVN for verification, and the status appears against the matching item in your Regulatory
-              Approvals checklist. Your onboarding is approved only after all mandatory proofs are verified.
+              All KYC, company registration, and regulatory compliance proofs must be submitted in physical hard-copy form
+              directly to the <strong>SJVN REIA Office</strong>. The SJVN Administration team will scan, upload, and verify
+              each proof on your company profile. You can monitor the verification status and validity of all documents below.
             </p>
           </div>
         </div>
@@ -118,7 +112,9 @@ export default function MyDocuments() {
                 )}
                 {r.note && <div style={{ fontSize: 12.5, color: 'var(--slate-600)', marginTop: 2 }}>{r.note}</div>}
               </div>
-              <button className="btn btn-primary btn-sm" onClick={() => setAnswer(r)}>Upload it</button>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e', background: '#fef3c7', padding: '4px 10px', borderRadius: 6 }}>
+                Submit physical copy to SJVN REIA desk
+              </span>
             </div>
           ))}
         </Card>
@@ -135,7 +131,9 @@ export default function MyDocuments() {
                   <strong>SJVN's remark:</strong> {d.verification_notes || 'No remark was given.'}
                 </div>
               </div>
-              <button className="btn btn-primary btn-sm" onClick={() => setRenew(d)}>Upload a corrected copy</button>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#b91c1c', background: '#fee2e2', padding: '4px 10px', borderRadius: 6 }}>
+                Submit revised physical copy to SJVN
+              </span>
             </div>
           ))}
           {dated.map((d) => (
@@ -144,14 +142,16 @@ export default function MyDocuments() {
                 <strong style={{ fontSize: 13.5 }}>{d.title}</strong>
                 <div style={{ marginTop: 2 }}><ExpiryTag doc={d} /></div>
               </div>
-              <button className="btn btn-primary btn-sm" onClick={() => setRenew(d)}>Upload the renewed one</button>
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e', background: '#fef3c7', padding: '4px 10px', borderRadius: 6 }}>
+                Submit renewed copy to SJVN
+              </span>
             </div>
           ))}
         </Card>
       )}
 
       {checklist.length > 0 && (
-        <Card title="Regulatory Approvals — what to upload" style={{ marginTop: 16 }}>
+        <Card title="Regulatory Approvals & Clearance Status" style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {checklist.map((item) => (
               <div
@@ -176,7 +176,7 @@ export default function MyDocuments() {
           </div>
           {pending.length > 0 && (
             <p style={{ margin: '12px 0 0', fontSize: 12.5, color: 'var(--amber-strong)' }}>
-              {pending.length} mandatory {pending.length === 1 ? 'clearance' : 'clearances'} still awaiting a verified proof.
+              {pending.length} mandatory {pending.length === 1 ? 'clearance' : 'clearances'} awaiting verified proof from SJVN desk.
             </p>
           )}
         </Card>
@@ -184,30 +184,13 @@ export default function MyDocuments() {
 
       <div style={{ marginTop: 16 }}>
         <DocumentManager
-          key={round}
           onChange={() => setTick((n) => n + 1)}
           moduleName="STAKEHOLDERS"
           entityId={entity.id}
-          title="My Documents (KYC, Registration, Licences)"
+          canUpload={false}
+          title="Verified Documents (KYC, Registration, Licences)"
         />
       </div>
-
-      <UploadModal
-        open={!!renew}
-        existing={renew}
-        moduleName="STAKEHOLDERS"
-        onClose={() => setRenew(null)}
-        onSuccess={() => setRound((n) => n + 1)}
-      />
-      <UploadModal
-        open={!!answer}
-        moduleName="STAKEHOLDERS"
-        entityId={entity.id}
-        presetDocType={answer?.document_type}
-        presetTitle={answer?.document_type || ''}
-        onClose={() => setAnswer(null)}
-        onSuccess={() => setRound((n) => n + 1)}
-      />
     </div>
   );
 }

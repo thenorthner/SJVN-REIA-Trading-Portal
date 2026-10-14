@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import api from '../../api/client.js';
+import { fmtDate } from '../../datetime.js';
 import SjvnDeskCard from '../../components/SjvnDeskCard.jsx';
+import MacroEnergyGrid3D from '../../components/MacroEnergyGrid3D.jsx';
 import { PageHeader, StatCard, Card, fmtCurrency, fmtNumber, Modal, Table } from '../../components/ui.jsx';
 
 const COLORS = ['url(#eliteBlue)', 'url(#eliteGreen)', 'url(#eliteOrange)', 'url(#eliteRed)', 'url(#elitePurple)', 'url(#eliteTeal)'];
@@ -29,7 +31,7 @@ export default function ReiaDashboard() {
   }
 
   if (!data) return <div className="page-loading">Loading REIA dashboard...</div>;
-  const { kpis, byStatus, byProjectType, monthlyBilling, lps, pendingSplit, ageing, formIv } = data;
+  const { kpis, byStatus, byProjectType, monthlyBilling, lps, pendingSplit, ageing, formIv, licence } = data;
 
   return (
     <div>
@@ -46,6 +48,12 @@ export default function ReiaDashboard() {
             </button>
           </div>
         }
+      />
+
+      <MacroEnergyGrid3D
+        activeContractsCount={kpis.activeContracts}
+        contractedCapacity={kpis.contractedCapacity}
+        onOpenSettlementTrail={() => navigate('/reia/invoices')}
       />
 
       <SjvnDeskCard />
@@ -137,6 +145,18 @@ export default function ReiaDashboard() {
               : undefined}
           />
         </div>
+        {/* The licence's own yearly dues, which no return shows. */}
+        {licence && (
+          <div>
+            <StatCard
+              label="CERC licence fee"
+              value={licence.fee_overdue > 0 ? `${licence.fee_overdue} unpaid` : 'Up to date'}
+              tone={licence.fee_overdue > 0 ? 'red' : licence.next_fee?.days_left <= 45 ? 'amber' : 'green'}
+              hint={`${licence.next_fee.fy} due ${fmtDate(licence.next_fee.due_date)}${licence.net_worth_pending ? ` · net worth not recorded for ${licence.net_worth_pending} yr` : ''}`}
+              onClick={() => navigate('/reia/cerc-compliance?view=licence')}
+            />
+          </div>
+        )}
       </div>
 
       {ageing && (

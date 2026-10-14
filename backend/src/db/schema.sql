@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS users (
     -- SJVN has already been agreed inside the client's own office.
     'TRADING_CLIENT','TRADING_CLIENT_MAKER','TRADING_CLIENT_CHECKER',
     'COMMERCIAL_ADMIN','COMMERCIAL_USER','COMMERCIAL',
+    'THERMAL_ADMIN','THERMAL_USER',
     'SJVN_ADMIN', 'SELLER', 'BUYER', 'REIA_USER', 'TRADING_USER' -- Legacy roles preserved for existing data
   )),
   linked_entity_id TEXT,
@@ -62,6 +63,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   role TEXT,
   type TEXT NOT NULL,
   message TEXT NOT NULL,
+  link TEXT,
   is_read INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -256,6 +258,10 @@ CREATE TABLE IF NOT EXISTS entities (
   cin TEXT,
   credit_rating TEXT,
   is_blacklisted INTEGER NOT NULL DEFAULT 0,
+  blacklist_reason TEXT,
+  blacklisted_by TEXT,
+  blacklisted_at TEXT,
+  verticals TEXT NOT NULL DEFAULT 'REIA', -- REIA / HYDRO / THERMAL, comma-separated
   capacity_mw REAL,
   technology TEXT, -- Solar / Wind / Hybrid / FDRE / Peak Power / PSP / Storage
   contracted_capacity_mw REAL,
@@ -1954,6 +1960,23 @@ CREATE TABLE IF NOT EXISTS cerc_form_iv_lines (
 
 CREATE INDEX IF NOT EXISTS idx_form_iv_lines_form ON cerc_form_iv_lines (form_id, line_no);
 
+-- What the trading licence owes each financial year besides returns: the annual
+-- licence fee (payable by 30 April) and the net worth its category requires.
+-- Recorded by hand; nothing here is derived from trade data.
+CREATE TABLE IF NOT EXISTS cerc_licence_compliance (
+  fy TEXT PRIMARY KEY,                 -- financial year, e.g. 2026-27
+  fee_amount REAL,                     -- what was actually paid (₹)
+  fee_paid_on TEXT,
+  fee_reference TEXT,                  -- UTR / receipt number
+  net_worth_cr REAL,                   -- per the auditor's certificate (₹ crore)
+  net_worth_as_on TEXT,
+  certificate_ref TEXT,
+  certificate_filed_on TEXT,
+  notes TEXT,
+  updated_by TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS contract_allocations (
   id TEXT PRIMARY KEY,
   ppa_id TEXT NOT NULL REFERENCES contracts(id),
@@ -2042,6 +2065,32 @@ CREATE TABLE IF NOT EXISTS hydro_auto_draft_runs (
   finished_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_hydro_auto_draft_runs_started ON hydro_auto_draft_runs (started_at);
+
+-- A hydro station's tariff constants for one financial year.
+--
+-- CERC approves the Annual Fixed Charges year by year, and revises them: NJHPS
+-- was billed on 1461.5741 crore for 2026-27 until the figure became 1700.8363
+-- crore. The contract carries one figure and can only change by amendment,
+-- which makes a new contract version — and the station's bills, allocation
+-- sheets and cumulative energy all hang off the version they were raised on.
+-- So the year's figures live here, against the same contract, and a bill takes
+-- them for the financial year its month falls in; the contract's own figures
+-- stand for any year that has no row.
+CREATE TABLE IF NOT EXISTS hydro_station_tariffs (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  financial_year TEXT NOT NULL,          -- e.g. 2026-2027
+  annual_afc REAL,                       -- Rs
+  ecr_excess_rate REAL,                  -- Rs/kWh for energy beyond the design energy
+  napaf_percent REAL,
+  annual_design_energy_mwh REAL,
+  normative_aux REAL,
+  order_ref TEXT,                        -- the CERC order or letter the figures come from
+  updated_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (contract_id, financial_year)
+);
 
 -- Every time a beneficiary's hydro bill was emailed, to whom, and whether it
 -- went. A station bill is fourteen separate sends, and "was Punjab's sent?" is
@@ -3328,7 +3377,15 @@ CREATE TABLE IF NOT EXISTS hydro_station_bills (
   -- bill when an input changes (β certified late, REA revised) and carries only
   -- the difference. FINAL closes the month against the final REA.
   bill_kind TEXT NOT NULL DEFAULT 'PROVISIONAL'
-    CHECK (bill_kind IN ('PROVISIONAL','REVISION','FINAL','ADDITIONAL','TCS','PTC')),
+    CHECK (bill_kind IN ('PROVISIONAL','REVISION','FINAL','ADDITIONAL','TCS','PTC','ARREAR','SUPPLEMENTARY')),
+  -- ARREAR: the difference a revised tariff (a CERC order) makes to months
+  -- already billed, month by month in hydro_arrear_months, on one bill.
+  -- SUPPLEMENTARY: a one-off amount billed on top of a month (change in law,
+  -- a tax or cess, an item the bill missed), apportioned or on one beneficiary.
+  arrear_from_month TEXT,
+  arrear_to_month TEXT,
+  -- On a thermal station's bill: the month's fuel inputs and the norms used.
+  thermal_inputs_json TEXT,
   revises_bill_id TEXT REFERENCES hydro_station_bills(id),
   rea_reference TEXT,                   -- e.g. "Provisional REA dated 01.07.2026"
   revision_reason TEXT,
@@ -3426,7 +3483,7 @@ CREATE TABLE IF NOT EXISTS hydro_station_bills (
 -- REA); a CANCELLED bill is excluded so a mistake can be re-billed.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_hydro_bill_station_month
   ON hydro_station_bills (contract_id, billing_month, bill_kind)
-  WHERE bill_kind <> 'REVISION' AND status <> 'CANCELLED';
+  WHERE bill_kind NOT IN ('REVISION','ARREAR','SUPPLEMENTARY') AND status <> 'CANCELLED';
 
 -- The beneficiary-wise breakup: pages 2 to 4 of the printed bill, one row per
 -- beneficiary. The percentages are frozen here as they were applied, so a later
@@ -3984,4 +4041,186 @@ CREATE TABLE IF NOT EXISTS mail_settings (
   user_id TEXT PRIMARY KEY REFERENCES users(id),
   signature TEXT NOT NULL DEFAULT '',    -- plain text, added under every new message
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Debit and credit notes on a hydro beneficiary's account. Raised as a DRAFT,
+-- approved by someone other than the maker, and only then posted to the ledger
+-- (a DN as a PB with mode DEBIT_NOTE, a CN as a PMT with mode CREDIT_NOTE).
+CREATE TABLE IF NOT EXISTS hydro_notes (
+  id TEXT PRIMARY KEY,
+  note_no TEXT UNIQUE NOT NULL,
+  note_type TEXT NOT NULL CHECK (note_type IN ('DEBIT','CREDIT')),
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  beneficiary_name TEXT NOT NULL,
+  beneficiary_id TEXT REFERENCES entities(id),
+  against_doc_id TEXT REFERENCES hydro_ledger_docs(id),
+  amount REAL NOT NULL CHECK (amount > 0),
+  reason TEXT NOT NULL,
+  remarks TEXT NOT NULL,
+  note_date TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','APPROVED','REJECTED','CANCELLED')),
+  rejection_reason TEXT,
+  ledger_doc_id TEXT REFERENCES hydro_ledger_docs(id),
+  created_by TEXT,
+  created_by_name TEXT,
+  approved_by TEXT,
+  approved_by_name TEXT,
+  approved_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hydro_notes_account ON hydro_notes (contract_id, beneficiary_name);
+
+-- The month-wise working behind an ARREAR bill: for each month, the bill it was
+-- computed against, what the month stood billed at, what it comes to on the
+-- revised tariff, and the difference per beneficiary (lines_json).
+CREATE TABLE IF NOT EXISTS hydro_arrear_months (
+  id TEXT PRIMARY KEY,
+  arrear_bill_id TEXT NOT NULL REFERENCES hydro_station_bills(id),
+  billing_month TEXT NOT NULL,
+  basis_bill_id TEXT REFERENCES hydro_station_bills(id),
+  basis_bill_no TEXT,
+  previously_billed REAL NOT NULL,
+  revised_amount REAL NOT NULL,
+  differential REAL NOT NULL,
+  capacity_differential REAL NOT NULL DEFAULT 0,
+  energy_differential REAL NOT NULL DEFAULT 0,
+  lines_json TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_hydro_arrear_months_bill ON hydro_arrear_months (arrear_bill_id);
+
+-- ── Hydro desk: disputes, payment security, reconciliation, TDS ─────────────
+-- A beneficiary's dispute on its share of an issued hydro bill.
+CREATE TABLE IF NOT EXISTS hydro_disputes (
+  id TEXT PRIMARY KEY,
+  dispute_no TEXT UNIQUE NOT NULL,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  bill_id TEXT NOT NULL REFERENCES hydro_station_bills(id),
+  ledger_doc_id TEXT REFERENCES hydro_ledger_docs(id),
+  beneficiary_name TEXT NOT NULL,
+  reason_code TEXT NOT NULL,
+  description TEXT NOT NULL,
+  billed_amount REAL NOT NULL,
+  disputed_amount REAL NOT NULL CHECK (disputed_amount > 0),
+  accepted_amount REAL,
+  letter_ref TEXT,
+  received_on TEXT NOT NULL,
+  ack_due TEXT NOT NULL,
+  resolve_due TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'RAISED' CHECK (status IN
+    ('RAISED','ACKNOWLEDGED','UNDER_REVIEW','INFO_REQUESTED','ESCALATED','RESOLVED_ACCEPTED','RESOLVED_REJECTED','CLOSED')),
+  resolution TEXT,
+  credit_note_id TEXT REFERENCES hydro_notes(id),
+  raised_by TEXT,
+  resolved_by TEXT,
+  resolved_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS hydro_dispute_events (
+  id TEXT PRIMARY KEY,
+  dispute_id TEXT NOT NULL REFERENCES hydro_disputes(id),
+  from_status TEXT,
+  to_status TEXT NOT NULL,
+  remarks TEXT,
+  actor TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Letters of credit and other instruments a beneficiary keeps for payment security.
+CREATE TABLE IF NOT EXISTS hydro_security_instruments (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  beneficiary_name TEXT NOT NULL,
+  instrument_type TEXT NOT NULL CHECK (instrument_type IN ('LC','BG','ESCROW','OTHER')),
+  instrument_no TEXT NOT NULL,
+  issuing_bank TEXT NOT NULL,
+  amount REAL NOT NULL CHECK (amount > 0),
+  valid_from TEXT NOT NULL,
+  valid_to TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','RELEASED','INVOKED')),
+  invoked_amount REAL NOT NULL DEFAULT 0,
+  remarks TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (contract_id, instrument_no)
+);
+CREATE TABLE IF NOT EXISTS hydro_security_events (
+  id TEXT PRIMARY KEY,
+  instrument_id TEXT NOT NULL REFERENCES hydro_security_instruments(id),
+  event TEXT NOT NULL,
+  amount REAL,
+  ledger_doc_id TEXT REFERENCES hydro_ledger_docs(id),
+  remarks TEXT,
+  actor TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Balance confirmation with a beneficiary for a period, from the ledger.
+CREATE TABLE IF NOT EXISTS hydro_reconciliations (
+  id TEXT PRIMARY KEY,
+  statement_no TEXT UNIQUE NOT NULL,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  beneficiary_name TEXT NOT NULL,
+  period_from TEXT NOT NULL,
+  period_to TEXT NOT NULL,
+  opening_balance REAL NOT NULL,
+  closing_balance REAL NOT NULL,
+  summary_json TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','SENT','CONFIRMED','DISPUTED','SIGNED_OFF')),
+  sent_on TEXT,
+  beneficiary_balance REAL,
+  difference REAL,
+  beneficiary_remarks TEXT,
+  signed_off_by TEXT,
+  signed_off_at TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Tax a beneficiary deducted at source from what it paid SJVN.
+CREATE TABLE IF NOT EXISTS hydro_tds_entries (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  beneficiary_name TEXT NOT NULL,
+  ledger_doc_id TEXT REFERENCES hydro_ledger_docs(id),
+  section TEXT NOT NULL,
+  tds_amount REAL NOT NULL CHECK (tds_amount > 0),
+  deduction_date TEXT NOT NULL,
+  financial_year TEXT NOT NULL,
+  quarter TEXT NOT NULL,
+  deductor_tan TEXT,
+  reference TEXT,
+  certificate_no TEXT,
+  certificate_date TEXT,
+  status TEXT NOT NULL DEFAULT 'PENDING_CERTIFICATE' CHECK (status IN
+    ('PENDING_CERTIFICATE','CERTIFICATE_RECEIVED','MATCHED_26AS','MISMATCH_26AS','REVERSED')),
+  amount_26as REAL,
+  remarks TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- A thermal station's tariff for a financial year: the CERC-approved fixed
+-- charges and the operating norms its energy charge rate is computed on. The
+-- month's fuel (GCV and landed price) is entered with each bill.
+CREATE TABLE IF NOT EXISTS thermal_station_tariffs (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  financial_year TEXT NOT NULL,              -- e.g. 2026-2027
+  annual_afc REAL NOT NULL,                  -- Rs
+  napaf_percent REAL NOT NULL,               -- normative annual plant availability factor
+  gross_heat_rate REAL NOT NULL,             -- GHR, kCal/kWh
+  aux_pct REAL NOT NULL,                     -- normative auxiliary energy consumption, %
+  sfc_ml_per_kwh REAL NOT NULL DEFAULT 0,    -- normative secondary fuel oil consumption
+  cv_secondary_kcal_per_ml REAL NOT NULL DEFAULT 10, -- calorific value of secondary fuel
+  order_ref TEXT,
+  updated_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (contract_id, financial_year)
 );

@@ -63,16 +63,15 @@ export default function KYCBanner() {
         <div style={bar(isRejected ? 'red' : 'amber')}>
           <ShieldAlert size={20} />
           <div>
-            {isPending && "Your company KYC and Regulatory Documents are pending verification by SJVN. You cannot raise invoices or access contracts until your onboarding is approved."}
-            {isRejected && "Your company KYC has been rejected. Please update your documents. You cannot access business operations until approved."}
+            {isPending && "Your company KYC and Regulatory Documents are pending physical verification by SJVN. Physical documents submitted to the SJVN office will be scanned and verified by SJVN Admin."}
+            {isRejected && "Your company KYC has remarks from SJVN. Please submit revised physical documents to the SJVN REIA office for re-verification."}
           </div>
         </div>
       )}
       {parts.length > 0 && !onDocsPage && (
         <div style={bar(expired.length || sentBack.length ? 'red' : 'amber')} role="status">
           <ShieldAlert size={20} />
-          <div style={{ flex: 1 }}>{parts.join(' · ')}.</div>
-          <Link to={docsPath} style={{ color: 'inherit', fontWeight: 700, whiteSpace: 'nowrap' }}>Open My Documents →</Link>
+          <div style={{ flex: 1 }}>{parts.join(' · ')}. Please submit updated physical copies to the SJVN REIA desk.</div>
         </div>
       )}
     </>

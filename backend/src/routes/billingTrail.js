@@ -119,6 +119,93 @@ function buildTrail({ bfr, contract, period, direction, focus = null }) {
     };
   }
 
+  // Linked topology (PPA <-> SJVN HUB <-> PSA)
+  let ppaContract = contract.contract_type === 'PPA' ? contract : null;
+  let psaContract = contract.contract_type === 'PSA' ? contract : null;
+  let allocationPercent = 100;
+
+  if (contract.contract_type === 'PSA') {
+    const alloc = db.prepare(`
+      SELECT ca.*, p.contract_no, p.capacity_mw, p.tariff_per_unit, p.seller_id, p.project_type
+      FROM contract_allocations ca
+      JOIN contracts p ON p.id = ca.ppa_id
+      WHERE ca.psa_id = ?
+      ORDER BY COALESCE(ca.effective_from, '0000-01-01') DESC LIMIT 1
+    `).get(contract.id);
+    if (alloc) {
+      allocationPercent = alloc.allocation_percent;
+      ppaContract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(alloc.ppa_id);
+    }
+  } else if (contract.contract_type === 'PPA') {
+    const alloc = db.prepare(`
+      SELECT ca.*, s.contract_no, s.capacity_mw, s.tariff_per_unit, s.buyer_id, s.project_type
+      FROM contract_allocations ca
+      JOIN contracts s ON s.id = ca.psa_id
+      WHERE ca.ppa_id = ?
+      ORDER BY COALESCE(ca.effective_from, '0000-01-01') DESC LIMIT 1
+    `).get(contract.id);
+    if (alloc) {
+      allocationPercent = alloc.allocation_percent;
+      psaContract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(alloc.psa_id);
+    }
+  }
+
+  const sellerEntity = ppaContract?.seller_id
+    ? db.prepare('SELECT id, name, entity_type FROM entities WHERE id = ?').get(ppaContract.seller_id)
+    : null;
+  const buyerEntity = psaContract?.buyer_id
+    ? db.prepare('SELECT id, name, entity_type FROM entities WHERE id = ?').get(psaContract.buyer_id)
+    : null;
+
+  const ppaInvoices = ppaContract ? db.prepare(`
+    SELECT id, invoice_no, invoice_type, total_amount, energy_mwh, status, due_date, validation_status
+    FROM invoices WHERE contract_id = ? AND billing_period = ? AND status != 'CANCELLED'
+    ORDER BY created_at ASC
+  `).all(ppaContract.id, period) : [];
+
+  const psaInvoices = psaContract ? db.prepare(`
+    SELECT id, invoice_no, invoice_type, total_amount, energy_mwh, status, due_date, validation_status
+    FROM invoices WHERE contract_id = ? AND billing_period = ? AND status != 'CANCELLED'
+    ORDER BY created_at ASC
+  `).all(psaContract.id, period) : [];
+
+  const effectiveMwh = Number(finalEnergy?.energy_mwh || provisionalEnergy?.energy_mwh || 0);
+  const tradingMarginPerUnit = (psaContract && ppaContract)
+    ? Math.max(0, Math.round(((Number(psaContract.tariff_per_unit) || 0) - (Number(ppaContract.tariff_per_unit) || 0)) * 1000) / 1000)
+    : 0.07;
+  const totalSpread = Math.round(effectiveMwh * 1000 * tradingMarginPerUnit);
+
+  const linkedTopology = {
+    has_link: !!(ppaContract && psaContract),
+    allocation_percent: allocationPercent,
+    ppa: ppaContract ? {
+      id: ppaContract.id,
+      contract_no: ppaContract.contract_no,
+      project_type: ppaContract.project_type,
+      capacity_mw: ppaContract.capacity_mw,
+      tariff_per_unit: ppaContract.tariff_per_unit,
+      seller_name: sellerEntity?.name || 'Power Producer (IPP)',
+      invoices: ppaInvoices,
+    } : null,
+    hub: {
+      name: 'SJVN Limited (REIA Trading Hub)',
+      allocation_percent: allocationPercent,
+      trading_margin_per_unit: tradingMarginPerUnit,
+      energy_mwh: effectiveMwh,
+      spread_amount: totalSpread,
+      validation_status: ppaInvoices[0]?.validation_status || 'MATCHED',
+    },
+    psa: psaContract ? {
+      id: psaContract.id,
+      contract_no: psaContract.contract_no,
+      project_type: psaContract.project_type,
+      capacity_mw: psaContract.capacity_mw,
+      tariff_per_unit: psaContract.tariff_per_unit,
+      buyer_name: buyerEntity?.name || 'Buyer DISCOM',
+      invoices: psaInvoices,
+    } : null,
+  };
+
   return {
     billing_family_ref: bfr,
     contract_id: contract.id,
@@ -127,6 +214,7 @@ function buildTrail({ bfr, contract, period, direction, focus = null }) {
     project_type: contract.project_type,
     billing_period: period,
     direction,
+    linked_topology: linkedTopology,
     provisional_energy: provisionalEnergy || null,
     final_energy: finalEnergy || null,
     delta_mwh: deltaMwh,

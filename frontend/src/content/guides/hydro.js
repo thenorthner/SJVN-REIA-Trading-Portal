@@ -59,6 +59,47 @@ const hydroGuide = {
     },
 
     {
+      id: 'hydro-processing-flow',
+      heading: 'How a station bill is processed — Draft → Approval → Issue → Release → Send → Payment',
+      blurb: 'Every station bill moves through these distinct stages, with segregation of duties enforced throughout.',
+      blocks: [
+        {
+          type: 'steps',
+          items: [
+            {
+              title: 'Draft',
+              detail: "Raise the monthly bill (from the REA, or with the month's fuel for a thermal station), or an arrear / supplementary bill. It is saved as a draft.",
+            },
+            {
+              title: 'Send for approval',
+              detail: 'Name the next approver and the final approver. A maker cannot approve their own bill.',
+            },
+            {
+              title: 'Approve',
+              detail: 'Each approver reviews it from "Waiting for your approval" — approve, forward or reject with a comment.',
+            },
+            {
+              title: 'Issue',
+              detail: "Once finally approved, Issue: the due date is fixed and each beneficiary's share is posted to its account.",
+            },
+            {
+              title: 'Release & print',
+              detail: "Release the issued bill, then print the station bill and each beneficiary's bill.",
+            },
+            {
+              title: 'Send / Despatch',
+              detail: 'Email the bill to the beneficiaries and record the courier despatch and receipt.',
+            },
+            {
+              title: 'Payment',
+              detail: 'Record receipts in Account Display: rebate, LPS, debit / credit notes are worked out there.',
+            },
+          ],
+        },
+      ],
+    },
+
+    {
       id: 'hydro-blocks',
       heading: 'The four blocks on the bill',
       blurb: 'The bill prints its own formulae beside each row. These are those formulae.',

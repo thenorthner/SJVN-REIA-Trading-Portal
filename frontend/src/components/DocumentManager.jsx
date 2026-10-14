@@ -592,8 +592,8 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
   const [zipping, setZipping] = useState(false);
 
   const isAdmin = canReviewDocuments(user?.role);
-  // The side that sends a document in is the side that may replace it.
-  const mayReplace = (doc) => (doc.category === 'VERIFY') === isOutsideRole(user?.role);
+  // Outside roles cannot upload/replace VERIFY (KYC) documents as they are physically submitted to SJVN.
+  const mayReplace = (doc) => canUpload && (isAdmin || (doc.category !== 'VERIFY' && isOutsideRole(user?.role)));
   const canSubmitToSjvn = ['SELLER', 'SELLER_L2', 'SELLER_L3', 'BUYER', 'BUYER_L2', 'BUYER_L3'].includes(user?.role);
   
   function load() {
@@ -779,7 +779,6 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
   const isInternal = !isOutsideRole(user?.role);
   const canAdminDirectUpload = ['SJVN_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role);
   const filterTypes = (list) => (isInternal && !canAdminDirectUpload ? list.filter((t) => t.category !== 'VERIFY') : list);
-  const [autoVerify, setAutoVerify] = useState(true);
 
   const fallbackTypes = filterTypes(DOCUMENT_TAXONOMY[moduleName] || [{ value: 'OTHER', label: 'Other Document', category: 'RECORD', reason: '' }]);
   const [availableTypes, setAvailableTypes] = useState(fallbackTypes);
@@ -868,7 +867,7 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
       formData.append('title', title);
     }
     if (expiry) formData.append('expiry_date', expiry);
-    if (canAdminDirectUpload && autoVerify) {
+    if (canAdminDirectUpload) {
       formData.append('auto_verify', 'true');
     }
 
@@ -937,20 +936,6 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
             This is strictly enforced by the platform's cross-module document taxonomy rules.
           </div>
         </Field>
-        {canAdminDirectUpload && autoCategory === 'VERIFY' && (
-          <div style={{ margin: '14px 0 6px', padding: '10px 14px', background: 'linear-gradient(135deg, rgba(37,99,235,0.06) 0%, rgba(30,58,138,0.08) 100%)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 8, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <input
-              type="checkbox"
-              id="autoVerifyDoc"
-              checked={autoVerify}
-              onChange={(e) => setAutoVerify(e.target.checked)}
-              style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#2563eb' }}
-            />
-            <label htmlFor="autoVerifyDoc" style={{ fontSize: 12.5, fontWeight: 600, color: '#1e3a8a', cursor: 'pointer', margin: 0 }}>
-              Direct SJVN Admission: Auto-verify document upon upload (Clears regulatory approval checklist)
-            </label>
-          </div>
-        )}
         </>
         )}
         <div className="form-actions" style={{ marginTop: 24 }}>
@@ -970,23 +955,26 @@ export function ReviewModal({ open, doc, onClose, onSuccess }) {
   const [reasons, setReasons] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [actionError, setActionError] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setReason('');
     setCode('');
+    setActionError('');
     api.documents.rejectReasons().then(setReasons).catch(() => setReasons([]));
   }, [open, doc?.latest_version_id]);
 
   if (!open || !doc) return null;
 
   async function handleAction(action) {
+    setActionError('');
     if (action === 'REJECT' && !code) {
-      alert('Choose why the document is being rejected');
+      setActionError('Choose why the document is being rejected');
       return;
     }
     if (action === 'REJECT' && code === 'OTHER' && !reason.trim()) {
-      alert('Please say what is wrong with the document');
+      setActionError('Please say what is wrong with the document');
       return;
     }
 
@@ -1000,7 +988,7 @@ export function ReviewModal({ open, doc, onClose, onSuccess }) {
       onSuccess();
       onClose();
     } catch (err) {
-      alert(err.response?.data?.error || 'Action failed');
+      setActionError(err.response?.data?.error || 'Action failed');
     } finally {
       setSubmitting(false);
     }
@@ -1008,6 +996,11 @@ export function ReviewModal({ open, doc, onClose, onSuccess }) {
 
   return (
     <Modal open={open} onClose={onClose} title="Review Document" width={740}>
+      {actionError && (
+        <div style={{ padding: '9px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#b91c1c', fontSize: 13, marginBottom: 16 }}>
+          ⚠️ {actionError}
+        </div>
+      )}
       <div style={{ marginBottom: 16 }}>
         <strong>{doc.title}</strong> (v{doc.version_number})
         <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>

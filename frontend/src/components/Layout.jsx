@@ -8,6 +8,7 @@ import { PortfolioSelect } from '../context/PortfolioContext.jsx';
 import { RouteSkeleton } from './ui.jsx';
 import ChangePasswordModal from './ChangePasswordModal.jsx';
 import { Lock } from 'lucide-react';
+import { getNotificationAction, formatTimeAgo } from '../lib/notificationRouting.js';
 
 /**
  * Keeps the shell up if a screen's module fails to load or throws while
@@ -100,12 +101,13 @@ const NAV_INTERNAL = [
       { to: '/trading/cea-reports', label: 'CEA Reports Dashboard' },
       { to: '/trading', label: 'Trading Dashboard', end: true },
       { to: '/reia', label: 'REIA Dashboard', end: true },
-      { to: '/hydro-thermal', label: 'Hydro & Thermal Dashboard', end: true },
+      { to: '/hydro-thermal', label: 'Hydro Dashboard', end: true },
+      { to: '/thermal', label: 'Thermal Dashboard', end: true },
     ],
   },
   {
     section: 'Alerts',
-    roles: [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.TRADING_ALL])],
+    roles: [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.THERMAL_ALL, ...ROLE_GROUPS.TRADING_ALL])],
     links: [
       { to: '/mail', label: 'Quick Connect', badge: 'Informal Desk', tooltip: 'Quick Connect — Operational desk facilitation only. Not an official legal / contractual mode of communication under PPA/PSA/CERC rules.' },
       { to: '/notification-board', label: 'Notification Board' },
@@ -149,19 +151,6 @@ const NAV_INTERNAL = [
     ],
   },
   {
-    section: 'Commercial (Hydro & Thermal)',
-    roles: ROLE_GROUPS.HYDRO_THERMAL_ALL,
-    links: [
-      { to: '/hydro-thermal', label: 'Hydro & Thermal Dashboard', end: true },
-      { to: '/hydro-thermal/hydro-billing', label: 'Hydro Billing (Station-wise)' },
-      { to: '/hydro-thermal/hydro-ledger', label: 'Hydro Account Display' },
-      { to: '/hydro-thermal/hydro-claims', label: 'Additional Charges & TCS' },
-      // Sale bills the station raises on PTC India, the trader it sells through —
-      // station revenue on the station's ledger, not SJVN's own trading desk.
-      { to: '/hydro-thermal/hydro-ptc', label: 'PTC Sale Bills' },
-    ],
-  },
-    {
     // Grouped the way ISET groups it. The flat list of thirty-four worked while
     // there were thirty-four; the menu it mirrors has close to a hundred, so the
     // second level comes from src/config/tradingMenu.js — one place that says what
@@ -171,6 +160,56 @@ const NAV_INTERNAL = [
     groups: TRADING_MENU,
   },
   {
+    section: 'Hydro Billing',
+    roles: ROLE_GROUPS.HYDRO_THERMAL_ALL,
+    links: [
+      { to: '/hydro-thermal', label: 'Hydro Dashboard', end: true },
+      // The beneficiaries a station bills. Onboarded here, not borrowed from REIA.
+      { to: '/hydro-thermal/stakeholders', label: 'Stakeholders (Beneficiaries)' },
+      { to: '/hydro-thermal/hydro-billing', label: 'Monthly Bills & Approval' },
+      // Months already billed: a revised tariff's arrear, or a one-off item.
+      { to: '/hydro-thermal/arrear-supplementary', label: 'Arrear & Supplementary Bills' },
+      // LPS, early-payment rebate and payments live on each beneficiary's account.
+      { to: '/hydro-thermal/hydro-ledger', label: 'Account Display (Payments, LPS & Rebate)' },
+      { to: '/hydro-thermal/notes', label: 'Debit / Credit Notes' },
+      { to: '/hydro-thermal/receivables', label: 'Payment Monitoring (Ageing)' },
+      { to: '/hydro-thermal/disputes', label: 'Dispute Management' },
+      { to: '/hydro-thermal/payment-security', label: 'Payment Security (LC / BG)' },
+      { to: '/hydro-thermal/reconciliation', label: 'Reconciliation' },
+      { to: '/hydro-thermal/tds', label: 'TDS by Beneficiaries' },
+      { to: '/hydro-thermal/dsm', label: 'Deviation Settlement (DSM)' },
+      { to: '/hydro-thermal/hydro-claims', label: 'Additional Charges & TCS' },
+      // Sale bills the station raises on PTC India, the trader it sells through —
+      // station revenue on the station's ledger, not SJVN's own trading desk.
+      { to: '/hydro-thermal/hydro-ptc', label: 'PTC Sale Bills' },
+    ],
+  },
+  {
+    // Its own section, as the Commercial department asked: thermal is billed on
+    // a different tariff (fixed + energy charge on fuel) from a hydro station.
+    section: 'Thermal Billing',
+    // Its own logins: the hydro desk does not see this section, and a thermal
+    // officer sees nothing else.
+    roles: ROLE_GROUPS.THERMAL_ALL,
+    links: [
+      { to: '/thermal', label: 'Thermal Dashboard', end: true },
+      { to: '/thermal/stakeholders', label: 'Stakeholders (Beneficiaries)' },
+      { to: '/thermal/stations', label: 'Stations & Tariff' },
+      { to: '/thermal/billing', label: 'Monthly Bills & Approval' },
+      { to: '/thermal/arrear-supplementary', label: 'Arrear & Supplementary Bills' },
+      { to: '/thermal/ledger', label: 'Account Display (Payments, LPS & Rebate)' },
+      { to: '/thermal/notes', label: 'Debit / Credit Notes' },
+      { to: '/thermal/receivables', label: 'Payment Monitoring (Ageing)' },
+      { to: '/thermal/disputes', label: 'Dispute Management' },
+      { to: '/thermal/payment-security', label: 'Payment Security (LC / BG)' },
+      { to: '/thermal/reconciliation', label: 'Reconciliation' },
+      { to: '/thermal/tds', label: 'TDS by Beneficiaries' },
+      { to: '/thermal/dsm', label: 'Deviation Settlement (DSM)' },
+      { to: '/thermal/claims', label: 'Additional Charges & TCS' },
+      { to: '/thermal/finance', label: 'Finance Posting (FI)' },
+    ],
+  },
+  {
     // What goes to SAP, from all three verticals — see FINANCE_SAP_MENU.
     section: 'Finance & SAP Integration',
     roles: [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.TRADING_ALL])],
@@ -178,10 +217,10 @@ const NAV_INTERNAL = [
   },
   {
     section: 'Platform',
-    roles: [...new Set([...ROLE_GROUPS.AUDITOR, ...ROLE_GROUPS.MASTERS_READ, ...ROLE_GROUPS.TRADING_ALL, 'REIA_ADMIN', 'TRADING_ADMIN', 'IT_SUPER_ADMIN'])],
+    roles: [...new Set([...ROLE_GROUPS.AUDITOR, ...ROLE_GROUPS.MASTERS_READ, ...ROLE_GROUPS.TRADING_ALL, 'REIA_ADMIN', 'TRADING_ADMIN', 'THERMAL_ADMIN', 'IT_SUPER_ADMIN'])],
     links: [
       // SJVN's own officers on the platform; an administrator's page.
-      { to: '/admin/users', label: 'SJVN Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN'] },
+      { to: '/admin/users', label: 'SJVN Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN', 'THERMAL_ADMIN'] },
       { to: '/master/portfolio-registry', label: 'Portfolio Registry', roles: ROLE_GROUPS.TRADING_ALL },
       { to: '/masters', label: 'Master Data', roles: ROLE_GROUPS.MASTERS_READ },
       { to: '/audit-logs', label: 'Audit Trail', roles: ROLE_GROUPS.AUDITOR },
@@ -198,7 +237,6 @@ const NAV_SELLER = [
       { to: '/mail', label: 'Quick Connect', badge: 'Informal Desk', tooltip: 'Quick Connect — Operational desk facilitation only. Not an official legal / contractual mode of communication under PPA/PSA/CERC rules.' },
       { to: '/notification-board', label: 'Notification Board' },
       { to: '/seller/team', label: 'My Team' },
-      { to: '/seller/documents', label: 'My Documents & KYC' },
       { to: '/seller/contracts', label: 'My Contracts (PPAs)', requiresKyc: true },
       { to: '/seller/energy-data', label: 'Energy Data', requiresKyc: true },
       { to: '/seller/invoices', label: 'My Invoices', requiresKyc: true },
@@ -219,7 +257,6 @@ const NAV_BUYER = [
       { to: '/mail', label: 'Quick Connect', badge: 'Informal Desk', tooltip: 'Quick Connect — Operational desk facilitation only. Not an official legal / contractual mode of communication under PPA/PSA/CERC rules.' },
       { to: '/notification-board', label: 'Notification Board' },
       { to: '/buyer/team', label: 'My Team' },
-      { to: '/buyer/documents', label: 'My Documents & KYC' },
       { to: '/buyer/contracts', label: 'My PSAs', requiresKyc: true },
       { to: '/buyer/energy-data', label: 'Energy Allocation', requiresKyc: true },
       { to: '/buyer/invoices', label: 'Payable Invoices', requiresKyc: true },
@@ -270,36 +307,29 @@ const NavSubGroup = ({ group, user }) => {
   const pending = links.filter((l) => l.pending).length;
 
   return (
-    <div style={{ marginBottom: 2 }}>
+    <div className="nav-subgroup">
       <div
         onClick={() => setIsOpen(!isOpen)}
         className="nav-subgroup-title"
-        style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center',
-                 justifyContent: 'space-between', padding: '10px 14px 8px 18px',
-                 fontSize: '18px', fontWeight: 650, letterSpacing: '.01em', color: '#cbd5e1' }}
         title={pending ? `${pending} of ${links.length} not built yet` : undefined}
       >
         <span>{group.group}</span>
-        <span style={{ fontSize: 13, opacity: 0.85 }}>{isOpen ? '▼' : '▶'}</span>
+        <span className="nav-caret">{isOpen ? '▼' : '▶'}</span>
       </div>
       {isOpen && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div className="nav-section-links" style={{ margin: 0 }}>
           {links.map((l) => (
             <NavLink
               key={l.to}
               to={l.to}
               end={l.end}
               className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}
-              style={({ isActive }) => ({ 
-                paddingLeft: 34, fontSize: '17px', padding: '8px 14px 8px 34px', borderRadius: '8px', 
-                color: isActive ? '#fff' : '#cbd5e1', margin: '2px 6px' 
-              })}
             >
               <span style={{ opacity: l.pending ? 0.55 : 1 }}>{l.label}</span>
               {/* A screen that is only planned says so in the menu, so nobody
                   opens it expecting data and files a bug when there is none. */}
               {l.pending && (
-                <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.5, fontStyle: 'italic' }}>soon</span>
+                <span style={{ marginLeft: 6, fontSize: 10.5, opacity: 0.5, fontStyle: 'italic' }}>soon</span>
               )}
             </NavLink>
           ))}
@@ -321,21 +351,16 @@ const NavGroup = ({ section, user }) => {
 
   return (
     <div className="nav-section">
-      <div 
-        className="nav-section-title" 
-        onClick={() => setIsOpen(!isOpen)} 
-        style={{ 
-          cursor: 'pointer', display: 'flex', justifyContent: 'space-between', 
-          alignItems: 'center', userSelect: 'none', 
-          fontSize: '21.5px', fontWeight: 750, color: '#ffffff', padding: '12px 14px 8px', letterSpacing: '0.01em'
-        }}
-        title={isOpen ? "Collapse section" : "Expand section"}
+      <div
+        className="nav-section-title"
+        onClick={() => setIsOpen(!isOpen)}
+        title={isOpen ? 'Collapse section' : 'Expand section'}
       >
-        <span style={{ fontSize: '21.5px', fontWeight: 750, color: '#ffffff' }}>{section.section}</span>
-        <span style={{ fontSize: '13px', opacity: 0.9, color: '#cbd5e1' }}>{isOpen ? '▼' : '▶'}</span>
+        <span>{section.section}</span>
+        <span className="nav-caret">{isOpen ? '▼' : '▶'}</span>
       </div>
       {isOpen && (
-        <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+        <div className="nav-section-links">
           {subGroups.map((g) => <NavSubGroup key={g.group} group={g} user={user} />)}
           {links.map((l) => {
             const isKycLocked = l.requiresKyc && user?.entity && user.entity.status !== 'APPROVED';
@@ -345,12 +370,6 @@ const NavGroup = ({ section, user }) => {
                 to={isKycLocked ? '#' : l.to}
                 end={l.end}
                 className={({ isActive }) => 'nav-link' + (isActive && !isKycLocked ? ' active' : '') + (isKycLocked ? ' locked' : '')}
-                style={({ isActive }) => ({
-                  ...(isKycLocked ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
-                  fontSize: '17.5px', padding: '8px 14px 8px 28px', borderRadius: '8px', 
-                  color: isActive ? '#fff' : '#cbd5e1', margin: '2px 6px',
-                  display: 'flex', alignItems: 'center'
-                })}
                 title={l.tooltip || (l.to === '/mail' ? 'Quick Connect — Operational query desk only. Not an official legal / contractual mode of communication.' : undefined)}
                 onClick={(e) => {
                   if (isKycLocked) {
@@ -359,22 +378,8 @@ const NavGroup = ({ section, user }) => {
                 }}
               >
                 <span>{l.label}</span>
-                {l.badge && (
-                  <span style={{
-                    marginLeft: 'auto',
-                    fontSize: '11px',
-                    padding: '2px 7px',
-                    borderRadius: '4px',
-                    background: 'rgba(234, 179, 8, 0.15)',
-                    color: '#fbbf24',
-                    fontWeight: 600,
-                    letterSpacing: '0.03em',
-                    textTransform: 'uppercase'
-                  }}>
-                    {l.badge}
-                  </span>
-                )}
-                {isKycLocked && <Lock size={15} style={{ marginLeft: 'auto', opacity: 0.5 }} />}
+                {l.badge && <span className="nav-badge">{l.badge}</span>}
+                {isKycLocked && <Lock size={13} style={{ marginLeft: 'auto', opacity: 0.5 }} />}
               </NavLink>
             );
           })}
@@ -431,10 +436,13 @@ export default function Layout() {
     };
   }, [showNotif, showProfile]);
 
-  // Moving to another screen closes whichever menu took the user there.
+  // Moving to another screen closes whichever menu took the user there, and
+  // starts the new screen at its top rather than wherever the last one was left.
+  const mainRef = useRef(null);
   useEffect(() => {
     setShowNotif(false);
     setShowProfile(false);
+    if (mainRef.current) mainRef.current.scrollTop = 0;
   }, [location.pathname]);
 
   // Auto-redirect counterparties to their own portals on first load. This must
@@ -535,7 +543,14 @@ export default function Layout() {
           <div className="brand-powered">Powered by <strong>SJVN</strong> RE Platform</div>
         )}
       </aside>
-      <div className="main-col">
+      {!isSidebarCollapsed && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setIsSidebarCollapsed(true)}
+          aria-hidden="true"
+        />
+      )}
+      <div className="main-col" ref={mainRef}>
         <header className="topbar">
           <div className="topbar-left">
             <button 
@@ -594,12 +609,82 @@ export default function Layout() {
                     </div>
                   </div>
                   {notifications.length === 0 && <div className="notif-empty">No unread alerts. All clear.</div>}
-                  {notifications.slice(0, 10).map((n) => (
-                    <div key={n.id} className={'notif-item' + (n.is_read ? '' : ' unread')} style={{ borderLeft: n.type === 'COMPLIANCE_ALERT' ? '3px solid #ef4444' : '3px solid transparent' }}>
-                      <div className="notif-type" style={{ color: n.type === 'COMPLIANCE_ALERT' ? '#ef4444' : 'var(--slate-500)', fontWeight: 600 }}>{n.type}</div>
-                      <div>{n.message}</div>
-                    </div>
-                  ))}
+                  {notifications.slice(0, 10).map((n) => {
+                    const action = getNotificationAction(n, user);
+                    const isAlert = n.type === 'COMPLIANCE_ALERT';
+                    return (
+                      <div
+                        key={n.id}
+                        className={'notif-item' + (n.is_read ? '' : ' unread')}
+                        style={{
+                          cursor: 'pointer',
+                          borderLeft: isAlert ? '3px solid #ef4444' : (n.is_read ? '3px solid transparent' : '3px solid #2563eb'),
+                          position: 'relative',
+                        }}
+                        onClick={() => {
+                          if (!n.is_read) {
+                            api.notifications.markRead(n.id).catch(() => {});
+                            setNotifications((prev) => prev.map((item) => (item.id === n.id ? { ...item, is_read: 1 } : item)));
+                          }
+                          setShowNotif(false);
+                          if (action.isMail) {
+                            navigate('/mail');
+                          } else if (action.url) {
+                            navigate(action.url);
+                          }
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                          <span
+                            className="notif-type"
+                            style={{
+                              color: isAlert ? '#ef4444' : 'var(--primary, #003366)',
+                              fontWeight: 700,
+                              fontSize: 11,
+                              letterSpacing: '.02em',
+                            }}
+                          >
+                            {n.type?.replace(/_/g, ' ')}
+                          </span>
+                          {n.created_at && (
+                            <span style={{ fontSize: 10.5, color: 'var(--slate-400)', whiteSpace: 'nowrap' }}>
+                              {formatTimeAgo(n.created_at)}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ color: 'var(--slate-700)', fontSize: 12.5, lineHeight: 1.45, marginBottom: 5 }}>
+                          {n.message}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 600,
+                              color: '#2563eb',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              background: 'rgba(37, 99, 235, 0.08)',
+                              padding: '2px 8px',
+                              borderRadius: 12,
+                            }}
+                          >
+                            {action.label || 'Take Action →'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div style={{ padding: '8px 14px', background: 'var(--slate-50, #f8fafc)', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+                    <button
+                      type="button"
+                      className="link-btn"
+                      style={{ fontSize: 11.5, color: 'var(--slate-600)', fontWeight: 600 }}
+                      onClick={() => { setShowNotif(false); navigate('/notification-board'); }}
+                    >
+                      Open Notification Board →
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

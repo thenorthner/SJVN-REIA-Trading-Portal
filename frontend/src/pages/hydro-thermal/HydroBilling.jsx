@@ -1,10 +1,14 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import api from '../../api/client.js';
+import { writeRolesFor, pathFor, deskLabel } from '../../lib/stationVertical.js';
 import { parseAllocationPaste, parseEnergyPaste } from './allocationPaste.js';
 import HydroReaRun from './HydroReaRun.jsx';
 import HydroBillSend from './HydroBillSend.jsx';
+import { ThermalBillForm, ThermalBillSummary } from './ThermalBillForm.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
+import { fmtDate } from '../../datetime.js';
 import { ROLE_GROUPS } from '../../roles.js';
 import {
   PageHeader, Card, Table, Badge, Modal, Field, StatCard, Tabs, Tab,
@@ -601,11 +605,99 @@ function RegulationPanel({ ursNr, allocations, deductions, setDeductions, e3, pr
   );
 }
 
-export default function HydroBilling() {
+/** An arrear or supplementary bill: why it was raised, and what each beneficiary owes. */
+function AdjustmentBillSummary({ bill }) {
+  const isArrear = bill.bill_kind === 'ARREAR';
+  return (
+    <div>
+      <table className="detail-table" style={{ marginBottom: 12 }}><tbody>
+        <tr><td>{isArrear ? 'Months' : 'Month'}</td><td>{isArrear ? `${bill.arrear_from_month} to ${bill.arrear_to_month}` : bill.billing_month}</td></tr>
+        <tr><td>Reason</td><td>{bill.revision_reason || '—'}</td></tr>
+        {bill.rea_reference && <tr><td>Order / reference</td><td>{bill.rea_reference}</td></tr>}
+        <tr><td><strong>{Number(bill.total_charges) < 0 ? 'Total credit' : 'Total payable'}</strong></td><td><strong>{fmtCurrency(Math.abs(bill.total_charges))}</strong></td></tr>
+      </tbody></table>
+      {isArrear && (bill.arrear_months || []).length > 0 && (
+        <>
+          <h4 style={{ margin: '0 0 8px' }}>Month-wise</h4>
+          <Table
+            columns={[
+              { key: 'billing_month', header: 'Month' },
+              { key: 'basis_bill_no', header: 'Billed on' },
+              { key: 'previously_billed', header: 'Already billed', render: (m) => fmtCurrency(m.previously_billed) },
+              { key: 'revised_amount', header: 'On revised tariff', render: (m) => fmtCurrency(m.revised_amount) },
+              { key: 'differential', header: 'Arrear', render: (m) => <strong>{fmtCurrency(m.differential)}</strong> },
+            ]}
+            rows={bill.arrear_months}
+          />
+        </>
+      )}
+      <h4 style={{ margin: '14px 0 8px' }}>Beneficiary-wise</h4>
+      <Table
+        columns={[
+          { key: 'beneficiary_name', header: 'Beneficiary' },
+          ...(isArrear ? [
+            { key: 'capacity_charge', header: 'Capacity charge diff.', render: (l) => fmtCurrency(l.capacity_charge) },
+            { key: 'energy_charge_total', header: 'Energy charge diff.', render: (l) => fmtCurrency(l.energy_charge_total) },
+          ] : [{ key: 'pct_proportionate', header: 'Share %', render: (l) => Number(l.pct_proportionate).toFixed(4) }]),
+          { key: 'total_charges', header: 'Amount', render: (l) => <strong style={{ color: l.total_charges < 0 ? '#15803d' : undefined }}>{fmtCurrency(l.total_charges)}{l.total_charges < 0 ? ' (credit)' : ''}</strong> },
+        ]}
+        rows={bill.lines || []}
+      />
+    </div>
+  );
+}
+
+/** Where a bill stands and who has to do what next — in words, per row. */
+function nextStepOf(r, user) {
+  if (r.status === 'CANCELLED') return 'Cancelled — nothing further';
+  if (r.status === 'DRAFT') {
+    if (r.approval_status === 'NOT_SENT') return 'Check the bill, then Send for approval';
+    if (r.approval_status === 'REJECTED') return 'Correct it (or cancel and re-raise), then Send for approval again';
+    if (r.approval_status === 'IN_APPROVAL') {
+      return r.pending_with && user?.name === r.pending_with
+        ? 'Waiting on you — Review it in "Waiting for your approval" above'
+        : `Waiting on ${r.pending_with || 'the approver'} to approve (they see it in their inbox on this page)`;
+    }
+    if (r.approval_status === 'APPROVED') return 'Approved — Issue it to post it to the beneficiaries\' accounts';
+  }
+  if (r.status === 'ISSUED' && !r.released_at) return 'Issued — Release it for printing';
+  if (r.status === 'ISSUED' && !r.dispatched_at) return 'Released — Send by email and/or record the Despatch';
+  if (r.status === 'ISSUED') return 'With the beneficiaries — record payments in Account Display';
+  return '—';
+}
+
+const PROCESS_STEPS = [
+  ['Draft', 'Raise the monthly bill (from the REA, or with the month\'s fuel for a thermal station), or an arrear / supplementary bill. It is saved as a draft.'],
+  ['Send for approval', 'Name the next approver and the final approver. A maker cannot approve their own bill.'],
+  ['Approve', 'Each approver reviews it from "Waiting for your approval" — approve, forward or reject with a comment.'],
+  ['Issue', 'Once finally approved, Issue: the due date is fixed and each beneficiary\'s share is posted to its account.'],
+  ['Release & print', 'Release the issued bill, then print the station bill and each beneficiary\'s bill.'],
+  ['Send / Despatch', 'Email the bill to the beneficiaries and record the courier despatch and receipt.'],
+  ['Payment', 'Record receipts in Account Display: rebate, LPS, debit / credit notes are worked out there.'],
+];
+
+function BillProcessGuide({ label = 'hydro' }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <Card style={{ marginBottom: 16 }}>
+      <button type="button" className="btn-link" onClick={() => setOpen(!open)} style={{ fontWeight: 600 }}>
+        {open ? '▼' : '▶'} How a {label} bill is processed — Draft → Approval → Issue → Release → Send → Payment
+      </button>
+      {open && (
+        <ol style={{ margin: '10px 0 0', paddingLeft: 20, fontSize: 13, lineHeight: 1.6 }}>
+          {PROCESS_STEPS.map(([t, d]) => <li key={t}><strong>{t}.</strong> {d}</li>)}
+        </ol>
+      )}
+    </Card>
+  );
+}
+
+export default function HydroBilling({ vertical = 'HYDRO' }) {
   // Page-level view. `tab` is already taken by the preview's inner tabs.
   const [view, setView] = useState('billing');
   const { user } = useAuth();
-  const canWrite = ROLE_GROUPS.HYDRO_THERMAL_WRITE.includes(user?.role);
+  const canWrite = writeRolesFor(vertical).includes(user?.role);
+  const isThermal = vertical === 'THERMAL';
 
   const [stations, setStations] = useState([]);
   const [stationId, setStationId] = useState('');
@@ -637,6 +729,7 @@ export default function HydroBilling() {
   const [sending, setSending] = useState(null);
   const [sendForm, setSendForm] = useState({ next_approver_id: '', final_approver_id: '', comments: '' });
   const [acting, setActing] = useState(null);
+  const [recalling, setRecalling] = useState(null); // { bill, reason }
   const [actForm, setActForm] = useState({ action: 'APPROVE', comments: '', next_approver_id: '', mark_final: true });
 
   const station = useMemo(() => stations.find((s) => s.id === stationId), [stations, stationId]);
@@ -657,12 +750,12 @@ export default function HydroBilling() {
   }, []);
 
   useEffect(() => {
-    api.hydroBilling.approvers().then((r) => setApprovers(r || [])).catch(() => setApprovers([]));
+    api.hydroBilling.approvers({ vertical }).then((r) => setApprovers(r || [])).catch(() => setApprovers([]));
     loadInbox();
   }, [loadInbox]);
 
   useEffect(() => {
-    api.hydroBilling.stations()
+    api.hydroBilling.stations({ vertical })
       .then((list) => {
         setStations(list || []);
         if (list?.length) setStationId((cur) => cur || list[0].id);
@@ -677,6 +770,29 @@ export default function HydroBilling() {
       .catch(() => setBills([]));
   }, [stationId]);
   useEffect(loadBills, [loadBills]);
+
+  const [searchParams] = useSearchParams();
+
+  // Mobile-style deep-linking: when arriving via notification, auto-open approval or bill modal
+  useEffect(() => {
+    const targetBillNo = searchParams.get('bill_no');
+    const targetBillId = searchParams.get('bill_id');
+    if (!targetBillNo && !targetBillId) return;
+
+    if (inbox.length > 0) {
+      const match = inbox.find((b) => (targetBillNo && b.bill_no === targetBillNo) || (targetBillId && b.id === targetBillId));
+      if (match) {
+        setActing(match);
+        return;
+      }
+    }
+    if (bills.length > 0) {
+      const match = bills.find((b) => (targetBillNo && b.bill_no === targetBillNo) || (targetBillId && b.id === targetBillId));
+      if (match) {
+        setOpenBill(match);
+      }
+    }
+  }, [inbox, bills, searchParams]);
 
 
 
@@ -705,7 +821,7 @@ export default function HydroBilling() {
       ? `Allocation sheet saved — ${r.rows.length} beneficiaries. ${r.warning}`
       : `Allocation sheet saved — ${r.rows.length} beneficiaries totalling 100%. ${station?.station_name || 'The station'} can now be billed.`);
     loadAllocations();
-    api.hydroBilling.stations().then((list) => setStations(list || [])).catch(() => {});
+    api.hydroBilling.stations({ vertical }).then((list) => setStations(list || [])).catch(() => {});
   }
 
   async function doPreview(e) {
@@ -765,6 +881,20 @@ export default function HydroBilling() {
             : `${r.bill_no} is now with ${r.now_with}.`,
       );
       setActing(null);
+      loadBills(); loadInbox();
+    } catch (err) {
+      setError(err.response?.data?.error || err.message);
+    }
+  }
+
+  async function doRecall(e) {
+    e.preventDefault();
+    const bill = recalling.bill;
+    setError('');
+    try {
+      await api.hydroBilling.recall(bill.id, recalling.reason);
+      setRecalling(null);
+      setNotice(`${bill.bill_no} recalled — it is back with you as a draft. Correct it if needed and send it for approval again.`);
       loadBills(); loadInbox();
     } catch (err) {
       setError(err.response?.data?.error || err.message);
@@ -863,9 +993,18 @@ export default function HydroBilling() {
       header: 'Approval',
       render: (r) => (r.approval_status === 'APPROVED'
         ? <Badge status="APPROVED" label="APPROVED" />
-        : <span style={{ fontSize: 12, color: r.approval_status === 'REJECTED' ? 'var(--red)' : 'var(--text-light)' }}>
-          {r.approval_status === 'IN_APPROVAL' ? 'with an approver' : r.approval_status === 'REJECTED' ? 'rejected' : 'not sent'}
-        </span>),
+        : (
+          <span style={{ fontSize: 12, color: r.approval_status === 'REJECTED' ? 'var(--red)' : 'var(--text-light)' }}>
+            {r.approval_status === 'IN_APPROVAL'
+              ? <>with <strong>{r.pending_with || 'an approver'}</strong>{r.pending_since ? <> since {fmtDate(r.pending_since)}</> : null}</>
+              : r.approval_status === 'REJECTED' ? <>rejected{r.rejection_comment ? <>: {r.rejection_comment}</> : null}</> : 'not sent'}
+          </span>
+        )),
+    },
+    {
+      key: 'next',
+      header: 'Next step',
+      render: (r) => <span style={{ fontSize: 12 }}>{nextStepOf(r, user)}</span>,
     },
     {
       key: 'actions',
@@ -875,13 +1014,16 @@ export default function HydroBilling() {
           <button type="button" className="btn btn-xs btn-outline" onClick={() => api.hydroBilling.get(r.id).then(setOpenBill)}>
             View
           </button>
-          {canWrite && r.status === 'DRAFT' && r.approval_status === 'NOT_SENT' && (
+          {canWrite && r.status === 'DRAFT' && ['NOT_SENT', 'REJECTED'].includes(r.approval_status) && (
             <button
               type="button" className="btn btn-xs btn-outline"
               onClick={() => { setSending(r); setSendForm({ next_approver_id: '', final_approver_id: '', comments: '' }); }}
             >
               Send for approval
             </button>
+          )}
+          {canWrite && r.status === 'DRAFT' && r.approval_status === 'IN_APPROVAL' && (
+            <button type="button" className="btn btn-xs btn-outline" title="Take the bill back from the approver" onClick={() => setRecalling({ bill: r, reason: '' })}>Recall</button>
           )}
           {canWrite && r.status === 'DRAFT' && r.approval_status === 'APPROVED' && (
             <button type="button" className="btn btn-xs btn-primary" onClick={() => doIssue(r)}>Issue</button>
@@ -925,8 +1067,10 @@ export default function HydroBilling() {
   return (
     <div>
       <PageHeader
-        title="Hydro Billing"
-        subtitle="Monthly CERC two-part bill for a hydro station, split across the beneficiaries of the Regional Energy Account"
+        title={isThermal ? 'Thermal Billing — Monthly Bills & Approval' : 'Hydro Billing'}
+        subtitle={isThermal
+          ? 'Monthly CERC two-part bill for a thermal station — capacity charge on availability, energy charge on the month\'s fuel — split across the beneficiaries'
+          : 'Monthly CERC two-part bill for a hydro station, split across the beneficiaries of the Regional Energy Account'}
       />
 
       <Tabs style={{ marginBottom: 18 }}>
@@ -934,15 +1078,27 @@ export default function HydroBilling() {
         <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
       </Tabs>
 
-      {view === 'fyi' && <ModuleGuide guide={getGuide('hydro')} />}
+      {view === 'fyi' && (
+        <>
+          <BillProcessGuide label={isThermal ? 'thermal' : 'hydro'} />
+          <ModuleGuide guide={getGuide('hydro')} />
+        </>
+      )}
 
       {view === 'billing' && (
       <>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
 
-      {canWrite && <HydroReaRun onDone={loadBills} />}
+      {canWrite && !isThermal && <HydroReaRun onDone={loadBills} />}
 
+      {inbox.length === 0 && (
+        <Card title="Waiting for your approval (0)">
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+            Nothing is waiting on you. A bill sent to you for approval appears here with a Review button.
+          </p>
+        </Card>
+      )}
       {inbox.length > 0 && (
         <Card title={`Waiting for your approval (${inbox.length})`}>
           <Table
@@ -976,6 +1132,25 @@ export default function HydroBilling() {
         </Card>
       )}
 
+      <Card title={`Bills raised for ${station?.station_name || 'this station'} — process them from here`}>
+        <div className="form-grid" style={{ marginBottom: 10, maxWidth: 520 }}>
+          <Field label="Station" htmlFor="hb-list-station">
+            <select id="hb-list-station" value={stationId} onChange={(e) => setStationId(e.target.value)}>
+              {stations.map((st) => <option key={st.id} value={st.id}>{st.station_name} — {st.contract_no}</option>)}
+            </select>
+          </Field>
+        </div>
+        <Table
+          columns={billColumns}
+          rows={bills}
+          emptyMessage="No bill has been raised for this station yet."
+        />
+      </Card>
+
+      {isThermal ? (
+        <ThermalBillForm station={station} stationId={stationId} canWrite={canWrite} onSaved={loadBills} />
+      ) : (
+      <>
       <Card title="REA Upload (Monthly Bill)">
         <form onSubmit={doPreview}>
           <div style={{ padding: '20px', background: 'var(--slate-50)', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 24 }}>
@@ -1182,6 +1357,9 @@ export default function HydroBilling() {
         />
       )}
 
+      </>
+      )}
+
       {preview && (
         <>
           <div className="stat-grid">
@@ -1235,16 +1413,26 @@ export default function HydroBilling() {
         </Card>
       )}
 
-      <Card title={`Bills raised for ${station?.station_name || 'this station'}`}>
-        <Table
-          columns={billColumns}
-          rows={bills}
-          emptyMessage="No bill has been raised for this station yet."
-        />
-      </Card>
 
       </>
       )}
+
+      <Modal open={!!recalling} onClose={() => setRecalling(null)} title={recalling ? `Recall ${recalling.bill.bill_no}` : ''} width={520}>
+        {recalling && (
+          <form onSubmit={doRecall}>
+            <p style={{ marginTop: 0, fontSize: 13 }}>
+              The bill is with <strong>{recalling.bill.pending_with || 'an approver'}</strong>. Recalling takes it back to you as a draft; you can correct it and send it for approval again.
+            </p>
+            <Field label="Why it is being recalled" required>
+              <input required minLength={5} value={recalling.reason} onChange={(e) => setRecalling({ ...recalling, reason: e.target.value })} placeholder="e.g. sent to the wrong approver" />
+            </Field>
+            <div className="form-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setRecalling(null)}>Cancel</button>
+              <button type="submit" className="btn btn-primary">Recall</button>
+            </div>
+          </form>
+        )}
+      </Modal>
 
       <Modal open={!!openBill} onClose={() => setOpenBill(null)} title={openBill ? `${openBill.bill_no} — ${openBill.station_name} ${openBill.billing_month}` : ''} width={980}>
         {openBill && (
@@ -1255,8 +1443,16 @@ export default function HydroBilling() {
               {openBill.revises_bill_no && <> · revises {openBill.revises_bill_no}</>}
               {openBill.revision_reason && <div style={{ marginTop: 4 }}>{openBill.revision_reason}</div>}
             </div>
-            <StationBillSheet bill={openBill} />
-            <BeneficiarySheet lines={openBill.lines || []} bill={openBill} />
+            {['ARREAR', 'SUPPLEMENTARY'].includes(openBill.bill_kind)
+              ? <AdjustmentBillSummary bill={openBill} />
+              : openBill.thermal_inputs_json
+              ? <ThermalBillSummary bill={openBill} lines={openBill.lines || []} />
+              : (
+                <>
+                  <StationBillSheet bill={openBill} />
+                  <BeneficiarySheet lines={openBill.lines || []} bill={openBill} />
+                </>
+              )}
           </div>
         )}
       </Modal>

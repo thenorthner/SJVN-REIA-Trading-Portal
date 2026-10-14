@@ -10,6 +10,9 @@ export const ROLE_GROUPS = {
   COMMERCIAL_WRITE: ['SJVN_ADMIN', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'IT_SUPER_ADMIN'],
   HYDRO_THERMAL_ALL: ['SJVN_ADMIN', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'MANAGEMENT'],
   HYDRO_THERMAL_WRITE: ['SJVN_ADMIN', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'IT_SUPER_ADMIN'],
+  // Thermal billing's own desk and logins — mirrors THERMAL_ALL / THERMAL_WRITE in the API.
+  THERMAL_ALL: ['SJVN_ADMIN', 'THERMAL_ADMIN', 'THERMAL_USER', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'MANAGEMENT'],
+  THERMAL_WRITE: ['SJVN_ADMIN', 'THERMAL_ADMIN', 'THERMAL_USER', 'IT_SUPER_ADMIN'],
   TRADING_ALL: ['SJVN_ADMIN', 'TRADING_USER', 'FINANCE_USER', 'MANAGEMENT'],
   TRADING_WRITE: ['SJVN_ADMIN', 'TRADING_USER'],
 
@@ -55,3 +58,4 @@ export const isBuyerRole = (role) => ROLE_GROUPS.BUYER_ALL.includes(role);
 export const isCounterpartyRole = (role) => isSellerRole(role) || isBuyerRole(role);
 export const isTradingClientRole = (role) => ROLE_GROUPS.TRADING_CLIENT_ALL.includes(role);
 export const isCommercialRole = (role) => ['COMMERCIAL_ADMIN', 'COMMERCIAL'].includes(role);
+export const isThermalRole = (role) => ['THERMAL_ADMIN', 'THERMAL_USER'].includes(role);

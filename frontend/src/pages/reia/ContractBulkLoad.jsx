@@ -287,6 +287,10 @@ export default function ContractBulkLoad({ open, onClose, onLoaded }) {
         </div>
         <textarea
           rows={7}
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          wrap="off"
           style={{
             width: '100%',
             border: 'none',
@@ -298,7 +302,9 @@ export default function ContractBulkLoad({ open, onClose, onLoaded }) {
             color: '#1e293b',
             background: '#ffffff',
             boxSizing: 'border-box',
-            resize: 'vertical'
+            resize: 'vertical',
+            whiteSpace: 'pre',
+            overflowX: 'auto',
           }}
           placeholder={'contract_no,contract_type,project_type,seller_id,capacity_mw,tariff_per_unit,tenure\nPPA/SOLAR/001,PPA,SOLAR,SELL-0001,250,2.65,25 Years\nPPA/WIND/002,PPA,WIND,SELL-0002,150,3.10,25 Years'}
           value={text}

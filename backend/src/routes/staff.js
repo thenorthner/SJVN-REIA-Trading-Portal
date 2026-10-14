@@ -50,7 +50,9 @@ export const STAFF_ROLES = {
   IT_SUPER_ADMIN: { label: 'IT Super Administrator', desk: 'Administration', does: 'Runs the platform: every section, every user, system settings.' },
   SJVN_ADMIN: { label: 'SJVN Administrator', desk: 'Administration', does: 'Every section across REIA, trading and finance, and manages SJVN\'s and the companies\' users.' },
   MANAGEMENT: { label: 'Management', desk: 'Management', does: 'Dashboards and reports across the verticals, and the approvals reserved for management. Does not enter data.' },
-  COMMERCIAL_ADMIN: { label: 'Commercial Administrator', desk: 'Commercial', does: 'Hydro & Thermal station billing, PAF, allocations, PTC billing, claims, ledgers and desk operations.' },
+  COMMERCIAL_ADMIN: { label: 'Commercial Administrator (Hydro)', desk: 'Hydro', does: 'Hydro station billing, PAF, allocations, PTC billing, claims, ledgers and desk operations.' },
+  THERMAL_ADMIN: { label: 'Thermal Administrator', desk: 'Thermal', does: 'Thermal station billing and its stakeholders, and manages the thermal desk\'s users.' },
+  THERMAL_USER: { label: 'Thermal Desk', desk: 'Thermal', does: 'Thermal stakeholders, station data and billing.' },
   REIA_ADMIN: { label: 'REIA Administrator', desk: 'REIA', does: 'Everything the REIA desk does, and manages the REIA desk\'s users and companies\' admin accounts.' },
   REIA_USER: { label: 'REIA Desk', desk: 'REIA', does: 'Contracts, energy data, billing, disputes, payment security and reconciliation with sellers and buyers.' },
   FINANCE_USER: { label: 'Finance', desk: 'Finance', does: 'Payments and their confirmation against the bank, releases, TDS certificates and the SAP hand-over.' },
@@ -66,11 +68,13 @@ const MANAGES = {
   SJVN_ADMIN: ROLES.filter((r) => r !== 'IT_SUPER_ADMIN'),
   REIA_ADMIN: ['REIA_USER'],
   TRADING_ADMIN: ['TRADING_USER'],
+  THERMAL_ADMIN: ['THERMAL_USER'],
 };
 
 /** What each role reaches, section by section, as the navigation and the routes enforce it. */
 const ACCESS = [
-  ['Hydro & Thermal billing — PAF, station billing, allocations, ledgers', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', MANAGEMENT: 'Read', COMMERCIAL_ADMIN: 'Full', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
+  ['Hydro billing — PAF, station billing, allocations, ledgers', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', MANAGEMENT: 'Read', COMMERCIAL_ADMIN: 'Full', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
+  ['Thermal billing — stations, stakeholders, billing', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', MANAGEMENT: 'Read', THERMAL_ADMIN: 'Full', THERMAL_USER: 'Full', FINANCE_USER: 'Read' }],
   ['REIA billing & settlement — contracts, energy, invoices, disputes, security', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', MANAGEMENT: 'Read', REIA_ADMIN: 'Full', REIA_USER: 'Full', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
   ['Payments — recording, confirming a buyer\'s payment, releases', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', REIA_USER: 'Full', FINANCE_USER: 'Full' }],
   ['Power trading — bids, exchange, clients', { SJVN_ADMIN: 'Full', MANAGEMENT: 'Read', FINANCE_USER: 'Read', TRADING_ADMIN: 'Full', TRADING_USER: 'Full' }],

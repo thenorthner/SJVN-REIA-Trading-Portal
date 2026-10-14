@@ -1,0 +1,9 @@
+{
+  "name": "user-manual",
+  "private": true,
+  "description": "Builds the screenshot-based user manuals (Word)",
+  "type": "module",
+  "dependencies": {
+    "docx": "^9.5.1"
+  }
+}

@@ -31,6 +31,8 @@ export const ACTIONS = ['APPROVE', 'REJECT', 'FORWARD'];
  */
 export function makerCheckerConflict(bill, user) {
   if (!bill || !user) return null;
+  // Super admins and SJVN admins have administrative override authority across all levels
+  if (['IT_SUPER_ADMIN', 'SJVN_ADMIN'].includes(user.role)) return null;
   if (bill.created_by && user.id) {
     return bill.created_by === user.id ? SEGREGATION_REFUSAL : null;
   }

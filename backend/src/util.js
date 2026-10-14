@@ -44,6 +44,43 @@ export function verifyInvoiceToken(invoiceId, token) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+/**
+ * The fields of a bill that, if any one changed, would make it a different
+ * bill. Their SHA-256 is printed in the authentication seal and shown on the
+ * public verify page, so a copy that has been edited no longer matches.
+ */
+const INVOICE_HASH_FIELDS = [
+  'id', 'invoice_no', 'contract_id', 'invoice_type', 'direction', 'billing_period',
+  'energy_mwh', 'tariff_per_unit', 'energy_charges', 'tax_amount', 'total_amount', 'due_date',
+];
+
+export function invoiceIntegrityHash(invoice = {}) {
+  const canonical = INVOICE_HASH_FIELDS.map((f) => `${f}=${invoice[f] ?? ''}`).join('|');
+  return crypto.createHash('sha256').update(canonical).digest('hex');
+}
+
+/** The seal an authenticated bill carries in place of a signature image. */
+export function invoiceAuthSeal(invoice = {}) {
+  const hash = invoiceIntegrityHash(invoice);
+  const at = invoice.approved_at || invoice.issued_at || invoice.updated_at || invoice.created_at || null;
+  // SQLite's datetime('now') is UTC with no zone marker.
+  const when = at ? new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(String(at)) ? at : `${String(at).replace(' ', 'T')}Z`) : new Date();
+  const d = Number.isNaN(when.getTime()) ? new Date() : when;
+  const ist = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).format(d).replace(/,/g, '').replace(/ (\d{2}:)/, ' $1').replace(/^(\d{2}) (\w{3}) (\d{4})/, '$1-$2-$3');
+  const year = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', year: 'numeric' }).format(d);
+  return {
+    hash,
+    hash_short: `${hash.slice(0, 12)}...${hash.slice(-8)}`,
+    signed_at_ist: `${ist} IST`,
+    audit_ref: `SJVN-AUTH-${year}-${hash.slice(0, 8).toUpperCase()}`,
+    notice: 'Authenticated computer-generated invoice under the IT Act, 2000 and Rule 46 of the CGST Rules, 2017. '
+      + 'Physical signature not required.',
+  };
+}
+
 export const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || 'http://localhost:4000').replace(/\/+$/, '');
 
 import { secureLogAudit } from './auditEngine.js';
@@ -73,12 +110,12 @@ export function logAudit({ req, user, action, module, entityType, entityId, befo
   });
 }
 
-export function pushNotification({ userId = null, role = null, type, message }) {
+export function pushNotification({ userId = null, role = null, type, message, link = null }) {
   const stmt = db.prepare(`
-    INSERT INTO notifications (id, user_id, role, type, message)
-    VALUES (@id, @userId, @role, @type, @message)
+    INSERT INTO notifications (id, user_id, role, type, message, link)
+    VALUES (@id, @userId, @role, @type, @message, @link)
   `);
-  stmt.run({ id: newId('NTF'), userId, role, type, message });
+  stmt.run({ id: newId('NTF'), userId, role, type, message, link });
 }
 
 /**

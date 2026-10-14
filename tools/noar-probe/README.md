@@ -88,10 +88,23 @@ carry are supplied:
 node noar-probe.mjs --wbes-base=<url> --wbes-user=<username> --wbes-util=<acronym>
 ```
 
-Without them it says so and skips. The guide publishes no host, and states the
-username must match the credential the key was issued against — so the key alone
-cannot be tested. Those three are pending with O/o CGM
-(`docs/WBES_IP_Whitelisting_Email_Draft.md`).
+Without them it says so and skips. The guide states the username must match the
+credential the key was issued against — so the key alone cannot be tested.
+
+**Grid India whitelisted 49.50.97.173 for `usr_SJVNL` on 14-Oct-2026** (ticket
+WBES-1788772472409, "IPs Whitelisted on Firewall"). NOAR is already proven from
+any address, so the WBES run skips it:
+
+```powershell
+node noar-probe.mjs --wbes-only --env=wbes.env
+```
+
+`wbes.env` holds `WBES_API_KEY`, `WBES_BASE_URL`, `WBES_USERNAME` (kept outside
+the repo, in `~/Downloads/wbes-probe-server/`). `--wbes-date=YYYY-MM-DD` picks a
+delivery date known to carry an SJVN schedule; the default is two days ago. Six
+calls: revision-no with the key in query and in header, then the schedule for
+each acronym candidate. Each line prints WBES's own `ResponseStatus.Code` —
+WBES refuses inside HTTP 200, so the status column alone proves nothing.
 
 ## What is safe to share
 

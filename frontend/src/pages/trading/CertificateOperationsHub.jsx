@@ -290,7 +290,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
   };
 
   return (
-    <div style={{ padding: '0 20px 20px', maxWidth: 1600, margin: '0 auto' }}>
+    <div style={{ padding: '0 20px 20px' }}>
       
       {/* Top Module Tabs */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 20, borderBottom: '2px solid #ddd' }}>

@@ -3,6 +3,7 @@ import api from '../api/client.js';
 import { Badge, Field, fmtCurrency, fmtNumber } from './ui.jsx';
 import { DocumentManager, PreviewModal } from './DocumentManager.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
+import { paymentTermsText, rebateText, lpsText } from '../lib/contractRules.js';
 
 // The working file of one contract, shared by the seller, the buyer and the
 // REIA desk: its documents, project milestones, performance guarantee, the
@@ -93,7 +94,10 @@ function Overview({ contract, ws, go }) {
         {item('Tariff', `₹${contract.tariff_per_unit}/unit`)}
         {item('Tenure', `${contract.tenure_start} → ${contract.tenure_end}`)}
         {item('Billing Cycle', contract.billing_cycle)}
-        {item('Payment Terms', contract.payment_terms || '-')}
+        {item('Payment Terms', paymentTermsText(contract))}
+        {item('Rebate Rule', rebateText(contract))}
+        {item('LPS Rule', lpsText(contract))}
+        {item('Payment Security', (contract.payment_security_type || '-').replaceAll('_', ' '))}
         {item('COD', contract.cod_date ? fmtDate(contract.cod_date) : 'Not commissioned')}
         {item('Next milestone', a.next_milestone ? <>{a.next_milestone.label}{a.next_milestone.due_date ? <> · {fmtDate(a.next_milestone.due_date)}<Countdown days={a.next_milestone.days_to_due} /></> : ' · no date set'}</> : '—')}
         {ws.guarantee && item('EMD', fmtCurrency(contract.emd_amount))}

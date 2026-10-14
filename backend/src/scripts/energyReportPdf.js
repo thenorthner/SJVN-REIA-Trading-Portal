@@ -105,6 +105,7 @@ export function generateEnergyReportPdf(report, meta, res) {
     size: [PAGE_W, PAGE_H],
     margins: { top: M, bottom: M, left: M, right: M },
     bufferPages: true,
+    font: 'Helvetica',
     info: {
       Title: 'SJVN Energy Data & Validation Report',
       Author: 'SJVN Limited',
@@ -112,6 +113,7 @@ export function generateEnergyReportPdf(report, meta, res) {
       Creator: 'SJVN Energy Platform',
     },
   });
+  doc.font('Helvetica');
 
   const filename = `SJVN_Energy_Report_${from || 'all'}_to_${to || 'all'}.pdf`;
   res.setHeader('Content-Type', 'application/pdf');

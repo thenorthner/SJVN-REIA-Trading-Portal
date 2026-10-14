@@ -361,14 +361,14 @@ describe('E2E: paying the generator', () => {
     return db.prepare('SELECT * FROM invoices WHERE id = ?').get(gen.body.id);
   }
 
-  it('refuses to release money to an account that has not passed penny drop', async () => {
+  it('refuses to release money to an account that has not been verified', async () => {
     const inv = await approvedDeveloperBill();
     db.prepare('UPDATE entities SET is_penny_drop_verified = 0 WHERE id = ?').run(seller.id);
 
     const r = await post(`/api/invoices/${inv.id}/release-to-generator`, finance,
       { amount: 10000, source: 'OWN_FUND', payment_date: '2026-05-15' });
     expect(r.status).toBe(400);
-    expect(r.body.error).toMatch(/penny.drop/i);
+    expect(r.body.error).toMatch(/not been verified/i);
     expect(db.prepare('SELECT COUNT(*) c FROM payments WHERE invoice_id = ?').get(inv.id).c).toBe(0);
   });
 
@@ -380,7 +380,7 @@ describe('E2E: paying the generator', () => {
     const r = await post(`/api/invoices/${inv.id}/release-to-generator`, finance,
       { amount: 10000, source: 'OWN_FUND', payment_date: '2026-05-15' });
     expect(r.status).toBe(400);
-    expect(r.body.error).toMatch(/awaiting penny-drop verification/i);
+    expect(r.body.error).toMatch(/awaiting verification/i);
   });
 
   it('will not pay out from DISCOM realization that has not been realized', async () => {

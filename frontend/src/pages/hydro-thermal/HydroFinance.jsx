@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import api from '../../api/client.js';
+import { writeRolesFor, pathFor, deskLabel } from '../../lib/stationVertical.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import {
@@ -19,9 +20,9 @@ const thisMonth = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
-export default function HydroFinance() {
+export default function HydroFinance({ vertical = 'HYDRO' }) {
   const { user } = useAuth();
-  const canWrite = ROLE_GROUPS.HYDRO_THERMAL_WRITE.includes(user?.role);
+  const canWrite = writeRolesFor(vertical).includes(user?.role);
 
   const [stations, setStations] = useState([]);
   const [stationId, setStationId] = useState('');
@@ -42,7 +43,7 @@ export default function HydroFinance() {
   const station = useMemo(() => stations.find((s) => s.id === stationId), [stations, stationId]);
 
   useEffect(() => {
-    api.hydroBilling.stations()
+    api.hydroBilling.stations({ vertical })
       .then((list) => {
         setStations(list || []);
         if (list?.length) setStationId((cur) => cur || list[0].id);
@@ -164,7 +165,7 @@ export default function HydroFinance() {
     <div>
       <PageHeader
         title="Finance Posting (FI)"
-        subtitle="The month-end handover of hydro billing to corporate Finance"
+        subtitle={`The month-end handover of ${deskLabel(vertical).toLowerCase()} billing to corporate Finance`}
       />
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}

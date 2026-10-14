@@ -160,7 +160,8 @@ export function buildDemandLetter(doc, { invocation, letter, contract, instrumen
 }
 
 export function generateDemandLetterPdf(payload, res) {
-  const doc = new PDFDocument({ size: 'A4', margin: 0 });
+  const doc = new PDFDocument({ size: 'A4', margin: 0, font: 'Helvetica' });
+  doc.font('Helvetica');
   const no = String(payload.invocation?.invocation_no || 'notice').replace(/[^\w.-]+/g, '_');
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="SJVN_Demand_${no}.pdf"`);

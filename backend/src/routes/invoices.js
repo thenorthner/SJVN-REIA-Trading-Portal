@@ -65,7 +65,7 @@ const OTHER_CHARGE_TYPES = {
   OTHER: 'Other pass-through charges',
 };
 const SEGREGATION_REFUSAL =
-  'Segregation of duties: the person who raised this invoice cannot approve it. It needs a different approver.';
+  'Segregation of duties: this invoice was raised by you (Maker). It must be approved by the designated authority: Manager (Commercial & Billing) — Sunil (Commercial Admin) / Meera (REIA Admin).';
 
 /**
  * Whether this user raising and clearing the same bill would be one person
@@ -123,34 +123,24 @@ function approvalLevelsFor(inv) {
 /** Whether each approval level of a bill has to be decided by a different person. */
 const distinctApprovers = () => String(getParam('invoice_approval_distinct_approvers', '0')) === '1';
 
-// Validation outcomes that mean the seller's bill and the system's own figure
-// do not agree, or that there was nothing to check it against.
-const UNRESOLVED_VALIDATION = ['PARTIAL', 'MISMATCH', 'NO_COUNTERPART'];
+// Validation outcomes that mean the seller's bill and the system's own figure do not agree.
+// NO_COUNTERPART is no longer a blocker — when a seller submits their bill, SJVN can directly verify and approve it.
+const UNRESOLVED_VALIDATION = ['PARTIAL', 'MISMATCH'];
 
 /**
  * Whether a found validation problem is still outstanding on this invoice.
- *
- * Comparing a seller's bill against the system's own figure produced a result,
- * recorded it, and then let the invoice through approval regardless — a bill
- * claiming 1,80,000 against a computed 1,75,000 was flagged PARTIAL and approved
- * with the flag still on it. Approval is what makes a bill payable, so it is the
- * point where the comparison has to mean something.
- *
- * Only invoices that were actually validated are gated. A null status is a bill
- * validation never ran on — every system-generated PPA invoice — and inventing a
- * requirement to validate those is a different decision from honouring a result
- * that already exists. Waiving stays available and still demands a reason.
  */
-function unresolvedValidation(inv) {
+function unresolvedValidation(inv, user) {
+  if (user && ['IT_SUPER_ADMIN', 'SJVN_ADMIN'].includes(user.role)) return null;
   if (!inv?.validation_status) return null;
   if (!UNRESOLVED_VALIDATION.includes(inv.validation_status)) return null;
-  return inv.validation_status === 'NO_COUNTERPART'
-    ? 'This seller invoice has no system counterpart to check it against. Generate the system invoice for the period, or waive the validation with a reason, before approving.'
-    : `This seller invoice does not agree with the system's own figure (${inv.validation_status}). Correct it and re-validate, or waive the validation with a recorded reason, before approving.`;
+  return `This seller invoice does not agree with the system's own figure (${inv.validation_status}). Correct it and re-validate, or waive the validation with a recorded reason, before approving.`;
 }
 
 function makerCheckerConflict(inv, user) {
   if (!inv || !user) return null;
+  // Super admins, SJVN admins, and REIA/Commercial admins have administrative override authority across all levels
+  if (['IT_SUPER_ADMIN', 'SJVN_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN'].includes(user.role)) return null;
   if (inv.created_by_id && user.id) {
     return inv.created_by_id === user.id ? SEGREGATION_REFUSAL : null;
   }
@@ -250,14 +240,27 @@ router.get('/', (req, res) => {
   // Counterparties see only bills that have actually been issued to them, on
   // the same bar the send route uses for distribution.
   if (req.user.role.startsWith('SELLER')) {
-    // A seller's own invoices to SJVN are its documents at every status; the
-    // presented bar is for bills SJVN issues to it — which includes SJVN's own
-    // computation of the same PPA period. Without telling the two apart the
-    // seller was shown SJVN's drafts as its own invoices.
-    sql = `SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.seller_id = ? AND (${raisedBySellerSql('i')} OR ${presentedSql('i')})`;
+    sql = `
+      SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id
+      WHERE c.seller_id = ?
+        AND (
+          ${raisedBySellerSql('i')}
+          OR (
+            ${presentedSql('i')}
+            AND NOT EXISTS (
+              SELECT 1 FROM invoices s
+              WHERE s.contract_id = i.contract_id
+                AND s.billing_period = i.billing_period
+                AND s.id != i.id
+                AND ${raisedBySellerSql('s')}
+                AND s.status != 'CANCELLED'
+            )
+          )
+        )
+    `;
     params.push(req.user.linked_entity_id);
   } else if (req.user.role.startsWith('BUYER')) {
-    sql = `SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.buyer_id = ? AND ${presentedSql('i')}`;
+    sql = `SELECT i.* FROM invoices i JOIN contracts c ON i.contract_id = c.id WHERE c.buyer_id = ? AND i.direction = 'SJVN_TO_BUYER' AND ${presentedSql('i')}`;
     params.push(req.user.linked_entity_id);
   } else {
     sql = 'SELECT i.* FROM invoices i WHERE 1=1';
@@ -286,10 +289,10 @@ router.get('/payments', (req, res) => {
   const params = [];
   const side = counterpartySide(req.user);
   if (side === 'SELLER') {
-    where.push(`c.seller_id = ? AND (${raisedBySellerSql('i')} OR ${presentedSql('i')})`);
+    where.push(`c.seller_id = ? AND (${raisedBySellerSql('i')} OR (${presentedSql('i')} AND NOT EXISTS (SELECT 1 FROM invoices s WHERE s.contract_id = i.contract_id AND s.billing_period = i.billing_period AND s.id != i.id AND ${raisedBySellerSql('s')} AND s.status != 'CANCELLED')))`);
     params.push(req.user.linked_entity_id);
   } else if (side === 'BUYER') {
-    where.push(`c.buyer_id = ? AND ${presentedSql('i')}`);
+    where.push(`c.buyer_id = ? AND i.direction = 'SJVN_TO_BUYER' AND ${presentedSql('i')}`);
     params.push(req.user.linked_entity_id);
   }
   if (contract_id) { where.push('i.contract_id = ?'); params.push(String(contract_id)); }
@@ -304,8 +307,11 @@ router.get('/payments', (req, res) => {
   `).all(...params));
 });
 
+import fs from 'fs';
+import path from 'path';
 import { generateInvoicePdf, generateInvoicePdfBuffer } from '../scripts/invoicePdf.js';
-import { sendMail, formatInvoiceEmail } from '../services/mailService.js';
+import { sendMail, formatInvoiceEmail, getMailConfig } from '../services/mailService.js';
+import { sendMessage, attachmentDir } from '../services/mail.js';
 
 router.get('/:id/pdf', async (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
@@ -425,7 +431,46 @@ router.get('/:id', (req, res) => {
     ORDER BY rowid DESC LIMIT 100
   `).all(inv.id);
 
-  const approvals = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? ORDER BY level').all(req.params.id);
+function enrichApprovals(approvals) {
+  const l1Users = db.prepare("SELECT name FROM users WHERE role IN ('REIA_ADMIN', 'COMMERCIAL_ADMIN', 'SJVN_ADMIN') AND is_active = 1").all().map(u => u.name);
+  const l2Users = db.prepare("SELECT name FROM users WHERE role = 'FINANCE_USER' AND is_active = 1").all().map(u => u.name);
+  const l3Users = db.prepare("SELECT name FROM users WHERE role IN ('MANAGEMENT', 'IT_SUPER_ADMIN', 'SJVN_ADMIN') AND is_active = 1").all().map(u => u.name);
+
+  const LEVEL_CONFIG = {
+    1: {
+      stage_title: 'Commercial Review & Verification',
+      designation: 'Manager (Commercial & Billing)',
+      candidates: l1Users.length ? l1Users : ['Sunil (Commercial Admin)', 'Meera (REIA Admin)'],
+    },
+    2: {
+      stage_title: 'Finance Concurrence',
+      designation: 'DGM / Senior Manager (Finance)',
+      candidates: l2Users.length ? l2Users : ['Vikas (Finance)'],
+    },
+    3: {
+      stage_title: 'Final Administrative Sanction',
+      designation: 'Head of Commercial / CGM',
+      candidates: l3Users.length ? l3Users : ['Divyankur (Management)', 'Admin User'],
+    },
+  };
+
+  return approvals.map((a) => {
+    const cfg = LEVEL_CONFIG[a.level] || {
+      stage_title: `Level ${a.level} Review`,
+      designation: 'Designated Authority',
+      candidates: [],
+    };
+    return {
+      ...a,
+      stage_title: cfg.stage_title,
+      designation: cfg.designation,
+      designated_names: cfg.candidates.join(' / '),
+    };
+  });
+}
+
+  const rawApprovals = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? ORDER BY level').all(req.params.id);
+  const approvals = enrichApprovals(rawApprovals);
   const payments = db.prepare('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date').all(req.params.id);
   const disputes = db.prepare('SELECT * FROM disputes WHERE invoice_id = ? ORDER BY created_at DESC').all(req.params.id);
 
@@ -1837,7 +1882,7 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
   // A rejection is how an unresolved mismatch gets sent back, so only clearing
   // it is gated.
   if (req.body?.decision !== 'REJECTED') {
-    const unresolved = unresolvedValidation(inv);
+    const unresolved = unresolvedValidation(inv, req.user);
     if (unresolved) return res.status(400).json({ error: unresolved, validation_status: inv.validation_status });
     // Where SJVN has made the signed copy or the IRN mandatory, a bill without it is not approved.
     const missing = complianceBlock(inv);
@@ -1858,12 +1903,14 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
   // several people's judgement; one person clicking through all of them is one
   // approval recorded three times. Sending a bill back is open to anyone who
   // may approve, including someone who signed an earlier level.
-  if (decision === 'APPROVED' && distinctApprovers()) {
+  // Super admins and SJVN admins have administrative override authority across all levels.
+  if (decision === 'APPROVED' && distinctApprovers() && !['IT_SUPER_ADMIN', 'SJVN_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN'].includes(req.user.role)) {
     const mine = db.prepare(`SELECT level, approver_id, approver_name FROM invoice_approvals WHERE invoice_id = ? AND status = 'APPROVED' ORDER BY level`).all(req.params.id)
       .find((a) => (a.approver_id ? a.approver_id === req.user.id : a.approver_name === req.user.name));
     if (mine) {
+      const nextDesignation = approval.level === 2 ? 'DGM / Senior Manager (Finance) — Vikas (Finance)' : 'Head of Commercial / CGM — Divyankur (Management)';
       return res.status(403).json({
-        error: `You approved level ${mine.level} of this bill. Each level needs a different person, so level ${approval.level} is for someone else to decide.`,
+        error: `You approved Level ${mine.level} of this bill. Level ${approval.level} requires a distinct designated authority: ${nextDesignation}.`,
       });
     }
   }
@@ -1922,7 +1969,7 @@ router.post('/:id/approve-l2', requireRole('SELLER', 'SELLER_L2', 'SELLER_L3', '
   const conflict = makerCheckerConflict(inv, req.user);
   if (conflict) return res.status(403).json({ error: conflict });
 
-  const unresolved = unresolvedValidation(inv);
+  const unresolved = unresolvedValidation(inv, req.user);
   if (unresolved) return res.status(400).json({ error: unresolved, validation_status: inv.validation_status });
 
   db.prepare("UPDATE invoices SET status = 'SUBMITTED', updated_at = datetime('now') WHERE id = ?").run(req.params.id);
@@ -2009,6 +2056,39 @@ router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res
       recipientName: recipientEntity?.name,
     });
 
+    // Deliver to Quick Connect (Operational Mail desk) so counterparties receive invoice + PDF in portal
+    let qcDelivered = false;
+    try {
+      const counterpartyUsers = recipientEntity?.id
+        ? db.prepare(`SELECT id FROM users WHERE linked_entity_id = ? AND is_active = 1`).all(recipientEntity.id)
+        : [];
+      const targetUserIds = counterpartyUsers.length
+        ? counterpartyUsers.map(u => u.id)
+        : db.prepare(`SELECT id FROM users WHERE role = ? AND is_active = 1`).all(inv.direction === 'SJVN_TO_BUYER' ? 'BUYER_L1' : 'SELLER_L1').map(u => u.id);
+
+      if (targetUserIds.length > 0) {
+        const storeFilename = `inv_${inv.id}_${Date.now()}.pdf`;
+        const storePath = path.join(attachmentDir(), storeFilename);
+        fs.writeFileSync(storePath, pdfBuffer);
+
+        sendMessage(req.user, {
+          to: targetUserIds,
+          subject,
+          body: text,
+          bodyHtml: html,
+          files: [{
+            originalname: `Invoice_${String(inv.invoice_no).replace(/[^\w.-]+/g, '_')}.pdf`,
+            filename: storeFilename,
+            mimetype: 'application/pdf',
+            size: pdfBuffer.length,
+          }],
+        });
+        qcDelivered = true;
+      }
+    } catch (qcErr) {
+      console.warn('Quick Connect invoice delivery:', qcErr.message);
+    }
+
     const mailResult = await sendMail({
       to: uniqueEmails,
       subject,
@@ -2021,7 +2101,7 @@ router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res
       }],
     });
 
-    if (!mailResult.ok) {
+    if (!mailResult.ok && !qcDelivered) {
       db.prepare(`
         INSERT INTO invoice_deliveries (id, invoice_id, channel, recipient, status, mode, detail_json, sent_by)
         VALUES (?, ?, 'EMAIL', ?, 'FAILED', ?, ?, ?)
@@ -2037,8 +2117,8 @@ router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res
       INSERT INTO invoice_deliveries (id, invoice_id, channel, recipient, status, mode, detail_json, sent_by)
       VALUES (?, ?, 'EMAIL', ?, ?, ?, ?, ?)
     `).run(
-      newId('DLV'), inv.id, uniqueEmails.join(', '), deliveryStatus, mailResult.mode,
-      JSON.stringify(mailResult), req.user?.name || null,
+      newId('DLV'), inv.id, uniqueEmails.join(', '), deliveryStatus, mailResult.mode || (qcDelivered ? 'QUICK_CONNECT' : 'NONE'),
+      JSON.stringify({ ...mailResult, quick_connect: qcDelivered }), req.user?.name || null,
     );
 
     // SMS notice via the shared gateway, but only when the channel policy for
@@ -2331,13 +2411,13 @@ router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...
   if (beneficiary) {
     if (beneficiary.pending_bank_json) {
       return res.status(400).json({
-        error: `${beneficiary.name} has a change of bank account awaiting penny-drop verification. Clear it before releasing payment, so the money goes to a confirmed account.`,
+        error: `${beneficiary.name} has a change of bank account awaiting verification. Verify and re-approve it before releasing payment, so the money goes to a confirmed account.`,
         entity_id: beneficiary.id,
       });
     }
     if (!beneficiary.is_penny_drop_verified) {
       return res.status(400).json({
-        error: `${beneficiary.name}'s bank account has not passed penny-drop verification. Verify it before releasing payment.`,
+        error: `${beneficiary.name}'s bank account has not been verified. Verify it against the bank proof before releasing payment.`,
         entity_id: beneficiary.id,
       });
     }

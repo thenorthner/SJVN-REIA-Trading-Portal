@@ -64,7 +64,6 @@ function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDo
   const [title, setTitle] = useState('');
   const [file, setFile] = useState(null);
   const [expiry, setExpiry] = useState('');
-  const [autoVerify, setAutoVerify] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -124,7 +123,7 @@ function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDo
     formData.append('category', 'VERIFY');
     formData.append('title', title || 'Regulatory Document');
     if (expiry) formData.append('expiry_date', expiry);
-    if (autoVerify) formData.append('auto_verify', 'true');
+    formData.append('auto_verify', 'true');
 
     try {
       const res = await api.documents.upload(formData);
@@ -194,32 +193,7 @@ function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDo
           />
         </Field>
 
-        <div style={{
-          background: 'rgba(5, 150, 105, 0.08)',
-          border: '1px solid rgba(5, 150, 105, 0.25)',
-          borderRadius: 8,
-          padding: '12px 14px',
-          margin: '16px 0',
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 12,
-        }}>
-          <input
-            type="checkbox"
-            id="admin_auto_verify_kyc"
-            checked={autoVerify}
-            onChange={(e) => setAutoVerify(e.target.checked)}
-            style={{ marginTop: 3, width: 18, height: 18, accentColor: '#059669' }}
-          />
-          <label htmlFor="admin_auto_verify_kyc" style={{ margin: 0, fontSize: 13, cursor: 'pointer', color: 'var(--slate-800)' }}>
-            <strong>Auto-verify & clear regulatory checklist item</strong>
-            <div style={{ fontSize: 12, color: 'var(--slate-600)', marginTop: 2 }}>
-              Marks this document as Verified immediately and updates the company's regulatory onboarding checklist to valid.
-            </div>
-          </label>
-        </div>
-
-        <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 20 }}>
+        <div className="form-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 24 }}>
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
           <button
             type="submit"
@@ -227,7 +201,7 @@ function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDo
             style={{ background: 'linear-gradient(135deg, #059669 0%, #047857 100%)' }}
             disabled={saving || !file || !entityId}
           >
-            {saving ? 'Uploading & verifying…' : (autoVerify ? 'Upload & auto-verify' : 'Upload document')}
+            {saving ? 'Uploading & verifying…' : 'Upload & verify'}
           </button>
         </div>
       </form>
@@ -296,7 +270,7 @@ export default function DocumentDesk() {
   }
 
   async function handleDirectAdmit(r) {
-    if (!window.confirm(`Directly admit and activate stakeholder "${r.name}"?\n\nThis will clear pending mandatory checklist items, confirm penny drop bank verification, and immediately activate their account.`)) {
+    if (!window.confirm(`Directly admit and activate stakeholder "${r.name}"?\n\nThis will clear pending mandatory checklist items, confirm the bank account as verified, and immediately activate their account.`)) {
       return;
     }
     setActionLoading(true);

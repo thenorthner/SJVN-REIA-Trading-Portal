@@ -11,7 +11,7 @@ export const REGULATORY_APPROVAL_CATALOG = [
   { code: 'DISCOM_LICENSE', label: 'DISCOM / Procurer License or Registration', applies_to: 'BUYER', is_mandatory: true, sort_order: 2, help: 'Legal buyer status (DISCOM license or C&I registration)' },
   { code: 'SERC_APPROVAL', label: 'SERC / Regulatory Commission Approval', applies_to: 'BUYER', is_mandatory: false, sort_order: 3, help: 'Where PSA / tariff requires commission approval' },
   { code: 'BOARD_RESOLUTION', label: 'Board Resolution / Power of Attorney', applies_to: 'BOTH', is_mandatory: true, sort_order: 8, help: 'Signing authority must be genuine' },
-  { code: 'BANK_ACCOUNT_PROOF', label: 'Bank Account Proof (Cancelled Cheque)', applies_to: 'BOTH', is_mandatory: true, sort_order: 9, help: 'Required with penny-drop verification' },
+  { code: 'BANK_ACCOUNT_PROOF', label: 'Bank Account Proof (Cancelled Cheque)', applies_to: 'BOTH', is_mandatory: true, sort_order: 9, help: 'Cancelled cheque or bank letter — the account is verified against it' },
 ];
 
 export function catalogForEntityType(entityType) {
@@ -28,3 +28,25 @@ export const APPROVAL_STATUS_LABELS = {
   EXPIRED: 'Expired',
   REJECTED: 'Rejected',
 };
+
+export const REGULATORY_ITEM_SHORT_NAMES = {
+  COMPANY_REGISTRATION: 'Company Registration',
+  GENERATION_LICENSE: 'Generation License',
+  ENV_CLEARANCE: 'Environmental Clearance',
+  CONNECTIVITY_APPROVAL: 'Grid Connectivity',
+  COD_CERTIFICATE: 'COD Certificate',
+  PLANT_TECHNICAL_DOCS: 'Plant Technical Docs',
+  DISCOM_LICENSE: 'DISCOM License',
+  SERC_APPROVAL: 'SERC Approval',
+  BOARD_RESOLUTION: 'Board Resolution',
+  BANK_ACCOUNT_PROOF: 'Bank Account Proof',
+};
+
+export function getRegulatoryItemLabel(code) {
+  if (!code) return 'Clearance';
+  if (REGULATORY_ITEM_SHORT_NAMES[code]) return REGULATORY_ITEM_SHORT_NAMES[code];
+  const found = REGULATORY_APPROVAL_CATALOG.find((a) => a.code === code);
+  if (found) return found.label.split('(')[0].trim() || found.label;
+  return code.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
+

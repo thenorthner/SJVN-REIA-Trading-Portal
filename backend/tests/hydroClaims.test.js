@@ -20,7 +20,7 @@ beforeEach(() => {
   db.prepare('DELETE FROM hydro_beneficiary_allocations').run();
   seedNjhpsAllocations();
   contract = db.prepare(`SELECT * FROM contracts WHERE contract_no = 'PPA/SJVN/NJHPS/001'`).get();
-  reia = tokenFor('REIA_USER');
+  reia = tokenFor('COMMERCIAL_ADMIN');
   viewer = tokenFor('MANAGEMENT');
 });
 

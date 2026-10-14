@@ -189,6 +189,26 @@ export default function CompanyUsers() {
           gap: 12,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            {selectedCompany.logo_url ? (
+              <img
+                src={selectedCompany.logo_url.startsWith('http') ? selectedCompany.logo_url : `http://localhost:4000${selectedCompany.logo_url}`}
+                alt={selectedCompany.name}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 10,
+                  objectFit: 'contain',
+                  background: '#fff',
+                  border: '1px solid var(--slate-200)',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+                  flexShrink: 0,
+                }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                }}
+              />
+            ) : null}
             <div style={{
               width: 44,
               height: 44,
@@ -197,12 +217,13 @@ export default function CompanyUsers() {
                 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
                 : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
               color: '#fff',
-              display: 'flex',
+              display: selectedCompany.logo_url ? 'none' : 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: 18,
               fontWeight: 700,
               boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+              flexShrink: 0,
             }}>
               {selectedCompany.name.charAt(0).toUpperCase()}
             </div>
@@ -407,6 +428,25 @@ export default function CompanyUsers() {
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          {c.logo_url ? (
+                            <img
+                              src={c.logo_url.startsWith('http') ? c.logo_url : `http://localhost:4000${c.logo_url}`}
+                              alt={c.name}
+                              style={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: 8,
+                                objectFit: 'contain',
+                                background: '#fff',
+                                border: '1px solid var(--slate-200)',
+                                flexShrink: 0,
+                              }}
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
                           <div style={{
                             width: 32,
                             height: 32,
@@ -415,7 +455,7 @@ export default function CompanyUsers() {
                               ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
                               : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
                             color: '#fff',
-                            display: 'flex',
+                            display: c.logo_url ? 'none' : 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             fontSize: 13,
@@ -573,6 +613,25 @@ export default function CompanyUsers() {
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1 }}>
+                      {c.logo_url ? (
+                        <img
+                          src={c.logo_url.startsWith('http') ? c.logo_url : `http://localhost:4000${c.logo_url}`}
+                          alt={c.name}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 8,
+                            objectFit: 'contain',
+                            background: '#fff',
+                            border: '1px solid var(--slate-200)',
+                            flexShrink: 0,
+                          }}
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
                       <div style={{
                         width: 32,
                         height: 32,
@@ -581,7 +640,7 @@ export default function CompanyUsers() {
                           ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
                           : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
                         color: '#fff',
-                        display: 'flex',
+                        display: c.logo_url ? 'none' : 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: 13,

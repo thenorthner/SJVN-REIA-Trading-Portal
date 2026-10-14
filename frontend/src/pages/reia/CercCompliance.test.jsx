@@ -2,15 +2,20 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 
 // Which CERC returns are owed — including the periods nobody has started, which a
 // register of prepared filings cannot show.
 
-const state = vi.hoisted(() => ({ answer: null, calls: [] }));
+const state = vi.hoisted(() => ({ answer: null, calls: [], role: 'REIA_USER', annexures: null, licence: null, saved: [], path: '/' }));
+vi.mock('../../context/AuthContext.jsx', () => ({ useAuth: () => ({ user: { role: state.role } }) }));
 vi.mock('../../api/client.js', () => {
   const api = {
     reports: {
       cercCompliance: (params) => { state.calls.push(params); return Promise.resolve(state.answer); },
+      cercAnnexures: () => Promise.resolve(state.annexures),
+      cercLicence: () => Promise.resolve(state.licence),
+      saveCercLicence: (fy, body) => { state.saved.push([fy, body]); return Promise.resolve(state.licence); },
     },
   };
   return { api, default: api };
@@ -48,13 +53,16 @@ let host, root;
 beforeEach(() => {
   state.answer = ANSWER;
   state.calls = [];
+  state.role = 'REIA_USER';
+  state.saved = [];
+  state.path = '/';
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
-const render = async () => { await act(async () => { root.render(<CercCompliance />); }); };
+const render = async () => { await act(async () => { root.render(<MemoryRouter initialEntries={[state.path]}><CercCompliance /></MemoryRouter>); }); };
 
 describe('CERC filing calendar', () => {
   it('counts what has not been started and what is past its deadline', async () => {
@@ -109,5 +117,60 @@ describe('CERC filing calendar', () => {
     await render();
     expect(host.textContent).toMatch(/Nothing has been traded yet/);
     expect(host.querySelector('.report-table')).toBeNull();
+  });
+  it('offers the Form-IV shortcut only to roles the Form-IV screen admits', async () => {
+    await render();
+    expect(host.textContent).not.toContain('Prepare Form-IV');
+
+    act(() => root.unmount());
+    root = createRoot(host);
+    state.role = 'SJVN_ADMIN';
+    await render();
+    const labels = [...host.querySelectorAll('button')].map((b) => b.textContent);
+    // Not started → prepare; filed → view.
+    expect(labels.filter((l) => l === 'Prepare Form-IV')).toHaveLength(3);
+    expect(labels).toContain('View filing');
+  });
+
+  it('opens a period into its annexures, NIL where a form has nothing', async () => {
+    state.annexures = {
+      basis: 'TRADE_BOOK', form_no: null,
+      annexures: [
+        { code: 'IV-A', title: 'Short-term RTC', unverified: false, row_count: 1, volume_mu: 7.44, margins: null,
+          sections: [{ key: 'A', label: 'Inter State Trading Transactions' }],
+          columns: [{ key: 'sr', label: 'Sr.No', group: null }, { key: 'seller', label: 'Name of the Seller', group: 'Purchased from' }],
+          rows: [{ section: 'A', seller: 'Teesta Urja', source_ref: 'X' }] },
+        { code: 'IV-B', title: 'Short-term Peak', unverified: false, row_count: 0, volume_mu: 0, margins: null, sections: [], columns: [], rows: [] },
+      ],
+    };
+    await render();
+    const btn = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Annexures');
+    await act(async () => { btn.click(); });
+
+    expect(host.textContent).toContain('read straight from the trade book');
+    expect(host.textContent).toContain('IV-B · NIL');
+    expect(host.textContent).toContain('Purchased from: Name of the Seller');
+    expect(host.textContent).toContain('Teesta Urja');
+  });
+
+  it('shows the licence fee and net worth year by year, and lets a writer record them', async () => {
+    state.path = '/?view=licence';
+    state.licence = {
+      category: 'I', licensee: 'SJVN Limited', fee_amount_due: 4000000, min_net_worth_cr: 50,
+      next_fee: { fy: '2027-28', due_date: '2027-04-30', days_left: 200 },
+      totals: { fee_overdue: 1, net_worth_pending: 1, net_worth_shortfall: 0 },
+      years: [{
+        fy: '2026-27', is_current: true, fee_due_date: '2026-04-30', fee_amount_due: 4000000, fee_status: 'OVERDUE',
+        fee_days_past_due: 165, net_worth_status: 'PENDING', net_worth_cr: null, volume_mu: 142.8,
+      }],
+    };
+    await render();
+    expect(host.textContent).toContain('165 days past due');
+    expect(host.textContent).toContain('Not recorded');
+
+    const record = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Record');
+    await act(async () => { record.click(); });
+    await act(async () => { host.ownerDocument.querySelector('form').requestSubmit(); });
+    expect(state.saved[0][0]).toBe('2026-27');
   });
 });

@@ -121,7 +121,7 @@ export default function IsetReportTable({
     ).join('');
     w.document.write(`<!doctype html><html><head><title>${title}</title>
       <style>
-        body{font-family:Arial,sans-serif;padding:24px}
+        body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;padding:24px}
         h1{font-size:18px;margin-bottom:16px}
         table{width:100%;border-collapse:collapse;font-size:10px}
         th{background:#101a2e;color:#fff;text-align:left;padding:6px}

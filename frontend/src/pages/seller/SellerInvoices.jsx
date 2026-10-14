@@ -431,7 +431,7 @@ export default function SellerInvoices() {
     { key: 'invoice_type', header: 'Type', render: (r) => r.invoice_type || '-' },
     { key: 'energy_mwh', header: 'Energy (MWh)', render: (r) => fmtNumber(r.energy_mwh) },
     { key: 'total_amount', header: 'Amount', render: (r) => fmtCurrency(r.total_amount) },
-    { key: 'status', header: 'Status', render: (r) => <InvoiceStatusCell row={r} showValidation /> },
+    { key: 'status', header: 'Status', render: (r) => <InvoiceStatusCell row={r} showValidation={false} /> },
     { key: 'due_date', header: 'Due Date', render: (r) => (r.due_date ? fmtDate(r.due_date) : '-') },
     {
       key: 'goes_with',

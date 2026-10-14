@@ -20,7 +20,7 @@
   --gray-bg: #eef0f3;
   --radius: 10px;
   --shadow: 0 1px 2px rgba(20, 30, 50, 0.06), 0 1px 8px rgba(20, 30, 50, 0.04);
-  --sidebar-w: 320px;
+  --sidebar-w: 268px;
 
   /* Aliases */
   --success: var(--green);
@@ -94,7 +94,23 @@
 
 * { box-sizing: border-box; }
 
-html, body, #root { height: 100%; }
+html, body {
+  height: 100%;
+  height: 100dvh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+}
+
+#root {
+  height: 100%;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+}
 
 body {
   margin: 0;
@@ -121,7 +137,9 @@ p { margin: 0; }
 body { font-variant-numeric: tabular-nums; }
 p, .page-subtitle, .login-subtitle, .inline-note { font-variant-numeric: normal; }
 
-button, input, select, textarea { font-family: inherit; font-size: inherit; }
+button, input, select, textarea { font-family: inherit; }
+input, select, textarea { font-size: 13.5px; line-height: normal; }
+select { box-sizing: border-box; }
 
 a { color: var(--primary); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -152,20 +170,42 @@ a:hover { text-decoration: underline; }
 /* ---------------- App Shell ---------------- */
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  width: 100%;
+  height: 100%;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow: hidden;
+  position: relative;
 }
 
 .sidebar {
   width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  max-width: var(--sidebar-w);
   flex-shrink: 0;
   background: #101a2e;
   color: #cbd5e6;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
   position: sticky;
   top: 0;
-  height: 100vh;
+  left: 0;
+  bottom: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 50;
 }
 
 .brand {
@@ -196,8 +236,8 @@ a:hover { text-decoration: underline; }
   line-height: 1.3;
 }
 
-.brand-text strong { color: #fff; font-size: 18px; }
-.brand-text span { font-size: 14.5px; color: #8a97ad; }
+.brand-text strong { color: #fff; font-size: 14.5px; }
+.brand-text span { font-size: 12px; color: #8a97ad; }
 
 /* White-label logo for Seller/Buyer portals */
 .brand-logo {
@@ -316,8 +356,9 @@ a:hover { text-decoration: underline; }
 
 .nb-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
 .nb-toolbar input[type="search"], .nb-toolbar input[type="date"], .nb-toolbar select {
-  height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: #fff; font: inherit; font-size: 13px;
+  height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; line-height: normal; box-sizing: border-box;
 }
+.nb-toolbar select { padding-right: 28px; cursor: pointer; }
 .nb-toolbar input[type="search"] { flex: 1; min-width: 200px; max-width: 320px; }
 .nb-chip {
   border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 5px 12px;
@@ -427,59 +468,82 @@ a:hover { text-decoration: underline; }
 
 .nav { padding: 14px 10px 24px; flex: 1; }
 
-.nav-section { margin-bottom: 20px; }
+.nav-section { margin-bottom: 6px; }
 
+/* Three levels, each a clear step down from the one above: the section, the
+   group inside it, and the screen. Sizes live here only — Layout.jsx sets none
+   inline, so the hierarchy cannot drift between the two again. */
 .nav-section-title {
-  font-size: 21.5px !important;
-  text-transform: none;
+  font-size: 13.5px;
   letter-spacing: 0.01em;
-  color: #ffffff !important;
-  padding: 12px 14px 8px;
-  font-weight: 750 !important;
+  color: #ffffff;
+  padding: 9px 12px;
+  font-weight: 700;
   border-radius: 8px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
   user-select: none;
   cursor: pointer;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
-.nav-section-title:hover {
-  color: #ffffff !important;
-  background: rgba(255, 255, 255, 0.06);
-}
+.nav-section-title:hover { background: rgba(255, 255, 255, 0.06); }
 
-.nav-section-title span:first-child {
-  font-size: 21.5px !important;
-  font-weight: 750 !important;
-  color: #ffffff !important;
-}
+.nav-caret { font-size: 9px; opacity: 0.7; color: #cbd5e1; flex-shrink: 0; }
+
+.nav-section-links { margin: 2px 0 8px; display: flex; flex-direction: column; gap: 1px; }
 
 .nav-subgroup-title {
-  font-size: 18px !important;
-  font-weight: 650 !important;
-  color: #cbd5e1 !important;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 12px 7px 18px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #aab6cb;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
 }
+.nav-subgroup-title:hover { background: rgba(255, 255, 255, 0.05); color: #ffffff; }
 
 .nav-link {
   display: flex;
   align-items: center;
-  padding: 8px 14px 8px 28px !important;
-  border-radius: 8px;
-  color: #cbd5e1 !important;
-  font-size: 17.5px !important;
-  font-weight: 450 !important;
-  margin: 2px 6px;
+  gap: 8px;
+  padding: 7px 12px 7px 22px;
+  border-radius: 7px;
+  color: #cbd5e1;
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 450;
+  margin: 0 4px;
   transition: background 0.15s ease, color 0.15s ease;
 }
+.nav-subgroup .nav-link { padding-left: 30px; }
+.nav-link.locked { opacity: 0.5; cursor: not-allowed; }
+.nav-badge {
+  margin-left: auto;
+  font-size: 9.5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(234, 179, 8, 0.15);
+  color: #fbbf24;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
 
-.nav-link:hover { background: rgba(255, 255, 255, 0.08); color: #ffffff !important; }
+.nav-link:hover { background: rgba(255, 255, 255, 0.08); color: #ffffff; }
 
 .nav-link.active {
   background: var(--primary);
-  color: #ffffff !important;
-  font-weight: 650 !important;
+  color: #ffffff;
+  font-weight: 600;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
@@ -498,8 +562,19 @@ a:hover { text-decoration: underline; }
 .main-col {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
+  /* The page's scroll container. The top bar stays sticky inside it. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  overscroll-behavior: contain;
 }
 
 .topbar {
@@ -513,6 +588,7 @@ a:hover { text-decoration: underline; }
   padding: 14px 28px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .topbar-left {
@@ -539,7 +615,6 @@ a:hover { text-decoration: underline; }
   font-size: 14.5px;
   font-weight: 600;
   color: var(--text);
-  max-width: 700px;
   /* The platform's full name is long. It gets one line and an ellipsis rather
      than wrapping into a column that pushes the bell and the user chip out of
      the bar. The full text stays available on hover. */
@@ -621,10 +696,13 @@ a:hover { text-decoration: underline; }
   padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   font-size: 12.8px;
+  transition: background-color 0.15s ease;
 }
 
 .notif-item:last-child { border-bottom: none; }
 .notif-item.unread { background: var(--primary-light); }
+.notif-item:hover { background: #f8fafc; }
+.notif-item.unread:hover { background: #e0f2fe; }
 
 .notif-type {
   font-size: 11px;
@@ -674,9 +752,11 @@ a:hover { text-decoration: underline; }
 
 .content {
   flex: 1;
-  padding: 24px 28px 48px;
-  max-width: 1440px;
+  /* No width cap: on a wide monitor the page uses the whole column instead of
+     stopping at 1440px and leaving an empty band down the right. */
+  padding: 24px clamp(16px, 2vw, 36px) 48px;
   width: 100%;
+  min-width: 0;
 }
 
 .page-loading, .empty-state {
@@ -1105,12 +1185,21 @@ input[type="file"]::file-selector-button:hover {
 .filters-bar input[type="number"] {
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 7px 10px;
-  height: 34px;
+  padding: 0 12px;
+  height: 38px;
+  min-height: 38px;
+  font-size: 13.5px;
+  line-height: normal;
   background: var(--surface);
   color: var(--text);
   min-width: 140px;
+  box-sizing: border-box;
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.filters-bar select {
+  padding-right: 32px;
+  cursor: pointer;
 }
 
 .filters-bar select:hover,
@@ -1299,6 +1388,70 @@ input[type="file"]::file-selector-button:hover {
 
 .modal-body { padding: 22px 24px; overflow-y: auto; }
 
+/* A message that must be seen: sits above any open modal (z-index 100). */
+.alert-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  animation: modal-backdrop-in 0.14s ease-out;
+}
+.alert-popup {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 36px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: 14px;
+  border-top: 5px solid var(--red);
+  box-shadow: 0 24px 60px -12px rgba(15, 23, 42, 0.45);
+  animation: modal-in 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.alert-popup.warning { border-top-color: #d97706; }
+.alert-popup.success { border-top-color: #16a34a; }
+.alert-popup.info { border-top-color: var(--primary); }
+.alert-popup-head { display: flex; align-items: center; gap: 12px; padding: 18px 22px 6px; }
+.alert-popup-head h3 { margin: 0; font-size: 16.5px; }
+.alert-popup-icon {
+  width: 30px; height: 30px; flex-shrink: 0;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: #fee2e2; color: #b91c1c;
+  font-weight: 800; font-size: 16px;
+}
+.alert-popup.warning .alert-popup-icon { background: #fef3c7; color: #b45309; }
+.alert-popup.success .alert-popup-icon { background: #dcfce7; color: #15803d; }
+.alert-popup.info .alert-popup-icon { background: #dbeafe; color: #1d4ed8; }
+.alert-popup-body { padding: 6px 22px 4px; overflow-y: auto; font-size: 13.5px; line-height: 1.5; }
+.alert-popup-body p { margin: 6px 0 10px; }
+.alert-popup-body ul { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.alert-popup-item {
+  display: flex; flex-direction: column; gap: 2px;
+  width: 100%; text-align: left;
+  padding: 9px 12px;
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+  font: inherit; color: var(--text);
+}
+button.alert-popup-item { cursor: pointer; }
+button.alert-popup-item:hover { background: #fee2e2; }
+.alert-popup-item strong { font-size: 12.5px; color: #991b1b; }
+.alert-popup-item span { font-size: 13px; }
+.alert-popup-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px 18px; flex-wrap: wrap; }
+
+/* A field the form has found a problem with. */
+.field.has-error input, .field.has-error select, .field.has-error textarea {
+  border-color: var(--red);
+  background: #fef2f2;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+.field.is-valid input { border-color: #16a34a; }
+.field-error { font-size: 12px; font-weight: 600; color: #b91c1c; line-height: 1.35; }
+.field-hint { font-size: 11.5px; color: var(--text-muted); }
+
 /* ---------------- Forms ---------------- */
 .field {
   display: flex;
@@ -1313,9 +1466,18 @@ input[type="file"]::file-selector-button:hover {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 11px;
+  font-size: 13.5px;
+  line-height: normal;
   background: var(--surface);
   color: var(--text);
   width: 100%;
+  box-sizing: border-box;
+}
+
+.field select {
+  min-height: 38px;
+  padding-right: 32px;
+  cursor: pointer;
 }
 
 .field input:focus, .field select:focus, .field textarea:focus {
@@ -1328,6 +1490,7 @@ input[type="file"]::file-selector-button:hover {
 
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
 @media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } }
+.field { min-width: 0; }
 
 .form-actions {
   display: flex;
@@ -1743,14 +1906,17 @@ input[type="file"]::file-selector-button:hover {
 .print-only { display: none; }
 
 @media print {
-  html, body, .app-shell, #root { 
+  html, body, .app-shell, #root, .main-col { 
     height: auto !important; 
     min-height: auto !important; 
+    max-height: none !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: visible !important; 
+    position: static !important;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
   }
-  .no-print, .sidebar, .topbar { display: none !important; }
+  .no-print, .sidebar, .topbar, .sidebar-backdrop { display: none !important; }
   .print-only { display: block; }
   .content { padding: 0 !important; margin: 0 !important; }
   .card { box-shadow: none; break-inside: avoid; page-break-inside: avoid; }
@@ -1766,12 +1932,20 @@ input[type="file"]::file-selector-button:hover {
 
 .audit-toolbar select,
 .audit-toolbar input[type="date"] {
-  padding: 7px 10px;
+  height: 36px;
+  padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
   color: var(--text);
   font-size: 13px;
+  line-height: normal;
+  box-sizing: border-box;
+}
+
+.audit-toolbar select {
+  padding-right: 28px;
+  cursor: pointer;
 }
 
 .audit-search {
@@ -2160,7 +2334,16 @@ input[type="file"]::file-selector-button:hover {
   color: var(--text-muted);
   white-space: nowrap;
 }
-.topbar-portfolio__select { min-width: 200px; max-width: 260px; }
+.topbar-portfolio__select {
+  min-width: 200px;
+  max-width: 260px;
+  height: 34px;
+  font-size: 13px;
+  line-height: normal;
+  border-radius: 8px;
+  padding: 0 28px 0 10px;
+  box-sizing: border-box;
+}
 
 /* Visible to assistive technology only — captions and clarifiers that would be
    redundant on screen but are the only cue a screen reader gets. */
@@ -2487,11 +2670,48 @@ input[type="file"]::file-selector-button:hover {
 
 .sidebar.collapsed {
   width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
   overflow: hidden !important;
   padding: 0 !important;
+  border: none !important;
+  visibility: hidden;
+  pointer-events: none;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              min-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              visibility 0.25s;
 }
-.sidebar.collapsed * {
-  display: none !important;
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    z-index: 100;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+    transform: translateX(0);
+  }
+  .sidebar.collapsed {
+    transform: translateX(-100%) !important;
+    width: var(--sidebar-w) !important;
+    min-width: var(--sidebar-w) !important;
+    max-width: var(--sidebar-w) !important;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(2px);
+    z-index: 90;
+  }
 }
 
 /* ── In-portal mail (pages/Mail.jsx) ───────────────────────────────────────── */

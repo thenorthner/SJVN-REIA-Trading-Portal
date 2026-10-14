@@ -160,7 +160,7 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
     const head = keys.map((k) => `<th>${k}</th>`).join('');
     const body = data.map((r) => `<tr>${keys.map((k) => `<td>${r[k] ?? ''}</td>`).join('')}</tr>`).join('');
     w.document.write(`<!doctype html><html><head><title>${title}</title>
-      <style>body{font-family:Arial,sans-serif;padding:20px;font-size:10px}
+      <style>body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;padding:20px;font-size:10px}
       table{width:100%;border-collapse:collapse} th{background:#101a2e;color:#fff;padding:6px;text-align:left}
       td{border-bottom:1px solid #ddd;padding:6px}</style></head><body>
       <h1>${title}</h1><table><thead><tr>${head}</tr></thead><tbody>${body || '<tr><td colspan="9">No data</td></tr>'}</tbody></table>

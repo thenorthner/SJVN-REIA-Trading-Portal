@@ -11,6 +11,12 @@
  *   RBT  rebate           early-payment rebate allowed on a PB        (credit)
  *        — stored as a PMT with mode REBATE, pointing at the payment that
  *          earned it, so the table's type check did not have to be rebuilt.
+ *   DN   debit note       an approved debit note: the beneficiary owes more
+ *        — stored as a PB with mode DEBIT_NOTE, with its own due date, so it
+ *          is paid, cleared and surcharged like any other bill.
+ *   CN   credit note      an approved credit note: the beneficiary owes less
+ *        — stored as a PMT with mode CREDIT_NOTE. It clears bills but is not
+ *          money received, so it never counts as a collection or earns a rebate.
  *
  * A credit that has not been applied to anything is what the desk reads as ADV
  * (advance). That is a state rather than a document type: it falls out of having
@@ -36,6 +42,14 @@ const CREDIT_TYPES = ['PMT'];
 
 /** A rebate credit — allowed by SJVN, not money received. */
 const isRebate = (doc) => doc?.doc_type === 'PMT' && doc?.mode === 'REBATE';
+const isCreditNote = (doc) => doc?.doc_type === 'PMT' && doc?.mode === 'CREDIT_NOTE';
+const isDebitNote = (doc) => doc?.doc_type === 'PB' && doc?.mode === 'DEBIT_NOTE';
+// Tax the beneficiary deducted at source and paid to government on SJVN's
+// account: it settles the bill, but no money reached SJVN's bank.
+const isTds = (doc) => doc?.doc_type === 'PMT' && doc?.mode === 'TDS';
+
+/** Payment modes the ledger keeps for its own documents, which a payment entry may not use. */
+export const RESERVED_MODES = ['REBATE', 'CREDIT_NOTE', 'DEBIT_NOTE', 'TDS', 'LC_INVOCATION'];
 
 /**
  * Document numbers the desk can read aloud and search on.
@@ -73,7 +87,7 @@ export function unappliedOf(docId) {
   return money(doc.amount - applied);
 }
 
-function insertDoc(row) {
+export function insertDoc(row) {
   const id = newId('HLD');
   db.prepare(`
     INSERT INTO hydro_ledger_docs (
@@ -101,46 +115,119 @@ export function dueDateFor(contract, billDate) {
   return addDays(billDate, days);
 }
 
+/** Energy bills: the monthly tariff bill and the documents that restate it. */
+const ENERGY_KINDS = ['PROVISIONAL', 'FINAL', 'REVISION'];
+const lineAmount = (l) => money(Number(l.total_charges) + Number(l.nrldc_fee || 0));
+
 /**
- * Post one PB per beneficiary when a station bill is issued.
+ * What each beneficiary already stands billed for a station-month, as the
+ * ledger carries it: the latest issued energy bill for the month (other than
+ * `exceptBillId`), plus any arrear issued on the month after it.
+ *
+ * A revision or a final bill restates a month that has usually been billed
+ * already, so only the difference against this is new money owed — posting the
+ * restated bill in full would bill the month twice.
+ */
+export function billedForMonth(contractId, month, { exceptBillId = null } = {}) {
+  const basis = db.prepare(`
+    SELECT * FROM hydro_station_bills
+    WHERE contract_id = ? AND billing_month = ? AND status = 'ISSUED' AND id <> ?
+      AND bill_kind IN (${ENERGY_KINDS.map(() => '?').join(',')})
+    ORDER BY issued_at DESC, created_at DESC LIMIT 1
+  `).get(contractId, month, exceptBillId || '', ...ENERGY_KINDS);
+  const byName = {};
+  if (basis) {
+    for (const l of db.prepare('SELECT * FROM hydro_bill_lines WHERE bill_id = ?').all(basis.id)) {
+      byName[l.beneficiary_name] = money((byName[l.beneficiary_name] || 0) + lineAmount(l));
+    }
+  }
+  // Arrears raised on the month after that bill was issued.
+  let arrears = [];
+  try {
+    arrears = db.prepare(`
+      SELECT m.lines_json FROM hydro_arrear_months m
+      JOIN hydro_station_bills a ON a.id = m.arrear_bill_id
+      WHERE a.contract_id = ? AND m.billing_month = ? AND a.status = 'ISSUED' AND a.id <> ?
+        AND (? IS NULL OR a.issued_at >= ?)
+    `).all(contractId, month, exceptBillId || '', basis?.issued_at ?? null, basis?.issued_at ?? null);
+  } catch { /* no arrear table on a database that predates it */ }
+  for (const r of arrears) {
+    for (const l of JSON.parse(r.lines_json || '[]')) {
+      byName[l.beneficiary_name] = money((byName[l.beneficiary_name] || 0) + Number(l.differential || 0));
+    }
+  }
+  return { basis, byName };
+}
+
+/**
+ * Post a station bill to the beneficiaries' accounts when it is issued.
  *
  * This is the moment the bill stops being an internal calculation and becomes
  * money fifteen parties owe, so it happens on issue and not on save. Idempotent:
  * a bill whose documents already exist is left alone rather than double-posted.
+ *
+ * What is posted depends on the kind of bill:
+ *   - a provisional bill, a claim, a supplementary bill: each line in full;
+ *   - a revision or final bill: each line less what the month already stands
+ *     billed at (billedForMonth), so the month is never billed twice;
+ *   - an arrear bill: its lines, which already are the differences.
+ * A difference that comes out negative is a credit to the beneficiary and is
+ * posted as a credit note against its open bills, not dropped.
  */
 export function postBillToLedger(bill, { createdBy = null } = {}) {
   const existing = db.prepare(
-    `SELECT COUNT(*) c FROM hydro_ledger_docs WHERE bill_id = ? AND doc_type = 'PB' AND status = 'OPEN'`,
+    `SELECT COUNT(*) c FROM hydro_ledger_docs WHERE bill_id = ? AND status = 'OPEN'`,
   ).get(bill.id).c;
   if (existing > 0) return { posted: 0, already: existing };
 
   const lines = db.prepare('SELECT * FROM hydro_bill_lines WHERE bill_id = ? ORDER BY sr_no').all(bill.id);
   const billDate = (bill.issued_at || bill.created_at || new Date().toISOString()).slice(0, 10);
+  const restates = ['REVISION', 'FINAL'].includes(bill.bill_kind);
+  const already = restates ? billedForMonth(bill.contract_id, bill.billing_month, { exceptBillId: bill.id }).byName : {};
 
   const posted = [];
+  const credits = [];
   db.transaction(() => {
     for (const line of lines) {
       // NRLDC fees are billed through to the beneficiary alongside its own
       // charges, so the account carries one figure to pay rather than two.
-      const amount = money(Number(line.total_charges) + Number(line.nrldc_fee || 0));
-      if (amount <= EPSILON) continue;
-      posted.push(insertDoc({
-        doc_no: genDocNo('PB', bill.billing_month),
+      const amount = money(lineAmount(line) - (already[line.beneficiary_name] || 0));
+      const base = {
         contract_id: bill.contract_id,
         beneficiary_name: line.beneficiary_name,
         beneficiary_id: line.beneficiary_id,
-        doc_type: 'PB',
         bill_id: bill.id,
         bill_line_id: line.id,
-        amount,
         doc_date: billDate,
-        due_date: bill.due_date,
-        info: `${bill.bill_no} — ${bill.station_name} ${bill.billing_month} ${bill.bill_kind.toLowerCase()}`,
         created_by: createdBy,
-      }));
+      };
+      const what = `${bill.bill_no} — ${bill.station_name} ${bill.billing_month} ${bill.bill_kind.toLowerCase()}`;
+      if (amount > EPSILON) {
+        posted.push(insertDoc({
+          ...base,
+          doc_no: genDocNo('PB', bill.billing_month),
+          doc_type: 'PB',
+          amount,
+          due_date: bill.due_date,
+          info: restates ? `${what} (difference over the month as already billed)` : what,
+        }));
+      } else if (amount < -EPSILON) {
+        const cn = insertDoc({
+          ...base,
+          doc_no: genDocNo('CN', bill.billing_month),
+          doc_type: 'PMT',
+          mode: 'CREDIT_NOTE',
+          reference: bill.bill_no,
+          amount: -amount,
+          info: `${what} — billed less than before; the difference is credited`,
+        });
+        posted.push(cn);
+        credits.push(cn);
+      }
     }
   })();
-  return { posted: posted.length, docs: posted };
+  for (const cn of credits) applyCredit(cn.id, { onDate: billDate, createdBy, rebate: false });
+  return { posted: posted.length, docs: posted, credits: credits.length };
 }
 
 /** The debit documents a beneficiary still owes on, oldest first. */
@@ -234,7 +321,9 @@ export function applyCredit(creditDocId, { onDate, createdBy = null, targetDebit
       if (remaining <= EPSILON) break;
       // The rebate is earned by when the money arrived, not by when an advance
       // was later set against the bill.
-      const { pct, rate } = rebate && debit.doc_type === 'PB'
+      // A credit note is not money arriving, and a debit note is not the
+      // station's energy bill, so neither side of either earns a rebate.
+      const { pct, rate } = rebate && !isCreditNote(credit) && !isTds(credit) && debit.doc_type === 'PB' && !isDebitNote(debit)
         ? rebateRateFor(debit, credit.doc_date, contract) : { pct: 0, rate: 0 };
       let cash;
       let allowed = 0;
@@ -315,6 +404,9 @@ export function recordPayment({
 }) {
   const amt = money(amount);
   if (!(amt > 0)) throw new Error('A payment must be a positive amount');
+  if (mode && RESERVED_MODES.includes(String(mode).trim().toUpperCase())) {
+    throw new Error(`"${mode}" is not a payment mode — rebates and debit/credit notes are posted by the ledger itself`);
+  }
   if (!contractId || !beneficiaryName) throw new Error('contractId and beneficiaryName are required');
   if (!paymentDate) throw new Error('paymentDate is required');
 
@@ -347,6 +439,7 @@ export function reversePayment(paymentDocId, { reason, onDate = null, createdBy 
   if (!pmt) throw new Error('Payment document not found');
   if (pmt.doc_type !== 'PMT') throw new Error(`${pmt.doc_no} is not a payment`);
   if (isRebate(pmt)) throw new Error(`${pmt.doc_no} is a rebate — reverse the payment that earned it`);
+  if (isCreditNote(pmt)) throw new Error(`${pmt.doc_no} is a credit note — correct it with a debit note, not by reversing it as a payment`);
   if (pmt.status === 'REVERSED') throw new Error(`${pmt.doc_no} is already reversed`);
   if (!reason) throw new Error('A reversal must say why');
 
@@ -598,6 +691,9 @@ export function accountDisplay(contractId, beneficiaryName) {
       applied: isDebit ? 0 : money(d.amount - unapplied),
       // A payment carrying nothing applied is an advance on this screen.
       display_type: isRebate(d) ? 'RBT'
+        : isCreditNote(d) ? 'CN'
+        : isTds(d) ? 'TDS'
+        : isDebitNote(d) ? 'DN'
         : (d.doc_type === 'PMT' && d.status === 'OPEN' && unapplied >= money(d.amount) - EPSILON ? 'ADV' : d.doc_type),
       side: isDebit ? 'DEBIT' : 'CREDIT',
       outstanding,
@@ -614,16 +710,25 @@ export function accountDisplay(contractId, beneficiaryName) {
     .reduce((a, r) => a + r.amount, 0);
   const rebateAllowed = rows.filter((r) => isRebate(r) && r.status === 'OPEN')
     .reduce((a, r) => a + r.amount, 0);
+  const creditNotes = rows.filter((r) => isCreditNote(r) && r.status === 'OPEN')
+    .reduce((a, r) => a + r.amount, 0);
+  const debitNotes = rows.filter((r) => isDebitNote(r) && r.status === 'OPEN')
+    .reduce((a, r) => a + r.amount, 0);
+  const tds = rows.filter((r) => isTds(r) && r.status === 'OPEN')
+    .reduce((a, r) => a + r.amount, 0);
 
   return {
     contract_id: contractId,
     beneficiary_name: beneficiaryName,
     rows,
     totals: {
-      billed: money(rows.filter((r) => r.doc_type === 'PB' && r.status === 'OPEN').reduce((a, r) => a + r.amount, 0)),
+      billed: money(rows.filter((r) => r.doc_type === 'PB' && !isDebitNote(r) && r.status === 'OPEN').reduce((a, r) => a + r.amount, 0)),
+      debit_notes: money(debitNotes),
+      credit_notes: money(creditNotes),
       surcharge: money(rows.filter((r) => r.doc_type === 'LPS' && r.status === 'OPEN').reduce((a, r) => a + r.amount, 0)),
       // Money in; the rebate SJVN allowed is a credit too, but not cash.
-      received: money(credit - rebateAllowed),
+      received: money(credit - rebateAllowed - creditNotes - tds),
+      tds: money(tds),
       rebate: money(rebateAllowed),
       outstanding: money(rows.reduce((a, r) => a + r.outstanding, 0)),
       advance: money(rows.reduce((a, r) => a + r.unapplied, 0)),
@@ -665,6 +770,11 @@ export function reverseBillDocs(billId, { reason, createdBy = null }) {
   ).all(billId);
   db.transaction(() => {
     for (const d of docs) {
+      // A credit the bill posted (a revision that came out lower) goes back
+      // with what it cleared, or those bills would stay paid by nothing.
+      if (CREDIT_TYPES.includes(d.doc_type)) {
+        db.prepare('DELETE FROM hydro_ledger_clearings WHERE credit_doc_id = ?').run(d.id);
+      }
       db.prepare(`UPDATE hydro_ledger_docs SET status = 'REVERSED', reversal_reason = ? WHERE id = ?`)
         .run(reason, d.id);
     }
@@ -685,3 +795,137 @@ export function beneficiariesWithAccounts(contractId) {
     outstanding: openDebits(contractId, r.beneficiary_name).reduce((a, d) => a + d.outstanding, 0),
   }));
 }
+
+/**
+ * Receivables across a station's beneficiaries, aged by days past due — the
+ * hydro desk's payment monitoring. Each open debit is placed in a bucket by how
+ * far past its due date it is today; one not yet due is "current".
+ */
+export function receivablesAgeing(contractId, { asOf = new Date() } = {}) {
+  const today = new Date(asOf);
+  const bucketOf = (due) => {
+    if (!due) return 'current';
+    const days = Math.floor((today - new Date(due)) / 86400000);
+    if (days <= 0) return 'current';
+    if (days <= 30) return 'd1_30';
+    if (days <= 60) return 'd31_60';
+    if (days <= 90) return 'd61_90';
+    return 'd90_plus';
+  };
+  const names = db.prepare(`
+    SELECT DISTINCT beneficiary_name FROM hydro_ledger_docs WHERE contract_id = ? ORDER BY beneficiary_name
+  `).all(contractId).map((r) => r.beneficiary_name);
+  const rows = names.map((name) => {
+    const debits = openDebits(contractId, name);
+    const b = { current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90_plus: 0 };
+    let oldestDue = null;
+    for (const d of debits) {
+      b[bucketOf(d.due_date)] = money(b[bucketOf(d.due_date)] + d.outstanding);
+      if (d.due_date && (!oldestDue || d.due_date < oldestDue)) oldestDue = d.due_date;
+    }
+    const lastPayment = db.prepare(`
+      SELECT doc_date, amount FROM hydro_ledger_docs
+      WHERE contract_id = ? AND beneficiary_name = ? AND doc_type = 'PMT' AND status = 'OPEN'
+        AND COALESCE(mode, '') NOT IN ('REBATE', 'CREDIT_NOTE')
+      ORDER BY doc_date DESC, created_at DESC LIMIT 1
+    `).get(contractId, name);
+    let lpsAccrued = 0;
+    try { lpsAccrued = money(accruedLpsFor(contractId, name, { asOf }).total_chargeable || 0); } catch { lpsAccrued = 0; }
+    const outstanding = money(Object.values(b).reduce((x, y) => x + y, 0));
+    const overdue = money(outstanding - b.current);
+    const advance = money(openCredits(contractId, name).reduce((x, c) => x + c.unapplied, 0));
+    return {
+      beneficiary_name: name, ...b, outstanding, overdue, advance,
+      oldest_due_date: oldestDue,
+      days_overdue: oldestDue ? Math.max(0, Math.floor((today - new Date(oldestDue)) / 86400000)) : 0,
+      last_payment_date: lastPayment?.doc_date || null,
+      last_payment_amount: lastPayment?.amount || null,
+      lps_accrued_not_charged: lpsAccrued,
+    };
+  });
+  const sum = (k) => money(rows.reduce((x, r) => x + (r[k] || 0), 0));
+  return {
+    contract_id: contractId,
+    as_of: today.toISOString().slice(0, 10),
+    rows,
+    totals: {
+      current: sum('current'), d1_30: sum('d1_30'), d31_60: sum('d31_60'), d61_90: sum('d61_90'), d90_plus: sum('d90_plus'),
+      outstanding: sum('outstanding'), overdue: sum('overdue'), advance: sum('advance'), lps_accrued_not_charged: sum('lps_accrued_not_charged'),
+    },
+  };
+}
+
+/**
+ * Post a credit that is not money from the beneficiary's own pocket in the
+ * ordinary way — TDS it deducted, an LC the bank honoured — and set it against
+ * its open bills, oldest first or the ones named. No rebate is earned on it.
+ */
+export function postSpecialCredit({
+  contractId, beneficiaryName, beneficiaryId = null, amount, onDate, mode, reference = null, info = null,
+  createdBy = null, targetDebitIds = null,
+}) {
+  const amt = money(amount);
+  if (!(amt > 0)) throw new Error('The amount must be greater than zero');
+  if (!['TDS', 'LC_INVOCATION'].includes(mode)) throw new Error(`Unknown credit mode ${mode}`);
+  const doc = insertDoc({
+    doc_no: genDocNo(mode === 'TDS' ? 'TDS' : 'PMT', onDate.slice(0, 7)),
+    contract_id: contractId,
+    beneficiary_name: beneficiaryName,
+    beneficiary_id: beneficiaryId,
+    doc_type: 'PMT',
+    mode,
+    reference,
+    amount: amt,
+    doc_date: onDate,
+    info,
+    created_by: createdBy,
+  });
+  const applied = applyCredit(doc.id, { onDate, createdBy, targetDebitIds, rebate: false });
+  return { doc, ...applied };
+}
+
+/** How a ledger document is classified on a statement of account. */
+function statementKind(d) {
+  if (d.doc_type === 'LPS') return 'surcharge';
+  if (d.doc_type === 'PB') return isDebitNote(d) ? 'debit_notes' : 'billed';
+  if (isRebate(d)) return 'rebate';
+  if (isCreditNote(d)) return 'credit_notes';
+  if (isTds(d)) return 'tds';
+  return 'received';
+}
+
+/**
+ * A beneficiary's statement of account for a period, from the ledger: the
+ * opening balance, every movement in the period by kind, and the closing
+ * balance. Reversed documents and their reversal entries net to nothing, so
+ * both are left out.
+ */
+export function ledgerStatement(contractId, beneficiaryName, fromDate, toDate) {
+  const docs = db.prepare(`
+    SELECT * FROM hydro_ledger_docs
+    WHERE contract_id = ? AND beneficiary_name = ? AND status = 'OPEN' AND reverses_doc_no IS NULL
+      AND doc_date <= ?
+    ORDER BY doc_date, created_at
+  `).all(contractId, beneficiaryName, toDate);
+  const sign = (d) => (DEBIT_TYPES.includes(d.doc_type) ? 1 : -1);
+  let opening = 0;
+  const movements = { billed: 0, debit_notes: 0, surcharge: 0, received: 0, rebate: 0, credit_notes: 0, tds: 0 };
+  const lines = [];
+  let running = 0;
+  for (const d of docs) {
+    if (d.doc_date < fromDate) { opening += sign(d) * d.amount; continue; }
+  }
+  running = money(opening);
+  for (const d of docs) {
+    if (d.doc_date < fromDate) continue;
+    const kind = statementKind(d);
+    movements[kind] = money(movements[kind] + d.amount);
+    running = money(running + sign(d) * d.amount);
+    lines.push({
+      doc_no: d.doc_no, doc_date: d.doc_date, kind, info: d.info,
+      debit: sign(d) > 0 ? money(d.amount) : 0, credit: sign(d) < 0 ? money(d.amount) : 0, balance: running,
+    });
+  }
+  return { opening_balance: money(opening), movements, lines, closing_balance: running };
+}
+

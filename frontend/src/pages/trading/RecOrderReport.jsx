@@ -61,7 +61,7 @@ export default function RecOrderReport() {
   ];
 
   return (
-    <div style={{ padding: 20, maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: 22 }}>REC Order Report</h1>
         <div style={{ display: 'flex', gap: 14, fontSize: 13 }}>

@@ -27,7 +27,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:4000',
+        // Overridable, so a second copy of the app can run against a second backend.
+        target: process.env.VITE_API_TARGET || 'http://localhost:4000',
         changeOrigin: true,
       },
     },

@@ -51,30 +51,45 @@ export function reachableBeneficiaries(billId) {
 /** Sent up the chain: the named approver has a bill waiting. */
 export function notifyBillForApproval(bill, approverUserId) {
   if (!approverUserId) return;
+  const isThermal = bill.project_type === 'Thermal';
+  const link = isThermal
+    ? `/thermal/billing?bill_id=${bill.id}&bill_no=${encodeURIComponent(bill.bill_no)}`
+    : `/hydro-thermal/hydro-billing?bill_id=${bill.id}&bill_no=${encodeURIComponent(bill.bill_no)}`;
   fire('HYDRO_BILL_FOR_APPROVAL', {
     userId: approverUserId,
     subject: `Hydro bill ${bill.bill_no} pending your approval`,
     message: `SJVN: Hydro bill ${bill.bill_no} for ${bill.billing_month} is pending your approval.`,
+    link,
   });
 }
 
 /** The chain closed: the maker can issue it. */
 export function notifyBillApproved(bill) {
   if (!bill.created_by) return;
+  const isThermal = bill.project_type === 'Thermal';
+  const link = isThermal
+    ? `/thermal/billing?bill_id=${bill.id}&bill_no=${encodeURIComponent(bill.bill_no)}`
+    : `/hydro-thermal/hydro-billing?bill_id=${bill.id}&bill_no=${encodeURIComponent(bill.bill_no)}`;
   fire('HYDRO_BILL_APPROVED', {
     userId: bill.created_by,
     subject: `Hydro bill ${bill.bill_no} approved`,
     message: `SJVN: Hydro bill ${bill.bill_no} for ${bill.billing_month} has been approved and can be issued.`,
+    link,
   });
 }
 
 /** Sent back: the maker has to raise a corrected bill. */
 export function notifyBillRejected(bill, reason) {
   if (!bill.created_by) return;
+  const isThermal = bill.project_type === 'Thermal';
+  const link = isThermal
+    ? `/thermal/billing?bill_id=${bill.id}&bill_no=${encodeURIComponent(bill.bill_no)}`
+    : `/hydro-thermal/hydro-billing?bill_id=${bill.id}&bill_no=${encodeURIComponent(bill.bill_no)}`;
   fire('HYDRO_BILL_REJECTED', {
     userId: bill.created_by,
     subject: `Hydro bill ${bill.bill_no} rejected in approval`,
     message: `SJVN: Hydro bill ${bill.bill_no} was rejected in approval. Reason: ${smsVar(reason || 'not stated')}`,
+    link,
   });
 }
 
@@ -88,6 +103,8 @@ export function notifyBillRejected(bill, reason) {
 export function notifyBillIssued(bill) {
   const { reachable } = reachableBeneficiaries(bill.id);
   const isRevision = bill.bill_kind === 'REVISION';
+  const isThermal = bill.project_type === 'Thermal';
+  const link = isThermal ? '/thermal/ledger' : '/hydro-thermal/hydro-ledger';
   for (const line of reachable) {
     const share = inr(Number(line.total_charges) + Number(line.nrldc_fee || 0));
     fire(isRevision ? 'HYDRO_BILL_REVISED' : 'HYDRO_BILL_ISSUED', {
@@ -98,6 +115,7 @@ export function notifyBillIssued(bill) {
           + `Differential amount Rs ${inr(bill.differential_amount)}, due ${bill.due_date}.`
         : `SJVN: Hydro bill ${bill.bill_no} for ${bill.billing_month} is issued. `
           + `Your share is Rs ${share}, due ${bill.due_date}.`,
+      link,
     });
   }
   return reachable.length;

@@ -159,7 +159,7 @@ export default function InvoiceCompliance({ invoice, onChanged }) {
             <input required value={irnForm.irn} onChange={(ev) => setIrnForm({ ...irnForm, irn: ev.target.value.trim() })} style={{ fontFamily: 'monospace', fontSize: 12 }} />
           </Field>
           <div className="form-grid">
-            <Field label="Acknowledgement No."><input value={irnForm.ack_no} onChange={(ev) => setIrnForm({ ...irnForm, ack_no: ev.target.value.trim() })} /></Field>
+            <Field label="Acknowledgement No."><input placeholder="e.g. 122010012345678 (digits only)" value={irnForm.ack_no} onChange={(ev) => setIrnForm({ ...irnForm, ack_no: ev.target.value.trim() })} /></Field>
             <Field label="Acknowledgement date"><input type="date" value={irnForm.ack_date} onChange={(ev) => setIrnForm({ ...irnForm, ack_date: ev.target.value })} /></Field>
           </div>
           <Field label="Signed QR code text (SignedQRCode)">

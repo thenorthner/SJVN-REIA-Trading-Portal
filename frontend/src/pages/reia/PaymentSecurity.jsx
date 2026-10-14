@@ -7,6 +7,7 @@ import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import SecurityInstrumentPanel, { ExpiryTag, changeText, errText, eventLabel } from '../../components/SecurityInstrumentPanel.jsx';
+import SecurityVaultWaterfall3D from '../../components/SecurityVaultWaterfall3D.jsx';
 import SjvnLcDesk from '../../components/SjvnLcDesk.jsx';
 import { fmtDate, fmtDateTime } from '../../datetime.js';
 
@@ -411,6 +412,12 @@ export default function PaymentSecurity() {
 
       {view === 'instruments' && (
       <>
+      <SecurityVaultWaterfall3D
+        stats={stats}
+        onOpenInvoke={() => setView('instruments')}
+        onRunAlerts={runAlerts}
+      />
+
       {stats && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
           <StatPill label="Total security" value={fmtCurrency(stats.total_security_value)} sub={`${stats.instrument_count} active`} />

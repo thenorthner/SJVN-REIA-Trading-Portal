@@ -80,7 +80,7 @@ export default function IexBidBookReport({ kind }) {
     const body = data.map((r) => `<tr>${columns.map((c) => `<td>${r[c.label] ?? ''}</td>`).join('')}</tr>`).join('');
     w.document.write(`<!doctype html><html><head><title>${config.title}</title>
       <style>
-        body{font-family:Arial,sans-serif;padding:16px;font-size:9px}
+        body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;padding:16px;font-size:9px}
         h1{font-size:15px}
         table{border-collapse:collapse;width:100%}
         th,td{border:1px solid #ccc;padding:3px;white-space:nowrap}

@@ -18,8 +18,8 @@
  *     divides it (Annexure-2) — and, until that account is out, with the fixed
  *     shares carried and the balance on the licensee that takes the balance;
  *   - Rajasthan divided on the discom shares the state allocates on;
- *   - the home state split between its free-power row and the Sale of Rights
- *     share that is fixed.
+ *   - the home state's own row held at its free and equity power, and the
+ *     rest of the state's entitlement on the state utility.
  *
  * Nothing here guesses. A row that does not line up with the energy scheduled
  * in Table D2, a share nobody on the sheet can be billed for, a total that is
@@ -148,12 +148,17 @@ export function buildMonthSheet({ prevRows, entitlement, delhiSea = null, rajast
     if (state === HOME_STATE) {
       const home = members.find((r) => r.is_home_state);
       if (!home) { problems.push(`${state} has ${pct.toFixed(6)}% but the sheet in force marks no home-state row`); continue; }
-      // The Sale of Rights share is fixed; the home state's own row is what is left.
-      const fixed = members.filter((r) => r !== home);
-      const left = r6(pct - fixed.reduce((a, r) => a + Number(r.pct_rea), 0));
-      if (left < 0) { problems.push(`${state}'s ${pct.toFixed(6)}% is less than the fixed shares inside it`); continue; }
-      add(home.beneficiary_name, left, { pct_incl_free: pct, is_home_state: true });
-      for (const r of fixed) add(r.beneficiary_name, r.pct_rea, { pct_incl_free: 0 });
+      // The home state's own row is its free power and its equity power, which
+      // are fixed; whatever is left of the state's entitlement is the state
+      // utility's (Commercial Department, Oct 2026: "after free and equity
+      // power from GoHP, remaining share is HPSEBL").
+      const others = members.filter((r) => r !== home);
+      const left = r6(pct - Number(home.pct_rea));
+      if (left < 0) { problems.push(`${state}'s ${pct.toFixed(6)}% is less than the home state's free and equity power (${Number(home.pct_rea).toFixed(6)}%)`); continue; }
+      if (others.length > 1) { problems.push(`${state} is billed through ${members.length} parties and no rule divides what is left after free and equity power`); continue; }
+      if (!others.length && left > 0) { problems.push(`${state} has ${left.toFixed(6)}% beyond its free and equity power and no party on the sheet to bill it to`); continue; }
+      add(home.beneficiary_name, home.pct_rea, { pct_incl_free: pct, is_home_state: true });
+      if (others.length) add(others[0].beneficiary_name, left, { pct_incl_free: 0 });
       continue;
     }
 

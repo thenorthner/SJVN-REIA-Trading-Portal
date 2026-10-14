@@ -78,7 +78,7 @@ beforeEach(() => {
     WHERE id = ?
   `).run(njhps.id);
   // Only NJHPS is billable in these tests: Rampur is left without an allocation.
-  reia = tokenFor('REIA_USER');
+  reia = tokenFor('COMMERCIAL_ADMIN');
 });
 
 const run = (body) => request(app).post('/api/hydro-billing/from-rea').set(auth(reia)).send(body);

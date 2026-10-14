@@ -46,8 +46,12 @@
  *   --wbes-base=<url>     WBES base or full endpoint URL (else WBES_BASE_URL)
  *   --wbes-key=<key>      else WBES_API_KEY
  *   --wbes-user=<name>    else WBES_USERNAME
+ *   --wbes-password=<pw>  gateway Basic-auth password (else WBES_PASSWORD)
+ *   --wbes-basic-user=<n> Basic-auth login if not the WBES username (else WBES_BASIC_USER)
  *                         (the acronym is not a flag: the tool tries the
  *                          candidates and the gateway decides)
+ *   --wbes-only           skip NOAR entirely (no NOAR credentials needed)
+ *   --wbes-date=<iso>     delivery date to ask WBES for, default two days ago
  *   --out=<path>          where to write the capture
  *   --no-ip               skip the outbound-IP echo (one call to ifconfig.me)
  *   --timeout=<ms>        per-request timeout, default 60000
@@ -140,16 +144,17 @@ function loadEnvFile() {
 const env = loadEnvFile();
 const fromEnv = (key) => process.env[key] || env.values[key] || '';
 
+const wbesOnly = has('wbes-only');
 const noarKey = flag('key') || fromEnv('NOAR_API_KEY');
 const noarSecret = flag('secret') || fromEnv('NOAR_API_SECRET');
 
-if (!noarKey || !noarSecret) {
+if (!wbesOnly && (!noarKey || !noarSecret)) {
   console.error('No NOAR credentials found.');
   console.error(`  .env looked for: ${env.checked.join(', ')}`);
   console.error(`  .env used:       ${env.path || 'none found'}`);
   console.error(`  NOAR_API_KEY:    ${noarKey ? 'present' : 'missing'}`);
   console.error(`  NOAR_API_SECRET: ${noarSecret ? 'present' : 'missing'}`);
-  console.error('Pass --key= and --secret=, or point --env= at a file that has them.');
+  console.error('Pass --key= and --secret=, or point --env= at a file that has them (or --wbes-only).');
   process.exit(2);
 }
 
@@ -194,7 +199,7 @@ const capture = {
   host: hostname(),
   range: { from: fromDate, to: toDate },
   env_file: env.path,
-  credentials: {
+  credentials: wbesOnly ? {} : {
     noar_key_fp: fingerprint(noarKey),
     noar_secret_fp: fingerprint(noarSecret),
     noar_token: tokenClaims(noarSecret),
@@ -251,7 +256,18 @@ function record(label, target, requestBody, result) {
     }
   }
   capture.calls.push(entry);
-  const shape = entry.json ? 'JSON' : entry.text ? 'non-JSON' : 'no body';
+  let shape = entry.json ? 'JSON' : entry.text ? 'non-JSON' : 'no body';
+  // WBES puts its verdict inside an HTTP 200, so print it — the status line alone lies.
+  const wbesCode = entry.json?.ResponseStatus?.Code;
+  if (wbesCode) {
+    const rb = entry.json.ResponseBody;
+    const groups = Array.isArray(rb?.GroupWiseDataList) ? rb.GroupWiseDataList.length : null;
+    const msg = entry.json.ResponseStatus.Message;
+    shape += ` ${wbesCode}${msg ? ` "${String(msg).slice(0, 80)}"` : ''}${groups != null ? `, ${groups} group(s)` : ''}`;
+  } else if (entry.status >= 400 && (entry.json || entry.text)) {
+    // A gateway refusal (e.g. a 401 before WBES sees the call) is the evidence — show it.
+    shape += ` ${(entry.json ? JSON.stringify(entry.json) : entry.text).replace(/\s+/g, ' ').slice(0, 200)}`;
+  }
   console.log(`  ${label.padEnd(34)} ${String(entry.status ?? 'ERR').padEnd(5)} ${String(entry.elapsed_ms).padStart(6)}ms  ${shape}${entry.error ? ` — ${entry.error}` : ''}`);
 }
 
@@ -317,7 +333,19 @@ async function probeWbes() {
   }
   console.log(`\nWBES — ${base}`);
   capture.credentials.wbes_key_fp = fingerprint(key);
-  const day = daysAgo(2);
+  // The gateway wants HTTP Basic on top of the key (14-Oct-2026: 401 "BASIC
+  // authentication failed", realm scheduling-api). Fingerprint only, as ever.
+  const password = flag('wbes-password') || fromEnv('WBES_PASSWORD');
+  const basicUser = flag('wbes-basic-user') || fromEnv('WBES_BASIC_USER') || user;
+  const authHeader = password ? { Authorization: `Basic ${Buffer.from(`${basicUser}:${password}`).toString('base64')}` } : {};
+  capture.credentials.wbes_basic = password ? { user: basicUser, password_fp: fingerprint(password) } : null;
+  console.log(`  basic auth         ${password ? `${basicUser} / password ${fingerprint(password)}` : 'none — the gateway will answer 401 (set WBES_PASSWORD)'}`);
+  const day = flag('wbes-date') || daysAgo(2);
+  if (!ISO.test(day)) {
+    console.error(`--wbes-date must be YYYY-MM-DD; got "${day}".`);
+    process.exit(2);
+  }
+  capture.wbes_date = day;
   const [y, m, d] = day.split('-');
   const wbesDate = `${d}-${m}-${y}`;
 
@@ -325,7 +353,7 @@ async function probeWbes() {
     const url = `${base}${WBES_PREFIX}/${endpoint}${keyInQuery ? `?apikey=${encodeURIComponent(key)}` : ''}`;
     return timedFetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-API-Key': key },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-API-Key': key, ...authHeader },
       body: JSON.stringify(body),
     });
   };
@@ -338,6 +366,21 @@ async function probeWbes() {
     const body = { Date: wbesDate, UserName: user };
     const result = await call('GetLatestFullSchdRevNo', body, { keyInQuery });
     record(`wbes revision-no key-in-${keyInQuery ? 'query' : 'header'}`, `${base}${WBES_PREFIX}/GetLatestFullSchdRevNo`, body, result);
+  }
+
+  // No password given: Grid India sent only a key. Some gateways take the API key
+  // as the Basic password, so try that once before asking them for one.
+  if (!password) {
+    const body = { Date: wbesDate, UserName: user };
+    const result = await timedFetch(`${base}${WBES_PREFIX}/GetLatestFullSchdRevNo?apikey=${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json', Accept: 'application/json', 'X-API-Key': key,
+        Authorization: `Basic ${Buffer.from(`${basicUser}:${key}`).toString('base64')}`,
+      },
+      body: JSON.stringify(body),
+    });
+    record('wbes revision-no basic=user:apikey', `${base}${WBES_PREFIX}/GetLatestFullSchdRevNo`, body, result);
   }
 
   // Then the schedule itself, once per acronym candidate. WBES answers a bad
@@ -353,11 +396,13 @@ async function probeWbes() {
 
 /* ------------------------------------------------------------------- main */
 
-console.log(`NOAR probe — ${fromDate} to ${toDate}`);
-console.log(`  key fingerprint    ${fingerprint(noarKey)}`);
-console.log(`  secret fingerprint ${fingerprint(noarSecret)}`);
+console.log(wbesOnly ? 'WBES probe (NOAR skipped)' : `NOAR probe — ${fromDate} to ${toDate}`);
+if (!wbesOnly) {
+  console.log(`  key fingerprint    ${fingerprint(noarKey)}`);
+  console.log(`  secret fingerprint ${fingerprint(noarSecret)}`);
+}
 const claims = capture.credentials.noar_token;
-if (claims.readable) {
+if (claims?.readable) {
   console.log(`  token              ${claims.login_username} / ${claims.role}, ${claims.issued_at?.slice(0, 10)} → ${claims.expires_at?.slice(0, 10)}${claims.expired ? ' (EXPIRED)' : ''}`);
   console.log(`  key in secret      ${claims.key_matches_secret === true ? 'matches — one pair' : claims.key_matches_secret === false ? 'DOES NOT MATCH the key given' : 'not stated'}`);
 }
@@ -370,7 +415,9 @@ if (!has('no-ip')) {
   console.log(`  outbound IP        ${capture.outbound_ip || `unknown (${ip.error || ip.status})`}`);
 }
 
-if (flag('base')) {
+if (wbesOnly) {
+  // NOAR is already proven from any address (it does not filter by IP).
+} else if (flag('base')) {
   NOAR_HOSTS.override = flag('base').replace(/\/$/, '');
   await probeNoar('override');
 } else {

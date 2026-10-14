@@ -80,6 +80,81 @@ const cercGuide = {
     },
 
     {
+      id: 'cerc-annexures',
+      heading: 'The annexures: Form-IV is a set of forms',
+      blurb: 'What the Commission receives is not one table but one format per kind of transaction.',
+      blocks: [
+        { type: 'p', text:
+          'Each row of the calendar has an Annexures button. It sorts that period’s '
+          + 'transactions into the formats they are filed in, and works even for a period '
+          + 'nobody has started — in that case it reads the trade book and the cleared bids '
+          + 'directly, so you can see what the return will contain before preparing it.' },
+        { type: 'table',
+          columns: ['Form', 'Covers', 'Filled from'],
+          rows: [
+            ['IV-A', 'Short-term inter-State, round the clock', 'Bilateral trades under a year'],
+            ['IV-B', 'Short-term inter-State, peak (17:00–23:00)', 'Bilateral trades whose product says peak'],
+            ['IV-C', 'Short-term inter-State, other than peak and RTC', 'Bilateral trades whose product says off-peak'],
+            ['IV-D', 'Long-term inter-State', 'Bilateral contracts of a year or more'],
+            ['IV-E', 'Intra-State, as a volume per state', 'Trades whose two ends are in the same state'],
+            ['IV-F', 'Day-ahead power exchange, plus margin table', 'Cleared DAM bids, one row per client per day'],
+            ['IV-G', 'Term-ahead power exchange', 'Cleared TAM bids'],
+            ['IV-H', 'Renewable energy certificates', 'Cleared REC bids'],
+            ['IV-K', 'Real-time market, plus margin table', 'Cleared RTM bids'],
+            ['IV-L', 'Green term-ahead', 'Cleared GTAM bids'],
+            ['IV-O', 'High-price day-ahead, plus margin table', 'Cleared HP-DAM bids'],
+          ],
+          caption: 'Titles, columns and footnotes follow a monthly Form-IV as filed by a trading licensee.' },
+        { type: 'note', tone: 'warn', title: 'Banking and cross-border are sections, not forms', text:
+          'IV-A, IV-B and IV-C each have three sections: ordinary inter-State trades, trades '
+          + 'through a banking arrangement, and cross-border trades. A banking trade goes in '
+          + 'section B of whichever of those forms its delivery hours put it on.' },
+        { type: 'note', tone: 'warn', title: 'Three things the platform assumes — check them', text:
+          'A bilateral trade is treated as round-the-clock unless its product says peak or '
+          + 'off-peak, because the trade record has no delivery hours. A term-ahead bid is '
+          + 'listed under daily contracts, because the bid does not record which contract it '
+          + 'was. And green day-ahead is shown as IV-I, a form letter that has not been '
+          + 'confirmed against a filed return.' },
+        { type: 'p', text:
+          'The Excel button writes the whole return as one workbook, a sheet per form, with '
+          + 'the headings, sections, NIL rows and notes of the filed layout. The licensee '
+          + 'name and licence number printed at the head of each sheet are master parameters; '
+          + 'the licence number is blank until someone enters it.' },
+      ],
+    },
+
+    {
+      id: 'cerc-licence',
+      heading: 'Licence fee and net worth',
+      blurb: 'What the licence owes each year that is not a return.',
+      blocks: [
+        { type: 'p', text:
+          'A trading licence carries two yearly obligations besides Form-IV. The annual '
+          + 'licence fee for a financial year is payable by 30 April of that year. And the '
+          + 'licensee must keep the net worth its licence category requires, evidenced by '
+          + 'an auditor’s certificate.' },
+        { type: 'table',
+          columns: ['Shown as', 'Means'],
+          rows: [
+            ['Fee: Due', '30 April has not yet passed and no payment is recorded'],
+            ['Fee: Overdue', '30 April has passed and no payment is recorded'],
+            ['Fee: Paid', 'A payment date and its reference are recorded'],
+            ['Net worth: Not recorded', 'No figure entered for the year'],
+            ['Net worth: Below minimum', 'The recorded figure is under the category minimum'],
+          ] },
+        { type: 'note', tone: 'warn', title: 'The fee is set by category, not computed from volume', text:
+          'Volume decides which licence category applies; the fee is then the fixed amount '
+          + 'for that category. Both the fee and the minimum net worth are master parameters '
+          + '— the Commission revises them, so confirm each against the regulation in force '
+          + 'rather than trusting the default.' },
+        { type: 'p', text:
+          'Nothing on that tab is derived. A year shows unpaid until someone records the '
+          + 'payment, including years paid before the platform existed — record those once '
+          + 'and they clear.' },
+      ],
+    },
+
+    {
       id: 'cerc-margin',
       heading: 'The trading margin cap',
       blurb: 'The one compliance rule this module enforces, and the one that stops a filing.',
@@ -113,8 +188,8 @@ const cercGuide = {
       blocks: [
         { type: 'steps', items: [
           { title: 'Open the period',
-            detail: 'Create a Form-IV for the month, or for the financial year. The deadline '
-              + 'is set from the period end.' },
+            detail: 'Use Prepare Form-IV on the calendar row — it opens the Form-IV screen '
+              + 'with that period already chosen. The deadline is set from the period end.' },
           { title: 'Generate the lines',
             detail: 'Pulls every bilateral transaction overlapping the period out of the trade '
               + 'data, transaction by transaction, with its quantum, purchase price, sale price '

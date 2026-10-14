@@ -78,6 +78,7 @@ export function generateContractReportPdf(report, meta, res) {
     size: [PAGE_W, PAGE_H],
     margins: { top: M, bottom: M, left: M, right: M },
     bufferPages: true,
+    font: 'Helvetica',
     info: {
       Title: 'SJVN Contract Portfolio Report',
       Author: 'SJVN Limited',
@@ -85,6 +86,7 @@ export function generateContractReportPdf(report, meta, res) {
       Creator: 'SJVN Energy Platform',
     },
   });
+  doc.font('Helvetica');
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', 'attachment; filename="SJVN_Contract_Portfolio_Report.pdf"');

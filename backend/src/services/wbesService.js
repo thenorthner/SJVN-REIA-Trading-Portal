@@ -31,6 +31,16 @@
  * — which makes it the honest first call: it proves the URL, the key, the
  * username and the whitelisting all at once, and cannot be confused by the
  * acronym question.
+ *
+ * BASIC AUTH (measured 14-Oct-2026, first run from the whitelisted server). The
+ * gateway answers every call — key in query or header, any body — with
+ *   401 {"type":"Authentication","failureCode":10004,"message":"BASIC
+ *        authentication failed.","headers":{"WWW-Authenticate":"Basic realm=\"scheduling-api\""}}
+ * before WBES sees it. That is the masked `Authorization: ••••••` header in every
+ * code sample of the guide, which the guide never explains: the API key is not
+ * enough, the gateway also wants HTTP Basic credentials. Grid India sent no
+ * password, so WBES_PASSWORD (and WBES_BASIC_USER, if the gateway login is not
+ * the WBES username) has to come from them.
  */
 import db from '../db/index.js';
 import { newId } from '../util.js';
@@ -78,7 +88,9 @@ export function getWbesConfig() {
   // must not be met with the other. Set WBES_KEY_IN_QUERY=false to stop putting
   // a credential in a URL once we know the header alone is honoured.
   const keyInQuery = String(envOrParam('WBES_KEY_IN_QUERY', 'wbes_key_in_query', 'true')) !== 'false';
-  return { enabled, live: enabled && !!apiKey && !!baseUrl, apiKey, baseUrl, userName, utility, keyInQuery };
+  const password = envOrParam('WBES_PASSWORD', 'wbes_password', '');
+  const basicUser = envOrParam('WBES_BASIC_USER', 'wbes_basic_user', '') || userName;
+  return { enabled, live: enabled && !!apiKey && !!baseUrl, apiKey, baseUrl, userName, utility, keyInQuery, password, basicUser };
 }
 
 /** Block index (0-based) to the 15-minute window it covers, e.g. "00:15-00:30". */
@@ -95,6 +107,24 @@ const API_PREFIX = '/reports/1.0/WebAccessAPI';
 function wbesUrl(cfg, endpoint) {
   const url = `${cfg.baseUrl}${API_PREFIX}/${endpoint}`;
   return cfg.keyInQuery ? `${url}?apikey=${encodeURIComponent(cfg.apiKey)}` : url;
+}
+
+/** Request headers: the key, plus the gateway's Basic credentials when we have them. */
+function wbesHeaders(cfg) {
+  const headers = { 'Content-Type': 'application/json', Accept: 'application/json', 'X-API-Key': cfg.apiKey };
+  if (cfg.password) {
+    headers.Authorization = `Basic ${Buffer.from(`${cfg.basicUser}:${cfg.password}`).toString('base64')}`;
+  }
+  return headers;
+}
+
+/** A non-2xx reply, with the gateway's Basic-auth refusal named for what it is. */
+function describeHttpError(cfg, status, text) {
+  const base = `HTTP ${status}: ${text.slice(0, 300)}`;
+  if (status === 401 && /BASIC authentication|Basic realm/i.test(text)) {
+    return `${base} — the Grid India gateway wants HTTP Basic credentials on top of the API key. ${cfg.password ? `The ones configured (user ${cfg.basicUser}) were rejected.` : 'No WBES_PASSWORD is configured; it has to come from Grid India.'}`;
+  }
+  return base;
 }
 
 /**
@@ -163,11 +193,11 @@ export async function fetchScheduleData(date, revisionNo = -1) {
   try {
     const resp = await fetch(wbesUrl(cfg, 'GetUtilityExternalSharedData'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-API-Key': cfg.apiKey },
+      headers: wbesHeaders(cfg),
       body: JSON.stringify(body),
     });
     const text = await resp.text();
-    if (!resp.ok) return { ok: false, mode: 'WBES', error: `HTTP ${resp.status}: ${text.slice(0, 300)}` };
+    if (!resp.ok) return { ok: false, mode: 'WBES', error: describeHttpError(cfg, resp.status, text) };
     const data = JSON.parse(text);
     const refused = readStatus(data);
     if (refused) return { ok: false, mode: 'WBES', request: body, error: `WBES refused the request — ${refused}` };
@@ -194,11 +224,11 @@ export async function fetchLatestRevisionNo(date) {
   try {
     const resp = await fetch(wbesUrl(cfg, 'GetLatestFullSchdRevNo'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-API-Key': cfg.apiKey },
+      headers: wbesHeaders(cfg),
       body: JSON.stringify(body),
     });
     const text = await resp.text();
-    if (!resp.ok) return { ok: false, mode: 'WBES', error: `HTTP ${resp.status}: ${text.slice(0, 300)}` };
+    if (!resp.ok) return { ok: false, mode: 'WBES', error: describeHttpError(cfg, resp.status, text) };
     const data = JSON.parse(text);
     const refused = readStatus(data);
     if (refused) return { ok: false, mode: 'WBES', request: body, error: `WBES refused the request — ${refused}` };

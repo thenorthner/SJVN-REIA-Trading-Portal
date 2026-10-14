@@ -222,7 +222,7 @@ export default function BulkCommunications() {
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ padding: 20 }}>
       <PageHeader title="Client Bulk Communication Hub" />
       
       <Tabs style={{ marginTop: 20 }}>

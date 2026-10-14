@@ -13,12 +13,14 @@ export function landingFor(user, from) {
   if (!path || path === '/' || path.startsWith('/login')) {
     const role = user?.role || '';
     if (['COMMERCIAL_ADMIN', 'COMMERCIAL'].includes(role)) return '/hydro-thermal';
+    if (['THERMAL_ADMIN', 'THERMAL_USER'].includes(role)) return '/thermal';
     return '/';
   }
   const target = `${path}${from.search || ''}`;
   if (['/mail', '/notification-board', '/settings'].some((p) => path.startsWith(p))) return target;
   const role = user?.role || '';
   if (['COMMERCIAL_ADMIN', 'COMMERCIAL'].includes(role)) return path.startsWith('/hydro-thermal') ? target : '/hydro-thermal';
+  if (['THERMAL_ADMIN', 'THERMAL_USER'].includes(role)) return path.startsWith('/thermal') ? target : '/thermal';
   if (isSellerRole(role)) return path.startsWith('/seller') ? target : '/';
   if (isBuyerRole(role)) return path.startsWith('/buyer') ? target : '/';
   if (isTradingClientRole(role)) return path.startsWith('/trading') ? target : '/';
@@ -28,7 +30,10 @@ export function landingFor(user, from) {
 
 const DEMO_ACCOUNTS = [
   { label: 'SJVN Admin', email: 'admin@sjvn.in', icon: ShieldCheck },
-  { label: 'Commercial Admin', email: 'commercial@sjvn.in', icon: ShieldCheck },
+  { label: 'Hydro Admin', email: 'commercial@sjvn.in', icon: ShieldCheck },
+  { label: 'Hydro Approver', email: 'hydro.hod@sjvn.in', icon: ShieldCheck },
+  { label: 'Thermal Admin', email: 'thermal@sjvn.in', icon: ShieldCheck },
+  { label: 'Thermal Desk', email: 'thermal.desk@sjvn.in', icon: ShieldCheck },
   { label: 'REIA Ops', email: 'reia@sjvn.in', icon: Zap },
   { label: 'REIA Admin', email: 'reia.admin@sjvn.in', icon: ShieldCheck },
   { label: 'Trading Ops', email: 'trading@sjvn.in', icon: Briefcase },

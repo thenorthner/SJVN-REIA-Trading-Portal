@@ -34,7 +34,7 @@ export const CHARGE_TYPE_LABELS = {
 };
 
 /** A bill number that is free, so the UNIQUE index cannot bite on insert. */
-function freeBillNo(prefix) {
+export function freeBillNo(prefix) {
   let no = genInvoiceNo(prefix);
   for (let i = 0; i < 10 && db.prepare('SELECT 1 FROM hydro_station_bills WHERE bill_no = ?').get(no); i += 1) {
     no = genInvoiceNo(prefix);
@@ -49,7 +49,7 @@ function freeBillNo(prefix) {
  * saying so with zeroes is honest: bill_kind already says what the row is, and
  * the printed claim never shows the A, C or E blocks.
  */
-function emptyBillBlocks(contract) {
+export function emptyBillBlocks(contract) {
   return {
     a1_afc: 0, a2_design_energy_mwh: 0, a3_aux_pct: 0,
     a4_fehs_pct: Number(contract.free_energy_home_state) || 0,
@@ -66,7 +66,7 @@ function emptyBillBlocks(contract) {
   };
 }
 
-const INSERT_BILL = `
+export const INSERT_BILL = `
   INSERT INTO hydro_station_bills (
     id, bill_no, contract_id, station_name, billing_month, financial_year,
     bill_kind, rea_reference, revision_reason,
@@ -270,6 +270,105 @@ export function claimAdditionalCharges({
     entries_claimed: entries.length,
     by_charge_type: byType,
     lines: allocations.length,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Supplementary bills
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const SUPPLEMENTARY_REASONS = {
+  CHANGE_IN_LAW: 'Change in Law',
+  TAXES_DUTIES: 'Taxes, duties, cess (e.g. water cess)',
+  BETA_INCENTIVE: 'Beta incentive certified after the bill',
+  TARIFF_ORDER_ITEM: 'Item allowed by a CERC tariff order',
+  OMITTED_ITEM: 'Item omitted from the monthly bill',
+  OTHER: 'Other',
+};
+
+/**
+ * A one-off amount billed on top of a month: something the monthly bill could
+ * not carry — a change in law, a cess, an item a tariff order allowed later.
+ *
+ * Apportioned across the month's beneficiaries the way the station's fixed
+ * costs are, or raised on one beneficiary alone when the cost is theirs. It is
+ * a bill of its own and goes through approval, issue, ledger and payment like
+ * every other. Something billed too much is corrected with a credit note, not
+ * with a negative supplementary bill.
+ */
+export function createSupplementaryBill({
+  contract, billingMonth, amount, reason, particulars, beneficiaryName = null,
+  orderReference = null, preparedBy = null, createdBy = null,
+}) {
+  if (!/^\d{4}-\d{2}$/.test(String(billingMonth || ''))) {
+    throw Object.assign(new Error('billing_month must be YYYY-MM'), { status: 400 });
+  }
+  const total = money(amount);
+  if (!(total > 0)) {
+    throw Object.assign(new Error('A supplementary bill is for an amount greater than zero — to give money back, raise a credit note'), { status: 400 });
+  }
+  if (!SUPPLEMENTARY_REASONS[reason]) {
+    throw Object.assign(new Error(`reason must be one of ${Object.keys(SUPPLEMENTARY_REASONS).join(', ')}`), { status: 400 });
+  }
+  const what = String(particulars || '').trim();
+  if (what.length < 10) {
+    throw Object.assign(new Error('Say what the supplementary bill is for (at least 10 characters) — it is printed on the bill'), { status: 400 });
+  }
+
+  const allocations = getAllocations(contract.id, billingMonth, Number(contract.free_energy_home_state) || 0);
+  if (!allocations.length) {
+    throw Object.assign(new Error('No beneficiary allocation is in force for this station and month'), { status: 400 });
+  }
+  let rows;
+  let shares;
+  if (beneficiaryName) {
+    const one = allocations.find((a) => a.beneficiary_name === beneficiaryName);
+    if (!one) throw Object.assign(new Error(`${beneficiaryName} is not a beneficiary of this station in ${billingMonth}`), { status: 400 });
+    rows = [one];
+    shares = [total];
+  } else {
+    rows = allocations;
+    shares = apportion(total, allocations.map((a) => Number(a.pct_proportionate)));
+  }
+
+  const id = newId('HSB');
+  const billNo = freeBillNo('HSP');
+  db.transaction(() => {
+    db.prepare(INSERT_BILL).run({
+      id,
+      bill_no: billNo,
+      contract_id: contract.id,
+      station_name: contract.station_name || contract.contract_no,
+      billing_month: billingMonth,
+      financial_year: financialYearOf(billingMonth),
+      bill_kind: 'SUPPLEMENTARY',
+      rea_reference: orderReference || null,
+      revision_reason: `${SUPPLEMENTARY_REASONS[reason]} — ${what}`,
+      ...emptyBillBlocks(contract),
+      total_charges: total,
+      prepared_by: preparedBy,
+      created_by: createdBy,
+    });
+    const insertLine = db.prepare(INSERT_LINE);
+    rows.forEach((a, i) => {
+      insertLine.run({
+        id: newId('HBL'),
+        bill_id: id,
+        sr_no: a.sr_no || i + 1,
+        beneficiary_name: a.beneficiary_name,
+        beneficiary_id: a.beneficiary_id || null,
+        parent_state: a.parent_state || null,
+        pct_incl_free: a.pct_incl_free ?? null,
+        pct_rea: a.pct_rea,
+        pct_excl_free: a.pct_excl_free,
+        pct_proportionate: beneficiaryName ? 100 : a.pct_proportionate,
+        total_charges: shares[i],
+      });
+    });
+  })();
+  return {
+    id, bill_no: billNo, bill_kind: 'SUPPLEMENTARY', billing_month: billingMonth,
+    total_charges: total, beneficiaries: rows.length,
   };
 }
 

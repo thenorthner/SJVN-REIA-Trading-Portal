@@ -9,8 +9,39 @@ import { settledLakh, settlementRupees, luToMwh } from '../services/nrpcDsa.js';
 const router = Router();
 router.use(requireAuth);
 
-const READ = [...new Set([...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'])];
-const WRITE = ROLE_GROUPS.REIA_WRITE;
+// Deviation settlement is settled station by station with the regional pool,
+// so each vertical's desk works its own stations' weeks: REIA its RE plants,
+// Commercial the hydro stations, Thermal the thermal ones.
+const READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.THERMAL_ALL, 'COMPLIANCE_AUDITOR'])];
+const WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
+
+/** The contracts a vertical's desk settles DSM for, as a SQL condition on alias c. */
+const VERTICAL_TYPES = {
+  HYDRO: "c.project_type IN ('Hydro','PSP')",
+  THERMAL: "c.project_type = 'Thermal'",
+  REIA: "COALESCE(c.project_type, '') NOT IN ('Hydro','PSP','Thermal')",
+};
+/**
+ * The Hydro and Thermal desks raise DSM only on their own stations. REIA has
+ * settled the SJVN hydro stations' DSA weeks since the module was built and
+ * keeps doing so; administrators are not tied to one desk.
+ */
+function outsideDesk(user, contract) {
+  const role = user?.role;
+  const type = contract?.project_type || '';
+  const hydro = ['Hydro', 'PSP'].includes(type);
+  const thermal = type === 'Thermal';
+  if (['COMMERCIAL_ADMIN', 'COMMERCIAL', 'COMMERCIAL_USER'].includes(role) && !hydro) return 'the Hydro desk settles DSM for hydro stations only';
+  if (['THERMAL_ADMIN', 'THERMAL_USER'].includes(role) && !thermal) return 'the Thermal desk settles DSM for thermal stations only';
+  return null;
+}
+
+function verticalClause(vertical) {
+  if (!vertical) return '';
+  const cond = VERTICAL_TYPES[vertical];
+  if (!cond) throw Object.assign(new Error('vertical must be REIA, HYDRO or THERMAL'), { status: 400 });
+  return ` AND contract_id IN (SELECT c.id FROM contracts c WHERE ${cond})`;
+}
 
 function withContract(row) {
   if (!row) return row;
@@ -198,8 +229,9 @@ function clearCancelledSlot(dup, req) {
 
 // List — filter by contract / period / status
 router.get('/', requireRole(...READ), (req, res) => {
-  const { contract_id, period_month, status } = req.query;
+  const { contract_id, period_month, status, vertical } = req.query;
   let sql = 'SELECT * FROM deviation_settlements WHERE 1=1';
+  try { sql += verticalClause(vertical); } catch (err) { return res.status(400).json({ error: err.message }); }
   const params = [];
   if (contract_id) { sql += ' AND contract_id = ?'; params.push(contract_id); }
   if (period_month) { sql += ' AND period_month = ?'; params.push(period_month); }
@@ -232,8 +264,9 @@ router.get('/scrape', requireRole(...WRITE), async (req, res) => {
  * revised week.
  */
 router.get('/summary', requireRole(...READ), (req, res) => {
-  const { contract_id, period_month } = req.query;
+  const { contract_id, period_month, vertical } = req.query;
   let filters = '';
+  try { filters += verticalClause(vertical); } catch (err) { return res.status(400).json({ error: err.message }); }
   const params = [];
   if (contract_id) { filters += ' AND contract_id = ?'; params.push(contract_id); }
   if (period_month) { filters += ' AND period_month = ?'; params.push(period_month); }
@@ -294,6 +327,8 @@ router.post('/from-dsa', requireRole(...WRITE), (req, res) => {
   const b = req.body || {};
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(b.contract_id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
+  const notMine = outsideDesk(req.user, contract);
+  if (notMine) return res.status(403).json({ error: `${contract.contract_no}: ${notMine}.` });
   if (!b.dsa_account_id) return res.status(400).json({ error: 'dsa_account_id is required' });
   if (!b.entity_name) return res.status(400).json({ error: 'entity_name is required — the name the statement uses, e.g. NATHPA JHAKRI HEP' });
 
@@ -402,6 +437,8 @@ router.post('/', requireRole(...WRITE), (req, res) => {
   const b = req.body;
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(b.contract_id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
+  const notMine = outsideDesk(req.user, contract);
+  if (notMine) return res.status(403).json({ error: `${contract.contract_no}: ${notMine}.` });
   if (!b.period_month) return res.status(400).json({ error: 'period_month (YYYY-MM) is required' });
   if (b.week_no == null || b.week_no === '') return res.status(400).json({ error: 'week_no is required' });
   const entry_type = ['PRIMARY', 'REVISED'].includes(b.entry_type) ? b.entry_type : 'PRIMARY';

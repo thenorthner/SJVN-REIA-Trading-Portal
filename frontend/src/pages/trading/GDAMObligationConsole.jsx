@@ -112,7 +112,7 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
   }
 
   return (
-    <div style={{ padding: '0 20px 20px', maxWidth: 1600, margin: '0 auto' }}>
+    <div style={{ padding: '0 20px 20px' }}>
       <Card style={{ marginBottom: 20, background: 'var(--slate-50)' }}>
         <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>

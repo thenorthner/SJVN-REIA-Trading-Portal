@@ -73,7 +73,7 @@ export default function DailyObligationReport() {
   );
 
   return (
-    <div style={{ padding: 20, maxWidth: 1600, margin: '0 auto' }}>
+    <div style={{ padding: 20 }}>
       {/* The report reads the bid book now: a block is here because a bid cleared
           on it. The charges that turn a gross position into a payout are raised
           on the exchange invoice, not on this report. */}

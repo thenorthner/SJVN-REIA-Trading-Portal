@@ -8,6 +8,7 @@ import { getGuide } from '../../content/guides/index.js';
 import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
 import ReaAutomationPipeline from '../../components/ReaAutomationPipeline.jsx';
 import EnergyAccountUpload from '../../components/EnergyAccountUpload.jsx';
+import BusbarLossPipeline3D from '../../components/BusbarLossPipeline3D.jsx';
 import EnergyRecordDetail, { ResponseBadge } from '../../components/EnergyRecordDetail.jsx';
 import { fmtDateTime } from '../../datetime.js';
 import { ROLE_GROUPS } from '../../roles.js';
@@ -318,6 +319,11 @@ export default function EnergyData() {
         </div>
       )}
 
+      <BusbarLossPipeline3D
+        selectedContractId={filters.contract_id}
+        contracts={contracts}
+      />
+
       <EnergyOverview contractId={filters.contract_id} rows={rows} />
 
       <div className="filters-bar">
@@ -390,7 +396,7 @@ export default function EnergyData() {
                     }
                   }}
                 >
-                  {scanning ? '⚡ Scanning All RPCs...' : 'Scan All RPCs Now'}
+                  {scanning ? 'Scanning All RPCs...' : 'Scan All RPCs Now'}
                 </button>
               </div>
             )}
@@ -431,7 +437,9 @@ export default function EnergyData() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 16 }}>⚡</span> Regional REA Automated Ingestion Pipeline
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                        </svg> Regional REA Automated Ingestion Pipeline
                       </div>
                       <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
                         Fully automated 6-stage ingestion engine: Discovery → Retrieval → Extraction → Validation → Settlement Commit
@@ -573,7 +581,7 @@ export default function EnergyData() {
                       }
                     }}
                   >
-                    {triggering ? '⚡ Fetching & Processing...' : 'Trigger Fetch'}
+                    {triggering ? 'Fetching & Processing...' : 'Trigger Fetch'}
                   </button>
                 </div>
 
@@ -752,7 +760,7 @@ export default function EnergyData() {
         )}
       </Modal>
 
-      <Modal open={!!trailEnergyId} onClose={() => setTrailEnergyId(null)} title="Settlement Trail" width={720}>
+      <Modal open={!!trailEnergyId} onClose={() => setTrailEnergyId(null)} title="Settlement Trail & Pipeline" width="90vw">
         {trailEnergyId && <SettlementTrailPanel energyId={trailEnergyId} />}
       </Modal>
 

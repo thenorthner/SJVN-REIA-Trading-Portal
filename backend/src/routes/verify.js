@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { verifyInvoiceToken } from '../util.js';
+import { verifyInvoiceToken, invoiceAuthSeal } from '../util.js';
 
 const router = Router();
 
@@ -98,6 +98,11 @@ router.get('/:id', (req, res) => {
     ['Total Amount', `<span class="amt">${esc(fmtMoney(inv.total_amount))}</span>`],
   ];
   if (inv.billing_family_ref) rows.push(['Billing Family Ref', esc(inv.billing_family_ref)]);
+  // The same figures the seal on the printed bill was computed from. A copy
+  // whose SHA-256 differs from this one has been altered since it was issued.
+  const seal = invoiceAuthSeal(inv);
+  rows.push(['Audit Ref', esc(`#${seal.audit_ref}`)]);
+  rows.push(['SHA-256', `<span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;word-break:break-all">${esc(seal.hash)}</span>`]);
 
   const body = `<div class="card">
     <div class="bar"><h1>Genuine Energy Bill</h1><p>SJVN RE Commercial &amp; Trading Platform</p></div>

@@ -105,14 +105,14 @@ beforeEach(() => {
   db.prepare('DELETE FROM notification_deliveries').run();
   db.prepare('DELETE FROM notifications').run();
 
-  reia = tokenFor('REIA_USER');
+  reia = tokenFor('COMMERCIAL_ADMIN');
   viewer = tokenFor('MANAGEMENT');
 });
 
 /** The maker / approver pair a bill needs — the two cannot be the same person. */
 function desk() {
-  const maker = makeUser('REIA_USER', { name: `Hydro Maker ${Math.random()}` });
-  const hod = makeUser('REIA_ADMIN', { name: `Hydro HOD ${Math.random()}` });
+  const maker = makeUser('COMMERCIAL_ADMIN', { name: `Hydro Maker ${Math.random()}` });
+  const hod = makeUser('COMMERCIAL_ADMIN', { name: `Hydro HOD ${Math.random()}` });
   return { maker, hod };
 }
 
@@ -496,10 +496,9 @@ describe('E2E: revising a month after the beta certificate arrives', () => {
   // The month is over-billed by roughly Rs 157 crore across the fifteen
   // beneficiaries, and the surcharge clock runs on all of it.
   //
-  // it.fails: the assertion below is what the ledger ought to hold. It does not
-  // today, so the suite stays green — and the moment the posting is corrected
-  // this test goes red and has to be turned back into a plain it().
-  it.fails('KNOWN DEFECT: a revision opens a second full bill instead of billing the difference', async () => {
+  // Fixed: issuing a revision now posts only the difference over what the month
+  // already stands billed at (postBillToLedger / billedForMonth).
+  it('posts a revision as the difference, so the month is owed once at the revised figure', async () => {
     const { bill, maker, hod } = await issuedBill();
 
     const rev = await post('/api/hydro-billing', signFor(maker), {

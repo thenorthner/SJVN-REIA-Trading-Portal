@@ -55,12 +55,9 @@ export const api = {
       formData.append('logo', file);
       return client.post(`/entities/${id}/logo`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
     },
-    uploadSignature: (id, file) => {
-      const formData = new FormData();
-      formData.append('signature', file);
-      return client.post(`/entities/${id}/signature`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
-    },
     approve: (id, decision, remarks, extra = {}) => p(`/entities/${id}/approve`, { decision, remarks, ...extra }),
+    setBlacklist: (id, blacklisted, reason) => p(`/entities/${id}/blacklist`, { blacklisted, reason }),
+    linkVertical: (id, vertical) => p(`/entities/${id}/verticals`, { vertical }),
   },
   users: {
     list: () => g('/users'),
@@ -514,6 +511,27 @@ export const api = {
     verificationQueue: (params) => g('/reports/verification-queue', params),
     // Every period that owes CERC a return, including the ones nobody started.
     cercCompliance: (params) => g('/reports/cerc-compliance', params),
+    // One period's return sorted into the formats it is filed in (IV-A, IV-B, ...).
+    cercAnnexures: (periodType, period) => g('/reports/cerc-compliance/annexures', { period_type: periodType, period }),
+    // The same split as the Excel workbook the Commission takes the soft copy in.
+    cercAnnexuresXlsx: async (periodType, period) => {
+      const res = await client.get('/reports/cerc-compliance/annexures/xlsx', {
+        params: { period_type: periodType, period }, responseType: 'blob',
+      });
+      if (res.data?.type && res.data.type.includes('json')) {
+        let msg = 'Could not build the Form-IV workbook';
+        try { msg = JSON.parse(await res.data.text()).error || msg; } catch { /* keep default */ }
+        throw new Error(msg);
+      }
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url; a.download = `CERC_Form-IV_${period}.xlsx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    },
+    // Annual licence fee and net worth, year by year.
+    cercLicence: () => g('/reports/cerc-compliance/licence'),
+    saveCercLicence: (fy, body) => put(`/reports/cerc-compliance/licence/${fy}`, body),
     billingSummary: (params) => g('/reports/billing-summary', params),
     billingSummaryPdf: async (params = {}) => {
       const qs = new URLSearchParams();
@@ -1036,9 +1054,39 @@ export const api = {
     generate: (body) => p('/generator-billing/generate', body),
     updateStatus: (id, status) => p(`/generator-billing/${id}/status`, { status }),
   },
+  thermal: {
+    stations: () => g('/thermal/stations'),
+    createStation: (body) => p('/thermal/stations', body),
+    tariffs: (contractId) => g('/thermal/tariffs', { contract_id: contractId }),
+    setTariff: (body) => p('/thermal/tariffs', body),
+    ecrPreview: (body) => p('/thermal/ecr-preview', body),
+  },
+  // The hydro desk after a bill is out: disputes, LC, balance confirmation, TDS.
+  hydroDesk: {
+    disputeReasons: () => g('/hydro-desk/disputes/reasons'),
+    disputeShares: (params) => g('/hydro-desk/disputes/shares', params),
+    disputes: (params) => g('/hydro-desk/disputes', params),
+    dispute: (id) => g(`/hydro-desk/disputes/${id}`),
+    raiseDispute: (body) => p('/hydro-desk/disputes', body),
+    moveDispute: (id, body) => p(`/hydro-desk/disputes/${id}/move`, body),
+    security: (params) => g('/hydro-desk/security', params),
+    securityEvents: (id) => g(`/hydro-desk/security/${id}/events`),
+    addSecurity: (body) => p('/hydro-desk/security', body),
+    amendSecurity: (id, body) => p(`/hydro-desk/security/${id}/amend`, body),
+    invokeSecurity: (id, body) => p(`/hydro-desk/security/${id}/invoke`, body),
+    releaseSecurity: (id, body) => p(`/hydro-desk/security/${id}/release`, body),
+    reconciliations: (params) => g('/hydro-desk/reconciliations', params),
+    createReconciliation: (body) => p('/hydro-desk/reconciliations', body),
+    moveReconciliation: (id, body) => p(`/hydro-desk/reconciliations/${id}/move`, body),
+    reconciliationPdf: (id, no) => api.reports.downloadPdf(`/hydro-desk/reconciliations/${id}/pdf`, `${String(no || id).replace(/[^\w.-]+/g, '_')}.pdf`),
+    tdsSections: () => g('/hydro-desk/tds/sections'),
+    tds: (params) => g('/hydro-desk/tds', params),
+    recordTds: (body) => p('/hydro-desk/tds', body),
+    tdsCertificate: (id, body) => p(`/hydro-desk/tds/${id}/certificate`, body),
+  },
   hydroBilling: {
     dashboard: () => g('/hydro-billing/dashboard'),
-    stations: () => g('/hydro-billing/stations'),
+    stations: (params) => g('/hydro-billing/stations', params),
     list: (params) => g('/hydro-billing', params),
     get: (id) => g(`/hydro-billing/${id}`),
     preview: (body) => p('/hydro-billing/preview', body),
@@ -1052,7 +1100,7 @@ export const api = {
     createAllocation: (body) => p('/hydro-billing/allocations', body),
     replaceAllocations: (body) => p('/hydro-billing/allocations/bulk', body),
     // Approval chain
-    approvers: () => g('/hydro-billing/approvers'),
+    approvers: (params) => g('/hydro-billing/approvers', params),
     inbox: () => g('/hydro-billing/approvals/inbox'),
     sendForApproval: (id, body) => p(`/hydro-billing/${id}/send-for-approval`, body),
     act: (id, body) => p(`/hydro-billing/${id}/approve`, body),
@@ -1066,6 +1114,11 @@ export const api = {
     accountMaintenance: (docId, body) => p(`/hydro-billing/ledger/${docId}/account-maintenance`, body || {}),
     lpsPreview: (params) => g('/hydro-billing/ledger/lps', params),
     postLps: (body) => p('/hydro-billing/ledger/lps', body),
+    // Debit / credit notes on a beneficiary's account (maker-checker).
+    notes: (params) => g('/hydro-billing/notes', params),
+    raiseNote: (body) => p('/hydro-billing/notes', body),
+    approveNote: (id) => p(`/hydro-billing/notes/${id}/approve`, {}),
+    rejectNote: (id, reason) => p(`/hydro-billing/notes/${id}/reject`, { reason }),
     // Release, print and despatch. The PDF goes through the shared downloader so
     // it carries the auth header and unwraps a JSON error into a real message.
     release: (id) => p(`/hydro-billing/${id}/release`, {}),
@@ -1079,6 +1132,15 @@ export const api = {
     send: (id, body) => p(`/hydro-billing/${id}/send`, body || {}),
     deliveries: (id) => g(`/hydro-billing/${id}/deliveries`),
     dispatch: (id, body) => p(`/hydro-billing/${id}/dispatch`, body),
+    // Taking a bill back out of approval, and the two kinds of bill on months already billed.
+    recall: (id, reason) => p(`/hydro-billing/${id}/recall`, { reason }),
+    arrearPreview: (body) => p('/hydro-billing/arrears/preview', body),
+    createArrear: (body) => p('/hydro-billing/arrears', body),
+    supplementaryReasons: () => g('/hydro-billing/supplementary/reasons'),
+    createSupplementary: (body) => p('/hydro-billing/supplementary', body),
+    tariffs: (contractId) => g('/hydro-billing/tariffs', { contract_id: contractId }),
+    receivables: (params) => g('/hydro-billing/receivables', params),
+    setTariff: (body) => p('/hydro-billing/tariffs', body),
     // Additional charges and TCS
     charges: (params) => g('/hydro-billing/charges', params),
     addCharge: (body) => p('/hydro-billing/charges', body),

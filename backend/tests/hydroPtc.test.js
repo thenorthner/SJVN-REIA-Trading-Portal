@@ -25,7 +25,7 @@ beforeEach(() => {
   db.prepare('DELETE FROM hydro_beneficiary_allocations').run();
   seedNjhpsAllocations();
   contract = db.prepare(`SELECT * FROM contracts WHERE contract_no = 'PPA/SJVN/NJHPS/001'`).get();
-  reia = tokenFor('REIA_USER');
+  reia = tokenFor('COMMERCIAL_ADMIN');
   viewer = tokenFor('MANAGEMENT');
 });
 
@@ -143,8 +143,8 @@ describe('raising a trading bill', () => {
 
 describe('a trading bill runs the same lifecycle as a tariff bill', () => {
   async function raisedAndIssued() {
-    const maker = makeUser('REIA_USER', { name: `PTC Maker ${Math.random()}` });
-    const hod = makeUser('REIA_ADMIN', { name: `PTC HOD ${Math.random()}` });
+    const maker = makeUser('COMMERCIAL_ADMIN', { name: `PTC Maker ${Math.random()}` });
+    const hod = makeUser('COMMERCIAL_ADMIN', { name: `PTC HOD ${Math.random()}` });
     const r = await post('/api/hydro-billing/ptc', signFor(maker), { contract_id: contract.id, ...TRADE });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
 

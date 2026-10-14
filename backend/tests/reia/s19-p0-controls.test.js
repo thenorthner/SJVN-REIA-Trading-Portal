@@ -17,17 +17,17 @@ describe('S19 A change of bank account is not the live one until it is verified'
   beforeEach(() => {
     ent = makeEntity('SELLER');
     db.prepare(`UPDATE entities SET status='APPROVED', is_penny_drop_verified=1,
-                bank_name='SBI', account_no='11112222', ifsc_code='SBIN0001' WHERE id = ?`).run(ent.id);
+                bank_name='SBI', account_no='111122223333', ifsc_code='SBIN0001234' WHERE id = ?`).run(ent.id);
   });
 
   const changeBank = (over = {}) => request(app).put(`/api/entities/${ent.id}`).set(auth(reia))
-    .send({ bank_name: 'HDFC Bank', account_no: '99998888', ifsc_code: 'HDFC0009', ...over });
+    .send({ bank_name: 'HDFC Bank', account_no: '999988887777', ifsc_code: 'HDFC0009876', ...over });
   const row = () => db.prepare('SELECT * FROM entities WHERE id = ?').get(ent.id);
 
   it('leaves the verified account live while the change waits', async () => {
     await changeBank();
-    expect(row().account_no, 'the new account went live before anyone verified it').toBe('11112222');
-    expect(JSON.parse(row().pending_bank_json).account_no).toBe('99998888');
+    expect(row().account_no, 'the new account went live before anyone verified it').toBe('111122223333');
+    expect(JSON.parse(row().pending_bank_json).account_no).toBe('999988887777');
   });
 
   it('keeps the live account verified, since it did not change', async () => {
@@ -40,22 +40,46 @@ describe('S19 A change of bank account is not the live one until it is verified'
     expect(row().status).toBe('PENDING');
   });
 
-  it('promotes the change once the penny drop clears', async () => {
+  it('promotes the change once the account is verified', async () => {
     await changeBank();
-    const r = await request(app).post(`/api/entities/${ent.id}/penny-drop`).set(auth(reia)).send({});
+    const r = await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(reia)).send({});
     expect(r.status).toBe(200);
-    expect(row().account_no, 'a verified change never became the live account').toBe('99998888');
+    expect(row().account_no, 'a verified change never became the live account').toBe('999988887777');
     expect(row().pending_bank_json).toBeNull();
     expect(row().is_penny_drop_verified).toBe(1);
   });
 
   it('records what the account was and what it became', async () => {
     await changeBank();
-    await request(app).post(`/api/entities/${ent.id}/penny-drop`).set(auth(reia)).send({});
+    await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(reia)).send({});
     const a = db.prepare(`SELECT * FROM audit_logs WHERE entity_id = ? AND action = 'BANK_CHANGE_VERIFIED'`).get(ent.id);
     expect(a, 'promoting an account to live left no trail').toBeTruthy();
-    expect(String(a.before_value ?? a.beforeValue ?? '')).toContain('11112222');
-    expect(String(a.after_value ?? a.afterValue ?? '')).toContain('99998888');
+    expect(String(a.before_value ?? a.beforeValue ?? '')).toContain('111122223333');
+    expect(String(a.after_value ?? a.afterValue ?? '')).toContain('999988887777');
+  });
+
+  it('promotes the change when the record is re-approved', async () => {
+    // Approval is where the bank proof on the checklist is confirmed, so it is
+    // also where the account it proves becomes the one that is paid.
+    await changeBank();
+    db.prepare(`UPDATE entity_regulatory_approvals SET status = 'VERIFIED' WHERE entity_id = ?`).run(ent.id);
+    const r = await request(app).post(`/api/entities/${ent.id}/approve`).set(auth(reia)).send({ decision: 'APPROVED' });
+    if (r.status === 400) {
+      // The checklist is seeded on first approval; verify it and go again.
+      db.prepare(`UPDATE entity_regulatory_approvals SET status = 'VERIFIED' WHERE entity_id = ?`).run(ent.id);
+      await request(app).post(`/api/entities/${ent.id}/approve`).set(auth(reia)).send({ decision: 'APPROVED' });
+    }
+    expect(row().status).toBe('APPROVED');
+    expect(row().account_no).toBe('999988887777');
+    expect(row().pending_bank_json).toBeNull();
+  });
+
+  it('refuses a bank account or IFSC that is not one', async () => {
+    const bad = await changeBank({ ifsc_code: 'SBIN9001234' });
+    expect(bad.status, 'an IFSC whose fifth character is not 0 was accepted').toBe(400);
+    const short = await changeBank({ account_no: '12345' });
+    expect(short.status, 'a five-digit account number was accepted').toBe(400);
+    expect(row().pending_bank_json, 'a refused change was staged anyway').toBeNull();
   });
 
   it('leaves non-bank edits applying as before', async () => {
@@ -69,7 +93,7 @@ describe('S19 Money does not move to an unverified account', () => {
   let ent, contract, inv;
   beforeEach(() => {
     ent = makeEntity('SELLER');
-    db.prepare(`UPDATE entities SET status='APPROVED', is_penny_drop_verified=1, account_no='11112222' WHERE id = ?`).run(ent.id);
+    db.prepare(`UPDATE entities SET status='APPROVED', is_penny_drop_verified=1, account_no='111122223333' WHERE id = ?`).run(ent.id);
     contract = makeContract({ status: 'ACTIVE', seller_id: ent.id });
     inv = makeInvoice({ contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'APPROVED', total_amount: 100000 });
   });
@@ -83,10 +107,10 @@ describe('S19 Money does not move to an unverified account', () => {
   });
 
   it('refuses while a change of account is awaiting verification', async () => {
-    await request(app).put(`/api/entities/${ent.id}`).set(auth(reia)).send({ account_no: '99998888' });
+    await request(app).put(`/api/entities/${ent.id}`).set(auth(reia)).send({ account_no: '999988887777' });
     const r = await release();
     expect(r.status, 'money was released while the account was in dispute').toBe(400);
-    expect(r.body.error).toMatch(/penny-drop/i);
+    expect(r.body.error).toMatch(/awaiting verification/i);
     expect(db.prepare('SELECT COUNT(*) c FROM payments WHERE invoice_id = ?').get(inv.id).c).toBe(0);
   });
 
@@ -98,8 +122,8 @@ describe('S19 Money does not move to an unverified account', () => {
   });
 
   it('releases again once the change has been verified', async () => {
-    await request(app).put(`/api/entities/${ent.id}`).set(auth(reia)).send({ account_no: '99998888' });
-    await request(app).post(`/api/entities/${ent.id}/penny-drop`).set(auth(reia)).send({});
+    await request(app).put(`/api/entities/${ent.id}`).set(auth(reia)).send({ account_no: '999988887777' });
+    await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(reia)).send({});
     const r = await release();
     expect(r.status, 'a verified account still could not be paid').toBeLessThan(400);
   });

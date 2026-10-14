@@ -263,7 +263,7 @@ router.post('/:id/einvoice', (req, res) => send(res, () => {
   const irn = String(req.body.irn || '').trim().toLowerCase();
   if (!/^[0-9a-f]{64}$/.test(irn)) throw fail(400, 'An IRN is 64 characters of 0–9 and a–f');
   const ackNo = String(req.body.ack_no || '').trim();
-  if (ackNo && !/^\d{8,20}$/.test(ackNo)) throw fail(400, 'The acknowledgement number is digits only');
+  if (ackNo && !/^\d{1,30}$/.test(ackNo)) throw fail(400, 'The acknowledgement number must contain digits only');
   const ackDate = String(req.body.ack_date || '').trim().slice(0, 10);
   if (ackDate && !DAY.test(ackDate)) throw fail(400, 'The acknowledgement date must be YYYY-MM-DD');
   const signedQr = String(req.body.signed_qr || '').trim();

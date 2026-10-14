@@ -286,6 +286,10 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
         </div>
         <textarea
           rows={7}
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+          wrap="off"
           style={{
             width: '100%',
             border: 'none',
@@ -297,7 +301,9 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
             color: '#1e293b',
             background: '#ffffff',
             boxSizing: 'border-box',
-            resize: 'vertical'
+            resize: 'vertical',
+            whiteSpace: 'pre',
+            overflowX: 'auto',
           }}
           placeholder={'contract_no,billing_period,invoice_no,invoice_type,energy_mwh,…\nPPA/SOLAR/001,2026-08,,FINAL,1250.5,…'}
           value={text}

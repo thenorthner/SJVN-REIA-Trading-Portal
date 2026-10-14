@@ -1,6 +1,9 @@
 # Email draft — WBES: whitelist 49.50.97.173
 
-> **STATUS: DRAFT — not sent.** Deliberately short: one ask, nothing else.
+> **STATUS: DONE — Grid India confirmed 14-Oct-2026: 49.50.97.173 whitelisted on
+> the firewall for `usr_SJVNL` (ticket WBES-1788772472409).**
+>
+> (Original draft below, kept for the record.) Deliberately short: one ask, nothing else.
 >
 > **Do not quote the API key.** Grid India issued it; the entity and username
 > identify us. If they ask, give the first and last four characters only.

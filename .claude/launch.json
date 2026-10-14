@@ -4,14 +4,42 @@
     {
       "name": "backend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "backend"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "backend"
+      ],
       "port": 4000
     },
     {
       "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "frontend"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "frontend"
+      ],
       "port": 5173
+    },
+    {
+      "name": "backend-test",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && PORT=4001 SJVN_DB_PATH=/private/tmp/claude-501/-Users-kshitijsharma-Downloads-sjvn-energy-platform/ba09fcbe-1390-4169-b4b6-c09b4cfa82b6/scratchpad/testdb/platform-test.db SJVN_BACKUP_DIR=/private/tmp/claude-501/-Users-kshitijsharma-Downloads-sjvn-energy-platform/ba09fcbe-1390-4169-b4b6-c09b4cfa82b6/scratchpad/testdb/backups node src/server.js"
+      ],
+      "port": 4001
+    },
+    {
+      "name": "frontend-test",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend && VITE_API_TARGET=http://localhost:4001 npx vite --port 5174 --strictPort"
+      ],
+      "port": 5174
     }
   ]
 }

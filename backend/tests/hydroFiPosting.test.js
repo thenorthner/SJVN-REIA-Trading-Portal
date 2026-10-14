@@ -31,7 +31,7 @@ beforeEach(() => {
   db.prepare('DELETE FROM hydro_beneficiary_allocations').run();
   seedNjhpsAllocations();
   contract = db.prepare(`SELECT * FROM contracts WHERE contract_no = 'PPA/SJVN/NJHPS/001'`).get();
-  reia = tokenFor('REIA_USER');
+  reia = tokenFor('COMMERCIAL_ADMIN');
   viewer = tokenFor('MANAGEMENT');
 });
 
@@ -42,8 +42,8 @@ const get = (url, token) => request(app).get(url).set(auth(token));
 
 /** A bill taken all the way to ISSUED, which is the only state Finance books. */
 async function issuedBill(overrides = {}) {
-  const maker = makeUser('REIA_USER', { name: `FI Maker ${Math.random()}` });
-  const hod = makeUser('REIA_ADMIN', { name: `FI HOD ${Math.random()}` });
+  const maker = makeUser('COMMERCIAL_ADMIN', { name: `FI Maker ${Math.random()}` });
+  const hod = makeUser('COMMERCIAL_ADMIN', { name: `FI HOD ${Math.random()}` });
   const b = await post('/api/hydro-billing', signFor(maker), {
     contract_id: contract.id, ...JUNE, ...overrides,
   });
@@ -212,8 +212,8 @@ describe('reversing a posting', () => {
     const bookedAt = prepared.body.lines[0].total_amount;
 
     // The bill is revised afterwards, for a materially different figure.
-    const maker = makeUser('REIA_USER', { name: 'Reviser' });
-    const hod = makeUser('REIA_ADMIN', { name: 'Reviser HOD' });
+    const maker = makeUser('COMMERCIAL_ADMIN', { name: 'Reviser' });
+    const hod = makeUser('COMMERCIAL_ADMIN', { name: 'Reviser HOD' });
     const rev = await post('/api/hydro-billing', signFor(maker), {
       contract_id: contract.id, ...JUNE, bill_kind: 'REVISION',
       revises_bill_id: bill.id, revision_reason: 'β certified', beta_value: 1.0,

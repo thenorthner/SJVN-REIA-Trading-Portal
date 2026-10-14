@@ -37,6 +37,15 @@ const ReiaFinance = lazy(() => import('./pages/reia/ReiaFinance.jsx'));
 const Mail = lazy(() => import('./pages/Mail.jsx'));
 const HydroPtc = lazy(() => import('./pages/hydro-thermal/HydroPtc.jsx'));
 const HydroThermalDashboard = lazy(() => import('./pages/hydro-thermal/HydroThermalDashboard.jsx'));
+const ThermalDashboard = lazy(() => import('./pages/hydro-thermal/ThermalDashboard.jsx'));
+const HydroNotes = lazy(() => import('./pages/hydro-thermal/HydroNotes.jsx'));
+const HydroAdjustmentBills = lazy(() => import('./pages/hydro-thermal/HydroAdjustmentBills.jsx'));
+const HydroReceivables = lazy(() => import('./pages/hydro-thermal/HydroReceivables.jsx'));
+const HydroDisputes = lazy(() => import('./pages/hydro-thermal/desk/HydroDisputes.jsx'));
+const HydroSecurity = lazy(() => import('./pages/hydro-thermal/desk/HydroSecurity.jsx'));
+const HydroReconciliation = lazy(() => import('./pages/hydro-thermal/desk/HydroReconciliation.jsx'));
+const HydroTds = lazy(() => import('./pages/hydro-thermal/desk/HydroTds.jsx'));
+const ThermalStations = lazy(() => import('./pages/hydro-thermal/ThermalStations.jsx'));
 
 const TradingDashboard = lazy(() => import('./pages/trading/TradingDashboard.jsx'));
 const TradingClients = lazy(() => import('./pages/trading/TradingClients.jsx'));
@@ -177,6 +186,7 @@ const UserProfile = lazy(() => import('./pages/settings/UserProfile.jsx'));
 // which scope every query to their own entity.
 const REIA_ROLES = [...ROLE_GROUPS.REIA_ALL];
 const HYDRO_THERMAL_ROLES = [...ROLE_GROUPS.HYDRO_THERMAL_ALL];
+const THERMAL_ROLES = [...ROLE_GROUPS.THERMAL_ALL];
 const TRADING_INTERNAL_ROLES = [...ROLE_GROUPS.TRADING_ALL];
 const TRADING_CLIENT_ROLES = [...ROLE_GROUPS.TRADING_CLIENT_ALL];
 const TRADING_COMBINED_ROLES = [...new Set([...TRADING_INTERNAL_ROLES, ...TRADING_CLIENT_ROLES])];
@@ -207,6 +217,7 @@ function HomeRoute() {
   if (isTradingClientRole(role)) return <Navigate to="/trading/my-profile" replace />;
   if (role === 'TRADING_USER') return <Navigate to="/trading" replace />;
   if (['COMMERCIAL_ADMIN', 'COMMERCIAL'].includes(role)) return <Navigate to="/hydro-thermal" replace />;
+  if (['THERMAL_ADMIN', 'THERMAL_USER'].includes(role)) return <Navigate to="/thermal" replace />;
   // The REIA admin works the same desk; without this it landed on the executive
   // dashboard, which it may not see, and met an "access restricted" wall.
   if (role === 'REIA_USER' || role === 'REIA_ADMIN') return <Navigate to="/reia" replace />;
@@ -254,7 +265,7 @@ export default function App() {
         <Route path="reia" element={<ProtectedRoute roles={REIA_ROLES}><ReiaDashboard /></ProtectedRoute>} />
         <Route path="reia/entities" element={<ProtectedRoute roles={REIA_ROLES}><Entities /></ProtectedRoute>} />
         <Route path="reia/document-desk" element={<ProtectedRoute roles={REIA_ROLES}><DocumentDesk /></ProtectedRoute>} />
-        <Route path="admin/users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN']}><StaffUsers /></ProtectedRoute>} />
+        <Route path="admin/users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN', 'THERMAL_ADMIN']}><StaffUsers /></ProtectedRoute>} />
         <Route path="reia/company-users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN']}><CompanyUsers /></ProtectedRoute>} />
         <Route path="reia/seller-ledgers" element={<ProtectedRoute roles={REIA_ROLES}><SellerLedgers /></ProtectedRoute>} />
         <Route path="reia/contracts" element={<ProtectedRoute roles={REIA_ROLES}><Contracts /></ProtectedRoute>} />
@@ -269,11 +280,37 @@ export default function App() {
         <Route path="reia/energy-banking" element={<ProtectedRoute roles={REIA_ROLES}><EnergyBanking /></ProtectedRoute>} />
         {/* Hydro & Thermal Billing Portal */}
         <Route path="hydro-thermal" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroThermalDashboard /></ProtectedRoute>} />
+        {/* The same onboarding screen, scoped to the vertical it is opened from. */}
+        <Route path="hydro-thermal/stakeholders" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><Entities key="HYDRO" vertical="HYDRO" /></ProtectedRoute>} />
+        <Route path="thermal" element={<ProtectedRoute roles={THERMAL_ROLES}><ThermalDashboard /></ProtectedRoute>} />
+        <Route path="thermal/stakeholders" element={<ProtectedRoute roles={THERMAL_ROLES}><Entities key="THERMAL" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="hydro-thermal/hydro-billing" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroBilling /></ProtectedRoute>} />
         <Route path="hydro-thermal/hydro-ledger" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroLedger /></ProtectedRoute>} />
         <Route path="hydro-thermal/hydro-claims" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroClaims /></ProtectedRoute>} />
         <Route path="hydro-thermal/hydro-finance" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroFinance /></ProtectedRoute>} />
         <Route path="hydro-thermal/hydro-ptc" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroPtc /></ProtectedRoute>} />
+        <Route path="hydro-thermal/notes" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroNotes /></ProtectedRoute>} />
+        <Route path="hydro-thermal/arrear-supplementary" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroAdjustmentBills /></ProtectedRoute>} />
+        <Route path="hydro-thermal/disputes" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroDisputes /></ProtectedRoute>} />
+        <Route path="hydro-thermal/payment-security" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroSecurity /></ProtectedRoute>} />
+        <Route path="hydro-thermal/reconciliation" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroReconciliation /></ProtectedRoute>} />
+        <Route path="hydro-thermal/tds" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroTds /></ProtectedRoute>} />
+        <Route path="hydro-thermal/receivables" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroReceivables /></ProtectedRoute>} />
+        <Route path="hydro-thermal/dsm" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><DeviationSettlements key="HYDRO" vertical="HYDRO" /></ProtectedRoute>} />
+        {/* Thermal billing: the same station-billing screens, on the thermal stations. */}
+        <Route path="thermal/stations" element={<ProtectedRoute roles={THERMAL_ROLES}><ThermalStations /></ProtectedRoute>} />
+        <Route path="thermal/billing" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroBilling key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/arrear-supplementary" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroAdjustmentBills key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/ledger" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroLedger key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/notes" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroNotes key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/receivables" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroReceivables key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/disputes" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroDisputes key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/payment-security" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroSecurity key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/reconciliation" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroReconciliation key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/tds" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroTds key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/claims" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroClaims key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/finance" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroFinance key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/dsm" element={<ProtectedRoute roles={THERMAL_ROLES}><DeviationSettlements key="THERMAL" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="reia/reports" element={<ProtectedRoute roles={REIA_ROLES}><Reports /></ProtectedRoute>} />
         <Route path="reia/payment-monitoring" element={<ProtectedRoute roles={REIA_ROLES}><PaymentMonitoring /></ProtectedRoute>} />
         <Route path="reia/generation-performance" element={<ProtectedRoute roles={REIA_ROLES}><GenerationPerformance /></ProtectedRoute>} />

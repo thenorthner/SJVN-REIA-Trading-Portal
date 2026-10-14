@@ -13,6 +13,9 @@ import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, genInvoiceNo, pushNotification } from '../util.js';
 import { getParam } from '../mastersService.js';
 import { secureLogAudit } from '../auditEngine.js';
+import { isThermal, buildThermalBill, rebuildThermalBill, thermalReadiness } from '../services/thermalStationBill.js';
+import { stationScope, deskVertical, verticalOfContract } from '../services/stationScope.js';
+import { listNotes, raiseNote, approveNote, rejectNote, NOTE_REASONS } from '../services/hydroNotes.js';
 import {
   generateHydroStationBillPdf, generateHydroBeneficiaryBillsPdf, hydroBeneficiaryBillPdfBuffer, monthLabel,
 } from '../scripts/hydroStationBillPdf.js';
@@ -20,6 +23,7 @@ import { sendMail, formatHydroBillEmail } from '../services/mailService.js';
 import {
   addCharge, unclaimedCharges, claimAdditionalCharges, claimTcs, computeTcs,
   listTcsClaims, CHARGE_TYPES, CHARGE_TYPE_LABELS,
+  createSupplementaryBill, SUPPLEMENTARY_REASONS, emptyBillBlocks, INSERT_BILL, freeBillNo,
 } from '../services/hydroClaims.js';
 import {
   bookableBills, preparePosting, postToFinance, reversePosting, getPosting,
@@ -39,19 +43,23 @@ import {
 import {
   postBillToLedger, recordPayment, reversePayment, resetClearing, accountMaintenance,
   accruedLpsFor, postLps, accountDisplay, beneficiariesWithAccounts,
-  billReversalBlockers, reverseBillDocs, dueDateFor, openDebits,
+  billReversalBlockers, reverseBillDocs, dueDateFor, openDebits, billedForMonth, receivablesAgeing,
 } from '../services/hydroLedger.js';
 import {
   computeStationBill, allocateBeneficiaries, getAllocations, priorCumulative,
   deriveAllocationColumns,
-  financialYearOf, seedNjhpsAllocations,
+  financialYearOf, seedNjhpsAllocations, contractForMonth,
 } from '../services/hydroStationBill.js';
 
 const router = Router();
 router.use(requireAuth);
 
-const READ = [...new Set([...ROLE_GROUPS.HYDRO_THERMAL_ALL, 'FINANCE_USER', 'COMPLIANCE_AUDITOR'])];
-const WRITE = [...ROLE_GROUPS.HYDRO_THERMAL_WRITE];
+// The hydro desk and the thermal desk share this billing machinery — the
+// bill, its approval, the ledger and everything after — each on its own
+// stations: stationScope refuses a desk any station of the other vertical.
+const READ = [...new Set([...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.THERMAL_ALL, 'FINANCE_USER', 'COMPLIANCE_AUDITOR'])];
+const WRITE = [...new Set([...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
+stationScope(router);
 
 // Lay out the NJHPS allocation master on first load, the way the DSM slabs are
 // seeded. It is idempotent and leaves a corrected percentage alone.
@@ -234,11 +242,13 @@ function resolveRevision(contract, month, body) {
 
 // GET /hydro-billing/stations — hydro PPAs and whether each can be billed yet.
 router.get('/stations', requireRole(...READ), (req, res) => {
+  const vertical = deskVertical(req.user) || (req.query.vertical === 'THERMAL' ? 'THERMAL' : 'HYDRO');
+  const types = vertical === 'THERMAL' ? "('Thermal')" : "('Hydro','PSP')";
   const rows = db.prepare(`
     SELECT c.*, e.name AS seller_name
     FROM contracts c
     LEFT JOIN entities e ON c.seller_id = e.id
-    WHERE c.contract_type = 'PPA' AND c.project_type IN ('Hydro','PSP')
+    WHERE c.contract_type = 'PPA' AND c.project_type IN ${types}
     ORDER BY c.contract_no
   `).all();
   res.json(rows.map((c) => ({
@@ -252,7 +262,10 @@ router.get('/stations', requireRole(...READ), (req, res) => {
     normative_aux: c.normative_aux,
     free_energy_home_state: c.free_energy_home_state,
     napaf_percent: c.napaf_percent,
-    ...readiness(c),
+    status: c.status,
+    tenure_start: c.tenure_start,
+    tenure_end: c.tenure_end,
+    ...(isThermal(c) ? thermalReadiness(c) : readiness(c)),
   })));
 });
 
@@ -639,13 +652,21 @@ router.patch('/allocations/:id', requireRole(...WRITE), (req, res) => {
 router.get('/', requireRole(...READ), (req, res) => {
   const { contract_id, billing_month, financial_year, status, bill_kind } = req.query;
   let sql = `
-    SELECT b.*, c.contract_no
+    SELECT b.*, c.contract_no,
+      -- Who a bill in approval is waiting on, and since when: "with an
+      -- approver" told the desk nothing about whom to chase.
+      (SELECT a.approver_name FROM hydro_bill_approvals a WHERE a.bill_id = b.id AND a.status = 'PENDING' LIMIT 1) AS pending_with,
+      (SELECT a.created_at FROM hydro_bill_approvals a WHERE a.bill_id = b.id AND a.status = 'PENDING' LIMIT 1) AS pending_since,
+      (SELECT a.comments FROM hydro_bill_approvals a WHERE a.bill_id = b.id AND a.status = 'REJECTED' ORDER BY a.acted_at DESC LIMIT 1) AS rejection_comment
     FROM hydro_station_bills b
     JOIN contracts c ON b.contract_id = c.id
     WHERE 1=1
   `;
   const params = [];
   if (contract_id) { sql += ' AND b.contract_id = ?'; params.push(contract_id); }
+  const listVertical = deskVertical(req.user) || req.query.vertical;
+  if (listVertical === 'THERMAL') sql += " AND c.project_type = 'Thermal'";
+  else if (listVertical === 'HYDRO') sql += " AND c.project_type IN ('Hydro','PSP')";
   if (billing_month) { sql += ' AND b.billing_month = ?'; params.push(normalizeMonth(billing_month) || billing_month); }
   if (financial_year) { sql += ' AND b.financial_year = ?'; params.push(financial_year); }
   if (status) { sql += ' AND b.status = ?'; params.push(status); }
@@ -661,7 +682,7 @@ router.post('/preview', requireRole(...READ), (req, res) => {
     if (!month) return res.status(400).json({ error: 'billing_month must be YYYY-MM (e.g. 2026-06) or a month name with year' });
     const contract = getContract(req.body.contract_id);
 
-    const { bill, lines, sources } = buildBill(contract, month, req.body);
+    const { bill, lines, sources } = computeFor(contract, month, req.body);
     const { revises, prevTotal } = resolveRevision(contract, month, req.body);
 
     res.json({
@@ -693,8 +714,13 @@ router.post('/preview', requireRole(...READ), (req, res) => {
  * Compute a month's bill and save it as DRAFT with its beneficiary breakup.
  * Shared by the desk's own save and by the REA run, so both write the same rows.
  */
+/** The month's bill on the station's own tariff: hydro or thermal. */
+function computeFor(contract, month, body) {
+  return isThermal(contract) ? buildThermalBill(contract, month, body) : buildBill(contract, month, body);
+}
+
 function saveBill(contract, month, kind, body, req) {
-  const { bill, lines, sources } = buildBill(contract, month, body);
+  const { bill, lines, sources } = computeFor(contract, month, body);
   const { revises, prevTotal } = resolveRevision(contract, month, body);
   if (kind === 'REVISION' && !body.revision_reason) {
     throw Object.assign(new Error('A revision must say what changed — supply revision_reason'), { status: 400 });
@@ -787,6 +813,9 @@ function saveBill(contract, month, kind, body, req) {
     },
   });
 
+  if (bill.thermal_inputs) {
+    db.prepare('UPDATE hydro_station_bills SET thermal_inputs_json = ? WHERE id = ?').run(JSON.stringify(bill.thermal_inputs), id);
+  }
   return { id, bill_no: billNo, billing_month: month, bill_kind: kind, ...bill, lines, sources };
 }
 
@@ -1341,7 +1370,11 @@ router.get('/approvals/inbox', requireRole(...READ), (req, res) => {
  * needed to choose between them.
  */
 router.get('/approvers', requireRole(...READ), (req, res) => {
-  const roles = ROLE_GROUPS.HYDRO_THERMAL_WRITE;
+  // A thermal bill is approved on the thermal desk, a hydro bill on the hydro desk.
+  const vertical = deskVertical(req.user) || (req.query.vertical === 'THERMAL' ? 'THERMAL' : 'HYDRO');
+  const roles = vertical === 'THERMAL'
+    ? ROLE_GROUPS.THERMAL_WRITE
+    : ROLE_GROUPS.HYDRO_THERMAL_WRITE;
   const placeholders = roles.map(() => '?').join(',');
   res.json(db.prepare(`
     SELECT id, name, role FROM users
@@ -1632,6 +1665,64 @@ function stationContract(id) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // GET /hydro-billing/charges?contract_id=  — entries and what they add to.
+// GET /hydro-billing/receivables?contract_id= — beneficiary-wise outstanding, aged.
+router.get('/receivables', requireRole(...READ), (req, res) => {
+  if (!req.query.contract_id) return res.status(400).json({ error: 'contract_id is required' });
+  res.json(receivablesAgeing(req.query.contract_id, { asOf: req.query.as_of ? new Date(req.query.as_of) : new Date() }));
+});
+
+// ── Debit / credit notes on a beneficiary's account ─────────────────────────
+// Raised as drafts, approved by a different officer, then posted to the ledger.
+router.get('/notes', requireRole(...READ), (req, res) => {
+  res.json({
+    notes: listNotes({ contractId: req.query.contract_id, beneficiaryName: req.query.beneficiary, status: req.query.status }),
+    reasons: Object.entries(NOTE_REASONS).map(([value, label]) => ({ value, label })),
+  });
+});
+
+router.post('/notes', requireRole(...WRITE), (req, res) => {
+  try {
+    const note = raiseNote(req.body || {}, req.user);
+    secureLogAudit(req, {
+      action: 'HYDRO_NOTE_RAISED', module: 'REIA', entityType: 'hydro_notes', entityId: note.id,
+      afterValue: { note_no: note.note_no, type: note.note_type, beneficiary: note.beneficiary_name, amount: note.amount, reason: note.reason },
+    });
+    pushNotification({
+      role: verticalOfContract(note.contract_id) === 'THERMAL' ? 'THERMAL_ADMIN' : 'COMMERCIAL_ADMIN', type: 'HYDRO_NOTE_PENDING',
+      message: `${note.note_type === 'DEBIT' ? 'Debit' : 'Credit'} note ${note.note_no} (₹${note.amount.toLocaleString('en-IN')}, ${note.beneficiary_name}) is awaiting approval.`,
+    });
+    res.status(201).json(note);
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+router.post('/notes/:id/approve', requireRole(...WRITE), (req, res) => {
+  try {
+    const out = approveNote(req.params.id, req.user);
+    secureLogAudit(req, {
+      action: 'HYDRO_NOTE_APPROVED', module: 'REIA', entityType: 'hydro_notes', entityId: out.note.id,
+      afterValue: { note_no: out.note.note_no, ledger_doc: out.ledger_doc.doc_no, amount: out.note.amount },
+    });
+    res.json(out);
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+router.post('/notes/:id/reject', requireRole(...WRITE), (req, res) => {
+  try {
+    const note = rejectNote(req.params.id, req.user, req.body?.reason);
+    secureLogAudit(req, {
+      action: note.status === 'CANCELLED' ? 'HYDRO_NOTE_WITHDRAWN' : 'HYDRO_NOTE_REJECTED',
+      module: 'REIA', entityType: 'hydro_notes', entityId: note.id, reason: note.rejection_reason,
+    });
+    res.json(note);
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
 router.get('/charges', requireRole(...READ), (req, res) => {
   const { contract_id, include_claimed } = req.query;
   if (!contract_id) return res.status(400).json({ error: 'contract_id is required' });
@@ -1956,7 +2047,363 @@ router.post('/fi/:postingId/reverse', requireRole(...WRITE), (req, res) => {
   }
 });
 
+// ─── A station's tariff constants, year by year ──────────────────────────────
+
+// GET /hydro-billing/tariffs?contract_id= — the years on file for a station.
+router.get('/tariffs', requireRole(...READ), (req, res) => {
+  if (!req.query.contract_id) return res.status(400).json({ error: 'contract_id is required' });
+  res.json(db.prepare(`
+    SELECT * FROM hydro_station_tariffs WHERE contract_id = ? ORDER BY financial_year DESC
+  `).all(String(req.query.contract_id)));
+});
+
+/**
+ * POST /hydro-billing/tariffs — set a station's figures for a financial year.
+ *
+ * CERC revises a year's Annual Fixed Charges after bills have been raised on
+ * the earlier figure. This records the year's figure against the station
+ * without amending the contract (which would start a new contract version and
+ * leave the station's bills and allocation sheets on the old one). It changes
+ * what the next bill is computed on; a bill already raised keeps the figures
+ * it was raised with, and is restated by cancelling and redrafting or by a
+ * revision.
+ */
+router.post('/tariffs', requireRole(...WRITE), (req, res) => {
+  try {
+    const { contract_id, financial_year, order_ref } = req.body;
+    if (!contract_id) return res.status(400).json({ error: 'contract_id is required' });
+    if (!/^\d{4}-\d{4}$/.test(String(financial_year || ''))) {
+      return res.status(400).json({ error: 'financial_year must look like 2026-2027' });
+    }
+    const contract = getContract(contract_id);
+    const num = (v, label, { max = Infinity } = {}) => {
+      if (v === '' || v == null) return null;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n <= 0 || n > max) throw Object.assign(new Error(`${label} is not a usable figure`), { status: 400 });
+      return n;
+    };
+    const row = {
+      annual_afc: num(req.body.annual_afc, 'Annual Fixed Charges'),
+      ecr_excess_rate: num(req.body.ecr_excess_rate, 'Rate beyond design energy', { max: 100 }),
+      napaf_percent: num(req.body.napaf_percent, 'NAPAF', { max: 100 }),
+      annual_design_energy_mwh: num(req.body.annual_design_energy_mwh, 'Annual design energy'),
+      normative_aux: num(req.body.normative_aux, 'Auxiliary consumption', { max: 100 }),
+    };
+    if (Object.values(row).every((v) => v == null)) return res.status(400).json({ error: 'Nothing to set — give at least one figure' });
+    // An AFC typed in crore instead of rupees would bill a ten-millionth of the
+    // station; refuse a figure that cannot be a year's fixed charges.
+    if (row.annual_afc != null && row.annual_afc < 1e7) {
+      return res.status(400).json({ error: 'Annual Fixed Charges are entered in rupees, not crore (1700.8363 crore is 17008363000)' });
+    }
+
+    const before = db.prepare('SELECT * FROM hydro_station_tariffs WHERE contract_id = ? AND financial_year = ?')
+      .get(contract.id, financial_year);
+    const who = req.user?.name || req.user?.email || null;
+    if (before) {
+      db.prepare(`
+        UPDATE hydro_station_tariffs SET annual_afc = ?, ecr_excess_rate = ?, napaf_percent = ?,
+          annual_design_energy_mwh = ?, normative_aux = ?, order_ref = ?, updated_by = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(row.annual_afc, row.ecr_excess_rate, row.napaf_percent, row.annual_design_energy_mwh,
+        row.normative_aux, order_ref || null, who, before.id);
+    } else {
+      db.prepare(`
+        INSERT INTO hydro_station_tariffs (id, contract_id, financial_year, annual_afc, ecr_excess_rate,
+          napaf_percent, annual_design_energy_mwh, normative_aux, order_ref, updated_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(newId('HST'), contract.id, financial_year, row.annual_afc, row.ecr_excess_rate, row.napaf_percent,
+        row.annual_design_energy_mwh, row.normative_aux, order_ref || null, who);
+    }
+    const after = db.prepare('SELECT * FROM hydro_station_tariffs WHERE contract_id = ? AND financial_year = ?')
+      .get(contract.id, financial_year);
+    secureLogAudit(req, {
+      action: 'HYDRO_STATION_TARIFF_SET',
+      module: 'REIA',
+      entityType: 'hydro_station_tariffs',
+      entityId: after.id,
+      beforeValue: before ? { annual_afc: before.annual_afc, ecr_excess_rate: before.ecr_excess_rate } : { annual_afc: contract.annual_afc, ecr_excess_rate: contract.ecr_excess_rate, from: 'contract' },
+      afterValue: { contract_no: contract.contract_no, financial_year, ...row, order_ref: order_ref || null },
+    });
+    // Bills of that year already raised on other figures, so the desk knows what is now stale.
+    const raised = db.prepare(`
+      SELECT bill_no, billing_month, status, a1_afc FROM hydro_station_bills
+      WHERE contract_id = ? AND financial_year = ? AND status <> 'CANCELLED' ORDER BY billing_month
+    `).all(contract.id, financial_year);
+    res.json({
+      ...after,
+      bills_on_other_figures: row.annual_afc == null ? [] : raised.filter((b) => Math.abs(Number(b.a1_afc) - row.annual_afc) > 0.5),
+    });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
 // GET /hydro-billing/:id — the bill and its beneficiary breakup.
+// ─────────────────────────────────────────────────────────────────────────────
+// Arrear bills — a revised tariff applied to months already billed
+// ─────────────────────────────────────────────────────────────────────────────
+
+const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+
+/**
+ * Work out the arrear a revised tariff makes on months already billed.
+ *
+ * For each month: the bill the month stands on (the latest issued energy bill,
+ * plus any arrear already issued on it), recomputed with the same energy,
+ * availability, β and beneficiary split but the tariff now on record for that
+ * financial year (Tariffs screen). The difference, beneficiary by beneficiary,
+ * is the arrear. Nothing is saved.
+ */
+function computeArrear(contract, fromMonth, toMonth) {
+  const from = normalizeMonth(fromMonth);
+  const to = normalizeMonth(toMonth || fromMonth);
+  if (!from || !to) throw Object.assign(new Error('from_month and to_month must be YYYY-MM'), { status: 400 });
+  if (from > to) throw Object.assign(new Error('from_month is after to_month'), { status: 400 });
+  const months = monthRange(from, to);
+  if (months.length > 36) throw Object.assign(new Error('An arrear bill covers at most 36 months'), { status: 400 });
+
+  const rows = [];
+  const skipped = [];
+  const byBeneficiary = new Map();
+  for (const m of months) {
+    // A month already on an arrear that has not been issued would be billed twice.
+    const pending = db.prepare(`
+      SELECT a.bill_no FROM hydro_arrear_months am JOIN hydro_station_bills a ON a.id = am.arrear_bill_id
+      WHERE a.contract_id = ? AND am.billing_month = ? AND a.status = 'DRAFT'
+    `).get(contract.id, m);
+    if (pending) { skipped.push({ month: m, reason: `already on draft arrear bill ${pending.bill_no} — issue or cancel it first` }); continue; }
+
+    const { basis, byName } = billedForMonth(contract.id, m);
+    if (!basis) { skipped.push({ month: m, reason: 'no issued bill for this month' }); continue; }
+    const basisLines = db.prepare('SELECT * FROM hydro_bill_lines WHERE bill_id = ? ORDER BY sr_no').all(basis.id);
+
+    const deductions = {};
+    const scheduled = {};
+    for (const l of basisLines) {
+      if (Number(l.deducted_scheduled_energy_kwh) > 0) deductions[l.beneficiary_name] = Number(l.deducted_scheduled_energy_kwh);
+      scheduled[l.beneficiary_name] = Number(l.actual_scheduled_energy_kwh) || 0;
+    }
+    const inputs = {
+      ex_bus_scheduled_kwh: basis.e1_ex_bus_scheduled_kwh,
+      free_power_kwh: basis.e2_free_power_kwh,
+      pafm_percent: basis.c1_pafm_pct,
+      beta_value: basis.c3_beta_factor,
+      nrldc_total_fee: basis.nrldc_total_fee,
+      urs_nr_kwh: basis.urs_nr_kwh,
+      prior_scheduled_kwh: Number(basis.e4_cum_scheduled_kwh) - Number(basis.e1_ex_bus_scheduled_kwh),
+      prior_free_kwh: Number(basis.e5_cum_free_power_kwh) - Number(basis.e2_free_power_kwh),
+      deductions: Object.keys(deductions).length ? deductions : null,
+    };
+    let rebuilt;
+    if (isThermal(contract)) {
+      rebuilt = rebuildThermalBill(contract, basis, m);
+    } else try {
+      // The beneficiary energy the month was billed on, where the bill held it;
+      // otherwise the allocation split it was derived from.
+      const usable = Object.values(scheduled).some((v) => v > 0);
+      rebuilt = buildBill(contract, m, { ...inputs, scheduled_energy: usable ? scheduled : null }, { excludeBillId: basis.id });
+    } catch {
+      rebuilt = buildBill(contract, m, inputs, { excludeBillId: basis.id });
+    }
+
+    const basisByName = Object.fromEntries(basisLines.map((l) => [l.beneficiary_name, l]));
+    const lines = rebuilt.lines.map((l) => {
+      const revised = round2(Number(l.total_charges) + Number(l.nrldc_fee || 0));
+      const before = round2(byName[l.beneficiary_name] || 0);
+      const b = basisByName[l.beneficiary_name];
+      return {
+        beneficiary_name: l.beneficiary_name,
+        beneficiary_id: l.beneficiary_id || b?.beneficiary_id || null,
+        parent_state: l.parent_state || null,
+        pct_rea: l.pct_rea, pct_excl_free: l.pct_excl_free, pct_proportionate: l.pct_proportionate, pct_incl_free: l.pct_incl_free,
+        previously_billed: before,
+        revised,
+        capacity_differential: round2(Number(l.capacity_charge) - Number(b?.capacity_charge || 0)),
+        energy_differential: round2(Number(l.energy_charge_total) - Number(b?.energy_charge_total || 0)),
+        differential: round2(revised - before),
+      };
+    });
+    const sum = (k) => round2(lines.reduce((a, l) => a + l[k], 0));
+    const row = {
+      month: m,
+      basis_bill_id: basis.id,
+      basis_bill_no: basis.bill_no,
+      basis_kind: basis.bill_kind,
+      tariff: { afc: rebuilt.bill.a1_afc, ecr: rebuilt.bill.a12_ecr, previous_afc: basis.a1_afc, previous_ecr: basis.a12_ecr },
+      previously_billed: sum('previously_billed'),
+      revised_amount: sum('revised'),
+      differential: sum('differential'),
+      capacity_differential: sum('capacity_differential'),
+      energy_differential: sum('energy_differential'),
+      lines,
+    };
+    rows.push(row);
+    for (const l of lines) {
+      const cur = byBeneficiary.get(l.beneficiary_name) || { ...l, differential: 0, capacity_differential: 0, energy_differential: 0, months: 0 };
+      cur.differential = round2(cur.differential + l.differential);
+      cur.capacity_differential = round2(cur.capacity_differential + l.capacity_differential);
+      cur.energy_differential = round2(cur.energy_differential + l.energy_differential);
+      cur.months += 1;
+      byBeneficiary.set(l.beneficiary_name, cur);
+    }
+  }
+  const beneficiaries = [...byBeneficiary.values()];
+  return {
+    from_month: from,
+    to_month: to,
+    months: rows,
+    skipped,
+    beneficiaries,
+    total_differential: round2(beneficiaries.reduce((a, b) => a + b.differential, 0)),
+  };
+}
+
+// POST /hydro-billing/arrears/preview — what the arrear would be, nothing saved.
+router.post('/arrears/preview', requireRole(...READ), (req, res) => {
+  try {
+    const contract = getContract(req.body.contract_id);
+    res.json(computeArrear(contract, req.body.from_month, req.body.to_month));
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// POST /hydro-billing/arrears — save the arrear as a DRAFT bill.
+router.post('/arrears', requireRole(...WRITE), (req, res) => {
+  try {
+    const contract = getContract(req.body.contract_id);
+    const reason = String(req.body.reason || '').trim();
+    if (reason.length < 10) {
+      return res.status(400).json({ error: 'Say why the arrear arises — e.g. the CERC order revising the tariff (at least 10 characters)' });
+    }
+    const a = computeArrear(contract, req.body.from_month, req.body.to_month);
+    if (!a.months.length) {
+      return res.status(400).json({ error: 'None of the months in that range can carry an arrear', skipped: a.skipped });
+    }
+    if (Math.abs(a.total_differential) < 0.01 && a.beneficiaries.every((b) => Math.abs(b.differential) < 0.01)) {
+      return res.status(400).json({
+        error: 'The tariff on record gives the same figures these months were billed at — there is no arrear. Update the tariff for the financial year first (Tariffs).',
+      });
+    }
+
+    const id = newId('HSB');
+    const billNo = freeBillNo('HAR');
+    const stationName = db.prepare('SELECT name FROM entities WHERE id = ?').get(contract.seller_id)?.name || contract.contract_no;
+    const tariff = contractForMonth(contract, a.to_month);
+    const insertLine = db.prepare(`
+      INSERT INTO hydro_bill_lines (
+        id, bill_id, sr_no, beneficiary_name, beneficiary_id, parent_state,
+        pct_incl_free, pct_rea, pct_excl_free, pct_proportionate,
+        capacity_charge, saleable_energy_kwh, energy_upto_design_kwh, energy_excess_kwh,
+        actual_scheduled_energy_kwh, deducted_scheduled_energy_kwh, is_regulated,
+        energy_charge_upto, energy_charge_excess, energy_charge_total, nrldc_fee, total_charges
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, 0, 0, 0, 0, 0, ?, 0, ?)
+    `);
+    db.transaction(() => {
+      db.prepare(INSERT_BILL).run({
+        id,
+        bill_no: billNo,
+        contract_id: contract.id,
+        station_name: stationName,
+        billing_month: a.to_month,
+        financial_year: financialYearOf(a.to_month),
+        bill_kind: 'ARREAR',
+        rea_reference: req.body.order_reference || null,
+        revision_reason: reason,
+        ...emptyBillBlocks(contract),
+        a1_afc: Number(tariff.annual_afc) || 0,
+        total_charges: a.total_differential,
+        prepared_by: req.user?.name || req.user?.email || null,
+        created_by: req.user?.id || null,
+      });
+      db.prepare(`
+        UPDATE hydro_station_bills SET arrear_from_month = ?, arrear_to_month = ?,
+          prev_total_charges = ?, differential_amount = ?
+        WHERE id = ?
+      `).run(a.from_month, a.to_month, round2(a.months.reduce((s2, m) => s2 + m.previously_billed, 0)), a.total_differential, id);
+      a.beneficiaries.forEach((b, i) => {
+        insertLine.run(
+          newId('HBL'), id, i + 1, b.beneficiary_name, b.beneficiary_id, b.parent_state,
+          b.pct_incl_free ?? null, b.pct_rea ?? 0, b.pct_excl_free ?? 0, b.pct_proportionate ?? 0,
+          b.capacity_differential, b.energy_differential, b.differential,
+        );
+      });
+      const insMonth = db.prepare(`
+        INSERT INTO hydro_arrear_months (id, arrear_bill_id, billing_month, basis_bill_id, basis_bill_no,
+          previously_billed, revised_amount, differential, capacity_differential, energy_differential, lines_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const m of a.months) {
+        insMonth.run(newId('HAM'), id, m.month, m.basis_bill_id, m.basis_bill_no, m.previously_billed,
+          m.revised_amount, m.differential, m.capacity_differential, m.energy_differential,
+          JSON.stringify(m.lines.map((l) => ({ beneficiary_name: l.beneficiary_name, differential: l.differential }))));
+      }
+    })();
+
+    secureLogAudit(req, {
+      action: 'HYDRO_ARREAR_BILL_CREATED', module: 'REIA', entityType: 'hydro_station_bills', entityId: id,
+      afterValue: { bill_no: billNo, from: a.from_month, to: a.to_month, total: a.total_differential, reason },
+    });
+    res.json({ id, bill_no: billNo, bill_kind: 'ARREAR', ...a });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// GET /hydro-billing/supplementary/reasons
+router.get('/supplementary/reasons', requireRole(...READ), (_req, res) => {
+  res.json(Object.entries(SUPPLEMENTARY_REASONS).map(([value, label]) => ({ value, label })));
+});
+
+// POST /hydro-billing/supplementary — a one-off bill on top of a month, as a DRAFT.
+router.post('/supplementary', requireRole(...WRITE), (req, res) => {
+  try {
+    const contract = getContract(req.body.contract_id);
+    const stationName = db.prepare('SELECT name FROM entities WHERE id = ?').get(contract.seller_id)?.name;
+    const r = createSupplementaryBill({
+      contract: { ...contract, station_name: stationName || contract.contract_no },
+      billingMonth: normalizeMonth(req.body.billing_month),
+      amount: req.body.amount,
+      reason: req.body.reason,
+      particulars: req.body.particulars,
+      beneficiaryName: req.body.beneficiary_name || null,
+      orderReference: req.body.order_reference || null,
+      preparedBy: req.user?.name || req.user?.email || null,
+      createdBy: req.user?.id || null,
+    });
+    secureLogAudit(req, {
+      action: 'HYDRO_SUPPLEMENTARY_BILL_CREATED', module: 'REIA', entityType: 'hydro_station_bills', entityId: r.id,
+      afterValue: r,
+    });
+    res.json(r);
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// POST /hydro-billing/:id/recall — the maker takes a bill back out of approval.
+router.post('/:id/recall', requireRole(...WRITE), (req, res) => {
+  try {
+    const bill = db.prepare('SELECT * FROM hydro_station_bills WHERE id = ?').get(req.params.id);
+    if (!bill) return res.status(404).json({ error: 'Bill not found' });
+    if (bill.status !== 'DRAFT' || !['IN_APPROVAL', 'REJECTED'].includes(bill.approval_status)) {
+      return res.status(400).json({ error: `${bill.bill_no} is not with an approver — there is nothing to recall` });
+    }
+    const reason = String(req.body?.reason || '').trim();
+    if (reason.length < 5) return res.status(400).json({ error: 'Say why the bill is being recalled' });
+    db.transaction(() => {
+      // The step is closed, not deleted, so the trail shows the bill was taken back.
+      db.prepare(`UPDATE hydro_bill_approvals SET status = 'REJECTED', comments = ?, acted_at = datetime('now') WHERE bill_id = ? AND status = 'PENDING'`)
+        .run(`Recalled by the maker (${req.user?.name || 'unknown'}): ${reason}`, bill.id);
+      db.prepare(`UPDATE hydro_station_bills SET approval_status = 'NOT_SENT', updated_at = datetime('now') WHERE id = ?`).run(bill.id);
+    })();
+    secureLogAudit(req, { action: 'HYDRO_BILL_RECALLED', module: 'REIA', entityType: 'hydro_station_bills', entityId: bill.id, reason });
+    res.json({ bill_no: bill.bill_no, approval_status: 'NOT_SENT' });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
 router.get('/:id', requireRole(...READ), (req, res) => {
   const bill = db.prepare(`
     SELECT b.*, c.contract_no, r.bill_no AS revises_bill_no
@@ -1967,7 +2414,11 @@ router.get('/:id', requireRole(...READ), (req, res) => {
   `).get(req.params.id);
   if (!bill) return res.status(404).json({ error: 'Bill not found' });
   const lines = db.prepare('SELECT * FROM hydro_bill_lines WHERE bill_id = ? ORDER BY sr_no').all(bill.id);
-  res.json({ ...bill, lines });
+  const arrear_months = bill.bill_kind === 'ARREAR'
+    ? db.prepare('SELECT * FROM hydro_arrear_months WHERE arrear_bill_id = ? ORDER BY billing_month').all(bill.id)
+      .map((m) => ({ ...m, lines: JSON.parse(m.lines_json || '[]') }))
+    : [];
+  res.json({ ...bill, lines, arrear_months, approval: { trail: approvalTrail(bill.id), pending: pendingStep(bill.id) } });
 });
 
 // POST /hydro-billing/:id/issue
@@ -2045,7 +2496,10 @@ function loadBillForPrint(id) {
     'SELECT * FROM hydro_bill_lines WHERE bill_id = ? ORDER BY sr_no',
   ).all(bill.id);
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(bill.contract_id);
-  return { bill, lines, contract };
+  const arrearMonths = bill.bill_kind === 'ARREAR'
+    ? db.prepare('SELECT * FROM hydro_arrear_months WHERE arrear_bill_id = ? ORDER BY billing_month').all(bill.id)
+    : [];
+  return { bill, lines, contract, arrearMonths };
 }
 
 // POST /hydro-billing/:id/release — approved and issued, now releasable to print.

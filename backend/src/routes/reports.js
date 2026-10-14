@@ -4,10 +4,13 @@ import { generationPerformance } from '../services/generationPerformance.js';
 import { contractCompliance } from '../services/contractCompliance.js';
 import { verificationQueue } from '../services/verificationQueue.js';
 import { cercCompliance } from '../services/cercCompliance.js';
+import { buildAnnexures, annexuresWorkbook } from '../services/cercAnnexures.js';
+import { licenceCompliance, saveLicenceYear } from '../services/cercLicence.js';
 import { pooledForecastAccuracy } from '../services/marketForecast.js';
 import { observedDays, latestObservedDate, summariseDays, summariseBy, MARKET_EXCHANGES, MARKET_PRODUCTS } from '../services/marketPrices.js';
 import { receivablesOutstanding, payablesOutstanding, overdueCount } from '../services/outstanding.js';
 import db from '../db/index.js';
+import { logAudit } from '../util.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { generateBillingReportPdf } from '../scripts/billingReportPdf.js';
 import { generateEnergyReportPdf } from '../scripts/energyReportPdf.js';
@@ -31,6 +34,8 @@ const REPORT_READ = [...new Set([...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'])
 // built from the REIA groups and would otherwise lock TRADING_USER out of its
 // own module's reports.
 const TRADING_REPORT_READ = [...new Set([...REPORT_READ, ...ROLE_GROUPS.TRADING_ALL])];
+// Recording a licence fee payment or a net worth certificate: either desk's writers.
+const LICENCE_WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.TRADING_WRITE])];
 
 /** Shared month-wise billing aggregation used by JSON + PDF endpoints. */
 export function buildBillingSummary({ from, to } = {}) {
@@ -183,6 +188,59 @@ router.get('/cerc-compliance', requireRole(...REPORT_READ), (req, res) => {
   } catch (err) {
     console.error('CERC compliance error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/reports/cerc-compliance/annexures?period_type=MONTHLY&period=YYYY-MM
+ *
+ * One period's return sorted into the formats it is filed in (IV-A, IV-B, ...).
+ * Works for a period nobody has started, by reading the trade book directly.
+ */
+router.get('/cerc-compliance/annexures', requireRole(...TRADING_REPORT_READ), (req, res) => {
+  try {
+    res.json(buildAnnexures(req.query.period_type, req.query.period));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/** The same split as an Excel workbook, a sheet per form, in the filed layout. */
+router.get('/cerc-compliance/annexures/xlsx', requireRole(...TRADING_REPORT_READ), (req, res) => {
+  let built;
+  try {
+    built = buildAnnexures(req.query.period_type, req.query.period);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  try {
+    const buffer = annexuresWorkbook(built);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="CERC_Form-IV_${built.period}.xlsx"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error('Form-IV workbook error:', err);
+    res.status(500).json({ error: err.message || 'Failed to build the Form-IV workbook' });
+  }
+});
+
+/** GET /api/reports/cerc-compliance/licence — annual licence fee and net worth, year by year. */
+router.get('/cerc-compliance/licence', requireRole(...TRADING_REPORT_READ), (req, res) => {
+  try {
+    res.json(licenceCompliance());
+  } catch (err) {
+    console.error('CERC licence compliance error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/cerc-compliance/licence/:fy', requireRole(...LICENCE_WRITE), (req, res) => {
+  try {
+    const saved = saveLicenceYear(req.params.fy, req.body || {}, req.user?.name);
+    logAudit({ req, user: req.user, action: 'UPDATE', module: 'TRADING', entityType: 'cerc_licence_compliance', entityId: saved.fy, details: req.body });
+    res.json(licenceCompliance());
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

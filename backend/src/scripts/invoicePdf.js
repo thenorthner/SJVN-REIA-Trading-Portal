@@ -1,6 +1,6 @@
 import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
-import { invoiceVerifyToken, PUBLIC_BASE_URL } from '../util.js';
+import { invoiceVerifyToken, invoiceAuthSeal, PUBLIC_BASE_URL } from '../util.js';
 
 const PAGE_WIDTH = 595.28;
 const PAGE_HEIGHT = 841.89;
@@ -17,7 +17,6 @@ const NAVY = '#1b3b6f';       // headings, borders, table header band
 const NAVY_SOFT = '#eef2f8';   // section band fill
 const NAVY_TINT = '#f6f8fc';   // subtle zebra / totals fill
 const INK = '#1a1a1a';         // body text
-const SEAL = '#22447e';        // round seal + signature accent
 
 const SJVN_LOGO = '/src/assets/sjvn_logo.jpg';
 
@@ -156,53 +155,6 @@ function drawDecorativeBorder(doc) {
   place(PAGE_WIDTH - o1, PAGE_HEIGHT - o1, -1, -1);     // bottom-right
 }
 
-/** Text along a circle arc (for the round seal). */
-function curvedText(doc, text, cx, cy, radius, centerDeg, upright) {
-  doc.font('Helvetica-Bold').fillColor(SEAL);
-  const chars = String(text).toUpperCase().split('');
-  const per = Math.min(15, chars.length > 1 ? 220 / (chars.length - 1) : 0);
-  doc.fontSize(radius > 24 ? 6 : 5);
-  const start = centerDeg - ((chars.length - 1) * per) / 2;
-  chars.forEach((ch, i) => {
-    const deg = start + i * per;
-    const a = deg * Math.PI / 180;
-    const x = cx + radius * Math.cos(a);
-    const y = cy + radius * Math.sin(a);
-    doc.save();
-    doc.translate(x, y);
-    const rot = (deg + (upright ? 90 : -90));
-    doc.rotate(rot, { origin: [0, 0] });
-    doc.text(ch, -2.2, -3, { lineBreak: false });
-    doc.restore();
-  });
-}
-
-function drawStar(doc, cx, cy, r, color) {
-  doc.save();
-  doc.fillColor(color);
-  let path = '';
-  for (let i = 0; i < 5; i++) {
-    const outer = (-90 + i * 72) * Math.PI / 180;
-    const inner = (-90 + i * 72 + 36) * Math.PI / 180;
-    path += (i === 0 ? 'M' : 'L') + ` ${cx + r * Math.cos(outer)} ${cy + r * Math.sin(outer)}`;
-    path += ` L ${cx + r * 0.42 * Math.cos(inner)} ${cy + r * 0.42 * Math.sin(inner)}`;
-  }
-  path += ' Z';
-  doc.path(path).fill();
-  doc.restore();
-}
-
-/** Round company seal with the issuer name on the top arc and city on the bottom. */
-function drawRoundSeal(doc, cx, cy, r, name, city) {
-  doc.save();
-  doc.lineWidth(1.4).strokeColor(SEAL).circle(cx, cy, r).stroke();
-  doc.lineWidth(0.6).strokeColor(SEAL).circle(cx, cy, r - 4.5).stroke();
-  curvedText(doc, name, cx, cy, r - 9, -90, true);
-  if (city) curvedText(doc, city, cx, cy, r - 9, 90, false);
-  drawStar(doc, cx, cy, 4.5, SEAL);
-  doc.restore();
-}
-
 function resolveParties(invoice, contract, seller, buyer) {
   let issuer;
   let recipient;
@@ -322,7 +274,8 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res, 
     qrBuffer = null;
   }
 
-  const doc = new PDFDocument({ size: 'A4', margin: MARGIN, autoFirstPage: true });
+  const doc = new PDFDocument({ size: 'A4', margin: MARGIN, autoFirstPage: true, font: 'Helvetica' });
+  doc.font('Helvetica');
   doc.pipe(res);
 
   // ========== DECORATIVE FRAME ==========
@@ -741,35 +694,48 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res, 
   // Signature block
   doc.save().lineWidth(0.8).strokeColor(NAVY).rect(sigX, bankTop, sigW, bankH).stroke().restore();
   cellText(doc, `For & on the behalf of\n${blank(issuer.name) || 'Supplier'}`,
-    sigX, bankTop + 6, sigW, 22, { bold: true, size: 8, align: 'center', color: NAVY });
+    sigX, bankTop + 3, sigW, 28, { bold: true, size: 8, align: 'center', color: NAVY });
 
-  // Signature image (left half of the block) + round seal (right half)
-  const sigMidY = bankTop + 30;
-  if (issuer.signature_url) {
-    try {
-      const sigPath = process.cwd() + issuer.signature_url;
-      doc.image(sigPath, sigX + 12, sigMidY, { fit: [sigW * 0.5 - 12, 26], align: 'center', valign: 'center' });
-    } catch (e) {
-      console.error('Failed to load signature:', e);
-    }
-  }
-  // Round company seal
-  try {
-    const sealCx = sigX + sigW * 0.72;
-    const sealCy = sigMidY + 16;
-    const sealName = (blank(issuer.name) || 'Company').replace(/\bPvt\b\.?/i, 'PVT').replace(/\bLtd\b\.?/i, 'LTD');
-    const sealCity = blank(issuer.branch_address).split(',')[0] || '';
-    drawRoundSeal(doc, sealCx, sealCy, 22, sealName, sealCity);
-  } catch (e) {
-    console.error('Failed to draw seal:', e);
-  }
-
-  // Digital-signature caption
+  // Authentication seal, in place of a scanned signature. Nobody hands over an
+  // image of their signature to be pasted on bills they have not seen — it can
+  // be lifted off any PDF and reused. What authenticates the bill instead is
+  // the approval recorded on the platform: who, when, and a hash of the figures
+  // that a tampered copy will not reproduce.
+  const seal = invoiceAuthSeal(invoice);
   const signedName = blank(issuer.signatory_name) || 'Authorised Signatory';
-  const signedDesig = blank(issuer.signatory_designation) || 'Authorised Signatory';
-  const signedDate = fmtDate(invoice.updated_at || invoice.created_at) || fmtDate(new Date());
-  const caption = `Digitally signed by ${signedName}\n${signedDesig}  |  Date: ${signedDate}`;
-  cellText(doc, caption, sigX, bankTop + bankH - 24, sigW, 22, { size: 6.5, align: 'center', color: INK });
+  const signedDesig = blank(issuer.signatory_designation);
+  const sealTop = bankTop + 31;
+  const GREEN = '#15803d';
+  if (isDraft) {
+    cellText(doc, 'DRAFT - not yet authenticated.\nThe seal is applied when the bill is approved.',
+      sigX, sealTop + 14, sigW, 30, { size: 7, align: 'center', color: '#b45309' });
+  } else {
+    // Shield
+    const shX = sigX + 12;
+    const shY = sealTop + 2;
+    doc.save();
+    doc.path(`M ${shX + 9} ${shY} L ${shX + 18} ${shY + 3.5} L ${shX + 18} ${shY + 11} `
+      + `Q ${shX + 18} ${shY + 18} ${shX + 9} ${shY + 22} Q ${shX} ${shY + 18} ${shX} ${shY + 11} L ${shX} ${shY + 3.5} Z`)
+      .fillAndStroke('#dcfce7', GREEN);
+    doc.lineWidth(1.4).strokeColor(GREEN)
+      .moveTo(shX + 5, shY + 11).lineTo(shX + 8, shY + 14.5).lineTo(shX + 13.5, shY + 7).stroke();
+    doc.restore();
+
+    const tx = shX + 24;
+    const tw = sigX + sigW - tx - 6;
+    doc.font('Helvetica-Bold').fontSize(7).fillColor(GREEN)
+      .text('DIGITALLY AUTHENTICATED', tx, sealTop, { width: tw, lineBreak: false });
+    doc.font('Helvetica-Bold').fontSize(7).fillColor(INK)
+      .text([signedName, signedDesig].filter(Boolean).join(', '), tx, sealTop + 9, { width: tw, height: 9, ellipsis: true });
+    doc.font('Helvetica').fontSize(6.3).fillColor(INK)
+      .text(`Date & Time: ${seal.signed_at_ist}`, tx, sealTop + 18, { width: tw, lineBreak: false })
+      .text(`SHA-256: ${seal.hash_short}`, tx, sealTop + 26, { width: tw, lineBreak: false })
+      .text(`Audit Ref: #${seal.audit_ref}`, tx, sealTop + 34, { width: tw, lineBreak: false });
+    // Inside the box, so the bill is no longer than it was with a signature.
+    doc.font('Helvetica-Oblique').fontSize(5).fillColor('#475569')
+      .text(seal.notice, sigX + 5, sealTop + 44, { width: sigW - 10, align: 'center', lineGap: -0.3 });
+  }
+  doc.fillColor(INK).strokeColor(NAVY);
 
   y = bankTop + bankH + 12;
 
@@ -780,11 +746,28 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res, 
     .text('NOTE:', MARGIN, y, { width: noteW, underline: true });
   let ny = doc.y + 4;
   doc.font('Helvetica').fontSize(7.5).fillColor(INK);
+  // Notes 2 to 4 state this contract's own terms. They used to be fixed text —
+  // "+ 45 days", "rebate of 1.5% within 5 days" — printed on every bill whatever
+  // had been agreed, so a contract fed with a 2% rebate still went out saying
+  // 1.5%. The fixed wording remains only for a contract that records no rule.
+  const c = contract || {};
+  const has = (v) => v !== null && v !== undefined && v !== '' && Number(v) > 0;
+  const dueNote = has(c.payment_terms_days)
+    ? `2. Due date of payment = Date of Billing + ${c.payment_terms_days} days, as per the Payment Terms of the PPA / PSA.`
+    : '2. Due date of payment = Date of Billing + 45 days (or as per the Payment Terms of the PPA / PSA).';
+  const lpsNote = has(c.lps_annual_pct)
+    ? `3. Late payment surcharge shall be payable at ${c.lps_annual_pct}% per annum on the outstanding amount`
+      + `${has(c.lps_grace_days) ? `, after a grace period of ${c.lps_grace_days} days from the due date` : ' from the due date'}, as per the PPA / PSA.`
+    : '3. Late payment surcharge shall be payable at the base rate of Late Payment Surcharge applicable for the month plus 0.5% as per the PPA / PSA / MoP LPS Rules.';
+  const rebateNote = has(c.rebate_pct)
+    ? `4. Rebate of ${c.rebate_pct}% shall be allowed for payment made within ${c.rebate_days || 0} days of the `
+      + `${c.rebate_basis === 'DUE_DATE' ? 'due date' : 'bill date'}, as per the PPA / PSA.`
+    : '4. Rebate of 1.5% shall be allowed for payment made within 5 days of presentation of the bill, as per applicable contract terms.';
   const notes = [
     '1. This bill is raised for the energy scheduled / accounted for the billing month as per applicable Energy Accounts / Injection Schedule.',
-    '2. Due date of payment = Date of Billing + 45 days (or as per the Payment Terms of the PPA / PSA).',
-    '3. Late payment surcharge shall be payable at the base rate of Late Payment Surcharge applicable for the month plus 0.5% as per the PPA / PSA / MoP LPS Rules.',
-    '4. Rebate of 1.5% shall be allowed for payment made within 5 days of presentation of the bill, as per applicable contract terms.',
+    dueNote,
+    lpsNote,
+    rebateNote,
     '5. No rebate shall be applicable on taxes, duties, levies or change-in-law amounts, if any.',
   ];
   notes.forEach((n) => {

@@ -231,7 +231,7 @@ function team(req) {
 router.get('/companies', (req, res) => send(res, () => {
   if (!SJVN_ADMINS.includes(req.user.role)) throw fail(403, 'Not authorized');
   return db.prepare(`
-    SELECT e.id, e.name, e.entity_type, e.status,
+    SELECT e.id, e.name, e.entity_type, e.status, e.logo_url,
       (SELECT COUNT(*) FROM users u WHERE u.linked_entity_id = e.id AND u.is_active = 1) AS active_users,
       (SELECT COUNT(*) FROM users u WHERE u.linked_entity_id = e.id) AS users
     FROM entities e ORDER BY e.entity_type DESC, e.name

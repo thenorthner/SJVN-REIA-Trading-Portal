@@ -6,12 +6,82 @@ import {
   catalogForEntityType,
   summarizeApprovals,
   APPROVAL_STATUSES,
+  getRegulatoryLabel,
 } from '../regulatoryApprovals.js';
 import { seedEntityAliases, resolveEntityByName, addAlias } from '../services/entityResolver.js';
 import multer from 'multer';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { entityVisibleTo, isCounterparty } from '../services/counterpartyScope.js';
+import { normaliseKycBody, validateKyc } from '../services/kycValidation.js';
+
+// Onboarding belongs to every vertical that bills a counterparty, not to REIA
+// alone: a hydro station's beneficiaries and a thermal station's are onboarded
+// by the Commercial desk, on the same record and under the same checks.
+const ENTITY_WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
+
+/**
+ * The verticals a desk works in. A desk officer onboards and lists only its own
+ * vertical's stakeholders; administrators across SJVN see all three.
+ */
+function deskVerticals(user) {
+  const role = user?.role;
+  if (['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'MANAGEMENT', 'FINANCE_USER', 'COMPLIANCE_AUDITOR'].includes(role)) return null;
+  if (['THERMAL_ADMIN', 'THERMAL_USER'].includes(role)) return ['THERMAL'];
+  if (['COMMERCIAL_ADMIN', 'COMMERCIAL', 'COMMERCIAL_USER'].includes(role)) return ['HYDRO'];
+  if (['REIA_ADMIN', 'REIA_USER'].includes(role)) return ['REIA'];
+  return null;
+}
+// Barring a counterparty is an administrator's decision, not a desk officer's.
+const BLACKLIST_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
+const VERTICALS = ['REIA', 'HYDRO', 'THERMAL'];
+const VERTICAL_LABELS = { REIA: 'REIA', HYDRO: 'Hydro Billing', THERMAL: 'Thermal Billing' };
+
+const verticalsOf = (entity) => String(entity?.verticals || 'REIA').split(',').map((v) => v.trim()).filter(Boolean);
+
+/**
+ * PAN and GSTIN each identify one legal entity, so neither may sit on two
+ * records. Compared trimmed and case-insensitively; `exceptId` is the record
+ * being edited.
+ */
+function findDuplicate(body, exceptId = null) {
+  for (const [field, label] of [['pan_no', 'PAN'], ['gst_no', 'GST']]) {
+    const value = body[field] && String(body[field]).trim().toUpperCase();
+    if (!value) continue;
+    const clash = db.prepare(`SELECT id, name, verticals FROM entities WHERE UPPER(TRIM(${field})) = ? AND id != ?`)
+      .get(value, exceptId ?? '');
+    if (clash) return { field, label, value, clash };
+  }
+  return null;
+}
+
+/**
+ * The account a counterparty asked to be paid into becomes the live one only
+ * here, when an officer has checked it against the bank proof on file.
+ */
+function promotePendingBank(entity) {
+  if (!entity.pending_bank_json) return null;
+  let staged = {};
+  try { staged = JSON.parse(entity.pending_bank_json) || {}; } catch { staged = {}; }
+  const allowed = ['bank_name', 'account_no', 'ifsc_code', 'branch_address', 'bank_details'];
+  const sets = [];
+  const params = [];
+  for (const [k, v] of Object.entries(staged)) {
+    if (!allowed.includes(k)) continue;
+    sets.push(`${k} = ?`);
+    params.push(v);
+  }
+  let promoted = null;
+  if (sets.length) {
+    promoted = { from: Object.fromEntries(Object.keys(staged).map((k) => [k, entity[k]])), to: staged };
+    db.prepare(`UPDATE entities SET ${sets.join(', ')} WHERE id = ?`).run(...params, entity.id);
+  }
+  db.prepare(`
+    UPDATE entities SET pending_bank_json = NULL, pending_bank_requested_by = NULL, pending_bank_requested_at = NULL
+    WHERE id = ?
+  `).run(entity.id);
+  return promoted;
+}
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
@@ -131,7 +201,7 @@ router.get('/resolve', (req, res) => {
 });
 
 router.get('/', (req, res) => {
-  const { entity_type, status, parent_entity_id } = req.query;
+  const { entity_type, status, parent_entity_id, vertical } = req.query;
   let sql = 'SELECT * FROM entities WHERE 1=1';
   const params = [];
   // The contract and invoice lists have always scoped to the caller's own
@@ -143,6 +213,18 @@ router.get('/', (req, res) => {
   }
   if (entity_type) { sql += ' AND entity_type = ?'; params.push(entity_type); }
   if (status) { sql += ' AND status = ?'; params.push(status); }
+  const own = deskVerticals(req.user);
+  if (own && !isCounterparty(req.user)) {
+    // A desk sees its own vertical's register, whatever it asks for.
+    if (vertical && !own.includes(vertical)) return res.json([]);
+    sql += ` AND (${own.map(() => `(',' || COALESCE(verticals, 'REIA') || ',') LIKE ?`).join(' OR ')})`;
+    params.push(...own.map((v) => `%,${v},%`));
+  }
+  if (vertical) {
+    if (!VERTICALS.includes(vertical)) return res.status(400).json({ error: `vertical must be one of: ${VERTICALS.join(', ')}` });
+    sql += ` AND (',' || COALESCE(verticals, 'REIA') || ',') LIKE ?`;
+    params.push(`%,${vertical},%`);
+  }
   if (parent_entity_id !== undefined) {
     if (parent_entity_id === 'null') sql += ' AND parent_entity_id IS NULL';
     else { sql += ' AND parent_entity_id = ?'; params.push(parent_entity_id); }
@@ -162,11 +244,22 @@ router.get('/:id', (req, res) => {
   res.json({ ...fetchEntityRelations(entity), history });
 });
 
-router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req, res) => {
+router.post('/', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) => {
   const id = newId('ENT');
-  const body = req.body;
+  const body = normaliseKycBody(req.body || {});
   if (!body.entity_type || !body.name || !body.category) {
     return res.status(400).json({ error: 'entity_type, name and category are required' });
+  }
+  if (!['SELLER', 'BUYER'].includes(body.entity_type)) {
+    return res.status(400).json({ error: 'entity_type must be SELLER or BUYER' });
+  }
+  const own = deskVerticals(req.user);
+  const vertical = body.vertical || (own ? own[0] : 'REIA');
+  if (!VERTICALS.includes(vertical)) {
+    return res.status(400).json({ error: `vertical must be one of: ${VERTICALS.join(', ')}` });
+  }
+  if (own && !own.includes(vertical)) {
+    return res.status(403).json({ error: `Your desk onboards ${own.map((v) => VERTICAL_LABELS[v]).join(', ')} stakeholders only.` });
   }
 
   // What a counterparty of this kind has to bring. Only name, type and category
@@ -194,19 +287,27 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req
     });
   }
 
+  // Format and cross-checks on every identifier, reported together.
+  const invalid = validateKyc(body);
+  if (invalid.length) {
+    return res.status(400).json({
+      error: invalid.map((e) => e.message).join(' '),
+      field_errors: invalid,
+    });
+  }
+
   // A PAN or GST identifies one legal entity. Onboarding the same one twice
   // splits its contracts, exposure and payment history across two records that
   // nothing later reconciles, so it is refused rather than quietly created.
-  for (const [field, label] of [['pan_no', 'PAN'], ['gst_no', 'GST']]) {
-    const value = body[field] && String(body[field]).trim().toUpperCase();
-    if (!value) continue;
-    const clash = db.prepare(`SELECT id, name FROM entities WHERE UPPER(TRIM(${field})) = ?`).get(value);
-    if (clash) {
-      return res.status(409).json({
-        error: `${label} ${value} is already onboarded as "${clash.name}".`,
-        duplicate_of: { id: clash.id, name: clash.name, field },
-      });
-    }
+  const dup = findDuplicate(body);
+  if (dup) {
+    const inVertical = verticalsOf(dup.clash).includes(vertical);
+    return res.status(409).json({
+      error: `${dup.label} ${dup.value} is already onboarded as "${dup.clash.name}".`
+        + (inVertical ? '' : ` It is registered under ${verticalsOf(dup.clash).map((v) => VERTICAL_LABELS[v] || v).join(', ')} — link that record to ${VERTICAL_LABELS[vertical]} instead of creating it again.`),
+      field_errors: [{ field: dup.field, message: `${dup.label} ${dup.value} is already onboarded as "${dup.clash.name}".` }],
+      duplicate_of: { id: dup.clash.id, name: dup.clash.name, field: dup.field, verticals: verticalsOf(dup.clash), can_link: !inVertical },
+    });
   }
 
   // Checked before the transaction opens: throwing inside it escapes to the
@@ -225,17 +326,18 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req
         is_blacklisted, capacity_mw, technology, contracted_capacity_mw, psa_tariff, supply_criteria,
         organization_details, regulatory_approvals, bank_details, is_penny_drop_verified, invoice_template_json, status,
         logo_url, corporate_email, corporate_phone, corporate_website, tan_no, signatory_name, signatory_designation,
-        address, bank_name, account_no, ifsc_code, branch_address
+        address, bank_name, account_no, ifsc_code, branch_address, verticals
       )
       VALUES (
         @id, @parent_entity_id, @entity_type, @category, @name, @pan_no, @gst_no, @cin, @credit_rating,
         0, @capacity_mw, @technology, @contracted_capacity_mw, @psa_tariff, @supply_criteria,
         @organization_details, @regulatory_approvals, @bank_details, 0, @invoice_template_json, 'PENDING',
         @logo_url, @corporate_email, @corporate_phone, @corporate_website, @tan_no, @signatory_name, @signatory_designation,
-        @address, @bank_name, @account_no, @ifsc_code, @branch_address
+        @address, @bank_name, @account_no, @ifsc_code, @branch_address, @verticals
       )
     `).run({
       id,
+      verticals: vertical,
       parent_entity_id: body.parent_entity_id ?? null,
       entity_type: body.entity_type,
       category: body.category,
@@ -304,7 +406,8 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req
   res.status(201).json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(id)));
 });
 
-router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req, res) => {
+router.put('/:id', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) => {
+  req.body = normaliseKycBody(req.body || {});
   const existing = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   // A counterparty edits its own record only. This let any seller rename another
   // company, change the contacts its invoices are mailed to, or stage a change
@@ -320,9 +423,29 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
   ];
 
   // Where the money actually goes. These are held back rather than written, and
-  // the live columns keep paying the account that was verified until a
-  // penny-drop clears the new one.
+  // the live columns keep paying the account that was verified until the new
+  // one is checked against its bank proof and the record is re-approved.
   const BANK_FIELDS = ['bank_name', 'account_no', 'ifsc_code', 'branch_address', 'bank_details'];
+
+  // Only what is actually being changed is checked, so a record that predates
+  // these rules can still have its address corrected without first being made
+  // to repair an old PAN.
+  const changing = {};
+  for (const f of fields) {
+    if (req.body[f] !== undefined && String(req.body[f]) !== String(existing[f])) changing[f] = req.body[f];
+  }
+  const invalid = validateKyc(changing, existing);
+  if (invalid.length) {
+    return res.status(400).json({ error: invalid.map((e) => e.message).join(' '), field_errors: invalid });
+  }
+  const dup = findDuplicate(changing, existing.id);
+  if (dup) {
+    return res.status(409).json({
+      error: `${dup.label} ${dup.value} is already onboarded as "${dup.clash.name}".`,
+      field_errors: [{ field: dup.field, message: `${dup.label} ${dup.value} is already onboarded as "${dup.clash.name}".` }],
+      duplicate_of: { id: dup.clash.id, name: dup.clash.name, field: dup.field },
+    });
+  }
 
   const updates = {};
   const stagedBank = {};
@@ -399,10 +522,10 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
     merged.status = 'PENDING';
   }
 
-  // Deliberately not clearing is_penny_drop_verified here. The live account is
-  // unchanged and still verified; the unverified one is the proposal sitting in
-  // pending_bank_json, and that is what the penny-drop has to clear before it
-  // can be paid into.
+  // Deliberately not clearing is_penny_drop_verified (the "bank verified" flag)
+  // here. The live account is unchanged and still verified; the unverified one
+  // is the proposal sitting in pending_bank_json, and that is what has to be
+  // verified before it can be paid into.
 
   db.prepare(`
     UPDATE entities SET category=@category, name=@name, pan_no=@pan_no, gst_no=@gst_no, cin=@cin, credit_rating=@credit_rating,
@@ -426,17 +549,17 @@ router.put('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (r
   if (bankChangeRequested) {
     pushNotification({
       role: 'SJVN_ADMIN', type: 'BANK_CHANGE_REQUESTED',
-      message: `${existing.name} has requested a change of bank account. It is held pending penny-drop verification.`,
+      message: `${existing.name} has requested a change of bank account. It is held until verified against the bank proof and re-approved.`,
     });
   }
   if (isHighRisk) {
-    pushNotification({ role: 'SJVN_ADMIN', type: 'RISK_UPDATE', message: `High-risk profile update by ${existing.name}. Penny-drop reset.` });
+    pushNotification({ role: 'SJVN_ADMIN', type: 'RISK_UPDATE', message: `High-risk profile update by ${existing.name}. Re-approval required.` });
   }
 
   res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id)));
 });
 
-router.put('/:id/regulatory-approvals/:approvalId', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), (req, res) => {
+router.put('/:id/regulatory-approvals/:approvalId', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) => {
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity || !entityVisibleTo(req.user, entity.id)) return res.status(404).json({ error: 'Entity not found' });
 
@@ -450,7 +573,7 @@ router.put('/:id/regulatory-approvals/:approvalId', requireRole(...ROLE_GROUPS.R
     return res.status(400).json({ error: `status must be one of: ${APPROVAL_STATUSES.join(', ')}` });
   }
 
-  const canVerify = ROLE_GROUPS.REIA_WRITE.includes(req.user.role);
+  const canVerify = ENTITY_WRITE.includes(req.user.role);
   if (status === 'VERIFIED' && !canVerify) {
     return res.status(403).json({ error: 'Only SJVN/REIA roles can mark an approval as VERIFIED' });
   }
@@ -495,38 +618,22 @@ router.put('/:id/regulatory-approvals/:approvalId', requireRole(...ROLE_GROUPS.R
   });
 });
 
-router.post('/:id/penny-drop', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+// Confirms the bank account on record against the proof on file (the cancelled
+// cheque). No money is sent: there is no penny-drop integration, and the screen
+// used to offer a "₹1 penny drop" button that only set a flag. '/penny-drop' is
+// kept as an alias for callers that still use the old path.
+router.post(['/:id/verify-bank', '/:id/penny-drop'], requireRole(...ENTITY_WRITE), (req, res) => {
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
 
-  // A requested change of account is verified by paying into it, so this is the
-  // point where the proposal becomes the live account — not the edit that
-  // requested it. Without this the new details would sit staged forever.
-  let promoted = null;
-  if (entity.pending_bank_json) {
-    let staged = {};
-    try { staged = JSON.parse(entity.pending_bank_json) || {}; } catch { staged = {}; }
-    const allowed = ['bank_name', 'account_no', 'ifsc_code', 'branch_address', 'bank_details'];
-    const sets = [];
-    const params = [];
-    for (const [k, v] of Object.entries(staged)) {
-      if (!allowed.includes(k)) continue;
-      sets.push(`${k} = ?`);
-      params.push(v);
-    }
-    if (sets.length) {
-      promoted = { from: Object.fromEntries(Object.keys(staged).map((k) => [k, entity[k]])), to: staged };
-      db.prepare(`UPDATE entities SET ${sets.join(', ')} WHERE id = ?`).run(...params, entity.id);
-    }
-    db.prepare(`
-      UPDATE entities SET pending_bank_json = NULL, pending_bank_requested_by = NULL, pending_bank_requested_at = NULL
-      WHERE id = ?
-    `).run(entity.id);
-  }
+  // A requested change of account becomes the live one at this point — not at
+  // the edit that requested it. Without this the new details would sit staged
+  // forever.
+  const promoted = promotePendingBank(entity);
 
   db.prepare(`UPDATE entities SET is_penny_drop_verified = 1 WHERE id = ?`).run(entity.id);
   logAudit({
-    req, user: req.user, action: promoted ? 'BANK_CHANGE_VERIFIED' : 'PENNY_DROP_VERIFIED',
+    req, user: req.user, action: promoted ? 'BANK_CHANGE_VERIFIED' : 'BANK_VERIFIED',
     module: 'REIA', entityType: 'entity', entityId: entity.id,
     beforeValue: promoted ? JSON.stringify(promoted.from) : undefined,
     afterValue: promoted ? JSON.stringify(promoted.to) : undefined,
@@ -534,13 +641,73 @@ router.post('/:id/penny-drop', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res
   res.json({
     success: true,
     message: promoted
-      ? 'Penny drop cleared. The requested account is now the live one.'
-      : 'Bank account verified via penny drop',
+      ? 'Bank account verified. The requested account is now the live one.'
+      : 'Bank account verified against the proof on file',
     ...(promoted ? { applied_bank_change: promoted } : {}),
   });
 });
 
-router.post('/:id/approve', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+// Bar a counterparty, or lift the bar. A blacklisted counterparty cannot be
+// approved and cannot be given a new contract; what it already holds is left
+// alone, because money owed under a live contract is still owed.
+router.post('/:id/blacklist', requireRole(...BLACKLIST_ROLES), (req, res) => {
+  const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  const blacklisted = req.body?.blacklisted !== false;
+  const reason = String(req.body?.reason ?? '').trim();
+  if (reason.length < 10) {
+    return res.status(400).json({
+      error: `A reason of at least 10 characters is required to ${blacklisted ? 'blacklist' : 'clear'} a stakeholder — it is what the audit trail shows.`,
+    });
+  }
+  if (!!entity.is_blacklisted === blacklisted) {
+    return res.status(400).json({ error: blacklisted ? `${entity.name} is already blacklisted.` : `${entity.name} is not blacklisted.` });
+  }
+
+  db.prepare(`
+    UPDATE entities SET is_blacklisted = ?, blacklist_reason = ?, blacklisted_by = ?, blacklisted_at = datetime('now'),
+      updated_at = datetime('now')
+    WHERE id = ?
+  `).run(blacklisted ? 1 : 0, reason, req.user.name || req.user.id, entity.id);
+  db.prepare(`INSERT INTO entity_audit (id, entity_id, field_changed, old_value, new_value, changed_by) VALUES (?, ?, ?, ?, ?, ?)`)
+    .run(newId('EAU'), entity.id, 'is_blacklisted', entity.is_blacklisted ? 'BLACKLISTED' : 'CLEAR',
+      `${blacklisted ? 'BLACKLISTED' : 'CLEAR'} — ${reason}`, req.user.name || req.user.id);
+  logAudit({
+    req, user: req.user, action: blacklisted ? 'ENTITY_BLACKLISTED' : 'ENTITY_BLACKLIST_CLEARED',
+    module: 'REIA', entityType: 'entity', entityId: entity.id, reason,
+    beforeValue: entity.is_blacklisted ? 'BLACKLISTED' : 'CLEAR', afterValue: blacklisted ? 'BLACKLISTED' : 'CLEAR',
+  });
+  pushNotification({
+    role: 'SJVN_ADMIN', type: 'COMPLIANCE_ALERT',
+    message: blacklisted
+      ? `${entity.name} has been blacklisted by ${req.user.name}: ${reason}`
+      : `Blacklist on ${entity.name} cleared by ${req.user.name}: ${reason}`,
+  });
+  res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(entity.id)));
+});
+
+// Register an existing counterparty under another vertical. The same DISCOM
+// buys under a REIA PSA and draws from a hydro station; it is one legal entity
+// with one PAN, so it is linked, not onboarded a second time.
+router.post('/:id/verticals', requireRole(...ENTITY_WRITE), (req, res) => {
+  const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  const vertical = req.body?.vertical;
+  if (!VERTICALS.includes(vertical)) return res.status(400).json({ error: `vertical must be one of: ${VERTICALS.join(', ')}` });
+  const own = deskVerticals(req.user);
+  if (own && !own.includes(vertical)) {
+    return res.status(403).json({ error: `Your desk links stakeholders to ${own.map((v) => VERTICAL_LABELS[v]).join(', ')} only.` });
+  }
+  const current = verticalsOf(entity);
+  if (!current.includes(vertical)) {
+    db.prepare(`UPDATE entities SET verticals = ?, updated_at = datetime('now') WHERE id = ?`)
+      .run([...current, vertical].join(','), entity.id);
+    logAudit({ req, user: req.user, action: 'ENTITY_VERTICAL_LINKED', module: 'REIA', entityType: 'entity', entityId: entity.id, details: { vertical } });
+  }
+  res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(entity.id)));
+});
+
+router.post('/:id/approve', requireRole(...ENTITY_WRITE), (req, res) => {
   const { decision, remarks, admin_direct_admit } = req.body;
   // Unvalidated, this wrote `status = decision` — an omitted field tripped the
   // NOT NULL constraint and came back a 500 rather than saying what was wrong.
@@ -550,28 +717,29 @@ router.post('/:id/approve', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
 
   if (decision === 'APPROVED') {
+    if (entity.is_blacklisted) {
+      return res.status(400).json({
+        error: `Cannot approve: ${entity.name} is blacklisted${entity.blacklist_reason ? ` (${entity.blacklist_reason})` : ''}. Clear the blacklist first.`,
+      });
+    }
     seedRegulatoryChecklist(entity.id, entity.entity_type);
 
-    if (admin_direct_admit && ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN'].includes(req.user.role)) {
+    if (admin_direct_admit && ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'].includes(req.user.role)) {
       db.prepare(`
         UPDATE entity_regulatory_approvals
         SET status = 'VERIFIED', verified_by = ?, verified_at = datetime('now'), notes = COALESCE(notes, 'Admitted & cleared directly by SJVN Admin')
         WHERE entity_id = ? AND is_mandatory = 1 AND status != 'VERIFIED'
       `).run(req.user.name || req.user.username || 'SJVN Admin', entity.id);
-
-      db.prepare(`UPDATE entities SET is_penny_drop_verified = 1 WHERE id = ?`).run(entity.id);
-      entity.is_penny_drop_verified = 1;
     }
 
     const { summary } = refreshRegulatorySummary(entity.id);
     if (!summary.ready_for_approval) {
+      const pendingNames = summary.blocking.map(getRegulatoryLabel);
       return res.status(400).json({
-        error: `Cannot approve: mandatory regulatory items pending — ${summary.blocking.join(', ')}`,
+        error: `Cannot approve: mandatory regulatory items pending verification (${pendingNames.join(', ')}). Please verify them or mark N/A.`,
         regulatory_summary: summary,
+        blocking_items: pendingNames,
       });
-    }
-    if (!entity.is_penny_drop_verified) {
-      return res.status(400).json({ error: 'Cannot approve: bank penny-drop verification is required' });
     }
   }
 
@@ -579,12 +747,28 @@ router.post('/:id/approve', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =
     return res.status(400).json({ error: 'Remarks are required for rejection' });
   }
 
+  // Approval is where the bank account is accepted: the bank proof is a
+  // mandatory item on the checklist that has just been confirmed verified, so
+  // the account it proves becomes the one that may be paid, and a requested
+  // change of account goes live with it.
+  let promotedBank = null;
+  if (decision === 'APPROVED') {
+    promotedBank = promotePendingBank(entity);
+    db.prepare(`UPDATE entities SET is_penny_drop_verified = 1 WHERE id = ?`).run(entity.id);
+    if (promotedBank) {
+      logAudit({
+        req, user: req.user, action: 'BANK_CHANGE_VERIFIED', module: 'REIA', entityType: 'entity', entityId: entity.id,
+        beforeValue: JSON.stringify(promotedBank.from), afterValue: JSON.stringify(promotedBank.to),
+      });
+    }
+  }
+
   db.prepare(`UPDATE entities SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(decision, req.params.id);
   logAudit({ req, user: req.user, action: `ENTITY_${decision}`, module: 'REIA', entityType: 'entity', entityId: entity.id, details: { remarks, admin_direct_admit: !!admin_direct_admit } });
   res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id)));
 });
 
-router.post('/:id/logo', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), upload.single('logo'), (req, res) => {
+router.post('/:id/logo', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), upload.single('logo'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No logo file provided' });
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity || !entityVisibleTo(req.user, entity.id)) return res.status(404).json({ error: 'Entity not found' });

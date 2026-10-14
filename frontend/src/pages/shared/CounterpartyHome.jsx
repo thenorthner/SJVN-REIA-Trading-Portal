@@ -68,9 +68,9 @@ export default function CounterpartyHome() {
   const quick = seller
     ? [
       d.tier === 'L1' ? ['Prepare an invoice', `${P}/invoices`, true] : ['Create new invoice', `${P}/invoices`, true],
-      ['Check energy data', `${P}/energy-data`], ['Payments & ledger', `${P}/payments`], ['Raise a dispute', `${P}/disputes`], ['My documents & KYC', `${P}/documents`],
+      ['Check energy data', `${P}/energy-data`], ['Payments & ledger', `${P}/payments`], ['Raise a dispute', `${P}/disputes`],
     ]
-    : [['View my bills', `${P}/invoices`, true], ['Energy data', `${P}/energy-data`], ['Reconciliation', `${P}/reconciliation`], ['Raise a dispute', `${P}/disputes`], ['My documents & KYC', `${P}/documents`]];
+    : [['View my bills', `${P}/invoices`, true], ['Energy data', `${P}/energy-data`], ['Reconciliation', `${P}/reconciliation`], ['Raise a dispute', `${P}/disputes`]];
 
   return (
     <div>
@@ -91,7 +91,9 @@ export default function CounterpartyHome() {
       {error && <div className="form-error">{error}</div>}
 
       {d.me.kyc_status && d.me.kyc_status !== 'APPROVED' && (
-        <div className="ps-alert amber">Your company's KYC is <strong>{String(d.me.kyc_status).replace(/_/g, ' ').toLowerCase()}</strong>. Some sections stay closed until SJVN approves it. <button type="button" className="btn-link" onClick={() => navigate(`${P}/documents`)}>Open My Documents & KYC →</button></div>
+        <div className="ps-alert amber">
+          Your company's KYC is <strong>{String(d.me.kyc_status).replace(/_/g, ' ').toLowerCase()}</strong>. Please submit required physical compliance documents directly to the SJVN REIA desk for intake and administrative verification.
+        </div>
       )}
 
       <div className="kpi-grid">
@@ -115,9 +117,9 @@ export default function CounterpartyHome() {
             {d.todo.length === 0 && <div className="ps-alert green" style={{ marginBottom: 0 }}>Nothing is waiting on you. Bills, energy data, documents and guarantees are all in order.</div>}
             {red > 0 && <p style={{ margin: '0 0 10px', fontSize: 13, color: '#b91c1c' }}>{red} of these {red === 1 ? 'is' : 'are'} overdue or about to lapse.</p>}
             {d.todo.map((t) => (
-              <button key={t.key} type="button" className={`ch-todo ${t.level}`} onClick={() => navigate(t.link)}>
+              <button key={t.key} type="button" className={`ch-todo ${t.level}`} onClick={() => t.link && navigate(t.link)}>
                 <div><strong>{t.title}</strong><span>{t.detail}</span></div>
-                <div className="ch-go">Open →</div>
+                {t.link ? <div className="ch-go">Open →</div> : null}
               </button>
             ))}
           </Card>

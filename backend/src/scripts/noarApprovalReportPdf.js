@@ -105,6 +105,7 @@ export function generateNoarApprovalReportPdf(summary, decided, res) {
     size: [PAGE_W, PAGE_H],
     margins: { top: M, bottom: M, left: M, right: M },
     bufferPages: true,
+    font: 'Helvetica',
     info: {
       Title: 'SJVN NOAR Approval Report',
       Author: 'SJVN Limited',
@@ -112,6 +113,7 @@ export function generateNoarApprovalReportPdf(summary, decided, res) {
       Creator: 'SJVN Energy Platform',
     },
   });
+  doc.font('Helvetica');
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="SJVN_NOAR_Approval_Report_${new Date().toISOString().slice(0, 10)}.pdf"`);

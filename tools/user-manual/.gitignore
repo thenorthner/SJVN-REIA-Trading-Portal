@@ -1,0 +1,7 @@
+survey/
+dumps/
+out/pg/
+out/*.pdf
+shots/_*
+samples/
+shots-opt/

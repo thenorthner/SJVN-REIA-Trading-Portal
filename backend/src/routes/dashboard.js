@@ -1,3 +1,4 @@
+import { licenceCompliance } from '../services/cercLicence.js';
 import { Router } from 'express';
 import db from '../db/index.js';
 import { observedDays, latestObservedDate } from '../services/marketPrices.js';
@@ -22,14 +23,26 @@ const EXECUTIVE_ROLES = ROLE_GROUPS.EXECUTIVE;
 // M. REIA dashboards
 router.get('/reia', (req, res) => {
   const activeContracts = db.prepare(`SELECT COUNT(*) c FROM contracts WHERE status = 'ACTIVE'`).get().c;
-  const contractedCapacity = db.prepare(`SELECT COALESCE(SUM(capacity_mw),0) s FROM contracts WHERE status = 'ACTIVE'`).get().s;
-  const energySupplied = db.prepare(`SELECT COALESCE(SUM(energy_mwh),0) s FROM energy_data`).get().s;
-  const billedEnergy = db.prepare(`SELECT COALESCE(SUM(energy_mwh),0) s FROM invoices`).get().s;
+  // Generation / source capacity (excluding child PSAs allocated from PPAs to prevent 2x double counting)
+  const contractedCapacity = db.prepare(`
+    SELECT COALESCE(SUM(capacity_mw),0) s FROM contracts
+    WHERE status = 'ACTIVE' AND (contract_type = 'PPA' OR id NOT IN (SELECT psa_id FROM contract_allocations))
+  `).get().s;
+  const energySupplied = db.prepare(`
+    SELECT COALESCE(SUM(e.energy_mwh),0) s FROM energy_data e
+    JOIN contracts c ON c.id = e.contract_id
+    WHERE (c.contract_type = 'PPA' OR c.id NOT IN (SELECT psa_id FROM contract_allocations))
+  `).get().s;
+  // Billed energy: volume supplied to buyers
+  const billedEnergy = db.prepare(`
+    SELECT COALESCE(SUM(i.energy_mwh),0) s FROM invoices i
+    WHERE i.direction = 'SJVN_TO_BUYER' AND i.status != 'CANCELLED'
+  `).get().s;
   const pendingApprovals = db.prepare(`SELECT COUNT(*) c FROM invoices WHERE status = 'UNDER_APPROVAL'`).get().c;
   const pendingDisputes = db.prepare(`SELECT COUNT(*) c FROM disputes WHERE status IN (${OPEN_STATUSES.map(() => '?').join(',')})`).get(...OPEN_STATUSES).c;
   const reconciliationExceptions = db.prepare(`SELECT COUNT(*) c FROM reconciliations WHERE status IN ('NEEDS_REVIEW','DISPUTED','REOPENED')`).get().c;
 
-  const totalInvoices = db.prepare(`SELECT COUNT(*) c, COALESCE(SUM(total_amount),0) s FROM invoices`).get();
+  const totalInvoices = db.prepare(`SELECT COUNT(*) c, COALESCE(SUM(total_amount),0) s FROM invoices WHERE status != 'CANCELLED'`).get();
   const receivables = receivablesOutstanding();
   const payables = payablesOutstanding();
   const paymentsReceived = db.prepare(`
@@ -42,14 +55,17 @@ router.get('/reia', (req, res) => {
   `).get().s;
   const overdue = overdueCount();
 
-  const byStatus = db.prepare(`SELECT status, COUNT(*) c FROM invoices GROUP BY status`).all();
+  const byStatus = db.prepare(`SELECT status, COUNT(*) c FROM invoices WHERE status != 'CANCELLED' GROUP BY status`).all();
   const byProjectType = db.prepare(`
     SELECT c.project_type, COUNT(*) contracts, COALESCE(SUM(c.capacity_mw),0) capacity
-    FROM contracts c WHERE c.status = 'ACTIVE' GROUP BY c.project_type
+    FROM contracts c WHERE c.status = 'ACTIVE' AND (c.contract_type = 'PPA' OR c.id NOT IN (SELECT psa_id FROM contract_allocations))
+    GROUP BY c.project_type
   `).all();
   const monthlyBilling = db.prepare(`
-    SELECT billing_period, COALESCE(SUM(total_amount),0) total, COALESCE(SUM(energy_mwh),0) energy
-    FROM invoices GROUP BY billing_period ORDER BY billing_period
+    SELECT billing_period,
+           COALESCE(SUM(CASE WHEN direction = 'SJVN_TO_BUYER' THEN total_amount ELSE 0 END),0) total,
+           COALESCE(SUM(CASE WHEN direction = 'SJVN_TO_BUYER' THEN energy_mwh ELSE 0 END),0) energy
+    FROM invoices WHERE status != 'CANCELLED' GROUP BY billing_period ORDER BY billing_period
   `).all();
 
   const expiringSecurities = db.prepare(`
@@ -149,6 +165,11 @@ router.get('/reia', (req, res) => {
     latest_due_date: latestFormIv?.due_date || null,
   };
 
+  // The licence's own yearly dues: the fee payable by 30 April and the net worth
+  // certificate. Neither is a return, so the Form-IV figures above never show them.
+  const licenceState = licenceCompliance();
+  const licence = { ...licenceState.totals, next_fee: licenceState.next_fee };
+
   res.json({
     kpis: {
       activeContracts, contractedCapacity, energySupplied, billedEnergy,
@@ -163,10 +184,11 @@ router.get('/reia', (req, res) => {
       buyerPending: pendingSplit.buyer.outstanding,
       formIvPending: formIv.pending,
       formIvOverdue: formIv.overdue,
+      licenceFeeOverdue: licence.fee_overdue,
     },
     byStatus, contractsByStatus, byProjectType, monthlyBilling,
     documentsExpiring: documentsExpiringSoon,
-    lps, pendingSplit, ageing, formIv,
+    lps, pendingSplit, ageing, formIv, licence,
   });
 });
 
@@ -415,8 +437,16 @@ router.get('/trading/analytics', (_req, res) => {
     const y = now.getUTCMonth() + 1 >= 4 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
     return `${y}-04`;
   })();
-  const energy = one(`SELECT COALESCE(SUM(energy_mwh),0) mwh FROM energy_data WHERE status = 'LOCKED'`);
-  const energyFy = one(`SELECT COALESCE(SUM(energy_mwh),0) mwh FROM energy_data WHERE status = 'LOCKED' AND period_month >= ?`, fyStart);
+  const energy = one(`
+    SELECT COALESCE(SUM(e.energy_mwh),0) mwh FROM energy_data e
+    JOIN contracts c ON c.id = e.contract_id
+    WHERE e.status = 'LOCKED' AND (c.contract_type = 'PPA' OR c.id NOT IN (SELECT psa_id FROM contract_allocations))
+  `);
+  const energyFy = one(`
+    SELECT COALESCE(SUM(e.energy_mwh),0) mwh FROM energy_data e
+    JOIN contracts c ON c.id = e.contract_id
+    WHERE e.status = 'LOCKED' AND e.period_month >= ? AND (c.contract_type = 'PPA' OR c.id NOT IN (SELECT psa_id FROM contract_allocations))
+  `, fyStart);
 
   // Exchange and product split of what has been bid, with whatever cleared.
   const byExchange = many(`

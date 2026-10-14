@@ -143,3 +143,32 @@ describe('S2 Contract management', () => {
     }
   });
 });
+
+describe('S02 A contract is signed only with its agreement on file', () => {
+  let token;
+  beforeEach(() => { resetReia(); token = tokenFor('REIA_USER'); });
+  const move = (id, status) => request(app).post(`/api/contracts/${id}/status`).set(auth(token)).send({ status });
+
+  it('refuses SIGNED while no document is on file, and allows it once there is', async () => {
+    const c = makeContract({ status: 'DRAFT' });
+    const refused = await move(c.id, 'SIGNED');
+    expect(refused.status).toBe(400);
+    expect(refused.body.missing_document).toBe(true);
+
+    db.prepare(`INSERT INTO documents (id, contract_id, document_type, category, title) VALUES (?, ?, 'CONTRACT', 'RECORD', 'Agreement')`)
+      .run(`DOC-${c.id}`, c.id);
+    expect((await move(c.id, 'SIGNED')).status).toBe(200);
+  });
+
+  it('lists a PSA’s source PPAs from the PSA’s own end', async () => {
+    const ppa = makeContract({ contract_type: 'PPA' });
+    const psa = makeContract({ contract_type: 'PSA' });
+    const map = await request(app).post(`/api/contracts/${ppa.id}/allocations`).set(auth(token))
+      .send({ psa_id: psa.id, allocation_percent: 60, effective_from: '2026-04-01' });
+    expect(map.status).toBe(201);
+    const fromPsa = await request(app).get(`/api/contracts/${psa.id}/allocations`).set(auth(token));
+    expect(fromPsa.body).toHaveLength(1);
+    expect(fromPsa.body[0].ppa_id).toBe(ppa.id);
+    expect(fromPsa.body[0].ppa_no).toBe(ppa.contract_no);
+  });
+});

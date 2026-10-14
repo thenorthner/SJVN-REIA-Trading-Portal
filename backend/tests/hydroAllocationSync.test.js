@@ -150,13 +150,26 @@ describe('the month\'s sheet, derived from Table C1', () => {
     }
   });
 
-  it('keeps the home state\'s Sale of Rights share fixed and its free-power row as the remainder', () => {
+  it('holds the home state at its free and equity power and gives the rest of the state\'s share to HPSEBL', () => {
     const { rows } = buildMonthSheet({
       prevRows: april, entitlement: SEPTEMBER.data[0].entitlement_pct, delhiSea: SEA_NJHPS, rajasthanShares: SHARES,
     });
     const gohp = rows.find((r) => r.beneficiary_name === 'GoHP');
     expect(gohp).toMatchObject({ pct_rea: 34, pct_incl_free: 36.47, is_home_state: 1 });
     expect(pct(rows, 'HPSEB')).toBe(2.47);
+
+    // A month in which Himachal Pradesh's entitlement moves: GoHP's 12% free
+    // and 22% equity stay, and HPSEBL takes the difference.
+    const e = SEPTEMBER.data[0].entitlement_pct;
+    const moved = buildMonthSheet({
+      prevRows: april,
+      entitlement: { ...e, 'HIMACHAL PRADESH': 37.47, PUNJAB: 11.206011 },
+      delhiSea: SEA_NJHPS,
+      rajasthanShares: SHARES,
+    });
+    expect(moved.problems).toEqual([]);
+    expect(pct(moved.rows, 'GoHP')).toBe(34);
+    expect(pct(moved.rows, 'HPSEB')).toBe(3.47);
   });
 
   it('refuses a share nobody on the sheet can be billed for', () => {

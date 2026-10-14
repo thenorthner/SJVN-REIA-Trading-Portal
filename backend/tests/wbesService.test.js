@@ -17,7 +17,7 @@ import {
 
 const ENV_KEYS = [
   'WBES_ENABLED', 'WBES_API_KEY', 'WBES_BASE_URL', 'WBES_USERNAME',
-  'WBES_UTILITY_ACRONYM', 'WBES_KEY_IN_QUERY',
+  'WBES_UTILITY_ACRONYM', 'WBES_KEY_IN_QUERY', 'WBES_PASSWORD', 'WBES_BASIC_USER',
 ];
 
 function liveConfig({ base = 'https://gateway.example/POSOCO', acronym = 'SJVNL' } = {}) {
@@ -77,6 +77,42 @@ describe('the API key', () => {
     await fetchLatestRevisionNo('2026-09-26');
     expect(calls[0].url).not.toContain('apikey');
     expect(calls[0].headers['X-API-Key']).toBe('test-key');
+  });
+});
+
+describe('the gateway\'s Basic auth', () => {
+  const refusal = { type: 'Authentication', failureCode: 10004, responseCode: 401, message: 'BASIC authentication failed.', headers: { 'WWW-Authenticate': 'Basic realm="scheduling-api"' } };
+
+  it('sends no Authorization header without a password', async () => {
+    liveConfig();
+    const calls = stubFetch({ ResponseStatus: { Code: 'WBES-200' }, ResponseBody: 3 });
+    await fetchLatestRevisionNo('2026-10-12');
+    expect(calls[0].headers.Authorization).toBeUndefined();
+  });
+
+  it('sends Basic credentials as the WBES username and WBES_PASSWORD', async () => {
+    liveConfig();
+    process.env.WBES_PASSWORD = 'pw';
+    const calls = stubFetch({ ResponseStatus: { Code: 'WBES-200' }, ResponseBody: 3 });
+    await fetchScheduleData('2026-10-12');
+    expect(calls[0].headers.Authorization).toBe(`Basic ${Buffer.from('usr_SJVNL:pw').toString('base64')}`);
+  });
+
+  it('uses WBES_BASIC_USER when the gateway login differs', async () => {
+    liveConfig();
+    process.env.WBES_PASSWORD = 'pw';
+    process.env.WBES_BASIC_USER = 'gw_user';
+    const calls = stubFetch({ ResponseStatus: { Code: 'WBES-200' }, ResponseBody: 3 });
+    await fetchLatestRevisionNo('2026-10-12');
+    expect(calls[0].headers.Authorization).toBe(`Basic ${Buffer.from('gw_user:pw').toString('base64')}`);
+  });
+
+  it('names the 401 as missing Basic credentials, not a bad key', async () => {
+    liveConfig();
+    stubFetch(refusal, { ok: false, status: 401 });
+    const r = await fetchLatestRevisionNo('2026-10-12');
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/No WBES_PASSWORD is configured/);
   });
 });
 

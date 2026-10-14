@@ -133,7 +133,7 @@ export default function InboxMailList() {
   });
 
   return (
-    <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ padding: 20 }}>
       <PageHeader title="Broadcast Log" subtitle="Broadcasts sent from Bulk Communications. Personal messages are in Mail." />
 
       {/* Top Action Bar */}
