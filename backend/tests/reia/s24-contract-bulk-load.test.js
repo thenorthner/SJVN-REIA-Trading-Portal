@@ -132,10 +132,16 @@ describe('S24 Contract bulk load', () => {
     expect(r.body.errors[0].error).toMatch(/bulk-template/);
   });
 
-  it('defaults the commissioned capacity to the contracted capacity', async () => {
-    await upload([row({ contract_no: 'BULK/CAP' })]);
+  it('defaults the commissioned capacity to the contracted capacity for a PPA with a COD', async () => {
+    await upload([row({ contract_no: 'BULK/CAP', cod_date: '2026-04-01' })]);
     const c = db.prepare("SELECT capacity_mw, commissioned_capacity_mw FROM contracts WHERE contract_no = 'BULK/CAP'").get();
     expect(c.commissioned_capacity_mw).toBe(c.capacity_mw);
+  });
+
+  it('leaves a contract with no COD uncommissioned, rather than 100% at COD', async () => {
+    await upload([row({ contract_no: 'BULK/NOCOD' })]);
+    const c = db.prepare("SELECT commissioned_capacity_mw FROM contracts WHERE contract_no = 'BULK/NOCOD'").get();
+    expect(c.commissioned_capacity_mw).toBe(0);
   });
 
   it('refuses an empty file rather than reporting a successful load of nothing', async () => {

@@ -6,6 +6,16 @@ import { syncRequirementsFromContract, createInstrumentsFromRequirements } from 
 import { allocationsInForce } from '../services/allocations.js';
 import { contractVisibleTo } from '../services/counterpartyScope.js';
 import { settlementPosition, settlementActions } from '../services/contractSettlement.js';
+import {
+  contractFieldErrors, normalizeProjectType, normalizeContractNo, changedTerms, cleanTerms, AMENDABLE_FIELDS, TERMINATION_GROUNDS,
+} from '../services/contractRules.js';
+
+const likeEscape = (s) => String(s).replace(/[\\%_]/g, (ch) => `\\${ch}`);
+
+/** A refusal that lists every problem, so the form can show them all at once. */
+function refuseFields(res, errors, title = 'The contract was not saved') {
+  return res.status(400).json({ error: errors.length === 1 ? errors[0] : `${title}: ${errors.length} problems — ${errors.join(' ')}`, errors });
+}
 
 const router = Router();
 router.use(requireAuth);
@@ -128,12 +138,15 @@ router.get('/', (req, res) => {
 
   if (contract_type) { sql += ' AND c.contract_type = ?'; params.push(contract_type); }
   if (status) { sql += ' AND c.status = ?'; params.push(status); }
-  if (project_type) { sql += ' AND c.project_type = ?'; params.push(project_type); }
+  if (project_type) { sql += ' AND lower(c.project_type) = lower(?)'; params.push(normalizeProjectType(project_type)); }
   if (seller_id) { sql += ' AND c.seller_id = ?'; params.push(seller_id); }
   if (buyer_id) { sql += ' AND c.buyer_id = ?'; params.push(buyer_id); }
-  if (q) {
-    sql += ' AND (c.contract_no LIKE ? OR es.name LIKE ? OR eb.name LIKE ?)';
-    params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+  // Escaped, so "%" or "_" typed in the box is searched for rather than matching every contract.
+  const term = typeof q === 'string' ? q.trim() : '';
+  if (term) {
+    const like = `%${likeEscape(term)}%`;
+    sql += " AND (c.contract_no LIKE ? ESCAPE '\\' OR es.name LIKE ? ESCAPE '\\' OR eb.name LIKE ? ESCAPE '\\')";
+    params.push(like, like, like);
   }
 
   for (const [value, clause, label] of [
@@ -185,14 +198,18 @@ router.get('/:id', (req, res) => {
   // A counterparty reads only its own contracts — tariff and tenure are the
   // commercially sensitive part of this payload.
   if (!contractVisibleTo(req.user, contract)) return res.status(404).json({ error: 'Contract not found' });
-  const versions = db.prepare('SELECT id, contract_no, version, status, created_at FROM contracts WHERE id = ? OR parent_contract_id = ? ORDER BY version').all(req.params.id, req.params.id);
-  const amendments = db.prepare('SELECT * FROM contract_amendments WHERE contract_id = ? ORDER BY version DESC').all(req.params.id);
+  // Every version of the contract, from whichever version is opened.
+  const family = contract.parent_contract_id || contract.id;
+  const versions = db.prepare('SELECT id, contract_no, version, status, amendment_effective_from, created_at FROM contracts WHERE id = ? OR parent_contract_id = ? ORDER BY version').all(family, family);
+  const amendments = db.prepare('SELECT * FROM contract_amendments WHERE contract_id = ? OR new_contract_id = ? ORDER BY version DESC').all(req.params.id, req.params.id);
   res.json({ ...fetchContractRelations(contract), versions, amendments });
 });
 
 router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const id = newId('CON');
-  const b = req.body;
+  const b = { ...req.body };
+  b.contract_no = normalizeContractNo(b.contract_no);
+  b.project_type = normalizeProjectType(b.project_type);
 
   // A counterparty still going through onboarding is not one you can contract
   // with. Approval is the step that checks its licences, its registration and
@@ -217,6 +234,17 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
       });
     }
   }
+  const fieldErrors = contractFieldErrors(b);
+  if (b.contract_type === 'PPA' && !b.seller_id) fieldErrors.push('Select the seller this PPA is signed with.');
+  if (b.contract_type === 'PSA' && !b.buyer_id) fieldErrors.push('Select the buyer this PSA is signed with.');
+  if (fieldErrors.length) return refuseFields(res, fieldErrors, 'The contract was not created');
+
+  // "QA-1", "QA-1 " and "qa-1" are one contract number to anyone reading a register.
+  const clash = db.prepare('SELECT contract_no FROM contracts WHERE lower(trim(contract_no)) = lower(?) LIMIT 1').get(b.contract_no);
+  if (clash) {
+    return res.status(409).json({ error: `Contract number ${clash.contract_no} is already on record. Use a different number, or amend the existing contract.` });
+  }
+
   db.transaction(() => {
     db.prepare(`
       INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
@@ -272,6 +300,28 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     createInstrumentsFromRequirements(id, req.user);
   }
   res.status(201).json(fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(id)));
+});
+
+// Discarding an empty draft. Used when the agreement upload that follows
+// creation fails: the rule is no contract without its agreement, and the record
+// created a moment earlier would otherwise stay behind with nothing on file.
+router.delete('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const c = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
+  if (!c) return res.status(404).json({ error: 'Contract not found' });
+  if (c.status !== 'DRAFT' || c.version > 1) return res.status(400).json({ error: `${c.contract_no} is ${c.status} — only an unsigned first draft can be discarded.` });
+  const used = db.prepare(`
+    SELECT (SELECT COUNT(*) FROM documents WHERE contract_id = ? AND status = 'ACTIVE')
+         + (SELECT COUNT(*) FROM contract_allocations WHERE ppa_id = ? OR psa_id = ?)
+         + (SELECT COUNT(*) FROM invoices WHERE contract_id = ?) AS n
+  `).get(c.id, c.id, c.id, c.id).n;
+  if (used) return res.status(400).json({ error: `${c.contract_no} already has documents, mappings or bills on it and cannot be discarded.` });
+  db.transaction(() => {
+    db.prepare('DELETE FROM contract_projects WHERE contract_id = ?').run(c.id);
+    db.prepare('DELETE FROM security_requirements WHERE contract_id = ?').run(c.id);
+    db.prepare('DELETE FROM contracts WHERE id = ?').run(c.id);
+  })();
+  logAudit({ req, user: req.user, action: 'DISCARD_DRAFT', module: 'REIA', entityType: 'contract', entityId: c.id, details: { contract_no: c.contract_no } });
+  res.json({ success: true });
 });
 
 // The contract lifecycle, and what each state may move to. A contract has to be
@@ -348,9 +398,47 @@ router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     }
   }
 
+  // A termination is dated inside the contract's own life, and says on what ground.
+  let terminationReasonText = termination_reason ?? null;
+  let terminationDate = termination_date ?? null;
+  if (status === 'TERMINATED') {
+    const problems = [];
+    const reasonIsGround = TERMINATION_GROUNDS.includes(termination_reason);
+    const ground = req.body.termination_ground || (reasonIsGround ? termination_reason : null);
+    if (!terminationDate) terminationDate = db.prepare(`SELECT date('now') d`).get().d;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(terminationDate))) problems.push('Termination date must be YYYY-MM-DD.');
+    else {
+      if (contract.tenure_end && terminationDate > contract.tenure_end) problems.push(`The termination date ${terminationDate} is after the contract ends anyway (${contract.tenure_end}).`);
+      if (contract.tenure_start && terminationDate < contract.tenure_start && termination_date) problems.push(`The termination date ${terminationDate} is before the contract begins (${contract.tenure_start}).`);
+    }
+    if (ground != null && !TERMINATION_GROUNDS.includes(ground)) problems.push(`Termination ground must be one of ${TERMINATION_GROUNDS.join(', ')}.`);
+    if (!ground && !String(termination_reason || '').trim()) problems.push('Give the ground for termination.');
+    if (problems.length) return refuseFields(res, problems, 'The contract was not terminated');
+    if (ground) {
+      const label = ground.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+      const details = reasonIsGround ? '' : String(termination_reason || '').trim();
+      terminationReasonText = details ? `${label} — ${details}` : label;
+    }
+  }
+
   db.prepare(`UPDATE contracts SET status = ?, remarks = ?, termination_reason = ?, termination_date = ?, updated_at = datetime('now') WHERE id = ?`)
-    .run(status, remarks ?? contract.remarks, termination_reason ?? null, termination_date ?? null, contract.id);
-    
+    .run(status, remarks ?? contract.remarks, terminationReasonText, status === 'TERMINATED' ? terminationDate : (termination_date ?? contract.termination_date ?? null), contract.id);
+
+  // A contract that has ended supplies nobody. Its PPA→PSA shares used to run
+  // on open-ended, so a terminated PPA went on "feeding" its buyers.
+  if (ending) {
+    const endOn = (status === 'TERMINATED' && terminationDate) ? terminationDate
+      : db.prepare(`SELECT date('now') d`).get().d;
+    const dropped = db.prepare(`DELETE FROM contract_allocations WHERE (ppa_id = ? OR psa_id = ?) AND effective_from > ?`).run(contract.id, contract.id, endOn).changes;
+    const closed = db.prepare(`
+      UPDATE contract_allocations SET effective_to = ?
+      WHERE (ppa_id = ? OR psa_id = ?) AND COALESCE(effective_to, '9999-12-31') > ?
+    `).run(endOn, contract.id, contract.id, endOn).changes;
+    if (dropped || closed) {
+      logAudit({ req, user: req.user, action: 'ALLOCATIONS_ENDED', module: 'REIA', entityType: 'contract', entityId: contract.id, details: { status, end_on: endOn, closed, dropped } });
+    }
+  }
+
   if (status === 'ACTIVE') {
     syncRequirementsFromContract(contract.id);
     createInstrumentsFromRequirements(contract.id, req.user);
@@ -365,6 +453,19 @@ router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
       `).get(contract.parent_contract_id, contract.parent_contract_id, contract.version - 1, contract.id);
       if (superseded) {
         db.prepare(`UPDATE contracts SET status = 'AMENDED', updated_at = datetime('now') WHERE id = ?`).run(superseded.id);
+
+        // The two versions hand over on the amendment's effective date: the old
+        // one's shares end the day before, the new one's start that day. Both
+        // used to run side by side, so a PSA was shown — and billed — as drawing
+        // from the PPA twice.
+        const eff = contract.amendment_effective_from;
+        if (eff) {
+          const side = contract.contract_type === 'PSA' ? 'psa_id' : 'ppa_id';
+          const dayBefore = db.prepare(`SELECT date(?, '-1 day') d`).get(eff).d;
+          db.prepare(`DELETE FROM contract_allocations WHERE ${side} = ? AND effective_from >= ?`).run(superseded.id, eff);
+          db.prepare(`UPDATE contract_allocations SET effective_to = ? WHERE ${side} = ? AND COALESCE(effective_to, '9999-12-31') >= ?`).run(dayBefore, superseded.id, eff);
+          db.prepare(`UPDATE contract_allocations SET effective_from = ? WHERE ${side} = ? AND effective_from < ?`).run(eff, contract.id, eff);
+        }
         logAudit({
           req, user: req.user, action: 'STATUS_AMENDED', module: 'REIA', entityType: 'contract', entityId: superseded.id,
           beforeValue: 'ACTIVE', afterValue: 'AMENDED',
@@ -405,6 +506,29 @@ router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
 router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const original = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
   if (!original) return res.status(404).json({ error: 'Contract not found' });
+  if (['TERMINATED', 'CLOSED', 'EXPIRED', 'AMENDED'].includes(original.status)) {
+    return res.status(400).json({ error: `${original.contract_no} is ${original.status} — it cannot be amended.` });
+  }
+
+  // A draft has not been signed, so there is nothing to amend: its terms are
+  // corrected in place. Amending one created a version 2 straight into
+  // PENDING_REGULATORY_APPROVAL, skipping signature altogether.
+  if (['DRAFT', 'UNDER_NEGOTIATION'].includes(original.status)) {
+    const body = cleanTerms(req.body);
+    if ('project_type' in body) body.project_type = normalizeProjectType(body.project_type);
+    const merged = { ...original, ...body };
+    const errors = contractFieldErrors(merged);
+    if (errors.length) return refuseFields(res, errors, 'The draft was not saved');
+    const changed = changedTerms(original, body);
+    if (!Object.keys(changed).length) return res.status(400).json({ error: 'Nothing was changed.' });
+    const sets = Object.keys(changed);
+    const rules = { ...billingRuleFields(merged), ...hydroBillingFields(merged) };
+    const extra = ['payment_terms', 'rebate_rule', 'lps_rule'];
+    db.prepare(`UPDATE contracts SET ${[...new Set([...sets, ...extra])].map((k) => `${k} = @${k}`).join(', ')}, updated_at = datetime('now') WHERE id = @id`)
+      .run({ ...Object.fromEntries(sets.map((k) => [k, merged[k]])), ...Object.fromEntries(extra.map((k) => [k, rules[k]])), id: original.id });
+    logAudit({ req, user: req.user, action: 'DRAFT_EDIT', module: 'REIA', entityType: 'contract', entityId: original.id, details: { changed, reason: req.body.amendment_reason } });
+    return res.json({ ...fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(original.id)), edited_in_place: true, changed });
+  }
 
   // When the revised terms start applying. An amendment is dated by the order or
   // agreement behind it, and there was nowhere to record that — a date passed in
@@ -412,26 +536,33 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
   // identical to one effective from the afternoon it was typed.
   const effectiveFrom = String(req.body.effective_from ?? req.body.amendment_effective_from ?? '').trim();
   if (!effectiveFrom || !/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
-    return res.status(400).json({ error: 'effective_from (YYYY-MM-DD) is required — an amendment applies from a date' });
+    return res.status(400).json({ error: 'Give the date the amendment takes effect from — an amendment applies from a date.' });
   }
   if (original.tenure_start && effectiveFrom < String(original.tenure_start)) {
     return res.status(400).json({
-      error: `effective_from ${effectiveFrom} is before the contract began (${original.tenure_start}) — an amendment cannot reach back past the contract itself.`,
+      error: `The effective date ${effectiveFrom} is before the contract began (${original.tenure_start}) — an amendment cannot reach back past the contract itself.`,
     });
   }
   const tenureEnd = req.body.tenure_end || original.tenure_end;
   if (tenureEnd && effectiveFrom > String(tenureEnd)) {
     return res.status(400).json({
-      error: `effective_from ${effectiveFrom} is after the contract ends (${tenureEnd}) — there would be nothing left for it to apply to.`,
+      error: `The effective date ${effectiveFrom} is after the contract ends (${tenureEnd}) — there would be nothing left for it to apply to.`,
     });
   }
 
+
   const newVersionId = newId('CON');
-  const updated = { ...original, ...req.body };
-  
-  const changedFields = {};
-  for (const k of Object.keys(req.body)) {
-    if (String(req.body[k]) !== String(original[k])) changedFields[k] = { old: original[k], new: req.body[k] };
+  // Only the contract's terms move into the new version. The whole detail
+  // payload used to be spread in, and the history then listed seller names,
+  // version lists and "[object Object]" as things that had been amended.
+  const terms = cleanTerms(Object.fromEntries(Object.entries(req.body || {}).filter(([k]) => AMENDABLE_FIELDS.includes(k))));
+  const updated = { ...original, ...terms };
+  const amendErrors = contractFieldErrors(updated);
+  if (amendErrors.length) return refuseFields(res, amendErrors, 'The amendment was not saved');
+
+  const changedFields = changedTerms(original, terms);
+  if (!Object.keys(changedFields).length) {
+    return res.status(400).json({ error: 'The amendment changes none of the contract terms — nothing to submit.' });
   }
 
   db.transaction(() => {
@@ -460,7 +591,7 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
       version: original.version + 1,
       parent_contract_id: original.parent_contract_id || original.id,
       amendment_effective_from: effectiveFrom,
-      remarks: req.body.amendment_reason ?? null,
+      remarks: req.body.amendment_reason ?? req.body.reason ?? null,
       ...billingRuleFields(updated),
       ...hydroBillingFields(updated),
     });
@@ -473,12 +604,18 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
     // And the PSA allocations, which did not follow. They stayed on the version
     // being retired, so after a tariff revision every buyer was still drawing
     // from the superseded PPA and the new one supplied nobody.
-    const allocs = db.prepare('SELECT * FROM contract_allocations WHERE ppa_id = ?').all(original.id);
+    // From either end: a PSA's source PPAs have to follow it too, or the new
+    // version of a PSA is linked to no PPA and has nothing to bill.
+    const side = original.contract_type === 'PSA' ? 'psa_id' : 'ppa_id';
+    const allocs = db.prepare(`SELECT * FROM contract_allocations WHERE ${side} = ? AND COALESCE(effective_to, '9999-12-31') >= ?`).all(original.id, effectiveFrom);
     const insertAlloc = db.prepare(`
       INSERT INTO contract_allocations (id, ppa_id, psa_id, allocation_percent, effective_from, effective_to)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
-    for (const a of allocs) insertAlloc.run(newId('CAL'), newVersionId, a.psa_id, a.allocation_percent, a.effective_from, a.effective_to);
+    for (const a of allocs) {
+      insertAlloc.run(newId('CAL'), side === 'ppa_id' ? newVersionId : a.ppa_id, side === 'psa_id' ? newVersionId : a.psa_id,
+        a.allocation_percent, a.effective_from > effectiveFrom ? a.effective_from : effectiveFrom, a.effective_to);
+    }
 
     // The original is deliberately left ACTIVE. Marking it AMENDED here retired
     // it the moment the amendment was drafted, so the revised terms took effect
@@ -505,8 +642,9 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
     module: 'REIA', entityType: 'contract', entityId: newVersionId,
     details: { amended_from: original.id, version: original.version + 1, changedFields, effective_from: effectiveFrom },
   });
+  // Instruments are raised when the version goes ACTIVE, not when it is drafted —
+  // a version awaiting approval holds no letter of credit or guarantee yet.
   syncRequirementsFromContract(newVersionId);
-  createInstrumentsFromRequirements(newVersionId, req.user);
   res.status(201).json(fetchContractRelations(db.prepare('SELECT * FROM contracts WHERE id = ?').get(newVersionId)));
 });
 
@@ -595,56 +733,157 @@ router.post('/:id/allocate-energy', requireRole(...ROLE_GROUPS.REIA_WRITE), (req
   });
 });
 
+const ENDED_STATUSES = ['TERMINATED', 'CLOSED', 'EXPIRED', 'AMENDED'];
+const OVERLAPS = `COALESCE(effective_from, '0000-01-01') <= ? AND COALESCE(effective_to, '9999-12-31') >= ?`;
+const round2 = (n) => Math.round(n * 100) / 100;
+
+/**
+ * Can a share of this PPA go to this PSA from this date? The dates and states
+ * both contracts allow. Returns a refusal { status, error } or null.
+ */
+function shareWindowProblem(ppa, psa, from) {
+  for (const c of [ppa, psa]) {
+    if (ENDED_STATUSES.includes(c.status)) {
+      return { status: 400, error: `${c.contract_no} is ${c.status} — a contract that has ended or been superseded cannot be mapped.` };
+    }
+  }
+  // A share starts inside both contracts' lives. Shares dated years before
+  // either contract existed, or after both had ended, were accepted.
+  const latestStart = [ppa.tenure_start, psa.tenure_start].filter(Boolean).sort().pop() || '0000-01-01';
+  const earliestEnd = [ppa.tenure_end, psa.tenure_end].filter(Boolean).sort()[0] || '9999-12-31';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from))) return { status: 400, error: 'Give the date the share starts from.' };
+  if (from < latestStart) {
+    return { status: 400, error: `The share cannot start on ${from}: ${ppa.tenure_start > psa.tenure_start ? ppa.contract_no : psa.contract_no} only begins on ${latestStart}.` };
+  }
+  if (from > earliestEnd) {
+    return { status: 400, error: `The share cannot start on ${from}: ${ppa.tenure_end < psa.tenure_end ? ppa.contract_no : psa.contract_no} ends on ${earliestEnd}.` };
+  }
+  return null;
+}
+
+/**
+ * Does a share of `percent` fit the PSA it goes to? One source PPA at a time,
+ * no more MW than the PSA buys, and no selling below cost without a reason.
+ */
+function shareFitProblem(ppa, psa, percent, from, to, reason) {
+  // A PSA bill takes its energy from one source PPA for a month, so a second
+  // concurrent source would be shown as supplying the buyer and never billed.
+  const otherSource = db.prepare(`
+    SELECT c.contract_no FROM contract_allocations a JOIN contracts c ON c.id = a.ppa_id
+    WHERE a.psa_id = ? AND a.ppa_id != ? AND c.status NOT IN ('TERMINATED','CLOSED','AMENDED') AND ${OVERLAPS.replace(/effective_/g, 'a.effective_')}
+  `).get(psa.id, ppa.id, to, from);
+  if (otherSource) {
+    return {
+      status: 409,
+      error: `${psa.contract_no} already draws from ${otherSource.contract_no} over these dates. A PSA is billed from one source PPA at a time — end that share first, or map from a date after it ends.`,
+    };
+  }
+  // The buyer cannot be promised more than its PSA contracts for.
+  const shareMw = round2(percent * ppa.capacity_mw / 100);
+  if (psa.capacity_mw && shareMw > psa.capacity_mw + 1e-6) {
+    return {
+      status: 400,
+      error: `${percent}% of ${ppa.contract_no} is ${shareMw} MW, but ${psa.contract_no} contracts for only ${psa.capacity_mw} MW. The most it can take is ${round2(psa.capacity_mw / ppa.capacity_mw * 100)}%.`,
+    };
+  }
+  // Selling below the purchase price is a loss on every unit. Allowed only on
+  // a recorded reason (a pooled-tariff order, a VGF scheme), never by accident.
+  const spread = round2((Number(psa.tariff_per_unit) || 0) - (Number(ppa.tariff_per_unit) || 0));
+  if (spread < 0 && !reason) {
+    return {
+      status: 409,
+      code: 'NEGATIVE_SPREAD',
+      spread_per_unit: spread,
+      error: `${psa.contract_no} sells at ₹${psa.tariff_per_unit}/unit but ${ppa.contract_no} buys at ₹${ppa.tariff_per_unit}/unit — SJVN would lose ₹${Math.abs(spread).toFixed(2)} on every unit. Record the reason (e.g. pooled-tariff order, VGF) to map it anyway.`,
+    };
+  }
+  return null;
+}
+
+const refuseWith = (res, p) => res.status(p.status).json(Object.fromEntries(Object.entries(p).filter(([k]) => k !== 'status')));
+
 router.post('/:id/allocations', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const ppa = db.prepare(`SELECT * FROM contracts WHERE id = ? AND contract_type = 'PPA'`).get(req.params.id);
   if (!ppa) return res.status(404).json({ error: 'PPA not found' });
-  
-  const { psa_id, allocation_percent, effective_from, effective_to } = req.body;
+
+  const { psa_id, allocation_percent, effective_to } = req.body;
+  const reason = String(req.body.negative_spread_reason || '').trim();
 
   // The other end has to be a PSA that exists. Unchecked, a mistyped id fell
   // through to the foreign key and came back a 500.
-  const psa = psa_id ? db.prepare(`SELECT id, contract_no FROM contracts WHERE id = ? AND contract_type = 'PSA'`).get(psa_id) : null;
-  if (!psa) return res.status(400).json({ error: 'psa_id must name an existing PSA' });
+  const psa = psa_id ? db.prepare(`SELECT * FROM contracts WHERE id = ? AND contract_type = 'PSA'`).get(psa_id) : null;
+  if (!psa) return res.status(400).json({ error: 'Select an existing PSA to map.' });
 
   const percent = Number(allocation_percent);
   if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
-    // Said "between 0 and 100" while refusing 0, which read as though a PSA
-    // could be ended by allocating it nothing. Ending one is /allocations/revise.
-    return res.status(400).json({
-      error: 'allocation_percent must be greater than 0 and at most 100. To end a PSA’s share, use POST /allocations/revise.',
-    });
+    return res.status(400).json({ error: 'The share must be more than 0% and at most 100% of the PPA. To end a share, record a dated re-split (revise the allocation) instead.' });
   }
 
-  // A PPA cannot be allocated beyond itself. Only the allocations whose validity
-  // overlaps this one count towards the limit — a share released when one PSA
-  // ends is available to re-allocate from that date on.
-  const from = effective_from || ppa?.tenure_start || '0000-01-01';
+  const from = req.body.effective_from || [ppa.tenure_start, psa.tenure_start].filter(Boolean).sort().pop() || '0000-01-01';
+  const windowProblem = shareWindowProblem(ppa, psa, from);
+  if (windowProblem) return refuseWith(res, windowProblem);
   const to = effective_to || '9999-12-31';
-  const overlapping = db.prepare(`
-    SELECT COALESCE(SUM(allocation_percent), 0) AS total FROM contract_allocations
-    WHERE ppa_id = ?
-      AND COALESCE(effective_from, '0000-01-01') <= ?
-      AND COALESCE(effective_to, '9999-12-31') >= ?
-  `).get(ppa.id, to, from).total;
 
-  if (overlapping + percent > 100) {
+  if (db.prepare(`SELECT 1 FROM contract_allocations WHERE ppa_id = ? AND psa_id = ? AND ${OVERLAPS}`).get(ppa.id, psa.id, to, from)) {
+    return res.status(409).json({ error: `${psa.contract_no} already holds a share of ${ppa.contract_no} over these dates.` });
+  }
+
+  const overlapping = db.prepare(`SELECT COALESCE(SUM(allocation_percent), 0) AS total FROM contract_allocations WHERE ppa_id = ? AND ${OVERLAPS}`).get(ppa.id, to, from).total;
+  if (round2(overlapping + percent) > 100) {
+    const left = round2(Math.max(0, 100 - overlapping));
     return res.status(400).json({
-      error: `Allocating ${percent}% would take this PPA to ${overlapping + percent}% over ${from} to ${to === '9999-12-31' ? 'open' : to}.`,
-      already_allocated_percent: overlapping,
+      error: `${ppa.contract_no} is already ${round2(overlapping)}% allocated from ${from}. Only ${left}% (${round2(left * ppa.capacity_mw / 100)} MW) is left — ${percent}% would take it to ${round2(overlapping + percent)}%.`,
+      already_allocated_percent: round2(overlapping),
+      headroom_percent: left,
     });
   }
 
-  // Bound to `from`, not the raw request value: the column is NOT NULL, so
-  // omitting the optional effective_from inserted a null and failed. The
-  // fallback to the PPA's own tenure_start was computed for the overlap check
-  // above and then not used for the row that check was guarding.
+  const fitProblem = shareFitProblem(ppa, psa, percent, from, to, reason);
+  if (fitProblem) return refuseWith(res, fitProblem);
+  const shareMw = round2(percent * ppa.capacity_mw / 100);
+  const spread = round2((Number(psa.tariff_per_unit) || 0) - (Number(ppa.tariff_per_unit) || 0));
+
+  const allocId = newId('CAL');
   db.prepare(`
     INSERT INTO contract_allocations (id, ppa_id, psa_id, allocation_percent, effective_from, effective_to)
     VALUES (?, ?, ?, ?, ?, ?)
-  `).run(newId('CAL'), ppa.id, psa_id, percent, from, effective_to ?? null);
-  
-  logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'CREATE_ALLOCATION', module: 'REIA', entityType: 'contract', entityId: ppa.id, details: { psa_id, allocation_percent } });
-  res.status(201).json({ success: true });
+  `).run(allocId, ppa.id, psa.id, percent, from, effective_to ?? null);
+
+  logAudit({
+    req, user: req.user, action: 'CREATE_ALLOCATION', module: 'REIA', entityType: 'contract', entityId: ppa.id,
+    reason: reason || undefined,
+    details: { allocation_id: allocId, psa_id: psa.id, allocation_percent: percent, effective_from: from, share_mw: shareMw, spread_per_unit: spread },
+  });
+  res.status(201).json({ success: true, id: allocId, share_mw: shareMw, spread_per_unit: spread, effective_from: from });
+});
+
+// Removing a share is a correction of a mistaken entry, so it is refused once
+// anything has been billed against it — the history a bill was built on stays.
+router.delete('/:id/allocations/:allocId', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const contract = db.prepare(`SELECT * FROM contracts WHERE id = ?`).get(req.params.id);
+  if (!contract) return res.status(404).json({ error: 'Contract not found' });
+  const alloc = db.prepare(`SELECT * FROM contract_allocations WHERE id = ? AND (ppa_id = ? OR psa_id = ?)`).get(req.params.allocId, contract.id, contract.id);
+  if (!alloc) return res.status(404).json({ error: 'That share is not on this contract.' });
+  if (['CLOSED', 'TERMINATED'].includes(contract.status)) {
+    return res.status(400).json({ error: `${contract.contract_no} is ${contract.status} — its shares are part of the record and cannot be removed.` });
+  }
+
+  const billed = db.prepare(`
+    SELECT COUNT(*) n FROM invoices
+    WHERE contract_id IN (?, ?) AND billing_period >= substr(?, 1, 7) AND status != 'CANCELLED'
+  `).get(alloc.psa_id, alloc.ppa_id, alloc.effective_from).n;
+  if (billed) {
+    return res.status(409).json({
+      error: `This share has been billed on (${billed} bill${billed === 1 ? '' : 's'} from ${alloc.effective_from.slice(0, 7)}). It cannot be removed — end it from a date with a re-split instead.`,
+    });
+  }
+
+  db.prepare(`DELETE FROM contract_allocations WHERE id = ?`).run(alloc.id);
+  logAudit({
+    req, user: req.user, action: 'DELETE_ALLOCATION', module: 'REIA', entityType: 'contract', entityId: contract.id,
+    details: { allocation_id: alloc.id, psa_id: alloc.psa_id, ppa_id: alloc.ppa_id, allocation_percent: alloc.allocation_percent, effective_from: alloc.effective_from },
+  });
+  res.json({ success: true });
 });
 
 /**
@@ -667,25 +906,55 @@ router.post('/:id/allocations/revise', requireRole(...ROLE_GROUPS.REIA_WRITE), (
   const ppa = db.prepare(`SELECT * FROM contracts WHERE id = ? AND contract_type = 'PPA'`).get(req.params.id);
   if (!ppa) return res.status(404).json({ error: 'PPA not found' });
 
-  const { effective_from, reason } = req.body || {};
+  const { effective_from } = req.body || {};
+  const reason = String(req.body?.reason || '').trim();
   const rows = Array.isArray(req.body?.allocations) ? req.body.allocations : null;
   if (!effective_from || !/^\d{4}-\d{2}-\d{2}$/.test(String(effective_from))) {
-    return res.status(400).json({ error: 'effective_from (YYYY-MM-DD) is required — a re-split has to take effect on a date' });
+    return res.status(400).json({ error: 'Give the date the new split takes effect from.' });
   }
   if (!rows) {
-    return res.status(400).json({ error: 'allocations must be an array of { psa_id, allocation_percent } — the complete split from this date, not just what changed' });
+    return res.status(400).json({ error: 'Give the complete split from this date — every PSA that keeps a share, with its percentage. A PSA left out has its share ended.' });
   }
 
+  // A re-split restates the basis of every month from its date. A month already
+  // billed on the old split cannot be restated from here.
+  const touched = new Set([
+    ...db.prepare(`SELECT psa_id FROM contract_allocations WHERE ppa_id = ? AND COALESCE(effective_to, '9999-12-31') >= ?`).all(ppa.id, effective_from).map((a) => a.psa_id),
+    ...rows.map((r) => r?.psa_id).filter(Boolean),
+  ]);
+  const ids = [ppa.id, ...touched];
+  const billed = db.prepare(`
+    SELECT c.contract_no, MAX(i.billing_period) AS period FROM invoices i JOIN contracts c ON c.id = i.contract_id
+    WHERE i.contract_id IN (${ids.map(() => '?').join(',')}) AND i.billing_period >= substr(?, 1, 7) AND i.status != 'CANCELLED'
+    GROUP BY c.contract_no ORDER BY period DESC LIMIT 1
+  `).get(...ids, effective_from);
+  if (billed) {
+    const next = db.prepare(`SELECT date(? || '-01', '+1 month') d`).get(billed.period).d;
+    return res.status(409).json({
+      error: `${billed.contract_no} has already been billed for ${billed.period}. A new split can start from ${next} at the earliest; a billed month is corrected by a supplementary bill, not by re-splitting.`,
+      earliest_effective_from: next,
+    });
+  }
+
+  const seen = new Set();
+  const checked = [];
   let total = 0;
   for (const r of rows) {
     const pct = Number(r?.allocation_percent);
-    if (!r?.psa_id) return res.status(400).json({ error: 'each allocation needs a psa_id' });
+    const psa = r?.psa_id ? db.prepare(`SELECT * FROM contracts WHERE id = ? AND contract_type = 'PSA'`).get(r.psa_id) : null;
+    if (!psa) return res.status(400).json({ error: 'Every row of the new split needs an existing PSA.' });
+    if (seen.has(psa.id)) return res.status(400).json({ error: `${psa.contract_no} appears twice in the new split — give it one share.` });
+    seen.add(psa.id);
     if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
-      return res.status(400).json({ error: `allocation_percent for ${r.psa_id} must be greater than 0 and at most 100. Leave a PSA out of the list to end its share.` });
+      return res.status(400).json({ error: `The share for ${psa.contract_no} must be more than 0% and at most 100%. Leave a PSA out of the split to end its share.` });
     }
-    const psa = db.prepare(`SELECT id FROM contracts WHERE id = ? AND contract_type = 'PSA'`).get(r.psa_id);
-    if (!psa) return res.status(404).json({ error: `PSA ${r.psa_id} not found` });
-    total += pct;
+    const problem = shareWindowProblem(ppa, psa, effective_from) || shareFitProblem(ppa, psa, pct, effective_from, '9999-12-31', reason);
+    if (problem) return refuseWith(res, problem);
+    total = round2(total + pct);
+    checked.push({ psa, pct });
+  }
+  if (rows.length === 0 && ENDED_STATUSES.includes(ppa.status)) {
+    return res.status(400).json({ error: `${ppa.contract_no} is ${ppa.status} — its shares have already ended.` });
   }
   if (total > 100) {
     return res.status(400).json({ error: `The new split comes to ${total}% — a PPA cannot be allocated beyond itself.`, requested_total_percent: total });
@@ -709,27 +978,29 @@ router.post('/:id/allocations/revise', requireRole(...ROLE_GROUPS.REIA_WRITE), (
         db.prepare('UPDATE contract_allocations SET effective_to = ? WHERE id = ?').run(closesOn, a.id);
       }
     }
-    for (const r of rows) {
+    for (const { psa, pct } of checked) {
       db.prepare(`
         INSERT INTO contract_allocations (id, ppa_id, psa_id, allocation_percent, effective_from, effective_to)
         VALUES (?, ?, ?, ?, ?, NULL)
-      `).run(newId('CAL'), ppa.id, r.psa_id, Number(r.allocation_percent), effective_from);
+      `).run(newId('CAL'), ppa.id, psa.id, pct, effective_from);
     }
   })();
 
-  const ended = before.filter((b) => !rows.some((r) => r.psa_id === b.psa_id)).map((b) => b.psa_id);
+  const after = checked.map(({ psa, pct }) => ({ psa_id: psa.id, psa_no: psa.contract_no, allocation_percent: pct, share_mw: round2(pct * ppa.capacity_mw / 100) }));
+  const ended = before.filter((b) => !checked.some((c) => c.psa.id === b.psa_id)).map((b) => b.psa_id);
   logAudit({
     req, user: req.user, action: 'REVISE_ALLOCATION', module: 'REIA', entityType: 'contract', entityId: ppa.id,
     reason: reason || undefined,
-    details: { effective_from, closed_on: closesOn, before, after: rows, ended_psa_ids: ended, new_total_percent: total },
+    details: { effective_from, closed_on: closesOn, before, after, ended_psa_ids: ended, new_total_percent: total },
   });
 
   res.json({
     success: true,
     effective_from,
     previous_allocations_closed_on: closesOn,
-    allocations: rows,
+    allocations: after,
     ended_psa_ids: ended,
+    ended_psa_nos: ended.map((id) => db.prepare('SELECT contract_no FROM contracts WHERE id = ?').get(id)?.contract_no).filter(Boolean),
     total_percent: total,
   });
 });
@@ -766,7 +1037,7 @@ function checkBulkRow(raw, entityCache, seenNumbers) {
   const row = {
     contract_no: str(raw.contract_no),
     contract_type: str(raw.contract_type).toUpperCase(),
-    project_type: str(raw.project_type).toUpperCase(),
+    project_type: normalizeProjectType(str(raw.project_type)),
     seller_id: str(raw.seller_id) || null,
     buyer_id: str(raw.buyer_id) || null,
     capacity_mw: num(raw.capacity_mw),
@@ -782,7 +1053,7 @@ function checkBulkRow(raw, entityCache, seenNumbers) {
 
   if (!row.contract_no) errors.push('contract_no is required');
   else if (seenNumbers.has(row.contract_no)) errors.push(`contract_no ${row.contract_no} appears twice in this file`);
-  else if (db.prepare('SELECT id FROM contracts WHERE contract_no = ?').get(row.contract_no)) {
+  else if (db.prepare('SELECT id FROM contracts WHERE lower(trim(contract_no)) = lower(?)').get(row.contract_no)) {
     errors.push(`contract_no ${row.contract_no} is already on record`);
   }
 
@@ -835,7 +1106,15 @@ function checkBulkRow(raw, entityCache, seenNumbers) {
     }
   }
 
-  if (row.commissioned_capacity_mw == null) row.commissioned_capacity_mw = row.capacity_mw;
+  // Blank means commissioned in full only for a PPA whose COD is given (a plant
+  // already running); otherwise 0. Defaulting to the full capacity marked every
+  // bulk-loaded draft — and every PSA, which has no plant — as 100% at COD.
+  if (row.commissioned_capacity_mw == null) {
+    row.commissioned_capacity_mw = row.contract_type === 'PPA' && row.cod_date ? row.capacity_mw : 0;
+  }
+  if (row.contract_type === 'PSA' && row.commissioned_capacity_mw > 0) errors.push('a PSA has no plant of its own — leave commissioned_capacity_mw blank');
+  if (row.commissioned_capacity_mw > 0 && !row.cod_date) errors.push('commissioned_capacity_mw needs its cod_date');
+  if (Number.isFinite(row.capacity_mw) && row.commissioned_capacity_mw > row.capacity_mw) errors.push('commissioned_capacity_mw cannot exceed capacity_mw');
   return { row, errors };
 }
 

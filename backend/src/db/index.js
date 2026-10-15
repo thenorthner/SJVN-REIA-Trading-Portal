@@ -242,6 +242,16 @@ function migrateContractVersionSchema() {
 }
 migrateContractVersionSchema();
 
+// One spelling per technology. Bulk loads stored SOLAR / HYBRID and the form
+// Solar / Hybrid, so the project-type filter, the CUF rules and every
+// technology total split the same contracts in two.
+function migrateProjectTypeCase() {
+  const canonical = { SOLAR: 'Solar', WIND: 'Wind', HYBRID: 'Hybrid', FDRE: 'FDRE', PEAKPOWER: 'PeakPower', HYDRO: 'Hydro', PSP: 'PSP', STORAGE: 'Storage', BESS: 'Storage' };
+  const fix = db.prepare('UPDATE contracts SET project_type = ? WHERE upper(project_type) = ? AND project_type != ?');
+  for (const [upper, name] of Object.entries(canonical)) fix.run(name, upper, name);
+}
+migrateProjectTypeCase();
+
 // Add the frequency-linked DSM columns to bilateral_schedules on existing DBs.
 // Blocks recorded before the slab master existed keep their stored penalty and
 // simply have no frequency or slab against them.

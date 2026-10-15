@@ -229,9 +229,10 @@ function guaranteeOf(contract) {
     instruments = db.prepare(`
       SELECT id, instrument_no, mechanism_type, bg_subtype, limit_amount, issuing_bank, validity_start, validity_end, status
       FROM payment_security
-      WHERE contract_id = ? AND mechanism_type = 'BANK_GUARANTEE' AND status NOT IN ('CLOSED','RELEASED')
+      WHERE contract_id IN (SELECT id FROM contracts WHERE id = ? OR parent_contract_id = ?)
+        AND mechanism_type = 'BANK_GUARANTEE' AND status NOT IN ('CLOSED','RELEASED')
       ORDER BY validity_end
-    `).all(contract.id);
+    `).all(contract.parent_contract_id || contract.id, contract.parent_contract_id || contract.id);
   } catch { /* no payment security on this database */ }
   const expiry = contract.pbg_expiry && DAY.test(String(contract.pbg_expiry).slice(0, 10)) ? String(contract.pbg_expiry).slice(0, 10) : null;
   const days = expiry ? daysUntil(expiry) : null;
@@ -325,7 +326,7 @@ router.get('/pending', (req, res) => send(res, () => {
 // GET /:contractId — the whole working file of one contract.
 router.get('/:contractId', (req, res) => send(res, () => {
   const { contract, side } = contractFor(req.user, req.params.contractId);
-  const amendments = db.prepare('SELECT id, version, changed_fields_json, approved_by, created_at FROM contract_amendments WHERE contract_id = ? ORDER BY version DESC').all(contract.id)
+  const amendments = db.prepare('SELECT id, version, changed_fields_json, approved_by, created_at FROM contract_amendments WHERE contract_id = ? OR new_contract_id = ? ORDER BY version DESC').all(contract.id, contract.id)
     .map((a) => { let changed = {}; try { changed = JSON.parse(a.changed_fields_json); } catch { /* shown as empty */ } return { ...a, changed, changed_fields_json: undefined }; });
   return {
     contract: { id: contract.id, contract_no: contract.contract_no, contract_type: contract.contract_type, status: contract.status, cod_date: contract.cod_date, tenure_end: contract.tenure_end, has_seller: !!contract.seller_id, has_buyer: !!contract.buyer_id },

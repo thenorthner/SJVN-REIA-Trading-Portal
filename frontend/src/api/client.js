@@ -148,6 +148,10 @@ export const api = {
     updateStatus: (id, body) => p(`/contracts/${id}/status`, body),
     allocations: (id) => g(`/contracts/${id}/allocations`),
     addAllocation: (id, body) => p(`/contracts/${id}/allocations`, body),
+    deleteAllocation: (id, allocId) => del(`/contracts/${id}/allocations/${allocId}`),
+    discardDraft: (id) => del(`/contracts/${id}`),
+    // The complete split from a date: shares left out end the day before.
+    reviseAllocations: (id, body) => p(`/contracts/${id}/allocations/revise`, body),
     // dry_run validates and reports without writing, so the desk sees what a
     // file would do before it does it.
     bulkUpload: (rows, dryRun = false) => p('/contracts/bulk-upload', { rows, dry_run: !!dryRun }),
@@ -1098,6 +1102,7 @@ export const api = {
     create: (body) => p('/hydro-billing', body),
     fromRea: (body) => p('/hydro-billing/from-rea', body),
     fromReaJob: (id) => g(`/hydro-billing/from-rea/jobs/${id}`),
+    uploadRea: (formData) => client.post('/hydro-billing/upload-rea', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
     autoDraft: () => g('/hydro-billing/from-rea/auto'),
     issue: (id, body) => p(`/hydro-billing/${id}/issue`, body || {}),
     cancel: (id, reason) => p(`/hydro-billing/${id}/cancel`, { reason }),

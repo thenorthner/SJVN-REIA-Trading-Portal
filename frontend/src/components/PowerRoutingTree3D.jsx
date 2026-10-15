@@ -9,10 +9,59 @@ import { Badge, Table, fmtCurrency, fmtNumber } from './ui.jsx';
  * ➔ 50 MW (20%) to Delhi (NDMC)
  * Includes interactive hover highlights, inspector drawer, and live re-routing.
  */
+const round2 = (n) => Math.round(n * 100) / 100;
+
+/** MW a share carries: a percentage of the PPA's capacity, whichever end it is read from. */
+export function shareMwOf(alloc, isPpa, ownCapacity) {
+  const ppaCapacity = isPpa ? ownCapacity : Number(alloc.ppa_capacity_mw) || 0;
+  return round2(ppaCapacity * (Number(alloc.allocation_percent) || 0) / 100);
+}
+
+/** Selling price minus buying price, per unit, for one share. Null when either tariff is missing. */
+export function spreadOf(alloc) {
+  const psa = Number(alloc.psa_tariff);
+  const ppa = Number(alloc.ppa_tariff);
+  return Number.isFinite(psa) && Number.isFinite(ppa) && alloc.psa_tariff != null && alloc.ppa_tariff != null ? Math.round((psa - ppa) * 1000) / 1000 : null;
+}
+
+/**
+ * Where a contract stands on its back-to-back cover, counting only shares still running.
+ * A PPA is measured in % of itself; a PSA in MW received against the MW it contracts for —
+ * adding up percentages of different PPAs, as this did, measures nothing.
+ */
+export function routingPosition(contract, allocations, today = new Date().toISOString().slice(0, 10)) {
+  const isPpa = contract?.contract_type === 'PPA';
+  const cap = Number(contract?.capacity_mw) || 0;
+  // Shares in force on one day: today, or — when nothing has started yet — the
+  // day the first one starts. Counting every share not yet ended added a
+  // version's old split to the new one that replaces it.
+  const notEnded = allocations.filter((a) => !a.effective_to || a.effective_to >= today);
+  const firstStart = notEnded.map((a) => a.effective_from).filter(Boolean).sort()[0];
+  const asOf = firstStart && firstStart > today ? firstStart : today;
+  const live = notEnded.filter((a) => (!a.effective_from || a.effective_from <= asOf) && (!a.effective_to || a.effective_to >= asOf));
+  const coveredMw = round2(live.reduce((s, a) => s + shareMwOf(a, isPpa, cap), 0));
+  const coveredPct = isPpa
+    ? round2(live.reduce((s, a) => s + (Number(a.allocation_percent) || 0), 0))
+    : (cap ? round2(coveredMw / cap * 100) : 0);
+  const openMw = round2(cap - coveredMw);
+  const state = Math.abs(openMw) < 0.005 ? 'FULL' : openMw < 0 ? 'OVER' : 'OPEN';
+  const label = isPpa
+    ? (state === 'FULL' ? '100% allocated' : state === 'OVER' ? `Over-allocated: ${coveredPct}%` : `${coveredPct}% allocated · ${fmtNumber(openMw)} MW open`)
+    : (state === 'FULL' ? `Fully supplied · ${fmtNumber(cap)} MW` : state === 'OVER' ? `Over-supplied by ${fmtNumber(-openMw)} MW` : `${fmtNumber(coveredMw)} of ${fmtNumber(cap)} MW supplied · ${fmtNumber(openMw)} MW short`);
+  return { isPpa, live, asOf, coveredMw, coveredPct, openMw, state, label: asOf > today ? `${label} (from ${asOf})` : label };
+}
+
+const STATE_TONE = {
+  FULL: { c: '#10b981', bg: 'rgba(16, 185, 129, 0.15)', b: 'rgba(16, 185, 129, 0.3)' },
+  OPEN: { c: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)', b: 'rgba(245, 158, 11, 0.3)' },
+  OVER: { c: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)', b: 'rgba(239, 68, 68, 0.4)' },
+};
+
 export function PowerRoutingTree3D({
   contract,
   allocations = [],
   onAddAllocation,
+  onRemoveAllocation,
   canMap = false,
 }) {
   const [viewMode, setViewMode] = useState('3D'); // '3D' | 'TABLE'
@@ -22,14 +71,14 @@ export function PowerRoutingTree3D({
   const isPpa = contract?.contract_type === 'PPA';
   const totalCapacity = Number(contract?.capacity_mw) || 0;
 
-  // Calculate allocated percent & capacity
-  const totalAllocatedPercent = allocations.reduce((sum, a) => sum + (Number(a.allocation_percent) || 0), 0);
-  const totalAllocatedMw = Math.round((totalCapacity * (totalAllocatedPercent / 100)) * 100) / 100;
-  const unallocatedMw = Math.max(0, Math.round((totalCapacity - totalAllocatedMw) * 100) / 100);
+  const pos = routingPosition(contract, allocations);
+  const totalAllocatedPercent = pos.coveredPct;
+  const totalAllocatedMw = pos.coveredMw;
+  const unallocatedMw = pos.openMw;
   const unallocatedPercent = Math.max(0, 100 - totalAllocatedPercent);
+  const tone = STATE_TONE[pos.state];
 
-  // Default base tariff
-  const baseTariff = Number(contract?.tariff_per_unit) || 2.82;
+  const baseTariff = Number(contract?.tariff_per_unit) || 0;
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -68,15 +117,15 @@ export function PowerRoutingTree3D({
               <span style={{
                 fontSize: 12.5,
                 textTransform: 'uppercase',
-                background: totalAllocatedPercent >= 100 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                color: totalAllocatedPercent >= 100 ? '#10b981' : '#f59e0b',
-                border: totalAllocatedPercent >= 100 ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(245, 158, 11, 0.3)',
+                background: tone.bg,
+                color: tone.c,
+                border: `1px solid ${tone.b}`,
                 padding: '2px 7px',
                 borderRadius: 4,
                 fontWeight: 700,
                 letterSpacing: 0.5,
               }}>
-                {totalAllocatedPercent >= 100 ? '100% Fully Subscribed' : `${totalAllocatedPercent}% Allocated (${unallocatedMw} MW Open)`}
+                {pos.label}
               </span>
             </div>
             <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
@@ -87,28 +136,6 @@ export function PowerRoutingTree3D({
 
         {/* View Mode Toggle & Action Buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {canMap && onAddAllocation && (
-            <button
-              type="button"
-              onClick={onAddAllocation}
-              style={{
-                background: 'linear-gradient(135deg, #0284c7, #2563eb)',
-                color: '#fff',
-                border: 'none',
-                padding: '6px 14px',
-                borderRadius: 6,
-                fontSize: 13.5,
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                boxShadow: '0 0 10px rgba(37, 99, 235, 0.4)',
-              }}
-            >
-              <span>+ Add / Adjust Allocation</span>
-            </button>
-          )}
 
           <div style={{
             display: 'flex',
@@ -170,17 +197,22 @@ export function PowerRoutingTree3D({
           totalAllocatedPercent={totalAllocatedPercent}
           totalAllocatedMw={totalAllocatedMw}
           unallocatedMw={unallocatedMw}
+          pos={pos}
           unallocatedPercent={unallocatedPercent}
           baseTariff={baseTariff}
           hoveredIndex={hoveredIndex}
           setHoveredIndex={setHoveredIndex}
           selectedIndex={selectedIndex}
           setSelectedIndex={setSelectedIndex}
+          canMap={canMap}
+          onRemoveAllocation={onRemoveAllocation}
         />
       ) : (
         <TableMatrixView
           isPpa={isPpa}
           allocations={allocations}
+          canMap={canMap}
+          onRemoveAllocation={onRemoveAllocation}
         />
       )}
     </div>
@@ -198,14 +230,22 @@ function RoutingTreeCanvas({
   totalAllocatedMw,
   unallocatedMw,
   unallocatedPercent,
+  pos,
   baseTariff,
   hoveredIndex,
   setHoveredIndex,
   selectedIndex,
   setSelectedIndex,
+  canMap,
+  onRemoveAllocation,
 }) {
   const isPpa = contract?.contract_type === 'PPA';
   const count = allocations.length;
+  // The margin actually earned: each live share's PSA tariff less its PPA tariff, weighted by MW.
+  const weighted = pos.live.map((a) => [shareMwOf(a, isPpa, totalCapacity), spreadOf(a)]).filter(([, sp]) => sp != null);
+  const weightMw = weighted.reduce((s, [mw]) => s + mw, 0);
+  const avgSpread = weightMw ? Math.round(weighted.reduce((s, [mw, sp]) => s + mw * sp, 0) / weightMw * 1000) / 1000 : null;
+  const tone = STATE_TONE[pos.state];
 
   return (
     <div style={{
@@ -263,25 +303,25 @@ function RoutingTreeCanvas({
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }} />
-            <span style={{ color: '#94a3b8' }}>Total Generation Pool: <strong style={{ color: '#f8fafc' }}>{fmtNumber(totalCapacity)} MW</strong></span>
+            <span style={{ color: '#94a3b8' }}>{isPpa ? 'Total PPA Generation:' : 'Total PSA Off-Take Demand:'} <strong style={{ color: '#f8fafc' }}>{fmtNumber(totalCapacity)} MW</strong></span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#38bdf8', boxShadow: '0 0 8px #38bdf8' }} />
-            <span style={{ color: '#94a3b8' }}>Carved-Out Allocated: <strong style={{ color: '#38bdf8' }}>{fmtNumber(totalAllocatedMw)} MW ({totalAllocatedPercent}%)</strong></span>
+            <span style={{ color: '#94a3b8' }}>{isPpa ? 'Carved-Out Allocated:' : 'Supplying PPAs Allocated:'} <strong style={{ color: '#38bdf8' }}>{fmtNumber(totalAllocatedMw)} MW ({totalAllocatedPercent}%)</strong></span>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{
             fontSize: 13,
-            color: unallocatedMw > 0 ? '#f59e0b' : '#10b981',
-            background: unallocatedMw > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-            border: unallocatedMw > 0 ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid rgba(16, 185, 129, 0.3)',
+            color: tone.c,
+            background: tone.bg,
+            border: `1px solid ${tone.b}`,
             padding: '3px 8px',
             borderRadius: 100,
             fontWeight: 600,
           }}>
-            {unallocatedMw > 0 ? `⚠ ${fmtNumber(unallocatedMw)} MW Available for Off-Take` : '✓ 100% Back-to-Back Subscribed'}
+            {pos.state === 'FULL' ? `✓ ${isPpa ? 'Fully back-to-back' : 'Fully supplied'}` : pos.state === 'OVER' ? `⚠ ${pos.label}` : `⚠ ${fmtNumber(unallocatedMw)} MW ${isPpa ? 'not yet sold on' : 'not yet sourced'}`}
           </span>
         </div>
       </div>
@@ -315,27 +355,27 @@ function RoutingTreeCanvas({
                 letterSpacing: 0.8,
                 textTransform: 'uppercase',
                 fontWeight: 700,
-                color: '#10b981',
-                background: 'rgba(16, 185, 129, 0.15)',
+                color: isPpa ? '#10b981' : '#38bdf8',
+                background: isPpa ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
                 padding: '2px 7px',
                 borderRadius: 4,
               }}>
-                1. Power Generator (IPP)
+                {isPpa ? '1. Power Generator (IPP)' : '1. Buying Utility (State DISCOM)'}
               </span>
               <span style={{
                 fontSize: 12.5,
                 fontWeight: 700,
-                color: '#10b981',
-                background: 'rgba(16, 185, 129, 0.15)',
+                color: isPpa ? '#10b981' : '#38bdf8',
+                background: isPpa ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
                 padding: '1px 5px',
                 borderRadius: 3,
               }}>
-                GEN
+                {isPpa ? 'GEN' : 'BUYER'}
               </span>
             </div>
 
             <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc', marginBottom: 2 }}>
-              {contract?.seller_name || 'Power Producer (IPP)'}
+              {isPpa ? (contract?.seller_name || 'Power Producer (IPP)') : (contract?.buyer_name || 'State Buying Utility')}
             </div>
             <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12 }}>
               {contract?.contract_no}
@@ -349,17 +389,17 @@ function RoutingTreeCanvas({
               marginBottom: 8,
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#94a3b8', marginBottom: 4 }}>
-                <span>Installed Capacity</span>
+                <span>{isPpa ? 'Contracted Capacity' : 'Contracted Demand'}</span>
                 <strong style={{ color: '#10b981', fontSize: 13 }}>{fmtNumber(totalCapacity)} MW</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#94a3b8' }}>
-                <span>Base PPA Tariff</span>
+                <span>{isPpa ? 'Base PPA Tariff' : 'Off-Take PSA Tariff'}</span>
                 <strong style={{ color: '#f8fafc' }}>₹{baseTariff.toFixed(2)} / unit</strong>
               </div>
             </div>
 
             <div style={{ fontSize: 12.5, color: '#64748b' }}>
-              Project: <strong>{contract?.project_type || 'Solar'}</strong> · COD: <strong>{contract?.cod_date || 'Active'}</strong>
+              Project: <strong>{contract?.project_type || 'Solar'}</strong> · {isPpa ? 'COD: ' : 'Tenure: '}<strong>{isPpa ? (contract?.cod_date || 'Not commissioned') : `${contract?.tenure_start || '—'} to ${contract?.tenure_end || '—'}`}</strong>
             </div>
           </div>
 
@@ -405,7 +445,7 @@ function RoutingTreeCanvas({
               textAlign: 'center',
             }}>
               <div>{fmtNumber(totalCapacity)} MW</div>
-              <div style={{ color: '#10b981', fontSize: 12 }}>Total Trunk</div>
+              <div style={{ color: '#10b981', fontSize: 12 }}>{isPpa ? 'PPA Pool' : 'PSA Demand'}</div>
             </div>
           </div>
 
@@ -435,7 +475,7 @@ function RoutingTreeCanvas({
                 gap: 4,
               }}>
                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8', animation: 'treePulse 1.5s infinite' }} />
-                2. SJVN Allocator Hub
+                {isPpa ? '2. SJVN Allocator Hub' : '2. SJVN Pooling Hub'}
               </span>
               <span style={{
                 fontSize: 12.5,
@@ -464,12 +504,12 @@ function RoutingTreeCanvas({
               marginBottom: 8,
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#94a3b8', marginBottom: 3 }}>
-                <span>Trading Margin</span>
-                <strong style={{ color: '#38bdf8' }}>+₹0.07 / unit</strong>
+                <span>Avg spread (PSA − PPA)</span>
+                <strong style={{ color: avgSpread != null && avgSpread < 0 ? '#ef4444' : '#38bdf8' }}>{avgSpread == null ? '—' : `${avgSpread < 0 ? '−' : '+'}₹${Math.abs(avgSpread).toFixed(3)} / unit`}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#94a3b8' }}>
-                <span>Carve-Out Branches</span>
-                <strong style={{ color: '#10b981' }}>{count} DISCOMs</strong>
+                <span>{isPpa ? 'Carve-Out Branches' : 'Source PPAs'}</span>
+                <strong style={{ color: '#10b981' }}>{count} {isPpa ? 'DISCOMs' : 'Generators'}</strong>
               </div>
             </div>
 
@@ -541,8 +581,7 @@ function RoutingTreeCanvas({
             {allocations.map((alloc, idx) => {
               const isHovered = hoveredIndex === idx;
               const isSelected = selectedIndex === idx;
-              const allocatedShareMw = Math.round((totalCapacity * (Number(alloc.allocation_percent) / 100)) * 100) / 100;
-              const psaTariff = Number(alloc.psa_tariff) || (baseTariff + 0.07);
+              const allocatedShareMw = shareMwOf(alloc, isPpa, totalCapacity);
 
               return (
                 <div
@@ -575,47 +614,53 @@ function RoutingTreeCanvas({
                         padding: '2px 6px',
                         borderRadius: 4,
                       }}>
-                        Branch {idx + 1}
+                        {isPpa ? `Branch ${idx + 1}` : `Source ${idx + 1}`}
                       </span>
                       <strong style={{ fontSize: 13, color: '#f8fafc' }}>
-                        {alloc.buyer_name || `DISCOM ${idx + 1}`}
+                        {isPpa ? (alloc.buyer_name || `DISCOM ${idx + 1}`) : (alloc.seller_name || `Generator ${idx + 1}`)}
                       </strong>
                     </div>
                     <span style={{
                       fontSize: 12.5,
                       fontWeight: 700,
-                      color: '#818cf8',
-                      background: 'rgba(129, 140, 248, 0.15)',
+                      color: isPpa ? '#818cf8' : '#10b981',
+                      background: isPpa ? 'rgba(129, 140, 248, 0.15)' : 'rgba(16, 185, 129, 0.15)',
                       padding: '1px 5px',
                       borderRadius: 3,
                     }}>
-                      DISCOM
+                      {isPpa ? 'DISCOM' : 'PPA'}
                     </span>
                   </div>
 
                   <div style={{ fontSize: 12.5, color: '#94a3b8', marginBottom: 8 }}>
-                    {alloc.psa_no || 'PSA Agreement'}
+                    {isPpa ? (alloc.psa_no || 'PSA Agreement') : (alloc.ppa_no || 'PPA Agreement')}
                   </div>
 
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: 'rgba(0, 0, 0, 0.3)',
-                    padding: '6px 8px',
-                    borderRadius: 6,
-                    fontSize: 13,
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
-                  }}>
-                    <div>
-                      <span style={{ color: '#94a3b8', fontSize: 12.5 }}>Share: </span>
-                      <strong style={{ color: '#38bdf8' }}>{alloc.allocation_percent}% ({fmtNumber(allocatedShareMw)} MW)</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: '#94a3b8', fontSize: 12.5 }}>Tariff: </span>
-                      <strong style={{ color: '#10b981' }}>₹{psaTariff.toFixed(2)}</strong>
-                    </div>
-                  </div>
+                  {(() => {
+                    const nodeTariff = Number(isPpa ? alloc.psa_tariff : alloc.ppa_tariff);
+                    const sp = spreadOf(alloc);
+                    return (
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        background: 'rgba(0, 0, 0, 0.3)',
+                        padding: '6px 8px',
+                        borderRadius: 6,
+                        fontSize: 13,
+                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                      }}>
+                        <div>
+                          <span style={{ color: '#94a3b8', fontSize: 12.5 }}>Share: </span>
+                          <strong style={{ color: '#38bdf8' }}>{alloc.allocation_percent}% ({fmtNumber(allocatedShareMw)} MW)</strong>
+                        </div>
+                        <div>
+                          <span style={{ color: '#94a3b8', fontSize: 12.5 }}>Tariff: </span>
+                          <strong style={{ color: sp != null && sp < 0 ? '#ef4444' : '#10b981' }}>{Number.isFinite(nodeTariff) ? `₹${nodeTariff.toFixed(2)}` : '—'}{sp != null && sp < 0 ? ' · loss' : ''}</strong>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   <div style={{
                     display: 'flex',
@@ -638,41 +683,68 @@ function RoutingTreeCanvas({
       {/* INSPECTOR DRAWER: Triggered when user selects a branch */}
       {selectedIndex != null && allocations[selectedIndex] && (() => {
         const alloc = allocations[selectedIndex];
-        const allocatedShareMw = Math.round((totalCapacity * (Number(alloc.allocation_percent) / 100)) * 100) / 100;
-        const psaTariff = Number(alloc.psa_tariff) || (baseTariff + 0.07);
-        const marginSpread = Math.max(0, Math.round((psaTariff - baseTariff) * 1000) / 1000);
+        const allocatedShareMw = shareMwOf(alloc, isPpa, totalCapacity);
+        const psaTariff = Number(alloc.psa_tariff) || 0;
+        const ppaTariff = Number(alloc.ppa_tariff) || 0;
+        const marginSpread = spreadOf(alloc) ?? 0;
+        const isLoss = marginSpread < 0;
 
         return (
           <div style={{
             marginTop: 16,
             background: 'rgba(15, 23, 42, 0.95)',
-            border: '1px solid #334155',
+            border: isLoss ? '1.5px solid #ef4444' : '1px solid #334155',
             borderRadius: 12,
             padding: 16,
             boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
             animation: 'fadeIn 0.2s ease-out',
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid #1e293b', paddingBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottom: '1px solid #1e293b', paddingBottom: 8, flexWrap: 'wrap', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#38bdf8' }} />
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: isLoss ? '#ef4444' : '#38bdf8' }} />
                 <strong style={{ color: '#f8fafc', fontSize: 14 }}>
-                  Carve-Out Deep Dive: {alloc.buyer_name || 'Buyer DISCOM'} ({alloc.allocation_percent}% Allocation)
+                  {isPpa ? `Carve-Out Deep Dive: ${alloc.buyer_name || 'Buyer DISCOM'}` : `Source Supply: ${alloc.seller_name || 'Generator IPP'}`} ({alloc.allocation_percent}% Allocation)
                 </strong>
+                {isLoss && (
+                  <span style={{ fontSize: 12, color: '#ef4444', background: 'rgba(239, 68, 68, 0.15)', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
+                    Negative Spread Alert (PSA &lt; PPA Tariff)
+                  </span>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedIndex(null)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#94a3b8',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  fontWeight: 600,
-                }}
-              >
-                ✕ Close
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {canMap && onRemoveAllocation && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveAllocation(alloc.id)}
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.2)',
+                      border: '1px solid rgba(239, 68, 68, 0.4)',
+                      color: '#f87171',
+                      borderRadius: 6,
+                      padding: '4px 10px',
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Unlink Allocation
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setSelectedIndex(null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    fontWeight: 600,
+                  }}
+                >
+                  ✕ Close
+                </button>
+              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, fontSize: 13.5 }}>
@@ -681,31 +753,31 @@ function RoutingTreeCanvas({
                 <div style={{ fontWeight: 700, color: '#38bdf8', fontSize: 15, marginTop: 2 }}>
                   {fmtNumber(allocatedShareMw)} MW
                 </div>
-                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 2 }}>{alloc.allocation_percent}% of {fmtNumber(totalCapacity)} MW PPA Pool</div>
+                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 2 }}>{alloc.allocation_percent}% of {fmtNumber(totalCapacity)} MW {isPpa ? 'PPA Pool' : 'PSA Requirement'}</div>
               </div>
 
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
                 <div style={{ color: '#94a3b8', fontSize: 13 }}>Off-Take Tariff & Spread</div>
-                <div style={{ fontWeight: 700, color: '#10b981', fontSize: 15, marginTop: 2 }}>
+                <div style={{ fontWeight: 700, color: isLoss ? '#ef4444' : '#10b981', fontSize: 15, marginTop: 2 }}>
                   ₹{psaTariff.toFixed(2)} / kWh
                 </div>
-                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 2 }}>
-                  Base ₹{baseTariff.toFixed(2)} + Margin ₹{marginSpread.toFixed(3)}
+                <div style={{ color: isLoss ? '#f87171' : '#64748b', fontSize: 12.5, marginTop: 2 }}>
+                  {isLoss ? `Deficit: -₹${Math.abs(marginSpread).toFixed(3)}/unit` : `Base ₹${ppaTariff.toFixed(2)} + Margin ₹${marginSpread.toFixed(3)}`}
                 </div>
               </div>
 
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 13 }}>PSA Contract Number</div>
-                <div style={{ fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>{alloc.psa_no || '—'}</div>
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>{isPpa ? 'PSA Contract Number' : 'Source PPA Number'}</div>
+                <div style={{ fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>{(isPpa ? alloc.psa_no : alloc.ppa_no) || '—'}</div>
                 <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 2 }}>Effective: {alloc.effective_from} → {alloc.effective_to || 'Active'}</div>
               </div>
 
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 13 }}>Trading Margin Yield (Est.)</div>
-                <div style={{ fontWeight: 700, color: '#f59e0b', fontSize: 15, marginTop: 2 }}>
-                  ₹{(allocatedShareMw * 1000 * 0.07 * 160).toLocaleString('en-IN', { maximumFractionDigits: 0 })} / mo
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>{isLoss ? 'Monthly loss (est.)' : 'Monthly margin (est.)'}</div>
+                <div style={{ fontWeight: 700, color: isLoss ? '#ef4444' : '#f59e0b', fontSize: 15, marginTop: 2 }}>
+                  {isLoss ? '−' : ''}₹{Math.abs(allocatedShareMw * 1000 * marginSpread * 160).toLocaleString('en-IN', { maximumFractionDigits: 0 })} / mo
                 </div>
-                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 2 }}>Pass-through with zero balancing risk</div>
+                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 2 }}>{fmtNumber(allocatedShareMw)} MW × 160 h/month (≈22% CUF) × spread</div>
               </div>
             </div>
           </div>
@@ -730,7 +802,7 @@ function RoutingTreeCanvas({
 /**
  * Classic Table Matrix View Fallback
  */
-function TableMatrixView({ isPpa, allocations }) {
+function TableMatrixView({ isPpa, allocations, canMap, onRemoveAllocation }) {
   if (!allocations.length) {
     return (
       <div style={{ padding: 20, textAlign: 'center', color: '#64748b', background: '#fff', borderRadius: '0 0 12px 12px', border: '1px solid var(--slate-200)' }}>
@@ -739,23 +811,44 @@ function TableMatrixView({ isPpa, allocations }) {
     );
   }
 
+  const baseColumns = isPpa ? [
+    { key: 'psa_no', header: 'PSA Number' },
+    { key: 'buyer_name', header: 'DISCOM (Buyer)' },
+    { key: 'allocation_percent', header: 'Allocation %', render: (r) => `${r.allocation_percent}%` },
+    { key: 'capacity', header: 'Allocated MW', render: (r) => `${fmtNumber(shareMwOf(r, true, Number(r.ppa_capacity_mw) || 0))} MW of ${fmtNumber(r.psa_capacity_mw)} MW PSA` },
+    { key: 'tariff', header: 'Tariff', render: (r) => r.psa_tariff ? `₹${r.psa_tariff}/unit` : '—' },
+    { key: 'effective', header: 'Effective Dates', render: (r) => `${r.effective_from} to ${r.effective_to || 'Active'}` },
+  ] : [
+    { key: 'ppa_no', header: 'PPA Number' },
+    { key: 'seller_name', header: 'Generator (Seller)' },
+    { key: 'ppa_capacity_mw', header: 'PPA Capacity', render: (r) => `${fmtNumber(r.ppa_capacity_mw)} MW` },
+    { key: 'allocation_percent', header: 'Share of that PPA', render: (r) => `${r.allocation_percent}%` },
+    { key: 'mw', header: 'MW received', render: (r) => `${fmtNumber(shareMwOf(r, false, 0))} MW` },
+    { key: 'ppa_tariff', header: 'PPA tariff', render: (r) => (r.ppa_tariff != null ? `₹${r.ppa_tariff}/unit` : '—') },
+    { key: 'effective', header: 'Effective Dates', render: (r) => `${r.effective_from} to ${r.effective_to || 'Active'}` },
+  ];
+
+  if (canMap && onRemoveAllocation) {
+    baseColumns.push({
+      key: 'action',
+      header: 'Action',
+      render: (r) => (
+        <button
+          type="button"
+          onClick={() => onRemoveAllocation(r.id)}
+          className="btn btn-outline btn-sm"
+          style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+        >
+          Unlink
+        </button>
+      ),
+    });
+  }
+
   return (
     <div style={{ background: '#fff', border: '1px solid var(--slate-200)', borderRadius: '0 0 12px 12px', padding: 16 }}>
       <Table
-        columns={isPpa ? [
-          { key: 'psa_no', header: 'PSA Number' },
-          { key: 'buyer_name', header: 'DISCOM (Buyer)' },
-          { key: 'allocation_percent', header: 'Allocation %', render: (r) => `${r.allocation_percent}%` },
-          { key: 'capacity', header: 'Allocated MW', render: (r) => r.psa_capacity_mw ? `${fmtNumber(r.psa_capacity_mw)} MW` : '—' },
-          { key: 'tariff', header: 'Tariff', render: (r) => r.psa_tariff ? `₹${r.psa_tariff}/unit` : '—' },
-          { key: 'effective', header: 'Effective Dates', render: (r) => `${r.effective_from} to ${r.effective_to || 'Active'}` },
-        ] : [
-          { key: 'ppa_no', header: 'PPA Number' },
-          { key: 'seller_name', header: 'Generator (Seller)' },
-          { key: 'ppa_capacity_mw', header: 'PPA Capacity', render: (r) => `${fmtNumber(r.ppa_capacity_mw)} MW` },
-          { key: 'allocation_percent', header: 'Share of that PPA', render: (r) => `${r.allocation_percent}%` },
-          { key: 'effective', header: 'Effective Dates', render: (r) => `${r.effective_from} to ${r.effective_to || 'Active'}` },
-        ]}
+        columns={baseColumns}
         rows={allocations}
       />
     </div>

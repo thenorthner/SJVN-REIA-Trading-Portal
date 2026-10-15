@@ -96,7 +96,9 @@ describe('S3 PPA to PSA allocation', () => {
 
   it('bills the old split before the change and the new split after it', async () => {
     // 30/50/20 until the end of May; from June the third PSA leaves and the
-    // remaining two go to 37.5/62.5.
+    // remaining two go to 37.5/62.5. The two that grow contract for enough MW
+    // to take the larger share — a PSA cannot be promised more than it buys.
+    db.prepare('UPDATE contracts SET capacity_mw = 100 WHERE id IN (?, ?)').run(psas[0].contract.id, psas[1].contract.id);
     await allocate(psas[0].contract.id, 30, '2026-04-01', '2026-05-31');
     await allocate(psas[1].contract.id, 50, '2026-04-01', '2026-05-31');
     await allocate(psas[2].contract.id, 20, '2026-04-01', '2026-05-31');

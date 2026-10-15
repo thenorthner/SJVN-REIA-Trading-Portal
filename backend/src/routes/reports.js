@@ -698,8 +698,15 @@ export function buildContractSummary({ contract_type, status, project_type, q } 
   const params = [];
   if (contract_type) { where.push('c.contract_type = ?'); params.push(contract_type); }
   if (status) { where.push('c.status = ?'); params.push(status); }
-  if (project_type) { where.push('c.project_type = ?'); params.push(project_type); }
-  if (q) { where.push('c.contract_no LIKE ?'); params.push(`%${q}%`); }
+  if (project_type) { where.push('lower(c.project_type) = lower(?)'); params.push(project_type); }
+  // The same search as the register on screen — number or counterparty, wildcards escaped —
+  // so the PDF lists what the officer was looking at.
+  const term = typeof q === 'string' ? q.trim() : '';
+  if (term) {
+    const like = `%${String(term).replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+    where.push("(c.contract_no LIKE ? ESCAPE '\\' OR es.name LIKE ? ESCAPE '\\' OR eb.name LIKE ? ESCAPE '\\')");
+    params.push(like, like, like);
+  }
 
   const raw = db.prepare(`
     SELECT c.*,
@@ -720,26 +727,30 @@ export function buildContractSummary({ contract_type, status, project_type, q } 
     capacity_mw: c.capacity_mw,
     commissioned_capacity_mw: c.commissioned_capacity_mw,
     tariff_per_unit: c.tariff_per_unit,
-    tenure: `${(c.tenure_start || '').slice(0, 7)} → ${(c.tenure_end || '').slice(0, 7)}`,
+    // Plain "to": the PDF's built-in font has no arrow glyph and printed "!’".
+    tenure: `${(c.tenure_start || '').slice(0, 7)} to ${(c.tenure_end || '').slice(0, 7)}`,
     pbg_amount: c.pbg_amount,
     status: c.status,
   }));
 
   const active = raw.filter((c) => c.status === 'ACTIVE');
   const techs = [...new Set(active.map((c) => c.project_type).filter(Boolean))];
-  const by_project_type = db.prepare(`
-    SELECT project_type, COUNT(*) as contracts, COALESCE(SUM(capacity_mw),0) as capacity
-    FROM contracts WHERE status = 'ACTIVE'
-    ${contract_type ? 'AND contract_type = ?' : ''}
-    GROUP BY project_type
-  `).all(...(contract_type ? [contract_type] : []));
+  // From the filtered rows, so an empty or narrowed report does not show the whole portfolio's mix.
+  const techMap = new Map();
+  for (const c of active) {
+    const k = c.project_type || '—';
+    const e = techMap.get(k) || { project_type: k, contracts: 0, capacity: 0 };
+    e.contracts += 1; e.capacity += c.capacity_mw || 0;
+    techMap.set(k, e);
+  }
+  const by_project_type = [...techMap.values()];
 
   const pipelineStatuses = ['DRAFT', 'UNDER_NEGOTIATION', 'SIGNED', 'PENDING_REGULATORY_APPROVAL'];
   const filterBits = [];
   if (contract_type) filterBits.push(contract_type);
   if (status) filterBits.push(status);
   if (project_type) filterBits.push(project_type);
-  if (q) filterBits.push(`q=${q}`);
+  if (term) filterBits.push(`Search "${term}"`);
 
   return {
     filter_label: filterBits.length ? filterBits.join(' · ') : 'All contracts',
@@ -750,9 +761,11 @@ export function buildContractSummary({ contract_type, status, project_type, q } 
       active: active.length,
       ppa_active: active.filter((c) => c.contract_type === 'PPA').length,
       psa_active: active.filter((c) => c.contract_type === 'PSA').length,
-      active_capacity_mw: active.reduce((s, c) => s + (c.capacity_mw || 0), 0),
-      commissioned_mw: active.reduce((s, c) => s + (c.commissioned_capacity_mw || 0), 0),
-      pbg_total: raw.reduce((s, c) => s + (c.pbg_amount || 0), 0),
+      // PPA and PSA capacity are the same power seen from either side; summing them counted it twice.
+      active_capacity_mw: active.filter((c) => c.contract_type === 'PPA').reduce((s, c) => s + (c.capacity_mw || 0), 0),
+      psa_capacity_mw: active.filter((c) => c.contract_type === 'PSA').reduce((s, c) => s + (c.capacity_mw || 0), 0),
+      commissioned_mw: active.filter((c) => c.contract_type === 'PPA').reduce((s, c) => s + (c.commissioned_capacity_mw || 0), 0),
+      pbg_total: active.reduce((s, c) => s + (c.pbg_amount || 0), 0),
       nearing_expiry: raw.filter((c) => c.status === 'NEARING_EXPIRY').length,
       pipeline: raw.filter((c) => pipelineStatuses.includes(c.status)).length,
       terminated: raw.filter((c) => c.status === 'TERMINATED').length,

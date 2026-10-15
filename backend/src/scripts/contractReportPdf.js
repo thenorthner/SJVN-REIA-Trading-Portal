@@ -123,11 +123,11 @@ export function generateContractReportPdf(report, meta, res) {
   const gap = 6;
   const kpis = [
     { label: 'Active Contracts', value: String(t.active || 0), sub: `${t.ppa_active || 0} PPA · ${t.psa_active || 0} PSA`, accent: GREEN },
-    { label: 'Contracted Capacity', value: fmtMw(t.active_capacity_mw), sub: 'Active portfolio MW', accent: NAVY },
-    { label: 'Commissioned (COD)', value: fmtMw(t.commissioned_mw), sub: 'COD capacity', accent: GREEN },
-    { label: 'PBG / Security Cover', value: fmtMoneyShort(t.pbg_total), sub: 'Sum of PBG amounts', accent: NAVY },
+    { label: 'Contracted (PPA)', value: fmtMw(t.active_capacity_mw), sub: `Active PPAs · PSAs sell ${fmtMw(t.psa_capacity_mw || 0)}`, accent: NAVY },
+    { label: 'Commissioned (COD)', value: fmtMw(t.commissioned_mw), sub: 'Active PPAs at COD', accent: GREEN },
+    { label: 'PBG / Security Cover', value: fmtMoneyShort(t.pbg_total), sub: 'PBG on active contracts', accent: NAVY },
     { label: 'Nearing Expiry', value: String(t.nearing_expiry || 0), sub: 'Within watch window', accent: (t.nearing_expiry || 0) > 0 ? AMBER : GREEN },
-    { label: 'Under Negotiation', value: String(t.pipeline || 0), sub: 'Draft / signed / pending', accent: AMBER },
+    { label: 'Pipeline', value: String(t.pipeline || 0), sub: 'Draft / negotiation / signed / pending', accent: AMBER },
     { label: 'Terminated / Expired', value: String((t.terminated || 0) + (t.expired || 0)), sub: `${t.terminated || 0} term · ${t.expired || 0} exp`, accent: RED },
     { label: 'Technologies', value: String(t.tech_count || 0), sub: t.tech_list || '—', accent: NAVY },
   ];

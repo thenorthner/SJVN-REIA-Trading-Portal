@@ -580,11 +580,15 @@ export function createInstrumentsFromRequirements(contractId, user) {
   const c = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId);
   const created = [];
   for (const r of reqs) {
+    // Across every version of the contract: an amended version is the same
+    // contract, and activating it raised a second guarantee for the one already held.
+    const family = c.parent_contract_id || c.id;
     const exists = db.prepare(`
       SELECT id FROM payment_security
-      WHERE contract_id = ? AND mechanism_type = ? AND COALESCE(bg_subtype,'') = COALESCE(?, '')
+      WHERE contract_id IN (SELECT id FROM contracts WHERE id = ? OR parent_contract_id = ?)
+        AND mechanism_type = ? AND COALESCE(bg_subtype,'') = COALESCE(?, '')
         AND status IN ('ACTIVE','PARTIALLY_UTILIZED','RENEWED','DRAFT')
-    `).get(contractId, r.mechanism_type, r.bg_subtype);
+    `).get(family, family, r.mechanism_type, r.bg_subtype);
     if (exists) continue;
 
     const required = r.months_cover > 0
@@ -612,7 +616,8 @@ export function createInstrumentsFromRequirements(contractId, user) {
       r.waterfall_priority,
       'To be confirmed',
       'SJVN Limited',
-      c.pbg_expiry || '2026-12-31',
+      // Unknown until the instrument is lodged; a made-up year-end date read as a real expiry.
+      (r.mechanism_type === 'BANK_GUARANTEE' ? c.pbg_expiry : null) || null,
       `Auto-synced from contract requirement (${r.mechanism_type})`
     );
     recordSecurityEvent({ instrumentId: id, contractId, user, eventType: 'CREATE', details: { from: 'requirement' } });

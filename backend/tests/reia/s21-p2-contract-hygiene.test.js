@@ -27,7 +27,7 @@ describe('S21 An amendment waits, and says when it applies', () => {
   it('needs a date to apply from', async () => {
     const r = await amend({ effective_from: undefined });
     expect(r.status, 'an amendment with no effective date was accepted').toBe(400);
-    expect(r.body.error).toMatch(/effective_from/);
+    expect(r.body.error).toMatch(/date the amendment takes effect/i);
   });
 
   it('refuses a date before the contract began', async () => {

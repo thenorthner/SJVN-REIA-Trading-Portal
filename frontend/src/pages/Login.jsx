@@ -29,21 +29,21 @@ export function landingFor(user, from) {
 }
 
 const DEMO_ACCOUNTS = [
-  { label: 'SJVN Admin', email: 'admin@sjvn.in', icon: ShieldCheck },
-  { label: 'Hydro Admin', email: 'commercial@sjvn.in', icon: ShieldCheck },
-  { label: 'Hydro Approver', email: 'hydro.hod@sjvn.in', icon: ShieldCheck },
-  { label: 'Thermal Admin', email: 'thermal@sjvn.in', icon: ShieldCheck },
-  { label: 'Thermal Desk', email: 'thermal.desk@sjvn.in', icon: ShieldCheck },
-  { label: 'REIA Ops', email: 'reia@sjvn.in', icon: Zap },
-  { label: 'REIA Admin', email: 'reia.admin@sjvn.in', icon: ShieldCheck },
-  { label: 'Trading Ops', email: 'trading@sjvn.in', icon: Briefcase },
-  { label: 'Finance', email: 'finance@sjvn.in', icon: Briefcase },
-  { label: 'Management', email: 'management@sjvn.in', icon: Users },
-  { label: 'Seller', email: 'seller@sunrise-solar.in', icon: User },
-  { label: 'Buyer (Admin)', email: 'buyer@discom.gov.in', icon: User },
-  { label: 'Buyer Maker (L1)', email: 'buyer.maker@discom.gov.in', icon: User },
-  { label: 'Buyer Checker (L2)', email: 'buyer.checker@discom.gov.in', icon: User },
-  { label: 'Trading Client', email: 'client@abctrading.in', icon: User },
+  { label: 'SJVN Admin', email: 'admin@sjvn.in', icon: ShieldCheck, cat: 'STAFF' },
+  { label: 'Hydro Admin', email: 'commercial@sjvn.in', icon: ShieldCheck, cat: 'STAFF' },
+  { label: 'Hydro Approver', email: 'hydro.hod@sjvn.in', icon: ShieldCheck, cat: 'STAFF' },
+  { label: 'Thermal Admin', email: 'thermal@sjvn.in', icon: ShieldCheck, cat: 'STAFF' },
+  { label: 'Thermal Desk', email: 'thermal.desk@sjvn.in', icon: ShieldCheck, cat: 'STAFF' },
+  { label: 'REIA Ops', email: 'reia@sjvn.in', icon: Zap, cat: 'STAFF' },
+  { label: 'REIA Admin', email: 'reia.admin@sjvn.in', icon: ShieldCheck, cat: 'STAFF' },
+  { label: 'Trading Ops', email: 'trading@sjvn.in', icon: Briefcase, cat: 'STAFF' },
+  { label: 'Finance', email: 'finance@sjvn.in', icon: Briefcase, cat: 'STAFF' },
+  { label: 'Management', email: 'management@sjvn.in', icon: Users, cat: 'STAFF' },
+  { label: 'Seller', email: 'seller@sunrise-solar.in', icon: User, cat: 'PARTY' },
+  { label: 'Buyer (Admin)', email: 'buyer@discom.gov.in', icon: User, cat: 'PARTY' },
+  { label: 'Buyer Maker (L1)', email: 'buyer.maker@discom.gov.in', icon: User, cat: 'PARTY' },
+  { label: 'Buyer Checker (L2)', email: 'buyer.checker@discom.gov.in', icon: User, cat: 'PARTY' },
+  { label: 'Trading Client', email: 'client@abctrading.in', icon: User, cat: 'PARTY' },
 ];
 
 export default function Login() {
@@ -56,6 +56,11 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [demoCategory, setDemoCategory] = useState('ALL');
+
+  const filteredDemoAccounts = demoCategory === 'ALL'
+    ? DEMO_ACCOUNTS
+    : DEMO_ACCOUNTS.filter((a) => a.cat === demoCategory);
 
   const from = location.state?.from || null;
 
@@ -80,66 +85,77 @@ export default function Login() {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      height: '100vh',
+      maxHeight: '100vh',
+      width: '100vw',
       display: 'flex',
       backgroundColor: '#ffffff',
+      overflow: 'hidden',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
     }}>
       {/* Main Container - Full Screen */}
       <div style={{
         display: 'flex',
         flex: 1,
+        height: '100%',
+        maxHeight: '100vh',
         background: '#ffffff',
-        position: 'relative'
+        position: 'relative',
+        overflow: 'hidden'
       }}>
         
         {/* LEFT PANE - Image & Branding */}
         <div style={{
-          flex: '1.2',
+          flex: '1.15',
           position: 'relative',
           display: 'flex',
           flexDirection: 'column',
+          justifyContent: 'space-between',
           color: 'white',
-          padding: '3rem',
+          padding: '2rem 2.5rem',
+          height: '100%',
+          maxHeight: '100vh',
+          overflowY: 'auto',
+          boxSizing: 'border-box',
           background: `
             linear-gradient(
               90deg,
-              rgba(4, 31, 75, 0.6),
-              rgba(4, 31, 75, 0.1)
+              rgba(4, 31, 75, 0.65),
+              rgba(4, 31, 75, 0.2)
             ),
             url("/images/sjvn-hydro-background.png") center / cover no-repeat
           `
         }}>
           {/* Top Logo Section */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 'auto' }}>
-            <div style={{ background: 'white', padding: '6px', borderRadius: 8 }}>
-              <img src="/sjvn-logo.png" alt="SJVN" style={{ height: 48, width: 'auto' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+            <div style={{ background: 'white', padding: '5px 6px', borderRadius: 8, display: 'flex', alignItems: 'center' }}>
+              <img src="/sjvn-logo.png" alt="SJVN" style={{ height: 42, width: 'auto' }} />
             </div>
             <div>
-              <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '0.02em', margin: 0 }}>SJVN</div>
-              <div style={{ fontSize: 12.5, fontWeight: 600, letterSpacing: '0.05em', color: '#cbd5e1' }}>A NAVRATNA CPSE</div>
-              <div style={{ fontSize: 12.5, color: '#94a3b8' }}>MINISTRY OF POWER, GOVERNMENT OF INDIA</div>
+              <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '0.02em', margin: 0, lineHeight: 1.2 }}>SJVN</div>
+              <div style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.05em', color: '#cbd5e1' }}>A NAVRATNA CPSE</div>
+              <div style={{ fontSize: 11, color: '#94a3b8' }}>MINISTRY OF POWER, GOVERNMENT OF INDIA</div>
             </div>
           </div>
 
           {/* Middle Content */}
-          <div style={{ marginTop: '4rem', maxWidth: '80%' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', color: '#93c5fd', marginBottom: 12 }}>
+          <div style={{ margin: 'auto 0', padding: '1rem 0', maxWidth: '85%', flexShrink: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', color: '#93c5fd', marginBottom: 8 }}>
               CLEAN ENERGY <span style={{ color: '#475569', margin: '0 8px' }}>|</span> BRIGHTER TOMORROW
             </div>
-            <h1 style={{ fontSize: 42, fontWeight: 800, lineHeight: 1.1, marginBottom: 16 }}>
+            <h1 style={{ fontSize: 'clamp(28px, 2.5vw, 38px)', fontWeight: 800, lineHeight: 1.15, marginBottom: 10 }}>
               RE Commercial &<br/>
               <span style={{ color: '#3b82f6' }}>Trading</span>
             </h1>
-            <h2 style={{ fontSize: 20, fontWeight: 500, color: '#e2e8f0', marginBottom: 24 }}>
+            <h2 style={{ fontSize: 'clamp(16px, 1.2vw, 19px)', fontWeight: 500, color: '#e2e8f0', marginBottom: 14 }}>
               Enterprise Management Platform
             </h2>
-            <p style={{ fontSize: 15, color: '#cbd5e1', lineHeight: 1.6, maxWidth: 400, marginBottom: 40 }}>
+            <p style={{ fontSize: 14, color: '#cbd5e1', lineHeight: 1.5, maxWidth: 440, marginBottom: 20 }}>
               Digitising renewable energy commercial operations for a cleaner, smarter and sustainable tomorrow.
             </p>
 
             {/* Feature Cards Grid */}
-            <div style={{ display: 'flex', gap: 16, marginBottom: 40 }}>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
               {[
                 { icon: Leaf, label: 'Renewable\nGrowth' },
                 { icon: BarChart3, label: 'Efficient\nTrading' },
@@ -149,23 +165,23 @@ export default function Login() {
                 const Icon = feature.icon;
                 return (
                   <div key={i} style={{
-                    background: 'rgba(4, 31, 75, 0.4)',
+                    background: 'rgba(4, 31, 75, 0.45)',
                     backdropFilter: 'blur(16px)',
                     border: '1px solid rgba(147, 197, 253, 0.3)',
                     boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-                    borderRadius: 16,
-                    padding: '16px 12px',
-                    width: 100,
+                    borderRadius: 12,
+                    padding: '10px 8px',
+                    width: 88,
                     textAlign: 'center',
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: 12
+                    gap: 8
                   }}>
-                    <Icon size={24} color="#93c5fd" />
-                    <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'pre-wrap', lineHeight: 1.3 }}>{feature.label}</div>
+                    <Icon size={20} color="#93c5fd" />
+                    <div style={{ fontSize: 11.5, fontWeight: 600, whiteSpace: 'pre-wrap', lineHeight: 1.25 }}>{feature.label}</div>
                   </div>
-                )
+                );
               })}
             </div>
 
@@ -173,11 +189,11 @@ export default function Login() {
             <div style={{ 
               fontFamily: '"Playfair Display", Georgia, serif', 
               fontStyle: 'italic', 
-              fontSize: 24, 
+              fontSize: 'clamp(18px, 1.5vw, 22px)', 
               color: '#e2e8f0',
-              transform: 'rotate(-3deg)',
+              transform: 'rotate(-2deg)',
               display: 'inline-block',
-              marginLeft: '20%'
+              marginLeft: '8%'
             }}>
               Harnessing Himalayan Energy<br/>
               <span style={{ borderBottom: '3px solid #3b82f6' }}>For A Greener India</span>
@@ -187,14 +203,17 @@ export default function Login() {
           {/* Bottom Stats Bar */}
           <div style={{ 
             marginTop: 'auto', 
-            background: 'rgba(15, 23, 42, 0.6)', 
+            background: 'rgba(15, 23, 42, 0.65)', 
             backdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: 16,
-            padding: '20px 24px',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            borderRadius: 14,
+            padding: '12px 20px',
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center'
+            alignItems: 'center',
+            gap: 12,
+            boxSizing: 'border-box',
+            flexShrink: 0
           }}>
             {[
               { icon: Zap, val: '2,000+ MW', sub: 'Installed Capacity' },
@@ -204,14 +223,14 @@ export default function Login() {
             ].map((stat, i) => {
               const Icon = stat.icon;
               return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <Icon size={20} color="#cbd5e1" />
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Icon size={18} color="#93c5fd" />
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>{stat.val}</div>
-                    <div style={{ fontSize: 13, color: '#94a3b8' }}>{stat.sub}</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'white', lineHeight: 1.2 }}>{stat.val}</div>
+                    <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.2 }}>{stat.sub}</div>
                   </div>
                 </div>
-              )
+              );
             })}
           </div>
         </div>
@@ -219,18 +238,22 @@ export default function Login() {
 
         {/* RIGHT PANE - Login Form */}
         <div style={{
-          flex: '0.8',
-          padding: '3rem 4rem',
+          flex: '0.85',
+          padding: '1.75rem 2.5rem',
           display: 'flex',
           flexDirection: 'column',
-          position: 'relative'
+          position: 'relative',
+          height: '100%',
+          maxHeight: '100vh',
+          overflowY: 'auto',
+          boxSizing: 'border-box'
         }}>
           {/* Top Right subtle watermark text */}
-          <div style={{ position: 'absolute', top: 32, right: 32, textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-            <div style={{ color: '#94a3b8', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.05em' }}>
+          <div style={{ position: 'absolute', top: 18, right: 24, textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', pointerEvents: 'none' }}>
+            <div style={{ color: '#94a3b8', fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', lineHeight: 1.3 }}>
               ENERGY<br/>FOR A BRIGHTER<br/>TOMORROW
             </div>
-            <div style={{ width: 28, height: 2, background: '#3b82f6', marginTop: 6 }}></div>
+            <div style={{ width: 24, height: 2, background: '#3b82f6', marginTop: 4 }}></div>
           </div>
 
           {/* Bottom Right Mountain & Tower SVG Watermark */}
@@ -259,30 +282,30 @@ export default function Login() {
             />
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 32, marginTop: '1.5rem', position: 'relative', zIndex: 1 }}>
-            <div style={{ marginBottom: 16 }}>
-              <img src="/sjvn-logo.png" alt="SJVN" style={{ height: 60, width: 'auto' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 16, marginTop: '0.25rem', position: 'relative', zIndex: 1, flexShrink: 0 }}>
+            <div style={{ marginBottom: 8 }}>
+              <img src="/sjvn-logo.png" alt="SJVN" style={{ height: 46, width: 'auto' }} />
             </div>
-            <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>
+            <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em', textAlign: 'center' }}>
               RE Commercial & Trading
             </h2>
-            <div style={{ color: '#64748b', fontSize: 14, fontWeight: 500, marginTop: 4 }}>
+            <div style={{ color: '#64748b', fontSize: 13, fontWeight: 500, marginTop: 2 }}>
               Enterprise Management Platform
             </div>
           </div>
 
           {error && (
-            <div className="animate-fade-in-up" style={{ marginBottom: 24, padding: 14, backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 12, fontSize: 14, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="animate-fade-in-up" style={{ marginBottom: 16, padding: 10, backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', borderRadius: 10, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
               <div style={{ fontWeight: 500 }}>{error}</div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} style={{ maxWidth: 400, margin: '0 auto', width: '100%', position: 'relative', zIndex: 1 }}>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Work Email</label>
+          <form onSubmit={handleSubmit} style={{ maxWidth: 410, margin: '0 auto', width: '100%', position: 'relative', zIndex: 1, flexShrink: 0 }}>
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: '#334155', marginBottom: 4 }}>Work Email</label>
               <div style={{ position: 'relative' }}>
-                <div style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
-                  <Mail size={18} strokeWidth={2.5} />
+                <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
+                  <Mail size={16} strokeWidth={2.5} />
                 </div>
                 <input
                   type="email"
@@ -292,13 +315,14 @@ export default function Login() {
                   placeholder="you@sjvn.in"
                   style={{
                     width: '100%',
-                    padding: '14px 16px 14px 44px',
+                    padding: '9px 14px 9px 38px',
                     background: '#ffffff',
                     border: '1px solid #cbd5e1',
-                    borderRadius: 12,
+                    borderRadius: 9,
                     color: '#0f172a',
-                    fontSize: 15,
+                    fontSize: 13.5,
                     outline: 'none',
+                    boxSizing: 'border-box',
                     transition: 'all 0.2s',
                   }}
                   onFocus={(e) => {
@@ -314,14 +338,14 @@ export default function Login() {
               </div>
             </div>
 
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                <label style={{ fontSize: 13.5, fontWeight: 700, color: '#334155' }}>Password</label>
-                <a href="#" onClick={(e) => { e.preventDefault(); setShowForgotModal(true); }} style={{ fontSize: 13.5, fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>Forgot Password?</a>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+                <label style={{ fontSize: 12.5, fontWeight: 700, color: '#334155' }}>Password</label>
+                <a href="#" onClick={(e) => { e.preventDefault(); setShowForgotModal(true); }} style={{ fontSize: 12, fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>Forgot Password?</a>
               </div>
               <div style={{ position: 'relative' }}>
-                <div style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
-                  <Lock size={18} strokeWidth={2.5} />
+                <div style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
+                  <Lock size={16} strokeWidth={2.5} />
                 </div>
                 <input
                   type={showPassword ? "text" : "password"}
@@ -331,13 +355,14 @@ export default function Login() {
                   placeholder="••••••••"
                   style={{
                     width: '100%',
-                    padding: '14px 44px 14px 44px',
+                    padding: '9px 38px 9px 38px',
                     background: '#ffffff',
                     border: '1px solid #cbd5e1',
-                    borderRadius: 12,
+                    borderRadius: 9,
                     color: '#0f172a',
-                    fontSize: 15,
+                    fontSize: 13.5,
                     outline: 'none',
+                    boxSizing: 'border-box',
                     transition: 'all 0.2s',
                   }}
                   onFocus={(e) => {
@@ -353,11 +378,11 @@ export default function Login() {
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   style={{
-                    position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', 
+                    position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', 
                     color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer', padding: 0
                   }}
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
             </div>
@@ -367,12 +392,12 @@ export default function Login() {
               disabled={loading}
               style={{
                 width: '100%',
-                padding: '16px',
+                padding: '10px',
                 background: '#041F4B',
                 color: 'white',
                 border: 'none',
-                borderRadius: 12,
-                fontSize: 16,
+                borderRadius: 9,
+                fontSize: 14,
                 fontWeight: 600,
                 cursor: loading ? 'not-allowed' : 'pointer',
                 display: 'flex',
@@ -385,23 +410,51 @@ export default function Login() {
               onMouseOver={(e) => { if(!loading) e.currentTarget.style.background = '#020f26'; }}
               onMouseOut={(e) => { if(!loading) e.currentTarget.style.background = '#041F4B'; }}
             >
-              {loading ? 'Authenticating...' : <>Sign In <ArrowRight size={18} /></>}
+              {loading ? 'Authenticating...' : <>Sign In <ArrowRight size={15} /></>}
             </button>
           </form>
 
-          <div style={{ maxWidth: 400, margin: '0 auto', width: '100%', marginTop: 24, position: 'relative', zIndex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', margin: '16px 0' }}>
+          <div style={{ maxWidth: 410, margin: '0 auto', width: '100%', marginTop: 10, position: 'relative', zIndex: 1, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', margin: '8px 0' }}>
               <div style={{ flex: 1, height: 1, background: '#e2e8f0' }}></div>
-              <div style={{ padding: '0 12px', fontSize: 13, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.05em' }}>OR</div>
+              <div style={{ padding: '0 10px', fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.05em' }}>OR</div>
               <div style={{ flex: 1, height: 1, background: '#e2e8f0' }}></div>
             </div>
 
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: '#64748b', textTransform: 'none', letterSpacing: '0.05em', marginBottom: 12, textAlign: 'center' }}>
-              Quick Demo Login
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#64748b', letterSpacing: '0.03em' }}>
+                Quick Demo Login
+              </div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {[
+                  { id: 'ALL', label: 'All (15)' },
+                  { id: 'STAFF', label: 'SJVN (10)' },
+                  { id: 'PARTY', label: 'Counterparty (5)' },
+                ].map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setDemoCategory(cat.id)}
+                    style={{
+                      background: demoCategory === cat.id ? '#041F4B' : '#f1f5f9',
+                      color: demoCategory === cat.id ? '#ffffff' : '#475569',
+                      border: 'none',
+                      borderRadius: 4,
+                      padding: '2px 7px',
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
             </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {DEMO_ACCOUNTS.map((a) => {
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
+              {filteredDemoAccounts.map((a) => {
                 const Icon = a.icon;
                 return (
                   <button
@@ -412,30 +465,33 @@ export default function Login() {
                       background: '#ffffff',
                       border: '1px solid #e2e8f0',
                       color: '#334155',
-                      padding: '10px 14px',
-                      borderRadius: 10,
-                      fontSize: 13.5,
+                      padding: '5px 8px',
+                      borderRadius: 7,
+                      fontSize: 11.5,
                       fontWeight: 600,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      transition: 'all 0.2s',
+                      transition: 'all 0.15s ease',
+                      boxSizing: 'border-box'
                     }}
                     onMouseOver={(e) => { 
                       e.currentTarget.style.borderColor = '#94a3b8'; 
-                      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.02)';
+                      e.currentTarget.style.background = '#f8fafc';
+                      e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.03)';
                     }}
                     onMouseOut={(e) => { 
                       e.currentTarget.style.borderColor = '#e2e8f0'; 
+                      e.currentTarget.style.background = '#ffffff';
                       e.currentTarget.style.boxShadow = 'none';
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Icon size={14} color="#3b82f6" strokeWidth={2.5} />
-                      {a.label}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <Icon size={12} color="#3b82f6" strokeWidth={2.5} style={{ flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.label}</span>
                     </div>
-                    <ChevronRight size={14} color="#cbd5e1" />
+                    <ChevronRight size={12} color="#cbd5e1" style={{ flexShrink: 0 }} />
                   </button>
                 );
               })}

@@ -8,9 +8,25 @@
  * saving it, issuing it, and restating it when an input arrives late.
  */
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
+import { fileURLToPath } from 'url';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, genInvoiceNo, pushNotification } from '../util.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const reaUpload = multer({ dest: 'temp/', limits: { fileSize: 30 * 1024 * 1024 } });
+
+function monthFromFileName(name) {
+  const m = /REA(\d{2})(\d{2})_[PF][A-Z0-9]*\.pdf$/i.exec(String(name).trim());
+  if (!m) return null;
+  const mm = Number(m[1]);
+  if (mm < 1 || mm > 12) return null;
+  return `20${m[2]}-${m[1]}`;
+}
 import { getParam } from '../mastersService.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { isThermal, buildThermalBill, rebuildThermalBill, thermalReadiness } from '../services/thermalStationBill.js';
@@ -1082,6 +1098,75 @@ router.get('/from-rea/jobs/:id', requireRole(...WRITE), (req, res) => {
   if (!job) return res.status(404).json({ error: 'No such REA run (the server may have restarted) — look at the bills list, then run again' });
   const { partial, ...rest } = job;
   res.json({ ...rest, months: job.result?.months || partial || [] });
+});
+
+/**
+ * POST /hydro-billing/upload-rea — upload an REA PDF document directly from local machine.
+ * Parses Table D2 & station energy, matches contracts, populates energy_data,
+ * and drafts the hydro bills for ready stations.
+ */
+router.post('/upload-rea', requireRole(...WRITE), reaUpload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No REA PDF file was uploaded' });
+  }
+
+  const tempPath = req.file.path;
+  const originalName = req.file.originalname || 'REA.pdf';
+  const rpc = req.body.rpc || 'NRPC';
+
+  try {
+    const parsed = await reaScraper.parsePdf(tempPath, rpc);
+    if (!parsed || !parsed.data || !parsed.data.length) {
+      throw new Error('No hydro station energy or availability records could be extracted from this PDF. Please ensure it is an authentic NRPC/RPC Regional Energy Account.');
+    }
+
+    const detectedPeriod = parsed.period || req.body.period_month || monthFromFileName(originalName);
+    if (!detectedPeriod) {
+      throw new Error('Could not identify billing month from the REA PDF header.');
+    }
+
+    const dataType = req.body.data_type || (/_F\.pdf$/i.test(originalName) ? 'FINAL' : 'PROVISIONAL');
+
+    // Archive PDF to rea_downloads directory
+    const targetDir = path.join(__dirname, `../../rea_downloads/${rpc}/${detectedPeriod}`);
+    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+    const targetFile = path.join(targetDir, `REA_${rpc}_${detectedPeriod}_${dataType}.pdf`);
+    try {
+      fs.copyFileSync(tempPath, targetFile);
+    } catch (copyErr) {
+      console.warn('[upload-rea] Could not persist REA file copy:', copyErr.message);
+    }
+
+    // Register in rea_fetch_log
+    const logId = newId('REALOG');
+    db.prepare(`DELETE FROM rea_fetch_log WHERE rpc_source = ? AND period_month = ? AND data_type = ? AND status = 'FAILED'`).run(rpc, detectedPeriod, dataType);
+    db.prepare(`
+      INSERT OR REPLACE INTO rea_fetch_log (id, rpc_source, period_month, data_type, local_file_path, status, created_at)
+      VALUES (?, ?, ?, ?, ?, 'PARSED', datetime('now'))
+    `).run(logId, rpc, detectedPeriod, dataType, targetFile);
+
+    // Save energy_data records
+    const recordsSaved = reaScraper.processAndSave(logId, parsed.data, rpc, detectedPeriod, dataType);
+
+    // Run drafting for this month
+    const fromMonth = req.body.from_month || detectedPeriod;
+    const toMonth = req.body.to_month || detectedPeriod;
+    const draftResult = await runFromRea({ from_month: fromMonth, to_month: toMonth, rpc }, req);
+
+    return res.json({
+      success: true,
+      period: detectedPeriod,
+      data_type: dataType,
+      stations_parsed: parsed.data.length,
+      records_saved: recordsSaved,
+      file_name: originalName,
+      ...draftResult,
+    });
+  } catch (err) {
+    return res.status(err.status || 400).json({ error: err.message });
+  } finally {
+    fs.unlink(tempPath, () => {});
+  }
 });
 
 // ─── Drafting without being asked ────────────────────────────────────────────

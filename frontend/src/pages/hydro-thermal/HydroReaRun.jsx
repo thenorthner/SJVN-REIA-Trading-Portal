@@ -1,8 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { HelpCircle } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { 
+  HelpCircle, UploadCloud, FileText, CheckCircle2, Trash2, 
+  Link as LinkIcon, FileUp, Sparkles, AlertCircle 
+} from 'lucide-react';
 import api from '../../api/client.js';
 import { Card, Table, Badge, Field, Modal, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import HydroBeneficiaryWaterfall3D from '../../components/HydroBeneficiaryWaterfall3D.jsx';
+import ReaDraftingCorridor3D from '../../components/ReaDraftingCorridor3D.jsx';
 
 // Draft a run of months' hydro bills straight from the Regional Energy Account.
 //
@@ -112,10 +116,17 @@ export function AutoDraftPanel({ status }) {
 }
 
 export default function HydroReaRun({ onDone }) {
+  const [activeTab, setActiveTab] = useState('UPLOAD'); // 'UPLOAD' | 'PASTE'
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [detectedMonth, setDetectedMonth] = useState('');
+  const fileInputRef = useRef(null);
+
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [paste, setPaste] = useState('');
   const [running, setRunning] = useState(false);
+  const [stageIndex, setStageIndex] = useState(1);
   const [err, setErr] = useState('');
   const [result, setResult] = useState(null);
   const [progress, setProgress] = useState('');
@@ -130,6 +141,67 @@ export default function HydroReaRun({ onDone }) {
   const { links, unread } = parseReaLinks(paste);
   const linkMonths = Object.keys(links).sort();
 
+  function handleFile(file) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      setErr('Only PDF format is supported for Regional Energy Accounts');
+      return;
+    }
+    setSelectedFile(file);
+    setErr('');
+    const detected = monthFromReaLink(file.name);
+    if (detected) {
+      setDetectedMonth(detected);
+      if (!from) setFrom(detected);
+      if (!to) setTo(detected);
+    }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
+    }
+  }
+
+  async function runUpload(e) {
+    e.preventDefault();
+    if (!selectedFile) {
+      setErr('Please select or drop an REA PDF file to upload.');
+      return;
+    }
+    setErr('');
+    setResult(null);
+    setRunning(true);
+    setStageIndex(1);
+    setProgress(`Ingesting REA PDF "${selectedFile.name}"...`);
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    if (from || detectedMonth) formData.append('from_month', from || detectedMonth);
+    if (to || detectedMonth) formData.append('to_month', to || detectedMonth);
+    formData.append('rpc', 'NRPC');
+
+    try {
+      setStageIndex(2);
+      setProgress(`Extracting Table D2 generation & availability metrics...`);
+      const res = await api.hydroBilling.uploadRea(formData);
+      setStageIndex(5);
+      setResult({
+        months: res.months || [],
+        stations_not_ready: res.stations_not_ready || [],
+      });
+      setProgress('');
+    } catch (ex) {
+      setErr(ex.response?.data?.error || ex.message);
+    } finally {
+      setRunning(false);
+      loadAuto();
+      onDone?.();
+    }
+  }
+
   // The server runs this in the background and the page polls. Fetching and
   // parsing a month's REA outlasts the proxies between the desk and the
   // server, which answered a plain request with 504 even though the server
@@ -143,13 +215,15 @@ export default function HydroReaRun({ onDone }) {
     if (fromMonth > toMonth) { setErr('From month is after To month.'); return; }
     const total = monthsBetween(fromMonth, toMonth).length;
     setRunning(true);
+    setStageIndex(1);
     setProgress(`Starting — ${total} month(s)…`);
     try {
       const start = await api.hydroBilling.fromRea({
         from_month: fromMonth, to_month: toMonth, rea_links: links, background: true,
       });
+      let currentStageStep = 1;
       for (;;) {
-        await new Promise((r) => setTimeout(r, 3000));
+        await new Promise((r) => setTimeout(r, 2500));
         let job;
         try {
           job = await api.hydroBilling.fromReaJob(start.job_id);
@@ -161,10 +235,13 @@ export default function HydroReaRun({ onDone }) {
         setResult({ months: job.months || [], stations_not_ready: job.result?.stations_not_ready || [] });
         if (job.status === 'RUNNING') {
           const p = job.progress;
-          setProgress(p ? `Month ${p.done + 1} of ${p.total}: fetching the ${p.month} REA and drafting…` : 'Working…');
+          currentStageStep = Math.min(4, currentStageStep + 1);
+          setStageIndex(currentStageStep);
+          setProgress(p ? `Month ${p.done + 1} of ${p.total}: fetching ${p.month} REA and drafting…` : 'Working…');
           continue;
         }
         if (job.status === 'FAILED') setErr(job.error || 'The run failed');
+        setStageIndex(5);
         break;
       }
     } catch (ex) {
@@ -213,39 +290,265 @@ export default function HydroReaRun({ onDone }) {
       }
     >
       <AutoDraftPanel status={auto} />
-      <form onSubmit={run}>
-        <Field label="REA PDF links (nrpc.gov.in)" htmlFor="rea-links">
-          <textarea
-            id="rea-links" rows={4} value={paste} onChange={(e) => setPaste(e.target.value)}
-            placeholder="https://nrpc.gov.in/allfile/…REA0826_P.pdf"
-            style={{ width: '100%', fontFamily: 'monospace', fontSize: 13.5 }}
-          />
-        </Field>
-        {linkMonths.length > 0 && (
-          <p style={{ margin: '4px 0' }}>Months read from the links: {linkMonths.join(', ')}</p>
-        )}
-        {unread.length > 0 && (
-          <p className="text-warning" style={{ margin: '4px 0' }}>
-            Not an REA PDF link (ignored): {unread.join(', ')}
-          </p>
-        )}
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <Field label="From month" htmlFor="rea-from">
-            <input id="rea-from" type="month" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </Field>
-          <Field label="To month" htmlFor="rea-to">
-            <input id="rea-to" type="month" value={to} onChange={(e) => setTo(e.target.value)} />
-          </Field>
-          <button type="submit" className="btn btn-primary" disabled={running}>
-            {running ? 'Fetching REA and drafting…' : 'Fetch REA and draft bills'}
-          </button>
-        </div>
-        <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--text-light)' }}>
-          Leave the months blank to bill exactly the months of the pasted links. Start from the first unbilled month of the financial year.
-        </p>
-      </form>
 
-      {progress && <p role="status" style={{ marginTop: 12 }}>{progress}</p>}
+      {/* Mode Selector Tabs */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        marginBottom: '18px',
+        borderBottom: '1px solid var(--border)',
+        paddingBottom: '10px',
+      }}>
+        <button
+          type="button"
+          onClick={() => { setActiveTab('UPLOAD'); setErr(''); }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '7px 16px',
+            borderRadius: '8px',
+            fontSize: '13.5px',
+            fontWeight: 600,
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            background: activeTab === 'UPLOAD' ? '#041F4B' : '#f1f5f9',
+            color: activeTab === 'UPLOAD' ? '#ffffff' : '#475569',
+            boxShadow: activeTab === 'UPLOAD' ? '0 2px 4px rgba(4, 31, 75, 0.2)' : 'none',
+          }}
+        >
+          <UploadCloud size={16} />
+          <span>Upload REA PDF Document</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setActiveTab('PASTE'); setErr(''); }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '7px 16px',
+            borderRadius: '8px',
+            fontSize: '13.5px',
+            fontWeight: 600,
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            background: activeTab === 'PASTE' ? '#041F4B' : '#f1f5f9',
+            color: activeTab === 'PASTE' ? '#ffffff' : '#475569',
+            boxShadow: activeTab === 'PASTE' ? '0 2px 4px rgba(4, 31, 75, 0.2)' : 'none',
+          }}
+        >
+          <LinkIcon size={15} />
+          <span>Paste NRPC Online Links</span>
+        </button>
+      </div>
+
+      {/* Mode 1: Upload REA PDF */}
+      {activeTab === 'UPLOAD' && (
+        <form onSubmit={runUpload}>
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => !selectedFile && fileInputRef.current?.click()}
+            style={{
+              border: `2px dashed ${dragOver ? '#2563eb' : selectedFile ? '#10b981' : '#cbd5e1'}`,
+              borderRadius: '12px',
+              padding: selectedFile ? '18px 24px' : '36px 20px',
+              textAlign: 'center',
+              backgroundColor: dragOver ? '#eff6ff' : selectedFile ? '#f0fdf4' : '#f8fafc',
+              cursor: selectedFile ? 'default' : 'pointer',
+              transition: 'all 0.2s ease',
+              marginBottom: '16px',
+              position: 'relative',
+            }}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              style={{ display: 'none' }}
+              onChange={(e) => handleFile(e.target.files?.[0])}
+            />
+
+            {!selectedFile ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <div style={{
+                  background: '#e0f2fe',
+                  color: '#0284c7',
+                  padding: '12px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                }}>
+                  <FileUp size={28} />
+                </div>
+                <div style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>
+                  Click to select or drag & drop REA PDF here
+                </div>
+                <div style={{ fontSize: '13px', color: '#64748b' }}>
+                  Supports official NRPC Regional Energy Account PDF files (e.g., REA0826_P.pdf, REA0826_F.pdf)
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', textAlign: 'left' }}>
+                  <div style={{
+                    background: '#fee2e2',
+                    color: '#dc2626',
+                    padding: '10px',
+                    borderRadius: '10px',
+                    display: 'flex',
+                  }}>
+                    <FileText size={24} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '14.5px', fontWeight: 700, color: '#0f172a' }}>
+                      {selectedFile.name}
+                    </div>
+                    <div style={{ fontSize: '12.5px', color: '#64748b' }}>
+                      Size: {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
+                      {detectedMonth && (
+                        <span style={{
+                          marginLeft: '10px',
+                          background: '#dbeafe',
+                          color: '#1d4ed8',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontWeight: 600,
+                        }}>
+                          Detected Month: {detectedMonth}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{ fontSize: '12.5px' }}
+                  >
+                    Change File
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setDetectedMonth('');
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                    }}
+                    style={{
+                      background: '#fee2e2',
+                      color: '#b91c1c',
+                      border: '1px solid #fecaca',
+                      borderRadius: '6px',
+                      padding: '4px 8px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                    title="Remove file"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <Field label="Billing Month" htmlFor="upload-from">
+              <input
+                id="upload-from"
+                type="month"
+                value={from}
+                onChange={(e) => { setFrom(e.target.value); setTo(e.target.value); }}
+              />
+            </Field>
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={running || !selectedFile}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '9px 20px',
+                fontWeight: 600,
+              }}
+            >
+              <UploadCloud size={16} />
+              <span>{running ? 'Processing REA PDF and drafting…' : 'Process REA PDF and draft bills'}</span>
+            </button>
+          </div>
+          <p style={{ margin: '8px 0 0', fontSize: '13px', color: 'var(--text-light)' }}>
+            The PDF will be parsed for Table D2 Gross Scheduled Generation, normative PAFM %, and multi-state beneficiary allocations.
+          </p>
+        </form>
+      )}
+
+      {/* Mode 2: Paste REA Links */}
+      {activeTab === 'PASTE' && (
+        <form onSubmit={run}>
+          <Field label="REA PDF links (nrpc.gov.in)" htmlFor="rea-links">
+            <textarea
+              id="rea-links" rows={4} value={paste} onChange={(e) => setPaste(e.target.value)}
+              placeholder="https://nrpc.gov.in/allfile/…REA0826_P.pdf"
+              style={{ width: '100%', fontFamily: 'monospace', fontSize: 13.5 }}
+            />
+          </Field>
+          {linkMonths.length > 0 && (
+            <p style={{ margin: '4px 0' }}>Months read from the links: {linkMonths.join(', ')}</p>
+          )}
+          {unread.length > 0 && (
+            <p className="text-warning" style={{ margin: '4px 0' }}>
+              Not an REA PDF link (ignored): {unread.join(', ')}
+            </p>
+          )}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <Field label="From month" htmlFor="rea-from">
+              <input id="rea-from" type="month" value={from} onChange={(e) => setFrom(e.target.value)} />
+            </Field>
+            <Field label="To month" htmlFor="rea-to">
+              <input id="rea-to" type="month" value={to} onChange={(e) => setTo(e.target.value)} />
+            </Field>
+            <button type="submit" className="btn btn-primary" disabled={running}>
+              {running ? 'Fetching REA and drafting…' : 'Fetch REA and draft bills'}
+            </button>
+          </div>
+          <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--text-light)' }}>
+            Leave the months blank to bill exactly the months of the pasted links. Start from the first unbilled month of the financial year.
+          </p>
+        </form>
+      )}
+
+      {/* Live Animated Step-by-Step Execution Pipeline */}
+      {(running || result) && (
+        <div style={{ marginTop: '20px' }}>
+          <ReaDraftingCorridor3D
+            running={running}
+            stageIndex={stageIndex}
+            progressText={progress}
+            result={result}
+            error={err}
+            mode={activeTab}
+            fileName={selectedFile?.name || linkMonths.join(', ')}
+            onReset={() => {
+              setResult(null);
+              setProgress('');
+              setErr('');
+            }}
+          />
+        </div>
+      )}
+
       {err && <div className="alert alert-error" role="alert" style={{ marginTop: 12 }}>{err}</div>}
 
       {result && (
@@ -287,13 +590,22 @@ export default function HydroReaRun({ onDone }) {
                 Purpose & Scope
               </h4>
               <p style={{ margin: 0 }}>
-                Fetches each month&apos;s REA from NRPC, records station energy, availability and free power accounts, and drafts that month&apos;s bill for every station ready to bill. Months run oldest first so each bill carries the year&apos;s cumulative energy; nothing is issued directly.
+                Fetches each month&apos;s REA from NRPC or uploaded PDF document, records station energy, availability and free power accounts, and drafts that month&apos;s bill for every station ready to bill. Months run oldest first so each bill carries the year&apos;s cumulative energy; nothing is issued directly.
               </p>
             </div>
 
             <div>
               <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>
-                How to copy REA PDF links from NRPC
+                Option 1: Upload REA PDF Directly
+              </h4>
+              <p style={{ margin: 0 }}>
+                Drag & drop or select any official NRPC / RPC Regional Energy Account PDF directly from your computer (e.g. <code>REA0826_P.pdf</code>). The system automatically identifies the billing month, validates checksums, extracts Table D2 parameters, and drafts bills.
+              </p>
+            </div>
+
+            <div>
+              <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>
+                Option 2: Copy REA PDF Links from NRPC
               </h4>
               <ol style={{ margin: 0, paddingLeft: 20 }}>
                 <li>Open <strong>nrpc.gov.in</strong> in your browser.</li>
@@ -308,13 +620,13 @@ export default function HydroReaRun({ onDone }) {
                 Date Range & Billing Sequence
               </h4>
               <ul style={{ margin: 0, paddingLeft: 20 }}>
-                <li>Leave the months blank to bill exactly the months of the pasted links.</li>
-                <li>Or choose From/To months starting from the first month of the financial year that is not yet billed — a later month is only drafted once every preceding month has been drafted.</li>
+                <li>Leave the months blank to bill exactly the months of the pasted links or uploaded file.</li>
+                <li>Or choose From/To months starting from the first month of the financial year that is not yet billed.</li>
               </ul>
             </div>
 
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', fontSize: '13.5px', color: '#64748b' }}>
-              <strong>Automatic Sweep:</strong> The same run happens automatically after each scheduled REA scan. This desk form is reserved for months the automated scan could not reach, or for links the scan does not yet have.
+              <strong>Automatic Sweep:</strong> The same run happens automatically after each scheduled REA scan. This desk form is reserved for manual PDF uploads, or for months the automated scan could not reach.
             </div>
           </div>
         </Modal>
@@ -322,3 +634,4 @@ export default function HydroReaRun({ onDone }) {
     </Card>
   );
 }
+

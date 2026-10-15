@@ -28,7 +28,7 @@
       "runtimeExecutable": "sh",
       "runtimeArgs": [
         "-c",
-        "cd backend && PORT=4001 SJVN_DB_PATH=/private/tmp/claude-501/-Users-kshitijsharma-Downloads-sjvn-energy-platform/ba09fcbe-1390-4169-b4b6-c09b4cfa82b6/scratchpad/testdb/platform-test.db SJVN_BACKUP_DIR=/private/tmp/claude-501/-Users-kshitijsharma-Downloads-sjvn-energy-platform/ba09fcbe-1390-4169-b4b6-c09b4cfa82b6/scratchpad/testdb/backups node src/server.js"
+        "cd backend && PORT=4001 SJVN_DB_PATH=/private/tmp/claude-501/-Users-kshitijsharma-Downloads-sjvn-energy-platform/fcb9b081-b79b-44b7-b262-802dbb6a460c/scratchpad/qadb/platform-qa.db SJVN_BACKUP_DIR=/private/tmp/claude-501/-Users-kshitijsharma-Downloads-sjvn-energy-platform/fcb9b081-b79b-44b7-b262-802dbb6a460c/scratchpad/qadb/backups node src/server.js"
       ],
       "port": 4001
     },
