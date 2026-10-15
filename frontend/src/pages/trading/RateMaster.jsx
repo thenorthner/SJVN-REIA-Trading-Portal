@@ -81,7 +81,7 @@ export default function RateMaster() {
       // An open-ended window is the rate in force today.
       render: r => (r.effective_to ? r.effective_to : <Badge type="success">Current</Badge>),
     },
-    { key: 'created_by', label: 'Source', render: r => <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>{r.created_by || '—'}</span> },
+    { key: 'created_by', label: 'Source', render: r => <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{r.created_by || '—'}</span> },
   ];
 
   return (

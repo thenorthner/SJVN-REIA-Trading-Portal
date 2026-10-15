@@ -111,7 +111,7 @@ export default function BusbarLossPipeline3D({
                 Busbar to Periphery 3D Transmission & Loss Pipeline
               </h3>
               <span style={{
-                fontSize: 10,
+                fontSize: 12.5,
                 textTransform: 'uppercase',
                 background: 'rgba(14, 165, 233, 0.15)',
                 color: '#38bdf8',
@@ -124,7 +124,7 @@ export default function BusbarLossPipeline3D({
                 ISTS CTU Certified
               </span>
             </div>
-            <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
               Central Transmission Utility (PGCIL) 400 kV Grid Losses & CERC DSM Balancing Slab
             </div>
           </div>
@@ -132,7 +132,7 @@ export default function BusbarLossPipeline3D({
 
         {/* Contract Selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>PPA Stream:</span>
+          <span style={{ fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>PPA Stream:</span>
           <div style={{
             display: 'flex',
             background: '#090e1a',
@@ -151,7 +151,7 @@ export default function BusbarLossPipeline3D({
                   border: 'none',
                   padding: '5px 12px',
                   borderRadius: 6,
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
@@ -197,7 +197,7 @@ export default function BusbarLossPipeline3D({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
               <span style={{
-                fontSize: 10,
+                fontSize: 12.5,
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 color: '#10b981',
@@ -207,13 +207,13 @@ export default function BusbarLossPipeline3D({
               }}>
                 Stage 1: Injection
               </span>
-              <span style={{ fontSize: 10, color: '#64748b' }}>400 kV Pooling</span>
+              <span style={{ fontSize: 12.5, color: '#64748b' }}>400 kV Pooling</span>
             </div>
 
             <div style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc', marginBottom: 2 }}>
               Generator Busbar (Gross)
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12 }}>
               Special Energy Meters (SEM)
             </div>
 
@@ -223,11 +223,11 @@ export default function BusbarLossPipeline3D({
               borderRadius: 8,
               border: '1px solid rgba(255,255,255,0.06)',
             }}>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>Gross Metered Energy</div>
+              <div style={{ fontSize: 13, color: '#94a3b8' }}>Gross Metered Energy</div>
               <div style={{ fontSize: 22, fontWeight: 800, color: '#10b981', marginTop: 2 }}>
                 {fmtNumber(grossMwh)} MWh
               </div>
-              <div style={{ fontSize: 10, color: '#64748b', marginTop: 3 }}>
+              <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 3 }}>
                 15-Min Block Time-of-Day (ToD)
               </div>
             </div>
@@ -266,7 +266,7 @@ export default function BusbarLossPipeline3D({
               border: '1px solid #1e293b',
               padding: '3px 6px',
               borderRadius: 6,
-              fontSize: 9,
+              fontSize: 12.5,
               color: '#38bdf8',
               fontWeight: 700,
               whiteSpace: 'nowrap',
@@ -274,7 +274,7 @@ export default function BusbarLossPipeline3D({
               textAlign: 'center',
             }}>
               <div>-{dataset.loss_percent}%</div>
-              <div style={{ color: '#f59e0b', fontSize: 8 }}>-{fmtNumber(lossMwh)} MWh</div>
+              <div style={{ color: '#f59e0b', fontSize: 12 }}>-{fmtNumber(lossMwh)} MWh</div>
             </div>
           </div>
 
@@ -305,7 +305,7 @@ export default function BusbarLossPipeline3D({
               border: '1px solid rgba(56, 189, 248, 0.35)',
               padding: '2px 8px',
               borderRadius: 20,
-              fontSize: 10,
+              fontSize: 12.5,
               fontWeight: 800,
               color: '#38bdf8',
               letterSpacing: 0.5,
@@ -318,7 +318,7 @@ export default function BusbarLossPipeline3D({
             <div style={{ fontSize: 14, fontWeight: 800, color: '#f8fafc', marginBottom: 2 }}>
               Central Transmission & Loss Pool
             </div>
-            <div style={{ fontSize: 10.5, color: '#94a3b8', marginBottom: 10 }}>
+            <div style={{ fontSize: 12.5, color: '#94a3b8', marginBottom: 10 }}>
               Regional PoC Loss Deduction: <strong>{dataset.loss_percent}%</strong>
             </div>
 
@@ -329,11 +329,11 @@ export default function BusbarLossPipeline3D({
               padding: '8px 10px',
               marginBottom: 8,
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8', marginBottom: 3 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#94a3b8', marginBottom: 3 }}>
                 <span>Scheduled Energy:</span>
                 <strong style={{ color: '#f8fafc' }}>{fmtNumber(dataset.scheduled_mwh)} MWh</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#94a3b8' }}>
                 <span>Deviation (DSM):</span>
                 <strong style={{ color: isOverInjection ? '#10b981' : '#ef4444' }}>
                   {isOverInjection ? `+${fmtNumber(deviationMwh)} MWh (Over)` : `${fmtNumber(deviationMwh)} MWh (Under)`}
@@ -342,7 +342,7 @@ export default function BusbarLossPipeline3D({
             </div>
 
             <div style={{
-              fontSize: 10.5,
+              fontSize: 12.5,
               color: '#10b981',
               background: 'rgba(16, 185, 129, 0.1)',
               padding: '4px 6px',
@@ -386,7 +386,7 @@ export default function BusbarLossPipeline3D({
               border: '1px solid #1e293b',
               padding: '3px 6px',
               borderRadius: 6,
-              fontSize: 9,
+              fontSize: 12.5,
               color: '#818cf8',
               fontWeight: 700,
               whiteSpace: 'nowrap',
@@ -394,7 +394,7 @@ export default function BusbarLossPipeline3D({
               textAlign: 'center',
             }}>
               <div>Ex-Periphery</div>
-              <div style={{ color: '#10b981', fontSize: 8 }}>{fmtNumber(netDeliveredMwh)} MWh</div>
+              <div style={{ color: '#10b981', fontSize: 12 }}>{fmtNumber(netDeliveredMwh)} MWh</div>
             </div>
           </div>
 
@@ -418,7 +418,7 @@ export default function BusbarLossPipeline3D({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
               <span style={{
-                fontSize: 10,
+                fontSize: 12.5,
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 color: '#818cf8',
@@ -428,13 +428,13 @@ export default function BusbarLossPipeline3D({
               }}>
                 Stage 3: Off-Take
               </span>
-              <span style={{ fontSize: 10, color: '#64748b' }}>NRPC Certified</span>
+              <span style={{ fontSize: 12.5, color: '#64748b' }}>NRPC Certified</span>
             </div>
 
             <div style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc', marginBottom: 2 }}>
               State Periphery (Net)
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12 }}>
               Regional Delivery Point Off-Take
             </div>
 
@@ -444,11 +444,11 @@ export default function BusbarLossPipeline3D({
               borderRadius: 8,
               border: '1px solid rgba(255,255,255,0.06)',
             }}>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>Net Billed Energy</div>
+              <div style={{ fontSize: 13, color: '#94a3b8' }}>Net Billed Energy</div>
               <div style={{ fontSize: 22, fontWeight: 800, color: '#818cf8', marginTop: 2 }}>
                 {fmtNumber(netDeliveredMwh)} MWh
               </div>
-              <div style={{ fontSize: 10, color: '#64748b', marginTop: 3 }}>
+              <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 3 }}>
                 After 3.52% ISTS deduction
               </div>
             </div>
@@ -469,7 +469,7 @@ export default function BusbarLossPipeline3D({
         position: 'relative',
         zIndex: 2,
       }}>
-        <div style={{ fontSize: 11.5, color: '#94a3b8' }}>
+        <div style={{ fontSize: 13, color: '#94a3b8' }}>
           Certified Ex-Periphery Off-Take Allocation to Buyers:
         </div>
 
@@ -482,7 +482,7 @@ export default function BusbarLossPipeline3D({
                 border: '1px solid rgba(255, 255, 255, 0.1)',
                 padding: '4px 10px',
                 borderRadius: 6,
-                fontSize: 11,
+                fontSize: 13,
               }}
             >
               <strong style={{ color: '#f8fafc' }}>{del.buyer}</strong>: <span style={{ color: '#38bdf8' }}>{fmtNumber(del.mwh)} MWh</span> ({del.share_percent}%)

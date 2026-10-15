@@ -35,7 +35,7 @@ function Countdown({ days }) {
   const late = days < 0;
   const soon = !late && days <= 30;
   return (
-    <span style={{ marginLeft: 8, padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: late ? '#fef2f2' : soon ? '#fffbeb' : '#f1f5f9', color: late ? '#b91c1c' : soon ? '#b45309' : '#475569' }}>
+    <span style={{ marginLeft: 8, padding: '1px 8px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: late ? '#fef2f2' : soon ? '#fffbeb' : '#f1f5f9', color: late ? '#b91c1c' : soon ? '#b45309' : '#475569' }}>
       {late ? `${plural(-days, 'day')} overdue` : days === 0 ? 'today' : `in ${plural(days, 'day')}`}
     </span>
   );
@@ -162,20 +162,20 @@ function Milestones({ ws, meta, run, raiseExtension }) {
                   <tr key={m.id}>
                     <td>
                       <strong>{m.label}</strong>
-                      {m.remarks && <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{m.remarks}</div>}
+                      {m.remarks && <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{m.remarks}</div>}
                     </td>
                     <td>
                       {m.due_date ? fmtDate(m.due_date) : <span style={{ color: 'var(--slate-500)' }}>Not set</span>}
                       {m.status !== 'ACHIEVED' && <Countdown days={m.days_to_due} />}
-                      {m.extended && <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>Extended — first agreed {fmtDate(m.original_due_date)}</div>}
+                      {m.extended && <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>Extended — first agreed {fmtDate(m.original_due_date)}</div>}
                     </td>
                     <td>
                       <Badge status={tone} label={label} />
-                      {m.status === 'REPORTED' && <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 2 }}>Reported for {fmtDate(m.reported_date)}{m.reported_note ? ` — ${m.reported_note}` : ''}</div>}
+                      {m.status === 'REPORTED' && <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2 }}>Reported for {fmtDate(m.reported_date)}{m.reported_note ? ` — ${m.reported_note}` : ''}</div>}
                     </td>
                     <td>
                       {m.achieved_date ? fmtDate(m.achieved_date) : '—'}
-                      {m.achieved_date && m.delay_days > 0 && <div style={{ fontSize: 12, color: '#b91c1c' }}>{plural(m.delay_days, 'day')} late</div>}
+                      {m.achieved_date && m.delay_days > 0 && <div style={{ fontSize: 13.5, color: '#b91c1c' }}>{plural(m.delay_days, 'day')} late</div>}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -428,14 +428,14 @@ function Requests({ ws, meta, run, setError, draft, clearDraft, onPreview }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <div>
                 <strong>{r.subject}</strong>
-                <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 2 }}>
+                <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2 }}>
                   {meta.request_types?.[r.request_type] || r.request_type} · {meta.request_grounds?.[r.ground] || r.ground} · raised {fmtDateTime(r.created_at)} by {r.raised_by_name || SIDE_NAME[r.raised_by_side]}
                 </div>
               </div>
               <Badge status={tone} label={label} />
             </div>
             <p style={{ margin: '8px 0', fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{r.description}</p>
-            <div style={{ fontSize: 12.5, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               {r.milestone_label && <span>Milestone: {r.milestone_label}</span>}
               {r.requested_date && <span>Asked for: {fmtDate(r.requested_date)}</span>}
               {r.amount && <span>Amount: {fmtCurrency(r.amount)}</span>}
@@ -543,7 +543,7 @@ function Notices({ ws, meta, run, setError, onPreview }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
               <div>
                 <strong>{n.subject}</strong>
-                <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 2 }}>
+                <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2 }}>
                   {n.notice_no} · {meta.notice_types?.[n.notice_type] || n.notice_type} · {SIDE_NAME[n.sent_by_side]} → {SIDE_NAME[toSide]} · {fmtDateTime(n.created_at)} · {n.sent_by_name}
                   {n.parent_notice_id && byId[n.parent_notice_id] ? ` · in reply to ${byId[n.parent_notice_id].notice_no}` : ''}
                 </div>
@@ -553,7 +553,7 @@ function Notices({ ws, meta, run, setError, onPreview }) {
                 : <Badge status={n.response_overdue ? 'REJECTED' : 'PENDING'} label={n.response_overdue ? 'Reply overdue' : `Awaiting ${SIDE_NAME[n.awaiting]}`} />}
             </div>
             <p style={{ margin: '8px 0', fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{n.body}</p>
-            <div style={{ fontSize: 12.5, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               {n.event_date && <span>Event: {fmtDate(n.event_date)}</span>}
               {n.response_due && <span style={{ color: n.response_overdue ? '#b91c1c' : 'inherit' }}>Reply by: {fmtDate(n.response_due)}</span>}
               {n.acknowledged_at && <span>Acknowledged {fmtDateTime(n.acknowledged_at)} by {n.acknowledged_by_name}</span>}
@@ -580,7 +580,7 @@ function History({ contract, ws }) {
       {ws.amendments.map((a) => (
         <div key={a.id} className="cw-card">
           <strong>Amendment — version {a.version}</strong>
-          <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--slate-500)' }}>{fmtDateTime(a.created_at)}</span>
+          <span style={{ marginLeft: 8, fontSize: 13.5, color: 'var(--slate-500)' }}>{fmtDateTime(a.created_at)}</span>
           <div className="table-wrap" style={{ marginTop: 8 }}>
             <table className="data-table" style={{ margin: 0 }}>
               <thead><tr><th scope="col">What changed</th><th scope="col">From</th><th scope="col">To</th></tr></thead>

@@ -1,18 +1,20 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../../../api/client.js';
 import { writeRolesFor, pathFor, deskLabel } from '../../../lib/stationVertical.js';
 import { useAuth } from '../../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../../roles.js';
-import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, fmtCurrency } from '../../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, AlertPopup, fmtCurrency } from '../../../components/ui.jsx';
 import { fmtDate } from '../../../datetime.js';
+import ModuleGuide from '../../../components/ModuleGuide.jsx';
 import { useStation, errOf } from './useStation.js';
-
-// Balance confirmation with each beneficiary. The statement is drawn from the
-// ledger for a period, sent, and marked confirmed only when the beneficiary's
-// balance matches ours; otherwise the difference and its explanation are kept.
 
 const TONE = { DRAFT: 'DRAFT', SENT: 'PENDING', CONFIRMED: 'ACTIVE', DISPUTED: 'REJECTED', SIGNED_OFF: 'ACTIVE' };
 const STEP = { SENT: 'Mark as sent', CONFIRMED: 'Beneficiary confirmed', DISPUTED: 'Beneficiary disputes balance', SIGNED_OFF: 'Sign off' };
+
+const TABS = [
+  { key: 'LIST', label: 'Statements' },
+  { key: 'FYI', label: 'FYI — Reference Guide' },
+];
 
 const quarterStart = () => {
   const d = new Date();
@@ -30,12 +32,28 @@ export default function HydroReconciliation({ vertical = 'HYDRO' }) {
   const [selected, setSelected] = useState(null);
   const [move, setMove] = useState(null);
   const [popup, setPopup] = useState(null);
+  const [tab, setTab] = useState('LIST');
+  const [statusFilter, setStatusFilter] = useState('');
 
   const load = useCallback(() => {
     if (!stationId) return;
     api.hydroDesk.reconciliations({ contract_id: stationId }).then(setRows).catch((e) => setPopup({ tone: 'error', title: 'Could not load', message: errOf(e) }));
   }, [stationId]);
   useEffect(load, [load]);
+
+  const filtered = useMemo(() => {
+    if (!statusFilter) return rows;
+    return rows.filter((r) => r.status === statusFilter);
+  }, [rows, statusFilter]);
+
+  const stats = useMemo(() => {
+    const total = rows.length;
+    const confirmed = rows.filter((r) => r.status === 'CONFIRMED' || r.status === 'SIGNED_OFF').length;
+    const disputed = rows.filter((r) => r.status === 'DISPUTED').length;
+    const pending = rows.filter((r) => r.status === 'DRAFT' || r.status === 'SENT').length;
+    const totalDiff = rows.reduce((s, r) => s + Math.abs(r.difference || 0), 0);
+    return { total, confirmed, disputed, pending, totalDiff };
+  }, [rows]);
 
   async function create(e) {
     e.preventDefault();
@@ -70,28 +88,69 @@ export default function HydroReconciliation({ vertical = 'HYDRO' }) {
         subtitle="Statements of account drawn from the ledger, sent to each beneficiary, and confirmed or reconciled"
         actions={canWrite && <button className="btn btn-primary" disabled={!stationId} onClick={() => setForm({ beneficiary_name: beneficiaries[0] || '', period_from: quarterStart(), period_to: new Date().toISOString().slice(0, 10) })}>+ New Statement</button>}
       />
-      <div className="filters-bar">
-        <select value={stationId} onChange={(e) => setStationId(e.target.value)}>
-          {stations.map((s) => <option key={s.id} value={s.id}>{s.station_name || s.contract_no}</option>)}
-        </select>
-      </div>
-      <Card>
-        <Table
-          onRowClick={setSelected}
-          columns={[
-            { key: 'statement_no', header: 'Statement', render: (r) => <strong>{r.statement_no}</strong> },
-            { key: 'beneficiary_name', header: 'Beneficiary' },
-            { key: 'period', header: 'Period', render: (r) => `${fmtDate(r.period_from)} – ${fmtDate(r.period_to)}` },
-            { key: 'closing_balance', header: 'Our closing balance', render: (r) => fmtCurrency(r.closing_balance) },
-            { key: 'beneficiary_balance', header: 'Their balance', render: (r) => (r.beneficiary_balance != null ? fmtCurrency(r.beneficiary_balance) : '—') },
-            { key: 'difference', header: 'Difference', render: (r) => (r.difference ? <span style={{ color: '#b91c1c' }}>{fmtCurrency(r.difference)}</span> : '—') },
-            { key: 'status', header: 'Status', render: (r) => <Badge status={TONE[r.status]} label={r.status.replace('_', ' ')} /> },
-          ]}
-          rows={rows}
-          emptyMessage="No statement drawn up for this station yet."
-        />
-      </Card>
 
+      <div className="nb-tabs" role="tablist">
+        {TABS.map((t) => (
+          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={`nb-tab ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'FYI' && (
+        <ModuleGuide sections={[
+          { title: 'Balance confirmation process', body: 'A statement of account is drawn from the beneficiary ledger for a period. It lists every bill, payment, note, TDS and surcharge in the period with opening and closing balances. The statement is sent to the beneficiary, who either confirms the balance or disputes it with their own closing figure.' },
+          { title: 'Status lifecycle', body: 'DRAFT → SENT → CONFIRMED (if balance matches) or DISPUTED (if not) → SIGNED OFF. A disputed statement records the beneficiary\'s closing balance and their explanation of the difference. Once resolved, it is signed off.' },
+          { title: 'PDF statement', body: 'Each statement can be downloaded as a PDF for sharing with the beneficiary. The PDF shows the opening balance, all movements (debits and credits), and the closing balance.' },
+          { title: 'Reconciliation tips', body: 'Common causes of difference: timing (a payment in transit), TDS not yet acknowledged, surcharge not recognized, or a disputed bill. The reconciliation tracks the difference amount and the beneficiary\'s explanation to help resolve it.' },
+        ]} />
+      )}
+
+      {tab === 'LIST' && (
+        <>
+          <div className="filters-bar">
+            <select value={stationId} onChange={(e) => setStationId(e.target.value)}>
+              {stations.map((s) => <option key={s.id} value={s.id}>{s.station_name || s.contract_no}</option>)}
+            </select>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">All statuses</option>
+              <option value="DRAFT">Draft</option>
+              <option value="SENT">Sent</option>
+              <option value="CONFIRMED">Confirmed</option>
+              <option value="DISPUTED">Disputed</option>
+              <option value="SIGNED_OFF">Signed off</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 14, marginBottom: 16 }}>
+            <StatCard label="Total statements" value={stats.total} />
+            <StatCard label="Confirmed / Signed off" value={stats.confirmed} tone={stats.confirmed ? 'default' : 'amber'} />
+            <StatCard label="Disputed" value={stats.disputed} tone={stats.disputed ? 'danger' : 'default'} />
+            <StatCard label="Pending (Draft / Sent)" value={stats.pending} tone={stats.pending ? 'amber' : 'default'} />
+            {stats.totalDiff > 0 && <StatCard label="Total variance" value={fmtCurrency(stats.totalDiff)} tone="danger" />}
+          </div>
+
+          <Card>
+            <Table
+              onRowClick={setSelected}
+              columns={[
+                { key: 'statement_no', header: 'Statement', render: (r) => <strong>{r.statement_no}</strong> },
+                { key: 'beneficiary_name', header: 'Beneficiary' },
+                { key: 'period', header: 'Period', render: (r) => `${fmtDate(r.period_from)} – ${fmtDate(r.period_to)}` },
+                { key: 'closing_balance', header: 'Our closing balance', render: (r) => fmtCurrency(r.closing_balance) },
+                { key: 'beneficiary_balance', header: 'Their balance', render: (r) => (r.beneficiary_balance != null ? fmtCurrency(r.beneficiary_balance) : '—') },
+                { key: 'difference', header: 'Difference', render: (r) => (r.difference ? <span style={{ color: '#b91c1c' }}>{fmtCurrency(r.difference)}</span> : '—') },
+                { key: 'status', header: 'Status', render: (r) => <Badge status={TONE[r.status]} label={r.status.replace('_', ' ')} /> },
+                { key: 'sent_on', header: 'Sent', render: (r) => r.sent_on ? fmtDate(r.sent_on) : '—' },
+              ]}
+              rows={filtered}
+              emptyMessage="No statement drawn up for this station yet."
+            />
+          </Card>
+        </>
+      )}
+
+      {/* ── Create statement ── */}
       <Modal open={!!form} onClose={() => setForm(null)} title="Draw up a statement of account" width={600}>
         {form && (
           <form onSubmit={create}>
@@ -112,6 +171,7 @@ export default function HydroReconciliation({ vertical = 'HYDRO' }) {
         )}
       </Modal>
 
+      {/* ── Statement detail ── */}
       <Modal open={!!selected} onClose={() => setSelected(null)} title={selected ? `${selected.statement_no} — ${selected.beneficiary_name}` : ''} width={900}>
         {selected && (
           <div>
@@ -120,15 +180,18 @@ export default function HydroReconciliation({ vertical = 'HYDRO' }) {
               <tr><td>Add: bills · debit notes · surcharge</td><td>{fmtCurrency(m.billed)} · {fmtCurrency(m.debit_notes)} · {fmtCurrency(m.surcharge)}</td></tr>
               <tr><td>Less: received · rebate · credit notes · TDS</td><td>{fmtCurrency(m.received)} · {fmtCurrency(m.rebate)} · {fmtCurrency(m.credit_notes)} · {fmtCurrency(m.tds)}</td></tr>
               <tr><td><strong>Closing balance ({fmtDate(selected.period_to)})</strong></td><td><strong>{fmtCurrency(selected.closing_balance)}</strong></td></tr>
-              <tr><td>Status</td><td><Badge status={TONE[selected.status]} label={selected.status.replace('_', ' ')} />{selected.sent_on ? ` · sent ${fmtDate(selected.sent_on)}` : ''}</td></tr>
+              {selected.beneficiary_balance != null && <tr><td>Beneficiary's closing balance</td><td>{fmtCurrency(selected.beneficiary_balance)}</td></tr>}
+              {selected.difference != null && selected.difference !== 0 && <tr><td style={{ color: '#b91c1c' }}>Difference</td><td style={{ color: '#b91c1c', fontWeight: 700 }}>{fmtCurrency(selected.difference)}</td></tr>}
+              <tr><td>Status</td><td><Badge status={TONE[selected.status]} label={selected.status.replace('_', ' ')} />{selected.sent_on ? ` · sent ${fmtDate(selected.sent_on)}` : ''}{selected.confirmed_on ? ` · confirmed ${fmtDate(selected.confirmed_on)}` : ''}</td></tr>
               {selected.beneficiary_remarks && <tr><td>Beneficiary says</td><td>{selected.beneficiary_remarks}</td></tr>}
             </tbody></table>
+
             <h4 style={{ margin: '16px 0 8px' }}>Movements</h4>
             <Table
               columns={[
                 { key: 'doc_date', header: 'Date', render: (l) => fmtDate(l.doc_date) },
                 { key: 'doc_no', header: 'Document' },
-                { key: 'info', header: 'Particulars', render: (l) => <span style={{ fontSize: 12 }}>{l.info || l.kind}</span> },
+                { key: 'info', header: 'Particulars', render: (l) => <span style={{ fontSize: 13.5 }}>{l.info || l.kind}</span> },
                 { key: 'debit', header: 'Debit', render: (l) => (l.debit ? fmtCurrency(l.debit) : '') },
                 { key: 'credit', header: 'Credit', render: (l) => (l.credit ? fmtCurrency(l.credit) : '') },
                 { key: 'balance', header: 'Balance', render: (l) => fmtCurrency(l.balance) },
@@ -136,6 +199,22 @@ export default function HydroReconciliation({ vertical = 'HYDRO' }) {
               rows={(selected.summary?.lines || []).map((l) => ({ ...l, id: l.doc_no }))}
               emptyMessage="No movement in the period."
             />
+
+            {selected.events?.length > 0 && (
+              <>
+                <h4 style={{ margin: '16px 0 8px' }}>Audit trail</h4>
+                <Table
+                  columns={[
+                    { key: 'created_at', header: 'When', render: (e) => fmtDate(e.created_at) },
+                    { key: 'action', header: 'Action', render: (e) => e.action || e.to_status?.replace('_', ' ') || '—' },
+                    { key: 'actor', header: 'By', render: (e) => e.actor_name || e.actor || '—' },
+                    { key: 'remarks', header: 'Remarks' },
+                  ]}
+                  rows={selected.events}
+                />
+              </>
+            )}
+
             <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
               <button type="button" className="btn btn-outline" onClick={() => api.hydroDesk.reconciliationPdf(selected.id, selected.statement_no).catch((e) => setPopup({ tone: 'error', title: 'PDF failed', message: errOf(e) }))}>Download statement (PDF)</button>
               {canWrite && selected.allowed_next.map((to) => (
@@ -151,6 +230,7 @@ export default function HydroReconciliation({ vertical = 'HYDRO' }) {
         )}
       </Modal>
 
+      {/* ── Move reconciliation ── */}
       <Modal open={!!move} onClose={() => setMove(null)} title={move ? STEP[move.to] : ''} width={520}>
         {move && (
           <form onSubmit={doMove}>

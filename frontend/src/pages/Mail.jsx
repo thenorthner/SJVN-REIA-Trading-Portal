@@ -124,7 +124,7 @@ function printThread(thread, printedBy) {
     <header><small>SJVN — RE Commercial &amp; Trading Platform · Quick Connect (Informal Operational Facility)</small><h1>${esc(subject)}</h1></header>
     ${messages}
     <footer>
-      <div style="margin: 12px 0 6px; padding: 8px 12px; border: 1px dashed #777; font-size: 8.5pt; color: #444; background: #fafafa; border-radius: 4px;">
+      <div style="margin: 12px 0 6px; padding: 8px 12px; border: 1px dashed #777; font-size: 10.5pt; color: #444; background: #fafafa; border-radius: 4px;">
         <strong>Legal &amp; Contractual Notice:</strong> Quick Connect is an in-portal operational coordination facility and does NOT constitute an official, statutory, or legal mode of communication under PPA/PSA agreements or CERC regulations. Formal contractual notices must be served through designated official channels.
       </div>
       Printed by ${esc(printedBy)} on ${esc(new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }))} · ${thread.messages.length} message${thread.messages.length === 1 ? '' : 's'}
@@ -380,7 +380,7 @@ function Compose({ draft, onClose, onSent, onOpenDisclaimer }) {
           background: 'rgba(241, 245, 249, 0.7)',
           border: '1px solid #e2e8f0',
           borderRadius: '6px',
-          fontSize: '11.5px',
+          fontSize: '13px',
           color: '#64748b',
           marginBottom: '12px'
         }}>
@@ -389,7 +389,7 @@ function Compose({ draft, onClose, onSent, onOpenDisclaimer }) {
             <button
               type="button"
               className="btn-link"
-              style={{ fontSize: '11.5px', padding: 0, textDecoration: 'underline', color: '#2563eb' }}
+              style={{ fontSize: '13px', padding: 0, textDecoration: 'underline', color: '#2563eb' }}
               onClick={onOpenDisclaimer}
             >
               Disclaimer
@@ -506,7 +506,7 @@ function SignatureSettings({ value, onClose, onSaved }) {
           />
         </Field>
         <div className="mail-draft-note">Added under every new message, reply and forward. Leave it empty for none.</div>
-        <div className="mail-draft-note" style={{ marginTop: 6, fontSize: '11px', color: '#64748b' }}>
+        <div className="mail-draft-note" style={{ marginTop: 6, fontSize: '13px', color: '#64748b' }}>
           Note: Quick Connect is an informal operational facility for day-to-day desk queries, not an official legal communication channel.
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
@@ -860,7 +860,7 @@ export default function Mail() {
               alignItems: 'center',
               gap: 6,
               padding: '6px 12px',
-              fontSize: '12.5px',
+              fontSize: '13.5px',
               fontWeight: 500,
               borderRadius: '6px',
               color: '#475569',
@@ -1122,14 +1122,14 @@ export default function Mail() {
               <div style={{
                 margin: '12px 0 8px',
                 textAlign: 'center',
-                fontSize: '11px',
+                fontSize: '13px',
                 color: '#94a3b8'
               }}>
                 Quick Connect is an informal operational facility ·{' '}
                 <button
                   type="button"
                   className="btn-link"
-                  style={{ fontSize: '11px', padding: 0, textDecoration: 'underline', color: '#64748b' }}
+                  style={{ fontSize: '13px', padding: 0, textDecoration: 'underline', color: '#64748b' }}
                   onClick={() => setDisclaimerOpen(true)}
                 >
                   Disclaimer

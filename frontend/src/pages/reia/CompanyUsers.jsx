@@ -233,7 +233,7 @@ export default function CompanyUsers() {
                   {selectedCompany.name}
                 </span>
                 <span style={{
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: 600,
                   padding: '2px 8px',
                   borderRadius: 999,
@@ -244,8 +244,8 @@ export default function CompanyUsers() {
                   {selectedCompany.entity_type === 'SELLER' ? 'Seller' : 'Buyer'}
                 </span>
               </div>
-              <div style={{ fontSize: 12.5, color: 'var(--slate-500)', marginTop: 2, display: 'flex', gap: 12 }}>
-                <span>👥 {selectedCompany.active_users} active user{selectedCompany.active_users === 1 ? '' : 's'}</span>
+              <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2, display: 'flex', gap: 12 }}>
+                <span>{selectedCompany.active_users} active user{selectedCompany.active_users === 1 ? '' : 's'}</span>
                 <span>•</span>
                 <span>ID: {selectedCompany.id}</span>
               </div>
@@ -283,7 +283,7 @@ export default function CompanyUsers() {
         <div ref={containerRef} style={{ position: 'relative', marginBottom: 24 }}>
           {/* Quick Filter Chips */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--slate-500)' }}>Filter:</span>
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-500)' }}>Filter:</span>
             {[
               { key: 'ALL', label: `All (${(companies || []).length})` },
               { key: 'SELLER', label: `Sellers (${sellersCount})` },
@@ -294,7 +294,7 @@ export default function CompanyUsers() {
                 type="button"
                 className={`nb-chip ${filterType === f.key ? 'active' : ''}`}
                 onClick={() => setFilterType(f.key)}
-                style={{ padding: '3px 10px', fontSize: 12 }}
+                style={{ padding: '3px 10px', fontSize: 13.5 }}
               >
                 {f.label}
               </button>
@@ -304,7 +304,7 @@ export default function CompanyUsers() {
                 type="button"
                 className="btn btn-ghost btn-sm"
                 onClick={() => setIsSwitching(false)}
-                style={{ marginLeft: 'auto', fontSize: 12 }}
+                style={{ marginLeft: 'auto', fontSize: 13.5 }}
               >
                 Cancel switch
               </button>
@@ -386,7 +386,7 @@ export default function CompanyUsers() {
             }}>
               <div style={{
                 padding: '8px 14px',
-                fontSize: 11.5,
+                fontSize: 13,
                 fontWeight: 600,
                 color: 'var(--slate-400)',
                 background: 'var(--slate-50, #f8fafc)',
@@ -468,7 +468,7 @@ export default function CompanyUsers() {
                             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-900)' }}>
                               {c.name}
                             </div>
-                            <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>
+                            <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
                               {c.id}
                             </div>
                           </div>
@@ -477,7 +477,7 @@ export default function CompanyUsers() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           {recentIds.includes(c.id) && (
                             <span style={{
-                              fontSize: 10.5,
+                              fontSize: 12.5,
                               fontWeight: 600,
                               padding: '1px 6px',
                               borderRadius: 4,
@@ -492,7 +492,7 @@ export default function CompanyUsers() {
                             </span>
                           )}
                           <span style={{
-                            fontSize: 11,
+                            fontSize: 13,
                             fontWeight: 600,
                             padding: '2px 8px',
                             borderRadius: 999,
@@ -501,7 +501,7 @@ export default function CompanyUsers() {
                           }}>
                             {c.entity_type === 'SELLER' ? 'Seller' : 'Buyer'}
                           </span>
-                          <span style={{ fontSize: 12, color: 'var(--slate-500)', fontWeight: 500 }}>
+                          <span style={{ fontSize: 13.5, color: 'var(--slate-500)', fontWeight: 500 }}>
                             {c.active_users} active
                           </span>
                           {isSelected && <Check size={16} color="#059669" />}
@@ -537,7 +537,7 @@ export default function CompanyUsers() {
                   </h3>
                   {recentCompanies.length > 0 && (
                     <span style={{
-                      fontSize: 11,
+                      fontSize: 13,
                       fontWeight: 600,
                       padding: '2px 8px',
                       borderRadius: 999,
@@ -565,7 +565,7 @@ export default function CompanyUsers() {
                   className="btn btn-outline btn-xs"
                   onClick={handleClearRecent}
                   style={{
-                    fontSize: 11.5,
+                    fontSize: 13,
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 5,
@@ -661,7 +661,7 @@ export default function CompanyUsers() {
                           {c.name}
                         </div>
                         <div style={{
-                          fontSize: 11.5,
+                          fontSize: 13,
                           color: 'var(--slate-500)',
                           display: 'flex',
                           alignItems: 'center',
@@ -674,7 +674,7 @@ export default function CompanyUsers() {
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 3,
-                              fontSize: 10.5,
+                              fontSize: 12.5,
                               color: '#1d4ed8',
                               fontWeight: 600,
                               background: '#eff6ff',

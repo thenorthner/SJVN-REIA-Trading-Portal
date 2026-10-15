@@ -166,6 +166,7 @@ const NAV_INTERNAL = [
       { to: '/hydro-thermal', label: 'Hydro Dashboard', end: true },
       // The beneficiaries a station bills. Onboarded here, not borrowed from REIA.
       { to: '/hydro-thermal/stakeholders', label: 'Stakeholders (Beneficiaries)' },
+      { to: '/hydro-thermal/document-desk', label: 'Documents & KYC Desk' },
       { to: '/hydro-thermal/hydro-billing', label: 'Monthly Bills & Approval' },
       // Months already billed: a revised tariff's arrear, or a one-off item.
       { to: '/hydro-thermal/arrear-supplementary', label: 'Arrear & Supplementary Bills' },
@@ -182,6 +183,7 @@ const NAV_INTERNAL = [
       // Sale bills the station raises on PTC India, the trader it sells through —
       // station revenue on the station's ledger, not SJVN's own trading desk.
       { to: '/hydro-thermal/hydro-ptc', label: 'PTC Sale Bills' },
+      { to: '/hydro-thermal/hydro-finance', label: 'Finance Posting (FI)' },
     ],
   },
   {
@@ -194,6 +196,7 @@ const NAV_INTERNAL = [
     links: [
       { to: '/thermal', label: 'Thermal Dashboard', end: true },
       { to: '/thermal/stakeholders', label: 'Stakeholders (Beneficiaries)' },
+      { to: '/thermal/document-desk', label: 'Documents & KYC Desk' },
       { to: '/thermal/stations', label: 'Stations & Tariff' },
       { to: '/thermal/billing', label: 'Monthly Bills & Approval' },
       { to: '/thermal/arrear-supplementary', label: 'Arrear & Supplementary Bills' },
@@ -259,8 +262,7 @@ const NAV_BUYER = [
       { to: '/buyer/team', label: 'My Team' },
       { to: '/buyer/contracts', label: 'My PSAs', requiresKyc: true },
       { to: '/buyer/energy-data', label: 'Energy Allocation', requiresKyc: true },
-      { to: '/buyer/invoices', label: 'Payable Invoices', requiresKyc: true },
-      { to: '/buyer/payments', label: 'Payment Ledger', requiresKyc: true },
+      { to: '/buyer/invoices', label: 'Billing & Payments', requiresKyc: true },
       { to: '/buyer/disputes', label: 'My Disputes', requiresKyc: true },
       { to: '/buyer/payment-security', label: 'Payment Security', requiresKyc: true },
       { to: '/buyer/reconciliation', label: 'Reconciliation', requiresKyc: true },
@@ -289,9 +291,14 @@ const NAV_TRADING_CLIENT = [
 ];
 
 /** Does this link own the current URL? */
-const linkIsActive = (l, pathname) => (l.end
-  ? pathname === l.to
-  : pathname === l.to || (l.to !== '/' && pathname.startsWith(l.to)));
+const linkIsActive = (l, pathname) => {
+  if (l.to === '/buyer/invoices') {
+    return pathname === '/buyer/invoices' || pathname === '/buyer/payments';
+  }
+  return (l.end
+    ? pathname === l.to
+    : pathname === l.to || (l.to !== '/' && pathname.startsWith(l.to)));
+};
 
 /**
  * A named run of links inside a section — ISET's second level, so "Exchange" can
@@ -329,7 +336,7 @@ const NavSubGroup = ({ group, user }) => {
               {/* A screen that is only planned says so in the menu, so nobody
                   opens it expecting data and files a bug when there is none. */}
               {l.pending && (
-                <span style={{ marginLeft: 6, fontSize: 10.5, opacity: 0.5, fontStyle: 'italic' }}>soon</span>
+                <span style={{ marginLeft: 6, fontSize: 12.5, opacity: 0.5, fontStyle: 'italic' }}>soon</span>
               )}
             </NavLink>
           ))}
@@ -605,7 +612,29 @@ export default function Layout() {
                   <div className="notif-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <span style={{ fontWeight: 600 }}>System Alerts</span>
                     <div style={{ display: 'flex', gap: 10 }}>
-                      <button className="link-btn" onClick={() => api.notifications.markAllRead().then(() => api.notifications.list(user?.role).then(setNotifications))}>Mark all read</button>
+                      <button
+                        type="button"
+                        className="link-btn"
+                        style={{ cursor: unread > 0 ? 'pointer' : 'default', opacity: unread > 0 ? 1 : 0.6 }}
+                        disabled={unread === 0}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          setNotifications((prev) => prev.map((item) => ({ ...item, is_read: 1 })));
+                          try {
+                            await api.notifications.markAllRead(notifications);
+                          } catch (err) {
+                            console.error('Failed to mark all read on server:', err);
+                          }
+                          try {
+                            const fresh = await api.notifications.list(user?.role);
+                            setNotifications(fresh || []);
+                          } catch (err) {
+                            console.error('Failed to reload notifications:', err);
+                          }
+                        }}
+                      >
+                        Mark all read
+                      </button>
                     </div>
                   </div>
                   {notifications.length === 0 && <div className="notif-empty">No unread alerts. All clear.</div>}
@@ -640,25 +669,39 @@ export default function Layout() {
                             style={{
                               color: isAlert ? '#ef4444' : 'var(--primary, #003366)',
                               fontWeight: 700,
-                              fontSize: 11,
+                              fontSize: 13,
                               letterSpacing: '.02em',
                             }}
                           >
                             {n.type?.replace(/_/g, ' ')}
                           </span>
                           {n.created_at && (
-                            <span style={{ fontSize: 10.5, color: 'var(--slate-400)', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: 12.5, color: 'var(--slate-400)', whiteSpace: 'nowrap' }}>
                               {formatTimeAgo(n.created_at)}
                             </span>
                           )}
                         </div>
-                        <div style={{ color: 'var(--slate-700)', fontSize: 12.5, lineHeight: 1.45, marginBottom: 5 }}>
+                        <div style={{ color: 'var(--slate-700)', fontSize: 13.5, lineHeight: 1.45, marginBottom: 5 }}>
                           {n.message}
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          {!n.is_read ? (
+                            <button
+                              type="button"
+                              className="link-btn"
+                              style={{ fontSize: 12, color: 'var(--slate-500)', padding: 0 }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                api.notifications.markRead(n.id).catch(() => {});
+                                setNotifications((prev) => prev.map((item) => (item.id === n.id ? { ...item, is_read: 1 } : item)));
+                              }}
+                            >
+                              Mark as read
+                            </button>
+                          ) : <span />}
                           <span
                             style={{
-                              fontSize: 11,
+                              fontSize: 13,
                               fontWeight: 600,
                               color: '#2563eb',
                               display: 'inline-flex',
@@ -679,7 +722,7 @@ export default function Layout() {
                     <button
                       type="button"
                       className="link-btn"
-                      style={{ fontSize: 11.5, color: 'var(--slate-600)', fontWeight: 600 }}
+                      style={{ fontSize: 13, color: 'var(--slate-600)', fontWeight: 600 }}
                       onClick={() => { setShowNotif(false); navigate('/notification-board'); }}
                     >
                       Open Notification Board →

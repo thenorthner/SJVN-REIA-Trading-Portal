@@ -80,7 +80,7 @@ export default function GeneratorBilling() {
     { key: 'ecr', label: 'ECR (₹/kWh)', render: r => (
         <div>
           {Number(r.ecr).toFixed(4)}
-          <div style={{ fontSize: 10, color: 'var(--slate-500)' }}>
+          <div style={{ fontSize: 12.5, color: 'var(--slate-500)' }}>
             {r.ecr_source === 'DERIVED_FROM_AFC' ? 'from AFC' : 'entered'}
           </div>
         </div>
@@ -91,7 +91,7 @@ export default function GeneratorBilling() {
     { key: 'status', label: 'Status', render: r => <Badge type={r.status === 'PAID' ? 'success' : 'warning'}>{r.status}</Badge> },
     { key: 'actions', label: '', render: r => (
         canWrite && NEXT_STATUS[r.status]
-          ? <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => handleAdvance(r)}>
+          ? <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: 13.5 }} onClick={() => handleAdvance(r)}>
               Mark {NEXT_STATUS[r.status]}
             </button>
           : null
@@ -158,7 +158,7 @@ export default function GeneratorBilling() {
               {derivedEcr != null ? (
                 <div>
                   <input type="number" className="input" value={derivedEcr.toFixed(4)} readOnly disabled />
-                  <div style={{ fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
+                  <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
                     {(AFC_ENERGY_SHARE * 100).toFixed(0)}% of AFC ÷ design energy. Clear design energy to type a rate instead.
                   </div>
                 </div>

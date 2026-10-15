@@ -292,7 +292,7 @@ export default function IexIntegration() {
         )}
 
         {report?.bid_areas_queried && (
-          <p style={{ fontSize: 12, color: 'var(--text-muted, #64748b)', marginBottom: 4 }}>
+          <p style={{ fontSize: 13.5, color: 'var(--text-muted, #64748b)', marginBottom: 4 }}>
             Bid areas asked: {report.bid_areas_queried.join(', ')}{' '}
             {report.bid_area_source === 'PORTFOLIO_MAPPING'
               ? '— ours, from the first two characters of our portfolio ids.'
@@ -303,7 +303,7 @@ export default function IexIntegration() {
         )}
 
         {report?.scaling && (
-          <p style={{ fontSize: 12, color: 'var(--text-muted, #64748b)' }}>
+          <p style={{ fontSize: 13.5, color: 'var(--text-muted, #64748b)' }}>
             Quantities divided by {report.scaling.qty_factor}, prices by {report.scaling.price_factor}{' '}
             ({report.scaling.source === 'ASSET_MASTER' ? 'from the Asset Master' : 'default — not read from the exchange'}).
             {report.delivery_date_source && <> Delivery date {report.delivery_date_source === 'EXCHANGE' ? 'taken from the exchange' : 'computed locally as UTC midnight'}.</>}

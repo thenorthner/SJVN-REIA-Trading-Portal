@@ -56,7 +56,7 @@ function SlaChip({ sla }) {
   return (
     <span
       title={`${sla.oa_type} target ${sla.target_days} days, measured submission → approval`}
-      style={{ background: style.bg, color: style.tone, padding: '2px 8px', borderRadius: 10, fontSize: 12, whiteSpace: 'nowrap' }}
+      style={{ background: style.bg, color: style.tone, padding: '2px 8px', borderRadius: 10, fontSize: 13.5, whiteSpace: 'nowrap' }}
     >
       {style.label} · {detail}
     </span>
@@ -474,7 +474,7 @@ export default function Bilateral() {
         <span>
           {sale != null ? Number(sale).toFixed(3) : '—'}
           {margin != null && (
-            <span style={{ fontSize: 11, color: 'var(--slate-500)', marginLeft: 6 }}>
+            <span style={{ fontSize: 13, color: 'var(--slate-500)', marginLeft: 6 }}>
               (buy {r.purchase_rate_per_unit != null ? Number(r.purchase_rate_per_unit).toFixed(3) : '—'} + {Number(margin).toFixed(3)})
             </span>
           )}
@@ -511,9 +511,9 @@ export default function Bilateral() {
         <Card>
           <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'flex-start' }}>
             <div>
-              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>Pending approvals</div>
+              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>Pending approvals</div>
               <div style={{ fontSize: 22, fontWeight: 600 }}>{sla.pending_total}</div>
-              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>
+              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
                 {sla.counts.ON_TRACK} on track · <span style={{ color: '#92400e' }}>{sla.counts.AT_RISK} at risk</span> ·{' '}
                 <span style={{ color: '#991b1b' }}>{sla.counts.BREACHED} overdue</span>
                 {sla.counts.REJECTED > 0 && (
@@ -522,20 +522,20 @@ export default function Bilateral() {
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>On-time rate</div>
+              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>On-time rate</div>
               <div style={{ fontSize: 22, fontWeight: 600 }}>
                 {sla.on_time_rate_pct === null ? '—' : `${sla.on_time_rate_pct}%`}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>
+              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
                 {sla.counts.MET + sla.counts.MISSED} decided ({sla.counts.MISSED} missed)
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>Avg approval time</div>
+              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>Avg approval time</div>
               <div style={{ fontSize: 22, fontWeight: 600 }}>
                 {sla.avg_approval_days === null ? '—' : `${sla.avg_approval_days}d`}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>
+              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
                 Targets: {Object.entries(sla.targets).map(([k, v]) => `${k} ${v}d`).join(' · ')}
               </div>
             </div>
@@ -551,9 +551,9 @@ export default function Bilateral() {
             </div>
             {sla.needs_attention.length > 0 && (
               <div style={{ flex: 1, minWidth: 260 }}>
-                <div style={{ fontSize: 12, color: 'var(--slate-500)', marginBottom: 4 }}>Needs attention</div>
+                <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginBottom: 4 }}>Needs attention</div>
                 {sla.needs_attention.slice(0, 4).map((a) => (
-                  <div key={a.id} style={{ fontSize: 12, marginBottom: 2 }}>
+                  <div key={a.id} style={{ fontSize: 13.5, marginBottom: 2 }}>
                     <span style={{ color: a.state === 'BREACHED' ? '#991b1b' : '#92400e' }}>●</span>{' '}
                     {a.counterparty} — {a.elapsed_days}d of {a.target_days}d ({a.noar_contract_no || a.id})
                   </div>
@@ -623,7 +623,7 @@ export default function Bilateral() {
                       : ` ${bulkPreview.applied} moved · ${bulkPreview.skipped} skipped`}
                   </div>
                   {bulkPreview.results.map((r) => (
-                    <div key={r.id} style={{ fontSize: 12, color: r.ok ? '#166534' : '#92400e' }}>
+                    <div key={r.id} style={{ fontSize: 13.5, color: r.ok ? '#166534' : '#92400e' }}>
                       {r.ok ? '' : '•'} {r.id} ({r.counterparty}) — {r.ok ? `${r.from} → ${r.to}` : r.reason}
                     </div>
                   ))}
@@ -708,7 +708,7 @@ export default function Bilateral() {
                       <th style={{ padding: '10px 12px', borderRight: '1px solid #e2e8f0', color: 'var(--slate-700)' }}>Variation</th>
                       <th style={{ padding: '10px 12px', width: 70, textAlign: 'center', color: 'var(--slate-700)' }}>Action</th>
                     </tr>
-                    <tr style={{ background: '#f1f5f9', color: 'var(--slate-600)', fontSize: 12 }}>
+                    <tr style={{ background: '#f1f5f9', color: 'var(--slate-600)', fontSize: 13.5 }}>
                       <th style={{ padding: '6px 12px', borderRight: '1px solid #e2e8f0', borderTop: '1px solid #e2e8f0', fontWeight: 500 }}>From *</th>
                       <th style={{ padding: '6px 12px', borderRight: '1px solid #e2e8f0', borderTop: '1px solid #e2e8f0', fontWeight: 500 }}>To *</th>
                       <th style={{ padding: '6px 12px', borderRight: '1px solid #e2e8f0', borderTop: '1px solid #e2e8f0', fontWeight: 500 }}>From *</th>
@@ -858,7 +858,7 @@ export default function Bilateral() {
             <div style={{ flex: 1 }}>
               <p>
                 <strong>Total Losses:</strong> {totalLosses(selectedTx).toFixed(2)}%
-                <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>
+                <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>
                   {' '}(inj {Number(selectedTx.loss_injection_state) || 0} · ISTS {Number(selectedTx.loss_inter_state) || 0} · drawee {Number(selectedTx.loss_drawee_state) || 0})
                 </span>
               </p>
@@ -875,22 +875,22 @@ export default function Bilateral() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: 'var(--slate-50)', borderRadius: 8, border: '1px solid var(--slate-200)' }}>
             <strong style={{ fontSize: 13 }}>NOAR Portal:</strong>
             <Badge status={selectedTx.noar_status === 'APPROVED' ? 'ACTIVE' : selectedTx.noar_status === 'NOT_INITIATED' ? 'DRAFT' : 'PENDING'} label={(selectedTx.noar_status || 'NOT_INITIATED').replace(/_/g, ' ')} />
-            {selectedTx.noar_contract_no && <span style={{ fontSize: 12, color: 'var(--slate-600)' }}>Contract: <strong>{selectedTx.noar_contract_no}</strong></span>}
+            {selectedTx.noar_contract_no && <span style={{ fontSize: 13.5, color: 'var(--slate-600)' }}>Contract: <strong>{selectedTx.noar_contract_no}</strong></span>}
             {selectedTx.noar_sla?.state && selectedTx.noar_sla.state !== 'NOT_APPLICABLE' && (
               <SlaChip sla={selectedTx.noar_sla} />
             )}
             {selectedTx.noar_timeline?.hours_in_current_status != null && (
-              <span style={{ fontSize: 12, color: 'var(--slate-600)' }}>
+              <span style={{ fontSize: 13.5, color: 'var(--slate-600)' }}>
                 In this status: <strong>{fmtDuration(selectedTx.noar_timeline.hours_in_current_status)}</strong>
               </span>
             )}
             {selectedTx.noar_timeline?.approval_turnaround_hours != null && (
-              <span style={{ fontSize: 12, color: '#166534' }}>
+              <span style={{ fontSize: 13.5, color: '#166534' }}>
                 Approval took <strong>{fmtDuration(selectedTx.noar_timeline.approval_turnaround_hours)}</strong>
               </span>
             )}
             {selectedTx.noar_resubmit_count > 0 && (
-              <span style={{ fontSize: 12, color: '#9a3412' }}>
+              <span style={{ fontSize: 13.5, color: '#9a3412' }}>
                 Resubmitted {selectedTx.noar_resubmit_count}×
               </span>
             )}
@@ -915,7 +915,7 @@ export default function Bilateral() {
             <div style={{ marginBottom: 16, padding: '10px 14px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8 }}>
               <strong style={{ fontSize: 13, color: '#9a3412' }}>Rejected by NLDC</strong>
               {selectedTx.noar_rejection_category && (
-                <span style={{ fontSize: 12, color: '#9a3412' }}>
+                <span style={{ fontSize: 13.5, color: '#9a3412' }}>
                   {' '}· {rejectReasons.find((r) => r.code === selectedTx.noar_rejection_category)?.label || selectedTx.noar_rejection_category}
                 </span>
               )}
@@ -980,11 +980,11 @@ export default function Bilateral() {
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>
+                      <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
                         {fmtStamp(e.changed_at)}{e.changed_by_name ? ` · ${e.changed_by_name}` : ''}
                         {e.noar_contract_no ? ` · ${e.noar_contract_no}` : ''}
                       </div>
-                      {e.note && <div style={{ fontSize: 12, color: 'var(--slate-600)', marginTop: 2 }}>{e.note}</div>}
+                      {e.note && <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 2 }}>{e.note}</div>}
                     </div>
                   </div>
                 ))}
@@ -1022,14 +1022,14 @@ export default function Bilateral() {
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                 <strong>Multi-Hop Approval: {sched.schedule_date}</strong>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => handleCurtail(sched.id)}>Grid Curtailment</button>
-                  <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 12 }} onClick={() => openActuals(sched)}>Record Actuals (DSM)</button>
+                  <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 13.5 }} onClick={() => handleCurtail(sched.id)}>Grid Curtailment</button>
+                  <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: 13.5 }} onClick={() => openActuals(sched)}>Record Actuals (DSM)</button>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 15 }}>
                 {sched.approvals?.map(app => (
                   <div key={app.id} style={{ flex: 1, padding: 10, background: '#fff', border: '1px solid #ddd', borderRadius: 4 }}>
-                    <div style={{ fontSize: 11, color: '#777', marginBottom: 5 }}>{app.node_type}</div>
+                    <div style={{ fontSize: 13, color: '#777', marginBottom: 5 }}>{app.node_type}</div>
                     <Badge type={app.status === 'APPROVED' ? 'success' : app.status === 'REJECTED' ? 'danger' : 'warning'}>{app.status}</Badge>
                     {app.status === 'PENDING' && (
                       <div style={{ marginTop: 10, display: 'flex', gap: 5 }}>
@@ -1096,9 +1096,9 @@ export default function Bilateral() {
                     ['DSM charges', `₹${fmtNumber(settlement.money.dsm_penalty_amount)}`, `deviation ${fmtNumber(settlement.energy.deviation_mwh)} MWh`],
                   ].map(([label, value, sub]) => (
                     <div key={label} style={{ padding: '10px 12px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8 }}>
-                      <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.3 }}>{label}</div>
+                      <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.3 }}>{label}</div>
                       <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2 }}>{value}</div>
-                      <div style={{ fontSize: 11, color: 'var(--slate-500)' }}>{sub}</div>
+                      <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>{sub}</div>
                     </div>
                   ))}
                 </div>
@@ -1107,7 +1107,7 @@ export default function Bilateral() {
                   <div style={{ marginBottom: 12, padding: '10px 12px', border: '1px solid var(--slate-200)', borderRadius: 8 }}>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
                       <strong style={{ fontSize: 13 }}>Split between buyers</strong>
-                      <label style={{ fontSize: 12 }}>
+                      <label style={{ fontSize: 13.5 }}>
                         Settle and bill for{' '}
                         <select className="input" value={billBuyer} aria-label="Buyer"
                           onChange={(e) => { setBillBuyer(e.target.value); refreshSettlement(selectedTx.id, billPeriod, e.target.value); }}>
@@ -1133,7 +1133,7 @@ export default function Bilateral() {
                 )}
 
                 {settlement.rate_segments?.length > 1 && (
-                  <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--slate-600)' }}>
+                  <div style={{ marginBottom: 12, fontSize: 13.5, color: 'var(--slate-600)' }}>
                     <strong>Rate revised in this period.</strong>{' '}
                     {settlement.rate_segments.map((g) => `${g.from} to ${g.to}: ${fmtNumber(g.delivered_mwh)} MWh @ ₹${g.sale_rate_per_unit}`).join(' · ')}
                   </div>
@@ -1154,7 +1154,7 @@ export default function Bilateral() {
                   <Badge type={settlement.energy.is_final ? 'success' : 'warning'}>
                     {settlement.energy.is_final ? 'FINAL' : 'PROVISIONAL'}
                   </Badge>
-                  <span style={{ fontSize: 12, color: 'var(--slate-600)' }}>
+                  <span style={{ fontSize: 13.5, color: 'var(--slate-600)' }}>
                     {settlement.energy.metered_blocks} of {settlement.energy.blocks} blocks metered
                     {settlement.energy.days ? ` · ${settlement.energy.days} day(s)` : ''}
                     {settlement.energy.period_from ? ` · ${settlement.energy.period_from} to ${settlement.energy.period_to}` : ''}
@@ -1163,13 +1163,13 @@ export default function Bilateral() {
 
                 {/* Energy cannot be billed until the portal has granted open access. */}
                 {!['APPROVED', 'PARTIAL'].includes(selectedTx.open_access_status) && (
-                  <div style={{ marginBottom: 12, padding: '8px 12px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, fontSize: 12, color: '#9a3412' }}>
+                  <div style={{ marginBottom: 12, padding: '8px 12px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, fontSize: 13.5, color: '#9a3412' }}>
                     Open access is <strong>{selectedTx.open_access_status}</strong> — the energy bill unlocks once NOAR approves it.
                   </div>
                 )}
 
                 {settlement.split && !billBuyer && (
-                  <div style={{ marginBottom: 12, padding: '8px 12px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, fontSize: 12, color: '#9a3412' }}>
+                  <div style={{ marginBottom: 12, padding: '8px 12px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, fontSize: 13.5, color: '#9a3412' }}>
                     Each buyer is billed its own energy and open access — choose the buyer above to raise them.
                   </div>
                 )}
@@ -1199,7 +1199,7 @@ export default function Bilateral() {
                   }}>
                     {billMsg.text}
                     {billMsg.warnings?.length > 0 && (
-                      <ul style={{ margin: '6px 0 0 18px', fontSize: 12 }}>
+                      <ul style={{ margin: '6px 0 0 18px', fontSize: 13.5 }}>
                         {billMsg.warnings.map((w, i) => <li key={i}>{w}</li>)}
                       </ul>
                     )}
@@ -1305,7 +1305,7 @@ export default function Bilateral() {
                   onChange={e => setActualsForm({ ...actualsForm, grid_frequency_hz: e.target.value })} placeholder="49.90" />
               </Field>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 6 }}>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 6 }}>
               Scheduled after curtailment: {fmtNumber((actualsFor.approved_mw || 0) - (actualsFor.curtailed_mw || 0), 2)} MW
             </div>
 

@@ -123,7 +123,7 @@ export default function IsetReportTable({
       <style>
         body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;padding:24px}
         h1{font-size:18px;margin-bottom:16px}
-        table{width:100%;border-collapse:collapse;font-size:10px}
+        table{width:100%;border-collapse:collapse;font-size:13px}
         th{background:#101a2e;color:#fff;text-align:left;padding:6px}
         td{border-bottom:1px solid #ddd;padding:6px}
       </style></head><body>
@@ -267,7 +267,7 @@ export default function IsetReportTable({
                 </tbody>
               </table>
             </div>
-            <p style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+            <p style={{ marginTop: 10, fontSize: 13.5, color: 'var(--text-muted)' }}>
               Showing {filtered.length ? 1 : 0} to {filtered.length} of {filtered.length} entries.
             </p>
           </>

@@ -213,8 +213,8 @@ export default function ReiaDashboard() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthlyBilling}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="billing_period" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${(v / 1e7).toFixed(1)}Cr`} />
+                <XAxis dataKey="billing_period" tick={{ fontSize: 13.5 }} />
+                <YAxis tick={{ fontSize: 13.5 }} tickFormatter={(v) => `₹${(v / 1e7).toFixed(1)}Cr`} />
                 <Tooltip formatter={(v) => fmtCurrency(v)} />
                 <Legend />
                 <Line type="monotone" dataKey="total" name="Billed Amount" stroke="var(--primary)" strokeWidth={2.5} dot={{ r: 3 }} />
@@ -242,8 +242,8 @@ export default function ReiaDashboard() {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={byStatus}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="status" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+              <XAxis dataKey="status" tick={{ fontSize: 13 }} />
+              <YAxis tick={{ fontSize: 13.5 }} allowDecimals={false} />
               <Tooltip />
               <Bar dataKey="c" name="Invoice count" fill="#1f5cd6" radius={[6, 6, 0, 0]} />
             </BarChart>

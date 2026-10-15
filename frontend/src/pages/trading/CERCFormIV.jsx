@@ -202,7 +202,7 @@ export default function CERCFormIV() {
     { key: 'line_no', header: '#' },
     { key: 'seller_name', header: 'Seller' },
     { key: 'buyer_name', header: 'Buyer' },
-    { key: 'period', header: 'Period', render: (l) => <span style={{ fontSize: 11.5 }}>{l.period_from} → {l.period_to}</span> },
+    { key: 'period', header: 'Period', render: (l) => <span style={{ fontSize: 13 }}>{l.period_from} → {l.period_to}</span> },
     { key: 'quantum_mu', header: 'MU', render: (l) => fmtNumber(l.quantum_mu, 2) },
     { key: 'purchase_rate', header: 'Purchase', render: (l) => (l.purchase_rate > 0 ? rate(l.purchase_rate) : <span style={{ color: 'var(--red)' }}>missing</span>) },
     { key: 'sale_rate', header: 'Sale', render: (l) => rate(l.sale_rate) },

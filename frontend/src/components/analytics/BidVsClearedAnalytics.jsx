@@ -81,10 +81,10 @@ export default function BidVsClearedAnalytics({ product = 'DAM' }) {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={blocks} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="var(--border)" vertical={false} />
-              <XAxis dataKey="time_block" minTickGap={24} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-              <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={48} />
+              <XAxis dataKey="time_block" minTickGap={24} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} />
+              <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={48} />
               <Tooltip formatter={(v, name) => [`${v} MW`, name]} />
-              <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
+              <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 13.5 }} />
               <Line type="stepAfter" dataKey="bid_mw" name="Bid" stroke={BID} strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} />
               <Line type="stepAfter" dataKey="cleared_mw" name="Cleared" stroke={CLEARED} strokeWidth={2} dot={false} isAnimationActive={false} />
             </LineChart>
@@ -97,10 +97,10 @@ export default function BidVsClearedAnalytics({ product = 'DAM' }) {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={blocks} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
               <CartesianGrid stroke="var(--border)" vertical={false} />
-              <XAxis dataKey="time_block" minTickGap={24} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-              <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} />
+              <XAxis dataKey="time_block" minTickGap={24} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} />
+              <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} />
               <Tooltip formatter={(v, name) => [`${rs(v)}/kWh`, name]} />
-              <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
+              <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 13.5 }} />
               <Line type="stepAfter" dataKey="bid_price" name="Bid price" stroke={BID} strokeWidth={2} strokeDasharray="6 4" dot={false} connectNulls={false} isAnimationActive={false} />
               <Line type="stepAfter" dataKey="cleared_price" name="Cleared price" stroke={CLEARED} strokeWidth={2} dot={false} connectNulls={false} isAnimationActive={false} />
               {data.market_loaded && (

@@ -114,7 +114,7 @@ export default function ExchangeBiddingDetailReport() {
     const body = data.map((r) => `<tr>${COLUMNS.map((c) => `<td>${r[c.label] ?? ''}</td>`).join('')}</tr>`).join('');
     w.document.write(`<!doctype html><html><head><title>Bid Details Report</title>
       <style>
-        body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;padding:16px;font-size:10px}
+        body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;padding:16px;font-size:13px}
         h1{font-size:16px}
         table{border-collapse:collapse;width:100%}
         th,td{border:1px solid #ccc;padding:4px;white-space:nowrap}
@@ -132,7 +132,7 @@ export default function ExchangeBiddingDetailReport() {
     background: '#101a2e',
     color: '#fff',
     padding: '8px 10px',
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: 600,
     whiteSpace: 'nowrap',
     position: 'sticky',
@@ -167,7 +167,7 @@ export default function ExchangeBiddingDetailReport() {
         ) : (
           <>
             <div style={{ overflow: 'auto', maxHeight: '70vh', border: '1px solid #e2e8f0' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
                 <thead>
                   <tr>
                     {COLUMNS.map((c) => <th key={c.key} style={thStyle}>{c.label}</th>)}
@@ -201,7 +201,7 @@ export default function ExchangeBiddingDetailReport() {
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
+            <div style={{ marginTop: 10, fontSize: 13.5, color: '#64748b' }}>
               Showing {filtered.length === 0 ? 0 : 1} to {filtered.length} of {filtered.length} entries
             </div>
           </>

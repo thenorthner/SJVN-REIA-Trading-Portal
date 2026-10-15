@@ -138,7 +138,7 @@ export default function RecOrder() {
     <div style={{ padding: 20, maxWidth: 960, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <div style={{ fontSize: 12, color: '#64748b' }}>REC Order Details</div>
+          <div style={{ fontSize: 13.5, color: '#64748b' }}>REC Order Details</div>
           <h1 style={{ margin: 0, fontSize: 22 }}>REC Order</h1>
         </div>
         <div style={{ display: 'flex', gap: 14, fontSize: 13 }}>
@@ -164,7 +164,7 @@ export default function RecOrder() {
             <button type="button" className="btn btn-outline btn-sm" onClick={fillFromReport} disabled={filling || !form.trade_date}>
               {filling ? 'Reading report…' : 'Fill from uploaded obligation report'}
             </button>
-            <Link to="/trading/rec/obligations" style={{ fontSize: 12, color: '#1d4ed8' }}>Upload a report →</Link>
+            <Link to="/trading/rec/obligations" style={{ fontSize: 13.5, color: '#1d4ed8' }}>Upload a report →</Link>
           </div>
           {fromReport && (
             <div
@@ -220,7 +220,7 @@ export default function RecOrder() {
             </Field>
           </div>
           {preview && (
-            <div style={{ marginTop: 10, fontSize: 12, color: '#64748b' }}>
+            <div style={{ marginTop: 10, fontSize: 13.5, color: '#64748b' }}>
               A×B check · ₹{fmtNumber(preview.obligation, 2)} — net = obligation − GST − fees − GST on fees
             </div>
           )}

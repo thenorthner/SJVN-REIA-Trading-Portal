@@ -92,15 +92,15 @@ export default function DailyObligationReport() {
       <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
         <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="dailyobligationreport-trading-date">Trading Date:</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="dailyobligationreport-trading-date">Trading Date:</label>
             <input id="dailyobligationreport-trading-date" type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="dailyobligationreport-portfolio-tag">Portfolio Tag:</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="dailyobligationreport-portfolio-tag">Portfolio Tag:</label>
             <PortfolioSelect id="dailyobligationreport-portfolio-tag" scope="global" allLabel="-- Select portfolio --" />
           </div>
           <div style={{ marginLeft: 'auto', borderLeft: '1px solid #ccc', paddingLeft: 20 }}>
-            <span style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Matrix Layout:</span>
+            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }}>Matrix Layout:</span>
             <div role="group" aria-label="Matrix Layout" style={{ display: 'flex', gap: 5 }}>
               <button 
                 className={`btn btn-sm ${layout === 'SPLIT' ? 'btn-primary' : 'btn-outline'}`}
@@ -143,7 +143,7 @@ export default function DailyObligationReport() {
                portfolio's clearance record. Check the client's clearance on the bidding screen.
             </div>
 
-            <div style={{ display: 'flex', gap: 15, marginBottom: 10, fontSize: 12 }}>
+            <div style={{ display: 'flex', gap: 15, marginBottom: 10, fontSize: 13.5 }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{width: 12, height: 12, background: '#e8f5e9', border: '1px solid #c8e6c9'}}></div> Cleared & Generating</span>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{width: 12, height: 12, background: '#f8f9fa', border: '1px solid #dee2e6'}}></div> Zero Cleared (Price Recorded)</span>
             </div>
@@ -193,7 +193,7 @@ export default function DailyObligationReport() {
                 PORTAL" — every figure invented by the API stub. Those charges are
                 raised on the exchange invoice, which is where they can be read
                 against something real. */}
-            <p style={{ marginTop: 24, fontSize: 12, color: '#555' }}>
+            <p style={{ marginTop: 24, fontSize: 13.5, color: '#555' }}>
               This report is the cleared position from the bid book. The charges that turn it into a payout —
               NLDC, CTU, STU, SLDC, exchange fees and tax — are raised on the exchange invoice for the period.
             </p>

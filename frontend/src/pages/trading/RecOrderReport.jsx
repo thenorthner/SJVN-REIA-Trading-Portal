@@ -77,11 +77,11 @@ export default function RecOrderReport() {
       <Card>
         <form onSubmit={search} style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>From Date</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>From Date</label>
             <input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>To Date</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>To Date</label>
             <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
           <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Searching…' : 'Search'}</button>
@@ -93,9 +93,9 @@ export default function RecOrderReport() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 16 }}>
         {cards.map((c) => (
           <div key={c.label} style={{ background: '#d6eaf8', borderRadius: 6, padding: '16px 14px', textAlign: 'center' }}>
-            <div style={{ fontSize: 12, color: '#1e3a5f', fontWeight: 600, marginBottom: 6 }}>{c.label}</div>
+            <div style={{ fontSize: 13.5, color: '#1e3a5f', fontWeight: 600, marginBottom: 6 }}>{c.label}</div>
             <div style={{ fontSize: 26, fontWeight: 700, color: '#0f172a' }}>{c.value}</div>
-            <div style={{ fontSize: 12, color: '#334155', marginTop: 4 }}>{c.unit}</div>
+            <div style={{ fontSize: 13.5, color: '#334155', marginTop: 4 }}>{c.unit}</div>
           </div>
         ))}
       </div>
@@ -122,7 +122,7 @@ export default function RecOrderReport() {
             }}
           >
             {formatTradeDate(t.trade_date)}
-            <span style={{ float: 'right', fontWeight: 500, opacity: 0.85, fontSize: 12 }}>
+            <span style={{ float: 'right', fontWeight: 500, opacity: 0.85, fontSize: 13.5 }}>
               {fmtNumber(t.total_recs_sold, 0)} RECs · ₹{fmtNumber(t.sale_value, 0)}
             </span>
           </button>

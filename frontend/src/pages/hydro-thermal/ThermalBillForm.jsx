@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/client.js';
 import { Card, Field, Table, StatCard, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import ThermalCoalToBusbarECR3D from '../../components/ThermalCoalToBusbarECR3D.jsx';
+import ThermalCapacityRecoveryGate3D from '../../components/ThermalCapacityRecoveryGate3D.jsx';
 
 // Raising a thermal station's monthly bill. The tariff (AFC, NAPAF and the
 // norms) is the financial year's, set under Station & Tariff; what the desk
@@ -18,6 +20,7 @@ export function ThermalBillSummary({ bill, lines }) {
   const t = typeof bill.thermal_inputs_json === 'string' ? JSON.parse(bill.thermal_inputs_json || '{}') : (bill.thermal_inputs || {});
   return (
     <div>
+      <ThermalCapacityRecoveryGate3D bill={bill} />
       <div className="stat-grid">
         <StatCard label="Capacity charge" value={fmtCurrency(bill.c5_total_capacity_charge)} hint={`PAFM ${bill.c1_pafm_pct}% / NAPAF ${bill.a11_napaf_pct}%`} />
         <StatCard label="Energy charge" value={fmtCurrency(bill.ee1_energy_charge)} hint={`${fmtNumber(bill.e1_ex_bus_scheduled_kwh / 1e6, 3)} MU × ₹${bill.a12_ecr}/kWh`} />
@@ -28,7 +31,7 @@ export function ThermalBillSummary({ bill, lines }) {
         <tr><td>Fuel for the month</td><td>GCV {t.fuel?.gcv_kcal_per_kg} kCal/kg · coal {fmtCurrency(t.fuel?.coal_rs_per_tonne)}/t · oil {fmtCurrency(t.fuel?.oil_rs_per_kl)}/kL</td></tr>
         <tr><td>Energy charge rate</td><td><strong>₹{bill.a12_ecr}/kWh</strong></td></tr>
         <tr><td>Capacity charge</td><td>{t.capacity_formula}</td></tr>
-        {t.not_modelled && <tr><td>Note</td><td style={{ fontSize: 12 }}>{t.not_modelled}</td></tr>}
+        {t.not_modelled && <tr><td>Note</td><td style={{ fontSize: 13.5 }}>{t.not_modelled}</td></tr>}
       </tbody></table>
       <Table
         columns={[
@@ -98,6 +101,9 @@ export function ThermalBillForm({ station, stationId, canWrite, onSaved }) {
           Not ready to bill: {station.missing?.join(', ')}. Set it up under <Link to="/thermal/stations">Station &amp; Tariff</Link>; the beneficiary allocation is entered below.
         </div>
       )}
+
+      <ThermalCoalToBusbarECR3D station={station} fuel={form} tariff={station} bill={preview?.bill} />
+
       <form onSubmit={doPreview} noValidate>
         <div className="form-grid">
           <Field label="Billing month" required><input type="month" value={form.billing_month} onChange={set('billing_month')} /></Field>

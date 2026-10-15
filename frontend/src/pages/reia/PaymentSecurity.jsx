@@ -52,9 +52,9 @@ function saveBlob(blob, name) {
 function StatPill({ label, value, sub }) {
   return (
     <div style={{ padding: '12px 14px', background: 'var(--surface-2, #f6f7f9)', borderRadius: 8, minWidth: 110 }}>
-      <div style={{ fontSize: 11, textTransform: 'none', letterSpacing: 0.4, opacity: 0.7 }}>{label}</div>
+      <div style={{ fontSize: 13, textTransform: 'none', letterSpacing: 0.4, opacity: 0.7 }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{value}</div>
-      {sub != null && <div style={{ fontSize: 12, opacity: 0.65 }}>{sub}</div>}
+      {sub != null && <div style={{ fontSize: 13.5, opacity: 0.65 }}>{sub}</div>}
     </div>
   );
 }
@@ -449,7 +449,7 @@ export default function PaymentSecurity() {
           {overrideFor && (
             <form className="cw-form" onSubmit={saveOverride}>
               <strong>Treat the security on {overrideFor.contract_no} as adequate</strong>
-              <p style={{ margin: '4px 0 10px', fontSize: 12, color: 'var(--text-light)' }}>
+              <p style={{ margin: '4px 0 10px', fontSize: 13.5, color: 'var(--text-light)' }}>
                 Scheduling and bidding for this buyer are held while its cover falls short. An override lets them go ahead on your say-so, until the date you give. It is recorded against your name and Management is told.
               </p>
               {overrideError && <div className="form-error">{overrideError}</div>}
@@ -589,7 +589,7 @@ export default function PaymentSecurity() {
             ]}
             rows={invocations.slice(0, 12)}
           />
-          {invocations.length > 12 && <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-light)' }}>Showing the latest 12 of {invocations.length}.</p>}
+          {invocations.length > 12 && <p style={{ margin: '8px 0 0', fontSize: 13.5, color: 'var(--text-light)' }}>Showing the latest 12 of {invocations.length}.</p>}
         </Card>
       )}
 
@@ -600,8 +600,8 @@ export default function PaymentSecurity() {
             {releaseError && <div className="form-error" role="alert">{releaseError}</div>}
             <Table
               columns={[
-                { key: 'instrument_no', header: 'Instrument', render: (r) => <><strong>{r.instrument_no}</strong><div style={{ fontSize: 11, color: 'var(--text-light)' }}>{r.contract_no}</div></> },
-                { key: 'reason', header: 'Asked for', render: (r) => <>{r.reason}<div style={{ fontSize: 11, color: 'var(--text-light)' }}>{r.requested_by}, {fmtDate(r.created_at)}</div></> },
+                { key: 'instrument_no', header: 'Instrument', render: (r) => <><strong>{r.instrument_no}</strong><div style={{ fontSize: 13, color: 'var(--text-light)' }}>{r.contract_no}</div></> },
+                { key: 'reason', header: 'Asked for', render: (r) => <>{r.reason}<div style={{ fontSize: 13, color: 'var(--text-light)' }}>{r.requested_by}, {fmtDate(r.created_at)}</div></> },
                 {
                   key: 'position',
                   header: 'Position today',
@@ -647,7 +647,7 @@ export default function PaymentSecurity() {
               columns={[
                 { key: 'contract_no', header: 'Contract' },
                 { key: 'reason', header: 'Reason' },
-                { key: 'approved_by', header: 'By', render: (r) => <>{r.approved_by}<div style={{ fontSize: 11, color: 'var(--text-light)' }}>{fmtDate(r.created_at)}</div></> },
+                { key: 'approved_by', header: 'By', render: (r) => <>{r.approved_by}<div style={{ fontSize: 13, color: 'var(--text-light)' }}>{fmtDate(r.created_at)}</div></> },
                 {
                   key: 'valid_until',
                   header: 'Until',
@@ -783,8 +783,8 @@ export default function PaymentSecurity() {
                     )}
                   </div>
                 )}
-                {action === 'utilize' && <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-light)' }}>{fmtCurrency(detail.available_amount)} is available. To raise a demand on the bank, use “Start waterfall invocation” instead — this only records a draw.</p>}
-                {action === 'replenish' && <p style={{ margin: '0 0 8px', fontSize: 12, color: 'var(--text-light)' }}>{fmtCurrency(detail.utilized_amount)} has been drawn{detail.is_revolving ? '' : '. This instrument does not revolve, so say what put the cover back'}.</p>}
+                {action === 'utilize' && <p style={{ margin: '0 0 8px', fontSize: 13.5, color: 'var(--text-light)' }}>{fmtCurrency(detail.available_amount)} is available. To raise a demand on the bank, use “Start waterfall invocation” instead — this only records a draw.</p>}
+                {action === 'replenish' && <p style={{ margin: '0 0 8px', fontSize: 13.5, color: 'var(--text-light)' }}>{fmtCurrency(detail.utilized_amount)} has been drawn{detail.is_revolving ? '' : '. This instrument does not revolve, so say what put the cover back'}.</p>}
                 <div className="form-actions">
                   <button type="button" className="btn btn-ghost" onClick={() => setAction(null)}>Cancel</button>
                   <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Confirm'}</button>
@@ -838,7 +838,7 @@ export default function PaymentSecurity() {
                     return (
                       <div className="timeline-item" key={ev.id}>
                         <strong>{eventLabel(ev.event_type)}</strong> — {ev.actor_name}
-                        {more && <div style={{ fontSize: 12 }}>{more}</div>}
+                        {more && <div style={{ fontSize: 13.5 }}>{more}</div>}
                         <div className="t-meta">{fmtDateTime(ev.created_at)}</div>
                       </div>
                     );

@@ -14,7 +14,7 @@ function ShortfallBar({ pct }) {
       <div style={{ flex: 1, height: 6, background: 'var(--slate-100, #f1f5f9)', borderRadius: 3, overflow: 'hidden' }}>
         <div style={{ width: `${width}%`, height: '100%', background: tone }} />
       </div>
-      <span style={{ fontSize: 12, color: tone, minWidth: 44, textAlign: 'right' }}>{fmtNumber(pct, 2)}%</span>
+      <span style={{ fontSize: 13.5, color: tone, minWidth: 44, textAlign: 'right' }}>{fmtNumber(pct, 2)}%</span>
     </div>
   );
 }
@@ -51,7 +51,7 @@ export default function DeviationRegister() {
 
   const scoreColumns = [
     { key: 'counterparty', label: 'Counterparty' },
-    { key: 'contract_ref', label: 'Contract', render: r => <span style={{ fontSize: 12 }}>{r.contract_ref}</span> },
+    { key: 'contract_ref', label: 'Contract', render: r => <span style={{ fontSize: 13.5 }}>{r.contract_ref}</span> },
     { key: 'days', label: 'Days' },
     { key: 'requested_mwh', label: 'Requested (MWh)', render: r => fmtNumber(r.requested_mwh, 2) },
     { key: 'scheduled_mwh', label: 'Delivered (MWh)', render: r => fmtNumber(r.scheduled_mwh, 2) },
@@ -153,7 +153,7 @@ export default function DeviationRegister() {
 
       <Card title="Counterparty scorecard">
         <Table columns={scoreColumns} rows={scorecard} loading={loading} emptyMessage="No schedule data for this period." />
-        <p style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 10 }}>
+        <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 10 }}>
           Grade is on delivered share of requested energy — A at 99.5% and above, B at 98%, C at 95%, D below that.
         </p>
       </Card>

@@ -108,12 +108,12 @@ export default function EnergyScheduleArchive() {
         <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
           <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedulearchive-portfolio-id">Portfolio ID:</label>
+              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedulearchive-portfolio-id">Portfolio ID:</label>
               <PortfolioSelect id="energyschedulearchive-portfolio-id" scope="global" allLabel="-- Select portfolio --" />
             </div>
             
             <div style={{ marginLeft: 20, borderLeft: '1px solid #ccc', paddingLeft: 20 }}>
-              <span style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Quick Dates:</span>
+              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }}>Quick Dates:</span>
               <div role="group" aria-label="Quick Dates" style={{ display: 'flex', gap: 5 }}>
                 <button 
                   className={`btn btn-sm ${dateFilter === 'LAST_7' ? 'btn-primary' : 'btn-outline'}`}
@@ -174,7 +174,7 @@ export default function EnergyScheduleArchive() {
                  made up. The register keeps the upload — file, period, revision,
                  row count — and not the parsed block values, so this says what it
                  has rather than drawing a day that was never read. */}
-             <p style={{ fontSize: 12, color: '#555', marginTop: 20 }}>
+             <p style={{ fontSize: 13.5, color: '#555', marginTop: 20 }}>
                 The platform records the file and its ingestion; the block-wise schedule inside it is not stored here.
              </p>
           </div>

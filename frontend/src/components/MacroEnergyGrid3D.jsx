@@ -176,7 +176,7 @@ export default function MacroEnergyGrid3D({
                 Macro Energy & Trading Margin Grid
               </h3>
               <span style={{
-                fontSize: 10,
+                fontSize: 12.5,
                 textTransform: 'uppercase',
                 background: 'rgba(16, 185, 129, 0.15)',
                 color: '#10b981',
@@ -189,7 +189,7 @@ export default function MacroEnergyGrid3D({
                 Live Pass-Through Synced
               </span>
             </div>
-            <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
               SJVN Limited (REIA Intermediary Desk) · CERC Section 63 Regulated Portfolio
             </div>
           </div>
@@ -213,7 +213,7 @@ export default function MacroEnergyGrid3D({
                 border: 'none',
                 padding: '5px 12px',
                 borderRadius: 6,
-                fontSize: 11,
+                fontSize: 13,
                 fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
@@ -230,7 +230,7 @@ export default function MacroEnergyGrid3D({
                 border: 'none',
                 padding: '5px 12px',
                 borderRadius: 6,
-                fontSize: 11,
+                fontSize: 13,
                 fontWeight: 600,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
@@ -245,7 +245,7 @@ export default function MacroEnergyGrid3D({
             border: '1px solid rgba(56, 189, 248, 0.25)',
             padding: '5px 10px',
             borderRadius: 6,
-            fontSize: 11,
+            fontSize: 13,
             color: '#38bdf8',
             fontWeight: 600,
           }}>
@@ -270,7 +270,7 @@ export default function MacroEnergyGrid3D({
           {/* COLUMN 1: GENERATION SOURCE POOL (IPPs) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{
-              fontSize: 11,
+              fontSize: 13,
               fontWeight: 700,
               textTransform: 'uppercase',
               color: '#10b981',
@@ -309,9 +309,9 @@ export default function MacroEnergyGrid3D({
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                    <strong style={{ fontSize: 12.5, color: '#f8fafc' }}>{gen.name}</strong>
+                    <strong style={{ fontSize: 13.5, color: '#f8fafc' }}>{gen.name}</strong>
                     <span style={{
-                      fontSize: 9.5,
+                      fontSize: 12.5,
                       fontWeight: 700,
                       color: gen.color,
                       background: 'rgba(255,255,255,0.06)',
@@ -322,7 +322,7 @@ export default function MacroEnergyGrid3D({
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#94a3b8' }}>
                     <span>{gen.contract_no}</span>
                     <strong style={{ color: '#10b981' }}>
                       {metricMode === 'CAPACITY' ? `${fmtNumber(gen.capacity_mw)} MW` : `₹${gen.tariff.toFixed(2)}/u`}
@@ -389,7 +389,7 @@ export default function MacroEnergyGrid3D({
               border: '1px solid rgba(56, 189, 248, 0.4)',
               padding: '3px 10px',
               borderRadius: 20,
-              fontSize: 10.5,
+              fontSize: 12.5,
               fontWeight: 800,
               color: '#38bdf8',
               letterSpacing: 0.6,
@@ -402,7 +402,7 @@ export default function MacroEnergyGrid3D({
             <div style={{ fontSize: 16, fontWeight: 800, color: '#f8fafc', marginBottom: 2 }}>
               Central Intermediary Engine
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 14 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 14 }}>
               Zero-Balancing Pass-Through Synchronization
             </div>
 
@@ -414,11 +414,11 @@ export default function MacroEnergyGrid3D({
               padding: '12px 14px',
               marginBottom: 12,
             }}>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>Aggregated Throughput</div>
+              <div style={{ fontSize: 13, color: '#94a3b8' }}>Aggregated Throughput</div>
               <div style={{ fontSize: 24, fontWeight: 800, color: '#38bdf8', marginTop: 2 }}>
                 {fmtNumber(totalCapacityMw)} MW
               </div>
-              <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 3 }}>
+              <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 3 }}>
                 Est. {fmtNumber(Math.round(monthlyScheduledMwh))} MWh / month
               </div>
             </div>
@@ -431,7 +431,7 @@ export default function MacroEnergyGrid3D({
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              fontSize: 11.5,
+              fontSize: 13,
             }}>
               <span style={{ color: '#94a3b8' }}>Trading Margin Yield:</span>
               <strong style={{ color: '#10b981', fontSize: 13 }}>
@@ -480,7 +480,7 @@ export default function MacroEnergyGrid3D({
           {/* COLUMN 3: STATE DISCOM OFF-TAKERS */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{
-              fontSize: 11,
+              fontSize: 13,
               fontWeight: 700,
               textTransform: 'uppercase',
               color: '#818cf8',
@@ -519,9 +519,9 @@ export default function MacroEnergyGrid3D({
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-                    <strong style={{ fontSize: 12.5, color: '#f8fafc' }}>{dis.name}</strong>
+                    <strong style={{ fontSize: 13.5, color: '#f8fafc' }}>{dis.name}</strong>
                     <span style={{
-                      fontSize: 9.5,
+                      fontSize: 12.5,
                       fontWeight: 700,
                       color: '#10b981',
                       background: 'rgba(16, 185, 129, 0.12)',
@@ -532,7 +532,7 @@ export default function MacroEnergyGrid3D({
                     </span>
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#94a3b8' }}>
                     <span>{dis.psa_no}</span>
                     <strong style={{ color: '#38bdf8' }}>
                       {metricMode === 'CAPACITY' ? `${fmtNumber(dis.capacity_mw)} MW (${dis.share_percent}%)` : `₹${dis.landed_tariff.toFixed(2)}/u`}
@@ -566,11 +566,11 @@ export default function MacroEnergyGrid3D({
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: selectedEntity.color || '#38bdf8' }} />
               <strong style={{ color: '#f8fafc', fontSize: 14 }}>{selectedEntity.name}</strong>
-              <span style={{ fontSize: 11, color: '#94a3b8' }}>
+              <span style={{ fontSize: 13, color: '#94a3b8' }}>
                 ({selectedEntity.tech || selectedEntity.state || 'REIA Portfolio'})
               </span>
             </div>
-            <div style={{ fontSize: 11.5, color: '#cbd5e1', marginTop: 4 }}>
+            <div style={{ fontSize: 13, color: '#cbd5e1', marginTop: 4 }}>
               Contract: <strong>{selectedEntity.contract_no || selectedEntity.psa_no}</strong> · Allocated Capacity: <strong style={{ color: '#38bdf8' }}>{selectedEntity.capacity_mw} MW</strong> · Base Tariff: <strong>₹{Number(selectedEntity.tariff || selectedEntity.landed_tariff).toFixed(2)} / unit</strong>
             </div>
           </div>
@@ -586,7 +586,7 @@ export default function MacroEnergyGrid3D({
                   border: 'none',
                   padding: '6px 12px',
                   borderRadius: 6,
-                  fontSize: 11.5,
+                  fontSize: 13,
                   fontWeight: 600,
                   cursor: 'pointer',
                 }}
@@ -602,7 +602,7 @@ export default function MacroEnergyGrid3D({
                 border: 'none',
                 color: '#94a3b8',
                 cursor: 'pointer',
-                fontSize: 12,
+                fontSize: 13.5,
               }}
             >
               ✕ Close

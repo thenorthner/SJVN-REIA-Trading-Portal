@@ -158,14 +158,14 @@ export default function BillOfSupplyForm() {
 
           <div style={{ marginTop: 14, padding: '10px 14px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8, display: 'flex', gap: 28, fontSize: 13 }}>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none' }}>Amount</div>
+              <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none' }}>Amount</div>
               <strong style={{ fontSize: 16 }}>₹{fmtNumber(computed.amount, 2)}</strong>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none' }}>After rebate</div>
+              <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none' }}>After rebate</div>
               <strong style={{ fontSize: 16 }}>₹{fmtNumber(computed.after, 2)}</strong>
             </div>
-            <div style={{ alignSelf: 'center', color: 'var(--slate-500)', fontSize: 12 }}>
+            <div style={{ alignSelf: 'center', color: 'var(--slate-500)', fontSize: 13.5 }}>
               Quantity × rate, less the rebate — computed, not typed.
             </div>
           </div>
@@ -205,7 +205,7 @@ export default function BillOfSupplyForm() {
                 <tr><td colSpan={9} style={{ padding: 16, textAlign: 'center', color: '#64748b' }}>No bills of supply yet.</td></tr>
               ) : rows.slice(0, 20).map((r) => (
                 <tr key={r.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                  <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontSize: 12 }}>{r.bill_no}</td>
+                  <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontSize: 13.5 }}>{r.bill_no}</td>
                   <td style={{ padding: '8px 10px' }}>{r.client_name}</td>
                   <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.invoice_date}</td>
                   <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.supply_from_date} → {r.supply_to_date}</td>

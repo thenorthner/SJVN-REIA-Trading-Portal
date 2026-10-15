@@ -150,7 +150,7 @@ export default function PxilReports() {
             {report.mode === 'PXIL' ? 'Live from PXIL' : 'Documented sample'}
           </Badge>
           {report.code && (
-            <span style={{ marginLeft: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+            <span style={{ marginLeft: 10, fontSize: 13.5, color: 'var(--text-muted)' }}>
               {/* PXIL sends an empty period as a 404; that is an answer, not a failure. */}
               {Number(report.code) === 404 ? 'PXIL holds no data for this period' : `Response code ${report.code}`}
             </span>

@@ -413,7 +413,7 @@ export default function BilateralBidding() {
                 <input className="input" value={form.alternate_route} onChange={(e) => set('alternate_route', e.target.value)} />
               </Field>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 4 }}>
                   Generating Source <span style={{ color: 'var(--red)' }}>*</span>
                 </div>
                 {form.generating_sources.map((src, idx) => (
@@ -441,7 +441,7 @@ export default function BilateralBidding() {
               <input ref={fileRef} type="file" accept=".csv,text/csv" className="input" style={{ maxWidth: 280 }} />
               <button type="button" className="btn btn-sm" style={{ background: '#475569', color: '#fff' }} onClick={handleCsvUpload}>Upload</button>
               <button type="button" className="btn btn-sm" style={{ background: '#475569', color: '#fff' }} onClick={downloadSampleCsv}>Download Sample File</button>
-              {csvName && <span style={{ fontSize: 12, color: '#64748b' }}>{csvName}</span>}
+              {csvName && <span style={{ fontSize: 13.5, color: '#64748b' }}>{csvName}</span>}
             </div>
           </div>
 
@@ -454,7 +454,7 @@ export default function BilateralBidding() {
                   <th style={{ padding: 8, border: '1px solid #e2e8f0', textAlign: 'center' }}>Capacity</th>
                   <th style={{ padding: 8, border: '1px solid #e2e8f0', width: 70, textAlign: 'center' }}>Action</th>
                 </tr>
-                <tr style={{ background: '#f8fafc', fontSize: 11, color: '#64748b', fontWeight: 500 }}>
+                <tr style={{ background: '#f8fafc', fontSize: 13, color: '#64748b', fontWeight: 500 }}>
                   <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>From *</th>
                   <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>To *</th>
                   <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>From *</th>

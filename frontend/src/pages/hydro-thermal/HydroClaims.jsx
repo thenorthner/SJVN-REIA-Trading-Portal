@@ -348,7 +348,7 @@ export default function HydroClaims({ vertical = 'HYDRO' }) {
                 : `All ${unclaimed.length} outstanding entry(ies)`}
               {' — '}
               <strong>{fmtCurrency(claimTotal)}</strong>
-              <div style={{ color: 'var(--text-light)', fontSize: 12 }}>
+              <div style={{ color: 'var(--text-light)', fontSize: 13.5 }}>
                 Split across the beneficiaries on the same basis as the capacity charge, because
                 these are costs of the station rather than of anyone&apos;s energy.
               </div>

@@ -14,9 +14,9 @@ function StatCard({ label, value, sub, tone }) {
   const color = tone === 'good' ? '#047857' : tone === 'bad' ? 'var(--red-deep)' : 'var(--slate-900)';
   return (
     <div style={{ background: '#fff', border: '1px solid var(--slate-200)', borderRadius: 8, padding: '14px 16px' }}>
-      <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.4 }}>{label}</div>
+      <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.4 }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 700, color, marginTop: 4 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: 'var(--text-subtle)', marginTop: 2 }}>{sub}</div>}
+      {sub && <div style={{ fontSize: 13.5, color: 'var(--text-subtle)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }

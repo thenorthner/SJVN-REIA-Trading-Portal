@@ -32,7 +32,7 @@ export function ResponseBadge({ row }) {
   }
   return row.status === 'VALIDATED'
     ? <Badge status="PENDING" label="Awaiting confirmation" />
-    : <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>—</span>;
+    : <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>—</span>;
 }
 
 function Summary({ d, run, onPreview, setError }) {
@@ -71,10 +71,10 @@ function Summary({ d, run, onPreview, setError }) {
         {item('Status', <Badge status={d.status} />)}
         {item('Energy', <strong>{mwh(d.energy_mwh)}</strong>)}
         {item('CUF', d.cuf_percent != null
-          ? <>{fmtNumber(d.cuf_percent)}%{d.cuf_computed ? <span style={{ fontSize: 11, color: 'var(--slate-500)' }}> (worked out from energy and capacity)</span> : ''}</>
+          ? <>{fmtNumber(d.cuf_percent)}%{d.cuf_computed ? <span style={{ fontSize: 13, color: 'var(--slate-500)' }}> (worked out from energy and capacity)</span> : ''}</>
           : '—')}
         {d.min_cuf_percent != null && item('Contractual minimum CUF', `${fmtNumber(d.min_cuf_percent)}%`)}
-        {d.lock_override_reason && item('Locked with a reason', <>{d.lock_override_reason}{d.lock_override_by ? <span style={{ fontSize: 11, color: 'var(--slate-500)' }}> — {d.lock_override_by}</span> : ''}</>)}
+        {d.lock_override_reason && item('Locked with a reason', <>{d.lock_override_reason}{d.lock_override_by ? <span style={{ fontSize: 13, color: 'var(--slate-500)' }}> — {d.lock_override_by}</span> : ''}</>)}
         {item('Availability', d.availability_percent != null ? `${fmtNumber(d.availability_percent)}%` : '—')}
         {item('Source', d.source)}
         {item('Bill', d.invoice ? `${d.invoice.invoice_no} (${d.invoice.status})` : 'Not billed yet')}
@@ -186,7 +186,7 @@ function Blocks({ d, reload, setError }) {
       {!has ? (
         <div className="empty-cell" style={{ padding: 28 }}>
           No 15-minute data has been loaded for this period.
-          {!d.can_manage && <div style={{ marginTop: 6, fontSize: 12.5 }}>The monthly figure above is what is billed. Block-wise data appears here once SJVN loads the SLDC / RLDC block statement.</div>}
+          {!d.can_manage && <div style={{ marginTop: 6, fontSize: 13.5 }}>The monthly figure above is what is billed. Block-wise data appears here once SJVN loads the SLDC / RLDC block statement.</div>}
         </div>
       ) : (
         <>
@@ -203,10 +203,10 @@ function Blocks({ d, reload, setError }) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.days} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} onClick={(e) => e?.activeLabel && load(e.activeLabel)}>
                 <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="date" tickFormatter={(v) => v.slice(8)} tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} width={48} />
+                <XAxis dataKey="date" tickFormatter={(v) => v.slice(8)} tick={{ fontSize: 13 }} />
+                <YAxis tick={{ fontSize: 13 }} width={48} />
                 <Tooltip formatter={(v) => `${fmtNumber(v, 3)} MWh`} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 13.5 }} />
                 <Bar dataKey="scheduled_mwh" name="Scheduled" fill="url(#eliteSlate)" isAnimationActive={false} />
                 <Bar dataKey="actual_mwh" name="Actual" fill="url(#eliteBlue)" isAnimationActive={false} />
               </BarChart>
@@ -218,7 +218,7 @@ function Blocks({ d, reload, setError }) {
             <select id="block-day" value={data.date || ''} onChange={(e) => load(e.target.value)}>
               {data.days.map((x) => <option key={x.date} value={x.date}>{fmtDate(x.date)} — {fmtNumber(x.actual_mwh, 3)} MWh</option>)}
             </select>
-            <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>{data.blocks.length} of 96 blocks</span>
+            <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{data.blocks.length} of 96 blocks</span>
           </div>
           <div className="table-wrap" style={{ maxHeight: 320, overflowY: 'auto' }}>
             <table className="data-table" style={{ margin: 0 }}>
@@ -303,9 +303,9 @@ function Response({ d, run, onPreview, setError, disputesPath }) {
       {d.response_status === 'OBJECTED' && (
         <div className="cw-card" style={{ borderLeft: `4px solid ${open ? '#dc2626' : '#94a3b8'}` }}>
           <strong>Objection</strong>
-          <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--slate-500)' }}>{d.response_by_name} · {fmtDateTime(d.response_at)}</span>
+          <span style={{ marginLeft: 8, fontSize: 13.5, color: 'var(--slate-500)' }}>{d.response_by_name} · {fmtDateTime(d.response_at)}</span>
           <p style={{ margin: '6px 0', fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{d.response_note}</p>
-          <div style={{ fontSize: 12.5, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 13.5, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <span>On record: {mwh(d.energy_mwh)}</span>
             {d.claimed_mwh != null && <span>Counterparty's figure: <strong>{mwh(d.claimed_mwh)}</strong> ({d.claimed_mwh - d.energy_mwh > 0 ? '+' : ''}{fmtNumber(d.claimed_mwh - d.energy_mwh, 3)})</span>}
             {d.response_version_id && <button type="button" className="btn-link" onClick={() => onPreview(d.response_version_id, 'meter-record')}>View their record</button>}
@@ -361,7 +361,7 @@ function Response({ d, run, onPreview, setError, disputesPath }) {
           <Field label={answer.outcome === 'UPHELD' ? 'What will be corrected' : 'Why the objection is not accepted'} required>
             <textarea required rows={3} value={answer.note} onChange={(e) => setAnswer({ ...answer, note: e.target.value })} />
           </Field>
-          {answer.outcome === 'UPHELD' && <p style={{ margin: '0 0 10px', fontSize: 12.5, color: 'var(--slate-600)' }}>This records the decision. Enter the corrected figure as a new record for the period.</p>}
+          {answer.outcome === 'UPHELD' && <p style={{ margin: '0 0 10px', fontSize: 13.5, color: 'var(--slate-600)' }}>This records the decision. Enter the corrected figure as a new record for the period.</p>}
           <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={() => setAnswer(null)}>Cancel</button><button type="submit" className="btn btn-primary">Send answer</button></div>
         </form>
       )}

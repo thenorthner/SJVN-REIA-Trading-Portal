@@ -288,7 +288,7 @@ export default function ExchangeBidding() {
                 <button type="button" className="btn btn-link" style={{ color: '#1d4ed8', padding: 0 }} onClick={downloadSample}>
                   Download Samples
                 </button>
-                {csvName && <span style={{ fontSize: 12, color: '#64748b' }}>{csvName}</span>}
+                {csvName && <span style={{ fontSize: 13.5, color: '#64748b' }}>{csvName}</span>}
               </div>
             </div>
           </FormSection>
@@ -309,7 +309,7 @@ export default function ExchangeBidding() {
                       <button type="button" style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, padding: '1px 7px' }} onClick={() => addRow()}>+</button>
                     </th>
                   </tr>
-                  <tr style={{ color: 'var(--slate-500)', fontWeight: 'normal', fontSize: 11 }}>
+                  <tr style={{ color: 'var(--slate-500)', fontWeight: 'normal', fontSize: 13 }}>
                     <th style={{ padding: '4px 8px' }}>From *</th>
                     <th style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>To *</th>
                     <th style={{ padding: '4px 8px' }}>From *</th>

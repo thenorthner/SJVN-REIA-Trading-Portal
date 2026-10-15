@@ -52,7 +52,7 @@ export default function VerificationChecklist({ invoiceId, canWrite = false, onS
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
         <strong>Verification Status:</strong>
         <Badge status={STATUS_TONE[data.verification_status] || 'PENDING'} label={data.verification_status} />
-        {data.verified_by && <span style={{ fontSize: 12, color: 'var(--text-light)' }}>by {data.verified_by}</span>}
+        {data.verified_by && <span style={{ fontSize: 13.5, color: 'var(--text-light)' }}>by {data.verified_by}</span>}
       </div>
 
       <div className="section-title" style={{ marginTop: 8 }}>Technical Verification</div>
@@ -61,12 +61,12 @@ export default function VerificationChecklist({ invoiceId, canWrite = false, onS
           <div key={t.key} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px solid var(--border, #eee)' }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>{t.label}</div>
-              {t.hint && <div style={{ fontSize: 11, color: 'var(--text-light)' }}>{t.hint}</div>}
+              {t.hint && <div style={{ fontSize: 13, color: 'var(--text-light)' }}>{t.hint}</div>}
               {canWrite && (
                 <input
                   placeholder="Note (optional)" value={t.note || ''}
                   onChange={(e) => setTech(t.key, { note: e.target.value })}
-                  style={{ marginTop: 4, width: '100%', fontSize: 12, padding: '2px 6px' }}
+                  style={{ marginTop: 4, width: '100%', fontSize: 13.5, padding: '2px 6px' }}
                 />
               )}
             </div>

@@ -21,7 +21,7 @@ export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
     { key: 'deduction', label: 'Deductions', render: r => <span style={{ color: '#e74c3c' }}>{fmtNumber(r.deduction)}</span> },
     { key: 'netTotal', label: 'Net Payout (₹)', render: r => <span style={{ color: '#27ae60', fontWeight: 'bold', fontSize: 15 }}>{fmtNumber(r.netTotal || r.netAmount)}</span> },
     { key: 'sapStatus', label: 'SAP FI Status', render: r => (
-      <span style={{ fontSize: 11, background: r.sapStatus === 'POSTED' ? '#e8f5e9' : '#fff3e0', color: r.sapStatus === 'POSTED' ? '#2e7d32' : '#f57c00', border: `1px solid ${r.sapStatus === 'POSTED' ? '#c8e6c9' : '#ffe0b2'}`, padding: '2px 6px', borderRadius: 12 }}>
+      <span style={{ fontSize: 13, background: r.sapStatus === 'POSTED' ? '#e8f5e9' : '#fff3e0', color: r.sapStatus === 'POSTED' ? '#2e7d32' : '#f57c00', border: `1px solid ${r.sapStatus === 'POSTED' ? '#c8e6c9' : '#ffe0b2'}`, padding: '2px 6px', borderRadius: 12 }}>
         {r.sapStatus === 'POSTED' ? 'Posted' : 'Pending'}
       </span>
     )},
@@ -48,7 +48,7 @@ export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, padding: '10px 15px', background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: 6 }}>
         <div>
           <strong style={{ fontSize: 14 }}>Commercial Tax Ledger</strong>
-          <div style={{ fontSize: 12, color: '#6c757d' }}>{marketSegment} Segment • Standardized Formula: (Gross + Margin + GST) - Deductions - TDS</div>
+          <div style={{ fontSize: 13.5, color: '#6c757d' }}>{marketSegment} Segment • Standardized Formula: (Gross + Margin + GST) - Deductions - TDS</div>
         </div>
         <button onClick={handleSapPost} className="btn btn-primary" style={{ background: '#f39c12', borderColor: '#e67e22', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 'bold' }}>
           <span></span> Generate SAP Journal Entry

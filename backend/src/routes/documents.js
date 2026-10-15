@@ -246,19 +246,24 @@ router.get('/reject-reasons', requireAuth, (_req, res) => {
   res.json(Object.entries(REJECTION_REASONS).map(([code, label]) => ({ code, label })));
 });
 
-// GET /queue — everything waiting on the REIA desk, longest-waiting first.
+// GET /queue — everything waiting on the desk, longest-waiting first.
+// ?vertical=HYDRO|THERMAL narrows to entities in that vertical.
 router.get('/queue', requireAuth, (req, res) => {
-  if (!canVerify(req.user)) return res.status(403).json({ error: 'The verification queue is for the REIA desk' });
-  const rows = db.prepare(`${LATEST} AND d.category = 'VERIFY' AND v.verification_status = 'PENDING' ORDER BY v.created_at ASC`).all()
+  if (!canVerify(req.user)) return res.status(403).json({ error: 'The verification queue is for the billing desk' });
+  const verticalFilter = req.query.vertical ? ` AND e.verticals LIKE '%${req.query.vertical.replace(/[^A-Z_]/g, '')}%'` : '';
+  const rows = db.prepare(`${LATEST} AND d.category = 'VERIFY' AND v.verification_status = 'PENDING'${verticalFilter} ORDER BY v.created_at ASC`).all()
     .map(decorate)
     .map((r) => ({ ...r, waiting_days: Math.max(0, -daysUntil(String(r.uploaded_at).slice(0, 10))) }));
   res.json(rows);
 });
 
 // GET /kyc-report — one row per company: where its documents stand.
+// ?vertical=HYDRO|THERMAL narrows to entities in that vertical.
 router.get('/kyc-report', requireAuth, (req, res) => {
   if (isExternal(req.user)) return res.status(403).json({ error: 'Access denied' });
-  const docs = db.prepare(`${LATEST} AND d.entity_id IS NOT NULL AND d.category = 'VERIFY'`).all().map(decorate);
+  const vf = req.query.vertical ? req.query.vertical.replace(/[^A-Z_]/g, '') : '';
+  const verticalFilter = vf ? ` AND e.verticals LIKE '%${vf}%'` : '';
+  const docs = db.prepare(`${LATEST} AND d.entity_id IS NOT NULL AND d.category = 'VERIFY'${verticalFilter}`).all().map(decorate);
   const by = new Map();
   for (const d of docs) {
     if (!by.has(d.entity_id)) by.set(d.entity_id, []);
@@ -273,7 +278,8 @@ router.get('/kyc-report', requireAuth, (req, res) => {
   } catch { /* checklist not on this database */ }
   const mandatory = new Map(approvals.map((a) => [a.entity_id, a]));
   const count = (list, fn) => list.filter(fn).length;
-  const rows = db.prepare(`SELECT id, name, entity_type, status FROM entities ORDER BY name`).all().map((e) => {
+  const entitiesWhere = vf ? `WHERE verticals LIKE '%${vf}%'` : '';
+  const rows = db.prepare(`SELECT id, name, entity_type, status FROM entities ${entitiesWhere} ORDER BY name`).all().map((e) => {
     const list = by.get(e.id) || [];
     const m = mandatory.get(e.id) || { total: 0, verified: 0 };
     const dated = list.filter((d) => d.expiry_date && d.expiry_state !== 'EXPIRED').map((d) => d.expiry_date).sort();

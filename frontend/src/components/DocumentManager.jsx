@@ -10,7 +10,7 @@ import { fmtDate, fmtDateTime } from '../datetime.js';
 // Sellers, buyers and trading clients send documents in; everyone else at SJVN
 // reads them, and the REIA desk reviews them. Mirrors routes/documents.js.
 export const isOutsideRole = (role) => /^(SELLER|BUYER|TRADING_CLIENT)/.test(role || '');
-export const canReviewDocuments = (role) => ROLE_GROUPS.REIA_WRITE.includes(role);
+export const canReviewDocuments = (role) => [...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE].includes(role);
 
 /** Where a document stands, as a badge: the review status, or Expired once its date has passed. */
 export function DocStatus({ doc }) {
@@ -20,19 +20,19 @@ export function DocStatus({ doc }) {
   if (st === 'REJECTED') return <Badge status="REJECTED" />;
   if (st === 'DRAFT') return <Badge status="DRAFT" />;
   if (st === 'PENDING') return <Badge status="PENDING" label="Awaiting SJVN" />;
-  return <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>Not Required</span>;
+  return <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>Not Required</span>;
 }
 
 /** The validity date, with how close it is when that matters. */
 export function ExpiryTag({ doc }) {
-  if (!doc.expiry_date) return <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>—</span>;
+  if (!doc.expiry_date) return <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>—</span>;
   const d = doc.days_to_expiry;
   const tone = doc.expiry_state === 'EXPIRED' ? { bg: '#fef2f2', fg: '#b91c1c' } : { bg: '#fffbeb', fg: '#b45309' };
   return (
     <div>
       <div style={{ fontSize: 13 }}>{fmtDate(doc.expiry_date)}</div>
       {doc.expiry_state && (
-        <span style={{ display: 'inline-block', marginTop: 2, padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: tone.bg, color: tone.fg }}>
+        <span style={{ display: 'inline-block', marginTop: 2, padding: '1px 8px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: tone.bg, color: tone.fg }}>
           {doc.expiry_state === 'EXPIRED'
             ? `Expired ${-d} day${d === -1 ? '' : 's'} ago`
             : d === 0 ? 'Expires today' : `Expiring in ${d} day${d === 1 ? '' : 's'}`}
@@ -47,14 +47,14 @@ export function ExtractedChecks({ extracted }) {
   if (!extracted) return null;
   if (!extracted.readable && !extracted.checks?.length) {
     return (
-      <div style={{ fontSize: 12.5, color: 'var(--slate-500)', background: 'var(--slate-50, #f8fafc)', padding: '8px 10px', borderRadius: 6 }}>
+      <div style={{ fontSize: 13.5, color: 'var(--slate-500)', background: 'var(--slate-50, #f8fafc)', padding: '8px 10px', borderRadius: 6 }}>
         No text could be read from this file (a scan or a picture), so its PAN / GSTIN was not checked automatically. Check it by eye.
       </div>
     );
   }
   const found = [...(extracted.pan || []).map((v) => `PAN ${v}`), ...(extracted.gstin || []).map((v) => `GSTIN ${v}`)];
   return (
-    <div style={{ fontSize: 12.5, background: 'var(--slate-50, #f8fafc)', padding: '8px 10px', borderRadius: 6 }}>
+    <div style={{ fontSize: 13.5, background: 'var(--slate-50, #f8fafc)', padding: '8px 10px', borderRadius: 6 }}>
       <div style={{ color: 'var(--slate-600)' }}>
         Read from the file: {found.length ? found.join(' · ') : 'no PAN or GSTIN found'}
       </div>
@@ -246,7 +246,7 @@ function ExcelViewer({ blob, fileName }) {
     return (
       <div style={{ padding: 40, textAlign: 'center', color: 'var(--slate-500)' }}>
         <div style={{ fontSize: 18, marginBottom: 8 }}>📊 Loading spreadsheet...</div>
-        <div style={{ fontSize: 12 }}>Parsing workbook sheets and formulas</div>
+        <div style={{ fontSize: 13.5 }}>Parsing workbook sheets and formulas</div>
       </div>
     );
   }
@@ -278,7 +278,7 @@ function ExcelViewer({ blob, fileName }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, background: 'var(--bg, #f8fafc)', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border, #e2e8f0)' }}>
         {/* Sheet Tabs */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'none', color: 'var(--text-light, #64748b)', marginRight: 4 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, textTransform: 'none', color: 'var(--text-light, #64748b)', marginRight: 4 }}>
             Sheets ({sheets.length}):
           </span>
           {sheets.map((s) => (
@@ -288,7 +288,7 @@ function ExcelViewer({ blob, fileName }) {
               onClick={() => handleSheetChange(s)}
               style={{
                 padding: '4px 10px',
-                fontSize: 12,
+                fontSize: 13.5,
                 fontWeight: 600,
                 borderRadius: 6,
                 border: activeSheet === s ? '1px solid var(--primary, #0284c7)' : '1px solid var(--border, #cbd5e1)',
@@ -312,7 +312,7 @@ function ExcelViewer({ blob, fileName }) {
             onChange={(e) => setSearch(e.target.value)}
             style={{
               padding: '5px 10px',
-              fontSize: 12,
+              fontSize: 13.5,
               borderRadius: 6,
               border: '1px solid var(--border, #cbd5e1)',
               background: 'var(--surface, #ffffff)',
@@ -320,7 +320,7 @@ function ExcelViewer({ blob, fileName }) {
               width: 190
             }}
           />
-          <span style={{ fontSize: 11, color: 'var(--text-light, #64748b)', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-light, #64748b)', whiteSpace: 'nowrap' }}>
             {filteredData.length} rows • {maxCols} cols
           </span>
         </div>
@@ -335,7 +335,7 @@ function ExcelViewer({ blob, fileName }) {
         background: 'var(--surface, #ffffff)',
         boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.04)'
       }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: 'inherit' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, fontFamily: 'inherit' }}>
           <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg, #f1f5f9)' }}>
             <tr>
               <th style={{
@@ -345,7 +345,7 @@ function ExcelViewer({ blob, fileName }) {
                 borderBottom: '2px solid var(--border, #cbd5e1)',
                 background: 'var(--bg, #e2e8f0)',
                 color: 'var(--text-light, #64748b)',
-                fontSize: 11,
+                fontSize: 13,
                 textAlign: 'center',
                 fontWeight: 700,
                 position: 'sticky',
@@ -361,7 +361,7 @@ function ExcelViewer({ blob, fileName }) {
                   borderBottom: '2px solid var(--border, #cbd5e1)',
                   background: 'var(--bg, #f1f5f9)',
                   color: 'var(--text, #1e293b)',
-                  fontSize: 11.5,
+                  fontSize: 13,
                   fontWeight: 700,
                   textAlign: 'left',
                   whiteSpace: 'nowrap'
@@ -391,7 +391,7 @@ function ExcelViewer({ blob, fileName }) {
                     borderBottom: '1px solid var(--border, #e2e8f0)',
                     background: 'var(--bg, #f1f5f9)',
                     color: 'var(--text-light, #64748b)',
-                    fontSize: 11,
+                    fontSize: 13,
                     textAlign: 'center',
                     fontWeight: 600,
                     position: 'sticky',
@@ -555,7 +555,7 @@ export function PreviewModal({ open, versionId, fileName, onClose }) {
         <div className="form-actions" style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             {state.name && (
-              <span style={{ fontSize: 12, color: 'var(--text-light, #64748b)' }}>
+              <span style={{ fontSize: 13.5, color: 'var(--text-light, #64748b)' }}>
                 {state.name}
               </span>
             )}
@@ -667,7 +667,7 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
                     <div style={{ maxWidth: 260, whiteSpace: 'normal', wordWrap: 'break-word' }}>
                       <DocStatus doc={doc} />
                       {doc.verification_status === 'REJECTED' && doc.verification_notes && (
-                        <div style={{ marginTop: 4, fontSize: 12, color: '#b91c1c', lineHeight: 1.35 }}>
+                        <div style={{ marginTop: 4, fontSize: 13.5, color: '#b91c1c', lineHeight: 1.35 }}>
                           <strong>SJVN's remark:</strong> {doc.verification_notes}
                         </div>
                       )}
@@ -917,12 +917,12 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
             ))}
           </select>
           {presetLocked && (
-            <div style={{ fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
+            <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
               Linked to this regulatory approval — type is fixed.
             </div>
           )}
           {activeDef.reason && (
-            <div style={{ fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
+            <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
               <i>Why is this needed?</i> {activeDef.reason}
             </div>
           )}
@@ -932,7 +932,7 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
             <option value="RECORD">Record Only (No approval workflow)</option>
             <option value="VERIFY">Verify (Requires SJVN Admin approval)</option>
           </select>
-          <div style={{ fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
+          <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
             This is strictly enforced by the platform's cross-module document taxonomy rules.
           </div>
         </Field>
@@ -1093,17 +1093,17 @@ function HistoryModal({ doc, onClose }) {
                   <td><strong>v{v.version_number}</strong></td>
                   <td>
                     {fmtDateTime(v.created_at)}
-                    <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{v.uploaded_by_name || '—'}</div>
+                    <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{v.uploaded_by_name || '—'}</div>
                   </td>
                   <td style={{ maxWidth: 240 }}>
                     <DocStatus doc={v} />
                     {v.verification_notes && (
-                      <div style={{ marginTop: 4, fontSize: 12, color: '#b91c1c' }}>{v.verification_notes}</div>
+                      <div style={{ marginTop: 4, fontSize: 13.5, color: '#b91c1c' }}>{v.verification_notes}</div>
                     )}
                   </td>
                   <td>
                     {v.verified_at ? fmtDateTime(v.verified_at) : '—'}
-                    {v.verified_by_name && <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{v.verified_by_name}</div>}
+                    {v.verified_by_name && <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{v.verified_by_name}</div>}
                   </td>
                   <td>{v.expiry_date ? fmtDate(v.expiry_date) : '—'}</td>
                   <td>

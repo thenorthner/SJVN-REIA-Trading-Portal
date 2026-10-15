@@ -42,7 +42,7 @@ export default function PendingScreen() {
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 14,
             background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe',
-            borderRadius: 999, padding: '4px 12px', fontSize: 12, fontWeight: 600,
+            borderRadius: 999, padding: '4px 12px', fontSize: 13.5, fontWeight: 600,
           }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3b82f6' }} />
             Planned
@@ -60,13 +60,13 @@ export default function PendingScreen() {
 
           {built.length > 0 && (
             <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid #e5e7eb' }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', marginBottom: 8 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: '#6b7280', marginBottom: 8 }}>
                 Working now under {group}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {built.map((s) => (
                   <a key={s.to} href={s.to} style={{
-                    fontSize: 12, color: '#1d4ed8', textDecoration: 'none',
+                    fontSize: 13.5, color: '#1d4ed8', textDecoration: 'none',
                     border: '1px solid #dbeafe', background: '#f8fafc',
                     borderRadius: 6, padding: '5px 10px',
                   }}>
@@ -77,7 +77,7 @@ export default function PendingScreen() {
             </div>
           )}
 
-          <div style={{ marginTop: 18, fontSize: 11, color: '#9ca3af' }}>
+          <div style={{ marginTop: 18, fontSize: 13, color: '#9ca3af' }}>
             Route <code style={{ background: '#f3f4f6', padding: '1px 5px', borderRadius: 3 }}>{pathname}</code>
           </div>
         </div>

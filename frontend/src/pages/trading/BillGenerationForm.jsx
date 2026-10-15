@@ -184,7 +184,7 @@ export default function BillGenerationForm() {
           </div>
 
           {selected && (
-            <p style={{ fontSize: 12, color: '#475569', marginTop: 4 }}>
+            <p style={{ fontSize: 13.5, color: '#475569', marginTop: 4 }}>
               {selected.kind} contract · {selected.state}
               {!selected.billable && ' — this one cannot be billed yet.'}
               {!form.from && !form.to && ' · leaving the period blank bills the whole contract.'}
@@ -264,7 +264,7 @@ export default function BillGenerationForm() {
           </table>
 
           {preview.warnings?.length > 0 && (
-            <ul style={{ margin: '10px 0 0 18px', fontSize: 12, color: '#9a3412' }}>
+            <ul style={{ margin: '10px 0 0 18px', fontSize: 13.5, color: '#9a3412' }}>
               {preview.warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
           )}

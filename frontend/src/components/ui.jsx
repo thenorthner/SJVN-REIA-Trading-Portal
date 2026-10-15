@@ -179,7 +179,7 @@ export function scrollPageTop(behavior = 'auto') {
 
 let modalSeq = 0;
 
-export function Modal({ open, onClose, title, children, width = 640 }) {
+export function Modal({ open, onClose, title, children, width, height, style, className }) {
   const titleId = React.useMemo(() => `modal-title-${++modalSeq}`, []);
   const panelRef = React.useRef(null);
   const wasOpenRef = React.useRef(false);
@@ -201,29 +201,44 @@ export function Modal({ open, onClose, title, children, width = 640 }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  // Scaled modal width: User requested "aisi har window thodi si badha de"
-  const computedMaxWidth = React.useMemo(() => {
-    if (typeof width === 'string' && (width.endsWith('vw') || width.endsWith('%') || width.endsWith('vh') || width.includes('calc'))) {
+  // Scaled modal: User requested all modals/windows cover 90% area with 10% side boundary (5vw left, 5vw right)
+  const isCompact = width === 'compact' || width === 'small';
+  const computedWidth = React.useMemo(() => {
+    if (isCompact) return 'min(520px, 90vw)';
+    if (typeof width === 'string' && (width.endsWith('vw') || width.endsWith('%') || width.includes('calc'))) {
       return width;
     }
-    let numWidth = typeof width === 'number' ? width : parseInt(width, 10);
-    if (!isNaN(numWidth)) {
-      const scaled = Math.round(Math.max(numWidth * 1.18, 640));
-      return `min(${scaled}px, calc(100vw - 36px))`;
+    return '90vw';
+  }, [width, isCompact]);
+
+  const computedHeight = React.useMemo(() => {
+    if (isCompact) return 'auto';
+    if (typeof height === 'string' && (height.endsWith('vh') || height.endsWith('%') || height.includes('calc'))) {
+      return height;
     }
-    return width || '680px';
-  }, [width]);
+    return '90vh';
+  }, [height, isCompact]);
 
   if (!open) return null;
-  const isWide = typeof width === 'string' && (width.includes('90') || width.includes('92') || width.includes('95'));
+
   return (
-    <div className="modal-backdrop" onClick={onClose} style={isWide ? { padding: '5vh 5vw' } : undefined}>
+    <div
+      className="modal-backdrop"
+      onClick={onClose}
+      style={{
+        padding: isCompact ? '24px 18px' : '5vh 5vw',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
       <div
-        className="modal"
+        className={`modal ${className || ''}`}
         style={{
-          width: typeof width === 'string' && (width.endsWith('vw') || width.endsWith('%')) ? width : '100%',
-          maxWidth: computedMaxWidth,
-          ...(isWide ? { maxHeight: '90vh' } : {}),
+          width: computedWidth,
+          maxWidth: computedWidth,
+          height: computedHeight,
+          maxHeight: '90vh',
+          ...style,
         }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
@@ -397,7 +412,7 @@ export function StatementViewer({ statement }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div>
           <h4 style={{ margin: 0, color: 'var(--slate-800)' }}>Statement {statement.recon_no}</h4>
-          <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 4 }}>Period: {statement.period} ({statement.period_type}) • Basis: {statement.data_basis}</div>
+          <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>Period: {statement.period} ({statement.period_type}) • Basis: {statement.data_basis}</div>
         </div>
         <Badge status={statement.status} />
       </div>
@@ -436,7 +451,7 @@ export function StatementViewer({ statement }) {
               <tr key={idx} style={{ background: ['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN', 'NOT_CONNECTED'].includes(it.status) ? 'transparent' : '#fff1f2' }}>
                 <td style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'normal', minWidth: 150 }}>{it.label}</td>
                 <td>{it.status === 'NOT_CONNECTED'
-                  ? <span style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>Not checked</span>
+                  ? <span style={{ color: 'var(--text-muted)', fontSize: 13.5, fontWeight: 600 }}>Not checked</span>
                   : it.status === 'OVERRIDDEN' ? <Badge status="AUTO_MATCHED" label="Overridden" />
                     : <Badge status={['EXACT', 'AUTO_MATCHED'].includes(it.status) ? 'AUTO_MATCHED' : it.status === 'CARRIED' ? 'REOPENED' : 'NEEDS_REVIEW'} />}</td>
                 <td>{it.metered != null ? fmtNumber(it.metered, 2) : '-'}</td>
@@ -444,7 +459,7 @@ export function StatementViewer({ statement }) {
                 <td style={{ color: it.variance !== 0 ? '#e53e3e' : '#10b981', fontWeight: it.variance !== 0 ? 600 : 400 }}>
                   {it.variance != null ? fmtNumber(it.variance, 2) : '-'}
                 </td>
-                <td style={{ fontSize: 12, color: 'var(--slate-600)', whiteSpace: 'normal', minWidth: 200, lineHeight: 1.4 }}>{it.notes || '—'}</td>
+                <td style={{ fontSize: 13.5, color: 'var(--slate-600)', whiteSpace: 'normal', minWidth: 200, lineHeight: 1.4 }}>{it.notes || '—'}</td>
               </tr>
             ))}
           </tbody>
@@ -453,11 +468,11 @@ export function StatementViewer({ statement }) {
       
       <div style={{ display: 'flex', gap: 24, marginTop: 16, borderTop: '1px solid var(--slate-200)', paddingTop: 16 }}>
         <div>
-          <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none' }}>SJVN Sign-off</div>
+          <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none' }}>SJVN Sign-off</div>
           <div style={{ fontWeight: 500 }}>{statement.sign_off?.sjvn ? `${statement.sign_off.sjvn.by}` : 'Pending'}</div>
         </div>
         <div>
-          <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none' }}>Counterparty Sign-off</div>
+          <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none' }}>Counterparty Sign-off</div>
           <div style={{ fontWeight: 500 }}>{statement.sign_off?.counterparty ? `${statement.sign_off.counterparty.by}` : 'Pending'}</div>
         </div>
       </div>
@@ -484,7 +499,7 @@ export function DemandLetterViewer({ letterStr, status = 'NOTICE_ISSUED', invoca
     <div className="card" style={{ border: '1px solid var(--slate-300)', borderRadius: 8, overflow: 'hidden', margin: '16px 0', background: 'white' }}>
       <div style={{ background: 'var(--slate-50)', padding: '16px 20px', borderBottom: '1px solid var(--slate-200)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 12, textTransform: 'none', color: 'var(--slate-500)', fontWeight: 600, letterSpacing: 0.5 }}>Demand notice{invocationNo ? ` · ${invocationNo}` : ''}</div>
+          <div style={{ fontSize: 13.5, textTransform: 'none', color: 'var(--slate-500)', fontWeight: 600, letterSpacing: 0.5 }}>Demand notice{invocationNo ? ` · ${invocationNo}` : ''}</div>
           <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--slate-900)', marginTop: 4 }}>{letter.subject}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -547,7 +562,7 @@ export function DemandLetterViewer({ letterStr, status = 'NOTICE_ISSUED', invoca
           </div>
         )}
       </div>
-      <div style={{ padding: '12px 20px', background: '#fffbeb', borderTop: '1px solid #fef3c7', fontSize: 12, color: '#92400e' }}>
+      <div style={{ padding: '12px 20px', background: '#fffbeb', borderTop: '1px solid #fef3c7', fontSize: 13.5, color: '#92400e' }}>
         <strong>Important:</strong> This is a demand against the counterparty's payment security. The amounts above have been drawn on the instruments named.
       </div>
     </div>

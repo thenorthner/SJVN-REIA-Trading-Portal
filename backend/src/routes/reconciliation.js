@@ -691,6 +691,9 @@ router.post('/:id/acknowledge', (req, res) => {
     if (!okRole && req.user.role !== 'SJVN_ADMIN') {
       return res.status(403).json({ error: 'Only counterparty can acknowledge on this side' });
     }
+    if (side === 'BUYER' && (req.user.role === 'BUYER_L1' || req.user.role.endsWith('_L1'))) {
+      return res.status(403).json({ error: 'Maker (Level 1) cannot execute final legal sign-off on balance reconciliation. Designated Checker (Level 2/3) or Company Admin authorization required.' });
+    }
     db.prepare(`UPDATE reconciliations SET counterparty_ack_at = datetime('now'), counterparty_ack_by = ?, discrepancy_notes = COALESCE(?, discrepancy_notes), updated_at = datetime('now') WHERE id = ?`)
       .run(req.user.name, remarks ? `Counterparty Note: ${remarks}` : null, recon.id);
   }

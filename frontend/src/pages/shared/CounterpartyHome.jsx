@@ -130,8 +130,8 @@ export default function CounterpartyHome() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chart} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                    <YAxis tickFormatter={short} tick={{ fontSize: 11 }} width={70} />
+                    <XAxis dataKey="label" tick={{ fontSize: 13 }} />
+                    <YAxis tickFormatter={short} tick={{ fontSize: 13 }} width={70} />
                     <Tooltip formatter={(v) => fmtCurrency(v)} />
                     <Legend />
                     <Bar dataKey="billed" name="Billed" fill="url(#eliteBlue)" isAnimationActive={false} />
@@ -148,9 +148,9 @@ export default function CounterpartyHome() {
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={chart} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                    <YAxis yAxisId="mwh" tick={{ fontSize: 11 }} width={60} tickFormatter={(v) => fmtNumber(v, 0)} />
-                    <YAxis yAxisId="cuf" orientation="right" tick={{ fontSize: 11 }} width={40} unit="%" domain={[0, 'auto']} />
+                    <XAxis dataKey="label" tick={{ fontSize: 13 }} />
+                    <YAxis yAxisId="mwh" tick={{ fontSize: 13 }} width={60} tickFormatter={(v) => fmtNumber(v, 0)} />
+                    <YAxis yAxisId="cuf" orientation="right" tick={{ fontSize: 13 }} width={40} unit="%" domain={[0, 'auto']} />
                     <Tooltip formatter={(v, name) => (name === 'CUF' ? `${v}%` : `${fmtNumber(v, 1)} MWh`)} />
                     <Legend />
                     <Bar yAxisId="mwh" dataKey="energy_mwh" name="Energy (MWh)" fill="url(#eliteTeal)" isAnimationActive={false} />
@@ -170,12 +170,12 @@ export default function CounterpartyHome() {
               return (
                 <div key={`${e.date}-${i}`} className="ch-cal" role="button" tabIndex={0} onClick={() => navigate(e.link)} onKeyDown={(ev) => { if (ev.key === 'Enter') navigate(e.link); }}>
                   <div className="ch-date"><b>{dt.getDate()}</b><small>{dt.toLocaleDateString('en-IN', { month: 'short' })}</small></div>
-                  <div><div style={{ fontWeight: 600 }}>{e.title}</div><div style={{ fontSize: 12, color: 'var(--text-light)' }}>{KIND_LABEL[e.kind]}{e.detail ? ` · ${e.detail}` : ''}</div></div>
+                  <div><div style={{ fontWeight: 600 }}>{e.title}</div><div style={{ fontSize: 13.5, color: 'var(--text-light)' }}>{KIND_LABEL[e.kind]}{e.detail ? ` · ${e.detail}` : ''}</div></div>
                   <div className={`ch-in ${e.days <= 7 ? 'soon' : ''}`}>{e.days === 0 ? 'Today' : e.days === 1 ? 'Tomorrow' : `in ${e.days} days`}</div>
                 </div>
               );
             })}
-            {d.calendar.length > 8 && <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-light)' }}>and {d.calendar.length - 8} more — all are in the PDF summary.</p>}
+            {d.calendar.length > 8 && <p style={{ margin: '8px 0 0', fontSize: 13.5, color: 'var(--text-light)' }}>and {d.calendar.length - 8} more — all are in the PDF summary.</p>}
           </Card>
 
           <Card title="Outstanding by age" className="mt-3">
@@ -200,7 +200,7 @@ export default function CounterpartyHome() {
             {d.recent.payments.map((p) => (
               <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
                 <div><strong>{fmtCurrency(p.amount)}</strong> <span style={{ color: 'var(--text-light)' }}>against {p.invoice_no}</span>
-                  <div style={{ fontSize: 12, color: 'var(--text-light)' }}>{[p.mode, p.reference, p.tds_amount > 0 && `TDS ${fmtCurrency(p.tds_amount)}`].filter(Boolean).join(' · ')}</div></div>
+                  <div style={{ fontSize: 13.5, color: 'var(--text-light)' }}>{[p.mode, p.reference, p.tds_amount > 0 && `TDS ${fmtCurrency(p.tds_amount)}`].filter(Boolean).join(' · ')}</div></div>
                 <div style={{ whiteSpace: 'nowrap', color: 'var(--text-light)' }}>{fmtDate(p.payment_date)}</div>
               </div>
             ))}
@@ -216,14 +216,14 @@ export default function CounterpartyHome() {
               {d.contracts.length === 0 && <tr><td colSpan={9} className="empty-cell">No contracts are linked to your company yet.</td></tr>}
               {d.contracts.map((c) => (
                 <tr key={c.id} className="clickable" tabIndex={0} role="button" onClick={() => navigate(`${P}/contracts`)} onKeyDown={(e) => { if (e.key === 'Enter') navigate(`${P}/contracts`); }}>
-                  <td><strong>{c.contract_no}</strong><div style={{ fontSize: 11, color: 'var(--text-light)' }}>{c.contract_type} · {c.project_type}</div></td>
+                  <td><strong>{c.contract_no}</strong><div style={{ fontSize: 13, color: 'var(--text-light)' }}>{c.contract_type} · {c.project_type}</div></td>
                   <td>{fmtNumber(c.capacity_mw)} MW</td>
                   <td>₹{Number(c.tariff_per_unit).toFixed(2)}/kWh</td>
-                  <td>{fmtCurrency(c.billed)}<div style={{ fontSize: 11, color: 'var(--text-light)' }}>{c.invoices} bill{c.invoices === 1 ? '' : 's'}</div></td>
+                  <td>{fmtCurrency(c.billed)}<div style={{ fontSize: 13, color: 'var(--text-light)' }}>{c.invoices} bill{c.invoices === 1 ? '' : 's'}</div></td>
                   <td>{fmtCurrency(c.received)}</td>
-                  <td>{fmtCurrency(c.outstanding)}{c.overdue > 0 && <div style={{ fontSize: 11, color: '#b91c1c' }}>{fmtCurrency(c.overdue)} overdue</div>}</td>
-                  <td>{c.last_energy_month ? <>{fmtNumber(c.last_energy_mwh, 1)} MWh<div style={{ fontSize: 11, color: 'var(--text-light)' }}>{monthLabel(c.last_energy_month)}{c.last_cuf != null ? ` · CUF ${Number(c.last_cuf).toFixed(1)}%` : ''}</div></> : '—'}</td>
-                  <td>{c.security_count ? <>{c.security_count} live<div style={{ fontSize: 11, color: 'var(--text-light)' }}>next expiry {fmtDate(c.security_next_expiry)}</div></> : <span style={{ color: 'var(--text-light)' }}>None</span>}</td>
+                  <td>{fmtCurrency(c.outstanding)}{c.overdue > 0 && <div style={{ fontSize: 13, color: '#b91c1c' }}>{fmtCurrency(c.overdue)} overdue</div>}</td>
+                  <td>{c.last_energy_month ? <>{fmtNumber(c.last_energy_mwh, 1)} MWh<div style={{ fontSize: 13, color: 'var(--text-light)' }}>{monthLabel(c.last_energy_month)}{c.last_cuf != null ? ` · CUF ${Number(c.last_cuf).toFixed(1)}%` : ''}</div></> : '—'}</td>
+                  <td>{c.security_count ? <>{c.security_count} live<div style={{ fontSize: 13, color: 'var(--text-light)' }}>next expiry {fmtDate(c.security_next_expiry)}</div></> : <span style={{ color: 'var(--text-light)' }}>None</span>}</td>
                   <td><Badge status={c.status} /></td>
                 </tr>
               ))}
@@ -251,7 +251,7 @@ export default function CounterpartyHome() {
           {d.recent.news.map((n) => (
             <div key={n.id} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 13, fontWeight: n.is_read ? 400 : 600 }}>
               {n.message}
-              <div style={{ fontSize: 11, color: 'var(--text-light)', fontWeight: 400 }}>{relativeDayLabel(n.created_at)}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-light)', fontWeight: 400 }}>{relativeDayLabel(n.created_at)}</div>
             </div>
           ))}
         </Card>

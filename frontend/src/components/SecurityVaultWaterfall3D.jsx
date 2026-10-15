@@ -127,7 +127,7 @@ export default function SecurityVaultWaterfall3D({
                 3-Tier Payment Security Waterfall & Cyber Defense Vault
               </h3>
               <span style={{
-                fontSize: 10,
+                fontSize: 12.5,
                 textTransform: 'uppercase',
                 background: 'rgba(16, 185, 129, 0.15)',
                 color: '#10b981',
@@ -140,7 +140,7 @@ export default function SecurityVaultWaterfall3D({
                 Zero Default Exposure
               </span>
             </div>
-            <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
               CERC Intermediary Trading Regulations · 3-Stage Cascading Risk Mitigation Architecture
             </div>
           </div>
@@ -158,7 +158,7 @@ export default function SecurityVaultWaterfall3D({
             gap: 8,
           }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }} />
-            <div style={{ fontSize: 11 }}>
+            <div style={{ fontSize: 13 }}>
               <span style={{ color: '#94a3b8' }}>Aggregate Coverage: </span>
               <strong style={{ color: '#10b981', fontSize: 13 }}>{avgCoverage.toFixed(2)}x</strong>
             </div>
@@ -173,7 +173,7 @@ export default function SecurityVaultWaterfall3D({
               color: simulationActive ? '#fff' : '#94a3b8',
               padding: '6px 14px',
               borderRadius: 6,
-              fontSize: 11.5,
+              fontSize: 13,
               fontWeight: 600,
               cursor: 'pointer',
               transition: 'all 0.2s',
@@ -242,7 +242,7 @@ export default function SecurityVaultWaterfall3D({
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <strong style={{ fontSize: 15, color: '#f8fafc' }}>{tier.title}</strong>
                       <span style={{
-                        fontSize: 10,
+                        fontSize: 12.5,
                         fontWeight: 700,
                         color: tier.color,
                         background: `${tier.color}15`,
@@ -253,7 +253,7 @@ export default function SecurityVaultWaterfall3D({
                         {tier.statusText}
                       </span>
                     </div>
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                    <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
                       {tier.subtitle} · {tier.coverageReq}
                     </div>
                   </div>
@@ -261,7 +261,7 @@ export default function SecurityVaultWaterfall3D({
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>Total Backing Limit</div>
+                    <div style={{ fontSize: 13, color: '#94a3b8' }}>Total Backing Limit</div>
                     <div style={{ fontSize: 17, fontWeight: 800, color: tier.color, marginTop: 1 }}>
                       {fmtCurrency(tier.amount)}
                     </div>
@@ -272,7 +272,7 @@ export default function SecurityVaultWaterfall3D({
                     borderRadius: 6,
                     background: 'rgba(255, 255, 255, 0.05)',
                     border: '1px solid rgba(255, 255, 255, 0.1)',
-                    fontSize: 11.5,
+                    fontSize: 13,
                     color: '#cbd5e1',
                     fontWeight: 600,
                   }}>
@@ -289,7 +289,7 @@ export default function SecurityVaultWaterfall3D({
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                fontSize: 11,
+                fontSize: 13,
                 color: '#64748b',
                 flexWrap: 'wrap',
                 gap: 8,
@@ -308,7 +308,7 @@ export default function SecurityVaultWaterfall3D({
                   background: 'rgba(0, 0, 0, 0.35)',
                   border: '1px solid rgba(255, 255, 255, 0.08)',
                   borderRadius: 8,
-                  fontSize: 12,
+                  fontSize: 13.5,
                   lineHeight: 1.5,
                   color: '#cbd5e1',
                   animation: 'tierIn 0.2s ease-out',
@@ -329,7 +329,7 @@ export default function SecurityVaultWaterfall3D({
                           border: 'none',
                           padding: '6px 12px',
                           borderRadius: 6,
-                          fontSize: 11.5,
+                          fontSize: 13,
                           fontWeight: 600,
                           cursor: 'pointer',
                         }}
@@ -347,7 +347,7 @@ export default function SecurityVaultWaterfall3D({
                           color: '#f8fafc',
                           padding: '6px 12px',
                           borderRadius: 6,
-                          fontSize: 11.5,
+                          fontSize: 13,
                           fontWeight: 600,
                           cursor: 'pointer',
                         }}

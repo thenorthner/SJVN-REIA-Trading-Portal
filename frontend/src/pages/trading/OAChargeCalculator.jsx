@@ -87,7 +87,7 @@ export default function OAChargeCalculator() {
     {
       key: 'rate_source',
       label: 'Rate from',
-      render: r => <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>{r.rate_source === 'OVERRIDE' ? 'Manual override' : 'Rate master'}</span>,
+      render: r => <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{r.rate_source === 'OVERRIDE' ? 'Manual override' : 'Rate master'}</span>,
     },
   ];
 

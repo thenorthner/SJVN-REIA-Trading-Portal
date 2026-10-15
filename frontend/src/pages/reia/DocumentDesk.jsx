@@ -33,13 +33,13 @@ function exportReport(rows) {
 }
 
 function Progress({ pct }) {
-  if (pct === null || pct === undefined) return <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>No checklist</span>;
+  if (pct === null || pct === undefined) return <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>No checklist</span>;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 130 }}>
       <div style={{ flex: 1, height: 8, borderRadius: 999, background: 'var(--slate-100, #f1f5f9)', overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#16a34a' : '#2563eb' }} />
       </div>
-      <span style={{ fontSize: 12, fontWeight: 600, width: 34, textAlign: 'right' }}>{pct}%</span>
+      <span style={{ fontSize: 13.5, fontWeight: 600, width: 34, textAlign: 'right' }}>{pct}%</span>
     </div>
   );
 }
@@ -148,9 +148,9 @@ function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDo
 
         <div style={{ background: 'var(--slate-50, #f8fafc)', border: '1px solid var(--slate-200, #e2e8f0)', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#0369a1', fontWeight: 600, fontSize: 13.5 }}>
-            <span>⚡ SJVN Admin direct stakeholder onboarding</span>
+            <span>SJVN Admin direct stakeholder onboarding</span>
           </div>
-          <p style={{ margin: '4px 0 0', fontSize: 12.5, color: 'var(--slate-600)' }}>
+          <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'var(--slate-600)' }}>
             Directly upload regulatory and compliance proofs on behalf of stakeholders to instantly complete KYC verification requirements without counterparty maker-checker delays.
           </p>
         </div>
@@ -209,11 +209,14 @@ function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDo
   );
 }
 
-export default function DocumentDesk() {
+const VERTICAL_LABELS = { REIA: 'REIA', HYDRO: 'Hydro', THERMAL: 'Thermal' };
+const ADMIN_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'THERMAL_ADMIN', 'THERMAL_USER'];
+
+export default function DocumentDesk({ vertical = 'REIA' }) {
   const { user } = useAuth();
   const canReview = canReviewDocuments(user?.role);
-  const canDirectAdmit = ['SJVN_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role);
-  const canAdminUpload = ['SJVN_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role);
+  const canDirectAdmit = ADMIN_ROLES.includes(user?.role);
+  const canAdminUpload = ADMIN_ROLES.includes(user?.role);
 
   const [tab, setTab] = useState(canReview ? 'QUEUE' : 'REPORT');
   const [queue, setQueue] = useState([]);
@@ -228,14 +231,15 @@ export default function DocumentDesk() {
 
   const load = useCallback(() => {
     setLoading(true);
+    const params = vertical !== 'REIA' ? { vertical } : undefined;
     Promise.all([
-      canReview ? api.documents.queue() : Promise.resolve([]),
-      api.documents.kycReport(),
+      canReview ? api.documents.queue(params) : Promise.resolve([]),
+      api.documents.kycReport(params),
     ])
       .then(([a, b]) => { setQueue(a); setReport(b); setError(''); })
       .catch((e) => setError(e.response?.data?.error || e.message))
       .finally(() => setLoading(false));
-  }, [canReview]);
+  }, [canReview, vertical]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -287,7 +291,7 @@ export default function DocumentDesk() {
   return (
     <div>
       <PageHeader
-        title="Documents & KYC Desk"
+        title={vertical === 'REIA' ? 'Documents & KYC Desk' : `Documents & KYC Desk — ${VERTICAL_LABELS[vertical]} Stations`}
         subtitle="Verification queue, company compliance status, and direct SJVN stakeholder onboarding & admission"
         actions={
           canAdminUpload && (
@@ -353,17 +357,17 @@ export default function DocumentDesk() {
                       <td><strong>{d.entity_name || (d.contract_no ? `Contract ${d.contract_no}` : '—')}</strong></td>
                       <td>
                         {d.title} <span style={{ color: 'var(--slate-500)' }}>(v{d.version_number})</span>
-                        <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{d.document_type}</div>
+                        <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{d.document_type}</div>
                       </td>
                       <td>
                         {fmtDateTime(d.uploaded_at)}
-                        <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{d.uploaded_by_name || '—'}</div>
+                        <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{d.uploaded_by_name || '—'}</div>
                       </td>
                       <td style={{ fontWeight: 600, color: d.waiting_days > 7 ? '#b91c1c' : d.waiting_days > 2 ? '#b45309' : 'inherit' }}>
                         {d.waiting_days === 0 ? 'Today' : `${d.waiting_days} day${d.waiting_days === 1 ? '' : 's'}`}
                       </td>
                       <td><ExpiryTag doc={d} /></td>
-                      <td style={{ fontSize: 12.5, fontWeight: 600 }}>
+                      <td style={{ fontSize: 13.5, fontWeight: 600 }}>
                         {bad > 0 && <span style={{ color: '#b91c1c' }}>✗ {bad} mismatch{bad === 1 ? '' : 'es'}</span>}
                         {bad === 0 && good > 0 && <span style={{ color: '#15803d' }}>✓ Matches record</span>}
                         {bad === 0 && good === 0 && <span style={{ color: 'var(--slate-500)', fontWeight: 400 }}>Not checked</span>}
@@ -423,12 +427,12 @@ export default function DocumentDesk() {
                     <tr key={r.entity_id}>
                       <td>
                         <strong>{r.name}</strong>
-                        <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{r.entity_type}</div>
+                        <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{r.entity_type}</div>
                       </td>
                       <td><Badge status={r.onboarding_status} /></td>
                       <td>
                         <Progress pct={r.progress_pct} />
-                        {r.mandatory_total > 0 && <div style={{ fontSize: 11.5, color: 'var(--slate-500)' }}>{r.mandatory_verified} of {r.mandatory_total}</div>}
+                        {r.mandatory_total > 0 && <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>{r.mandatory_verified} of {r.mandatory_total}</div>}
                       </td>
                       {num(r.verified, '#15803d')}
                       {num(r.pending, '#b45309')}

@@ -5,6 +5,8 @@ import { writeRolesFor, pathFor, deskLabel } from '../../lib/stationVertical.js'
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Field, AlertPopup, Tabs, Tab, fmtCurrency } from '../../components/ui.jsx';
+import HydroAdjustmentCorridor3D from '../../components/HydroAdjustmentCorridor3D.jsx';
+import ThermalAdjustmentCorridor3D from '../../components/ThermalAdjustmentCorridor3D.jsx';
 
 // Bills on months that are already billed.
 //
@@ -144,6 +146,12 @@ export default function HydroAdjustmentBills({ vertical = 'HYDRO' }) {
           {stations.map((s) => <option key={s.id} value={s.id}>{s.station_name || s.contract_no}</option>)}
         </select>
       </div>
+
+      {vertical === 'THERMAL' ? (
+        <ThermalAdjustmentCorridor3D stationId={stationId} bills={bills} preview={preview} arrearForm={arrear} />
+      ) : (
+        <HydroAdjustmentCorridor3D stationId={stationId} bills={bills} preview={preview} arrearForm={arrear} />
+      )}
 
       <Tabs style={{ marginBottom: 16 }}>
         <Tab active={view === 'arrear'} onClick={() => setView('arrear')}>Arrear bill</Tab>
@@ -310,7 +318,7 @@ export default function HydroAdjustmentBills({ vertical = 'HYDRO' }) {
             { key: 'total_charges', header: 'Amount', render: (b) => fmtCurrency(b.total_charges) },
             { key: 'status', header: 'Status', render: (b) => <Badge status={b.status} label={b.status} /> },
             { key: 'approval_status', header: 'Approval', render: (b) => (b.approval_status === 'IN_APPROVAL' ? `with ${b.pending_with || 'an approver'}` : b.approval_status.replaceAll('_', ' ').toLowerCase()) },
-            { key: 'reason', header: 'Reason', render: (b) => <span style={{ fontSize: 12 }}>{b.revision_reason}</span> },
+            { key: 'reason', header: 'Reason', render: (b) => <span style={{ fontSize: 13.5 }}>{b.revision_reason}</span> },
           ]}
           rows={bills}
           emptyMessage="No arrear or supplementary bill on this station yet."

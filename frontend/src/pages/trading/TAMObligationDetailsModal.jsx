@@ -84,13 +84,15 @@ export default function TAMObligationDetailsModal({ record, product = 'TAM', onC
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+      background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+      padding: '5vh 5vw',
     }}>
-      <div style={{ background: '#fff', borderRadius: 8, width: 1000, maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: '#fff', borderRadius: 14, width: '90vw', maxWidth: '90vw', height: '90vh', maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px -10px rgba(15, 23, 42, 0.35)' }}>
         <div style={{ padding: '15px 20px', borderBottom: '1px solid #ddd', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8f9fa', borderRadius: '8px 8px 0 0' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: 18, color: '#333' }}>{product} cleared blocks</h2>
-            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+            <div style={{ fontSize: 13.5, color: '#666', marginTop: 4 }}>
               {record.client_name} · {record.exchange} · {record.deliveryDate}
             </div>
           </div>
@@ -100,15 +102,15 @@ export default function TAMObligationDetailsModal({ record, product = 'TAM', onC
         <div style={{ padding: 20 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px 20px', marginBottom: 24 }}>
             <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Client</div>
+              <div style={{ fontSize: 13, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Client</div>
               <div style={{ fontSize: 14 }}>{record.client_name}</div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Exchange</div>
+              <div style={{ fontSize: 13, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Exchange</div>
               <div style={{ fontSize: 14 }}>{record.exchange}</div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Contract</div>
+              <div style={{ fontSize: 13, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Contract</div>
               <div style={{ fontSize: 14 }}>
                 {record.contract_id
                   ? <Link to={`/trading/exchange/contracts/${record.contract_id}`}>{record.contract_id}</Link>
@@ -116,15 +118,15 @@ export default function TAMObligationDetailsModal({ record, product = 'TAM', onC
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Status</div>
+              <div style={{ fontSize: 13, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Status</div>
               <div style={{ fontSize: 14 }}>{record.status}</div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Cleared energy</div>
+              <div style={{ fontSize: 13, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Cleared energy</div>
               <div style={{ fontSize: 14, fontWeight: 'bold' }}>{fmtNumber(totalMwh, 3)} MWh</div>
             </div>
             <div>
-              <div style={{ fontSize: 11, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Value</div>
+              <div style={{ fontSize: 13, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Value</div>
               <div style={{ fontSize: 14, fontWeight: 'bold' }}>₹{fmtNumber(totalValue, 2)}</div>
             </div>
           </div>

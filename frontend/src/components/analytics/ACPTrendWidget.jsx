@@ -43,10 +43,10 @@ export default function ACPTrendWidget({ exchange = 'IEX', product = 'DAM' }) {
                     <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="rate_date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} axisLine={false} tickLine={false} />
+                <XAxis dataKey="rate_date" tickFormatter={shortDate} minTickGap={24} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} axisLine={false} tickLine={false} />
                 <Tooltip labelFormatter={shortDate} formatter={(v, name) => [v == null ? '—' : `${rs(v)}/kWh`, name]} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
-                <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
+                <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 13.5 }} />
                 <Area type="monotone" dataKey="mcp_rate" name="Day price" stroke="var(--primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorMcp)" isAnimationActive={false} />
                 {hasRange && <Line type="monotone" dataKey="max_rate" name="Highest block" stroke="var(--text-muted)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls={false} isAnimationActive={false} />}
                 {hasRange && <Line type="monotone" dataKey="min_rate" name="Lowest block" stroke="var(--text-muted)" strokeWidth={1.5} strokeDasharray="1 3" dot={false} connectNulls={false} isAnimationActive={false} />}

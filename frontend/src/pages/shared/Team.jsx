@@ -141,7 +141,7 @@ export function Activity({ member, entityId, load = null }) {
         <thead><tr><th scope="col">When</th><th scope="col">What</th><th scope="col">Where</th><th scope="col">On</th></tr></thead>
         <tbody>
           {rows.map((a) => (
-            <tr key={a.id}><td style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(a.at)}</td><td>{a.what}</td><td>{a.module}</td><td style={{ fontSize: 12, color: 'var(--slate-500)' }}>{a.on || '—'}</td></tr>
+            <tr key={a.id}><td style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(a.at)}</td><td>{a.what}</td><td>{a.module}</td><td style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{a.on || '—'}</td></tr>
           ))}
         </tbody>
       </table>
@@ -240,7 +240,7 @@ export default function Team({ entityId = null }) {
               <div key={m.id} className={`elite-user-card ${!m.is_active ? 'inactive' : ''}`}>
                 <div className="elite-card-top">
                   <div className={`elite-avatar ${avatarStyle(m)}`}>{m.name.charAt(0).toUpperCase()}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: 'var(--slate-500)', fontWeight: 500 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.875rem', color: 'var(--slate-500)', fontWeight: 500 }}>
                     <div className={`elite-status-indicator ${!m.is_active ? 'inactive' : ''}`} />
                     {m.is_active ? 'Active' : 'Switched off'}
                   </div>

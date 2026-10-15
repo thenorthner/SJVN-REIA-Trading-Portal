@@ -303,7 +303,7 @@ export default function ExchangeBiddingLatest() {
               <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={(e) => setCsvName(e.target.files?.[0]?.name || '')} />
               <button type="button" className="btn" style={{ background: '#475569', color: '#fff' }} onClick={handleCsvUpload}>Upload</button>
               <button type="button" className="btn btn-link" style={{ color: '#1d4ed8', padding: 0 }} onClick={downloadSample}>Download Samples</button>
-              {csvName && <span style={{ fontSize: 12, color: '#64748b' }}>{csvName}</span>}
+              {csvName && <span style={{ fontSize: 13.5, color: '#64748b' }}>{csvName}</span>}
             </div>
           </div>
 
@@ -355,7 +355,7 @@ export default function ExchangeBiddingLatest() {
                   <button type="button" className="btn btn-sm btn-primary" onClick={() => addPq(dIndex)}>Add PQData</button>
                 </div>
                 {detail.pq_data.length === 0 ? (
-                  <div style={{ fontSize: 12, color: '#64748b' }}>No PQ rows yet — click Add PQData (rate / quantity).</div>
+                  <div style={{ fontSize: 13.5, color: '#64748b' }}>No PQ rows yet — click Add PQData (rate / quantity).</div>
                 ) : (
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>

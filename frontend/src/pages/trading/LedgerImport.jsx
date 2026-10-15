@@ -108,7 +108,7 @@ export default function LedgerImport() {
                   <tr key={key}>
                     <td>{label}</td>
                     <td><strong>{report[key] ?? 0}</strong></td>
-                    <td style={{ fontSize: 12, color: 'var(--slate-500)' }}>{meaning}</td>
+                    <td style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{meaning}</td>
                   </tr>
                 ))}
               </tbody>

@@ -173,7 +173,7 @@ export default function InvoiceClearanceCorridor3D({
                 Executive Maker-Checker Clearance Corridor
               </strong>
               <span style={{
-                fontSize: 10,
+                fontSize: 12.5,
                 textTransform: 'uppercase',
                 background: isDispatched ? 'rgba(16, 185, 129, 0.15)' : 'rgba(14, 165, 233, 0.15)',
                 color: isDispatched ? '#10b981' : '#38bdf8',
@@ -186,13 +186,13 @@ export default function InvoiceClearanceCorridor3D({
                 {isDispatched ? 'Full Statutory Sanction Achieved' : 'In Approval Pipeline'}
               </span>
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 1 }}>
               Invoice: <strong style={{ color: '#38bdf8' }}>{invoice.invoice_no}</strong> · Amount: <strong style={{ color: '#10b981' }}>{fmtCurrency(invoice.total_amount)}</strong>
             </div>
           </div>
         </div>
 
-        <div style={{ fontSize: 11, color: '#94a3b8' }}>
+        <div style={{ fontSize: 13, color: '#94a3b8' }}>
           Sequential 3-Tier Multi-Level Commercial & Finance Verification
         </div>
       </div>
@@ -241,7 +241,7 @@ export default function InvoiceClearanceCorridor3D({
                 {/* Stage Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
                   <span style={{
-                    fontSize: 9.5,
+                    fontSize: 12.5,
                     fontWeight: 800,
                     textTransform: 'uppercase',
                     color: stg.color,
@@ -259,7 +259,7 @@ export default function InvoiceClearanceCorridor3D({
 
                   {isPassed && (
                     <span style={{
-                      fontSize: 10,
+                      fontSize: 12.5,
                       fontWeight: 700,
                       color: '#10b981',
                       display: 'flex',
@@ -271,10 +271,10 @@ export default function InvoiceClearanceCorridor3D({
                   )}
                 </div>
 
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: '#f8fafc', marginBottom: 2 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: '#f8fafc', marginBottom: 2 }}>
                   {stg.title}
                 </div>
-                <div style={{ fontSize: 10.5, color: '#94a3b8', marginBottom: 10 }}>
+                <div style={{ fontSize: 12.5, color: '#94a3b8', marginBottom: 10 }}>
                   {stg.post}
                 </div>
 
@@ -286,19 +286,19 @@ export default function InvoiceClearanceCorridor3D({
                   padding: '8px 10px',
                   marginBottom: 8,
                 }}>
-                  <div style={{ fontSize: 10, color: '#94a3b8' }}>Designated Authority:</div>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, color: '#f8fafc', marginTop: 1 }}>
+                  <div style={{ fontSize: 12.5, color: '#94a3b8' }}>Designated Authority:</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#f8fafc', marginTop: 1 }}>
                     {stg.actorName || stg.designatedNames || '—'}
                   </div>
                   {stg.timestamp && (
-                    <div style={{ fontSize: 9.5, color: '#64748b', marginTop: 3 }}>
+                    <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 3 }}>
                       {fmtDateTime(stg.timestamp)}
                     </div>
                   )}
                 </div>
 
                 {stg.comments && (
-                  <div style={{ fontSize: 10.5, color: '#cbd5e1', fontStyle: 'italic', marginBottom: 8 }}>
+                  <div style={{ fontSize: 12.5, color: '#cbd5e1', fontStyle: 'italic', marginBottom: 8 }}>
                     &ldquo;{stg.comments}&rdquo;
                   </div>
                 )}
@@ -323,7 +323,7 @@ export default function InvoiceClearanceCorridor3D({
                       color: '#f8fafc',
                       padding: '5px 8px',
                       borderRadius: 4,
-                      fontSize: 11,
+                      fontSize: 13,
                       marginBottom: 8,
                     }}
                   />
@@ -340,7 +340,7 @@ export default function InvoiceClearanceCorridor3D({
                           border: 'none',
                           padding: '6px 8px',
                           borderRadius: 4,
-                          fontSize: 11,
+                          fontSize: 13,
                           fontWeight: 700,
                           cursor: 'pointer',
                         }}
@@ -359,7 +359,7 @@ export default function InvoiceClearanceCorridor3D({
                           border: '1px solid rgba(239, 68, 68, 0.3)',
                           padding: '6px 8px',
                           borderRadius: 4,
-                          fontSize: 11,
+                          fontSize: 13,
                           fontWeight: 600,
                           cursor: 'pointer',
                         }}

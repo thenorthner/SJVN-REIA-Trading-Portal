@@ -187,7 +187,7 @@ export default function RECObligationLedger() {
             />
           </Field>
         </div>
-        <p className="muted" style={{ marginTop: 12, fontSize: 12 }}>
+        <p className="muted" style={{ marginTop: 12, fontSize: 13.5 }}>
           The file is read by column name, not by position. Nothing is saved until you have seen
           what it was read as. Uploading the same file twice is refused; a corrected report updates
           the trades it restates.
@@ -230,7 +230,7 @@ export default function RECObligationLedger() {
         />
       </Card>
       {(ledger?.lines || []).some((l) => l.derived_fields?.length) && (
-        <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+        <p className="muted" style={{ fontSize: 13.5, marginTop: 8 }}>
           * computed here from quantity, rate and the exchange&apos;s charges — the report did not carry that figure.
         </p>
       )}
@@ -304,7 +304,7 @@ export default function RECObligationLedger() {
                 ))}
               </div>
               {(preview.columns_ignored || []).length > 0 && (
-                <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                <p className="muted" style={{ fontSize: 13.5, marginTop: 8 }}>
                   Ignored: {preview.columns_ignored.join(', ')}. If one of these holds a figure that
                   matters, it needs to be added to the parser before it can be relied on.
                 </p>
@@ -367,7 +367,7 @@ export default function RECObligationLedger() {
             )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+              <p className="muted" style={{ fontSize: 13.5, margin: 0 }}>
                 Withdrawing removes only the trades this report is still the source of — anything a
                 later report has since restated stays.
               </p>

@@ -28,7 +28,7 @@ function RateTrend({ points }) {
         {[yMin, (yMin + yMax) / 2, yMax].map((v, i) => (
           <g key={i}>
             <line x1={PAD.l} y1={y(v)} x2={W - PAD.r} y2={y(v)} stroke="var(--slate-200, #e2e8f0)" strokeWidth="1" />
-            <text x={PAD.l - 8} y={y(v) + 4} textAnchor="end" fontSize="11" fill="var(--slate-500,#64748b)">₹{v.toFixed(2)}</text>
+            <text x={PAD.l - 8} y={y(v) + 4} textAnchor="end" fontSize="12.5" fill="var(--slate-500,#64748b)">₹{v.toFixed(2)}</text>
           </g>
         ))}
         {/* The margin band — thin and even is what "healthy" looks like. */}
@@ -37,14 +37,14 @@ function RateTrend({ points }) {
         <path d={line('sale_rate')} fill="none" stroke="url(#eliteGreen)" strokeWidth="1.8" />
         {points.map((p, i) => (
           (points.length <= 14 || i % Math.ceil(points.length / 12) === 0) && (
-            <text key={p.settlement_date} x={x(i)} y={H - 20} textAnchor="end" fontSize="10"
+            <text key={p.settlement_date} x={x(i)} y={H - 20} textAnchor="end" fontSize="12.5"
               fill="var(--slate-500,#64748b)" transform={`rotate(-40 ${x(i)} ${H - 20})`}>
               {p.settlement_date.slice(5)}
             </text>
           )
         ))}
       </svg>
-      <div style={{ display: 'flex', gap: 18, fontSize: 12, color: 'var(--slate-500)', marginTop: 4 }}>
+      <div style={{ display: 'flex', gap: 18, fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
         <span><span style={{ display: 'inline-block', width: 14, height: 2, background: '#dc2626', marginRight: 5, verticalAlign: 'middle' }} />Purchase rate (paid to seller)</span>
         <span><span style={{ display: 'inline-block', width: 14, height: 2, background: '#16a34a', marginRight: 5, verticalAlign: 'middle' }} />Sale rate (billed to buyer)</span>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#2563eb', opacity: 0.3, marginRight: 5 }} />Trading margin</span>
@@ -156,7 +156,7 @@ export default function MarginAssurance() {
 
       <Card title="Purchase and sale rate, day by day">
         <RateTrend points={trend} />
-        <p style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 10 }}>
+        <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 10 }}>
           The purchase rate is market-linked and moves daily; the margin does not. An even band between the two lines is
           what a healthy book looks like — a widening or pinching band is a pricing error worth chasing.
         </p>
@@ -170,7 +170,7 @@ export default function MarginAssurance() {
 
       <Card title={`Receipt exceptions (${exceptions.length})`}>
         <Table columns={exceptionColumns} rows={exceptions} loading={loading} emptyMessage="Every receipt matched what was billed." />
-        <p style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 10 }}>
+        <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 10 }}>
           Days where the money received did not match the bill. These are small and were never chased in the ledger —
           a TDS adjustment and bank rounding — but they are the list to work through.
         </p>

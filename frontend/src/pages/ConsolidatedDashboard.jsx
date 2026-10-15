@@ -301,8 +301,8 @@ export default function ConsolidatedDashboard() {
                     <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.6}/>
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${(v / 1e7).toFixed(1)}Cr`} axisLine={false} tickLine={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 13.5 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 13.5 }} tickFormatter={(v) => `₹${(v / 1e7).toFixed(1)}Cr`} axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v) => fmtCurrency(v)} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
                 <Legend />
                 <Bar dataKey="Value" fill="url(#colorValue)" radius={[6, 6, 0, 0]} />
@@ -411,7 +411,7 @@ export default function ConsolidatedDashboard() {
                   <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--slate-900)', marginBottom: '6px', lineHeight: 1.3 }}>
                     {r.title}
                   </div>
-                  <div style={{ fontSize: '12px', color: 'var(--slate-500)', lineHeight: '1.45', marginBottom: '16px', flex: 1 }}>
+                  <div style={{ fontSize: '13.5px', color: 'var(--slate-500)', lineHeight: '1.45', marginBottom: '16px', flex: 1 }}>
                     {r.blurb}
                   </div>
 
@@ -431,7 +431,7 @@ export default function ConsolidatedDashboard() {
                       border: '1px solid var(--slate-300)',
                       background: '#ffffff',
                       color: 'var(--slate-900)',
-                      fontSize: '12px',
+                      fontSize: '13.5px',
                       fontWeight: 500,
                       cursor: busyReport === r.path ? 'not-allowed' : 'pointer',
                       opacity: busyReport === r.path ? 0.6 : 1,

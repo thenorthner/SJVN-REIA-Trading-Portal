@@ -168,7 +168,7 @@ export default function PxilOrderSummary() {
       <style>
         body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 24px; }
         h1 { font-size: 18px; margin-bottom: 16px; }
-        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
         th { background: #101a2e; color: #fff; text-align: left; padding: 8px; }
         td { border-bottom: 1px solid #ddd; padding: 8px; }
       </style></head><body>
@@ -284,7 +284,7 @@ export default function PxilOrderSummary() {
                         <span style={{ color: '#1d4ed8', fontWeight: 500 }}>{r.reference_no}</span>
                       </td>
                       <td style={{ padding: '10px 12px' }}>{r.product_code}</td>
-                      <td style={{ padding: '10px 12px', fontSize: 12 }}>{r.contract_id || '—'}</td>
+                      <td style={{ padding: '10px 12px', fontSize: 13.5 }}>{r.contract_id || '—'}</td>
                       <td style={{ padding: '10px 12px' }}>{r.quantity}</td>
                       <td style={{ padding: '10px 12px' }}>{r.price}</td>
                       <td style={{ padding: '10px 12px' }}>{fmtDate(r.delivery_date_from)}</td>
@@ -293,7 +293,7 @@ export default function PxilOrderSummary() {
                       <td style={{ padding: '10px 12px' }}>{fmtTime(r.to_time)}</td>
                       <td style={{ padding: '10px 12px' }}>
                         {r.status === 'BID_PLACED' ? (
-                          <div style={{ color: '#15803d', fontSize: 12, fontWeight: 600 }}>
+                          <div style={{ color: '#15803d', fontSize: 13.5, fontWeight: 600 }}>
                             Bid Placed
                             {Array.isArray(r.bid_ids) && r.bid_ids.length > 0 && (
                               <div style={{ fontWeight: 400, color: '#475569' }}>{r.bid_ids.length} bid{r.bid_ids.length > 1 ? 's' : ''} linked</div>
@@ -316,7 +316,7 @@ export default function PxilOrderSummary() {
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 12, fontSize: 12, color: '#64748b' }}>
+            <div style={{ marginTop: 12, fontSize: 13.5, color: '#64748b' }}>
               Showing 1 to {filtered.length} of {filtered.length} entries.
             </div>
           </>

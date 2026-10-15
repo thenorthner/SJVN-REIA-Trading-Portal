@@ -50,7 +50,7 @@ export default function ContractPnl() {
 
   const columns = [
     { key: 'client', label: 'Buyer' },
-    { key: 'counterparty', label: 'Seller', render: r => <span style={{ fontSize: 12 }}>{r.counterparty}</span> },
+    { key: 'counterparty', label: 'Seller', render: r => <span style={{ fontSize: 13.5 }}>{r.counterparty}</span> },
     {
       key: 'volume_basis',
       label: 'Volume from',
@@ -111,7 +111,7 @@ export default function ContractPnl() {
 
           <Card title="Per-deal detail">
             <Table columns={columns} rows={active} loading={loading} emptyMessage="No deals with volume in this period." />
-            <p style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 10 }}>
+            <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 10 }}>
               Volume is the buyer's own approved application energy where the day-wise schedule is held at contract level,
               so no single buyer is credited with the whole contract.
             </p>
@@ -142,7 +142,7 @@ export default function ContractPnl() {
                 </tr>
               </tbody>
             </table>
-            <p style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 12 }}>
+            <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 12 }}>
               TDS is shown separately because it is timing rather than cost — {fmtCurrency(realised.tds_withheld_by_buyer)} withheld
               by the buyer from SJVN, and {fmtCurrency(realised.tds_withheld_from_seller)} withheld by SJVN from the seller.
             </p>

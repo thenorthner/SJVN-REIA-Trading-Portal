@@ -201,7 +201,7 @@ export default function RecBidEntry() {
     <div style={{ padding: 20, maxWidth: 960, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 12, color: '#64748b' }}>REC Order Details</div>
+          <div style={{ fontSize: 13.5, color: '#64748b' }}>REC Order Details</div>
           <h1 style={{ margin: 0, fontSize: 22 }}>REC Bid Entry</h1>
         </div>
         <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
@@ -211,7 +211,7 @@ export default function RecBidEntry() {
             <div>
               <span style={{ color: '#64748b' }}>Sellable · </span>
               <strong>{fmtNumber(inventory.sellable_qty, 0)}</strong> RECs
-              <span style={{ color: '#94a3b8', fontSize: 12 }}>
+              <span style={{ color: '#94a3b8', fontSize: 13.5 }}>
                 {' '}({fmtNumber(inventory.held_qty, 0)} held − {fmtNumber(inventory.committed_qty, 0)} committed)
               </span>
             </div>
@@ -263,8 +263,8 @@ export default function RecBidEntry() {
             </Field>
             <Field label="Price (Rs./Certificate)" required>
               <input type="number" step="any" min="0" className="input" value={form.price} onChange={(e) => set('price', e.target.value)} required />
-              {priceError && <div style={{ marginTop: 4, fontSize: 12, color: '#991b1b', fontWeight: 600 }}>{priceError}</div>}
-              {!priceError && priceNote && <div style={{ marginTop: 4, fontSize: 12, color: '#64748b' }}>{priceNote}</div>}
+              {priceError && <div style={{ marginTop: 4, fontSize: 13.5, color: '#991b1b', fontWeight: 600 }}>{priceError}</div>}
+              {!priceError && priceNote && <div style={{ marginTop: 4, fontSize: 13.5, color: '#64748b' }}>{priceNote}</div>}
             </Field>
             <Field label="Quantity (Nos.)" required>
               <input type="number" min="1" step="1" className="input" value={form.quantity} onChange={(e) => set('quantity', e.target.value)} required />
@@ -287,7 +287,7 @@ export default function RecBidEntry() {
             </div>
           )}
 
-          <p style={{ fontSize: 12, color: '#64748b', marginTop: 14 }}>
+          <p style={{ fontSize: 13.5, color: '#64748b', marginTop: 14 }}>
             * 1 Certificate is equivalent to 1 MWh (1000 Kwh) of Energy Injected for each type of Contract
           </p>
 
@@ -345,7 +345,7 @@ export default function RecBidEntry() {
                       {o.status}
                     </Badge>
                     {o.status === 'EXECUTED' && o.executed_quantity != null && (
-                      <div style={{ fontSize: 11, color: '#64748b' }}>
+                      <div style={{ fontSize: 13, color: '#64748b' }}>
                         {fmtNumber(o.executed_quantity, 0)} @ ₹{fmtNumber(o.discovered_rate, 2)}
                       </div>
                     )}
@@ -420,7 +420,7 @@ export default function RecBidEntry() {
               )}
             </div>
             {execRow.side === 'Sell' && Number(execForm.executed_quantity) > 0 && Number(execForm.discovered_rate) > 0 && (
-              <p style={{ fontSize: 12, color: '#475569', marginTop: 10 }}>
+              <p style={{ fontSize: 13.5, color: '#475569', marginTop: 10 }}>
                 Trade obligation{' '}
                 <strong>₹{fmtNumber(Number(execForm.executed_quantity) * Number(execForm.discovered_rate), 0)}</strong>
                 {' '}before exchange fees.
@@ -447,7 +447,7 @@ export default function RecBidEntry() {
               {form.side} <strong>{form.quantity}</strong> × {form.rec_type} @ <strong>₹{form.price}</strong> on {form.exchange}
               {notional != null && <> (₹{fmtNumber(notional, 2)})</>}.
             </p>
-            <p style={{ fontSize: 12, color: '#64748b' }}>{form.entity_name} · {form.portfolio_code}</p>
+            <p style={{ fontSize: 13.5, color: '#64748b' }}>{form.entity_name} · {form.portfolio_code}</p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
               <button type="button" className="btn btn-outline" onClick={() => setConfirmOpen(false)} disabled={busy}>Cancel</button>
               <button type="button" className="btn btn-primary" onClick={confirmSubmit} disabled={busy}>

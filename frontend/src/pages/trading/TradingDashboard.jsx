@@ -128,7 +128,7 @@ export default function TradingDashboard() {
                       <div style={{ flex: 1, height: 8, background: '#eee', borderRadius: 4, overflow: 'hidden' }}>
                         <div style={{ height: '100%', background: perc > 90 ? '#cf1322' : '#1890ff', width: `${Math.min(perc, 100)}%` }} />
                       </div>
-                      <span style={{ fontSize: 12, color: perc > 90 ? '#cf1322' : '#666' }}>{perc.toFixed(1)}%</span>
+                      <span style={{ fontSize: 13.5, color: perc > 90 ? '#cf1322' : '#666' }}>{perc.toFixed(1)}%</span>
                     </div>
                   );
                 }

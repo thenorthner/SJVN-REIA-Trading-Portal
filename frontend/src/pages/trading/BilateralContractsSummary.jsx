@@ -116,7 +116,7 @@ export default function BilateralContractsSummary() {
       <style>
         body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 24px; }
         h1 { font-size: 18px; margin-bottom: 16px; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
         th { background: #101a2e; color: #fff; text-align: left; padding: 8px; }
         td { border-bottom: 1px solid #ddd; padding: 8px; }
       </style></head><body>
@@ -227,7 +227,7 @@ export default function BilateralContractsSummary() {
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 12, fontSize: 12, color: '#64748b' }}>
+            <div style={{ marginTop: 12, fontSize: 13.5, color: '#64748b' }}>
               Showing {filtered.length === 0 ? 0 : 1} to {filtered.length} of {filtered.length} entries
               {search.trim() && rows.length !== filtered.length ? ` (filtered from ${rows.length})` : ''}
             </div>

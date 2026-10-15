@@ -15,7 +15,7 @@ const emptyRevision = { effective_from: '', sale_rate_per_unit: '', purchase_rat
 const emptyBuyer = () => ({ buyer_name: '', share_percent: '', drawal_state: '' });
 
 const box = { padding: '10px 12px', border: '1px solid var(--slate-200, #e2e8f0)', borderRadius: 8, background: 'var(--slate-50, #f8fafc)' };
-const small = { fontSize: 12, color: 'var(--slate-600, #475569)' };
+const small = { fontSize: 13.5, color: 'var(--slate-600, #475569)' };
 
 export default function BilateralRevisionsPanel({ transaction, onChanged }) {
   const { user } = useAuth();

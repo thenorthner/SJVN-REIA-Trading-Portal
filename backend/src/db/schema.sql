@@ -1030,7 +1030,7 @@ CREATE TABLE IF NOT EXISTS payment_intimations (
   proof_version_id TEXT,
   remarks TEXT,
   exceeds_balance INTEGER NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('PENDING_CHECKER','SUBMITTED','CONFIRMED','REJECTED','WITHDRAWN')),
+  status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('PENDING_CHECKER','SUBMITTED','CONFIRMED','REJECTED','WITHDRAWN','RETURNED_BY_CHECKER')),
   prepared_by TEXT,
   approved_by TEXT,
   approved_at TEXT,
@@ -4125,6 +4125,16 @@ CREATE TABLE IF NOT EXISTS hydro_dispute_events (
   to_status TEXT NOT NULL,
   remarks TEXT,
   actor TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS hydro_dispute_comments (
+  id TEXT PRIMARY KEY,
+  dispute_id TEXT NOT NULL REFERENCES hydro_disputes(id),
+  body TEXT NOT NULL,
+  is_internal INTEGER NOT NULL DEFAULT 0,
+  author_id TEXT,
+  author_name TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

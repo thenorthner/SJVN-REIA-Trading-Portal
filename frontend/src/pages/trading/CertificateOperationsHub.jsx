@@ -403,7 +403,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
       <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
         <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-exchange">Exchange:</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-exchange">Exchange:</label>
             <select id="certificateoperationshub-exchange" className="input" value={exchange} onChange={e => setExchange(e.target.value)}>
               <option value="ALL">---Select---</option>
               <option value="IEX">IEX</option>
@@ -411,20 +411,20 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-portfolio">Portfolio:</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-portfolio">Portfolio:</label>
             <PortfolioSelect id="certificateoperationshub-portfolio" includeAll />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-from-date">From Date:</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-from-date">From Date:</label>
             <input id="certificateoperationshub-from-date" type="date" className="input" />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-to-date">To Date:</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-to-date">To Date:</label>
             <input id="certificateoperationshub-to-date" type="date" className="input" />
           </div>
           {activeSubView === 'BIDDING' && (
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-status">Status:</label>
+              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-status">Status:</label>
               <select id="certificateoperationshub-status" className="input">
                 <option value="ALL">New</option>
                 <option value="APPROVED">Approved</option>
@@ -469,13 +469,13 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
                   <option value="AUTO_ROUTE">Auto-Route (Best Depth)</option>
                 </select>
                 {createForm.exchange === 'IEX' && (
-                  <div style={{ marginTop: 5, fontSize: 11, color: '#666' }}>30-Day Liquidity: ~85,000 RECs cleared</div>
+                  <div style={{ marginTop: 5, fontSize: 13, color: '#666' }}>30-Day Liquidity: ~85,000 RECs cleared</div>
                 )}
                 {createForm.exchange === 'PXIL' && (
-                  <div style={{ marginTop: 5, fontSize: 11, color: '#666' }}>30-Day Liquidity: ~12,000 RECs cleared</div>
+                  <div style={{ marginTop: 5, fontSize: 13, color: '#666' }}>30-Day Liquidity: ~12,000 RECs cleared</div>
                 )}
                 {(createForm.exchange === 'SMART_SPLIT' || createForm.exchange === 'AUTO_ROUTE') && (
-                  <div style={{ marginTop: 5, fontSize: 11, color: '#2980b9', fontWeight: 'bold' }}>
+                  <div style={{ marginTop: 5, fontSize: 13, color: '#2980b9', fontWeight: 'bold' }}>
                     {createForm.exchange === 'SMART_SPLIT' ? ' Splitting order to hedge execution risk.' : ' Routing to exchange with highest order-book depth.'}
                   </div>
                 )}
@@ -513,10 +513,10 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
                 <Field label={`Per Certificate Price (₹)`} style={{ flex: 1 }}>
                   <input type="number" className="input" value={createForm.price} onChange={e => setCreateForm({...createForm, price: e.target.value})} placeholder="e.g. 1500" />
                   {priceError && (
-                    <div style={{ marginTop: 5, fontSize: 11, color: 'var(--red)', fontWeight: 'bold' }}> {priceError}</div>
+                    <div style={{ marginTop: 5, fontSize: 13, color: 'var(--red)', fontWeight: 'bold' }}> {priceError}</div>
                   )}
                   {!priceError && priceNote && (
-                    <div style={{ marginTop: 5, fontSize: 11, color: 'var(--text-muted)' }}>{priceNote}</div>
+                    <div style={{ marginTop: 5, fontSize: 13, color: 'var(--text-muted)' }}>{priceNote}</div>
                   )}
                 </Field>
               </div>
@@ -525,7 +525,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
             {/* Auto-calculating Estimator */}
             {createForm.qty && createForm.price && (
               <div style={{ background: '#f8f9fa', border: '1px dashed #adb5bd', padding: 15, borderRadius: 8, marginBottom: 20 }}>
-                <div style={{ fontSize: 12, color: '#6c757d', fontWeight: 'bold', textTransform: 'none', marginBottom: 5 }}>Order Value Estimator</div>
+                <div style={{ fontSize: 13.5, color: '#6c757d', fontWeight: 'bold', textTransform: 'none', marginBottom: 5 }}>Order Value Estimator</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>{fmtNumber(createForm.qty)} Units × ₹{fmtNumber(createForm.price)}</span>
                   <span style={{ fontSize: 20, fontWeight: 'bold', color: '#2c3e50' }}>₹{fmtNumber(createForm.qty * createForm.price)}</span>

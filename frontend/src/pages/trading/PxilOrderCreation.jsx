@@ -103,7 +103,7 @@ export default function PxilOrderCreation() {
     <div style={{ padding: 20, maxWidth: 920, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <div style={{ fontSize: 12, color: '#64748b' }}>PXIL</div>
+          <div style={{ fontSize: 13.5, color: '#64748b' }}>PXIL</div>
           <h1 style={{ margin: 0, fontSize: 22 }}>Pxil Order Creation</h1>
         </div>
         <Link to="/trading/pxil/summary" style={{ color: '#1d4ed8', fontSize: 13 }}>Order Summary →</Link>

@@ -36,12 +36,12 @@ export default function SjvnDeskCard() {
           return (
             <div key={`${e.date}-${i}`} className="ch-cal" role="button" tabIndex={0} onClick={() => navigate(e.link)} onKeyDown={(ev) => { if (ev.key === 'Enter') navigate(e.link); }}>
               <div className="ch-date"><b>{dt.getDate()}</b><small>{dt.toLocaleDateString('en-IN', { month: 'short' })}</small></div>
-              <div><div style={{ fontWeight: 600 }}>{e.title}</div><div style={{ fontSize: 12, color: 'var(--text-light)' }}>{KIND[e.kind]}{e.detail ? ` · ${e.detail}` : ''}</div></div>
+              <div><div style={{ fontWeight: 600 }}>{e.title}</div><div style={{ fontSize: 13.5, color: 'var(--text-light)' }}>{KIND[e.kind]}{e.detail ? ` · ${e.detail}` : ''}</div></div>
               <div className={`ch-in ${e.days <= 7 ? 'soon' : ''}`}>{e.days === 0 ? 'Today' : e.days === 1 ? 'Tomorrow' : `in ${e.days} days`}</div>
             </div>
           );
         })}
-        {d.calendar.length > 10 && <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-light)' }}>and {d.calendar.length - 10} more.</p>}
+        {d.calendar.length > 10 && <p style={{ margin: '8px 0 0', fontSize: 13.5, color: 'var(--text-light)' }}>and {d.calendar.length - 10} more.</p>}
       </Card>
     </div>
   );

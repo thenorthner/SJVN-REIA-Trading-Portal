@@ -480,7 +480,7 @@ export default function Entities({ vertical = 'REIA' }) {
     { key: 'name', header: 'Name', render: (r) => (
       <div>
         <div style={{fontWeight: 600}}>{r.name}</div>
-        {r.parent_name && <div style={{fontSize: 11, color: '#666'}}>Parent: {r.parent_name}</div>}
+        {r.parent_name && <div style={{fontSize: 13, color: '#666'}}>Parent: {r.parent_name}</div>}
       </div>
     )},
     { key: 'entity_type', header: 'Type', render: (r) => <Badge status={r.entity_type} /> },
@@ -655,14 +655,14 @@ export default function Entities({ vertical = 'REIA' }) {
                         <div style={{ fontWeight: 600, fontSize: 13 }}>
                           {item.label}
                           {item.is_mandatory ? (
-                            <span style={{ color: 'var(--red-deep)', marginLeft: 6, fontSize: 11 }}>Required</span>
+                            <span style={{ color: 'var(--red-deep)', marginLeft: 6, fontSize: 13 }}>Required</span>
                           ) : (
-                            <span style={{ color: 'var(--slate-500)', marginLeft: 6, fontSize: 11 }}>Optional</span>
+                            <span style={{ color: 'var(--slate-500)', marginLeft: 6, fontSize: 13 }}>Optional</span>
                           )}
                         </div>
-                        <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>{item.help}</div>
+                        <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{item.help}</div>
                       </div>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, whiteSpace: 'nowrap' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, whiteSpace: 'nowrap' }}>
                         <input
                           type="checkbox"
                           checked={na}
@@ -714,7 +714,7 @@ export default function Entities({ vertical = 'REIA' }) {
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                 onClick={() => startEdit(selected)}
               >
-                ✏️ Edit Stakeholder Details
+                Edit Stakeholder Details
               </button>
             )}
           </div>
@@ -740,7 +740,7 @@ export default function Entities({ vertical = 'REIA' }) {
                     <td>
                       {selected.is_blacklisted ? <Badge status="REJECTED" label="BLACKLISTED" /> : <Badge status="ACTIVE" label="Clear" />}
                       {(selected.blacklist_reason || selected.blacklisted_by) && (
-                        <div style={{ fontSize: 11.5, color: 'var(--slate-500)', marginTop: 4 }}>
+                        <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
                           {selected.is_blacklisted ? 'Blacklisted' : 'Cleared'}
                           {selected.blacklisted_by ? ` by ${selected.blacklisted_by}` : ''}
                           {selected.blacklisted_at ? ` on ${fmtDate(selected.blacklisted_at)}` : ''}
@@ -771,7 +771,7 @@ export default function Entities({ vertical = 'REIA' }) {
                     <td>Bank Details</td>
                     <td>
                       <div>{selected.account_no || '-'}, {selected.bank_name || '-'}</div>
-                      <div style={{fontSize: 11, color: '#666'}}>IFSC: {selected.ifsc_code || '-'} | Branch: {selected.branch_address || '-'}</div>
+                      <div style={{fontSize: 13, color: '#666'}}>IFSC: {selected.ifsc_code || '-'} | Branch: {selected.branch_address || '-'}</div>
                       <div style={{ marginTop: 6 }}>
                         {selected.is_penny_drop_verified
                           ? <Badge status="ACTIVE" label="Bank verified" />
@@ -785,7 +785,7 @@ export default function Entities({ vertical = 'REIA' }) {
                         )}
                       </div>
                       {selected.pending_bank_json && (
-                        <div style={{ fontSize: 11.5, color: 'var(--amber-strong)', marginTop: 4 }}>
+                        <div style={{ fontSize: 13, color: 'var(--amber-strong)', marginTop: 4 }}>
                           A change of bank account is waiting. It becomes the live account when this record is re-approved.
                         </div>
                       )}
@@ -844,18 +844,18 @@ export default function Entities({ vertical = 'REIA' }) {
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <strong style={{ fontSize: 13 }}>{item.label}</strong>
                     <Badge status={item.status === 'VERIFIED' ? 'ACTIVE' : item.status === 'NOT_APPLICABLE' ? 'DRAFT' : 'PENDING'} label={APPROVAL_STATUS_LABELS[item.status] || item.status} />
-                    {item.is_mandatory ? <span style={{ fontSize: 11, color: 'var(--red-deep)' }}>Required</span> : <span style={{ fontSize: 11, color: 'var(--slate-500)' }}>Optional</span>}
+                    {item.is_mandatory ? <span style={{ fontSize: 13, color: 'var(--red-deep)' }}>Required</span> : <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>Optional</span>}
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 4 }}>
+                  <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
                     {item.reference_no ? `Ref: ${item.reference_no} · ` : ''}
                     {item.issued_by ? `Issuer: ${item.issued_by} · ` : ''}
                     {item.issued_on ? `Issued: ${item.issued_on} · ` : ''}
                     {item.valid_until ? `Valid till: ${item.valid_until}` : ''}
                     {!item.reference_no && !item.issued_by && !item.issued_on && !item.valid_until ? 'No details yet' : ''}
                   </div>
-                  {item.notes && <div style={{ fontSize: 12, color: 'var(--slate-600)', marginTop: 2 }}>{item.notes}</div>}
+                  {item.notes && <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 2 }}>{item.notes}</div>}
                   {item.verified_by && (
-                    <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-subtle)', marginTop: 2 }}>
                       Verified by {item.verified_by}{item.verified_at ? ` · ${fmtDate(item.verified_at)}` : ''}
                     </div>
                   )}
@@ -868,18 +868,18 @@ export default function Entities({ vertical = 'REIA' }) {
                       <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         {proof ? (
                           <>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: vs === 'VERIFIED' ? '#15803d' : vs === 'REJECTED' ? '#b91c1c' : '#b45309' }}>
+                            <span style={{ fontSize: 13.5, fontWeight: 600, color: vs === 'VERIFIED' ? '#15803d' : vs === 'REJECTED' ? '#b91c1c' : '#b45309' }}>
                                {vs === 'VERIFIED' ? 'Proof verified' : vs === 'REJECTED' ? 'Proof rejected' : 'Proof uploaded — pending review'}
                             </span>
-                            <button type="button" className="link-btn" style={{ fontSize: 12 }} onClick={() => setDocPreview({ versionId: proof.latest_version_id, fileName: proof.file_name })}>
+                            <button type="button" className="link-btn" style={{ fontSize: 13.5 }} onClick={() => setDocPreview({ versionId: proof.latest_version_id, fileName: proof.file_name })}>
                                View proof
                             </button>
                           </>
                         ) : (
-                          <span style={{ fontSize: 12, color: 'var(--text-subtle)' }}>
+                          <span style={{ fontSize: 13.5, color: 'var(--text-subtle)' }}>
                             No proof uploaded
                             {canUpload ? (
-                              <button type="button" className="link-btn" style={{ fontSize: 12, marginLeft: 6 }} onClick={() => setUploadFor({ code: item.approval_code, label: item.label })}>
+                              <button type="button" className="link-btn" style={{ fontSize: 13.5, marginLeft: 6 }} onClick={() => setUploadFor({ code: item.approval_code, label: item.label })}>
                                 Upload
                               </button>
                             ) : ' · awaiting stakeholder upload'}
@@ -997,7 +997,7 @@ export default function Entities({ vertical = 'REIA' }) {
                     {selected.regulatory_summary?.blocking?.length > 0 && (
                       <span
                         style={{
-                          fontSize: 11.5,
+                          fontSize: 13,
                           fontWeight: 600,
                           color: '#b45309',
                           background: '#fef3c7',
@@ -1010,7 +1010,7 @@ export default function Entities({ vertical = 'REIA' }) {
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 12.5, color: '#78350f', lineHeight: 1.45 }}>
+                  <div style={{ fontSize: 13.5, color: '#78350f', lineHeight: 1.45 }}>
                     Standard approval will remain on hold until mandatory regulatory clearances are verified or marked N/A in the checklist above.
                   </div>
                   {selected.regulatory_summary?.blocking?.length > 0 && (

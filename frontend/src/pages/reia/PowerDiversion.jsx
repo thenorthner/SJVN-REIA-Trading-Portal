@@ -138,7 +138,7 @@ export default function PowerDiversion() {
           </div>
           <div className="callout" style={{ margin: '8px 0', padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, fontSize: 13 }}>
             Sale: <strong>{fmtCurrency(salePreview)}</strong>{'  ·  '}Net Gain: <Signed v={netPreview} />
-            <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>Positive gain reduces the buyer's dues; a deficit is made good by the buyer.</div>
+            <div style={{ fontSize: 13, color: 'var(--text-light)', marginTop: 2 }}>Positive gain reduces the buyer's dues; a deficit is made good by the buyer.</div>
           </div>
           <Field label="Notes"><input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
           <div className="form-actions">

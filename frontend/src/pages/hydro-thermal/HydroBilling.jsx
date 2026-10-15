@@ -16,6 +16,8 @@ import {
 } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
+import HydroWaterToWirePipeline3D from '../../components/HydroWaterToWirePipeline3D.jsx';
+import HydroBeneficiaryWaterfall3D from '../../components/HydroBeneficiaryWaterfall3D.jsx';
 
 // The monthly bill for a hydro station, in the shape SJVN's Commercial & System
 // Operation Department issues it: the station's own charges (the A, C, E and EE
@@ -106,7 +108,7 @@ function StationBillSheet({ bill }) {
                   {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.fill} />)}
                 </Pie>
                 <Tooltip formatter={(val) => fmtCurrency(val)} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: 13.5 }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -122,7 +124,7 @@ function StationBillSheet({ bill }) {
                 <div style={{ width: `${(bill.e3_saleable_scheduled_kwh / bill.e1_ex_bus_scheduled_kwh) * 100}%`, background: 'var(--primary)', height: '100%' }} />
                 <div style={{ width: `${(bill.e2_free_power_kwh / bill.e1_ex_bus_scheduled_kwh) * 100}%`, background: 'var(--green)', height: '100%' }} />
              </div>
-             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5 }}>
                 <span style={{ color: 'var(--primary)' }}>Saleable: {fmtNumber(bill.e3_saleable_scheduled_kwh / 1000, 1)}</span>
                 <span style={{ color: 'var(--green)' }}>Free (Home): {fmtNumber(bill.e2_free_power_kwh / 1000, 1)}</span>
              </div>
@@ -221,7 +223,7 @@ function BeneficiarySheet({ lines, bill }) {
         <span>
           {r.beneficiary_name}
           {r.parent_state && (
-            <span style={{ color: 'var(--text-light)', fontSize: 11, marginLeft: 6 }}>· {r.parent_state}</span>
+            <span style={{ color: 'var(--text-light)', fontSize: 13, marginLeft: 6 }}>· {r.parent_state}</span>
           )}
         </span>
       ),
@@ -271,7 +273,7 @@ function BeneficiarySheet({ lines, bill }) {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 0, left: 40, bottom: 0 }}>
               <XAxis type="number" hide />
-              <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
+              <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} />
               <Tooltip formatter={(val) => fmtCurrency(val)} cursor={{ fill: 'var(--slate-200)' }} />
               <Bar dataKey="value" fill="var(--primary)" radius={[0, 4, 4, 0]} barSize={16} />
             </BarChart>
@@ -448,18 +450,18 @@ function AllocationSheet({ alloc, station, canWrite, onSaved }) {
                 {parsed.closesOn100 ? ' — closes on 100%' : ' — must close on 100% before a bill can be raised'}
               </div>
               {parsed.rows.some((r) => r.is_home_state) ? (
-                <div style={{ color: 'var(--text-light)', fontSize: 12 }}>
+                <div style={{ color: 'var(--text-light)', fontSize: 13.5 }}>
                   Home state: {parsed.rows.filter((r) => r.is_home_state).map((r) => r.beneficiary_name).join(', ')}
                   {' '}— carries the {alloc.fehs_pct}% free power
                 </div>
               ) : (
-                <div style={{ color: 'var(--red)', fontSize: 12 }}>
+                <div style={{ color: 'var(--red)', fontSize: 13.5 }}>
                   No home state marked — add a <code>*</code> after the name of the state that
                   receives the {alloc.fehs_pct}% free power
                 </div>
               )}
               {parsed.errors.map((e2) => (
-                <div key={e2} style={{ color: 'var(--red)', fontSize: 12 }}>{e2}</div>
+                <div key={e2} style={{ color: 'var(--red)', fontSize: 13.5 }}>{e2}</div>
               ))}
             </div>
           )}
@@ -540,7 +542,7 @@ function RegulationPanel({ ursNr, allocations, deductions, setDeductions, e3, pr
               <th scope="col">
                 Actual scheduled energy
                 {!exact && (
-                  <span style={{ fontWeight: 400, color: 'var(--text-light)', fontSize: 11, display: 'block' }}>
+                  <span style={{ fontWeight: 400, color: 'var(--text-light)', fontSize: 13, display: 'block' }}>
                     approximate until the bill is computed
                   </span>
                 )}
@@ -559,7 +561,7 @@ function RegulationPanel({ ursNr, allocations, deductions, setDeductions, e3, pr
                   <td>
                     {r.beneficiary_name}
                     {r.parent_state && (
-                      <span style={{ color: 'var(--text-light)', fontSize: 11, marginLeft: 6 }}>· {r.parent_state}</span>
+                      <span style={{ color: 'var(--text-light)', fontSize: 13, marginLeft: 6 }}>· {r.parent_state}</span>
                     )}
                   </td>
                   <td style={{ fontVariantNumeric: 'tabular-nums' }}>{Number(r.pct_proportionate).toFixed(6)}%</td>
@@ -574,7 +576,7 @@ function RegulationPanel({ ursNr, allocations, deductions, setDeductions, e3, pr
                       placeholder="0"
                     />
                     {over && (
-                      <div style={{ color: 'var(--red)', fontSize: 11 }}>
+                      <div style={{ color: 'var(--red)', fontSize: 13 }}>
                         more than it was scheduled
                       </div>
                     )}
@@ -980,7 +982,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
         <span>
           {fmtCurrency(r.total_charges)}
           {r.differential_amount != null && (
-            <span style={{ display: 'block', fontSize: 11, color: 'var(--text-light)' }}>
+            <span style={{ display: 'block', fontSize: 13, color: 'var(--text-light)' }}>
               differential {fmtCurrency(r.differential_amount)}
             </span>
           )}
@@ -994,7 +996,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
       render: (r) => (r.approval_status === 'APPROVED'
         ? <Badge status="APPROVED" label="APPROVED" />
         : (
-          <span style={{ fontSize: 12, color: r.approval_status === 'REJECTED' ? 'var(--red)' : 'var(--text-light)' }}>
+          <span style={{ fontSize: 13.5, color: r.approval_status === 'REJECTED' ? 'var(--red)' : 'var(--text-light)' }}>
             {r.approval_status === 'IN_APPROVAL'
               ? <>with <strong>{r.pending_with || 'an approver'}</strong>{r.pending_since ? <> since {fmtDate(r.pending_since)}</> : null}</>
               : r.approval_status === 'REJECTED' ? <>rejected{r.rejection_comment ? <>: {r.rejection_comment}</> : null}</> : 'not sent'}
@@ -1004,7 +1006,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
     {
       key: 'next',
       header: 'Next step',
-      render: (r) => <span style={{ fontSize: 12 }}>{nextStepOf(r, user)}</span>,
+      render: (r) => <span style={{ fontSize: 13.5 }}>{nextStepOf(r, user)}</span>,
     },
     {
       key: 'actions',
@@ -1151,11 +1153,14 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
         <ThermalBillForm station={station} stationId={stationId} canWrite={canWrite} onSaved={loadBills} />
       ) : (
       <>
+      {!preview && (
+        <HydroWaterToWirePipeline3D station={station} />
+      )}
       <Card title="REA Upload (Monthly Bill)">
         <form onSubmit={doPreview}>
           <div style={{ padding: '20px', background: 'var(--slate-50)', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 24 }}>
             <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 12 }}>1</span>
+              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 13.5 }}>1</span>
               Station & Period
             </h4>
             <div className="form-grid">
@@ -1187,7 +1192,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
 
           <div style={{ padding: '20px', background: 'var(--slate-50)', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 24 }}>
              <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 12 }}>2</span>
+              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 13.5 }}>2</span>
               Output & Tariffs
             </h4>
             <div className="form-grid">
@@ -1220,7 +1225,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
 
           <div style={{ padding: '20px', background: 'var(--slate-50)', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 24 }}>
              <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--navy)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 12 }}>3</span>
+              <span style={{ background: 'var(--primary-light)', color: 'var(--primary)', width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', fontSize: 13.5 }}>3</span>
               Adjustments & Meta
             </h4>
             <div className="form-grid">
@@ -1315,7 +1320,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
                   const e3 = preview?.bill?.e3_saleable_scheduled_kwh;
                   if (e3 == null) {
                     return (
-                      <div style={{ color: 'var(--text-light)', fontSize: 12 }}>
+                      <div style={{ color: 'var(--text-light)', fontSize: 13.5 }}>
                         Compute the bill to check this against the month&apos;s saleable energy (E3).
                       </div>
                     );
@@ -1323,14 +1328,14 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
                   const diff = Math.round((parsedEnergy.total - e3) * 10) / 10;
                   const ties = Math.abs(diff) <= 1;
                   return (
-                    <div style={{ color: ties ? 'var(--green, #276749)' : 'var(--red)', fontSize: 12 }}>
+                    <div style={{ color: ties ? 'var(--green, #276749)' : 'var(--red)', fontSize: 13.5 }}>
                       Station saleable energy (E3) is {fmtNumber(e3, 1)} kWh —
                       {ties ? ' they agree' : ` ${diff > 0 ? 'over by' : 'short by'} ${fmtNumber(Math.abs(diff), 1)} kWh`}
                     </div>
                   );
                 })()}
                 {parsedEnergy.errors.map((e2) => (
-                  <div key={e2} style={{ color: 'var(--red)', fontSize: 12 }}>{e2}</div>
+                  <div key={e2} style={{ color: 'var(--red)', fontSize: 13.5 }}>{e2}</div>
                 ))}
               </div>
             )}
@@ -1377,10 +1382,12 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
             </div>
           )}
 
+          <HydroWaterToWirePipeline3D bill={bill} station={station} />
+
           <Card
             title={`${station?.station_name || 'Station'} — ${bill.billing_month} ${bill.bill_kind.toLowerCase()} bill`}
             actions={
-              <span style={{ fontSize: 12, color: 'var(--text-light)' }}>
+              <span style={{ fontSize: 13.5, color: 'var(--text-light)' }}>
                 energy: {preview.sources.energy} · availability: {preview.sources.pafm} ·
                 {' '}β: {preview.sources.beta} · cumulative: {preview.sources.cumulative}
                 {preview.sources.beneficiary_energy && (
@@ -1399,7 +1406,12 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
               <Tab active={tab === 'allocation'} onClick={() => setTab('allocation')}>Allocation sheet</Tab>
             </Tabs>
             {tab === 'bill' && <StationBillSheet bill={bill} />}
-            {tab === 'beneficiaries' && <BeneficiarySheet lines={preview.lines} bill={bill} />}
+            {tab === 'beneficiaries' && (
+              <>
+                <HydroBeneficiaryWaterfall3D lines={preview.lines} bill={bill} stationName={station?.station_name} />
+                <BeneficiarySheet lines={preview.lines} bill={bill} />
+              </>
+            )}
             {tab === 'allocation' && (
               <AllocationSheet alloc={alloc} station={station} canWrite={canWrite} onSaved={onAllocationSaved} />
             )}

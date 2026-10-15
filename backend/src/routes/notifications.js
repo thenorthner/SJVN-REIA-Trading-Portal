@@ -64,6 +64,11 @@ router.post('/:id/read', requireAuth, (req, res) => {
 });
 
 router.post('/read-all', requireAuth, (req, res) => {
+  const { ids } = req.body || {};
+  if (Array.isArray(ids) && ids.length > 0) {
+    const placeholders = ids.map(() => '?').join(',');
+    db.prepare(`UPDATE notifications SET is_read = 1 WHERE id IN (${placeholders})`).run(...ids);
+  }
   db.prepare('UPDATE notifications SET is_read = 1 WHERE user_id = ? OR role = ?').run(req.user.id, req.user.role);
   res.json({ ok: true });
 });

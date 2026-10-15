@@ -79,7 +79,7 @@ function renderTariffStructure(selected) {
           display = '';
         }
         return (
-          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--slate-100, #f1f5f9)', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--slate-100, #f1f5f9)', padding: '2px 8px', borderRadius: 4, fontSize: 13 }}>
             <span style={{ color: 'var(--slate-600, #475569)', textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}:</span>
             <span style={{ fontWeight: 600 }}>{display}</span>
           </div>
@@ -371,20 +371,20 @@ export default function Contracts() {
     { key: 'capacity_mw', header: 'Capacity', render: (r) => (
       <div>
         <div style={{fontWeight: 600}}>{fmtNumber(r.capacity_mw)} MW</div>
-        {r.commissioned_capacity_mw > 0 && <div style={{fontSize: 11, color:'#22c55e'}}>{fmtNumber(r.commissioned_capacity_mw)} MW COD</div>}
+        {r.commissioned_capacity_mw > 0 && <div style={{fontSize: 13, color:'#22c55e'}}>{fmtNumber(r.commissioned_capacity_mw)} MW COD</div>}
       </div>
     )},
     { key: 'tariff', header: 'Tariff', render: (r) => (
       <div>
         <div>₹{r.tariff_per_unit}/u</div>
-        <div style={{fontSize: 11, color:'#666'}}>{r.tariff_type}</div>
+        <div style={{fontSize: 13, color:'#666'}}>{r.tariff_type}</div>
       </div>
     )},
     {
       key: 'next', header: 'Next milestone', render: (r) => {
         const n = attention[r.id]?.next_milestone;
         if (!n) return <span style={{ color: 'var(--slate-500)' }}>—</span>;
-        return <span>{n.label.replace(/\s*\(.*\)$/, '')}{n.due_date ? <div style={{ fontSize: 12, color: n.status === 'DELAYED' ? '#b91c1c' : 'var(--slate-500)' }}>{n.due_date}</div> : null}</span>;
+        return <span>{n.label.replace(/\s*\(.*\)$/, '')}{n.due_date ? <div style={{ fontSize: 13.5, color: n.status === 'DELAYED' ? '#b91c1c' : 'var(--slate-500)' }}>{n.due_date}</div> : null}</span>;
       },
     },
     {
@@ -644,7 +644,7 @@ export default function Contracts() {
                 <input type="number" step="0.01" placeholder="Blank = master default" value={form.transmission_charge_per_mwh || ''} onChange={(e) => setForm({ ...form, transmission_charge_per_mwh: e.target.value })} />
               </Field>
             </div>
-            <p style={{ fontSize: 12, color: 'var(--slate-500)', margin: '8px 0 0' }}>
+            <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '8px 0 0' }}>
               Capacity = AFC × 0.5 × days/year × (PAFM/NAPAF). ECR from AFC &amp; DE. PAFM comes from energy data availability %. β incentive = (3% × β × 0.5 × AFC)/12.
             </p>
           </div>
@@ -658,7 +658,7 @@ export default function Contracts() {
                 <input type="number" step="0.01" min="0" max="100" placeholder="Blank = master default (Solar 22 / Wind 30 / Hybrid 25)" value={form.min_cuf_percent || ''} onChange={(e) => setForm({ ...form, min_cuf_percent: e.target.value })} />
               </Field>
             </div>
-            <p style={{ fontSize: 12, color: 'var(--slate-500)', margin: '8px 0 0' }}>
+            <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '8px 0 0' }}>
               If actual CUF (from energy data) is below this threshold, invoice generate applies a shortfall penalty = shortfall MWh × tariff (or master ₹/MWh rate).
             </p>
             <h4 style={{ margin: '16px 0 12px 0', color: '#0369a1' }}>4c. Peak Availability Obligation</h4>
@@ -676,7 +676,7 @@ export default function Contracts() {
                 <input type="number" step="0.01" min="0" placeholder="Blank = master rate, else tariff" value={form.peak_penalty_per_mwh || ''} onChange={(e) => setForm({ ...form, peak_penalty_per_mwh: e.target.value })} />
               </Field>
             </div>
-            <p style={{ fontSize: 12, color: 'var(--slate-500)', margin: '8px 0 0' }}>
+            <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '8px 0 0' }}>
               A peak-power or FDRE PSA buys energy when the system needs it. Leave the minimum blank and this contract
               carries no peak obligation — nothing is charged on it. With one set, a month whose reported peak-window
               availability falls short is billed shortfall % × capacity × peak hours × rate.
@@ -691,7 +691,7 @@ export default function Contracts() {
                 <input type="file" accept="application/pdf,.pdf" onChange={(e) => pickContractFile(e.target.files[0])} />
               </Field>
             </div>
-            <p style={{ fontSize: 12, color: uploadFile ? '#15803d' : 'var(--slate-500)', margin: '4px 0 0' }}>
+            <p style={{ fontSize: 13.5, color: uploadFile ? '#15803d' : 'var(--slate-500)', margin: '4px 0 0' }}>
               {uploadFile
                 ? `Selected: ${uploadFile.name} (${(uploadFile.size / 1048576).toFixed(2)} MB)`
                 : 'Mandatory. A contract cannot be created — or later marked SIGNED / ACTIVE — without its agreement PDF on file.'}
@@ -815,12 +815,12 @@ export default function Contracts() {
                       </Field>
                     </div>
                     {!isPpa && (
-                      <p style={{ fontSize: 12, color: 'var(--slate-500)', margin: '4px 0 0' }}>
+                      <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '4px 0 0' }}>
                         The percentage is the share of the chosen PPA’s energy that goes to this PSA. A PPA cannot be allocated beyond 100% across all its PSAs.
                       </p>
                     )}
                     {candidates.length === 0 && (
-                      <p style={{ fontSize: 12, color: 'var(--amber-strong)', margin: '4px 0 0' }}>
+                      <p style={{ fontSize: 13.5, color: 'var(--amber-strong)', margin: '4px 0 0' }}>
                         {isPpa ? 'There is no PSA left to map. Create the PSA first.' : 'There is no PPA left to map. Create the PPA first.'}
                       </p>
                     )}
@@ -877,7 +877,7 @@ export default function Contracts() {
               Current stage: <strong>{selected?.status}</strong>
             </p>
             {lifecycleHint(selected?.status) && (
-              <p style={{ margin: '0 0 14px', fontSize: 12, lineHeight: 1.45, color: '#64748b' }}>
+              <p style={{ margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.45, color: '#64748b' }}>
                 {lifecycleHint(selected?.status)}
               </p>
             )}
@@ -933,7 +933,7 @@ export default function Contracts() {
                     onChange={(e) => setAmendForm({ ...amendForm, effective_from: e.target.value })}
                   />
                   {(amendForm.tenure_start || amendForm.tenure_end) && (
-                    <span style={{ fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
+                    <span style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
                       Date the revised terms apply from — within tenure {amendForm.tenure_start || '…'} to {amendForm.tenure_end || '…'}
                     </span>
                   )}

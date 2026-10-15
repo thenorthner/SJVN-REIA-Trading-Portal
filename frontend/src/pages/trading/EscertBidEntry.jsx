@@ -144,7 +144,7 @@ export default function EscertBidEntry() {
     <div style={{ padding: 20, maxWidth: 960, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 12, color: '#64748b' }}>Exchange · Certificates</div>
+          <div style={{ fontSize: 13.5, color: '#64748b' }}>Exchange · Certificates</div>
           <h1 style={{ margin: 0, fontSize: 22 }}>ECERTS Bid Entry</h1>
         </div>
         <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
@@ -195,8 +195,8 @@ export default function EscertBidEntry() {
             </Field>
             <Field label="Price (Rs./Certificate)" required>
               <input type="number" step="any" min="0" className="input" value={form.price} onChange={(e) => set('price', e.target.value)} required />
-              {priceError && <div style={{ marginTop: 4, fontSize: 12, color: '#991b1b', fontWeight: 600 }}>{priceError}</div>}
-              {!priceError && priceNote && <div style={{ marginTop: 4, fontSize: 12, color: '#64748b' }}>{priceNote}</div>}
+              {priceError && <div style={{ marginTop: 4, fontSize: 13.5, color: '#991b1b', fontWeight: 600 }}>{priceError}</div>}
+              {!priceError && priceNote && <div style={{ marginTop: 4, fontSize: 13.5, color: '#64748b' }}>{priceNote}</div>}
             </Field>
             <Field label="Quantity (Nos.)" required>
               <input type="number" min="1" step="1" className="input" value={form.quantity} onChange={(e) => set('quantity', e.target.value)} required />
@@ -222,7 +222,7 @@ export default function EscertBidEntry() {
             </div>
           )}
 
-          <p style={{ fontSize: 12, color: '#64748b', marginTop: 14 }}>
+          <p style={{ fontSize: 13.5, color: '#64748b', marginTop: 14 }}>
             * 1 Certificate is equivalent to 1 Metric Ton of Oil Equivalent (MToE)
           </p>
 
@@ -287,7 +287,7 @@ export default function EscertBidEntry() {
               {form.side} <strong>{form.quantity}</strong> × {form.rec_type} @ <strong>₹{form.price}</strong> on {form.exchange}
               {notional != null && <> (₹{fmtNumber(notional, 2)})</>}.
             </p>
-            <p style={{ fontSize: 12, color: '#64748b' }}>{form.entity_name} · {form.portfolio_code}</p>
+            <p style={{ fontSize: 13.5, color: '#64748b' }}>{form.entity_name} · {form.portfolio_code}</p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
               <button type="button" className="btn btn-outline" onClick={() => setConfirmOpen(false)} disabled={busy}>Cancel</button>
               <button type="button" className="btn btn-primary" onClick={confirmSubmit} disabled={busy}>

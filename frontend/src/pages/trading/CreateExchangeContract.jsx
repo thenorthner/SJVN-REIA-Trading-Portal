@@ -259,7 +259,7 @@ export default function CreateExchangeContract() {
                     <th style={{ padding: 8 }}>Variation</th>
                     <th style={{ padding: 8, width: 70, textAlign: 'center' }}>Action</th>
                   </tr>
-                  <tr style={{ color: 'var(--slate-500)', fontWeight: 'normal', fontSize: 11 }}>
+                  <tr style={{ color: 'var(--slate-500)', fontWeight: 'normal', fontSize: 13 }}>
                     <th style={{ padding: '4px 8px' }}>From *</th>
                     <th style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>To *</th>
                     <th style={{ padding: '4px 8px' }}>From *</th>

@@ -9,6 +9,7 @@ import {
 } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
+import LatePaymentSurchargeLadder3D from '../../components/LatePaymentSurchargeLadder3D.jsx';
 
 // One beneficiary's running account against a hydro station — the screen SJVN's
 // desk knows as Account Display.
@@ -36,7 +37,7 @@ function DocType({ row }) {
   return (
     <span style={{ color: tone.color, fontWeight: 600, whiteSpace: 'nowrap' }}>
       {row.display_type}
-      <span style={{ fontWeight: 400, color: 'var(--text-light)', fontSize: 11, marginLeft: 6 }}>
+      <span style={{ fontWeight: 400, color: 'var(--text-light)', fontSize: 13, marginLeft: 6 }}>
         {tone.label}
       </span>
     </span>
@@ -142,7 +143,7 @@ export default function HydroLedger({ vertical = 'HYDRO' }) {
   const lps = account?.lps;
 
   const columns = [
-    { key: 'doc_no', header: 'Doc', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>{r.doc_no}</span> },
+    { key: 'doc_no', header: 'Doc', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13.5 }}>{r.doc_no}</span> },
     { key: 'display_type', header: 'Type', render: (r) => <DocType row={r} /> },
     { key: 'doc_date', header: 'Date' },
     {
@@ -162,7 +163,7 @@ export default function HydroLedger({ vertical = 'HYDRO' }) {
         ? <span style={{ fontWeight: r.outstanding > 0 ? 600 : 400 }}>{fmtCurrency(r.outstanding)}</span>
         : (r.unapplied > 0 ? <span style={{ color: 'var(--blue, #2b6cb0)' }}>{fmtCurrency(r.unapplied)} unapplied</span> : '—')),
     },
-    { key: 'clr_doc', header: 'CLR doc', render: (r) => (r.clr_doc ? <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>{r.clr_doc}</span> : '—') },
+    { key: 'clr_doc', header: 'CLR doc', render: (r) => (r.clr_doc ? <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13 }}>{r.clr_doc}</span> : '—') },
     { key: 'clr_date', header: 'CLR date', render: (r) => r.clr_date || '—' },
     {
       key: 'status',
@@ -212,7 +213,9 @@ export default function HydroLedger({ vertical = 'HYDRO' }) {
           {error && <div className="alert alert-error" role="alert">{error}</div>}
           {notice && <div className="alert alert-success" role="status">{notice}</div>}
 
-      <Card title="Account">
+          <LatePaymentSurchargeLadder3D stationId={stationId} beneficiary={beneficiary} account={account} />
+
+          <Card title="Account">
         <div className="form-grid">
           <Field label="Station" htmlFor="hl-station">
             <select id="hl-station" value={stationId} onChange={(e) => setStationId(e.target.value)}>

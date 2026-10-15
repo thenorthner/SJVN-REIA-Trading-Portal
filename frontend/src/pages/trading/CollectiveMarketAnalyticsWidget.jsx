@@ -61,8 +61,8 @@ export default function CollectiveMarketAnalyticsWidget() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chart} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="segment" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} interval={0} />
-                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={40} tickFormatter={(v) => `₹${v}`} />
+                <XAxis dataKey="segment" tick={{ fontSize: 13, fill: 'var(--text-muted)' }} interval={0} />
+                <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={40} tickFormatter={(v) => `₹${v}`} />
                 <Tooltip formatter={(v) => [`₹${Number(v).toFixed(2)}/kWh`, 'Weighted average']} />
                 <Bar dataKey="weighted_avg" name="Weighted average" fill="var(--primary)" maxBarSize={24} radius={[4, 4, 0, 0]} isAnimationActive={false} />
               </BarChart>

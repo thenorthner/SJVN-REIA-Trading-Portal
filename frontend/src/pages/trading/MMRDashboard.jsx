@@ -70,8 +70,8 @@ export default function MMRDashboard() {
             <div style={{ width: '100%', height: 240 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={MIX.map((m) => ({ label: m.label, volume: data.short_term[m.key], fill: m.colour }))} layout="vertical" margin={{ top: 8, right: 24, left: 24, bottom: 0 }}>
-                  <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                  <YAxis type="category" dataKey="label" width={120} tick={{ fontSize: 12, fill: 'var(--text)' }} axisLine={false} tickLine={false} />
+                  <XAxis type="number" tick={{ fontSize: 13, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="label" width={120} tick={{ fontSize: 13.5, fill: 'var(--text)' }} axisLine={false} tickLine={false} />
                   <Tooltip formatter={(v) => [`${mu(v)} MU`, 'Volume']} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} cursor={{ fill: 'rgba(0,0,0,0.02)' }} />
                   <Bar dataKey="volume" name="Volume" maxBarSize={24} radius={[0, 4, 4, 0]} isAnimationActive={false}>
                     {MIX.map((m) => <Cell key={m.key} fill={m.colour} />)}
@@ -96,10 +96,10 @@ export default function MMRDashboard() {
           <div style={{ width: '100%', height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={history} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <XAxis dataKey="period" tickFormatter={periodLabel} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} minTickGap={16} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={56} axisLine={false} tickLine={false} />
+                <XAxis dataKey="period" tickFormatter={periodLabel} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} minTickGap={16} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={56} axisLine={false} tickLine={false} />
                 <Tooltip labelFormatter={periodLabel} formatter={(v, name) => [v == null ? '—' : `${mu(v)} MU`, name]} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
-                <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
+                <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 13.5 }} />
                 {MIX.map((m) => (
                   <Line type="monotone" key={m.key} dataKey={m.key} name={m.label} stroke={m.colour} strokeWidth={3} dot={false} activeDot={{ r: 6, strokeWidth: 0 }} connectNulls={false} isAnimationActive={false} />
                 ))}

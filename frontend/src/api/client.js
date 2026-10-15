@@ -101,8 +101,8 @@ export const api = {
     reject: (versionId, reason, reason_code) => p(`/documents/${versionId}/reject`, { reason, reason_code }),
     rejectReasons: () => g('/documents/reject-reasons'),
     history: (documentId) => g(`/documents/history/${documentId}`),
-    queue: () => g('/documents/queue'),
-    kycReport: () => g('/documents/kyc-report'),
+    queue: (params) => g('/documents/queue', params),
+    kycReport: (params) => g('/documents/kyc-report', params),
     requests: (params) => g('/documents/requests', params),
     createRequest: (body) => p('/documents/requests', body),
     cancelRequest: (id) => p(`/documents/requests/${id}/cancel`),
@@ -266,6 +266,8 @@ export const api = {
     intimations: (params) => g('/buyer-bills/intimations', params),
     notify: (body) => p('/buyer-bills/intimations', body),
     approve: (id) => p(`/buyer-bills/intimations/${id}/approve`),
+    returnToMaker: (id, note) => p(`/buyer-bills/intimations/${id}/return-to-maker`, { note }),
+    bulkApprove: (ids) => p('/buyer-bills/intimations/bulk-approve', { ids }),
     withdraw: (id, note) => p(`/buyer-bills/intimations/${id}/withdraw`, { note }),
     confirm: (id, body) => p(`/buyer-bills/intimations/${id}/confirm`, body),
     reject: (id, note) => p(`/buyer-bills/intimations/${id}/reject`, { note }),
@@ -1069,6 +1071,9 @@ export const api = {
     dispute: (id) => g(`/hydro-desk/disputes/${id}`),
     raiseDispute: (body) => p('/hydro-desk/disputes', body),
     moveDispute: (id, body) => p(`/hydro-desk/disputes/${id}/move`, body),
+    disputeComments: (id) => g(`/hydro-desk/disputes/${id}/comments`),
+    addDisputeComment: (id, body, is_internal) => p(`/hydro-desk/disputes/${id}/comments`, { body, is_internal }),
+    disputeStats: (params) => g('/hydro-desk/disputes/stats', params),
     security: (params) => g('/hydro-desk/security', params),
     securityEvents: (id) => g(`/hydro-desk/security/${id}/events`),
     addSecurity: (body) => p('/hydro-desk/security', body),
@@ -1323,7 +1328,35 @@ export const api = {
       }
       return p(`/notifications/${id}/read`);
     },
-    markAllRead: () => p('/notifications/read-all'),
+    markAllRead: async (notifs = []) => {
+      try {
+        const dismissed = JSON.parse(localStorage.getItem('sjvn_clearance_dismissed') || '[]');
+        const toDismiss = new Set(dismissed);
+        (notifs || []).forEach((n) => {
+          if (String(n.id).startsWith('clearance-')) {
+            toDismiss.add(n.id);
+          }
+        });
+        try {
+          const clearance = await g('/bids/standing-clearance');
+          if (clearance) {
+            (clearance.expired || []).forEach((c) => toDismiss.add(`clearance-expired-${c.client_id}`));
+            (clearance.renewal_due || []).forEach((c) => toDismiss.add(`clearance-renewal-${c.client_id}`));
+          }
+        } catch {
+          // Ignore if role lacks permission
+        }
+        localStorage.setItem('sjvn_clearance_dismissed', JSON.stringify([...toDismiss]));
+      } catch (e) {
+        console.warn('Could not update sjvn_clearance_dismissed in localStorage', e);
+      }
+
+      const serverIds = (notifs || [])
+        .filter((n) => !String(n.id).startsWith('clearance-'))
+        .map((n) => n.id);
+
+      return p('/notifications/read-all', { ids: serverIds });
+    },
     testEmail: () => p('/notifications/test-email'),
   },
   alerts: {

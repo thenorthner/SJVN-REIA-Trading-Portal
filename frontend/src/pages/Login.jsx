@@ -40,7 +40,9 @@ const DEMO_ACCOUNTS = [
   { label: 'Finance', email: 'finance@sjvn.in', icon: Briefcase },
   { label: 'Management', email: 'management@sjvn.in', icon: Users },
   { label: 'Seller', email: 'seller@sunrise-solar.in', icon: User },
-  { label: 'Buyer', email: 'buyer@discom.gov.in', icon: User },
+  { label: 'Buyer (Admin)', email: 'buyer@discom.gov.in', icon: User },
+  { label: 'Buyer Maker (L1)', email: 'buyer.maker@discom.gov.in', icon: User },
+  { label: 'Buyer Checker (L2)', email: 'buyer.checker@discom.gov.in', icon: User },
   { label: 'Trading Client', email: 'client@abctrading.in', icon: User },
 ];
 
@@ -115,14 +117,14 @@ export default function Login() {
             </div>
             <div>
               <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '0.02em', margin: 0 }}>SJVN</div>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', color: '#cbd5e1' }}>A NAVRATNA CPSE</div>
-              <div style={{ fontSize: 10, color: '#94a3b8' }}>MINISTRY OF POWER, GOVERNMENT OF INDIA</div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, letterSpacing: '0.05em', color: '#cbd5e1' }}>A NAVRATNA CPSE</div>
+              <div style={{ fontSize: 12.5, color: '#94a3b8' }}>MINISTRY OF POWER, GOVERNMENT OF INDIA</div>
             </div>
           </div>
 
           {/* Middle Content */}
           <div style={{ marginTop: '4rem', maxWidth: '80%' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', color: '#93c5fd', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.1em', color: '#93c5fd', marginBottom: 12 }}>
               CLEAN ENERGY <span style={{ color: '#475569', margin: '0 8px' }}>|</span> BRIGHTER TOMORROW
             </div>
             <h1 style={{ fontSize: 42, fontWeight: 800, lineHeight: 1.1, marginBottom: 16 }}>
@@ -161,7 +163,7 @@ export default function Login() {
                     gap: 12
                   }}>
                     <Icon size={24} color="#93c5fd" />
-                    <div style={{ fontSize: 11, fontWeight: 600, whiteSpace: 'pre-wrap', lineHeight: 1.3 }}>{feature.label}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'pre-wrap', lineHeight: 1.3 }}>{feature.label}</div>
                   </div>
                 )
               })}
@@ -206,7 +208,7 @@ export default function Login() {
                   <Icon size={20} color="#cbd5e1" />
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: 'white' }}>{stat.val}</div>
-                    <div style={{ fontSize: 11, color: '#94a3b8' }}>{stat.sub}</div>
+                    <div style={{ fontSize: 13, color: '#94a3b8' }}>{stat.sub}</div>
                   </div>
                 </div>
               )
@@ -225,7 +227,7 @@ export default function Login() {
         }}>
           {/* Top Right subtle watermark text */}
           <div style={{ position: 'absolute', top: 32, right: 32, textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-            <div style={{ color: '#94a3b8', fontSize: 9, fontWeight: 700, letterSpacing: '0.05em' }}>
+            <div style={{ color: '#94a3b8', fontSize: 12.5, fontWeight: 700, letterSpacing: '0.05em' }}>
               ENERGY<br/>FOR A BRIGHTER<br/>TOMORROW
             </div>
             <div style={{ width: 28, height: 2, background: '#3b82f6', marginTop: 6 }}></div>
@@ -277,7 +279,7 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} style={{ maxWidth: 400, margin: '0 auto', width: '100%', position: 'relative', zIndex: 1 }}>
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Work Email</label>
+              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: '#334155', marginBottom: 8 }}>Work Email</label>
               <div style={{ position: 'relative' }}>
                 <div style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
                   <Mail size={18} strokeWidth={2.5} />
@@ -314,8 +316,8 @@ export default function Login() {
 
             <div style={{ marginBottom: 24 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>Password</label>
-                <a href="#" onClick={(e) => { e.preventDefault(); setShowForgotModal(true); }} style={{ fontSize: 12, fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>Forgot Password?</a>
+                <label style={{ fontSize: 13.5, fontWeight: 700, color: '#334155' }}>Password</label>
+                <a href="#" onClick={(e) => { e.preventDefault(); setShowForgotModal(true); }} style={{ fontSize: 13.5, fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>Forgot Password?</a>
               </div>
               <div style={{ position: 'relative' }}>
                 <div style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
@@ -390,11 +392,11 @@ export default function Login() {
           <div style={{ maxWidth: 400, margin: '0 auto', width: '100%', marginTop: 24, position: 'relative', zIndex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', margin: '16px 0' }}>
               <div style={{ flex: 1, height: 1, background: '#e2e8f0' }}></div>
-              <div style={{ padding: '0 12px', fontSize: 11, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.05em' }}>OR</div>
+              <div style={{ padding: '0 12px', fontSize: 13, fontWeight: 700, color: '#94a3b8', letterSpacing: '0.05em' }}>OR</div>
               <div style={{ flex: 1, height: 1, background: '#e2e8f0' }}></div>
             </div>
 
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'none', letterSpacing: '0.05em', marginBottom: 12, textAlign: 'center' }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: '#64748b', textTransform: 'none', letterSpacing: '0.05em', marginBottom: 12, textAlign: 'center' }}>
               Quick Demo Login
             </div>
             
@@ -412,7 +414,7 @@ export default function Login() {
                       color: '#334155',
                       padding: '10px 14px',
                       borderRadius: 10,
-                      fontSize: 12,
+                      fontSize: 13.5,
                       fontWeight: 600,
                       cursor: 'pointer',
                       display: 'flex',

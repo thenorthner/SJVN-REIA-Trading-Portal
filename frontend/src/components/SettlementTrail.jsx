@@ -135,26 +135,26 @@ export function SettlementTrailPanel({
             </svg>
           </div>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <h4 style={{ margin: 0, color: '#f8fafc', fontSize: 15, fontWeight: 700, letterSpacing: 0.3 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <h4 style={{ margin: 0, color: '#f8fafc', fontSize: 18, fontWeight: 700, letterSpacing: 0.3 }}>
                 Billing Settlement Trail & Linked Pipeline
               </h4>
               <span style={{
-                fontSize: 10,
+                fontSize: 13.5,
                 textTransform: 'uppercase',
                 background: '#0f172a',
                 color: '#38bdf8',
                 border: '1px solid rgba(56, 189, 248, 0.4)',
-                padding: '2px 6px',
-                borderRadius: 4,
-                fontWeight: 600,
+                padding: '3px 8px',
+                borderRadius: 5,
+                fontWeight: 700,
                 letterSpacing: 0.6,
               }}>
                 Period: {trail.billing_period}
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
-              <code style={{ fontSize: 11, color: '#94a3b8', fontFamily: 'ui-monospace, monospace' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+              <code style={{ fontSize: 13.5, color: '#94a3b8', fontFamily: 'ui-monospace, monospace' }}>
                 BFR: {trail.billing_family_ref}
               </code>
               <button
@@ -165,7 +165,7 @@ export function SettlementTrailPanel({
                   border: 'none',
                   color: copied ? '#4ade80' : '#64748b',
                   cursor: 'pointer',
-                  fontSize: 11,
+                  fontSize: 13,
                   padding: 0,
                 }}
                 title="Copy Billing Family Reference"
@@ -180,7 +180,7 @@ export function SettlementTrailPanel({
         <div style={{
           display: 'flex',
           background: '#0f172a',
-          padding: 3,
+          padding: 4,
           borderRadius: 8,
           border: '1px solid #1e293b',
         }}>
@@ -191,9 +191,9 @@ export function SettlementTrailPanel({
               background: viewMode === '3D' ? 'linear-gradient(135deg, #0284c7, #2563eb)' : 'transparent',
               color: viewMode === '3D' ? '#fff' : '#94a3b8',
               border: 'none',
-              padding: '6px 14px',
+              padding: '8px 16px',
               borderRadius: 6,
-              fontSize: 12,
+              fontSize: 13.5,
               fontWeight: 600,
               cursor: 'pointer',
               display: 'flex',
@@ -212,9 +212,9 @@ export function SettlementTrailPanel({
               background: viewMode === 'LEDGER' ? 'linear-gradient(135deg, #334155, #1e293b)' : 'transparent',
               color: viewMode === 'LEDGER' ? '#fff' : '#94a3b8',
               border: 'none',
-              padding: '6px 14px',
+              padding: '8px 16px',
               borderRadius: 6,
-              fontSize: 12,
+              fontSize: 13.5,
               fontWeight: 600,
               cursor: 'pointer',
               display: 'flex',
@@ -223,7 +223,7 @@ export function SettlementTrailPanel({
               transition: 'all 0.2s',
             }}
           >
-            <span>📋 Audit Ledger</span>
+            <span>Audit Ledger</span>
           </button>
         </div>
       </div>
@@ -309,34 +309,34 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
         borderBottom: '1px solid rgba(255, 255, 255, 0.07)',
         paddingBottom: 14,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 18, fontSize: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, fontSize: 13.5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }} />
             <span style={{ color: '#94a3b8' }}>Green Energy MWh Stream (Left ➔ Right)</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
             <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#f59e0b', boxShadow: '0 0 8px #f59e0b' }} />
             <span style={{ color: '#94a3b8' }}>Commercial Settlement Flow (Right ➔ Left)</span>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{
-            fontSize: 11,
+            fontSize: 13.5,
             color: '#10b981',
             background: 'rgba(16, 185, 129, 0.1)',
             border: '1px solid rgba(16, 185, 129, 0.3)',
-            padding: '3px 8px',
+            padding: '4px 10px',
             borderRadius: 100,
             display: 'flex',
             alignItems: 'center',
-            gap: 5,
-            fontWeight: 600,
+            gap: 6,
+            fontWeight: 700,
           }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981', animation: 'pulse 2s infinite' }} />
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10b981', animation: 'pulse 2s infinite' }} />
             BACK-TO-BACK LINKED & BALANCED
           </span>
-          <span style={{ fontSize: 11, color: '#64748b' }}>
+          <span style={{ fontSize: 13, color: '#94a3b8' }}>
             Allocation: <strong style={{ color: '#38bdf8' }}>{topo.allocation_percent || 100}%</strong>
           </span>
         </div>
@@ -368,53 +368,53 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
                 : '0 10px 25px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
               backdropFilter: 'blur(16px)',
               borderRadius: 14,
-              padding: 16,
+              padding: 18,
               cursor: 'pointer',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
               <span style={{
-                fontSize: 10,
+                fontSize: 13.5,
                 letterSpacing: 0.8,
                 textTransform: 'uppercase',
                 fontWeight: 700,
                 color: '#10b981',
                 background: 'rgba(16, 185, 129, 0.15)',
-                padding: '2px 7px',
-                borderRadius: 4,
+                padding: '3px 8px',
+                borderRadius: 5,
               }}>
                 1. Power Generator (IPP)
               </span>
-              <span style={{ fontSize: 16 }}>☀️</span>
+              <span style={{ fontSize: 18 }}>☀️</span>
             </div>
 
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc', marginBottom: 2 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc', marginBottom: 3 }}>
               {ppa?.seller_name || 'Power Producer (IPP)'}
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 14 }}>
               {ppa?.contract_no || trail.contract_no || 'PPA Agreement'} · {ppa?.capacity_mw || 50} MW
             </div>
 
             <div style={{
-              background: 'rgba(0, 0, 0, 0.3)',
+              background: 'rgba(0, 0, 0, 0.35)',
               borderRadius: 8,
-              padding: '8px 10px',
-              border: '1px solid rgba(255, 255, 255, 0.05)',
-              marginBottom: 10,
+              padding: '10px 12px',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              marginBottom: 12,
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: '#94a3b8', marginBottom: 6 }}>
                 <span>PPA Base Tariff</span>
-                <strong style={{ color: '#f8fafc', fontSize: 12 }}>₹{ppa?.tariff_per_unit ?? '2.88'} / kWh</strong>
+                <strong style={{ color: '#f8fafc', fontSize: 14 }}>₹{ppa?.tariff_per_unit ?? '2.88'} / kWh</strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: '#94a3b8' }}>
                 <span>Metered Generation</span>
-                <strong style={{ color: '#10b981' }}>{fmtNumber(effectiveMwh)} MWh</strong>
+                <strong style={{ color: '#10b981', fontSize: 14 }}>{fmtNumber(effectiveMwh)} MWh</strong>
               </div>
             </div>
 
-            <div style={{ fontSize: 11, color: '#64748b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Invoices on SJVN: <strong>{ppaInvoices.length}</strong></span>
-              <span style={{ color: '#10b981', fontWeight: 600 }}>{selectedNode === 'PPA' ? '▲ Hide' : '▼ Inspect'}</span>
+            <div style={{ fontSize: 13.5, color: '#94a3b8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Invoices on SJVN: <strong style={{ color: '#f8fafc' }}>{ppaInvoices.length}</strong></span>
+              <span style={{ color: '#10b981', fontWeight: 700, fontSize: 13 }}>{selectedNode === 'PPA' ? '▲ Hide' : '▼ Inspect'}</span>
             </div>
           </div>
 
@@ -471,17 +471,17 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
               transform: 'translate(-50%, -50%)',
               background: '#090e1a',
               border: '1px solid #1e293b',
-              padding: '2px 6px',
+              padding: '4px 8px',
               borderRadius: 6,
-              fontSize: 9,
+              fontSize: 13.5,
               color: '#38bdf8',
-              fontWeight: 600,
+              fontWeight: 700,
               whiteSpace: 'nowrap',
               boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
               textAlign: 'center',
             }}>
               <div>{fmtNumber(effectiveMwh)} MWh</div>
-              <div style={{ color: '#f59e0b', fontSize: 8.5 }}>₹{ppa?.tariff_per_unit ?? '2.88'}</div>
+              <div style={{ color: '#f59e0b', fontSize: 13, marginTop: 1 }}>₹{ppa?.tariff_per_unit ?? '2.88'}</div>
             </div>
           </div>
 
@@ -498,7 +498,7 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
                 : '0 0 25px rgba(14, 165, 233, 0.25), 0 15px 30px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15)',
               backdropFilter: 'blur(20px)',
               borderRadius: 16,
-              padding: 18,
+              padding: 20,
               cursor: 'pointer',
               position: 'relative',
             }}
@@ -506,40 +506,40 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
             {/* Pulsing REIA Hub Badge */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
               <span style={{
-                fontSize: 10,
+                fontSize: 13.5,
                 letterSpacing: 0.8,
                 textTransform: 'uppercase',
                 fontWeight: 800,
                 color: '#38bdf8',
                 background: 'rgba(56, 189, 248, 0.2)',
                 border: '1px solid rgba(56, 189, 248, 0.3)',
-                padding: '3px 8px',
+                padding: '4px 10px',
                 borderRadius: 6,
                 display: 'flex',
                 alignItems: 'center',
-                gap: 5,
+                gap: 6,
               }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#38bdf8', animation: 'pulse 1.5s infinite' }} />
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#38bdf8', animation: 'pulse 1.5s infinite' }} />
                 2. SJVN REIA Clearing Hub
               </span>
               <span style={{
                 background: 'rgba(56, 189, 248, 0.2)',
                 borderRadius: '50%',
-                width: 24,
-                height: 24,
+                width: 28,
+                height: 28,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: 12,
+                fontSize: 14,
               }}>
                 🏛️
               </span>
             </div>
 
-            <div style={{ fontSize: 16, fontWeight: 800, color: '#f8fafc', marginBottom: 3 }}>
+            <div style={{ fontSize: 19, fontWeight: 800, color: '#f8fafc', marginBottom: 4 }}>
               SJVN Limited (REIA)
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 14 }}>
               Intermediary Trading & Allocation Hub
             </div>
 
@@ -547,39 +547,39 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
             <div style={{
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
-              gap: 8,
+              gap: 10,
               background: 'rgba(0, 0, 0, 0.4)',
               borderRadius: 10,
-              padding: '10px 12px',
+              padding: '12px 14px',
               border: '1px solid rgba(56, 189, 248, 0.2)',
-              marginBottom: 10,
+              marginBottom: 12,
             }}>
               <div>
-                <div style={{ fontSize: 10, color: '#94a3b8' }}>Trading Margin</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#38bdf8', marginTop: 2 }}>
-                  +₹{tradingMargin.toFixed(3)} <span style={{ fontSize: 10, fontWeight: 400, color: '#64748b' }}>/ kWh</span>
+                <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Trading Margin</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#38bdf8', marginTop: 2 }}>
+                  +₹{tradingMargin.toFixed(3)} <span style={{ fontSize: 13.5, fontWeight: 400, color: '#64748b' }}>/ kWh</span>
                 </div>
-                <div style={{ fontSize: 9.5, color: '#64748b' }}>
+                <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
                   ({(tradingMargin * 100).toFixed(1)} paise spread)
                 </div>
               </div>
 
               <div>
-                <div style={{ fontSize: 10, color: '#94a3b8' }}>Total Trading Spread</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#10b981', marginTop: 2 }}>
+                <div style={{ fontSize: 13.5, color: '#94a3b8' }}>Total Trading Spread</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#10b981', marginTop: 2 }}>
                   {fmtCurrency(totalSpread)}
                 </div>
-                <div style={{ fontSize: 9.5, color: '#64748b' }}>
+                <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
                   Throughput: {fmtNumber(effectiveMwh)} MWh
                 </div>
               </div>
             </div>
 
-            <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#38bdf8', fontSize: 11 }}>
+            <div style={{ fontSize: 13.5, color: '#94a3b8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#38bdf8', fontSize: 13 }}>
                 Risk: <strong>Zero Open Exposure</strong>
               </span>
-              <span style={{ color: '#38bdf8', fontWeight: 600 }}>{selectedNode === 'HUB' ? '▲ Hide' : '▼ Inspect'}</span>
+              <span style={{ color: '#38bdf8', fontWeight: 700, fontSize: 13 }}>{selectedNode === 'HUB' ? '▲ Hide' : '▼ Inspect'}</span>
             </div>
           </div>
 
@@ -636,17 +636,17 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
               transform: 'translate(-50%, -50%)',
               background: '#090e1a',
               border: '1px solid #1e293b',
-              padding: '2px 6px',
+              padding: '4px 8px',
               borderRadius: 6,
-              fontSize: 9,
+              fontSize: 13.5,
               color: '#818cf8',
-              fontWeight: 600,
+              fontWeight: 700,
               whiteSpace: 'nowrap',
               boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
               textAlign: 'center',
             }}>
               <div>Allocated {topo.allocation_percent || 100}%</div>
-              <div style={{ color: '#f59e0b', fontSize: 8.5 }}>₹{psa?.tariff_per_unit ?? (Number(ppa?.tariff_per_unit || 2.88) + tradingMargin).toFixed(2)}</div>
+              <div style={{ color: '#f59e0b', fontSize: 13, marginTop: 1 }}>₹{psa?.tariff_per_unit ?? (Number(ppa?.tariff_per_unit || 2.88) + tradingMargin).toFixed(2)}</div>
             </div>
           </div>
 
@@ -663,55 +663,55 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
                 : '0 10px 25px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
               backdropFilter: 'blur(16px)',
               borderRadius: 14,
-              padding: 16,
+              padding: 18,
               cursor: 'pointer',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
               <span style={{
-                fontSize: 10,
+                fontSize: 13.5,
                 letterSpacing: 0.8,
                 textTransform: 'uppercase',
                 fontWeight: 700,
                 color: '#818cf8',
                 background: 'rgba(129, 140, 248, 0.15)',
-                padding: '2px 7px',
-                borderRadius: 4,
+                padding: '3px 8px',
+                borderRadius: 5,
               }}>
                 3. Buyer Off-Taker (DISCOM)
               </span>
-              <span style={{ fontSize: 16 }}>🏢</span>
+              <span style={{ fontSize: 18 }}>🏢</span>
             </div>
 
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc', marginBottom: 2 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc', marginBottom: 3 }}>
               {psa?.buyer_name || 'Buyer Off-Taker (DISCOM)'}
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 12 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 14 }}>
               {psa?.contract_no || 'PSA Agreement'} · {psa?.capacity_mw || ppa?.capacity_mw || 50} MW
             </div>
 
             <div style={{
-              background: 'rgba(0, 0, 0, 0.3)',
+              background: 'rgba(0, 0, 0, 0.35)',
               borderRadius: 8,
-              padding: '8px 10px',
-              border: '1px solid rgba(255, 255, 255, 0.05)',
-              marginBottom: 10,
+              padding: '10px 12px',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              marginBottom: 12,
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: '#94a3b8', marginBottom: 6 }}>
                 <span>Off-Take Tariff</span>
-                <strong style={{ color: '#f8fafc', fontSize: 12 }}>
+                <strong style={{ color: '#f8fafc', fontSize: 14 }}>
                   ₹{psa?.tariff_per_unit ?? (Number(ppa?.tariff_per_unit || 2.88) + tradingMargin).toFixed(2)} / kWh
                 </strong>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: '#94a3b8' }}>
                 <span>Allocated Energy</span>
-                <strong style={{ color: '#818cf8' }}>{fmtNumber(effectiveMwh)} MWh</strong>
+                <strong style={{ color: '#818cf8', fontSize: 14 }}>{fmtNumber(effectiveMwh)} MWh</strong>
               </div>
             </div>
 
-            <div style={{ fontSize: 11, color: '#64748b', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span>Bills to Buyer: <strong>{psaInvoices.length}</strong></span>
-              <span style={{ color: '#818cf8', fontWeight: 600 }}>{selectedNode === 'PSA' ? '▲ Hide' : '▼ Inspect'}</span>
+            <div style={{ fontSize: 13.5, color: '#94a3b8', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Bills to Buyer: <strong style={{ color: '#f8fafc' }}>{psaInvoices.length}</strong></span>
+              <span style={{ color: '#818cf8', fontWeight: 700, fontSize: 13 }}>{selectedNode === 'PSA' ? '▲ Hide' : '▼ Inspect'}</span>
             </div>
           </div>
         </div>
@@ -756,19 +756,19 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
           </div>
 
           {selectedNode === 'PPA' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, fontSize: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, fontSize: 13.5 }}>
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 11 }}>PPA Contract Number</div>
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>PPA Contract Number</div>
                 <div style={{ fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>{ppa?.contract_no || '—'}</div>
-                <div style={{ color: '#64748b', fontSize: 10, marginTop: 4 }}>Capacity: {ppa?.capacity_mw || 50} MW ({ppa?.project_type || 'RE'})</div>
+                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 4 }}>Capacity: {ppa?.capacity_mw || 50} MW ({ppa?.project_type || 'RE'})</div>
               </div>
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 11 }}>Base Tariff Rate</div>
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>Base Tariff Rate</div>
                 <div style={{ fontWeight: 600, color: '#10b981', marginTop: 2 }}>₹{ppa?.tariff_per_unit || '2.88'} / unit</div>
-                <div style={{ color: '#64748b', fontSize: 10, marginTop: 4 }}>CERC / State Regulated</div>
+                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 4 }}>CERC / State Regulated</div>
               </div>
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 11 }}>Invoices Raised by Seller</div>
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>Invoices Raised by Seller</div>
                 <div style={{ fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>
                   {ppaInvoices.length > 0 ? (
                     ppaInvoices.map((inv) => `${inv.invoice_no} (${fmtCurrency(inv.total_amount)})`).join(', ')
@@ -779,41 +779,41 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
           )}
 
           {selectedNode === 'HUB' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, fontSize: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, fontSize: 13.5 }}>
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 11 }}>Role & Intermediary Position</div>
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>Role & Intermediary Position</div>
                 <div style={{ fontWeight: 600, color: '#38bdf8', marginTop: 2 }}>Renewable Energy Implementing Agency</div>
-                <div style={{ color: '#64748b', fontSize: 10, marginTop: 4 }}>Designated under Ministry of Power Guidelines</div>
+                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 4 }}>Designated under Ministry of Power Guidelines</div>
               </div>
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 11 }}>Trading Margin Spread</div>
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>Trading Margin Spread</div>
                 <div style={{ fontWeight: 600, color: '#10b981', marginTop: 2 }}>₹{tradingMargin.toFixed(3)} / unit (7.00p)</div>
-                <div style={{ color: '#64748b', fontSize: 10, marginTop: 4 }}>Period Spread Yield: {fmtCurrency(totalSpread)}</div>
+                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 4 }}>Period Spread Yield: {fmtCurrency(totalSpread)}</div>
               </div>
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 11 }}>Back-to-Back Balancing</div>
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>Back-to-Back Balancing</div>
                 <div style={{ fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>Zero Open Position</div>
-                <div style={{ color: '#64748b', fontSize: 10, marginTop: 4 }}>PPA purchase 100% matched to PSA sale</div>
+                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 4 }}>PPA purchase 100% matched to PSA sale</div>
               </div>
             </div>
           )}
 
           {selectedNode === 'PSA' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, fontSize: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, fontSize: 13.5 }}>
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 11 }}>PSA Contract Number</div>
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>PSA Contract Number</div>
                 <div style={{ fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>{psa?.contract_no || '—'}</div>
-                <div style={{ color: '#64748b', fontSize: 10, marginTop: 4 }}>Off-Taker: {psa?.buyer_name || 'Buyer'}</div>
+                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 4 }}>Off-Taker: {psa?.buyer_name || 'Buyer'}</div>
               </div>
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 11 }}>Off-Take Tariff (Pass-Through)</div>
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>Off-Take Tariff (Pass-Through)</div>
                 <div style={{ fontWeight: 600, color: '#818cf8', marginTop: 2 }}>
                   ₹{psa?.tariff_per_unit || (Number(ppa?.tariff_per_unit || 2.88) + tradingMargin).toFixed(2)} / unit
                 </div>
-                <div style={{ color: '#64748b', fontSize: 10, marginTop: 4 }}>Base ₹{ppa?.tariff_per_unit || '2.88'} + Margin ₹{tradingMargin.toFixed(3)}</div>
+                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 4 }}>Base ₹{ppa?.tariff_per_unit || '2.88'} + Margin ₹{tradingMargin.toFixed(3)}</div>
               </div>
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
-                <div style={{ color: '#94a3b8', fontSize: 11 }}>SJVN Invoices to Buyer</div>
+                <div style={{ color: '#94a3b8', fontSize: 13 }}>SJVN Invoices to Buyer</div>
                 <div style={{ fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>
                   {psaInvoices.length > 0 ? (
                     psaInvoices.map((inv) => `${inv.invoice_no} (${fmtCurrency(inv.total_amount)})`).join(', ')
@@ -835,18 +835,18 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
         boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.05)',
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc', letterSpacing: 0.3 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc', letterSpacing: 0.3 }}>
               Settlement Lifecycle &amp; True-Up Rail
             </span>
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>
+            <span style={{ fontSize: 13, color: '#94a3b8' }}>
               (Provisional Baseline vs Final REA True-Up Progression)
             </span>
           </div>
 
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>
-              Period Energy Delta: <strong style={{ color: trail.delta_mwh > 0 ? '#10b981' : trail.delta_mwh < 0 ? '#ef4444' : '#38bdf8' }}>
+            <span style={{ fontSize: 13.5, color: '#94a3b8' }}>
+              Period Energy Delta: <strong style={{ fontSize: 14.5, color: trail.delta_mwh > 0 ? '#10b981' : trail.delta_mwh < 0 ? '#ef4444' : '#38bdf8' }}>
                 {trail.delta_mwh != null ? `${fmtNumber(trail.delta_mwh)} MWh` : '0.00 MWh'}
               </strong>
             </span>
@@ -856,27 +856,27 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
         {/* 4-Stage Progress Track */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: 12,
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: 14,
         }}>
           {/* STAGE 1: PROVISIONAL BASELINE */}
           <div style={{
             background: '#090e1a',
             border: trail.provisional_energy ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid #1e293b',
             borderRadius: 10,
-            padding: 12,
+            padding: 14,
             position: 'relative',
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: '#10b981', textTransform: 'uppercase' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                 Stage 1: Provisional REA
               </span>
-              <span style={{ fontSize: 10, color: '#10b981' }}>● Locked</span>
+              <span style={{ fontSize: 13.5, color: '#10b981', fontWeight: 600 }}>● Locked</span>
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>
+            <div style={{ fontSize: 16.5, fontWeight: 700, color: '#f8fafc' }}>
               {trail.provisional_energy ? `${fmtNumber(trail.provisional_energy.energy_mwh)} MWh` : 'No Record'}
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
               Billed: {fmtCurrency(trail.provisional_billed || 0)}
             </div>
           </div>
@@ -886,20 +886,20 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
             background: '#090e1a',
             border: trail.final_energy ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid #1e293b',
             borderRadius: 10,
-            padding: 12,
+            padding: 14,
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                 Stage 2: Final REA Audit
               </span>
-              <span style={{ fontSize: 10, color: trail.final_energy ? '#38bdf8' : '#64748b' }}>
+              <span style={{ fontSize: 13.5, color: trail.final_energy ? '#38bdf8' : '#64748b', fontWeight: 600 }}>
                 {trail.final_energy ? '● Verified' : '○ Awaiting Final'}
               </span>
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>
+            <div style={{ fontSize: 16.5, fontWeight: 700, color: '#f8fafc' }}>
               {trail.final_energy ? `${fmtNumber(trail.final_energy.energy_mwh)} MWh` : 'Pending CERC / RPC'}
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
               Δ Energy: {trail.delta_mwh != null ? `${fmtNumber(trail.delta_mwh)} MWh` : '—'}
             </div>
           </div>
@@ -909,20 +909,20 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
             background: '#090e1a',
             border: trail.final_invoices?.length ? '1px solid rgba(129, 140, 248, 0.4)' : '1px solid #1e293b',
             borderRadius: 10,
-            padding: 12,
+            padding: 14,
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: '#818cf8', textTransform: 'uppercase' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: '#818cf8', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                 Stage 3: True-Up Adjustment
               </span>
-              <span style={{ fontSize: 10, color: trail.final_invoices?.length ? '#818cf8' : '#64748b' }}>
+              <span style={{ fontSize: 13.5, color: trail.final_invoices?.length ? '#818cf8' : '#64748b', fontWeight: 600 }}>
                 {trail.final_invoices?.length ? '● Generated' : '○ Not Required'}
               </span>
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>
+            <div style={{ fontSize: 16.5, fontWeight: 700, color: '#f8fafc' }}>
               {trail.final_invoices?.length ? `${trail.final_invoices.length} Bills Raised` : 'No Adjustments'}
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
               Net Due: {trail.net_due != null ? fmtCurrency(trail.net_due) : '₹0'}
             </div>
           </div>
@@ -932,18 +932,18 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
             background: '#090e1a',
             border: (trail.paid_on_period || trail.already_paid) ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid #1e293b',
             borderRadius: 10,
-            padding: 12,
+            padding: 14,
           }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                 Stage 4: Settlement Realization
               </span>
-              <span style={{ fontSize: 10, color: '#f59e0b' }}>● Clearing</span>
+              <span style={{ fontSize: 13.5, color: '#f59e0b', fontWeight: 600 }}>● Clearing</span>
             </div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>
+            <div style={{ fontSize: 16.5, fontWeight: 700, color: '#f8fafc' }}>
               {fmtCurrency(trail.paid_on_period ?? trail.already_paid ?? 0)}
             </div>
-            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>
+            <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>
               Realized on Period
             </div>
           </div>
@@ -952,27 +952,27 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
         {/* Hydro Frequency Beta Response Strip (If Hydro / Certified) */}
         {trail.frequency_beta && (
           <div style={{
-            marginTop: 12,
+            marginTop: 14,
             background: 'rgba(56, 189, 248, 0.08)',
             border: '1px solid rgba(56, 189, 248, 0.25)',
             borderRadius: 8,
-            padding: '10px 14px',
+            padding: '12px 16px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             flexWrap: 'wrap',
-            gap: 10,
-            fontSize: 12,
+            gap: 12,
+            fontSize: 14,
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span>🌊</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 18 }}>🌊</span>
               <span>
                 Hydro Frequency Response Performance: <strong>β = {Number(trail.frequency_beta.beta_value).toFixed(2)}</strong>
                 {trail.frequency_beta.station_name ? ` (${trail.frequency_beta.station_name})` : ''} ·
                 Incentive: <strong style={{ color: '#10b981' }}>{fmtCurrency(trail.frequency_beta.computed_incentive || 0)}</strong>
               </span>
             </div>
-            <div style={{ color: '#38bdf8', fontSize: 11 }}>
+            <div style={{ color: '#38bdf8', fontSize: 13 }}>
               True-Up Δ: {fmtCurrency(trail.frequency_beta.true_up_delta || 0)} · Source: {trail.frequency_beta.source || 'NRPC'}
             </div>
           </div>
@@ -1013,9 +1013,9 @@ function AuditLedgerView({ trail }) {
       background: 'var(--slate-50)',
       border: '1px solid var(--slate-200)',
       borderRadius: '0 0 12px 12px',
-      padding: 16,
+      padding: 18,
     }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
         <Stat label="Period" value={trail.billing_period} />
         <Stat label="Paid on the period" value={fmtCurrency(trail.paid_on_period ?? trail.already_paid)} />
         <Stat label="Δ Energy" value={trail.delta_mwh != null ? `${fmtNumber(trail.delta_mwh)} MWh` : '—'} />
@@ -1031,16 +1031,16 @@ function AuditLedgerView({ trail }) {
       </div>
 
       {trail.frequency_beta && (
-        <TrailBlock title="Frequency Response Performance (β)" style={{ marginBottom: 12 }}>
+        <TrailBlock title="Frequency Response Performance (β)" style={{ marginBottom: 14 }}>
           {trail.frequency_beta.status === 'CERTIFIED' ? (
             <>
-              <div>
+              <div style={{ fontSize: 15 }}>
                 β = <strong>{Number(trail.frequency_beta.beta_value).toFixed(2)}</strong>
                 {trail.frequency_beta.station_code ? ` · ${trail.frequency_beta.station_code}` : ''}
                 {trail.frequency_beta.station_name ? ` (${trail.frequency_beta.station_name})` : ''}
                 {' · '}<Badge status="ACTIVE" label={trail.frequency_beta.source || 'NRPC'} />
               </div>
-              <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 4 }}>
+              <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 6 }}>
                 {trail.frequency_beta.certified_on ? `Certified ${trail.frequency_beta.certified_on} · ` : ''}
                 Incentive {fmtCurrency(trail.frequency_beta.computed_incentive || 0)}
                 {trail.frequency_beta.already_billed_incentive
@@ -1050,65 +1050,65 @@ function AuditLedgerView({ trail }) {
                   ? ` · true-up Δ ${fmtCurrency(trail.frequency_beta.true_up_delta)}`
                   : ''}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 }}>{trail.frequency_beta.incentive_reason}</div>
+              <div style={{ fontSize: 13.5, color: 'var(--text-subtle)', marginTop: 4 }}>{trail.frequency_beta.incentive_reason}</div>
             </>
           ) : (
-            <span style={{ color: 'var(--text-subtle)' }}>Awaiting NRPC β certificate — provisional bills exclude incentive; true-up when certified</span>
+            <span style={{ fontSize: 14, color: 'var(--text-subtle)' }}>Awaiting NRPC β certificate — provisional bills exclude incentive; true-up when certified</span>
           )}
         </TrailBlock>
       )}
 
       {trail.direction === 'SJVN_TO_BUYER' && !trail.psa_unallocated && (
-        <div style={{ fontSize: 12, color: 'var(--slate-500)', marginBottom: 10, padding: '6px 10px', background: '#eef2ff', borderRadius: 6 }}>
+        <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginBottom: 12, padding: '8px 12px', background: '#eef2ff', borderRadius: 8, lineHeight: 1.5 }}>
           Energy shown below is the <strong>source PPA</strong> generation for this period. The PSA bill uses the allocated share (see invoice breakdown: Source PPA Energy × Allocation %).
         </div>
       )}
       {trail.psa_unallocated && (
-        <div style={{ fontSize: 12, color: '#92400e', marginBottom: 10, padding: '6px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6 }}>
+        <div style={{ fontSize: 13.5, color: '#92400e', marginBottom: 12, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, lineHeight: 1.5 }}>
           This PSA holds no allocation from a PPA, so there is no source energy to show for it — and no energy bill can be generated on it until the PPA allocates it a share (Contracts → the source PPA).
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <TrailBlock title="Provisional Energy">
           {trail.provisional_energy ? (
             <>
-              <div>{fmtNumber(trail.provisional_energy.energy_mwh)} MWh · {trail.provisional_energy.source}</div>
-              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}><Badge status={trail.provisional_energy.status} /> · {trail.provisional_energy.id}</div>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{fmtNumber(trail.provisional_energy.energy_mwh)} MWh · {trail.provisional_energy.source}</div>
+              <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}><Badge status={trail.provisional_energy.status} /> · {trail.provisional_energy.id}</div>
             </>
-          ) : <span style={{ color: 'var(--text-subtle)' }}>{trail.psa_unallocated ? 'No source PPA' : 'None'}</span>}
+          ) : <span style={{ fontSize: 14, color: 'var(--text-subtle)' }}>{trail.psa_unallocated ? 'No source PPA' : 'None'}</span>}
         </TrailBlock>
         <TrailBlock title="Final Energy">
           {trail.final_energy ? (
             <>
-              <div>{fmtNumber(trail.final_energy.energy_mwh)} MWh · {trail.final_energy.source}</div>
-              <div style={{ fontSize: 12, color: 'var(--slate-500)' }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{fmtNumber(trail.final_energy.energy_mwh)} MWh · {trail.final_energy.source}</div>
+              <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
                 <Badge status={trail.final_energy.status} />
                 {trail.final_energy.supersedes_energy_id && ' · replaces the provisional figure'}
               </div>
             </>
-          ) : <span style={{ color: 'var(--text-subtle)' }}>{trail.psa_unallocated ? 'No source PPA' : 'Awaiting CERC final'}</span>}
+          ) : <span style={{ fontSize: 14, color: 'var(--text-subtle)' }}>{trail.psa_unallocated ? 'No source PPA' : 'Awaiting CERC final'}</span>}
         </TrailBlock>
       </div>
 
-      <TrailBlock title="Provisional Invoices" style={{ marginTop: 12 }}>
+      <TrailBlock title="Provisional Invoices" style={{ marginTop: 14 }}>
         {trail.provisional_invoices?.length ? (
-          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+          <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14.5, lineHeight: 1.6 }}>
             {trail.provisional_invoices.map((inv) => (
               <li key={inv.id}>
                 {inv.invoice_no}{whose(inv, trail)} · {fmtCurrency(inv.total_amount)} · <Badge status={inv.status} />
               </li>
             ))}
           </ul>
-        ) : <span style={{ color: 'var(--text-subtle)' }}>None</span>}
-        <div style={{ marginTop: 6, fontSize: 12, color: 'var(--slate-500)' }}>
+        ) : <span style={{ fontSize: 14, color: 'var(--text-subtle)' }}>None</span>}
+        <div style={{ marginTop: 8, fontSize: 13.5, color: 'var(--slate-600)' }}>
           Billed {fmtCurrency(trail.provisional_billed)} · Paid on provisional {fmtCurrency(trail.already_paid)}
         </div>
       </TrailBlock>
 
-      <TrailBlock title="Final, Supplementary and Arrear Bills" style={{ marginTop: 12 }}>
+      <TrailBlock title="Final, Supplementary and Arrear Bills" style={{ marginTop: 14 }}>
         {trail.final_invoices?.length ? (
-          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+          <ul style={{ margin: 0, paddingLeft: 20, fontSize: 14.5, lineHeight: 1.6 }}>
             {trail.final_invoices.map((inv) => (
               <li key={inv.id}>
                 {inv.invoice_no} ({inv.invoice_type}){whose(inv, trail)} · Net {fmtCurrency(inv.total_amount)}
@@ -1118,7 +1118,7 @@ function AuditLedgerView({ trail }) {
               </li>
             ))}
           </ul>
-        ) : <span style={{ color: 'var(--text-subtle)' }}>Not generated yet</span>}
+        ) : <span style={{ fontSize: 14, color: 'var(--text-subtle)' }}>Not generated yet</span>}
       </TrailBlock>
     </div>
   );
@@ -1133,18 +1133,18 @@ function whose(inv, trail) {
 
 function Stat({ label, value, hint }) {
   return (
-    <div style={{ background: '#fff', border: '1px solid var(--slate-200)', borderRadius: 6, padding: '8px 10px' }}>
-      <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.3 }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-900)', marginTop: 2 }}>{value}</div>
-      {hint && <div style={{ fontSize: 11, color: 'var(--slate-500)', marginTop: 1, wordBreak: 'break-all' }}>{hint}</div>}
+    <div style={{ background: '#fff', border: '1px solid var(--slate-200)', borderRadius: 8, padding: '10px 12px' }}>
+      <div style={{ fontSize: 13.5, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.3 }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--slate-900)', marginTop: 4 }}>{value}</div>
+      {hint && <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2, wordBreak: 'break-all' }}>{hint}</div>}
     </div>
   );
 }
 
 function TrailBlock({ title, children, style }) {
   return (
-    <div style={{ background: '#fff', border: '1px solid var(--slate-200)', borderRadius: 6, padding: 12, ...style }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--slate-600)', marginBottom: 6 }}>{title}</div>
+    <div style={{ background: '#fff', border: '1px solid var(--slate-200)', borderRadius: 8, padding: 14, ...style }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--slate-700)', marginBottom: 8 }}>{title}</div>
       {children}
     </div>
   );
@@ -1160,7 +1160,7 @@ export function BfrChip({ bfr, onClick }) {
       title={bfr}
       style={{
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        fontSize: 11,
+        fontSize: 13,
         padding: '2px 8px',
         borderRadius: 4,
         border: '1px solid #c7d2fe',

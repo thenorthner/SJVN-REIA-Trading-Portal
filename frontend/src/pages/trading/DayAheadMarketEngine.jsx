@@ -81,7 +81,7 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
           </p>
         </div>
         {isGreen && (
-          <div style={{ background: '#c8e6c9', color: '#2e7d32', padding: '5px 10px', borderRadius: 12, fontSize: 12, fontWeight: 'bold' }}>
+          <div style={{ background: '#c8e6c9', color: '#2e7d32', padding: '5px 10px', borderRadius: 12, fontSize: 13.5, fontWeight: 'bold' }}>
              RPO Compliance Eligible
           </div>
         )}

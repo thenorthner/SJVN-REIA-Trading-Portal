@@ -485,7 +485,7 @@ export default function CsvUploaderForm({ kind, title, fields }) {
                           background: statusColor.bg, 
                           color: statusColor.text, 
                           borderRadius: 20, 
-                          fontSize: 11, 
+                          fontSize: 13, 
                           fontWeight: 600,
                           letterSpacing: '0.02em'
                         }}>

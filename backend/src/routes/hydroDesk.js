@@ -2,6 +2,7 @@
  * /api/hydro-desk — the hydro desk's disputes, payment security, balance
  * confirmation and TDS, all working off the beneficiary ledger.
  */
+import crypto from 'crypto';
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
@@ -61,6 +62,45 @@ router.post('/disputes/:id/move', requireRole(...WRITE), handle((req) => {
   const d = moveDispute(req.params.id, req.body || {}, req.user);
   audit(req, `HYDRO_DISPUTE_${d.status}`, 'hydro_disputes', d.id, { reason: req.body?.remarks });
   return d;
+}));
+
+router.get('/disputes/:id/comments', requireRole(...READ), handle((req) => {
+  return db.prepare('SELECT * FROM hydro_dispute_comments WHERE dispute_id = ? ORDER BY created_at ASC').all(req.params.id);
+}));
+router.post('/disputes/:id/comments', requireRole(...WRITE), handle((req) => {
+  const { body: text, is_internal } = req.body || {};
+  if (!text?.trim()) throw Object.assign(new Error('Comment body is required'), { status: 400 });
+  const id = crypto.randomUUID();
+  db.prepare('INSERT INTO hydro_dispute_comments (id, dispute_id, body, is_internal, author_id, author_name) VALUES (?,?,?,?,?,?)').run(
+    id, req.params.id, text.trim(), is_internal ? 1 : 0, req.user.id, req.user.name || req.user.email,
+  );
+  audit(req, 'HYDRO_DISPUTE_COMMENT', 'hydro_disputes', req.params.id, { reason: text.trim().slice(0, 120) });
+  return db.prepare('SELECT * FROM hydro_dispute_comments WHERE id = ?').get(id);
+}));
+
+router.get('/disputes/stats', requireRole(...READ), handle((req) => {
+  const contractId = req.query.contract_id;
+  const where = contractId ? 'WHERE contract_id = ?' : '';
+  const params = contractId ? [contractId] : [];
+  const all = db.prepare(`SELECT * FROM hydro_disputes ${where}`).all(...params);
+  const open = all.filter((d) => !['RESOLVED_ACCEPTED', 'RESOLVED_REJECTED', 'CLOSED'].includes(d.status));
+  const today = new Date().toISOString().slice(0, 10);
+  const daysBetween = (a, b) => Math.max(0, Math.floor((new Date(b) - new Date(a)) / 86400000));
+  const openDays = open.map((d) => daysBetween(d.created_at.slice(0, 10), today));
+  return {
+    total: all.length,
+    open: open.length,
+    exposure: open.reduce((s, d) => s + d.disputed_amount, 0),
+    sla_breached: open.filter((d) => d.resolve_due < today).length,
+    resolved: all.filter((d) => d.status === 'RESOLVED_ACCEPTED' || d.status === 'RESOLVED_REJECTED').length,
+    aging: {
+      '0_7': openDays.filter((d) => d <= 7).length,
+      '8_15': openDays.filter((d) => d > 7 && d <= 15).length,
+      '16_30': openDays.filter((d) => d > 15 && d <= 30).length,
+      '30_plus': openDays.filter((d) => d > 30).length,
+    },
+    by_reason: Object.entries(open.reduce((m, d) => { m[d.reason_code] = (m[d.reason_code] || 0) + 1; return m; }, {})).map(([code, count]) => ({ code, count })),
+  };
 }));
 
 // ── Payment security ────────────────────────────────────────────────────────

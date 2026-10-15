@@ -3,6 +3,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Badge } from '../../components/ui.jsx';
 import { DocumentManager, ExpiryTag } from '../../components/DocumentManager.jsx';
+import { FileText } from 'lucide-react';
 import { fmtDate } from '../../datetime.js';
 import { APPROVAL_STATUS_LABELS } from '../../constants/regulatoryApprovals.js';
 
@@ -64,7 +65,7 @@ export default function MyDocuments() {
 
       <Card>
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <span style={{ fontSize: 20 }}>📋</span>
+          <FileText size={22} color="var(--primary)" style={{ marginTop: 2, flexShrink: 0 }} />
           <div>
             <strong style={{ fontSize: 14 }}>Physical Document Submission Process</strong>
             <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'var(--slate-600)', lineHeight: 1.55 }}>
@@ -106,13 +107,13 @@ export default function MyDocuments() {
               <div>
                 <strong style={{ fontSize: 13.5 }}>{r.document_type}</strong>
                 {r.due_date && (
-                  <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 600, color: r.overdue ? '#b91c1c' : '#b45309' }}>
+                  <span style={{ marginLeft: 8, fontSize: 13.5, fontWeight: 600, color: r.overdue ? '#b91c1c' : '#b45309' }}>
                     {r.overdue ? 'Was due' : 'Due'} {fmtDate(r.due_date)}
                   </span>
                 )}
-                {r.note && <div style={{ fontSize: 12.5, color: 'var(--slate-600)', marginTop: 2 }}>{r.note}</div>}
+                {r.note && <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 2 }}>{r.note}</div>}
               </div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e', background: '#fef3c7', padding: '4px 10px', borderRadius: 6 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: '#92400e', background: '#fef3c7', padding: '4px 10px', borderRadius: 6 }}>
                 Submit physical copy to SJVN REIA desk
               </span>
             </div>
@@ -127,11 +128,11 @@ export default function MyDocuments() {
               <div style={{ minWidth: 0, flex: 1 }}>
                 <strong style={{ fontSize: 13.5, marginRight: 8 }}>{d.title}</strong>
                 <Badge status="REJECTED" />
-                <div style={{ fontSize: 12.5, color: '#b91c1c', marginTop: 2 }}>
+                <div style={{ fontSize: 13.5, color: '#b91c1c', marginTop: 2 }}>
                   <strong>SJVN's remark:</strong> {d.verification_notes || 'No remark was given.'}
                 </div>
               </div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#b91c1c', background: '#fee2e2', padding: '4px 10px', borderRadius: 6 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: '#b91c1c', background: '#fee2e2', padding: '4px 10px', borderRadius: 6 }}>
                 Submit revised physical copy to SJVN
               </span>
             </div>
@@ -142,7 +143,7 @@ export default function MyDocuments() {
                 <strong style={{ fontSize: 13.5 }}>{d.title}</strong>
                 <div style={{ marginTop: 2 }}><ExpiryTag doc={d} /></div>
               </div>
-              <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e', background: '#fef3c7', padding: '4px 10px', borderRadius: 6 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: '#92400e', background: '#fef3c7', padding: '4px 10px', borderRadius: 6 }}>
                 Submit renewed copy to SJVN
               </span>
             </div>
@@ -164,8 +165,8 @@ export default function MyDocuments() {
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <strong style={{ fontSize: 13 }}>{item.label}</strong>
                   {item.is_mandatory
-                    ? <span style={{ fontSize: 11, color: 'var(--red-deep)' }}>Required</span>
-                    : <span style={{ fontSize: 11, color: 'var(--slate-500)' }}>Optional</span>}
+                    ? <span style={{ fontSize: 13, color: 'var(--red-deep)' }}>Required</span>
+                    : <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>Optional</span>}
                 </div>
                 <Badge
                   status={item.status === 'VERIFIED' ? 'ACTIVE' : item.status === 'NOT_APPLICABLE' ? 'DRAFT' : 'PENDING'}
@@ -175,7 +176,7 @@ export default function MyDocuments() {
             ))}
           </div>
           {pending.length > 0 && (
-            <p style={{ margin: '12px 0 0', fontSize: 12.5, color: 'var(--amber-strong)' }}>
+            <p style={{ margin: '12px 0 0', fontSize: 13.5, color: 'var(--amber-strong)' }}>
               {pending.length} mandatory {pending.length === 1 ? 'clearance' : 'clearances'} awaiting verified proof from SJVN desk.
             </p>
           )}

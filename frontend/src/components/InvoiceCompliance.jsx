@@ -11,7 +11,7 @@ import { fmtDate, fmtDateTime } from '../datetime.js';
 
 const errText = (e) => e.response?.data?.error || e.message;
 const Tick = ({ ok, children }) => (
-  <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 3, color: ok === true ? '#15803d' : ok === false ? '#b91c1c' : 'var(--slate-500)' }}>
+  <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 3, color: ok === true ? '#15803d' : ok === false ? '#b91c1c' : 'var(--slate-500)' }}>
     {ok === true ? '✓' : ok === false ? '✗' : '·'} {children}
   </div>
 );
@@ -30,7 +30,7 @@ export function TdsEstimate({ tds, total }) {
         <Row label={`TDS u/s ${tds.section} @ ${tds.rate_pct}%`}><strong style={{ color: tds.tds_amount > 0 ? '#b45309' : 'inherit' }}>{fmtCurrency(tds.tds_amount)}</strong></Row>
         <Row label="Expected net payment"><strong style={{ color: '#15803d' }}>{fmtCurrency(tds.net_payable ?? (total - tds.tds_amount))}</strong></Row>
       </div>
-      <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 12, color: 'var(--slate-500)', lineHeight: 1.5 }}>
+      <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 13.5, color: 'var(--slate-500)', lineHeight: 1.5 }}>
         {tds.notes.map((n) => <li key={n}>{n}</li>)}
       </ul>
     </div>
@@ -127,12 +127,12 @@ export default function InvoiceCompliance({ invoice, onChanged }) {
       {e ? (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div style={{ flex: 1, minWidth: 260 }}>
-            <div style={{ fontSize: 12.5, wordBreak: 'break-all' }}><strong>IRN</strong> {e.irn}</div>
-            <div style={{ fontSize: 12.5, color: 'var(--slate-600)', marginTop: 2 }}>
+            <div style={{ fontSize: 13.5, wordBreak: 'break-all' }}><strong>IRN</strong> {e.irn}</div>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 2 }}>
               {e.ack_no ? `Ack No. ${e.ack_no}` : 'No acknowledgement number'}{e.ack_date ? ` · ${fmtDate(e.ack_date)}` : ''}
             </div>
             {e.checks.map((k) => <Tick key={k.text} ok={k.ok}>{k.text}</Tick>)}
-            <div style={{ fontSize: 11.5, color: 'var(--slate-500)', marginTop: 6 }}>
+            <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 6 }}>
               Compared with this bill as given. The portal's signature on the QR is not verified here — scan the QR with the GST e-invoice verifier app for that.
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
@@ -156,14 +156,14 @@ export default function InvoiceCompliance({ invoice, onChanged }) {
             <input type="file" accept=".json,application/json" onChange={(ev) => readIrpFile(ev.target.files[0])} />
           </Field>
           <Field label="IRN (64 characters)" required>
-            <input required value={irnForm.irn} onChange={(ev) => setIrnForm({ ...irnForm, irn: ev.target.value.trim() })} style={{ fontFamily: 'monospace', fontSize: 12 }} />
+            <input required value={irnForm.irn} onChange={(ev) => setIrnForm({ ...irnForm, irn: ev.target.value.trim() })} style={{ fontFamily: 'monospace', fontSize: 13.5 }} />
           </Field>
           <div className="form-grid">
             <Field label="Acknowledgement No."><input placeholder="e.g. 122010012345678 (digits only)" value={irnForm.ack_no} onChange={(ev) => setIrnForm({ ...irnForm, ack_no: ev.target.value.trim() })} /></Field>
             <Field label="Acknowledgement date"><input type="date" value={irnForm.ack_date} onChange={(ev) => setIrnForm({ ...irnForm, ack_date: ev.target.value })} /></Field>
           </div>
           <Field label="Signed QR code text (SignedQRCode)">
-            <textarea rows={3} value={irnForm.signed_qr} onChange={(ev) => setIrnForm({ ...irnForm, signed_qr: ev.target.value.trim() })} style={{ fontFamily: 'monospace', fontSize: 11 }} placeholder="eyJhbGciOi…" />
+            <textarea rows={3} value={irnForm.signed_qr} onChange={(ev) => setIrnForm({ ...irnForm, signed_qr: ev.target.value.trim() })} style={{ fontFamily: 'monospace', fontSize: 13 }} placeholder="eyJhbGciOi…" />
           </Field>
           <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={() => setIrnForm(null)}>Cancel</button><button type="submit" className="btn btn-primary" disabled={busy}>Save</button></div>
         </form>
@@ -181,7 +181,7 @@ export default function InvoiceCompliance({ invoice, onChanged }) {
           {s.signed
             ? <Tick ok>A digital signature is present{s.signer ? ` — signer: ${s.signer}` : ''}{s.signed_on ? `, signed ${s.signed_on}` : ''}{s.signatures > 1 ? ` (${s.signatures} signatures)` : ''}.</Tick>
             : <Tick ok={false}>No digital signature was found in this PDF. Sign it with your DSC or Aadhaar e-Sign and attach it again.</Tick>}
-          <div style={{ fontSize: 11.5, color: 'var(--slate-500)', marginTop: 4 }}>
+          <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
             This reads the signature in the file. It does not validate the certificate — open the PDF in a reader that does for that.
           </div>
         </div>

@@ -254,7 +254,7 @@ export default function EnergyData() {
     { key: 'peak_availability_percent', header: 'Peak Avail. %', render: (r) => r.peak_availability_percent != null ? `${fmtNumber(r.peak_availability_percent)}%` : '-' },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
     // What the seller or buyer has said to the figure: accepted, objected, or not yet answered.
-    { key: 'response', header: 'Counterparty', render: (r) => (r.is_superseded ? <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>Replaced by final</span> : <ResponseBadge row={r} />) },
+    { key: 'response', header: 'Counterparty', render: (r) => (r.is_superseded ? <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>Replaced by final</span> : <ResponseBadge row={r} />) },
     { key: 'deviation_notes', header: 'Notes', render: (r) => r.deviation_notes || '-' },
     ...(CAN_WRITE.includes(user?.role) ? [{
       key: 'actions', header: 'Actions', render: (r) => (
@@ -366,7 +366,7 @@ export default function EnergyData() {
                   }}
                   title="Simulate and visualize each step of the automated REA pipeline"
                 >
-                  <span>👁️</span> Explore Step-by-Step Flow
+                  Explore Step-by-Step Flow
                 </button>
                 <button
                   className="btn btn-secondary btn-sm"
@@ -403,116 +403,160 @@ export default function EnergyData() {
           </div>
 
           {showReaPanel && (
-            <>
-              {/* Live Step-by-Step Pipeline Monitor */}
-              {showPipelineMonitor && (
-                <ReaAutomationPipeline
-                  isRunning={pipelineRunning}
-                  mode={pipelineMode}
-                  rpcSource={triggerForm.rpc || 'NRPC'}
-                  periodMonth={triggerForm.period_month || lastMonth()}
-                  dataType={triggerForm.data_type || 'PROVISIONAL'}
-                  result={pipelineResult}
-                  error={pipelineError}
-                  onClose={() => setShowPipelineMonitor(false)}
-                  onViewRecords={() => {
-                    if (triggerForm.period_month) {
-                      setFilters(prev => ({ ...prev, period_month: triggerForm.period_month }));
-                    }
-                    setShowPipelineMonitor(false);
-                  }}
-                  onReRun={() => {
-                    setPipelineResult(null);
-                    setPipelineError(null);
-                    setPipelineRunning(true);
-                  }}
-                />
-              )}
+            <Card>
+              {reaMsg && <div style={{ padding: '8px 16px', background: '#f0f9ff', color: '#0369a1', fontSize: 13, borderBottom: '1px solid #e0f2fe' }}>{reaMsg}</div>}
 
-              <Card>
-                {reaMsg && <div style={{ padding: '8px 16px', background: '#f0f9ff', color: '#0369a1', fontSize: 13, borderBottom: '1px solid #e0f2fe' }}>{reaMsg}</div>}
-
-                {/* Embedded Visual Interactive Pipeline Banner */}
-                <div style={{ padding: '16px', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                        </svg> Regional REA Automated Ingestion Pipeline
-                      </div>
-                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                        Fully automated 6-stage ingestion engine: Discovery → Retrieval → Extraction → Validation → Settlement Commit
-                      </div>
+              {/* Embedded Visual Interactive Pipeline Banner */}
+              <div style={{ padding: '16px', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                      </svg> Regional REA Automated Ingestion Pipeline
                     </div>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        style={{ background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', display: 'inline-flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 4px rgba(37,99,235,0.2)' }}
-                        onClick={() => {
-                          setPipelineMode('DEMO');
-                          setPipelineResult(null);
-                          setPipelineError(null);
-                          setShowPipelineMonitor(true);
-                          setPipelineRunning(true);
-                        }}
-                      >
-                        <span>▶</span> Watch Live Step-by-Step Animation
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-outline btn-sm"
-                        style={{ background: '#ffffff' }}
-                        onClick={() => setShowPipelineMonitor(!showPipelineMonitor)}
-                      >
-                        {showPipelineMonitor ? 'Hide Pipeline Monitor ▲' : 'Open Pipeline Monitor ▼'}
-                      </button>
+                    <div style={{ fontSize: 13.5, color: '#475569', marginTop: 3 }}>
+                      Fully automated 6-stage ingestion engine: Discovery → Retrieval → Extraction → Validation → Settlement Commit
                     </div>
                   </div>
-
-                  {/* 6 Stage Interactive Pills */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginTop: 10 }}>
-                    {[
-                      { num: '1', title: 'TLS Handshake', sub: 'nrpc.gov.in', icon: '🌐' },
-                      { num: '2', title: 'Bulletin Scan', sub: 'REA Gazette', icon: '🔍' },
-                      { num: '3', title: 'PDF Ingest', sub: 'Audit Vault', icon: '📥' },
-                      { num: '4', title: 'OCR & Parser', sub: 'Scheduled MWh', icon: '⚙️' },
-                      { num: '5', title: 'BFR Match', sub: 'PPA Contracts', icon: '⚖️' },
-                      { num: '6', title: 'Ledger Commit', sub: 'Immutable Sync', icon: '💾' },
-                    ].map((st) => (
-                      <div
-                        key={st.num}
-                        onClick={() => {
-                          setPipelineMode('DEMO');
-                          setPipelineResult(null);
-                          setPipelineError(null);
-                          setShowPipelineMonitor(true);
-                          setPipelineRunning(true);
-                        }}
-                        style={{
-                          background: '#ffffff',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: 6,
-                          padding: '8px 10px',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-                        }}
-                        title="Click to view full animated pipeline"
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ fontSize: 14 }}>{st.icon}</span>
-                          <span style={{ fontSize: 10, fontWeight: 700, background: '#e0f2fe', color: '#0284c7', padding: '1px 5px', borderRadius: 10 }}>Step {st.num}</span>
-                        </div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b' }}>{st.title}</div>
-                        <div style={{ fontSize: 10, color: '#64748b' }}>{st.sub}</div>
-                      </div>
-                    ))}
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      style={{ background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', display: 'inline-flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 4px rgba(37,99,235,0.2)' }}
+                      onClick={() => {
+                        setPipelineMode('DEMO');
+                        setPipelineResult(null);
+                        setPipelineError(null);
+                        setShowPipelineMonitor(true);
+                        setPipelineRunning(true);
+                      }}
+                    >
+                      <span>▶</span> Watch Live Step-by-Step Animation
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      style={{ background: '#ffffff' }}
+                      onClick={() => setShowPipelineMonitor(!showPipelineMonitor)}
+                    >
+                      {showPipelineMonitor ? 'Hide Pipeline Monitor ▲' : 'Open Pipeline Monitor ▼'}
+                    </button>
                   </div>
                 </div>
+
+                {/* 6 Stage Interactive Pills */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginTop: 10 }}>
+                  {[
+                    {
+                      num: '1', title: 'TLS Handshake', sub: 'nrpc.gov.in',
+                      svg: (
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
+                      )
+                    },
+                    {
+                      num: '2', title: 'Bulletin Scan', sub: 'REA Gazette',
+                      svg: (
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                      )
+                    },
+                    {
+                      num: '3', title: 'PDF Ingest', sub: 'Audit Vault',
+                      svg: (
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      )
+                    },
+                    {
+                      num: '4', title: 'OCR & Parser', sub: 'Scheduled MWh',
+                      svg: (
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" />
+                          <line x1="9" y1="1" x2="9" y2="4" /><line x1="15" y1="1" x2="15" y2="4" /><line x1="9" y1="20" x2="9" y2="23" /><line x1="15" y1="20" x2="15" y2="23" />
+                        </svg>
+                      )
+                    },
+                    {
+                      num: '5', title: 'BFR Match', sub: 'PPA Contracts',
+                      svg: (
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" /><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" /><path d="M7 21h10" /><path d="M12 3v18" />
+                        </svg>
+                      )
+                    },
+                    {
+                      num: '6', title: 'Ledger Commit', sub: 'Immutable Sync',
+                      svg: (
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+                        </svg>
+                      )
+                    },
+                  ].map((st) => (
+                    <div
+                      key={st.num}
+                      onClick={() => {
+                        setPipelineMode('DEMO');
+                        setPipelineResult(null);
+                        setPipelineError(null);
+                        setShowPipelineMonitor(true);
+                        setPipelineRunning(true);
+                      }}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 6,
+                        padding: '8px 10px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                      }}
+                      title="Click to view full animated pipeline"
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span>{st.svg}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, background: '#e0f2fe', color: '#0284c7', padding: '1px 5px', borderRadius: 10 }}>Step {st.num}</span>
+                      </div>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: '#1e293b' }}>{st.title}</div>
+                      <div style={{ fontSize: 12.5, color: '#64748b' }}>{st.sub}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Live Step-by-Step Pipeline Monitor */}
+              {showPipelineMonitor && (
+                <div style={{ padding: '16px 16px 0 16px', background: '#f8fafc', borderBottom: '1px solid var(--border)' }}>
+                  <ReaAutomationPipeline
+                    isRunning={pipelineRunning}
+                    mode={pipelineMode}
+                    rpcSource={triggerForm.rpc || 'NRPC'}
+                    periodMonth={triggerForm.period_month || lastMonth()}
+                    dataType={triggerForm.data_type || 'PROVISIONAL'}
+                    result={pipelineResult}
+                    error={pipelineError}
+                    onClose={() => setShowPipelineMonitor(false)}
+                    onViewRecords={() => {
+                      if (triggerForm.period_month) {
+                        setFilters(prev => ({ ...prev, period_month: triggerForm.period_month }));
+                      }
+                      setShowPipelineMonitor(false);
+                    }}
+                    onReRun={() => {
+                      setPipelineResult(null);
+                      setPipelineError(null);
+                      setPipelineRunning(true);
+                    }}
+                  />
+                </div>
+              )}
 
                 {/* RPC Status Cards */}
                 {reaStatus && (
@@ -523,13 +567,13 @@ export default function EnergyData() {
                           <strong style={{ fontSize: 15 }}>{key}</strong>
                           <Badge status={rpc.latest_fetch?.status === 'PROCESSED' ? 'ACTIVE' : rpc.latest_fetch?.status === 'FAILED' ? 'REJECTED' : 'PENDING'} label={rpc.latest_fetch?.status || 'Never Run'} />
                         </div>
-                        <div style={{ fontSize: 12, color: 'var(--text-light)' }}>{rpc.name}</div>
+                        <div style={{ fontSize: 13.5, color: 'var(--text-light)' }}>{rpc.name}</div>
                         <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 13 }}>
                           <div>Processed: <strong>{rpc.total_processed}</strong></div>
                           <div>Failed: <strong>{rpc.total_failed}</strong></div>
                         </div>
                         {rpc.latest_fetch && (
-                          <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 6 }}>
+                          <div style={{ fontSize: 13, color: 'var(--text-light)', marginTop: 6 }}>
                             Last: {rpc.latest_fetch.period_month} — {fmtDateTime(rpc.latest_fetch.fetched_at)}
                           </div>
                         )}
@@ -610,7 +654,7 @@ export default function EnergyData() {
                           <td><Badge status={log.status === 'PROCESSED' ? 'ACTIVE' : log.status === 'FAILED' ? 'REJECTED' : log.status} label={log.status} /></td>
                           <td>{log.records_created}</td>
                           <td>{fmtDateTime(log.fetched_at)}</td>
-                          <td style={{ fontSize: 11, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{log.error_message || '-'}</td>
+                          <td style={{ fontSize: 13, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{log.error_message || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -618,8 +662,7 @@ export default function EnergyData() {
                 </div>
               )}
             </Card>
-          </>
-        )}
+          )}
       </div>
     )}
 

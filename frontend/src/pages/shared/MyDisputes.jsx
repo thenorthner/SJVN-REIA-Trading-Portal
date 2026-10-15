@@ -182,7 +182,7 @@ export default function MyDisputes({ role, direction }) {
   }), [rows, view, text]);
 
   const columns = [
-    { key: 'dispute_no', header: 'Dispute ID', render: (r) => <span>{r.dispute_no}{r.group && <div style={{ fontSize: 11.5, color: 'var(--slate-500)' }} title={r.group.title}>{r.group.ref} · {r.group.disputes.length} bills</div>}</span> },
+    { key: 'dispute_no', header: 'Dispute ID', render: (r) => <span>{r.dispute_no}{r.group && <div style={{ fontSize: 13, color: 'var(--slate-500)' }} title={r.group.title}>{r.group.ref} · {r.group.disputes.length} bills</div>}</span> },
     { key: 'invoice_no', header: 'Invoice' },
     { key: 'reason_code', header: 'Category', render: (r) => reasonLabel(r.reason_code) },
     { key: 'disputed_amount', header: 'Amount', render: (r) => fmtCurrency(r.disputed_amount) },
@@ -244,14 +244,14 @@ export default function MyDisputes({ role, direction }) {
                     <input type="checkbox" checked={on} onChange={() => { setError(''); setPicked((p) => { const n = { ...p }; if (on) delete n[i.id]; else n[i.id] = ''; return n; }); }} />
                     <span>
                       <strong>{i.invoice_no}</strong> · {i.billing_period} · {fmtCurrency(i.total_amount)}
-                      {on && <div style={{ fontSize: 11.5, color: 'var(--slate-500)' }}>{chargeLabel(form.charge_line)} on this bill: {fmtCurrency(breakdownOf(i)[form.charge_line] || 0)}</div>}
+                      {on && <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>{chargeLabel(form.charge_line)} on this bill: {fmtCurrency(breakdownOf(i)[form.charge_line] || 0)}</div>}
                     </span>
                     {on && <input type="number" min="0.01" step="any" required placeholder="Amount disputed (₹)" value={picked[i.id]} onClick={(e) => e.preventDefault()} onChange={(e) => setPicked({ ...picked, [i.id]: e.target.value })} aria-label={`Amount disputed on ${i.invoice_no}`} />}
                   </label>
                 );
               })}
             </div>
-            {chosen.length > 0 && <div style={{ fontSize: 12.5, marginTop: 6 }}>{chosen.length} bill{chosen.length === 1 ? '' : 's'} · <strong>{fmtCurrency(total)}</strong> in dispute</div>}
+            {chosen.length > 0 && <div style={{ fontSize: 13.5, marginTop: 6 }}>{chosen.length} bill{chosen.length === 1 ? '' : 's'} · <strong>{fmtCurrency(total)}</strong> in dispute</div>}
           </div>
           {chosen.length > 1 && (
             <Field label="Title for the linked disputes" required>
@@ -319,7 +319,7 @@ export default function MyDisputes({ role, direction }) {
             {!(detail.comments || []).length && <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>No messages yet.</div>}
             {(detail.comments || []).map((c) => (
               <div key={c.id} style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 12, opacity: 0.65 }}>{c.user_name} · {fmtDateTime(c.created_at)}</div>
+                <div style={{ fontSize: 13.5, opacity: 0.65 }}>{c.user_name} · {fmtDateTime(c.created_at)}</div>
                 <div style={{ whiteSpace: 'pre-wrap' }}>{c.body}</div>
               </div>
             ))}

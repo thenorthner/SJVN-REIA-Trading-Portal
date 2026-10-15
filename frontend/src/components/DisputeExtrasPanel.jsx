@@ -26,7 +26,7 @@ function saveBlob(blob, name) {
 /** The clock as a short tag, for a list. */
 export function SlaTag({ sla, sjvn = false }) {
   if (!sla) return null;
-  if (sla.stage === 'DONE') return <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>{sla.label}</span>;
+  if (sla.stage === 'DONE') return <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>{sla.label}</span>;
   const tone = sla.stage === 'CONTESTED' ? ['#f5f3ff', '#6d28d9']
     : sla.breached ? ['#fef2f2', '#b91c1c']
       : sla.stage === 'RESPONSE' || sla.owner === 'SUBMITTER' ? ['#eff6ff', '#1d4ed8']
@@ -36,7 +36,7 @@ export function SlaTag({ sla, sjvn = false }) {
       : sla.breached ? `Overdue ${Math.max(1, -sla.days_left)}d`
         : sla.days_left === undefined ? '—'
           : `${sla.owner === 'SUBMITTER' ? 'Reply awaited · ' : ''}${sla.days_left}d left`;
-  return <span title={sla.label} style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: tone[0], color: tone[1], whiteSpace: 'nowrap' }}>{text}</span>;
+  return <span title={sla.label} style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: tone[0], color: tone[1], whiteSpace: 'nowrap' }}>{text}</span>;
 }
 
 export default function DisputeExtrasPanel({ disputeId, onChanged }) {

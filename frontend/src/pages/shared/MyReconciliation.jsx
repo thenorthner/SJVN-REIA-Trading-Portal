@@ -123,8 +123,8 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {[['SJVN', detail.sjvn_ack_at, detail.sjvn_ack_by, 'Pending SJVN'], [partyName, detail.counterparty_ack_at, detail.counterparty_ack_by, 'Pending your action']].map(([label, at, by, pending]) => (
                   <div key={label} style={{ padding: 10, background: at ? '#ecfdf5' : '#fff', border: `1px solid ${at ? '#a7f3d0' : 'var(--border)'}`, borderRadius: 6 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: at ? '#065f46' : 'var(--text-muted)' }}>{label}</div>
-                    <div style={{ fontSize: 12, marginTop: 3 }}>{at ? `${by} · ${fmtDateTime(at)}` : pending}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: at ? '#065f46' : 'var(--text-muted)' }}>{label}</div>
+                    <div style={{ fontSize: 13.5, marginTop: 3 }}>{at ? `${by} · ${fmtDateTime(at)}` : pending}</div>
                   </div>
                 ))}
               </div>
@@ -137,7 +137,7 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
               {(detail.items || []).map((it) => (
                 <li key={it.id} style={{ marginBottom: 4 }}>
                   {it.match_status === 'NOT_CONNECTED' ? (
-                    <span title="No connector for the system this would be checked against, so this line was not checked." style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>Not checked</span>
+                    <span title="No connector for the system this would be checked against, so this line was not checked." style={{ color: 'var(--text-muted)', fontSize: 13.5, fontWeight: 600 }}>Not checked</span>
                   ) : (
                     <Badge status={['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN'].includes(it.match_status) ? 'AUTO_MATCHED' : 'NEEDS_REVIEW'} />
                   )}{' '}

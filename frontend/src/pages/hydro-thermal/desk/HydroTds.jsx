@@ -5,6 +5,7 @@ import { useAuth } from '../../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, AlertPopup, fmtCurrency } from '../../../components/ui.jsx';
 import { fmtDate } from '../../../datetime.js';
+import ModuleGuide from '../../../components/ModuleGuide.jsx';
 import { useStation, errOf } from './useStation.js';
 
 // Tax a beneficiary deducted at source when it paid. It settles that much of
@@ -13,6 +14,11 @@ import { useStation, errOf } from './useStation.js';
 // until the credit is matched.
 
 const TONE = { PENDING_CERTIFICATE: 'PENDING', CERTIFICATE_RECEIVED: 'PENDING', MATCHED_26AS: 'ACTIVE', MISMATCH_26AS: 'REJECTED', REVERSED: 'DRAFT' };
+
+const TABS = [
+  { key: 'REG', label: 'TDS Register' },
+  { key: 'FYI', label: 'FYI — Reference Guide' },
+];
 
 export default function HydroTds({ vertical = 'HYDRO' }) {
   const { user } = useAuth();
@@ -23,6 +29,7 @@ export default function HydroTds({ vertical = 'HYDRO' }) {
   const [form, setForm] = useState(null);
   const [cert, setCert] = useState(null);
   const [popup, setPopup] = useState(null);
+  const [tab, setTab] = useState('REG');
 
   const load = useCallback(() => {
     if (!stationId) return;
@@ -63,6 +70,25 @@ export default function HydroTds({ vertical = 'HYDRO' }) {
         subtitle="Tax deducted at source on payments to the station — credited to the beneficiary's account and followed to Form 16A and 26AS"
         actions={canWrite && <button className="btn btn-primary" disabled={!stationId} onClick={() => setForm({ beneficiary_name: beneficiaries[0] || '', section: '194Q', tds_amount: '', deduction_date: new Date().toISOString().slice(0, 10), deductor_tan: '', reference: '', remarks: '' })}>+ Record TDS</button>}
       />
+
+      <div className="nb-tabs" role="tablist">
+        {TABS.map((t) => (
+          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={`nb-tab ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'FYI' && (
+        <ModuleGuide sections={[
+          { title: 'What TDS on payments means here', body: 'When a beneficiary pays the station, it deducts tax at source under the applicable section (194Q for purchase of goods, 194C for works contracts, etc.). The amount deducted settles that much of the beneficiary\'s bills — it is posted to its account as a credit, separate from the cash received. The station then follows the Form 16A (the certificate from the beneficiary) and the 26AS (what the income-tax department shows) until the credit is matched.' },
+          { title: 'Status lifecycle', body: 'PENDING CERTIFICATE → the TDS has been recorded but no Form 16A from the beneficiary yet. CERTIFICATE RECEIVED → the beneficiary has issued a 16A, but it has not been matched against the income-tax portal. MATCHED 26AS → the amount in the TDS register agrees with the 26AS. MISMATCH 26AS → the 26AS shows a different amount; follow up with the beneficiary.' },
+          { title: 'Quarterly reconciliation', body: 'TDS is summarized by financial quarter (Q1 Apr–Jun through Q4 Jan–Mar). At the end of each quarter, check that the total deducted agrees with the 26AS pulled from the IT portal. Outstanding certificates should be chased within 15 days of the quarter end.' },
+          { title: 'Reversal', body: 'A reversed entry means the TDS posting was incorrect or duplicated. The reversal undoes the credit on the beneficiary\'s account. A new entry must be raised in its place if the deduction was real.' },
+        ]} />
+      )}
+
+      {tab === 'REG' && (<>
       <div className="filters-bar">
         <select value={stationId} onChange={(e) => setStationId(e.target.value)}>
           {stations.map((s) => <option key={s.id} value={s.id}>{s.station_name || s.contract_no}</option>)}
@@ -107,6 +133,7 @@ export default function HydroTds({ vertical = 'HYDRO' }) {
           emptyMessage="No TDS recorded on this station."
         />
       </Card>
+      </>)}
 
       <Modal open={!!form} onClose={() => setForm(null)} title="Record TDS deducted by a beneficiary" width={680}>
         {form && (
@@ -127,7 +154,7 @@ export default function HydroTds({ vertical = 'HYDRO' }) {
               <Field label="Deductor TAN"><input maxLength={10} value={form.deductor_tan} onChange={(e) => setForm({ ...form, deductor_tan: e.target.value.toUpperCase() })} placeholder="e.g. PTLP12345A" /></Field>
               <Field label="Payment reference (UTR)"><input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} /></Field>
             </div>
-            <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Record the cash received separately in Account Display; this posts only the tax part.</p>
+            <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>Record the cash received separately in Account Display; this posts only the tax part.</p>
             <div className="form-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setForm(null)}>Cancel</button>
               <button type="submit" className="btn btn-primary">Record</button>

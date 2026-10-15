@@ -168,7 +168,7 @@ export default function InboxMailList() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, borderBottom: '1px solid #eee', paddingBottom: 10 }}>
             <h3 style={{ margin: 0, fontSize: 16 }}>Group Filters</h3>
           </div>
-          <div style={{ fontSize: 12, marginBottom: 10, color: '#666' }}>
+          <div style={{ fontSize: 13.5, marginBottom: 10, color: '#666' }}>
             <span style={{ cursor: 'pointer', color: 'blue' }} onClick={() => { /* expand all */ }}>Open all</span> | <span style={{ cursor: 'pointer', color: 'blue' }} onClick={() => { /* collapse all */ }}>Close all</span>
           </div>
           <p style={{ fontSize: 13, color: '#555' }}>Groups are shown below:</p>

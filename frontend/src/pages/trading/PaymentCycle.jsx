@@ -53,8 +53,8 @@ function CashTimeline({ points }) {
             <title>{`${p.date}\nBalance: ${fmtCurrency(p.running_balance)}`}</title>
           </circle>
         ))}
-        <text x={PAD.l - 8} y={balY(balMax)} textAnchor="end" fontSize="11" fill="var(--slate-500,#64748b)">{crore(balMax)}</text>
-        <text x={PAD.l - 8} y={balY(balMin)} textAnchor="end" fontSize="11" fill="var(--slate-500,#64748b)">{crore(balMin)}</text>
+        <text x={PAD.l - 8} y={balY(balMax)} textAnchor="end" fontSize="12.5" fill="var(--slate-500,#64748b)">{crore(balMax)}</text>
+        <text x={PAD.l - 8} y={balY(balMin)} textAnchor="end" fontSize="12.5" fill="var(--slate-500,#64748b)">{crore(balMin)}</text>
         {points.map((p, i) => (
           (points.length <= 12 || i % Math.ceil(points.length / 10) === 0) && (
             <text
@@ -62,7 +62,7 @@ function CashTimeline({ points }) {
               x={PAD.l + bandW * i + bandW / 2}
               y={H - 22}
               textAnchor="end"
-              fontSize="10"
+              fontSize="12.5"
               fill="var(--slate-500,#64748b)"
               transform={`rotate(-40 ${PAD.l + bandW * i + bandW / 2} ${H - 22})`}
             >
@@ -71,7 +71,7 @@ function CashTimeline({ points }) {
           )
         ))}
       </svg>
-      <div style={{ display: 'flex', gap: 18, fontSize: 12, color: 'var(--slate-500)', marginTop: 4 }}>
+      <div style={{ display: 'flex', gap: 18, fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#16a34a', marginRight: 5 }} />Collected from buyer</span>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, background: '#dc2626', marginRight: 5 }} />Paid to seller</span>
         <span><span style={{ display: 'inline-block', width: 14, height: 2, background: '#2563eb', marginRight: 5, verticalAlign: 'middle' }} />Running balance</span>
@@ -134,7 +134,7 @@ export default function PaymentCycle() {
       key: 'payment_date',
       label: 'Paid on',
       // The ledger sometimes records the terms instead of a date; keep that visible.
-      render: r => r.payment_date || (r.payment_note ? <span style={{ fontSize: 12, color: 'var(--slate-500)' }} title={r.payment_note}>per terms</span> : '—'),
+      render: r => r.payment_date || (r.payment_note ? <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }} title={r.payment_note}>per terms</span> : '—'),
     },
     {
       key: 'status',

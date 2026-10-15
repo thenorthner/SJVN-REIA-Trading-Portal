@@ -127,7 +127,7 @@ export default function BilateralApplications() {
       <style>
         body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 24px; }
         h1 { font-size: 18px; margin-bottom: 16px; }
-        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
         th { background: #101a2e; color: #fff; text-align: left; padding: 8px; }
         td { border-bottom: 1px solid #ddd; padding: 8px; }
       </style></head><body>
@@ -270,7 +270,7 @@ export default function BilateralApplications() {
                   ) : filtered.map((r, i) => (
                     <tr key={r.id} style={{ background: i % 2 ? '#f8fafc' : '#fff', borderBottom: '1px solid #e2e8f0' }}>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{fmtDate(r.application_date)}</td>
-                      <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: 12 }}>{r.application_id}</td>
+                      <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: 13.5 }}>{r.application_id}</td>
                       <td style={{ padding: '10px 12px' }}>{r.applicant}</td>
                       <td style={{ padding: '10px 12px', maxWidth: 280 }}>{r.seller_name}</td>
                       <td style={{ padding: '10px 12px' }}>{r.buyer_name}</td>
@@ -304,7 +304,7 @@ export default function BilateralApplications() {
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 12, fontSize: 12, color: '#64748b' }}>
+            <div style={{ marginTop: 12, fontSize: 13.5, color: '#64748b' }}>
               Showing {filtered.length === 0 ? 0 : 1} to {filtered.length} of {filtered.length} entries
               {search.trim() && rows.length !== filtered.length ? ` (filtered from ${rows.length})` : ''}
             </div>
@@ -340,7 +340,7 @@ export default function BilateralApplications() {
               </Field>
             </div>
             {convertForm.sale_rate_per_unit && (
-              <p style={{ fontSize: 12, color: '#475569', marginTop: 10 }}>
+              <p style={{ fontSize: 13.5, color: '#475569', marginTop: 10 }}>
                 Purchase rate works out to{' '}
                 <strong>
                   ₹{(Number(convertForm.sale_rate_per_unit) - Number(convertForm.trading_margin_per_unit || 0)).toFixed(4)}

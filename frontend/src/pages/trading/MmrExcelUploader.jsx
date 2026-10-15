@@ -123,7 +123,7 @@ export default function MmrExcelUploader() {
                   onChange={onFileChange}
                   required
                 />
-                {fileName && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>{fileName}</div>}
+                {fileName && <div style={{ fontSize: 13.5, color: '#64748b', marginTop: 6 }}>{fileName}</div>}
               </div>
             </div>
           </div>
@@ -146,7 +146,7 @@ export default function MmrExcelUploader() {
         <Card style={{ marginTop: 16 }}>
           <strong style={{ fontSize: 13 }}>Recent MMR uploads</strong>
           <div style={{ overflowX: 'auto', marginTop: 8 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
               <thead>
                 <tr style={{ background: '#f1f5f9' }}>
                   {['Id', 'Period', 'File', 'Status', 'Created'].map((h) => (

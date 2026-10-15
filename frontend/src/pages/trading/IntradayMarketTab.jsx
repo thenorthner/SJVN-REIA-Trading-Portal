@@ -109,10 +109,10 @@ export default function IntradayMarketTab() {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="time_block" interval={11} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} />
+                  <XAxis dataKey="time_block" interval={11} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} />
+                  <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={48} tickFormatter={(v) => `₹${v}`} />
                   <Tooltip formatter={(v, name) => [`${rs(v)}/kWh`, name]} />
-                  <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 12 }} />
+                  <Legend verticalAlign="top" height={28} iconType="plainline" wrapperStyle={{ fontSize: 13.5 }} />
                   {present.map((p) => (
                     <Line key={p} dataKey={`${p}_mcp`} name={p} stroke={PRODUCT_COLOURS[p]} strokeWidth={2}
                       strokeDasharray={p === 'RTM' ? '6 4' : undefined} dot={false} isAnimationActive={false} />
@@ -128,10 +128,10 @@ export default function IntradayMarketTab() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={rows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                     <CartesianGrid stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="time_block" interval={11} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-                    <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={56} />
+                    <XAxis dataKey="time_block" interval={11} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} />
+                    <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={56} />
                     <Tooltip formatter={(v, name) => [`${Number(v).toLocaleString('en-IN')} MW`, name]} />
-                    <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 12 }} />
+                    <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 13.5 }} />
                     {present.map((p) => (
                       <Bar key={p} dataKey={`${p}_mcv`} name={p} stackId="mcv" fill={PRODUCT_COLOURS[p]} isAnimationActive={false} />
                     ))}

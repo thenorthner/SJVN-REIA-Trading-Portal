@@ -65,7 +65,7 @@ function exportCsv(rows) {
 
 // A small mark for each thing that goes with the bill.
 const Mark = ({ on, children, title }) => (
-  <span title={title} style={{ display: 'inline-block', marginRight: 4, padding: '1px 6px', borderRadius: 999, fontSize: 10.5, fontWeight: 700, background: on ? '#dcfce7' : '#f1f5f9', color: on ? '#15803d' : '#94a3b8' }}>{children}</span>
+  <span title={title} style={{ display: 'inline-block', marginRight: 4, padding: '1px 6px', borderRadius: 999, fontSize: 12.5, fontWeight: 700, background: on ? '#dcfce7' : '#f1f5f9', color: on ? '#15803d' : '#94a3b8' }}>{children}</span>
 );
 
 function StatusStepper({ status }) {
@@ -423,7 +423,7 @@ export default function SellerInvoices() {
       // SJVN's own computation of a month, shown once it is approved, is not
       // one of the seller's invoices — say so.
       render: (r) => (r.raised_by_seller === false
-        ? <span>{r.invoice_no}<div style={{ fontSize: 11, color: '#1d4ed8' }}>Raised by SJVN</div></span>
+        ? <span>{r.invoice_no}<div style={{ fontSize: 13, color: '#1d4ed8' }}>Raised by SJVN</div></span>
         : r.invoice_no),
     },
     { key: 'contract_no', header: 'Contract' },
@@ -552,7 +552,7 @@ export default function SellerInvoices() {
                     <span className="detail-label">Energy Charges</span>
                     <span className="detail-value" style={{ color: 'var(--success)', fontWeight: 600 }}>
                       {fmtCurrency(calculatedCharges)}
-                      <div style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-light)' }}>{fmtNumber(energyPreview.energy_mwh)} MWh × 1,000 units × ₹{contractPreview?.tariff_per_unit}</div>
+                      <div style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-light)' }}>{fmtNumber(energyPreview.energy_mwh)} MWh × 1,000 units × ₹{contractPreview?.tariff_per_unit}</div>
                     </span>
                   </div>
                   <div className="detail-item"><span className="detail-label">Data Source</span><span className="detail-value">{energyPreview.source} ({energyPreview.data_type})</span></div>
@@ -746,19 +746,19 @@ export default function SellerInvoices() {
             <div className="form-actions" style={{ marginTop: 18, flexWrap: 'wrap' }}>
               {selected.status === 'DRAFT' && (isMaker
                 ? <button type="button" className="btn btn-primary" disabled={!!busy} onClick={handleSendToChecker}>Send to checker</button>
-                : <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>A draft your maker has not yet sent for checking.</span>)}
+                : <span style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>A draft your maker has not yet sent for checking.</span>)}
               {selected.status === 'DRAFT' && selected.raised_by_seller !== false && (
                 <button type="button" className="btn btn-secondary" disabled={!!busy} onClick={openRevise}>Revise</button>
               )}
               {selected.status === 'PENDING_L2' && (canSendToSjvn
                 ? <button type="button" className="btn btn-primary" disabled={!!busy} onClick={handleCheckerApprove}>Approve &amp; submit to SJVN</button>
-                : <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Waiting for your company&apos;s checker to approve it and submit it to SJVN.</span>)}
+                : <span style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>Waiting for your company&apos;s checker to approve it and submit it to SJVN.</span>)}
               {selected.status === 'REJECTED' && selected.raised_by_seller !== false && (
                 <>
                   <button type="button" className="btn btn-primary" disabled={!!busy} onClick={openRevise}>Revise the bill</button>
                   {canSendToSjvn
                     ? <button type="button" className="btn btn-secondary" disabled={!!busy} onClick={handleSubmitForApproval}>Resubmit to SJVN</button>
-                    : <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Your company&apos;s checker sends it to SJVN again.</span>}
+                    : <span style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>Your company&apos;s checker sends it to SJVN again.</span>}
                 </>
               )}
               {selected.status !== 'CANCELLED' && selected.raised_by_seller !== false && (

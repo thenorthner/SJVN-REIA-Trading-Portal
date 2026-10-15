@@ -106,7 +106,7 @@ export function ScheduleGridModal({ tx, onClose, onSubmit }) {
         )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, marginTop: 20 }}>
-          <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>
+          <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
             Contracted quantum: <strong>{contracted} MW</strong> — no block may exceed this.
           </span>
           <div style={{ display: 'flex', gap: 10 }}>

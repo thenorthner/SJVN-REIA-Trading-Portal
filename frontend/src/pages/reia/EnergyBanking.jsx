@@ -32,7 +32,7 @@ function CycleWindow({ endsOn, available }) {
   return (
     <span style={{ color: tone, fontWeight: urgent ? 600 : 400 }}>
       {endsOn}
-      <span style={{ fontSize: 11, marginLeft: 6, color: 'var(--text-light)' }}>{note}</span>
+      <span style={{ fontSize: 13, marginLeft: 6, color: 'var(--text-light)' }}>{note}</span>
     </span>
   );
 }
@@ -144,7 +144,7 @@ export default function EnergyBanking() {
         return (
           <span>
             {fmtCurrency(r.settled_amount)}
-            <span style={{ fontSize: 11, color: 'var(--text-light)', marginLeft: 6 }}>{fmtNumber(r.settled_mwh, 3)} MWh lapsed</span>
+            <span style={{ fontSize: 13, color: 'var(--text-light)', marginLeft: 6 }}>{fmtNumber(r.settled_mwh, 3)} MWh lapsed</span>
           </span>
         );
       },
@@ -233,7 +233,7 @@ export default function EnergyBanking() {
             <div style={{ margin: '8px 0', padding: '10px 12px', background: 'var(--bg)', borderRadius: 8, fontSize: 13 }}>
               Drawn back within the cycle: <strong>{fmtCurrency(fullValue)}</strong> of energy.
               {'  ·  '}Left to lapse: <strong style={{ color: 'var(--amber, #b7791f)' }}>{fmtCurrency(lapseValue)}</strong>
-              <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
+              <div style={{ fontSize: 13, color: 'var(--text-light)', marginTop: 2 }}>
                 Unused energy settles at 75% of tariff by default, so drawing it back is worth {fmtCurrency(fullValue - lapseValue)} more than letting the cycle close on it.
               </div>
             </div>
@@ -253,7 +253,7 @@ export default function EnergyBanking() {
             <Field label="Draw (MWh)">
               <input required type="number" step="0.001" min="0.001" value={drawForm.draw_mwh} onChange={(e) => setDrawForm({ ...drawForm, draw_mwh: e.target.value })} />
             </Field>
-            <div style={{ fontSize: 12, color: 'var(--text-light)', margin: '4px 0 8px' }}>
+            <div style={{ fontSize: 13.5, color: 'var(--text-light)', margin: '4px 0 8px' }}>
               Available in this cycle: <strong>{fmtNumber(rows.find((r) => r.cycle === drawForm.cycle)?.available_mwh || 0, 3)} MWh</strong>. Oldest energy is drawn first, so what expires soonest is used up first.
             </div>
             <div className="form-actions">

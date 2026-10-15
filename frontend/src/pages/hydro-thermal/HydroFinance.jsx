@@ -6,6 +6,7 @@ import { ROLE_GROUPS } from '../../roles.js';
 import {
   PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtCurrency,
 } from '../../components/ui.jsx';
+import LatePaymentSurchargeLadder3D from '../../components/LatePaymentSurchargeLadder3D.jsx';
 
 // The month-end handover from Commercial to corporate Finance.
 //
@@ -107,7 +108,7 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
   }
 
   const columns = [
-    { key: 'posting_no', header: 'Posting', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>{r.posting_no}</span> },
+    { key: 'posting_no', header: 'Posting', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13.5 }}>{r.posting_no}</span> },
     { key: 'period_month', header: 'Month' },
     { key: 'bill_category', header: 'Category', render: (r) => <Badge label={r.bill_category} /> },
     { key: 'bills_count', header: 'Bills' },
@@ -130,7 +131,7 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
         <span>
           <Badge status={r.status} label={r.status} />
           {r.fi_document_no && (
-            <span style={{ display: 'block', fontSize: 11, color: 'var(--text-light)' }}>{r.fi_document_no}</span>
+            <span style={{ display: 'block', fontSize: 13, color: 'var(--text-light)' }}>{r.fi_document_no}</span>
           )}
         </span>
       ),
@@ -170,6 +171,8 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
+
+      <LatePaymentSurchargeLadder3D stationId={stationId} stationName={station?.station_name} />
 
       <Card title="Prepare a month">
         <div className="form-grid">
@@ -250,7 +253,7 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
               ]}
               rows={open.lines || []}
             />
-            <p style={{ color: 'var(--text-light)', fontSize: 12, marginTop: 10 }}>
+            <p style={{ color: 'var(--text-light)', fontSize: 13.5, marginTop: 10 }}>
               These are the amounts as they were booked. A later revision to any of these bills does
               not change them, because what Finance holds is not ours to restate.
             </p>

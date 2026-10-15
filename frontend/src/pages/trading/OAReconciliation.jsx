@@ -31,7 +31,7 @@ function MonthlyCost({ months }) {
           </div>
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 18, fontSize: 12, color: 'var(--slate-500)', marginTop: 10 }}>
+      <div style={{ display: 'flex', gap: 18, fontSize: 13.5, color: 'var(--slate-500)', marginTop: 10 }}>
         {parts.map(([key, colour, label]) => (
           <span key={key}><span style={{ display: 'inline-block', width: 10, height: 10, background: colour, marginRight: 5 }} />{label}</span>
         ))}
@@ -170,7 +170,7 @@ export default function OAReconciliation() {
 
       <Card title="Match rate by transmission corridor">
         <Table columns={regionColumns} rows={regionRows} loading={loading} emptyMessage="No applications." />
-        <p style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 10 }}>
+        <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 10 }}>
           ISTS is billed per corridor, not nationally — the same day is charged at a different rate in each. A whole
           corridor drifting means its rate is missing or stale, rather than one application being unusual.
         </p>

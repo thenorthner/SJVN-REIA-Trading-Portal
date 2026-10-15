@@ -32,7 +32,7 @@ const short = (name, max = 32) => (name.length > max ? `${name.slice(0, max - 14
 function EntityTick({ x, y, payload, rows }) {
   const row = rows.find((r) => r.label === payload.value);
   return (
-    <text x={x} y={y} dy={4} textAnchor="end" fontSize={11} fill="var(--text)">
+    <text x={x} y={y} dy={4} textAnchor="end" fontSize={12.5} fill="var(--text)">
       <title>{row?.entity_name || payload.value}</title>
       {payload.value}
     </text>
@@ -102,7 +102,7 @@ export function ParticipantsCard({ period, segment, side, title, limit = 10 }) {
                 <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.6}/>
               </linearGradient>
             </defs>
-            <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} unit={licensee ? '%' : ''} axisLine={false} tickLine={false} />
+            <XAxis type="number" tick={{ fontSize: 13, fill: 'var(--text-muted)' }} unit={licensee ? '%' : ''} axisLine={false} tickLine={false} />
             <YAxis type="category" dataKey="label" width={260} tick={<EntityTick rows={rows} />} interval={0} axisLine={false} tickLine={false} />
             <Tooltip
               formatter={(v) => [licensee ? pct(v, 2) : `${mu(v)} MU`, licensee ? 'Share' : 'Volume']}
@@ -268,10 +268,10 @@ export function RecBidDepthCard({ month }) {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={rows} margin={{ top: 8, right: 16, left: 8, bottom: 0 }} barGap={2} barCategoryGap="38%">
                 <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="exchange" tick={{ fontSize: 11, fill: 'var(--text-muted)' }} />
-                <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={72} tickFormatter={(v) => `${(v / 100000).toLocaleString('en-IN', { maximumFractionDigits: 1 })}L`} />
+                <XAxis dataKey="exchange" tick={{ fontSize: 13, fill: 'var(--text-muted)' }} />
+                <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={72} tickFormatter={(v) => `${(v / 100000).toLocaleString('en-IN', { maximumFractionDigits: 1 })}L`} />
                 <Tooltip formatter={(v, name) => [`${whole(v)} RECs`, name]} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 13.5 }} />
                 <Bar dataKey="buy_bid_mwh" name="Bid to buy" fill={BUY} radius={[4, 4, 0, 0]} isAnimationActive={false} />
                 <Bar dataKey="sell_bid_mwh" name="Offered to sell" fill={SELL} radius={[4, 4, 0, 0]} isAnimationActive={false} />
               </BarChart>

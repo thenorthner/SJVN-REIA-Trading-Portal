@@ -134,15 +134,15 @@ export default function EnergySchedule({ product = 'DAM' }) {
       <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
         <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedule-trading-date">Delivery Date</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedule-trading-date">Delivery Date</label>
             <input id="energyschedule-trading-date" type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedule-portfolio-id">Client</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedule-portfolio-id">Client</label>
             <PortfolioSelect id="energyschedule-portfolio-id" scope="global" allLabel="All clients" includeAll />
           </div>
           <div style={{ marginLeft: 'auto' }}>
-            <span style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }}>Aggregation</span>
+            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }}>Aggregation</span>
             <div role="group" aria-label="Aggregation Level" style={{ display: 'flex', gap: 5 }}>
               <button type="button" className={`btn btn-sm ${viewMode === 'BLOCK' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setViewMode('BLOCK')}>15-min (96)</button>
               <button type="button" className={`btn btn-sm ${viewMode === 'HOURLY' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setViewMode('HOURLY')}>Hourly (24)</button>
@@ -160,7 +160,7 @@ export default function EnergySchedule({ product = 'DAM' }) {
           <div style={{ textAlign: 'right' }}>
             <div><strong>Cleared:</strong> {fmtNumber(data?.summary?.cleared_mwh || 0, 3)} MWh</div>
             <div><strong>Value:</strong> ₹{fmtNumber(data?.summary?.cleared_value || 0, 2)}</div>
-            <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>
+            <div style={{ fontSize: 13.5, color: '#555', marginTop: 4 }}>
               From {data?.summary?.bids || 0} filed bid{(data?.summary?.bids || 0) === 1 ? '' : 's'} — not WBES / JMR
             </div>
           </div>

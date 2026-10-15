@@ -46,7 +46,7 @@ export function ExpiryTag({ expiry }) {
   if (!expiry || expiry.level === 'NONE' || expiry.days == null) return null;
   const tone = TONE[expiry.level] || TONE.OK;
   const text = expiry.level === 'EXPIRED' ? `Expired ${Math.abs(expiry.days)}d ago` : expiry.days === 0 ? 'Expires today' : `${expiry.days}d left`;
-  return <span title={expiry.label} style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: tone[0], color: tone[1], whiteSpace: 'nowrap' }}>{text}</span>;
+  return <span title={expiry.label} style={{ display: 'inline-block', padding: '1px 8px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: tone[0], color: tone[1], whiteSpace: 'nowrap' }}>{text}</span>;
 }
 
 /** The three SFMS fields, shared by every form that records a bank's advice. */
@@ -126,7 +126,7 @@ function AmendForm({ d, sjvn, onDone, onCancel }) {
   return (
     <form className="cw-form" onSubmit={submit}>
       <strong>{sjvn ? 'Record an amendment' : `Submit ${d.mechanism_type === 'LC' ? 'LC' : 'BG'} extension / amendment`}</strong>
-      <p style={{ margin: '4px 0 10px', fontSize: 12, color: 'var(--text-light)' }}>
+      <p style={{ margin: '4px 0 10px', fontSize: 13.5, color: 'var(--text-light)' }}>
         Fill in only what the bank changed. Currently {fmtCurrency(d.limit_amount)}, valid until {fmtDate(d.validity_end)}{d.claim_deadline ? `, claims until ${fmtDate(d.claim_deadline)}` : ''}.
         {!sjvn && ' Nothing changes on the instrument until SJVN accepts the amendment.'}
       </p>
@@ -309,7 +309,7 @@ export default function SecurityInstrumentPanel({ instrumentId, onChanged }) {
           <div>
             <strong>Original document</strong>
             {d.is_ebg && <span className="cw-flag" style={{ background: '#eff6ff', color: '#1d4ed8', marginLeft: 8 }}>e-BG{d.ebg_reference ? ` · ${d.ebg_reference}` : ''}</span>}
-            <div style={{ fontSize: 12, color: 'var(--text-light)' }}>{d.document ? d.document.file_name : 'No scanned guarantee or e-BG is on file for this instrument.'}</div>
+            <div style={{ fontSize: 13.5, color: 'var(--text-light)' }}>{d.document ? d.document.file_name : 'No scanned guarantee or e-BG is on file for this instrument.'}</div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {d.document && <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPreview(d.document)}>View scanned BG / e-BG</button>}
@@ -341,24 +341,24 @@ export default function SecurityInstrumentPanel({ instrumentId, onChanged }) {
               {c.changes.map((ch) => <div key={ch.field} style={{ color: 'var(--primary-dark, #1e40af)' }}>{changeText([ch])}</div>)}
               {c.reason && <div className="ps-meta">{c.reason}</div>}
               {c.sfms_reference && <div className="ps-meta">SFMS {c.sfms_message_type || ''} · {c.sfms_reference}{c.sfms_date ? ` · ${fmtDate(c.sfms_date)}` : ''}</div>}
-              {c.seq > 0 && c.document && <button type="button" className="btn-link" style={{ fontSize: 12 }} onClick={() => setPreview(c.document)}>View amendment letter</button>}
+              {c.seq > 0 && c.document && <button type="button" className="btn-link" style={{ fontSize: 13.5 }} onClick={() => setPreview(c.document)}>View amendment letter</button>}
             </li>
           ))}
         </ol>
-        {d.chain.length === 1 && !pending && <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-light)' }}>No amendments — the instrument stands as issued.</p>}
+        {d.chain.length === 1 && !pending && <p style={{ margin: '8px 0 0', fontSize: 13.5, color: 'var(--text-light)' }}>No amendments — the instrument stands as issued.</p>}
 
         {pending && (
           <div className="ps-alert blue" style={{ margin: '12px 0 0' }}>
             <strong>Awaiting SJVN:</strong> {changeText(pending.changes)}
-            <div style={{ fontSize: 12 }}>{pending.reason} — {pending.raised_by_name}, {fmtDateTime(pending.created_at)}</div>
+            <div style={{ fontSize: 13.5 }}>{pending.reason} — {pending.raised_by_name}, {fmtDateTime(pending.created_at)}</div>
             <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
-              {pending.document_version_id && <button type="button" className="btn-link" style={{ fontSize: 12 }} onClick={() => setPreview({ version_id: pending.document_version_id, file_name: pending.document_name })}>View amendment letter</button>}
-              {pending.raised_by_side === d.side && <button type="button" className="btn-link" style={{ fontSize: 12 }} onClick={() => withdraw(pending.id)}>Withdraw</button>}
+              {pending.document_version_id && <button type="button" className="btn-link" style={{ fontSize: 13.5 }} onClick={() => setPreview({ version_id: pending.document_version_id, file_name: pending.document_name })}>View amendment letter</button>}
+              {pending.raised_by_side === d.side && <button type="button" className="btn-link" style={{ fontSize: 13.5 }} onClick={() => withdraw(pending.id)}>Withdraw</button>}
             </div>
           </div>
         )}
         {others.map((a) => (
-          <div key={a.id} style={{ marginTop: 8, fontSize: 12, color: 'var(--text-light)' }}>
+          <div key={a.id} style={{ marginTop: 8, fontSize: 13.5, color: 'var(--text-light)' }}>
             <Badge status={a.status} /> {changeText(a.changes)}{a.decision_note ? ` — ${a.decision_note}` : ''} · {fmtDate(a.decided_at || a.created_at)}
           </div>
         ))}

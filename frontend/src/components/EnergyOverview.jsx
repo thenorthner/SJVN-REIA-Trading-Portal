@@ -41,17 +41,17 @@ export default function EnergyOverview({ contractId, rows = [], onShow }) {
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="period" tickFormatter={monthLabel} tick={{ fontSize: 11 }} />
-                <YAxis yAxisId="mwh" tick={{ fontSize: 11 }} width={64} tickFormatter={(v) => fmtNumber(v, 0)} />
-                <YAxis yAxisId="cuf" orientation="right" tick={{ fontSize: 11 }} width={44} unit="%" domain={[0, (max) => Math.ceil(Math.max(max, minCuf || 0) / 10) * 10 + 10]} />
+                <XAxis dataKey="period" tickFormatter={monthLabel} tick={{ fontSize: 13 }} />
+                <YAxis yAxisId="mwh" tick={{ fontSize: 13 }} width={64} tickFormatter={(v) => fmtNumber(v, 0)} />
+                <YAxis yAxisId="cuf" orientation="right" tick={{ fontSize: 13 }} width={44} unit="%" domain={[0, (max) => Math.ceil(Math.max(max, minCuf || 0) / 10) * 10 + 10]} />
                 <Tooltip labelFormatter={(p) => `${monthLabel(p)}${series.find((s) => s.period === p)?.provisional ? ' — provisional' : ''}`}
                   formatter={(v, name) => (name === 'CUF' ? [`${fmtNumber(v)}%`, name] : [`${fmtNumber(v)} MWh`, name])} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 13.5 }} />
                 <Bar yAxisId="mwh" dataKey="energy_mwh" name="Energy" fill="url(#eliteBlue)" radius={[3, 3, 0, 0]} isAnimationActive={false}>
                   {series.map((s) => <Cell key={s.period} fill={s.provisional ? '#93c5fd' : '#2563eb'} />)}
                 </Bar>
                 <Line yAxisId="cuf" type="monotone" dataKey="cuf_percent" name="CUF" stroke="url(#eliteOrange)" strokeWidth={2} dot={{ r: 3 }} connectNulls isAnimationActive={false} />
-                {contractId && minCuf != null && <ReferenceLine yAxisId="cuf" y={minCuf} stroke="url(#eliteRed)" strokeDasharray="5 4" label={{ value: `Min CUF ${minCuf}%`, position: 'insideTopRight', fontSize: 11, fill: '#dc2626' }} />}
+                {contractId && minCuf != null && <ReferenceLine yAxisId="cuf" y={minCuf} stroke="url(#eliteRed)" strokeDasharray="5 4" label={{ value: `Min CUF ${minCuf}%`, position: 'insideTopRight', fontSize: 13, fill: '#dc2626' }} />}
               </ComposedChart>
             </ResponsiveContainer>
           </div>

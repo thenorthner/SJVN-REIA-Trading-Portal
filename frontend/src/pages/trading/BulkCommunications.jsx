@@ -288,7 +288,7 @@ export default function BulkCommunications() {
                   className="input"
                 />
                 {files.length > 0 && (
-                  <div style={{ marginTop: 5, fontSize: 12, color: '#666' }}>
+                  <div style={{ marginTop: 5, fontSize: 13.5, color: '#666' }}>
                     {files.length} file(s) selected
                   </div>
                 )}
@@ -369,7 +369,7 @@ export default function BulkCommunications() {
                       <td>
                         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                           {channels.map(ch => (
-                            <span key={ch} style={{ background: '#eee', padding: '2px 6px', borderRadius: 4, fontSize: 11 }}>
+                            <span key={ch} style={{ background: '#eee', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>
                               {ch}
                             </span>
                           ))}

@@ -137,10 +137,10 @@ export default function MainDashboard() {
                         <stop offset="95%" stopColor="#c2410c" stopOpacity={0.6}/>
                       </linearGradient>
                     </defs>
-                    <XAxis dataKey="period" tickFormatter={periodLabel} tick={{ fontSize: 11, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: 'var(--text-muted)' }} width={56} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="period" tickFormatter={periodLabel} tick={{ fontSize: 13, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 13, fill: 'var(--text-muted)' }} width={56} axisLine={false} tickLine={false} />
                     <Tooltip labelFormatter={periodLabel} formatter={(v, name) => [v == null ? '—' : `${mu(v)} MU`, name]} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }} />
-                    <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 12 }} />
+                    <Legend verticalAlign="top" height={28} wrapperStyle={{ fontSize: 13.5 }} />
                     {MIX.map((m) => (
                       <Bar key={m.key} dataKey={m.key} name={m.label} stackId="mu" fill={m.colour} maxBarSize={32} isAnimationActive={false} />
                     ))}

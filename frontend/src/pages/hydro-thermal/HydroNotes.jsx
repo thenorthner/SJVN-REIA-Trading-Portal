@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, fmtCurrency } from '../../components/ui.jsx';
 import { fmtDate } from '../../datetime.js';
+import ModuleGuide from '../../components/ModuleGuide.jsx';
 
 // Debit and credit notes on a hydro beneficiary's account. A note is raised as a
 // draft and moves nothing until a different officer approves it; then a debit
@@ -34,6 +35,7 @@ export default function HydroNotes({ vertical = 'HYDRO' }) {
   const [rejectReason, setRejectReason] = useState('');
   const [popup, setPopup] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState('LIST');
 
   const fail = (title, err) => setPopup({ tone: 'error', title, message: err?.response?.data?.error || err?.message || 'Something went wrong' });
 
@@ -126,11 +128,11 @@ export default function HydroNotes({ vertical = 'HYDRO' }) {
     { key: 'beneficiary_name', header: 'Beneficiary' },
     { key: 'against', header: 'Against', render: (n) => n.against_doc_no || 'Oldest open bills' },
     { key: 'amount', header: 'Amount', render: (n) => fmtCurrency(n.amount) },
-    { key: 'reason', header: 'Reason', render: (n) => <div><div>{n.reason_label}</div><div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{n.remarks}</div></div> },
+    { key: 'reason', header: 'Reason', render: (n) => <div><div>{n.reason_label}</div><div style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>{n.remarks}</div></div> },
     { key: 'status', header: 'Status', render: (n) => (
       <div>
         <Badge status={STATUS_TONE[n.status]} label={n.status} />
-        <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 3 }}>
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 3 }}>
           Raised by {n.created_by_name || '—'} on {fmtDate(n.note_date)}
           {n.approved_by_name && n.status !== 'DRAFT' ? ` · ${n.status.toLowerCase()} by ${n.approved_by_name}` : ''}
           {n.ledger_doc_no ? ` · ledger ${n.ledger_doc_no}` : ''}
@@ -158,6 +160,24 @@ export default function HydroNotes({ vertical = 'HYDRO' }) {
         actions={canWrite && <button className="btn btn-primary" disabled={!stationId} onClick={() => setForm(emptyForm(accounts[0]?.beneficiary_name || ''))}>+ Raise Note</button>}
       />
 
+      <div className="nb-tabs" role="tablist">
+        {[{ key: 'LIST', label: 'Notes' }, { key: 'FYI', label: 'FYI — Reference Guide' }].map((t) => (
+          <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} className={`nb-tab ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'FYI' && (
+        <ModuleGuide sections={[
+          { title: 'Debit note', body: 'A debit note increases what the beneficiary owes. Once approved, it lands on the account as its own bill with its own due date and carries late payment surcharge if paid late. Typical uses: revised REA difference, auxiliary consumption beyond normative, exchange rate variation claim.' },
+          { title: 'Credit note', body: 'A credit note reduces what the beneficiary owes. It is set against the chosen bill (or the oldest open ones if none is chosen). It is not money received and earns no rebate. Anything it cannot clear stays on the account as credit. Typical uses: overbilling correction, write-off of a disputed amount.' },
+          { title: 'Approval workflow', body: 'A note is raised as a DRAFT by one officer and must be approved by a different officer before it takes effect. The same officer who raised it cannot approve it. If rejected, the note is cancelled and nothing changes on the account. An approved note is corrected by raising the opposite type (debit note to reverse a credit, and vice versa).' },
+          { title: 'Linking to a bill', body: 'A note can optionally be linked to a specific open bill. For credit notes, this is important — the credit is applied directly against that bill. For debit notes, the link is informational only (the note creates its own bill). If no bill is chosen, credit notes clear the oldest open bills first.' },
+        ]} />
+      )}
+
+      {tab === 'LIST' && (<>
       <div className="filters-bar">
         <select value={stationId} onChange={(e) => setStationId(e.target.value)}>
           {stations.map((s) => <option key={s.id} value={s.id}>{s.station_name || s.contract_no}</option>)}
@@ -175,6 +195,7 @@ export default function HydroNotes({ vertical = 'HYDRO' }) {
       <Card>
         <Table columns={columns} rows={notes} emptyMessage="No debit or credit notes on this station yet." />
       </Card>
+      </>)}
 
       <Modal open={!!form} onClose={() => setForm(null)} title="Raise a Debit / Credit Note" width={720}>
         {form && (
@@ -211,7 +232,7 @@ export default function HydroNotes({ vertical = 'HYDRO' }) {
               <textarea rows={3} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })}
                 placeholder="e.g. Difference on revised REA for June 2026 issued by NRPC on 12.09.2026" />
             </Field>
-            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+            <p style={{ fontSize: 13.5, color: 'var(--text-muted)', margin: '4px 0 0' }}>
               {form.note_type === 'DEBIT'
                 ? 'On approval this becomes its own bill on the account, due as per the PPA payment terms, and carries late payment surcharge if paid late.'
                 : 'On approval this is set against the chosen bill (or the oldest open ones). It is not money received and earns no rebate; anything it cannot clear stays on the account as credit.'}

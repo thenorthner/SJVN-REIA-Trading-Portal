@@ -190,7 +190,7 @@ export default function TDSRegister() {
               {vendors.map(v => <option key={v.id} value={v.name}>{v.name} — {v.pan}</option>)}
             </select>
           </Field>
-          <p style={{ fontSize: 12, color: 'var(--slate-500)', margin: '6px 0 14px' }}>
+          <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '6px 0 14px' }}>
             The vendor's PAN and default section fill in automatically. Override the section or rate only where the payment is taxed differently.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>

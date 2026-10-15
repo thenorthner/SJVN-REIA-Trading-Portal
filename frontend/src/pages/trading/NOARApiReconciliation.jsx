@@ -215,7 +215,7 @@ export default function NOARApiReconciliation() {
             {syncing ? 'Pulling…' : 'Pull from NOAR'}
           </button>
         </div>
-        <p className="muted" style={{ marginTop: 12, fontSize: 12 }}>
+        <p className="muted" style={{ marginTop: 12, fontSize: 13.5 }}>
           Read-only against NOAR. Nothing here changes a transaction&apos;s open-access status —
           it reports what the registry says so the desk can correct whichever side is wrong.
         </p>
@@ -259,7 +259,7 @@ export default function NOARApiReconciliation() {
                 <div><strong>Scheduled:</strong> {fmtNumber(viewing.scheduled_mwh)} MWh</div>
                 <div><strong>Revision:</strong> {viewing.revision_no}</div>
               </div>
-              <p className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+              <p className="muted" style={{ marginTop: 10, fontSize: 13.5 }}>
                 NOAR also returns Status {viewing.status_code ?? '—'}, Bid {viewing.bid_status ?? '—'},
                 Congestion {viewing.congestion_status ?? '—'} and Payment {viewing.payment_status ?? '—'}
                 as bare numbers. The trader API guide defines no meaning for them, so they are shown
@@ -310,7 +310,7 @@ export default function NOARApiReconciliation() {
                   data={(viewing.approved_summary?.length ? viewing.approved_summary : viewing.applied_summary).map((s, i) => ({ id: `blk-${i}`, ...s }))}
                   emptyMessage="No block-wise summary was returned."
                 />
-                <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+                <p className="muted" style={{ marginTop: 8, fontSize: 13.5 }}>
                   {viewing.approved_summary?.length ? 'Approved' : 'Applied'} quantum, as returned by NOAR.
                 </p>
               </div>

@@ -28,9 +28,9 @@ const RESOLVE_FORM = { outcome: 'PARTIAL_CREDIT', accepted_amount: '', resolutio
 function StatPill({ label, value, sub }) {
   return (
     <div style={{ padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, minWidth: 120 }}>
-      <div style={{ fontSize: 11, textTransform: 'none', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
+      <div style={{ fontSize: 13, textTransform: 'none', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: 'var(--text)' }}>{value}</div>
-      {sub != null && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
+      {sub != null && <div style={{ fontSize: 13.5, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -251,7 +251,7 @@ export default function Disputes() {
     { key: 'ageing_days', header: 'Age', render: (r) => `${r.ageing_days ?? 0}d` },
     { key: 'sla', header: 'Clock', render: (r) => (clock[r.id] ? <SlaTag sla={clock[r.id].sla} sjvn /> : (r.sla_breached || r.status === 'ESCALATED' ? <Badge status="ESCALATED" /> : 'OK')) },
     { key: 'lps', header: 'LPS at stake', render: (r) => (clock[r.id]?.lps_estimate?.amount > 0 ? <span style={{ color: clock[r.id].lps_estimate.running ? '#b45309' : 'inherit' }}>{fmtCurrency(clock[r.id].lps_estimate.amount)}</span> : '—') },
-    { key: 'group', header: 'Linked', render: (r) => { const g = clock[r.id]?.group || (r.group_ref ? { ref: r.group_ref, title: r.group_title } : null); return g?.ref ? <span title={g.title || ''} style={{ fontSize: 12 }}>{g.ref}</span> : '—'; } },
+    { key: 'group', header: 'Linked', render: (r) => { const g = clock[r.id]?.group || (r.group_ref ? { ref: r.group_ref, title: r.group_title } : null); return g?.ref ? <span title={g.title || ''} style={{ fontSize: 13.5 }}>{g.ref}</span> : '—'; } },
   ];
 
   return (
@@ -304,7 +304,7 @@ export default function Disputes() {
                 key={r.reason_code}
                 type="button"
                 className="btn btn-ghost"
-                style={{ fontSize: 12 }}
+                style={{ fontSize: 13.5 }}
                 onClick={() => setFilters({ ...filters, reason_code: r.reason_code })}
               >
                 {reasonLabel(r.reason_code)} · {r.count} · {fmtCurrency(r.amount)}
@@ -531,7 +531,7 @@ export default function Disputes() {
                       <tr key={d.filename}>
                         <td style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
                           <strong>{d.original_name || d.filename}</strong>
-                          {d.note && <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 2 }}>{d.note}</div>}
+                          {d.note && <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2 }}>{d.note}</div>}
                         </td>
                         <td>{d.uploaded_by || '—'}</td>
                         <td>{fmtDate(d.uploaded_at)}</td>
@@ -549,7 +549,7 @@ export default function Disputes() {
             <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid var(--border, #e5e7eb)', borderRadius: 8, padding: 10, marginBottom: 10 }}>
               {(detail.comments || []).map((c) => (
                 <div key={c.id} style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>
+                  <div style={{ fontSize: 13.5, opacity: 0.7 }}>
                     {c.user_name} ({c.role}) · {fmtDateTime(c.created_at)}
                     {c.is_internal ? ' · INTERNAL' : ''}
                   </div>

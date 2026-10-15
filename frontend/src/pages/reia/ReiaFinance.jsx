@@ -38,7 +38,7 @@ const partColumns = [
 ];
 
 const docColumns = [
-  { key: 'doc_no', header: 'Document', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>{r.doc_no}</span> },
+  { key: 'doc_no', header: 'Document', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13.5 }}>{r.doc_no}</span> },
   { key: 'doc_kind', header: 'Kind', render: (r) => <Badge label={r.doc_kind} /> },
   { key: 'contract_no', header: 'Contract' },
   { key: 'counterparty', header: 'Counterparty' },
@@ -120,7 +120,7 @@ export default function ReiaFinance() {
   }
 
   const columns = [
-    { key: 'posting_no', header: 'Posting', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>{r.posting_no}</span> },
+    { key: 'posting_no', header: 'Posting', render: (r) => <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13.5 }}>{r.posting_no}</span> },
     { key: 'period_month', header: 'Month' },
     { key: 'category', header: 'Category', render: (r) => <Badge label={r.category} /> },
     { key: 'docs_count', header: 'Docs' },
@@ -132,7 +132,7 @@ export default function ReiaFinance() {
         <span>
           <Badge status={r.status} label={r.status} />
           {r.fi_document_no && (
-            <span style={{ display: 'block', fontSize: 11, color: 'var(--text-light)' }}>{r.fi_document_no}</span>
+            <span style={{ display: 'block', fontSize: 13, color: 'var(--text-light)' }}>{r.fi_document_no}</span>
           )}
         </span>
       ),
@@ -221,7 +221,7 @@ export default function ReiaFinance() {
               {open.reversal_reason && <div style={{ marginTop: 4 }}>{open.reversal_reason}</div>}
             </div>
             <Table columns={docColumns} rows={open.lines || []} />
-            <p style={{ color: 'var(--text-light)', fontSize: 12, marginTop: 10 }}>
+            <p style={{ color: 'var(--text-light)', fontSize: 13.5, marginTop: 10 }}>
               These are the amounts as they were booked. A later change to any of these documents
               does not change them, because what Finance holds is not ours to restate.
             </p>

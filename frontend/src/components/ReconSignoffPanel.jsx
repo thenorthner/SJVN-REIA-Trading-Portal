@@ -239,19 +239,19 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
   const both = !!(s.sjvn && s.counterparty);
   const sideKey = d.side === 'SJVN' ? 'sjvn' : 'counterparty';
   const sigLine = (label, x) => (
-    <div style={{ padding: 10, border: `1px solid ${x ? '#a7f3d0' : 'var(--border)'}`, background: x ? '#ecfdf5' : '#fff', borderRadius: 6, fontSize: 12.5 }}>
+    <div style={{ padding: 10, border: `1px solid ${x ? '#a7f3d0' : 'var(--border)'}`, background: x ? '#ecfdf5' : '#fff', borderRadius: 6, fontSize: 13.5 }}>
       <div style={{ fontWeight: 700, color: x ? '#065f46' : 'var(--text-muted)' }}>{label}</div>
       {x ? (
         <>
           <div>{x.by} · {String(x.role).replace(/_/g, ' ')}</div>
           <div>{fmtDateTime(x.at)}{x.decision === 'AGREE_WITH_EXCEPTIONS' ? ' · with exceptions' : ''}</div>
-          <div style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--slate-500)' }} title={x.fingerprint}>Fingerprint {x.fingerprint.slice(0, 16)}…</div>
+          <div style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--slate-500)' }} title={x.fingerprint}>Fingerprint {x.fingerprint.slice(0, 16)}…</div>
         </>
       ) : <div style={{ color: 'var(--slate-500)' }}>Not signed in this way yet</div>}
     </div>
   );
   const copyLine = (label, c) => c && (
-    <div style={{ fontSize: 12.5, marginTop: 4 }}>
+    <div style={{ fontSize: 13.5, marginTop: 4 }}>
       {label}: <button type="button" className="btn-link" onClick={() => setPreview(c)}>{c.file_name}</button>{' '}
       <span style={{ fontWeight: 600, color: c.signed ? '#15803d' : '#b91c1c' }}>
         {c.signed ? `✓ digital signature present${c.signer ? ` — ${c.signer}` : ''}${c.signed_on ? `, ${c.signed_on}` : ''}` : '✗ no digital signature found in the file'}
@@ -289,7 +289,7 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
                 <Badge status={x.status === 'OPEN' ? 'PENDING' : x.status === 'ACCEPTED' ? 'ACTIVE' : 'REJECTED'} label={x.status === 'OPEN' ? 'Open' : x.status === 'ACCEPTED' ? 'Accepted by SJVN' : 'Not accepted'} />
               </div>
               <div style={{ fontSize: 13, marginTop: 4 }}>{x.reason}</div>
-              <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 2 }}>Raised by {x.raised_by_name} · {fmtDateTime(x.created_at)}</div>
+              <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2 }}>Raised by {x.raised_by_name} · {fmtDateTime(x.created_at)}</div>
               {x.status !== 'OPEN' && <div style={{ fontSize: 13, marginTop: 6 }}><strong>{x.resolved_by}:</strong> {x.resolution_note}</div>}
               {x.status === 'OPEN' && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>

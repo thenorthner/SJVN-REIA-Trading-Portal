@@ -104,7 +104,7 @@ export default function UserProfile() {
                     <span></span>
                     <span style={{ fontWeight: 600, color: 'var(--navy)' }}>{pf.name}</span>
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--slate-500)', marginLeft: 26 }}>{pf.id} · {pf.client_type}</div>
+                  <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginLeft: 26 }}>{pf.id} · {pf.client_type}</div>
                 </div>
               ))}
               <button 

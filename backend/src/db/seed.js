@@ -356,6 +356,8 @@ const users = [
   { name: 'Ravi (Compliance)', email: 'auditor@sjvn.in', role: 'COMPLIANCE_AUDITOR' },
   { name: 'Sunrise Solar Pvt Ltd', email: 'seller@sunrise-solar.in', role: 'SELLER' },
   { name: 'State DISCOM Buyer', email: 'buyer@discom.gov.in', role: 'BUYER' },
+  { name: 'Gurpreet Singh (Buyer Maker)', email: 'buyer.maker@discom.gov.in', role: 'BUYER_L1' },
+  { name: 'Harpreet Kaur (Buyer Checker)', email: 'buyer.checker@discom.gov.in', role: 'BUYER_L2' },
   { name: 'ABC Trading Client', email: 'client@abctrading.in', role: 'TRADING_CLIENT' },
   { name: 'Sunil (Commercial Admin)', email: 'commercial@sjvn.in', role: 'COMMERCIAL_ADMIN' },
 ];
@@ -410,6 +412,8 @@ db.prepare(`
 
 db.prepare('UPDATE users SET linked_entity_id = ? WHERE email = ?').run(seller.id, 'seller@sunrise-solar.in');
 db.prepare('UPDATE users SET linked_entity_id = ? WHERE email = ?').run(buyer.id, 'buyer@discom.gov.in');
+db.prepare('UPDATE users SET linked_entity_id = ? WHERE email = ?').run(buyer.id, 'buyer.maker@discom.gov.in');
+db.prepare('UPDATE users SET linked_entity_id = ? WHERE email = ?').run(buyer.id, 'buyer.checker@discom.gov.in');
 
 const ppa = {
   id: newId('CON'),

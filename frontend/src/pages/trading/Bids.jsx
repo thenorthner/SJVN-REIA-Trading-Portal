@@ -420,7 +420,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       <span>
         {r.id}
         {(r.source_kind === 'ISET' || r.source_kind === 'ISET_LATEST') && (
-          <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--slate-500)', fontWeight: 600 }}>ISET</span>
+          <span style={{ marginLeft: 6, fontSize: 12.5, color: 'var(--slate-500)', fontWeight: 600 }}>ISET</span>
         )}
       </span>
     ) },
@@ -431,7 +431,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
     { key: 'type', label: 'Bid Type', render: r => r.type || 'Sell' },
     { key: 'revision_no', label: 'Rev No', render: r => r.revision_no || 1 },
     { key: 'internal_status', label: 'Internal Status', render: r => (
-      bidView === 'history' ? <span style={{ color: 'var(--green-strong)', fontWeight: '500', fontSize: 12 }}>File Prepared</span> : 
+      bidView === 'history' ? <span style={{ color: 'var(--green-strong)', fontWeight: '500', fontSize: 13.5 }}>File Prepared</span> : 
       <Badge type={r.approval_status === 'APPROVED' ? 'success' : r.approval_status === 'REJECTED' ? 'danger' : 'warning'}>{r.approval_status}</Badge>
     ) },
     { key: 'status', label: 'Exchange Status', render: r => {
@@ -440,7 +440,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       if (r.status === 'SUBMITTED' && r.submission_mode === 'STUB') {
         return (
           <span
-            style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 12, cursor: 'help' }}
+            style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 13.5, cursor: 'help' }}
             title={`Recorded without contacting the exchange (stub mode). Receipt ${r.exchange_receipt_ref || '—'} is local, not an exchange acknowledgement.`}
           >
             Not sent — stub
@@ -448,10 +448,10 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
         );
       }
       if (tab.short === 'RTM') {
-        if (r.status === 'SUBMITTED') return <span style={{ color: 'var(--green-strong)', fontWeight: 'bold', fontSize: 12 }}>Submitted to Exchange</span>;
-        if (r.status === 'PENDING') return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 12 }}>Pending Gateway</span>;
-        if (r.status === 'REJECTED') return <span style={{ color: 'var(--red-strong)', fontWeight: 'bold', fontSize: 12, cursor: 'help' }} title={r.rejection_reason || 'Error Code 402: Bid quantity exceeds standing clearance limit'}>Rejected by Exchange</span>;
-        return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 12 }}>Pending Gateway</span>; // Default mock for new RTM bids
+        if (r.status === 'SUBMITTED') return <span style={{ color: 'var(--green-strong)', fontWeight: 'bold', fontSize: 13.5 }}>Submitted to Exchange</span>;
+        if (r.status === 'PENDING') return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 13.5 }}>Pending Gateway</span>;
+        if (r.status === 'REJECTED') return <span style={{ color: 'var(--red-strong)', fontWeight: 'bold', fontSize: 13.5, cursor: 'help' }} title={r.rejection_reason || 'Error Code 402: Bid quantity exceeds standing clearance limit'}>Rejected by Exchange</span>;
+        return <span style={{ color: '#ca8a04', fontWeight: 'bold', fontSize: 13.5 }}>Pending Gateway</span>; // Default mock for new RTM bids
       }
       return <Badge type={r.status === 'CLEARED' ? 'success' : r.status === 'DRAFT' ? 'neutral' : 'primary'}>{r.status}</Badge>;
     } },
@@ -562,7 +562,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                   {clearance.sldc_name || 'SLDC'} Standing Clearance:{' '}
                 </span>
                 <span style={{ fontWeight: 700, fontSize: 13, color: tone.fg }}>{tone.label}</span>
-                <span style={{ fontSize: 12, color: 'var(--slate-500)', marginLeft: 8 }}>
+                <span style={{ fontSize: 13.5, color: 'var(--slate-500)', marginLeft: 8 }}>
                   {clearance.client_name}
                   {clearance.tgna_approved_mw != null && ` | T-GNA Cap: ${clearance.tgna_approved_mw} MW`}
                   {clearance.standing_clearance_no && ` | ${clearance.standing_clearance_no}`}
@@ -572,32 +572,32 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {clearance.state === 'ACTIVE' && (
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--green-strong)' }}>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--green-strong)' }}>
                   Expires in: {clearance.days_left} days
                 </span>
               )}
               {clearance.state === 'RENEWAL_DUE' && (
                 <>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--amber-strong)' }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--amber-strong)' }}>
                     Expires in: {clearance.days_left} day(s) — bidding continues
                   </span>
-                  <button className="btn btn-sm" style={{ background: 'var(--amber-strong)', color: '#fff', fontSize: 11 }}>
+                  <button className="btn btn-sm" style={{ background: 'var(--amber-strong)', color: '#fff', fontSize: 13 }}>
                     Trigger Renewal Declaration
                   </button>
                 </>
               )}
               {clearance.state === 'EXPIRED' && (
                 <>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--red-strong)' }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--red-strong)' }}>
                     Lapsed {Math.abs(clearance.days_left)} day(s) ago — new bids refused
                   </span>
-                  <button className="btn btn-sm" style={{ background: 'var(--red-strong)', color: '#fff', fontSize: 11 }}>
+                  <button className="btn btn-sm" style={{ background: 'var(--red-strong)', color: '#fff', fontSize: 13 }}>
                     Submit Renewal NOW
                   </button>
                 </>
               )}
               {clearance.state === 'NOT_ON_RECORD' && (
-                <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>
+                <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
                   No NOC captured for this client — capacity limits cannot be checked
                 </span>
               )}
@@ -631,27 +631,27 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
         <Card style={{ marginBottom: 20, background: 'var(--slate-50)' }}>
           <div style={{ display: 'flex', gap: 15, alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-portfolio-name">Portfolio Name</label>
+              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-portfolio-name">Portfolio Name</label>
               <PortfolioSelect id="bids-portfolio-name" includeAll />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-delivery-date">Delivery Date</label>
+              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-delivery-date">Delivery Date</label>
               <input id="bids-delivery-date" type="date" className="input" value={deliveryDateFilter} onChange={e => setDeliveryDateFilter(e.target.value)} />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-submission-date">Submission Date</label>
+              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-submission-date">Submission Date</label>
               <input id="bids-submission-date" type="date" className="input" />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid-type">Bid Type</label>
+              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid-type">Bid Type</label>
               <select id="bids-bid-type" className="input"><option>--Select--</option><option>Sell</option><option>Buy</option></select>
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid">Bid</label>
+              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid">Bid</label>
               <select id="bids-bid" className="input"><option>--Select--</option><option>Single</option><option>Block</option></select>
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid-source">Bid Source</label>
+              <label style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 5 }} htmlFor="bids-bid-source">Bid Source</label>
               <select id="bids-bid-source" className="input"><option>--Select--</option><option>Web Portal</option><option>API Gateway</option><option>Excel Upload</option></select>
             </div>
             
@@ -666,7 +666,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
       ) : (
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 20, background: 'var(--surface)', padding: 15, border: '1px solid var(--border)', borderRadius: 8 }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, marginBottom: 5, color: 'var(--text-muted)' }} htmlFor="bids-delivery-date-2">Delivery Date</label>
+            <label style={{ display: 'block', fontSize: 13.5, marginBottom: 5, color: 'var(--text-muted)' }} htmlFor="bids-delivery-date-2">Delivery Date</label>
             <input id="bids-delivery-date-2" type="date" className="input" value={deliveryDateFilter} onChange={e => setDeliveryDateFilter(e.target.value)} />
           </div>
           <button className="btn btn-primary" disabled={!deliveryDateFilter} onClick={() => setAppliedDeliveryDate(deliveryDateFilter)}>
@@ -680,7 +680,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
         </div>
       )}
 
-      <div style={{ fontSize: 12, color: 'var(--slate-500)', marginBottom: 14 }}>{tab.hint}</div>
+      <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginBottom: 14 }}>{tab.hint}</div>
 
       {/* Per-product summary — this product's bidding position at a glance. */}
       <Card style={{ marginBottom: 16 }}>
@@ -693,7 +693,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
             { label: 'Clear ratio', value: summary.quantumBid > 0 ? `${Math.round(summary.clearRatio)}%` : '—' },
           ].map((s) => (
             <div key={s.label}>
-              <div style={{ fontSize: 12, color: '#64748b' }}>{s.label}</div>
+              <div style={{ fontSize: 13.5, color: '#64748b' }}>{s.label}</div>
               <div style={{ fontSize: 20, fontWeight: 600, color: s.tone || '#0f172a' }}>{s.value}</div>
             </div>
           ))}
@@ -862,7 +862,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
               <span style={{ margin: '0 6px', color: 'var(--text-subtle)' }}>|</span>
               {/* Clock Fallback: if server clock payload is empty, use local synced clock with visual indicator */}
               <span>TIME : <LiveClock format="time24" /></span>
-              <span style={{ fontSize: 9, color: 'var(--green-strong)', animation: 'pulse 2s infinite', marginLeft: 4 }} title="Local clock sync — server WebSocket fallback active">● SYNC</span>
+              <span style={{ fontSize: 12.5, color: 'var(--green-strong)', animation: 'pulse 2s infinite', marginLeft: 4 }} title="Local clock sync — server WebSocket fallback active">● SYNC</span>
             </div>
           </div>
 
@@ -873,19 +873,19 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                   <div>
                     <h4 style={{ margin: '0 0 4px 0', color: 'var(--navy)', fontSize: 14 }}>{clearance.client_name}</h4>
-                    <div style={{ fontSize: 12, color: 'var(--slate-600)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 13.5, color: 'var(--slate-600)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                       {clearance.noar_id && <span>NOAR ID: <strong>{clearance.noar_id}</strong></span>}
                       {clearance.standing_clearance_no && <span>NOC: <strong>{clearance.standing_clearance_no}</strong></span>}
                       {clearance.tgna_approved_mw != null && <span>T-GNA Cap: <strong>{clearance.tgna_approved_mw} MW</strong></span>}
                       {clearance.max_ramp_rate_mw_per_min != null && <span>Ramp: <strong>{clearance.max_ramp_rate_mw_per_min} MW/min</strong></span>}
                     </div>
                   </div>
-                  <div style={{ fontSize: 11, background: '#e0f2fe', padding: '4px 8px', borderRadius: 4, color: '#0369a1', fontWeight: 600 }}>
+                  <div style={{ fontSize: 13, background: '#e0f2fe', padding: '4px 8px', borderRadius: 4, color: '#0369a1', fontWeight: 600 }}>
                     {clearance.is_generator ? 'Generating Station' : 'Trader / Buyer'}
                   </div>
                 </div>
 
-                <div style={{ fontSize: 12, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 13.5, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                   <span>Valid till <strong>{clearance.valid_till}</strong></span>
                   {clearance.periphery_loss_percent != null && (
                     <span>Injection loss to periphery: <strong>{clearance.periphery_loss_percent}%</strong></span>
@@ -921,21 +921,21 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                 </Field>
                 {/* Segment Tag — Read-only */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--slate-600)' }}>Segment:</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', background: '#e0f2fe', padding: '2px 10px', borderRadius: 4 }}>{tab.short}</span>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-600)' }}>Segment:</span>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--navy)', background: '#e0f2fe', padding: '2px 10px', borderRadius: 4 }}>{tab.short}</span>
                 </div>
                 <Field label="Delivery Date" required>
                   <input type="date" className="input" value={form.delivery_date} onChange={e => setForm({...form, delivery_date: e.target.value})} required />
                 </Field>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                    <label htmlFor="bids-create-portfolio" style={{ fontSize: 12, fontWeight: 600, color: 'var(--slate-600)' }}>
+                    <label htmlFor="bids-create-portfolio" style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-600)' }}>
                       Portfolio
                       <span aria-hidden="true" style={{ color: 'var(--red)' }}> *</span>
                       <span className="sr-only"> (required)</span>
                     </label>
                     {form.client_id && (
-                      <button type="button" onClick={() => setShowProfile(true)} style={{ background: 'none', border: 'none', color: 'var(--navy)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
+                      <button type="button" onClick={() => setShowProfile(true)} style={{ background: 'none', border: 'none', color: 'var(--navy)', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
                         View Profile
                       </button>
                     )}
@@ -965,7 +965,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
               <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {/* Bid Type — Color-Coded (placed first to match PTC layout) */}
                 <div>
-                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid Type</span>
+                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid Type</span>
                   <div role="group" aria-label="Bid Type" style={{ display: 'flex', gap: 16 }}>
                     {[
                       { value: 'Buy', emoji: '', color: 'var(--green-strong)', bg: '#f0fdf4' },
@@ -990,7 +990,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
                 {/* Bid Structure */}
                 <div>
-                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid</span>
+                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid</span>
                   <div role="group" aria-label="Bid" style={{ display: 'flex', gap: 20 }}>
                     {['Single', 'Block'].map(opt => (
                       <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: 'var(--slate-700)' }}>
@@ -1004,7 +1004,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
                 {/* Bid On — EX-BUS vs Regional Periphery */}
                 <div>
-                  <span style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid On</span>
+                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, marginBottom: 6, color: 'var(--slate-600)' }}>Bid On</span>
                   <div role="group" aria-label="Bid On" style={{ display: 'flex', gap: 20 }}>
                     {[
                       { value: 'EX-BUS', label: 'EX-BUS', hint: 'Plant Busbar' },
@@ -1016,7 +1016,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                       </label>
                     ))}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>
+                  <div style={{ fontSize: 13, color: 'var(--text-subtle)', marginTop: 4 }}>
                     {(form.bid_on || 'EX-BUS') === 'EX-BUS'
                       ? 'Losses borne by buyer · ₹/kWh at plant terminal'
                       : 'Includes CTU/STU transmission loss adjustment'}
@@ -1038,7 +1038,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
             <div style={{ border: '1px solid var(--slate-200)', borderRadius: 8, padding: 20, marginBottom: 20, background: '#fafbfc' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <div>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--slate-600)' }}>Select Excel File Bid Type to Upload :</span>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-600)' }}>Select Excel File Bid Type to Upload :</span>
                   <div role="group" aria-label="Select Excel File Bid Type to Upload " style={{ display: 'flex', gap: 18, marginTop: 8 }}>
                     {['24 Blocks', '50 Blocks', '96 Blocks'].map(opt => (
                       <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer', color: 'var(--slate-700)' }}>
@@ -1048,12 +1048,12 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                     ))}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, fontSize: 12 }}>
+                <div style={{ display: 'flex', gap: 8, fontSize: 13.5 }}>
                   <span style={{ color: 'var(--slate-500)' }}>Download formats:</span>
                   {['24 blocks', '50 blocks', '96 blocks'].map((t, i) => (
                     <React.Fragment key={t}>
                       {i > 0 && <span style={{ color: 'var(--slate-300)' }}>|</span>}
-                      <button type="button" onClick={handleDownloadTemplate} style={{ background: 'none', border: 'none', color: 'var(--navy)', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: 12 }}>{t}</button>
+                      <button type="button" onClick={handleDownloadTemplate} style={{ background: 'none', border: 'none', color: 'var(--navy)', textDecoration: 'underline', cursor: 'pointer', padding: 0, fontSize: 13.5 }}>{t}</button>
                     </React.Fragment>
                   ))}
                 </div>
@@ -1086,7 +1086,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
               >
                 <div style={{ fontSize: 36, marginBottom: 8 }}></div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-700)' }}>Drag & Drop .xlsx Bid File Here</div>
-                <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 4 }}>or click to <strong>Browse Files</strong></div>
+                <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>or click to <strong>Browse Files</strong></div>
                 <input
                   id="dam-file-upload"
                   type="file"
@@ -1174,12 +1174,12 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                   <div style={{ padding: 12, borderRadius: 8, background: 'var(--slate-50)', border: '1px solid var(--slate-300)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' }}>
                       <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--slate-700)' }}>Approved NOAR Cap: {clearance.tgna_approved_mw} MW</span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: utilPercent > 100 ? 'var(--red-strong)' : '#0ea5e9' }}>{utilPercent.toFixed(1)}% Utilized</span>
+                      <span style={{ fontSize: 13.5, fontWeight: 700, color: utilPercent > 100 ? 'var(--red-strong)' : '#0ea5e9' }}>{utilPercent.toFixed(1)}% Utilized</span>
                     </div>
                     <div style={{ height: 6, background: 'var(--slate-200)', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
                       <div style={{ height: '100%', background: utilPercent > 100 ? 'var(--red-strong)' : '#0ea5e9', width: `${Math.min(100, utilPercent)}%` }} />
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--slate-500)' }}>
+                    <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>
                       Current Bid: {maxBidMW.toFixed(2)} MW {isExBus ? `(EX-BUS) → ${regionalMW.toFixed(2)} MW (Periphery)` : '(Regional Periphery)'}
                     </div>
                   </div>
@@ -1187,11 +1187,11 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                   {/* Net Financial Estimator */}
                   <div style={{ padding: 12, borderRadius: 8, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
                     <h4 style={{ fontSize: 13, color: 'var(--green-strong)', margin: '0 0 8px 0' }}>Automated Clearing Net Financial Estimator</h4>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--slate-600)', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: 'var(--slate-600)', marginBottom: 4 }}>
                       <span>Gross Revenue (Estimated):</span>
                       <span>₹ {grossRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--red-strong)', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: 'var(--red-strong)', marginBottom: 4 }}>
                       <span>Transmission & SLDC Fees:</span>
                       <span>- ₹ {(regionalTxFee + stateTxFee + dailySLDCFee).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                     </div>
@@ -1281,7 +1281,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                     {i > 0 && <span style={{ color: 'var(--navy)' }}>→</span>}
                     <span
                       style={{
-                        padding: '4px 8px', borderRadius: 4, fontSize: 12,
+                        padding: '4px 8px', borderRadius: 4, fontSize: 13.5,
                         background: l.id === selectedBid.id ? 'var(--navy)' : '#fff',
                         color: l.id === selectedBid.id ? '#fff' : '#333',
                         border: '1px solid #cbd7e6', cursor: 'pointer',
@@ -1497,7 +1497,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: 20, background: '#f8f9fa', borderBottom: '1px solid #dee2e6' }}>
             <div>
               <h3 style={{ margin: 0 }}>Audit Trail Viewer: {auditBid.id}</h3>
-              <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 5 }}>Portfolio: {auditBid.client_name} | Delivery: {auditBid.delivery_date}</div>
+              <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 5 }}>Portfolio: {auditBid.client_name} | Delivery: {auditBid.delivery_date}</div>
             </div>
             <button onClick={() => setAuditBid(null)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>&times;</button>
           </div>

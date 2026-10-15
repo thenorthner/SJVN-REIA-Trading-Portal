@@ -137,7 +137,7 @@ export default function NOARWallet() {
     {
       key: 'reference',
       header: 'Reference',
-      render: (r) => <span style={{ fontSize: 11.5 }}>{r.reference || '—'}</span>,
+      render: (r) => <span style={{ fontSize: 13 }}>{r.reference || '—'}</span>,
     },
     { key: 'amount', header: 'Amount', render: (r) => <SignedAmount type={r.txn_type} amount={r.amount} /> },
     { key: 'balance_after', header: 'Balance', render: (r) => fmtCurrency(r.balance_after) },
@@ -227,8 +227,8 @@ export default function NOARWallet() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={trend}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
+                  <XAxis dataKey="month" tick={{ fontSize: 13 }} />
+                  <YAxis tick={{ fontSize: 13 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
                   <Tooltip formatter={(v, name) => [fmtCurrency(v), name]} />
                   <Legend />
                   <Bar dataKey="recharge" name="Recharged" fill="var(--green)" radius={[6, 6, 0, 0]} />
@@ -245,8 +245,8 @@ export default function NOARWallet() {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={trend}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
+                  <XAxis dataKey="month" tick={{ fontSize: 13 }} />
+                  <YAxis tick={{ fontSize: 13 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
                   <Tooltip formatter={(v) => [fmtCurrency(v), 'Closing balance']} />
                   <Line type="monotone" dataKey="closing_balance" name="Closing balance" stroke="var(--primary)" strokeWidth={2.4} dot={{ r: 3 }} />
                 </LineChart>
@@ -263,8 +263,8 @@ export default function NOARWallet() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={categoryBars} layout="vertical" margin={{ left: 24 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
-                <YAxis type="category" dataKey="category" tick={{ fontSize: 12 }} width={100} />
+                <XAxis type="number" tick={{ fontSize: 13 }} tickFormatter={(v) => `₹${(v / 100000).toFixed(0)}L`} />
+                <YAxis type="category" dataKey="category" tick={{ fontSize: 13.5 }} width={100} />
                 <Tooltip formatter={(v, _n, p) => [fmtCurrency(v), CATEGORY_LABEL[p?.payload?.category] || 'Charges']} />
                 <Bar dataKey="amount" name="Paid" radius={[0, 6, 6, 0]} fill="var(--primary)" />
               </BarChart>

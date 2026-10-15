@@ -125,11 +125,11 @@ export default function ContractBulkLoad({ open, onClose, onLoaded }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{
                 background: '#2563eb', color: '#fff', width: 20, height: 20, borderRadius: '50%',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700
               }}>1</span>
               <strong style={{ fontSize: 13, color: '#1e293b' }}>Template</strong>
             </div>
-            <p style={{ margin: 0, fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
+            <p style={{ margin: 0, fontSize: 13.5, color: '#64748b', lineHeight: 1.4 }}>
               Download official CSV template and fill 1 contract per row.
             </p>
           </div>
@@ -156,11 +156,11 @@ export default function ContractBulkLoad({ open, onClose, onLoaded }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{
               background: '#0284c7', color: '#fff', width: 20, height: 20, borderRadius: '50%',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700
             }}>2</span>
             <strong style={{ fontSize: 13, color: '#1e293b' }}>Input Data</strong>
           </div>
-          <p style={{ margin: 0, fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: '#64748b', lineHeight: 1.4 }}>
             Drop or browse CSV file, or paste rows directly into the editor below.
           </p>
         </div>
@@ -177,11 +177,11 @@ export default function ContractBulkLoad({ open, onClose, onLoaded }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{
               background: '#059669', color: '#fff', width: 20, height: 20, borderRadius: '50%',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700
             }}>3</span>
             <strong style={{ fontSize: 13, color: '#1e293b' }}>Verify & Load</strong>
           </div>
-          <p style={{ margin: 0, fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: '#64748b', lineHeight: 1.4 }}>
             Dry-run checks fields first. Every contract commits safely as a <strong>DRAFT</strong>.
           </p>
         </div>
@@ -232,14 +232,14 @@ export default function ContractBulkLoad({ open, onClose, onLoaded }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#ffffff', border: '1px solid #bfdbfe', padding: '6px 14px', borderRadius: 20, boxShadow: '0 2px 5px rgba(37,99,235,0.08)' }}>
             <FileSpreadsheet size={16} color="#2563eb" />
             <strong style={{ fontSize: 13, color: '#1e3a8a' }}>{fileName}</strong>
-            {fileSize && <span style={{ fontSize: 11, color: '#64748b' }}>({fileSize})</span>}
+            {fileSize && <span style={{ fontSize: 13, color: '#64748b' }}>({fileSize})</span>}
           </div>
         ) : (
           <div>
             <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
               Choose a file or drag and drop
             </span>
-            <span style={{ fontSize: 12, color: '#64748b', display: 'block', marginTop: 2 }}>
+            <span style={{ fontSize: 13.5, color: '#64748b', display: 'block', marginTop: 2 }}>
               Supports CSV, TSV, or TXT spreadsheets
             </span>
           </div>
@@ -262,13 +262,13 @@ export default function ContractBulkLoad({ open, onClose, onLoaded }) {
           padding: '8px 14px',
           background: '#f8fafc',
           borderBottom: '1px solid #e2e8f0',
-          fontSize: 12
+          fontSize: 13.5
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569', fontWeight: 600 }}>
             <FileSpreadsheet size={14} color="#64748b" />
             <span>Spreadsheet CSV Data</span>
             {parsed.rows.length > 0 && (
-              <span style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: 12, fontSize: 11, fontWeight: 700 }}>
+              <span style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: 12, fontSize: 13, fontWeight: 700 }}>
                 {parsed.rows.length} {parsed.rows.length === 1 ? 'row' : 'rows'} detected
               </span>
             )}
@@ -297,7 +297,7 @@ export default function ContractBulkLoad({ open, onClose, onLoaded }) {
             outline: 'none',
             padding: '12px 14px',
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-            fontSize: 12,
+            fontSize: 13.5,
             lineHeight: 1.6,
             color: '#1e293b',
             background: '#ffffff',

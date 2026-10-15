@@ -235,7 +235,7 @@ export default function TAMManagement({ marketType = 'TAM' }) {
       <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
         <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tam-exchange">Exchange</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tam-exchange">Exchange</label>
             <select id="tam-exchange" className="input" value={exchange} onChange={(e) => setExchange(e.target.value)}>
               <option value="">All</option>
               <option value="IEX">IEX</option>
@@ -244,15 +244,15 @@ export default function TAMManagement({ marketType = 'TAM' }) {
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tam-client">Client</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tam-client">Client</label>
             <PortfolioSelect id="tam-client" includeAll allLabel="All clients" value={clientId} onChange={setClientId} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tam-from">From delivery</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tam-from">From delivery</label>
             <input id="tam-from" type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} />
           </div>
           <div>
-            <label style={{ display: 'block', fontSize: 12, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tam-to">To delivery</label>
+            <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="tam-to">To delivery</label>
             <input id="tam-to" type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} />
           </div>
           <button type="button" className="btn btn-primary" onClick={load}>Search</button>
@@ -264,7 +264,7 @@ export default function TAMManagement({ marketType = 'TAM' }) {
           <span style={{ color: '#27ae60', fontWeight: 'bold', fontSize: 16 }}>
             Cleared {fmtNumber(totals.mwh, 3)} MWh · ₹{fmtNumber(totals.value, 2)}
           </span>
-          <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>From live {product} bids — not IEX PDFs</div>
+          <div style={{ fontSize: 13.5, color: '#555', marginTop: 4 }}>From live {product} bids — not IEX PDFs</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 13, fontWeight: 'bold', color: '#555' }}>Volume</span>
@@ -318,7 +318,7 @@ export default function TAMManagement({ marketType = 'TAM' }) {
                         <td style={{ padding: 10 }}>
                           {record.deliveryDate}
                           {product === 'GTAM' && (
-                            <Badge type="success" style={{ display: 'block', marginTop: 4, background: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9', fontSize: 10 }}>
+                            <Badge type="success" style={{ display: 'block', marginTop: 4, background: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9', fontSize: 12.5 }}>
                               Green Power (GTAM)
                             </Badge>
                           )}
@@ -342,7 +342,7 @@ export default function TAMManagement({ marketType = 'TAM' }) {
                           <td style={{ padding: 10, color: '#666' }}>{child.client_name}</td>
                           <td style={{ padding: 10, color: '#666' }}>{child.tradeDate}</td>
                           <td style={{ padding: 10, color: '#666' }}>{child.deliveryDate}</td>
-                          <td style={{ padding: 10, color: '#666', fontFamily: 'monospace', fontSize: 12 }}>{child.id}</td>
+                          <td style={{ padding: 10, color: '#666', fontFamily: 'monospace', fontSize: 13.5 }}>{child.id}</td>
                           <td style={{ padding: 10, color: '#666' }}>{child.exchange}</td>
                           <td style={{ padding: 10 }}>{statusBadge(child.status)}</td>
                           <td style={{ padding: 10, color: '#444' }}>{renderVolume(child.energyMUs)}</td>

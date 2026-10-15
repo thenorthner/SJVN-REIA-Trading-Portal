@@ -100,7 +100,7 @@ function intimationView(r) {
   return {
     ...r, gross_settled: gross,
     proof: r.proof_version_id ? { version_id: r.proof_version_id, file_name: r.proof_name || null } : null,
-    with: r.status === 'PENDING_CHECKER' ? 'Your checker' : r.status === 'SUBMITTED' ? 'SJVN Finance' : null,
+    with: r.status === 'PENDING_CHECKER' ? 'Your checker' : r.status === 'SUBMITTED' ? 'SJVN Finance' : r.status === 'RETURNED_BY_CHECKER' ? 'Returned to Maker' : null,
   };
 }
 
@@ -329,7 +329,7 @@ router.get('/intimations', (req, res) => send(res, () => {
   else where.push(`pi.status <> 'PENDING_CHECKER'`);
   if (req.query.status) { where.push('pi.status = ?'); params.push(String(req.query.status).toUpperCase()); }
   if (req.query.invoice_id) { where.push('pi.invoice_id = ?'); params.push(String(req.query.invoice_id)); }
-  const rows = db.prepare(`${INTIMATION_SQL} WHERE ${where.join(' AND ')} ORDER BY CASE pi.status WHEN 'SUBMITTED' THEN 0 WHEN 'PENDING_CHECKER' THEN 1 ELSE 2 END, pi.created_at DESC LIMIT 300`).all(...params)
+  const rows = db.prepare(`${INTIMATION_SQL} WHERE ${where.join(' AND ')} ORDER BY CASE pi.status WHEN 'PENDING_CHECKER' THEN 0 WHEN 'RETURNED_BY_CHECKER' THEN 1 WHEN 'SUBMITTED' THEN 2 ELSE 3 END, pi.created_at DESC LIMIT 300`).all(...params)
     .map((r) => {
       const v = intimationView(r);
       if (scope.side === 'SJVN' && r.status === 'SUBMITTED') {
@@ -344,6 +344,7 @@ router.get('/intimations', (req, res) => send(res, () => {
       awaiting_finance: rows.filter((r) => r.status === 'SUBMITTED').length,
       awaiting_finance_amount: money(rows.filter((r) => r.status === 'SUBMITTED').reduce((s, r) => s + r.amount, 0)),
       awaiting_checker: rows.filter((r) => r.status === 'PENDING_CHECKER').length,
+      returned_by_checker: rows.filter((r) => r.status === 'RETURNED_BY_CHECKER').length,
       rejected: rows.filter((r) => r.status === 'REJECTED').length,
     },
   };
@@ -370,11 +371,67 @@ router.post('/intimations/:id/approve', (req, res) => send(res, () => {
   return v;
 }));
 
+// POST /intimations/:id/return-to-maker { note } — the buyer's checker sends an intimation back to maker with remarks
+router.post('/intimations/:id/return-to-maker', (req, res) => send(res, () => {
+  const { r, scope } = intimationFor(req.user, req.params.id);
+  if (scope.side !== 'BUYER') throw fail(403, 'Not authorized');
+  if (r.status !== 'PENDING_CHECKER') throw fail(400, 'This intimation is not awaiting a checker');
+  if (tierOf(req.user.role) === 'L1') throw fail(403, 'Only a checker or approver can return an intimation to the maker');
+  const note = text(req.body?.note, 300);
+  if (!note) throw fail(400, 'Please provide remarks explaining why this intimation is returned to the maker');
+  db.prepare(`UPDATE payment_intimations SET status = 'RETURNED_BY_CHECKER', decision_note = ?, decided_by = ?, decided_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`).run(note, req.user.id, r.id);
+  audit(req, 'PAYMENT_INTIMATION_RETURNED', 'payment_intimation', r.id, { beforeValue: { status: 'PENDING_CHECKER' }, afterValue: { status: 'RETURNED_BY_CHECKER' }, reason: note });
+  const v = intimation(r.id);
+  if (r.prepared_by) {
+    try {
+      pushNotification({ userId: r.prepared_by, type: 'PAYMENT', message: `Your payment intimation of ${rupees(v.amount)} against ${v.invoice_no} (UTR ${v.reference}) was returned by Checker: ${note}` });
+    } catch { /* push notification courtesy */ }
+  }
+  return v;
+}));
+
+// POST /intimations/bulk-approve { ids: string[] } — bulk authorize pending intimations
+router.post('/intimations/bulk-approve', (req, res) => send(res, () => {
+  const scope = scopeOf(req.user);
+  if (scope.side !== 'BUYER') throw fail(403, 'Not authorized');
+  if (tierOf(req.user.role) === 'L1') throw fail(403, 'A checker or approver passes intimations on to SJVN');
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+  if (!ids.length) throw fail(400, 'No intimation IDs provided for approval');
+
+  const approved = [];
+  const errors = [];
+  const stmt = db.prepare(`UPDATE payment_intimations SET status = 'SUBMITTED', approved_by = ?, approved_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`);
+
+  db.transaction(() => {
+    for (const id of ids) {
+      const r = db.prepare('SELECT * FROM payment_intimations WHERE id = ?').get(id);
+      if (!r || r.entity_id !== scope.entityId) {
+        errors.push({ id, error: 'Intimation not found' });
+        continue;
+      }
+      if (r.status !== 'PENDING_CHECKER') {
+        errors.push({ id, error: `Intimation is already ${r.status}` });
+        continue;
+      }
+      if (r.prepared_by === req.user.id) {
+        errors.push({ id, error: 'Maker cannot check own entry' });
+        continue;
+      }
+      stmt.run(req.user.id, r.id);
+      audit(req, 'PAYMENT_INTIMATION_APPROVED', 'payment_intimation', r.id, { beforeValue: { status: 'PENDING_CHECKER' }, afterValue: { status: 'SUBMITTED' }, bulk: true });
+      const v = intimation(r.id);
+      approved.push(v);
+      notifyFinance(`${v.contract_no}: the buyer reports a payment of ${rupees(v.amount)}${v.tds_amount > 0 ? ` (plus TDS ${rupees(v.tds_amount)})` : ''} against ${v.invoice_no}, UTR ${v.reference}, dated ${dayInWords(v.payment_date)}. Confirm it against the bank statement.`);
+    }
+  })();
+  return { approved_count: approved.length, approved, errors };
+}));
+
 // POST /intimations/:id/withdraw — by the buyer, while SJVN has not decided.
 router.post('/intimations/:id/withdraw', (req, res) => send(res, () => {
   const { r, scope } = intimationFor(req.user, req.params.id);
   if (scope.side !== 'BUYER') throw fail(403, 'Only the buyer withdraws its intimation');
-  if (!OPEN.includes(r.status)) throw fail(400, `This intimation has already been ${r.status.toLowerCase()}`);
+  if (![...OPEN, 'RETURNED_BY_CHECKER'].includes(r.status)) throw fail(400, `This intimation has already been ${r.status.toLowerCase()}`);
   if (r.status === 'SUBMITTED' && tierOf(req.user.role) === 'L1') throw fail(403, 'Once it is with SJVN, a checker or approver withdraws it');
   const note = text(req.body?.note, 300);
   db.prepare(`UPDATE payment_intimations SET status = 'WITHDRAWN', decision_note = ?, decided_by = ?, decided_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`).run(note || null, req.user.id, r.id);

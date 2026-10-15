@@ -4,6 +4,8 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, fmtCurrency } from '../../components/ui.jsx';
+import ThermalCoalToBusbarECR3D from '../../components/ThermalCoalToBusbarECR3D.jsx';
+import ThermalUrsMarketDiversion3D from '../../components/ThermalUrsMarketDiversion3D.jsx';
 
 // A thermal station and the tariff each financial year of it is billed on.
 // The station is a PPA with a generating company onboarded under Thermal
@@ -88,7 +90,7 @@ export default function ThermalStations() {
             { key: 'contract_no', header: 'PPA' },
             { key: 'capacity_mw', header: 'Capacity', render: (s) => `${s.capacity_mw} MW` },
             { key: 'tenure', header: 'Tenure', render: (s) => `${s.tenure_start} → ${s.tenure_end}` },
-            { key: 'ready', header: 'Ready to bill', render: (s) => (s.ready ? <Badge status="ACTIVE" label="Ready" /> : <span style={{ fontSize: 12, color: 'var(--amber-strong)' }}>Missing: {s.missing.join(', ')}</span>) },
+            { key: 'ready', header: 'Ready to bill', render: (s) => (s.ready ? <Badge status="ACTIVE" label="Ready" /> : <span style={{ fontSize: 13.5, color: 'var(--amber-strong)' }}>Missing: {s.missing.join(', ')}</span>) },
           ]}
           rows={stations}
           emptyMessage="No thermal station set up yet. Onboard the generating company under Thermal → Stakeholders, approve it, then set up the station here."
@@ -129,18 +131,22 @@ export default function ThermalStations() {
       )}
 
       {station && tariffs.length > 0 && (
-        <Card title="What a month's fuel makes the energy charge rate">
-          <div className="form-grid">
-            <Field label="GCV of coal (kCal/kg)"><input type="number" value={fuel.gcv_kcal_per_kg} onChange={(e) => setFuel({ ...fuel, gcv_kcal_per_kg: e.target.value })} /></Field>
-            <Field label="Landed price of coal (₹/tonne)"><input type="number" value={fuel.coal_rs_per_tonne} onChange={(e) => setFuel({ ...fuel, coal_rs_per_tonne: e.target.value })} /></Field>
-            <Field label="Landed price of secondary oil (₹/kL)"><input type="number" value={fuel.oil_rs_per_kl} onChange={(e) => setFuel({ ...fuel, oil_rs_per_kl: e.target.value })} /></Field>
-          </div>
-          <button type="button" className="btn btn-secondary" onClick={previewEcr}>Work out ECR ({tariffs[0].financial_year} norms)</button>
-          {ecr && <p style={{ marginTop: 10 }}>ECR = <strong>₹{ecr.ecr}/kWh</strong> — [(GHR − SFC × CVSF) × LPPF / CVPF + SFC × LPSFi] × 100 / (100 − AUX)</p>}
-          <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-            Then raise the month's bill under <Link to="/thermal/billing">Monthly Bills &amp; Approval</Link>.
-          </p>
-        </Card>
+        <>
+          <ThermalCoalToBusbarECR3D station={station} tariff={tariffs[0]} fuel={fuel} />
+          <Card title="What a month's fuel makes the energy charge rate" style={{ marginBottom: 16 }}>
+            <div className="form-grid">
+              <Field label="GCV of coal (kCal/kg)"><input type="number" value={fuel.gcv_kcal_per_kg} onChange={(e) => setFuel({ ...fuel, gcv_kcal_per_kg: e.target.value })} /></Field>
+              <Field label="Landed price of coal (₹/tonne)"><input type="number" value={fuel.coal_rs_per_tonne} onChange={(e) => setFuel({ ...fuel, coal_rs_per_tonne: e.target.value })} /></Field>
+              <Field label="Landed price of secondary oil (₹/kL)"><input type="number" value={fuel.oil_rs_per_kl} onChange={(e) => setFuel({ ...fuel, oil_rs_per_kl: e.target.value })} /></Field>
+            </div>
+            <button type="button" className="btn btn-secondary" onClick={previewEcr}>Work out ECR ({tariffs[0].financial_year} norms)</button>
+            {ecr && <p style={{ marginTop: 10 }}>ECR = <strong>₹{ecr.ecr}/kWh</strong> — [(GHR − SFC × CVSF) × LPPF / CVPF + SFC × LPSFi] × 100 / (100 − AUX)</p>}
+            <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
+              Then raise the month's bill under <Link to="/thermal/billing">Monthly Bills &amp; Approval</Link>.
+            </p>
+          </Card>
+          <ThermalUrsMarketDiversion3D station={station} />
+        </>
       )}
 
       <Modal open={!!setup} onClose={() => setSetup(null)} title="Set up a thermal station" width={720}>

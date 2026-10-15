@@ -177,7 +177,7 @@ export default function HydroPtc() {
                   render: (r) => (
                     <span>
                       <Badge status={r.status} label={r.status} />
-                      <span style={{ display: 'block', fontSize: 11, color: 'var(--text-light)' }}>
+                      <span style={{ display: 'block', fontSize: 13, color: 'var(--text-light)' }}>
                         {r.approval_status === 'APPROVED' ? 'approved' : r.approval_status?.toLowerCase().replace('_', ' ')}
                         {r.dispatched_at ? ' · despatched' : r.released_at ? ' · released' : ''}
                       </span>
@@ -188,7 +188,7 @@ export default function HydroPtc() {
               rows={bills}
               emptyMessage="No PTC sale bill has been raised on this station."
             />
-            <p style={{ color: 'var(--text-light)', fontSize: 12, marginTop: 10 }}>
+            <p style={{ color: 'var(--text-light)', fontSize: 13.5, marginTop: 10 }}>
               A PTC sale bill goes up the same approval chain as a tariff bill, and once issued it opens
               an account for the counterparty on the Hydro Account Display — where its payment, any
               reversal and its surcharge are handled exactly the same way.

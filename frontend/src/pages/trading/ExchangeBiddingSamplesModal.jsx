@@ -107,7 +107,7 @@ export default function ExchangeBiddingSamplesModal({ open, onClose }) {
         </tbody>
       </table>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, fontSize: 12, color: '#64748b' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, fontSize: 13.5, color: '#64748b' }}>
         <span>
           Showing {page.length === 0 ? 0 : 1} to {page.length} of {filtered.length} entries
         </span>

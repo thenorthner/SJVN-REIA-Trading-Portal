@@ -56,7 +56,7 @@ function Steps({ items }) {
             <span style={{
               width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center',
               background: 'var(--primary-light)', color: 'var(--primary)',
-              fontSize: 12.5, fontWeight: 700,
+              fontSize: 13.5, fontWeight: 700,
             }}>{i + 1}</span>
             {i < items.length - 1 && (
               <span style={{ flex: 1, width: 1, background: 'var(--border)', marginTop: 4 }} />
@@ -84,7 +84,7 @@ function GuideTable({ columns, rows, caption }) {
               <th key={c} style={{
                 textAlign: 'left', padding: '8px 12px 8px 0',
                 borderBottom: '1px solid var(--border)',
-                fontSize: 11, fontWeight: 700, letterSpacing: '.04em',
+                fontSize: 13, fontWeight: 700, letterSpacing: '.04em',
                 textTransform: 'none', color: 'var(--text-muted)', whiteSpace: 'nowrap',
               }}>{c}</th>
             ))}
@@ -108,7 +108,7 @@ function GuideTable({ columns, rows, caption }) {
         </tbody>
       </table>
       {caption && (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>
+        <div style={{ fontSize: 13.5, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>
           {caption}
         </div>
       )}
@@ -216,7 +216,7 @@ export default function ModuleGuide({ guide }) {
         padding: '22px 24px', marginBottom: 18,
       }}>
         <div style={{
-          fontSize: 11, fontWeight: 700, letterSpacing: '.07em',
+          fontSize: 13, fontWeight: 700, letterSpacing: '.07em',
           textTransform: 'none', color: 'var(--primary)', marginBottom: 8,
         }}>
           {guide.eyebrow || 'Reference'}
@@ -242,14 +242,14 @@ export default function ModuleGuide({ guide }) {
                 borderRadius: 8, border: '1px solid var(--border)',
               }}>
                 <div style={{
-                  fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em',
+                  fontSize: 12.5, fontWeight: 700, letterSpacing: '.05em',
                   textTransform: 'none', color: 'var(--text-muted)',
                 }}>{f.label}</div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', margin: '4px 0 2px' }}>
                   {f.value}
                 </div>
                 {f.hint && (
-                  <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--text-muted)' }}>{f.hint}</div>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-muted)' }}>{f.hint}</div>
                 )}
               </div>
             ))}
@@ -278,7 +278,7 @@ export default function ModuleGuide({ guide }) {
                 paddingBottom: 6, marginBottom: 12, borderBottom: '1px solid var(--border)',
               }}>
                 <span style={{
-                  fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+                  fontSize: 13, fontWeight: 700, color: 'var(--text-muted)',
                   fontVariantNumeric: 'tabular-nums',
                 }}>
                   {String(i + 1).padStart(2, '0')}
@@ -305,7 +305,7 @@ export default function ModuleGuide({ guide }) {
               borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)', padding: '14px 8px 14px 14px',
             }}>
               <div style={{
-                fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em',
+                fontSize: 12.5, fontWeight: 700, letterSpacing: '.06em',
                 textTransform: 'none', color: 'var(--text-muted)', marginBottom: 10,
               }}>On this page</div>
               {guide.sections.map((s) => (
@@ -314,7 +314,7 @@ export default function ModuleGuide({ guide }) {
                   href={`#${s.id}`}
                   style={{
                     display: 'block', padding: '6px 10px', marginBottom: 2,
-                    fontSize: 12.5, lineHeight: 1.45, textDecoration: 'none',
+                    fontSize: 13.5, lineHeight: 1.45, textDecoration: 'none',
                     borderLeft: `2px solid ${active === s.id ? 'var(--primary)' : 'transparent'}`,
                     color: active === s.id ? 'var(--primary)' : 'var(--text-muted)',
                     fontWeight: active === s.id ? 650 : 400,
@@ -332,13 +332,13 @@ export default function ModuleGuide({ guide }) {
                 padding: 14, marginTop: 14,
               }}>
                 <div style={{
-                  fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em',
+                  fontSize: 12.5, fontWeight: 700, letterSpacing: '.06em',
                   textTransform: 'none', color: 'var(--text-muted)', marginBottom: 10,
                 }}>{guide.quickRef.title}</div>
                 {guide.quickRef.items.map((q) => (
                   <div key={q.k} style={{ marginBottom: 11 }}>
-                    <div style={{ fontSize: 12, fontWeight: 650, color: 'var(--text)' }}>{q.k}</div>
-                    <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--text-muted)' }}>{q.v}</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--text)' }}>{q.k}</div>
+                    <div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-muted)' }}>{q.v}</div>
                   </div>
                 ))}
               </div>
@@ -349,7 +349,7 @@ export default function ModuleGuide({ guide }) {
 
       {guide.footnote && (
         <p style={{
-          fontSize: 12, color: 'var(--text-muted)', marginTop: 16,
+          fontSize: 13.5, color: 'var(--text-muted)', marginTop: 16,
           maxWidth: `${MAX_PROSE}ch`, lineHeight: 1.6,
         }}>{guide.footnote}</p>
       )}

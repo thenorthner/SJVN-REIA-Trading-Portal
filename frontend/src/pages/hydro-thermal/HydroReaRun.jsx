@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { HelpCircle } from 'lucide-react';
 import api from '../../api/client.js';
 import { Card, Table, Badge, Field, Modal, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import HydroBeneficiaryWaterfall3D from '../../components/HydroBeneficiaryWaterfall3D.jsx';
 
 // Draft a run of months' hydro bills straight from the Regional Energy Account.
 //
@@ -197,7 +198,7 @@ export default function HydroReaRun({ onDone }) {
             alignItems: 'center',
             gap: 6,
             padding: '5px 12px',
-            fontSize: '12px',
+            fontSize: '13.5px',
             fontWeight: 500,
             borderRadius: '6px',
             color: '#475569',
@@ -217,7 +218,7 @@ export default function HydroReaRun({ onDone }) {
           <textarea
             id="rea-links" rows={4} value={paste} onChange={(e) => setPaste(e.target.value)}
             placeholder="https://nrpc.gov.in/allfile/…REA0826_P.pdf"
-            style={{ width: '100%', fontFamily: 'monospace', fontSize: 12 }}
+            style={{ width: '100%', fontFamily: 'monospace', fontSize: 13.5 }}
           />
         </Field>
         {linkMonths.length > 0 && (
@@ -239,7 +240,7 @@ export default function HydroReaRun({ onDone }) {
             {running ? 'Fetching REA and drafting…' : 'Fetch REA and draft bills'}
           </button>
         </div>
-        <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-light)' }}>
+        <p style={{ margin: '6px 0 0', fontSize: 13.5, color: 'var(--text-light)' }}>
           Leave the months blank to bill exactly the months of the pasted links. Start from the first unbilled month of the financial year.
         </p>
       </form>
@@ -249,6 +250,7 @@ export default function HydroReaRun({ onDone }) {
 
       {result && (
         <div style={{ marginTop: 16 }}>
+          <HydroBeneficiaryWaterfall3D stationName={rows[0]?.station_name || 'Nathpa Jhakri HEP (1,500 MW)'} />
           <Table
             caption="What the run did, month by month"
             rows={rows}
@@ -311,7 +313,7 @@ export default function HydroReaRun({ onDone }) {
               </ul>
             </div>
 
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', fontSize: '12.5px', color: '#64748b' }}>
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', fontSize: '13.5px', color: '#64748b' }}>
               <strong>Automatic Sweep:</strong> The same run happens automatically after each scheduled REA scan. This desk form is reserved for months the automated scan could not reach, or for links the scan does not yet have.
             </div>
           </div>

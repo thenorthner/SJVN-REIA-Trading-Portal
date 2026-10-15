@@ -271,7 +271,7 @@ export default function RECManagement() {
       key: 'technology',
       header: 'Tech',
       render: (r) => (r.technology
-        ? <span title={`Certificate multiplier ${r.certificate_multiplier}×`}>{r.technology} <span style={{ color: 'var(--text-light)', fontSize: 11 }}>{r.certificate_multiplier}×</span></span>
+        ? <span title={`Certificate multiplier ${r.certificate_multiplier}×`}>{r.technology} <span style={{ color: 'var(--text-light)', fontSize: 13 }}>{r.certificate_multiplier}×</span></span>
         : '—'),
     },
     { key: 'vintage_month', header: 'Vintage' },
@@ -316,7 +316,7 @@ export default function RECManagement() {
     { key: 'amount', header: 'Amount', render: (t) => (t.amount ? fmtCurrency(t.amount) : '—') },
     { key: 'platform', header: 'Platform', render: (t) => t.platform || '—' },
     { key: 'counterparty', header: 'Counterparty', render: (t) => t.buyer || t.obligated_entity || '—' },
-    { key: 'reference', header: 'Reference', render: (t) => <span style={{ fontSize: 11.5 }}>{t.reference || '—'}</span> },
+    { key: 'reference', header: 'Reference', render: (t) => <span style={{ fontSize: 13 }}>{t.reference || '—'}</span> },
     ...(canWrite ? [{
       key: 'actions',
       header: '',
@@ -428,8 +428,8 @@ export default function RECManagement() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={agingData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="bucket" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <XAxis dataKey="bucket" tick={{ fontSize: 13 }} />
+                  <YAxis tick={{ fontSize: 13 }} />
                   <Tooltip formatter={(v) => [`${fmtNumber(v, 0)} RECs`, 'Held']} />
                   <Bar dataKey="recs" name="Held RECs" fill="var(--primary)" radius={[6, 6, 0, 0]} />
                 </BarChart>
@@ -447,8 +447,8 @@ export default function RECManagement() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={techData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="technology" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
+                  <XAxis dataKey="technology" tick={{ fontSize: 13 }} />
+                  <YAxis tick={{ fontSize: 13 }} />
                   <Tooltip formatter={(v, name) => [`${fmtNumber(v, 0)} RECs`, name]} />
                   <Legend />
                   <Bar dataKey="sold" name="Sold" fill="var(--green)" radius={[6, 6, 0, 0]} />

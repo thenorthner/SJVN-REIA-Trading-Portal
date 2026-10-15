@@ -103,7 +103,7 @@ export default function ExchangeApplications() {
     background: '#1e4b7a',
     color: '#fff',
     padding: '10px 12px',
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: 600,
     whiteSpace: 'nowrap',
     cursor: 'pointer',
@@ -116,7 +116,7 @@ export default function ExchangeApplications() {
     border: 'none',
     padding: 0,
     cursor: 'pointer',
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: 600,
     textDecoration: 'underline',
   };
@@ -199,16 +199,16 @@ export default function ExchangeApplications() {
                         Action
                       </button>
                       {r.approval_status !== 'PENDING' && (
-                        <div style={{ fontSize: 11, marginTop: 4, color: r.approval_status === 'APPROVED' ? '#166534' : '#991b1b' }}>
+                        <div style={{ fontSize: 13, marginTop: 4, color: r.approval_status === 'APPROVED' ? '#166534' : '#991b1b' }}>
                           {r.approval_status}
                         </div>
                       )}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
                       {(r.bids || []).length === 0 ? (
-                        <span style={{ color: '#94a3b8', fontSize: 12 }}>—</span>
+                        <span style={{ color: '#94a3b8', fontSize: 13.5 }}>—</span>
                       ) : r.bids.map((b) => (
-                        <div key={b.id} style={{ fontSize: 12, marginBottom: 2 }}>
+                        <div key={b.id} style={{ fontSize: 13.5, marginBottom: 2 }}>
                           <span style={{ fontFamily: 'ui-monospace, monospace' }}>{b.id}</span>
                           {' '}
                           <Badge type={b.status === 'CLEARED' ? 'success' : b.status === 'REJECTED' ? 'danger' : 'warning'}>
@@ -217,7 +217,7 @@ export default function ExchangeApplications() {
                         </div>
                       ))}
                       {r.contract_label && (
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{r.contract_label}</div>
+                        <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>{r.contract_label}</div>
                       )}
                     </td>
                     <td style={{ padding: '10px 12px' }}>

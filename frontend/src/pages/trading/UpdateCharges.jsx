@@ -153,13 +153,13 @@ export default function UpdateCharges() {
     background: '#33598d',
     color: '#fff',
     padding: '8px 6px',
-    fontSize: 12,
+    fontSize: 13.5,
     fontWeight: 600,
     textAlign: 'center',
     border: '1px solid #2a4a75',
   };
-  const td = { padding: '4px', border: '1px solid #e2e8f0', fontSize: 12 };
-  const inputStyle = { width: '100%', padding: '4px 6px', fontSize: 12, boxSizing: 'border-box' };
+  const td = { padding: '4px', border: '1px solid #e2e8f0', fontSize: 13.5 };
+  const inputStyle = { width: '100%', padding: '4px 6px', fontSize: 13.5, boxSizing: 'border-box' };
 
   function MetaLabel({ label, value }) {
     return (

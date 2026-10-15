@@ -54,7 +54,7 @@ function OpenForm({ contracts, onDone, onCancel }) {
         <Field label="Issue date"><input type="date" value={f.issue_date} onChange={(e) => set({ issue_date: e.target.value })} /></Field>
         <Field label="Valid until" required><input required type="date" value={f.validity_end} onChange={(e) => set({ validity_end: e.target.value })} /></Field>
       </div>
-      {need?.lc_required > 0 && <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-light)' }}>Worked out from the average monthly bill, this PPA needs about {fmtCurrency(need.lc_required)}; {fmtCurrency(need.lc_open)} is open now.</p>}
+      {need?.lc_required > 0 && <p style={{ margin: '0 0 10px', fontSize: 13.5, color: 'var(--text-light)' }}>Worked out from the average monthly bill, this PPA needs about {fmtCurrency(need.lc_required)}; {fmtCurrency(need.lc_open)} is open now.</p>}
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, marginBottom: 10 }}>
         <input type="checkbox" checked={f.is_revolving} onChange={(e) => set({ is_revolving: e.target.checked })} /> Revolving
       </label>
@@ -156,7 +156,7 @@ function LcDetail({ id, canManage, onChanged, onPreview }) {
               <div className="timeline-item" key={ev.id}>
                 <strong>{ev.event_type.charAt(0) + ev.event_type.slice(1).toLowerCase()}</strong> — {ev.actor_name}
                 {ev.details && (
-                  <div style={{ fontSize: 12 }}>
+                  <div style={{ fontSize: 13.5 }}>
                     {[ev.details.amount?.from != null && `amount ${fmtCurrency(ev.details.amount.from)} → ${fmtCurrency(ev.details.amount.to)}`,
                       typeof ev.details.amount === 'number' && fmtCurrency(ev.details.amount),
                       ev.details.validity_end?.from !== undefined && `validity ${ev.details.validity_end.from ? fmtDate(ev.details.validity_end.from) : '—'} → ${fmtDate(ev.details.validity_end.to)}`,

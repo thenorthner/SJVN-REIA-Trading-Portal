@@ -282,8 +282,10 @@ export default function App() {
         <Route path="hydro-thermal" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroThermalDashboard /></ProtectedRoute>} />
         {/* The same onboarding screen, scoped to the vertical it is opened from. */}
         <Route path="hydro-thermal/stakeholders" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><Entities key="HYDRO" vertical="HYDRO" /></ProtectedRoute>} />
+        <Route path="hydro-thermal/document-desk" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><DocumentDesk key="HYDRO" vertical="HYDRO" /></ProtectedRoute>} />
         <Route path="thermal" element={<ProtectedRoute roles={THERMAL_ROLES}><ThermalDashboard /></ProtectedRoute>} />
         <Route path="thermal/stakeholders" element={<ProtectedRoute roles={THERMAL_ROLES}><Entities key="THERMAL" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/document-desk" element={<ProtectedRoute roles={THERMAL_ROLES}><DocumentDesk key="THERMAL" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="hydro-thermal/hydro-billing" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroBilling /></ProtectedRoute>} />
         <Route path="hydro-thermal/hydro-ledger" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroLedger /></ProtectedRoute>} />
         <Route path="hydro-thermal/hydro-claims" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroClaims /></ProtectedRoute>} />

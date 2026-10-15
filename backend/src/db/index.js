@@ -106,6 +106,51 @@ function migratePaymentSecuritySchema() {
 
 migratePaymentSecuritySchema();
 
+/** Allow RETURNED_BY_CHECKER status in payment_intimations table. */
+function migratePaymentIntimationsCheck() {
+  const meta = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='payment_intimations'`).get();
+  if (!meta || !meta.sql || meta.sql.includes('RETURNED_BY_CHECKER')) return;
+  db.pragma('foreign_keys = OFF');
+  db.exec(`
+    CREATE TABLE payment_intimations_mig (
+      id TEXT PRIMARY KEY,
+      invoice_id TEXT NOT NULL REFERENCES invoices(id),
+      contract_id TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      tds_amount REAL NOT NULL DEFAULT 0,
+      tds_section TEXT,
+      other_deduction REAL NOT NULL DEFAULT 0,
+      deduction_note TEXT,
+      payment_date TEXT NOT NULL,
+      confirmed_date TEXT,
+      mode TEXT,
+      reference TEXT NOT NULL,
+      proof_version_id TEXT,
+      remarks TEXT,
+      exceeds_balance INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'SUBMITTED' CHECK (status IN ('PENDING_CHECKER','SUBMITTED','CONFIRMED','REJECTED','WITHDRAWN','RETURNED_BY_CHECKER')),
+      prepared_by TEXT,
+      approved_by TEXT,
+      approved_at TEXT,
+      decided_by TEXT,
+      decided_at TEXT,
+      decision_note TEXT,
+      payment_id TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    INSERT INTO payment_intimations_mig SELECT * FROM payment_intimations;
+    DROP TABLE payment_intimations;
+    ALTER TABLE payment_intimations_mig RENAME TO payment_intimations;
+    CREATE INDEX IF NOT EXISTS idx_payment_intimations_invoice ON payment_intimations(invoice_id);
+    CREATE INDEX IF NOT EXISTS idx_payment_intimations_status ON payment_intimations(status);
+  `);
+  db.pragma('foreign_keys = ON');
+}
+
+migratePaymentIntimationsCheck();
+
 /** Add CERC billing columns to invoices and contracts if upgrading from simple billing schema. */
 function migrateBillingSchema() {
   const invCols = db.prepare('PRAGMA table_info(invoices)').all().map(c => c.name);

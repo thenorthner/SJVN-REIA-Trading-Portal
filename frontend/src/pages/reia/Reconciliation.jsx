@@ -40,9 +40,9 @@ const figure = (v, unit) => {
 function StatPill({ label, value, sub }) {
   return (
     <div style={{ padding: '12px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, minWidth: 120 }}>
-      <div style={{ fontSize: 11, textTransform: 'none', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
+      <div style={{ fontSize: 13, textTransform: 'none', letterSpacing: 0.4, color: 'var(--text-muted)' }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4, color: 'var(--text)' }}>{value}</div>
-      {sub != null && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
+      {sub != null && <div style={{ fontSize: 13.5, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
     </div>
   );
 }
@@ -54,7 +54,7 @@ function MatchCell({ status }) {
     return (
       <span
         title="No connector for the system this would be checked against, so this line was not checked."
-        style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}
+        style={{ color: 'var(--text-muted)', fontSize: 13.5, fontWeight: 600 }}
       >
         Not checked
       </span>
@@ -403,7 +403,7 @@ export default function Reconciliation() {
             <div key={rq.id} style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
               <span>{rq.recon_no} / {rq.period}</span>
               <span style={{ opacity: 0.7 }}>{rq.reason}</span>
-              <span style={{ fontSize: 12 }}>by {rq.requested_by_name}</span>
+              <span style={{ fontSize: 13.5 }}>by {rq.requested_by_name}</span>
               {CAN_APPROVE_REOPEN.includes(user?.role) && (
                 <>
                   <button className="btn btn-success btn-sm" type="button" onClick={() => actReopen(rq.id, 'APPROVED')}>Approve</button>
@@ -533,17 +533,17 @@ export default function Reconciliation() {
               border: '1px solid var(--border)',
             }}>
               <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>🤝 Dual Sign-off & Acknowledgment Status</span>
+                <span>Dual Sign-off &amp; Acknowledgment Status</span>
                 {detail.sjvn_ack_at && detail.counterparty_ack_at ? (
-                  <span style={{ fontSize: 12, background: '#10b981', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
-                    ✓ 2/2 Complete (Closed & Legally Agreed)
+                  <span style={{ fontSize: 13.5, background: '#10b981', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
+                    ✓ 2/2 Complete (Closed &amp; Legally Agreed)
                   </span>
                 ) : (detail.sjvn_ack_at || detail.counterparty_ack_at) ? (
-                  <span style={{ fontSize: 12, background: '#f59e0b', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
-                    ⏳ 1/2 Acknowledged (Awaiting Dual Signature)
+                  <span style={{ fontSize: 13.5, background: '#f59e0b', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
+                    1/2 Acknowledged (Awaiting Dual Signature)
                   </span>
                 ) : (
-                  <span style={{ fontSize: 12, background: 'var(--text-muted)', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
+                  <span style={{ fontSize: 13.5, background: 'var(--text-muted)', color: '#fff', padding: '2px 8px', borderRadius: 12 }}>
                     0/2 Signed Off
                   </span>
                 )}
@@ -557,17 +557,17 @@ export default function Reconciliation() {
                   border: `1px solid ${detail.sjvn_ack_at ? '#a7f3d0' : 'var(--border)'}`,
                   borderRadius: 6,
                 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'none', color: detail.sjvn_ack_at ? '#065f46' : 'var(--text-muted)' }}>
-                    🏛️ SJVN REIA Desk Sign-Off
+                  <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'none', color: detail.sjvn_ack_at ? '#065f46' : 'var(--text-muted)' }}>
+                    SJVN REIA Desk Sign-Off
                   </div>
                   {detail.sjvn_ack_at ? (
                     <div style={{ marginTop: 4, fontSize: 13, color: '#065f46' }}>
-                      <div style={{ fontWeight: 600 }}>✅ Acknowledged by {detail.sjvn_ack_by}</div>
-                      <div style={{ fontSize: 11, opacity: 0.8 }}>on {fmtDateTime(detail.sjvn_ack_at)}</div>
+                      <div style={{ fontWeight: 600 }}>Acknowledged by {detail.sjvn_ack_by}</div>
+                      <div style={{ fontSize: 13, opacity: 0.8 }}>on {fmtDateTime(detail.sjvn_ack_at)}</div>
                     </div>
                   ) : (
                     <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>
-                      ⏳ Pending SJVN verification & sign-off
+                      Pending SJVN verification &amp; sign-off
                     </div>
                   )}
                 </div>
@@ -579,24 +579,24 @@ export default function Reconciliation() {
                   border: `1px solid ${detail.counterparty_ack_at ? '#a7f3d0' : 'var(--border)'}`,
                   borderRadius: 6,
                 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'none', color: detail.counterparty_ack_at ? '#065f46' : 'var(--text-muted)' }}>
-                    🏢 Counterparty (Buyer/Seller) Sign-Off
+                  <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'none', color: detail.counterparty_ack_at ? '#065f46' : 'var(--text-muted)' }}>
+                    Counterparty (Buyer/Seller) Sign-Off
                   </div>
                   {detail.counterparty_ack_at ? (
                     <div style={{ marginTop: 4, fontSize: 13, color: '#065f46' }}>
-                      <div style={{ fontWeight: 600 }}>✅ Acknowledged by {detail.counterparty_ack_by}</div>
-                      <div style={{ fontSize: 11, opacity: 0.8 }}>on {fmtDateTime(detail.counterparty_ack_at)}</div>
+                      <div style={{ fontWeight: 600 }}>Acknowledged by {detail.counterparty_ack_by}</div>
+                      <div style={{ fontSize: 13, opacity: 0.8 }}>on {fmtDateTime(detail.counterparty_ack_at)}</div>
                     </div>
                   ) : (
                     <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>
-                      ⏳ Pending Discom / Generator digital sign-off
+                      Pending Discom / Generator digital sign-off
                     </div>
                   )}
                 </div>
               </div>
 
               {detail.discrepancy_notes && (
-                <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', background: '#ffffff', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--border)' }}>
+                <div style={{ marginTop: 10, fontSize: 13.5, color: 'var(--text-muted)', fontStyle: 'italic', background: '#ffffff', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--border)' }}>
                   <strong>Notes / Remarks:</strong> {detail.discrepancy_notes}
                 </div>
               )}
@@ -615,8 +615,8 @@ export default function Reconciliation() {
                   <tr key={it.id}>
                     <td style={{ whiteSpace: 'normal', minWidth: 200 }}>
                       {it.label}
-                      {!!it.pattern_flag && <div style={{ color: 'var(--error)', fontSize: 11 }}>Pattern flag — systemic?</div>}
-                      {it.notes && <div style={{ opacity: 0.6, fontSize: 11 }}>{it.notes}</div>}
+                      {!!it.pattern_flag && <div style={{ color: 'var(--error)', fontSize: 13 }}>Pattern flag — systemic?</div>}
+                      {it.notes && <div style={{ opacity: 0.6, fontSize: 13 }}>{it.notes}</div>}
                     </td>
                     <td>{figure(it.metered_value, it.unit)}</td>
                     <td>{figure(it.billed_value, it.unit)}</td>
@@ -630,7 +630,7 @@ export default function Reconciliation() {
                           <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRaiseDispute(it.id)}>→ Dispute</button>
                         </div>
                       )}
-                      {it.dispute_id && <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>Linked dispute</div>}
+                      {it.dispute_id && <div style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>Linked dispute</div>}
                     </td>
                   </tr>
                 ))}
@@ -684,7 +684,7 @@ export default function Reconciliation() {
                   onClick={handleRegenerate}
                   style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                 >
-                  {regenerateLoading ? '⏳ Recalculating & Regenerating…' : '🔄 Regenerate statement (Re-sync)'}
+                  {regenerateLoading ? 'Recalculating & Regenerating…' : 'Regenerate statement (Re-sync)'}
                 </button>
               )}
 
@@ -719,7 +719,7 @@ export default function Reconciliation() {
       <Modal
         open={ackModal.open}
         onClose={() => !ackLoading && setAckModal({ ...ackModal, open: false })}
-        title={ackModal.decision === 'AGREE' ? '✍️ Sign-off & Acknowledgment' : '⚠️ Record Disagreement & Dispute Notice'}
+        title={ackModal.decision === 'AGREE' ? 'Sign-off & Acknowledgment' : 'Record Disagreement & Dispute Notice'}
         width={560}
       >
         <div>
@@ -831,7 +831,7 @@ export default function Reconciliation() {
                   disabled={!ackModal.remarks.trim() || ackLoading}
                   onClick={submitAcknowledgement}
                 >
-                  {ackLoading ? 'Submitting Disagreement…' : '⚠️ Submit Disagreement & Flag Dispute'}
+                  {ackLoading ? 'Submitting Disagreement…' : 'Submit Disagreement & Flag Dispute'}
                 </button>
               </div>
             </div>

@@ -263,7 +263,7 @@ export default function ExchangeContractDetail() {
     <div style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 12, color: '#64748b' }}>Exchange Contracts</div>
+          <div style={{ fontSize: 13.5, color: '#64748b' }}>Exchange Contracts</div>
           <h1 style={{ margin: 0, fontSize: 22 }}>{form.loa_no || id}</h1>
         </div>
         <div style={{ display: 'flex', gap: 24, fontSize: 13 }}>
@@ -417,7 +417,7 @@ export default function ExchangeContractDetail() {
                       <button type="button" style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 8px' }} onClick={addScheduleRow}>+</button>
                     </th>}
                   </tr>
-                  <tr style={{ background: '#7eb3de', fontSize: 11, fontWeight: 500 }}>
+                  <tr style={{ background: '#7eb3de', fontSize: 13, fontWeight: 500 }}>
                     <th style={{ padding: '4px 8px' }}>From *</th>
                     <th style={{ padding: '4px 8px' }}>To *</th>
                     <th style={{ padding: '4px 8px' }}>From *</th>
@@ -606,9 +606,9 @@ export default function ExchangeContractDetail() {
                   ['Client position', `₹${fmtNumber(settlement.money?.client_energy_position)}`, settlement.side === 'Buyer' ? 'buy-side' : 'sell-side'],
                 ].map(([label, value, sub]) => (
                   <div key={label} style={{ padding: '10px 12px', background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.3 }}>{label}</div>
+                    <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.3 }}>{label}</div>
                     <div style={{ fontSize: 16, fontWeight: 600, marginTop: 2 }}>{value}</div>
-                    <div style={{ fontSize: 11, color: 'var(--slate-500)' }}>{sub}</div>
+                    <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>{sub}</div>
                   </div>
                 ))}
               </div>
@@ -617,7 +617,7 @@ export default function ExchangeContractDetail() {
                 <Badge type={(settlement.cleared?.cleared_mwh ?? 0) > 0 ? 'success' : 'warning'}>
                   {(settlement.cleared?.cleared_mwh ?? 0) > 0 ? 'FINAL' : 'NO CLEARANCE'}
                 </Badge>
-                <span style={{ fontSize: 12, color: 'var(--slate-600)' }}>
+                <span style={{ fontSize: 13.5, color: 'var(--slate-600)' }}>
                   {settlement.cleared?.bids ?? 0} bid(s)
                   {settlement.cleared?.days ? ` · ${settlement.cleared.days} day(s)` : ''}
                   {settlement.cleared?.period_from ? ` · ${settlement.cleared.period_from} to ${settlement.cleared.period_to}` : ''}
@@ -626,7 +626,7 @@ export default function ExchangeContractDetail() {
               </div>
 
               {settlement.warnings?.length > 0 && (
-                <ul style={{ margin: '0 0 12px 18px', fontSize: 12, color: '#92400e' }}>
+                <ul style={{ margin: '0 0 12px 18px', fontSize: 13.5, color: '#92400e' }}>
                   {settlement.warnings.map((w, i) => <li key={i}>{w}</li>)}
                 </ul>
               )}
@@ -650,7 +650,7 @@ export default function ExchangeContractDetail() {
                 }}>
                   {billMsg.text}
                   {billMsg.warnings?.length > 0 && (
-                    <ul style={{ margin: '6px 0 0 18px', fontSize: 12 }}>
+                    <ul style={{ margin: '6px 0 0 18px', fontSize: 13.5 }}>
                       {billMsg.warnings.map((w, i) => <li key={i}>{w}</li>)}
                     </ul>
                   )}

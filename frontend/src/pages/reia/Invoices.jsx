@@ -469,7 +469,7 @@ export default function Invoices() {
     { key: 'invoice_type', header: 'Type', render: (r) => (
       r.invoice_type === 'PROVISIONAL' ? (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, padding: '2px 6px', background: '#fef08a', color: '#854d0e', borderRadius: 4, fontWeight: 600 }}>PROVISIONAL</span>
+          <span style={{ fontSize: 13, padding: '2px 6px', background: '#fef08a', color: '#854d0e', borderRadius: 4, fontWeight: 600 }}>PROVISIONAL</span>
           {CAN_WRITE.includes(user?.role) && !['CANCELLED'].includes(r.status) && (
             <button 
               className="btn btn-xs btn-outline" 
@@ -479,7 +479,7 @@ export default function Invoices() {
                 setSuppError('');
                 setShowSupp(true);
               }}
-              style={{ fontSize: 10, padding: '2px 6px' }}
+              style={{ fontSize: 12.5, padding: '2px 6px' }}
             >
               True-Up
             </button>
@@ -552,24 +552,11 @@ export default function Invoices() {
             borderBottom: activeTab === 'INVOICES' ? '3px solid var(--primary)' : '3px solid transparent',
             color: activeTab === 'INVOICES' ? 'var(--primary)' : 'var(--text-muted)',
             fontWeight: activeTab === 'INVOICES' ? 700 : 500,
-            fontSize: 14,
+            fontSize: 14.5,
             cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
           }}
         >
-          <span>📋 Invoices &amp; Ledger</span>
-          <span style={{
-            fontSize: 11,
-            background: activeTab === 'INVOICES' ? 'var(--primary)' : 'var(--slate-200)',
-            color: activeTab === 'INVOICES' ? '#fff' : 'var(--slate-700)',
-            padding: '2px 8px',
-            borderRadius: 12,
-            fontWeight: 700,
-          }}>
-            {rows.length}
-          </span>
+          Invoices &amp; Ledger
         </button>
 
         <button
@@ -582,26 +569,11 @@ export default function Invoices() {
             borderBottom: activeTab === 'TRAIL' ? '3px solid #0284c7' : '3px solid transparent',
             color: activeTab === 'TRAIL' ? '#0284c7' : 'var(--text-muted)',
             fontWeight: activeTab === 'TRAIL' ? 700 : 500,
-            fontSize: 14,
+            fontSize: 14.5,
             cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
           }}
         >
-          <span>Settlement Trail &amp; 3D Pipeline</span>
-          <span style={{
-            fontSize: 10,
-            background: 'linear-gradient(135deg, #0284c7, #38bdf8)',
-            color: '#fff',
-            padding: '2px 8px',
-            borderRadius: 6,
-            fontWeight: 800,
-            letterSpacing: 0.5,
-            boxShadow: '0 0 10px rgba(56, 189, 248, 0.4)',
-          }}>
-            LIVE PIPELINE
-          </span>
+          Settlement Trail &amp; 3D Pipeline
         </button>
       </div>
 
@@ -644,7 +616,7 @@ export default function Invoices() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
               <div>
-                <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
+                <label style={{ display: 'block', fontSize: 13, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
                   Select Contract (PPA / PSA)
                 </label>
                 <select
@@ -669,7 +641,7 @@ export default function Invoices() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
+                <label style={{ display: 'block', fontSize: 13, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
                   Billing Period
                 </label>
                 <input
@@ -688,7 +660,7 @@ export default function Invoices() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 11, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
+                <label style={{ display: 'block', fontSize: 13, color: '#94a3b8', marginBottom: 4, fontWeight: 600 }}>
                   Flow Direction
                 </label>
                 <select
@@ -712,7 +684,7 @@ export default function Invoices() {
 
             {/* Quick Portfolios Shortcuts */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Quick Portfolios:</span>
+              <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>Quick Portfolios:</span>
               <button
                 type="button"
                 onClick={() => { setTrailContractId('CON-SOLAR-250MW'); setTrailPeriod('2026-10'); }}
@@ -722,7 +694,7 @@ export default function Invoices() {
                   color: trailContractId === 'CON-SOLAR-250MW' ? '#38bdf8' : '#94a3b8',
                   padding: '5px 10px',
                   borderRadius: 6,
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: 600,
                   cursor: 'pointer',
                 }}
@@ -738,7 +710,7 @@ export default function Invoices() {
                   color: trailContractId === 'CON-572a3db958704c6b' ? '#10b981' : '#94a3b8',
                   padding: '5px 10px',
                   borderRadius: 6,
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: 600,
                   cursor: 'pointer',
                 }}
@@ -814,11 +786,11 @@ export default function Invoices() {
                           <div style={{ flex: 1 }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                               <div style={{ fontSize: 13, fontWeight: 600, color: isSelected ? 'var(--primary-dark)' : 'var(--text)' }}>{r.invoice_no}</div>
-                              <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--bg)', color: 'var(--text-muted)', border: '1px solid var(--border)', textTransform: 'uppercase', fontWeight: 600 }}>
+                              <span style={{ fontSize: 12.5, padding: '2px 6px', borderRadius: 4, background: 'var(--bg)', color: 'var(--text-muted)', border: '1px solid var(--border)', textTransform: 'uppercase', fontWeight: 600 }}>
                                 {r.status.replace(/_/g, ' ')}
                               </span>
                             </div>
-                            <div style={{ fontSize: 11, color: isSelected ? 'var(--primary)' : 'var(--text-muted)', marginTop: 2 }}>Period: {r.billing_period}  •  Amount: {fmtCurrency(r.total_amount)}</div>
+                            <div style={{ fontSize: 13, color: isSelected ? 'var(--primary)' : 'var(--text-muted)', marginTop: 2 }}>Period: {r.billing_period}  •  Amount: {fmtCurrency(r.total_amount)}</div>
                           </div>
                         </label>
                       );
@@ -826,7 +798,7 @@ export default function Invoices() {
                   </div>
                 )}
                 <div style={{ marginTop: 8, padding: '10px 14px', background: 'rgba(59, 130, 246, 0.06)', borderLeft: '3px solid var(--primary)', borderRadius: '0 6px 6px 0' }}>
-                  <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                  <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.4 }}>
                     <strong>Optional:</strong> Link incoming developer bills to this DISCOM bill for back-to-back audit tracking. You can also generate directly without linking.
                   </p>
                 </div>
@@ -838,7 +810,7 @@ export default function Invoices() {
             <div style={{ color: 'var(--primary)', marginTop: 2 }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
             </div>
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+            <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
               Invoice amount is auto-computed from locked/final energy data and the contract tariff. <strong style={{color: 'var(--text)'}}>FINAL</strong> invoices require <strong style={{color: 'var(--text)'}}>LOCKED</strong> energy data.
             </p>
           </div>
@@ -865,7 +837,7 @@ export default function Invoices() {
               Outstanding: <strong>{fmtCurrency(wfOutstanding.total_due)}</strong>
               {'  ·  '}LPS <strong>{fmtCurrency(wfOutstanding.total_lps)}</strong>
               {'  ·  '}Principal <strong>{fmtCurrency(wfOutstanding.total_principal)}</strong>
-              <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>{wfOutstanding.items.length} outstanding bill(s)</div>
+              <div style={{ fontSize: 13, color: 'var(--text-light)', marginTop: 2 }}>{wfOutstanding.items.length} outstanding bill(s)</div>
             </div>
           )}
           <div className="form-grid">
@@ -882,12 +854,12 @@ export default function Invoices() {
           {wfResult && (
             <div style={{ marginTop: 8 }}>
               <div className="inline-note">Allocated {fmtCurrency(wfResult.allocated)}{wfResult.unallocated > 0 ? ` · ${fmtCurrency(wfResult.unallocated)} unallocated (no more dues)` : ''}:</div>
-              <table className="data-table" style={{ width: '100%', fontSize: 12.5, marginTop: 4 }}>
+              <table className="data-table" style={{ width: '100%', fontSize: 13.5, marginTop: 4 }}>
                 <tbody>
                   {wfResult.allocations.map((a) => (
                     <tr key={a.invoice_no}>
                       <td><strong>{a.invoice_no}</strong> <span style={{ color: 'var(--text-light)' }}>{a.billing_period}</span></td>
-                      <td style={{ fontSize: 12, color: 'var(--text-light)' }}>
+                      <td style={{ fontSize: 13.5, color: 'var(--text-light)' }}>
                         {a.to_lps > 0 ? `Surcharge ${fmtCurrency(a.to_lps)}` : ''}{a.to_lps > 0 && a.to_principal > 0 ? ' · ' : ''}{a.to_principal > 0 ? `Bill ${fmtCurrency(a.to_principal)}` : ''}
                       </td>
                       <td className="text-right mono">{fmtCurrency(a.allocated)}</td>
@@ -1024,7 +996,7 @@ export default function Invoices() {
                   <span className="detail-label">Cancel Reason</span>
                   <span className="detail-value">
                     {selected.cancel_reason}
-                    <div style={{ fontSize: 11, color: 'var(--text-light)' }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-light)', marginTop: 2 }}>
                       {selected.cancelled_by || '—'} · {fmtDateTime(selected.cancelled_at, '')}
                     </div>
                   </span>
@@ -1032,7 +1004,7 @@ export default function Invoices() {
               )}
               <div className="detail-item"><span className="detail-label">Contract</span><span className="detail-value">
                 {selected.contract_id ? (
-                  <button type="button" className="btn-link" onClick={() => openContract(selected.contract_id)} title="View contract details">
+                  <button type="button" className="btn-link" onClick={() => openContract(selected.contract_id)} title="View contract details" style={{ fontSize: 15.5 }}>
                     {selected.contract_no} &rsaquo;
                   </button>
                 ) : (selected.contract_no || '-')}
@@ -1046,7 +1018,7 @@ export default function Invoices() {
                   <span className="detail-label">Overdue / Accrued LPS</span>
                   <span className="detail-value" style={{ color: 'var(--error)', fontWeight: 600 }}>
                     {selected.days_past_due || selected.days_overdue} day(s) past due · {fmtCurrency(selected.accrued_lps)}
-                    <span style={{ fontWeight: 400, color: 'var(--slate-500)', fontSize: 12 }}>
+                    <span style={{ fontWeight: 400, color: 'var(--slate-500)', fontSize: 13.5 }}>
                       {' '}(accruing until paid{selected.days_past_due > 0 && selected.days_overdue !== selected.days_past_due ? `; surcharge is counted on ${selected.days_overdue} working day(s)` : ''})
                     </span>
                   </span>
@@ -1153,44 +1125,50 @@ export default function Invoices() {
                     const designatedNames = a.designated_names || (a.level === 1 ? 'Sunil (Commercial Admin) / Meera (REIA Admin)' : a.level === 2 ? 'Vikas (Finance)' : 'Divyankur (Management) / Admin User');
 
                     return (
-                      <div className="timeline-item" key={a.id} style={{ paddingBottom: 16 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+                      <div className="timeline-item" key={a.id} style={{ paddingBottom: 18, paddingTop: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                           <div>
-                            <span style={{ fontWeight: 600, fontSize: 13 }}>Level {a.level}: {stageTitle}</span>
-                            <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-muted)' }}>• Post: <strong style={{ color: 'var(--text)' }}>{postName}</strong></span>
+                            <span style={{ fontWeight: 700, fontSize: 16 }}>Level {a.level}: {stageTitle}</span>
+                            <span style={{ marginLeft: 10, fontSize: 14, color: 'var(--text-muted)' }}>• Post: <strong style={{ color: 'var(--text)' }}>{postName}</strong></span>
                           </div>
                           <div>
-                            <Badge status={a.status} /> {a.approver_name ? <span style={{ fontWeight: 500, fontSize: 13 }}> · Approved by <strong>{a.approver_name}</strong></span> : ''}
-                            {a.acted_at && <span style={{ color: 'var(--text-light)', fontSize: 12 }}> · {fmtDateTime(a.acted_at)}</span>}
+                            <Badge status={a.status} /> {a.approver_name ? <span style={{ fontWeight: 600, fontSize: 14 }}> · Approved by <strong>{a.approver_name}</strong></span> : ''}
+                            {a.acted_at && <span style={{ color: 'var(--text-light)', fontSize: 13 }}> · {fmtDateTime(a.acted_at)}</span>}
                           </div>
                         </div>
 
-                        {a.comments && <div className="t-meta" style={{ marginTop: 2, marginBottom: 4 }}><strong>Note:</strong> {a.comments}</div>}
+                        {a.comments && <div className="t-meta" style={{ marginTop: 4, marginBottom: 6, fontSize: 14 }}><strong>Note:</strong> {a.comments}</div>}
                         
                         {approvalsOpen && a.status === 'PENDING' && !isNext && (
-                          <div className="t-meta" style={{ marginTop: 4, color: 'var(--text-muted)' }}>
-                            Designated Authority: <strong>{designatedNames}</strong> ({postName}) · Waits for Level {a.level - 1} approval.
+                          <div className="t-meta" style={{ marginTop: 6, fontSize: 14, color: 'var(--text-muted)' }}>
+                            Designated Authority: <strong style={{ color: 'var(--text)' }}>{designatedNames}</strong> ({postName}) · Waits for Level {a.level - 1} approval.
                           </div>
                         )}
 
                         {(canApprove || canReject) && (raisedByMe ? (
-                          <div className="t-meta" style={{ marginTop: 6, color: '#b45309', background: 'rgba(245, 158, 11, 0.08)', padding: '8px 12px', borderRadius: 6, border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+                          <div className="t-meta" style={{ marginTop: 8, fontSize: 14, color: '#b45309', background: 'rgba(245, 158, 11, 0.08)', padding: '10px 14px', borderRadius: 8, border: '1px solid rgba(245, 158, 11, 0.25)' }}>
                             You raised this bill as Maker ({selected.created_by || 'You'}). Designated Approver for Level {a.level}: <strong>{designatedNames}</strong> [Post: <strong>{postName}</strong>].
                           </div>
                         ) : (
-                          <div style={{ marginTop: 8 }}>
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
+                          <div style={{ marginTop: 10 }}>
+                            <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>
                               Designated Approver: <strong style={{ color: 'var(--text)' }}>{designatedNames}</strong> ({postName})
                             </div>
-                            <input placeholder={canApprove ? 'Comments (optional for approve, needed to reject)' : 'Why it is being sent back'} aria-label={`Comments for level ${a.level}`} value={approveComments[a.level] || ''} onChange={(e) => setApproveComments({ ...approveComments, [a.level]: e.target.value })} style={{ marginBottom: 6, width: '100%', border: '1px solid var(--border)', borderRadius: 6, padding: '6px 10px' }} />
+                            <input
+                              placeholder={canApprove ? 'Comments (optional for approve, needed to reject)' : 'Why it is being sent back'}
+                              aria-label={`Comments for level ${a.level}`}
+                              value={approveComments[a.level] || ''}
+                              onChange={(e) => setApproveComments({ ...approveComments, [a.level]: e.target.value })}
+                              style={{ marginBottom: 10, width: '100%', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', fontSize: 15 }}
+                            />
                             {canReject && approvalsOpen && !isAdmin && mySignedLevel != null && (
-                              <div className="t-meta" style={{ marginBottom: 6, color: '#b45309' }}>
+                              <div className="t-meta" style={{ marginBottom: 8, fontSize: 14, color: '#b45309' }}>
                                 You approved Level {mySignedLevel}. Level {a.level} must be approved by <strong>{designatedNames}</strong> [Post: <strong>{postName}</strong>]. You can still send the bill back.
                               </div>
                             )}
-                            <div className="cell-actions">
-                              {canReject && <button className="btn btn-danger btn-sm" disabled={!!busy} onClick={() => handleAct(a.level, 'REJECTED')}>{approvalsOpen ? 'Reject' : 'Return to seller'}</button>}
-                              {canApprove && <button className="btn btn-success btn-sm" disabled={!!busy} onClick={() => handleAct(a.level, 'APPROVED')}>{busy === `act-${a.level}` ? 'Recording…' : `Approve as ${postName}`}</button>}
+                            <div className="cell-actions" style={{ gap: 10 }}>
+                              {canReject && <button className="btn btn-danger" style={{ padding: '8px 18px', fontSize: 14.5 }} disabled={!!busy} onClick={() => handleAct(a.level, 'REJECTED')}>{approvalsOpen ? 'Reject' : 'Return to seller'}</button>}
+                              {canApprove && <button className="btn btn-success" style={{ padding: '8px 18px', fontSize: 14.5 }} disabled={!!busy} onClick={() => handleAct(a.level, 'APPROVED')}>{busy === `act-${a.level}` ? 'Recording…' : `Approve as ${postName}`}</button>}
                             </div>
                           </div>
                         ))}
@@ -1322,7 +1300,7 @@ export default function Invoices() {
                     DISCOM realized: <strong>{fmtCurrency(selected.generator_realization.realized)}</strong>
                     {'  ·  '}Already released from realization: <strong>{fmtCurrency(selected.generator_realization.released_from_realization)}</strong>
                     {'  ·  '}Available: <strong style={{ color: 'var(--green)' }}>{fmtCurrency(selected.generator_realization.available)}</strong>
-                    <div style={{ fontSize: 11, color: 'var(--text-light)', marginTop: 2 }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-light)', marginTop: 2 }}>
                       {selected.generator_realization.linked_psa ? `${selected.generator_realization.linked_psa} PSA invoice(s) linked` : 'No PSA invoice mapped — use Own Fund / Security Fund'}
                     </div>
                   </div>

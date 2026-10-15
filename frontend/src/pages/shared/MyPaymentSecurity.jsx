@@ -85,7 +85,7 @@ function SubmitForm({ seller, contracts, onDone, onCancel }) {
         </Field>
       </div>
       {seller && need && f.bg_subtype === 'PBG' && need.pbg_required > 0 && (
-        <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--text-light)' }}>
+        <p style={{ margin: '0 0 10px', fontSize: 13.5, color: 'var(--text-light)' }}>
           This PPA asks for a PBG of {fmtCurrency(need.pbg_required)}; {fmtCurrency(need.pbg_held)} is held now.
         </p>
       )}
@@ -130,7 +130,7 @@ function ReleaseBox({ d, onDone }) {
       {d.releases?.map((r) => (
         <div key={r.id} style={{ fontSize: 13, marginTop: 6 }}>
           <Badge status={r.status} /> {r.reason} <span style={{ color: 'var(--text-light)' }}>· {r.requested_by}, {fmtDate(r.created_at)}{r.acted_by ? ` · decided by ${r.acted_by}` : ''}</span>
-          {r.decision_note && <div style={{ fontSize: 12, color: r.status === 'REJECTED' ? '#b91c1c' : 'var(--text-light)' }}>SJVN: {r.decision_note}</div>}
+          {r.decision_note && <div style={{ fontSize: 13.5, color: r.status === 'REJECTED' ? '#b91c1c' : 'var(--text-light)' }}>SJVN: {r.decision_note}</div>}
         </div>
       ))}
       {!pending && rc.can_request && (
@@ -210,13 +210,13 @@ function LcTab({ o, onPreview }) {
             {o.lcs.length === 0 && <tr><td colSpan={9} className="empty-cell">SJVN has not recorded a letter of credit in your favour yet.</td></tr>}
             {o.lcs.map((l) => (
               <tr key={l.id} className={ROW_CLASS[l.expiry.level] || ''}>
-                <td><strong>{l.lc_no}</strong>{!!l.is_revolving && <div style={{ fontSize: 11, color: 'var(--text-light)' }}>Revolving</div>}</td>
+                <td><strong>{l.lc_no}</strong>{!!l.is_revolving && <div style={{ fontSize: 13, color: 'var(--text-light)' }}>Revolving</div>}</td>
                 <td>{l.contract_no}</td>
-                <td>{l.issuing_bank || '—'}{l.advising_bank && <div style={{ fontSize: 11, color: 'var(--text-light)' }}>Advised through {l.advising_bank}</div>}</td>
+                <td>{l.issuing_bank || '—'}{l.advising_bank && <div style={{ fontSize: 13, color: 'var(--text-light)' }}>Advised through {l.advising_bank}</div>}</td>
                 <td>{fmtCurrency(l.amount)}</td>
-                <td>{fmtCurrency(l.available_amount)}{l.utilized_amount > 0 && <div style={{ fontSize: 11, color: 'var(--text-light)' }}>{fmtCurrency(l.utilized_amount)} drawn</div>}</td>
+                <td>{fmtCurrency(l.available_amount)}{l.utilized_amount > 0 && <div style={{ fontSize: 13, color: 'var(--text-light)' }}>{fmtCurrency(l.utilized_amount)} drawn</div>}</td>
                 <td>{l.validity_end ? fmtDate(l.validity_end) : '—'} <ExpiryTag expiry={l.expiry} /></td>
-                <td>{l.sfms_reference ? <>{l.sfms_message_type} · {l.sfms_reference}<div style={{ fontSize: 11, color: 'var(--text-light)' }}>{l.sfms_date ? fmtDate(l.sfms_date) : ''}</div></> : <span style={{ color: 'var(--text-light)' }}>Not recorded</span>}</td>
+                <td>{l.sfms_reference ? <>{l.sfms_message_type} · {l.sfms_reference}<div style={{ fontSize: 13, color: 'var(--text-light)' }}>{l.sfms_date ? fmtDate(l.sfms_date) : ''}</div></> : <span style={{ color: 'var(--text-light)' }}>Not recorded</span>}</td>
                 <td><Badge status={l.status === 'ACTIVE' && l.expiry.level === 'EXPIRED' ? 'EXPIRED' : l.status} /></td>
                 <td>{l.document && <button type="button" className="btn-link" onClick={() => onPreview(l.document)}>View LC</button>}</td>
               </tr>
@@ -332,14 +332,14 @@ export default function MyPaymentSecurity({ role = 'SELLER' }) {
                 {rows.map((r) => (
                   <tr key={r.id} className={`clickable ${ROW_CLASS[r.expiry.level] || ''}`} tabIndex={0} role="button" onClick={() => setOpenId(r.id)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenId(r.id); } }}>
-                    <td><strong>{r.instrument_no}</strong>{r.bank_reference_no && <div style={{ fontSize: 11, color: 'var(--text-light)' }}>Bank ref {r.bank_reference_no}</div>}</td>
+                    <td><strong>{r.instrument_no}</strong>{r.bank_reference_no && <div style={{ fontSize: 13, color: 'var(--text-light)' }}>Bank ref {r.bank_reference_no}</div>}</td>
                     <td>{r.contract_no}</td>
                     <td>{typeOf(r)}{r.is_ebg && <span className="cw-flag" style={{ background: '#eff6ff', color: '#1d4ed8', marginLeft: 6 }}>e-BG</span>}</td>
-                    <td>{fmtCurrency(r.limit_amount)}{r.utilized_amount > 0 && <div style={{ fontSize: 11, color: '#b91c1c' }}>{fmtCurrency(r.utilized_amount)} drawn</div>}</td>
+                    <td>{fmtCurrency(r.limit_amount)}{r.utilized_amount > 0 && <div style={{ fontSize: 13, color: '#b91c1c' }}>{fmtCurrency(r.utilized_amount)} drawn</div>}</td>
                     <td>{r.issuing_bank || '—'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{r.validity_end ? fmtDate(r.validity_end) : '—'} <ExpiryTag expiry={r.expiry} />{r.pending_amendment && <div style={{ fontSize: 11, color: '#1d4ed8' }}>Extension with SJVN</div>}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{r.validity_end ? fmtDate(r.validity_end) : '—'} <ExpiryTag expiry={r.expiry} />{r.pending_amendment && <div style={{ fontSize: 13, color: '#1d4ed8' }}>Extension with SJVN</div>}</td>
                     <td>{r.sfms.confirmed
-                      ? <><span style={{ color: '#15803d', fontWeight: 600 }}>Received</span><div style={{ fontSize: 11, color: 'var(--text-light)' }}>{[r.sfms.message_type, r.sfms.reference, r.sfms.date && fmtDate(r.sfms.date)].filter(Boolean).join(' · ')}</div></>
+                      ? <><span style={{ color: '#15803d', fontWeight: 600 }}>Received</span><div style={{ fontSize: 13, color: 'var(--text-light)' }}>{[r.sfms.message_type, r.sfms.reference, r.sfms.date && fmtDate(r.sfms.date)].filter(Boolean).join(' · ')}</div></>
                       : <span style={{ color: '#b45309', fontWeight: 600 }}>Pending</span>}</td>
                     <td>{r.amendment_count || '—'}</td>
                     <td>{r.document
