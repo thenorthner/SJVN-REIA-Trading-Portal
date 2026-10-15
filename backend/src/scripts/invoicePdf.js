@@ -476,6 +476,9 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res, 
   let bdLines = [];
   try { bdLines = JSON.parse(invoice.invoice_breakdown_json || '[]'); } catch { bdLines = []; }
   const bd = (code) => { const l = bdLines.find((x) => x.code === code); return l ? l.value : null; };
+  // A PSA supplied by several PPAs at once: each source's share, listed on a page of its own.
+  const sourceShares = bdLines.filter((l) => l.code === 'ALLOC' && l.ppa_contract_no);
+  const multiSource = sourceShares.length > 1;
 
   // Hydro row: code | particular | value (label spans wide, value right-aligned).
   function drawHydroRow(rowY, rowH, code, label, value, { bold = false } = {}) {
@@ -577,9 +580,10 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res, 
   const duration = periodRange(invoice.billing_period);
   const invType = invoice.invoice_type || 'PROVISIONAL';
 
-  const row1Desc = invType === 'FINAL'
+  const row1Desc = (invType === 'FINAL'
     ? 'Final amount, based on units as per Energy Accounts / Injection Schedule Report for the billing month.'
-    : 'Provisional amount, based on units as per Injection Schedule Report for the billing month.';
+    : 'Provisional amount, based on units as per Injection Schedule Report for the billing month.')
+    + (multiSource ? ` Units from ${sourceShares.length} source PPAs, itemised on page 2.` : '');
 
   drawBillingRow(y, 36, [
     '1',
@@ -816,6 +820,37 @@ export async function generateInvoicePdf(invoice, contract, seller, buyer, res, 
 
     doc.font('Helvetica-Oblique').fontSize(7).fillColor(INK)
       .text('Note: Allocation percentages are as per the applicable REA / NRPC allocation order for the billing month. Share is the beneficiary’s portion of the total billed amount.',
+        MARGIN, py + 8, { width: CONTENT_WIDTH, align: 'left' });
+  }
+
+  // ========== PAGE 2: ENERGY BY SOURCE PPA (multi-source PSA) ==========
+  // Where the units billed on page 1 came from: each PPA's energy for the
+  // month and this PSA's share of it, adding up to the units billed.
+  if (multiSource) {
+    doc.addPage();
+    let py = MARGIN;
+    doc.font('Helvetica-Bold').fontSize(13).fillColor(NAVY)
+      .text('Energy by Source PPA', MARGIN, py, { width: CONTENT_WIDTH, align: 'center' });
+    py = doc.y + 3;
+    doc.font('Helvetica').fontSize(8).fillColor(INK)
+      .text(`Units billed on ${invoice.invoice_no || 'this bill'} for ${periodLabel(invoice.billing_period)}, by the PPA they were bought under`,
+        MARGIN, py, { width: CONTENT_WIDTH, align: 'center' });
+    py = doc.y + 12;
+
+    const mwh = (v) => fmtNum(Number(v), Number.isInteger(Number(v)) ? 0 : 3);
+    drawBillingRow(py, 18, ['Sr', 'Source PPA', 'PPA energy (MWh)', 'Share %', 'Share (MWh)', 'Units (kWh)'], { headerBand: true });
+    py += 18;
+    sourceShares.forEach((l, i) => {
+      const src = bdLines.find((x) => x.code === 'SRC' && x.ppa_id === l.ppa_id);
+      drawBillingRow(py, 18, [String(i + 1), l.ppa_contract_no, src ? mwh(src.value) : '—', `${l.allocation_percent}%`, mwh(l.value), fmtNum(Number(l.value) * 1000, 2)]);
+      py += 18;
+    });
+    const totMwh = sourceShares.reduce((t, l) => t + (Number(l.value) || 0), 0);
+    drawSpanRow(py, 20, `Total units billed  (${mwh(Math.round(totMwh * 1000) / 1000)} MWh)`, fmtNum(totMwh * 1000, 2), { bold: true });
+    py += 20;
+
+    doc.font('Helvetica-Oblique').fontSize(7).fillColor(INK)
+      .text('Note: Each share is this PSA\'s allocation of the source PPA in force on the first day of the billing month, applied to that PPA\'s energy as per the Energy Accounts / Injection Schedule.',
         MARGIN, py + 8, { width: CONTENT_WIDTH, align: 'left' });
   }
 

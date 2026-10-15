@@ -7,7 +7,7 @@ export default function BuyerContracts() {
     <MyContracts
       contractType="PSA"
       title="My Contracts (PSAs)"
-      subtitle="Your Power Sale Agreements with SJVN — documents, milestones, requests and notices"
+      subtitle="Your Power Sale Agreements with SJVN — documents, requests and notices"
       sourceLabel="Power Source"
       capacityLabel="Allocated"
     />

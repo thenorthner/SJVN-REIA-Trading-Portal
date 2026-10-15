@@ -97,12 +97,34 @@ describe('S25 PPA → PSA mapping rules', () => {
     expect(r.body.error).toMatch(/150 MW/);
   });
 
-  it('gives a PSA one source PPA at a time, since its bill draws on one', async () => {
-    const ppa = ppaOf(); const other = ppaOf({ capacity_mw: 100, tariff_per_unit: 2.4 }); const psa = psaOf();
+  it('lets a PSA draw from several PPAs while their MW together fit it', async () => {
+    // 180 MW PSA: 60% of a 300 MW PPA is 180 MW, so it is full.
+    const ppa = ppaOf(); const other = ppaOf({ capacity_mw: 100, tariff_per_unit: 2.4 }); const psa = psaOf({ capacity_mw: 200 });
     expect((await map(ppa, psa, 60)).status).toBe(201);
-    const r = await map(other, psa, 20);
-    expect(r.status).toBe(409);
-    expect(r.body.error).toMatch(/one source PPA at a time/);
+    // 20 MW more fits the 200 MW it buys…
+    expect((await map(other, psa, 20, '2026-11-01', { negative_spread_reason: 'Pooled tariff order' })).status).toBe(201);
+    // …and a third source taking it past 200 MW does not.
+    const third = ppaOf({ capacity_mw: 50 });
+    const r = await map(third, psa, 10);
+    expect(r.status).toBe(400);
+    expect(r.body.error).toMatch(/already receives 200 MW/);
+    expect(r.body.received_from_other_sources_mw).toBe(200);
+    expect(r.body.headroom_mw).toBe(0);
+  });
+
+  it('counts only the sources running at the same time as the new share', async () => {
+    const a = ppaOf(); const b = ppaOf(); const psa = psaOf({ capacity_mw: 180 });
+    // a supplies the whole 180 MW until the end of 2027; b takes over with 150 MW from 2028.
+    expect((await map(a, psa, 60, '2026-11-01', { effective_to: '2027-12-31' })).status).toBe(201);
+    expect((await map(b, psa, 50, '2028-01-01')).status).toBe(201);
+    const c = ppaOf({ capacity_mw: 100 });
+    // From mid-2027 the PSA is full on a; a and b never run together, so the
+    // busiest point is 180 MW, not 330.
+    const r = await map(c, psa, 10, '2027-06-01');
+    expect(r.status).toBe(400);
+    expect(r.body.received_from_other_sources_mw).toBe(180);
+    // From 2028 there are 30 MW left beside b.
+    expect((await map(c, psa, 10, '2028-01-01')).status).toBe(201);
   });
 
   it('asks for a reason before mapping a PSA that sells below its PPA', async () => {
@@ -228,11 +250,14 @@ describe('S25 Changing a PPA\'s split from a date', () => {
     expect((await revise(ppa, { effective_from: '2027-01-01', allocations: [{ psa_id: a.id, allocation_percent: 60 }, { psa_id: b.id, allocation_percent: 60 }] })).status).toBe(400);
   });
 
-  it('refuses a PSA that another PPA already supplies, and an ended PSA', async () => {
+  it('gives a share to a PSA another PPA supplies only while its MW fit, and refuses an ended PSA', async () => {
     const other = ppaOf({ status: 'ACTIVE', capacity_mw: 100 });
-    const d = psaOf({ status: 'ACTIVE' });
-    await map(other, d, 50);
-    expect((await revise(ppa, { effective_from: '2027-01-01', allocations: [{ psa_id: d.id, allocation_percent: 10 }] })).status).toBe(409);
+    const d = psaOf({ status: 'ACTIVE' });                       // 180 MW
+    await map(other, d, 50);                                     // 50 MW from the other PPA
+    const over = await revise(ppa, { effective_from: '2027-01-01', allocations: [{ psa_id: d.id, allocation_percent: 50 }] });
+    expect(over.status).toBe(400);                               // 150 + 50 > 180
+    expect(over.body.error).toMatch(/already receives 50 MW/);
+    expect((await revise(ppa, { effective_from: '2027-01-01', allocations: [{ psa_id: d.id, allocation_percent: 40 }] })).status).toBe(200); // 120 + 50
     const gone = psaOf({ status: 'TERMINATED' });
     expect((await revise(ppa, { effective_from: '2027-01-01', allocations: [{ psa_id: gone.id, allocation_percent: 10 }] })).status).toBe(400);
   });

@@ -256,39 +256,42 @@ const contracts = (side) => {
   return {
     eyebrow: 'How this page works',
     title: `My Contracts (${w.contracts})`,
-    summary: `Your ${w.contracts} with SJVN. Each contract opens a "working file" — its documents, milestones, ${w.seller ? 'the performance guarantee, ' : ''}your requests to SJVN and the formal notices between you.`,
+    // A PSA has no plant behind it: no milestones and no performance guarantee.
+    summary: `Your ${w.contracts} with SJVN. Each contract opens a "working file" — its documents, ${w.seller ? 'milestones, the performance guarantee, ' : ''}your requests to SJVN and the formal notices between you.${w.seller ? '' : ` The ${w.security} securing your payments is under Payment Security.`}`,
     facts: [
       { label: 'Terms', value: 'Read-only', hint: 'Changed only by an amendment' },
-      { label: 'Milestones', value: 'You report, SJVN confirms', hint: 'With proof' },
+      ...(w.seller ? [{ label: 'Milestones', value: 'You report, SJVN confirms', hint: 'With proof' }] : []),
       { label: 'Requests', value: 'SJVN approves or refuses', hint: 'With its reason' },
       { label: 'Notices', value: 'Cannot be edited once sent', hint: 'The other side acknowledges' },
     ],
     sections: [
       { id: 'c-list', heading: 'The list', blocks: [
-        { type: 'p', text: 'Each row is one contract. The "Next milestone" column shows what is due next. The "Needs attention" column shows small red or amber tags when something on that contract is waiting on you. Click a row to open its working file.' },
+        { type: 'p', text: `Each row is one contract; an amendment awaiting approval is listed as its next version (v2, v3…) beside the one in force. ${w.seller ? 'The "Next milestone" column shows what is due next. ' : ''}The "Needs attention" column shows small red or amber tags when something on that contract is waiting on you. Click a row to open its working file.` },
       ] },
       { id: 'c-tabs', heading: 'Inside the working file', blocks: [
         { type: 'table', columns: ['Tab', 'What is in it'], rows: [
           ['Overview', 'The main terms — capacity, tariff, tenure, payment terms — and the billing position on this contract.'],
           ['Documents', 'The signed contract, amendments and other papers. Upload yours here.'],
-          ['Milestones', 'Financial closure, SCOD, COD and so on, with due dates.'],
-          ...(w.seller ? [['Guarantee (PBG)', 'Your performance guarantee: amount, expiry, and how to submit a renewal.']] : []),
+          ...(w.seller ? [
+            ['Milestones', 'Financial closure, SCOD, COD and so on, with due dates.'],
+            ['Guarantee (PBG)', 'Your performance guarantee: amount, expiry, and how to submit a renewal.'],
+          ] : []),
           ['Requests', 'What you have asked SJVN for, and its decision.'],
           ['Notices', 'Formal notices sent by you or by SJVN.'],
           ['History', 'Everything that has happened on the contract, in order.'],
         ] },
       ] },
-      { id: 'c-ms', heading: 'Reporting a milestone', blocks: [
+      ...(w.seller ? [{ id: 'c-ms', heading: 'Reporting a milestone', blocks: [
         { type: 'steps', items: [
           { title: 'Open the Milestones tab', detail: 'A milestone close to its due date is amber; one past its due date is red.' },
           { title: 'Report it achieved', detail: 'Give the date and a short note, and attach the proof.' },
           { title: 'SJVN confirms', detail: 'Until SJVN confirms, the milestone shows as "reported". After confirmation it is closed.' },
         ] },
         { type: 'note', tone: 'warn', title: 'Need more time?', text: 'Do not wait for the date to pass. Raise a request for an extension from the Requests tab, with the reason and supporting papers.' },
-      ] },
+      ] }] : []),
       { id: 'c-req', heading: 'Requests and notices', blocks: [
         { type: 'table', columns: ['Use', 'When'], rows: [
-          ['Request — milestone extension', 'You need a later date for a milestone. SJVN may approve a different date from the one you asked for.'],
+          ...(w.seller ? [['Request — milestone extension', 'You need a later date for a milestone. SJVN may approve a different date from the one you asked for.']] : []),
           ['Request — amendment', 'You want a term of the contract changed.'],
           ...(w.seller ? [['Request — renewed guarantee', 'Your bank has renewed the PBG and you want SJVN to take it on record.']] : []),
           ['Notice', 'A formal communication under the contract: force majeure, default, cure, termination.'],

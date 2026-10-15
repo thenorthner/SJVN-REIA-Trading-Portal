@@ -3,12 +3,14 @@ import api from '../api/client.js';
 import { Badge, Field, fmtCurrency, fmtNumber } from './ui.jsx';
 import { DocumentManager, PreviewModal } from './DocumentManager.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
-import { paymentTermsText, rebateText, lpsText } from '../lib/contractRules.js';
+import { paymentTermsText, rebateText, lpsText, paymentSecurityText } from '../lib/contractRules.js';
 
 // The working file of one contract, shared by the seller, the buyer and the
 // REIA desk: its documents, project milestones, performance guarantee, the
 // requests the counterparty raises, and the notices that pass either way.
 // What each side may do is decided by the server; this shows what it allows.
+// A PSA has no plant behind it, so it has no milestones or performance
+// guarantee here — its LC or corpus is in the Payment Security module.
 
 const TABS = [
   ['OVERVIEW', 'Overview'], ['DOCUMENTS', 'Documents'], ['MILESTONES', 'Milestones'], ['GUARANTEE', 'Guarantee (PBG)'],
@@ -97,9 +99,9 @@ function Overview({ contract, ws, go }) {
         {item('Payment Terms', paymentTermsText(contract))}
         {item('Rebate Rule', rebateText(contract))}
         {item('LPS Rule', lpsText(contract))}
-        {item('Payment Security', (contract.payment_security_type || '-').replaceAll('_', ' '))}
-        {item('COD', contract.cod_date ? fmtDate(contract.cod_date) : 'Not commissioned')}
-        {item('Next milestone', a.next_milestone ? <>{a.next_milestone.label}{a.next_milestone.due_date ? <> · {fmtDate(a.next_milestone.due_date)}<Countdown days={a.next_milestone.days_to_due} /></> : ' · no date set'}</> : '—')}
+        {item('Payment Security', paymentSecurityText(contract))}
+        {ws.has_project && item('COD', contract.cod_date ? fmtDate(contract.cod_date) : 'Not commissioned')}
+        {ws.has_project && item('Next milestone', a.next_milestone ? <>{a.next_milestone.label}{a.next_milestone.due_date ? <> · {fmtDate(a.next_milestone.due_date)}<Countdown days={a.next_milestone.days_to_due} /></> : ' · no date set'}</> : '—')}
         {ws.guarantee && item('EMD', fmtCurrency(contract.emd_amount))}
         {item('Version', `v${contract.version}`)}
       </div>
@@ -121,7 +123,10 @@ function Overview({ contract, ws, go }) {
 }
 
 function Milestones({ ws, meta, run, raiseExtension }) {
+  // Only a contract with a project behind it takes new milestones.
   const manage = ws.can_manage;
+  const canAdd = manage && ws.has_project;
+  const canExtend = ws.request_types.includes('MILESTONE_EXTENSION');
   const outside = ws.side !== 'SJVN';
   const [edit, setEdit] = useState(null);     // { id, due_date, achieved_date, remarks }
   const [report, setReport] = useState(null); // { id, achieved_date, note }
@@ -139,7 +144,7 @@ function Milestones({ ws, meta, run, raiseExtension }) {
       {ws.milestones.length === 0 && (
         <div className="empty-cell" style={{ padding: 24 }}>
           No milestones have been set on this contract yet.
-          {manage && <div style={{ marginTop: 10 }}><button className="btn btn-primary btn-sm" onClick={() => run(() => api.contractWorkspace.addStandardMilestones(ws.contract.id))}>Add Financial Closure, SCOD and COD</button></div>}
+          {canAdd && <div style={{ marginTop: 10 }}><button className="btn btn-primary btn-sm" onClick={() => run(() => api.contractWorkspace.addStandardMilestones(ws.contract.id))}>Add Financial Closure, SCOD and COD</button></div>}
         </div>
       )}
 
@@ -192,7 +197,7 @@ function Milestones({ ws, meta, run, raiseExtension }) {
                         {outside && !m.achieved_date && m.status !== 'REPORTED' && (
                           <button className="btn btn-primary btn-sm" onClick={() => setReport({ id: m.id, achieved_date: '', note: '' })}>Report achieved</button>
                         )}
-                        {outside && !m.achieved_date && m.due_date && (
+                        {canExtend && !m.achieved_date && m.due_date && (
                           <button className="btn btn-secondary btn-sm" onClick={() => raiseExtension(m)}>Ask for extension</button>
                         )}
                       </div>
@@ -205,7 +210,7 @@ function Milestones({ ws, meta, run, raiseExtension }) {
         </div>
       )}
 
-      {manage && ws.milestones.length > 0 && !add && (
+      {canAdd && ws.milestones.length > 0 && !add && (
         <div style={{ marginTop: 12 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => setAdd({ milestone_type: 'OTHER', label: '', due_date: '' })}>+ Add a milestone</button>
         </div>
@@ -263,7 +268,7 @@ function Guarantee({ ws, run, setError }) {
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
   const pending = ws.requests.filter((r) => r.request_type === 'PBG_RENEWAL' && r.status === 'PENDING');
-  const canRenew = ws.side === 'SELLER';
+  const canRenew = ws.request_types.includes('PBG_RENEWAL');
 
   async function submit(e) {
     e.preventDefault();
@@ -356,7 +361,11 @@ function Requests({ ws, meta, run, setError, draft, clearDraft, onPreview }) {
     if (draft) { setForm(draft); clearDraft(); }
   }, [draft, clearDraft]);
 
-  const blank = { request_type: 'MILESTONE_EXTENSION', milestone_id: open[0]?.id || '', requested_date: '', ground: 'FORCE_MAJEURE', subject: '', description: '', file: null };
+  // The renewed guarantee has its own form under Guarantee.
+  const types = Object.entries(meta.request_types || {}).filter(([k]) => k !== 'PBG_RENEWAL' && ws.request_types.includes(k));
+  const grounds = Object.entries(meta.request_grounds || {}).filter(([k]) => ws.request_grounds.includes(k));
+  const canExtend = ws.request_types.includes('MILESTONE_EXTENSION');
+  const blank = { request_type: canExtend ? 'MILESTONE_EXTENSION' : 'AMENDMENT', milestone_id: open[0]?.id || '', requested_date: '', ground: 'FORCE_MAJEURE', subject: '', description: '', file: null };
 
   async function submit(e) {
     e.preventDefault();
@@ -372,14 +381,12 @@ function Requests({ ws, meta, run, setError, draft, clearDraft, onPreview }) {
     }
   }
 
-  const types = Object.entries(meta.request_types || {}).filter(([k]) => k !== 'PBG_RENEWAL');
-
   return (
     <div>
       <Note>
         {outside
-          ? 'Ask SJVN for more time on a milestone, an amendment, or anything else under this contract. Nothing changes until SJVN approves.'
-          : 'What the counterparty has asked for. Approving an extension moves the milestone date; approving a renewed guarantee updates the expiry on record. An approved amendment is then made through Amend on the contract.'}
+          ? `Ask SJVN for ${canExtend ? 'more time on a milestone, ' : ''}an amendment, or anything else under this contract. Nothing changes until SJVN approves.`
+          : `What the counterparty has asked for. ${ws.has_project ? 'Approving an extension moves the milestone date; approving a renewed guarantee updates the expiry on record. ' : ''}An approved amendment is then made through Amend on the contract.`}
       </Note>
 
       {outside && !form && <div style={{ marginBottom: 12 }}><button className="btn btn-primary btn-sm" onClick={() => setForm(blank)}>+ Raise a request</button></div>}
@@ -394,7 +401,7 @@ function Requests({ ws, meta, run, setError, draft, clearDraft, onPreview }) {
             </Field>
             <Field label="Ground">
               <select value={form.ground} onChange={(e) => setForm({ ...form, ground: e.target.value })}>
-                {Object.entries(meta.request_grounds || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                {grounds.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </Field>
           </div>
@@ -665,7 +672,7 @@ export default function ContractWorkspace({ contract, onChanged, startTab = 'OVE
   return (
     <div>
       <div className="nb-tabs" role="tablist" style={{ flexWrap: 'wrap' }}>
-        {TABS.filter(([key]) => key !== 'GUARANTEE' || ws.guarantee).map(([key, label]) => (
+        {TABS.filter(([key]) => (key !== 'GUARANTEE' || ws.guarantee) && (key !== 'MILESTONES' || ws.has_project || ws.milestones.length > 0)).map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key} className={`nb-tab ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>
             {label}{dot[key] > 0 && <span className="cw-dot">{dot[key]}</span>}
           </button>

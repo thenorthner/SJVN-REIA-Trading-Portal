@@ -12,7 +12,7 @@ import { getParamNumber, getParam } from '../mastersService.js';
 import { resolveBetaRow } from '../services/betaFactor.js';
 import { sendSms } from '../services/smsService.js';
 import { channelsFor, dispatch } from '../services/notificationService.js';
-import { allocationsInForce } from '../services/allocations.js';
+import { allocationsInForce, sourcesForPsa } from '../services/allocations.js';
 import { contractVisibleTo, invoicePresentedTo, authoredBy, billPresentedOn, presentedSql, raisedBySellerSql, raisedBySeller } from '../services/counterpartyScope.js';
 import { asOfFrom, isProjection } from '../services/clock.js';
 import { computeCercHydroBill } from '../services/cercHydroBilling.js';
@@ -575,7 +575,7 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     }
   }
 
-  // If PSA, resolve parent PPA via the allocation in force for this period.
+  // If PSA, resolve its source PPAs via the allocations in force for this period.
   //
   // This used to select on psa_id alone and take whichever row came back first,
   // with no date filter and no ordering — so allocations were written with
@@ -586,23 +586,17 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   // period. A change dated mid-month therefore applies from the following
   // month's bill: monthly billing has one allocation per bill, and pro-rating a
   // month across two splits is a pricing decision nobody has made.
-  let ppa_id = contract_id;
-  let alloc_percent = 100;
+  //
+  // A PSA can draw from several PPAs at once — a DISCOM's PSA is often backed by
+  // more than one developer — and it then took only the latest of them, billing
+  // the buyer for part of what it received. Every source in force is billed:
+  // energy = Σ (each PPA's energy for the month × this PSA's share of it).
+  let sources = [{ ppa_id: contract_id, allocation_percent: 100 }];
   let psaUnallocated = false;
   if (contract.contract_type === 'PSA') {
-    const periodStart = `${period_month}-01`;
-    const alloc = db.prepare(`
-      SELECT ppa_id, allocation_percent FROM contract_allocations
-      WHERE psa_id = ?
-        AND COALESCE(effective_from, '0000-01-01') <= ?
-        AND COALESCE(effective_to, '9999-12-31') >= ?
-      ORDER BY COALESCE(effective_from, '0000-01-01') DESC
-      LIMIT 1
-    `).get(contract_id, periodStart, periodStart);
-
-    if (alloc) {
-      ppa_id = alloc.ppa_id;
-      alloc_percent = alloc.allocation_percent;
+    const inForce = sourcesForPsa(contract_id, period_month);
+    if (inForce.length) {
+      sources = inForce;
     } else {
       // Allocated at some point but not for this period: the share has ended or
       // has not started. Refusing beats falling back to the PSA's own contract
@@ -619,8 +613,10 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
       psaUnallocated = true;
     }
   }
+  const multiSource = sources.length > 1;
+  const alloc_percent = sources[0].allocation_percent;
 
-  const energy = db.prepare(`
+  const pickEnergy = db.prepare(`
     SELECT * FROM energy_data WHERE contract_id = ? AND period_month = ?
     ORDER BY
       CASE WHEN ? = 'FINAL' THEN (data_type = 'FINAL') ELSE (data_type = 'PROVISIONAL') END DESC,
@@ -629,8 +625,25 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
       (status = 'LOCKED') DESC,
       created_at DESC
     LIMIT 1
-  `).get(ppa_id, period_month, invoice_type || 'PROVISIONAL');
-  
+  `);
+  const supplies = sources.map((source) => ({
+    source,
+    energy: pickEnergy.get(source.ppa_id, period_month, invoice_type || 'PROVISIONAL'),
+  }));
+
+  if (multiSource) {
+    // Billing the sources that have reported and leaving out the one that has
+    // not would send the buyer a bill for part of the month that reads as whole.
+    const missing = supplies.filter((s) => !s.energy).map((s) => s.source.ppa_contract_no);
+    if (missing.length) {
+      throw refuse(400, {
+        error: `${contract.contract_no} draws from ${sources.length} PPAs, and ${missing.join(', ')} ${missing.length === 1 ? 'has' : 'have'} no energy for ${period_month}. A PSA is billed for its whole supply or not at all — upload that energy, then generate again.`,
+        missing_source_ppas: missing,
+      });
+    }
+  }
+  let energy = supplies[0].energy;
+
   if (!energy && psaUnallocated) {
     // The commonest reason a PSA cannot be billed, and "no energy data" sent
     // people to look for a file that was never missing.
@@ -641,7 +654,7 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   }
   if (!energy) throw refuse(400, { error: 'No energy data found for this contract (or parent PPA)/period. Upload energy data first.' });
 
-  const resolvedType = invoice_type || (energy.data_type === 'FINAL' ? 'FINAL' : 'PROVISIONAL');
+  const resolvedType = invoice_type || (supplies.every((s) => s.energy.data_type === 'FINAL') ? 'FINAL' : 'PROVISIONAL');
 
   // One bill of a kind per contract and month. Nothing checked, so a second
   // click on Generate — or a second person on the same morning — raised the same
@@ -670,25 +683,41 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   // Checked before the not-LOCKED refusal below: both would refuse a flagged
   // FINAL period, but "failed validation, here is what" is the answer worth
   // giving over "not locked", which leaves the reader to go and find out why.
-  if (energy.status === 'DISPUTED') {
-    throw refuse(400, {
-      error: 'This period failed energy validation — correct and re-validate it, or lock it with a recorded reason before billing.',
-      energy_status: energy.status,
-      validation_note: energy.deviation_notes,
-    });
+  // Each source is held to this on its own: one flagged or unlocked PPA is
+  // enough to stop a bill that draws on it, and the message names which.
+  for (const { source, energy: e } of supplies) {
+    const whose = multiSource ? `${source.ppa_contract_no}: ` : '';
+    if (e.status === 'DISPUTED') {
+      throw refuse(400, {
+        error: `${whose}This period failed energy validation — correct and re-validate it, or lock it with a recorded reason before billing.`,
+        energy_status: e.status,
+        validation_note: e.deviation_notes,
+      });
+    }
+    if (resolvedType === 'FINAL' && e.status !== 'LOCKED') {
+      throw refuse(400, { error: `${whose}Cannot generate FINAL invoice because energy data is not LOCKED.` });
+    }
+    if (resolvedType === 'FINAL' && e.data_type !== 'FINAL') {
+      throw refuse(400, { error: `${whose}Cannot generate FINAL invoice: no FINAL energy row for this period (provisional must remain separate).` });
+    }
   }
 
-  if (resolvedType === 'FINAL' && energy.status !== 'LOCKED') {
-    throw refuse(400, { error: 'Cannot generate FINAL invoice because energy data is not LOCKED.' });
-  }
-  if (resolvedType === 'FINAL' && energy.data_type !== 'FINAL') {
-    throw refuse(400, { error: 'Cannot generate FINAL invoice: no FINAL energy row for this period (provisional must remain separate).' });
+  // A hydro bill's capacity charge and Beta incentive rest on one station's
+  // availability and its NRPC certificate; there is no rule here for blending
+  // stations into one bill, so one is not invented.
+  if (multiSource && ['Hydro', 'PSP'].includes(contract.project_type)) {
+    throw refuse(400, {
+      error: `${contract.contract_no} is a hydro PSA drawing from ${sources.length} stations (${sources.map((s) => s.ppa_contract_no).join(', ')}). A hydro bill is worked on one station's availability and Beta — bill it from one source PPA.`,
+    });
   }
 
   // ──── Billing Calculation Engine ────
   // tariff_per_unit is ₹/kWh (per "unit"); energy is in MWh → convert MWh→kWh (×1000).
   const UNITS_PER_MWH = 1000;
-  const allocated_energy_mwh = (energy.energy_mwh * alloc_percent) / 100;
+  const shareOf = (mwh, pct) => ((Number(mwh) || 0) * pct) / 100;
+  const allocated_energy_mwh = multiSource
+    ? Math.round(supplies.reduce((t, s) => t + shareOf(s.energy.energy_mwh, s.source.allocation_percent), 0) * 1e6) / 1e6
+    : (energy.energy_mwh * alloc_percent) / 100;
   const allocated_units_kwh = allocated_energy_mwh * UNITS_PER_MWH;
   const breakdown = [];
   let capacityCharges = 0;
@@ -698,9 +727,47 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   let energyCharges = 0;
 
   // PSA bills draw energy from the parent PPA — surface that linkage explicitly.
-  if (contract.contract_type === 'PSA' && alloc_percent !== 100) {
+  if (contract.contract_type === 'PSA' && !multiSource && alloc_percent !== 100) {
     breakdown.push({ code: 'SRC', label: `Source PPA Energy (${period_month})`, value: energy.energy_mwh });
     breakdown.push({ code: 'ALLOC', label: `Allocation to this PSA (${alloc_percent}%)`, value: allocated_energy_mwh });
+  }
+  // With several sources, each one's energy and this PSA's share of it, so the
+  // bill shows where every MWh of the total came from.
+  if (multiSource) {
+    for (const { source, energy: e } of supplies) {
+      const ref = { ppa_id: source.ppa_id, ppa_contract_no: source.ppa_contract_no, energy_data_id: e.id };
+      breakdown.push({ code: 'SRC', label: `Source ${source.ppa_contract_no} energy (${period_month}, ${e.data_type.toLowerCase()})`, value: e.energy_mwh, format: 'mwh', ...ref });
+      breakdown.push({
+        code: 'ALLOC',
+        label: `${source.ppa_contract_no} share to this PSA (${source.allocation_percent}%)`,
+        value: Math.round(shareOf(e.energy_mwh, source.allocation_percent) * 1e6) / 1e6,
+        format: 'mwh',
+        allocation_percent: source.allocation_percent,
+        ...ref,
+      });
+    }
+    // What the downstream lines read off "the" energy row is, for a combined
+    // supply, each plant's figure weighted by the MW of it this PSA takes —
+    // the availability of the supply as a whole. A figure one plant did not
+    // report leaves the combined one unknown rather than guessed.
+    const weighted = (field) => {
+      let num = 0;
+      let den = 0;
+      for (const { source, energy: e } of supplies) {
+        const w = (source.allocation_percent * (Number(source.ppa_capacity_mw) || 0)) / 100;
+        if (e[field] == null || e[field] === '' || !(w > 0)) return null;
+        num += Number(e[field]) * w;
+        den += w;
+      }
+      return den > 0 ? Math.round((num / den) * 100) / 100 : null;
+    };
+    energy = {
+      id: null,
+      cuf_percent: weighted('cuf_percent'),
+      availability_percent: weighted('availability_percent'),
+      peak_availability_percent: weighted('peak_availability_percent'),
+      lock_override_reason: null,
+    };
   }
 
   const isHydro = ['Hydro', 'PSP'].includes(contract.project_type);
@@ -780,9 +847,9 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     // Deemed generation: energy the seller stood ready to deliver but the buyer
     // or grid could not take. It is paid for at the same rate, on its own line,
     // so it is never mistaken for energy that actually flowed.
-    const deemedMwh = Number(energy.deemed_generation_mwh) || 0;
-    if (deemedMwh > 0) {
-      deemedEnergyMwh = Number(((deemedMwh * alloc_percent) / 100).toFixed(3));
+    const deemedShareMwh = supplies.reduce((t, s) => t + shareOf(s.energy.deemed_generation_mwh, s.source.allocation_percent), 0);
+    if (deemedShareMwh > 0) {
+      deemedEnergyMwh = Number(deemedShareMwh.toFixed(3));
       deemedCharges = Math.round(deemedEnergyMwh * UNITS_PER_MWH * tariff.rate);
       breakdown.push({
         code: 'DG',
@@ -909,10 +976,11 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   // counterparty is being asked to pay against a figure the system itself
   // questioned, and the dispute window is short — they should not have to find
   // that out from the audit log.
-  if (energy.lock_override_reason) {
+  for (const { source, energy: e } of supplies) {
+    if (!e.lock_override_reason) continue;
     breakdown.push({
       code: 'NOTE',
-      label: `Energy for this period was locked over a validation flag — ${energy.lock_override_reason}`,
+      label: `Energy ${multiSource ? `of ${source.ppa_contract_no} ` : ''}for this period was locked over a validation flag — ${e.lock_override_reason}`,
       value: 0,
     });
   }
@@ -1017,6 +1085,7 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
       const familyRef = buildBillingFamilyRef(ppa.contract_no, period_month, 'SJVN_TO_BUYER');
       const raised = [];
       const failed = [];
+      const alreadyBilled = [];
       db.transaction(() => {
         for (const alloc of allocations) {
           try {
@@ -1026,15 +1095,34 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
             raised.push({ ...inv, billing_family_ref: familyRef, allocation_percent: alloc.allocation_percent });
           } catch (err) {
             if (!err.status) throw err;
+            // A PSA fed by several PPAs gets one bill for the month covering all
+            // of them. If another of its PPAs has already billed it, this PPA's
+            // share is on that bill — it is done, not failed.
+            const existing = err.status === 409 && err.payload?.existing_invoice_no
+              && sourcesForPsa(alloc.psa_id, period_month).length > 1
+              && db.prepare('SELECT invoice_breakdown_json FROM invoices WHERE invoice_no = ?').get(err.payload.existing_invoice_no);
+            const covers = existing && (() => {
+              try { return JSON.parse(existing.invoice_breakdown_json).some((l) => l.code === 'ALLOC' && l.ppa_id === ppa.id); } catch { return false; }
+            })();
+            if (covers) {
+              alreadyBilled.push({ psa_id: alloc.psa_id, psa_contract_no: alloc.psa_contract_no, invoice_no: err.payload.existing_invoice_no });
+              continue;
+            }
             failed.push({ psa_id: alloc.psa_id, error: err.payload?.error || err.message });
           }
         }
         // All or nothing: a partial fan-out would bill some buyers for a period
         // and silently leave others unbilled.
         if (failed.length) throw refuse(400, { error: 'Could not bill every PSA for this period', failed });
+        if (!raised.length) {
+          throw refuse(409, {
+            error: `Every PSA ${ppa.contract_no} supplies is already billed for ${period_month} — ${alreadyBilled.map((a) => `${a.psa_contract_no} on ${a.invoice_no}`).join(', ')}.`,
+            already_billed: alreadyBilled,
+          });
+        }
       })();
 
-      return res.status(201).json({ billing_family_ref: familyRef, invoices: raised, count: raised.length });
+      return res.status(201).json({ billing_family_ref: familyRef, invoices: raised, count: raised.length, already_billed: alreadyBilled });
     }
 
     res.status(201).json(generateInvoiceFor(req.body, req));

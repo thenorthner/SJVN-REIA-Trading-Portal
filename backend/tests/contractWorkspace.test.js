@@ -172,3 +172,32 @@ describe('what is waiting', () => {
     expect(keys).toEqual(['contract-notices', 'contract-requests', 'milestones-delayed', 'pbg-expiring']);
   });
 });
+
+describe('on a PSA', () => {
+  // SJVN selling to a buyer: no plant behind it, so nothing of the generator's side.
+  let psa;
+  beforeEach(() => {
+    psa = makeContract({ contract_type: 'PSA', seller_id: alpha.id, buyer_id: discom.id, payment_security_type: 'LETTER_OF_CREDIT' });
+    db.prepare(`UPDATE contracts SET seller_id = NULL, pbg_amount = 5000000, pbg_expiry = ? WHERE id = ?`).run(day(12), psa.id);
+  });
+
+  it('offers no milestones, performance guarantee or generator grounds', async () => {
+    const file = (await ws(reia, psa.id)).body;
+    expect(file).toMatchObject({ has_project: false, guarantee: null, milestones: [] });
+    expect(file.attention.pbg_state).toBeNull();
+    expect((await ws(buyer, psa.id)).body).toMatchObject({ request_types: ['AMENDMENT', 'OTHER'], request_grounds: ['FORCE_MAJEURE', 'CHANGE_IN_LAW', 'COMMERCIAL', 'OTHER'] });
+    expect((await ws(seller)).body).toMatchObject({ has_project: true, request_types: ['MILESTONE_EXTENSION', 'AMENDMENT', 'PBG_RENEWAL', 'OTHER'] });
+  });
+
+  it('refuses project milestones and the requests that hang off them', async () => {
+    expect((await post(reia, `/${psa.id}/milestones/standard`)).status).toBe(400);
+    expect((await post(reia, `/${psa.id}/milestones`, { milestone_type: 'OTHER', label: 'LC opened' })).status).toBe(400);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM contract_milestones WHERE contract_id = ?').get(psa.id).n).toBe(0);
+
+    const ext = await post(buyer, `/${psa.id}/requests`, { request_type: 'MILESTONE_EXTENSION', requested_date: day(40), description: 'More time' });
+    expect(ext.status).toBe(400);
+    expect(ext.body.error).toMatch(/PSA/);
+    expect((await post(buyer, `/${psa.id}/requests`, { request_type: 'OTHER', ground: 'LAND_DELAY', subject: 's', description: 'd' })).status).toBe(400);
+    expect((await post(buyer, `/${psa.id}/requests`, { request_type: 'AMENDMENT', ground: 'CHANGE_IN_LAW', subject: 'Revised duty', description: 'New levy' })).status).toBe(200);
+  });
+});

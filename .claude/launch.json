@@ -28,7 +28,7 @@
       "runtimeExecutable": "sh",
       "runtimeArgs": [
         "-c",
-        "cd backend && PORT=4001 SJVN_DB_PATH=/private/tmp/claude-501/-Users-kshitijsharma-Downloads-sjvn-energy-platform/fcb9b081-b79b-44b7-b262-802dbb6a460c/scratchpad/qadb/platform-qa.db SJVN_BACKUP_DIR=/private/tmp/claude-501/-Users-kshitijsharma-Downloads-sjvn-energy-platform/fcb9b081-b79b-44b7-b262-802dbb6a460c/scratchpad/qadb/backups node src/server.js"
+        "cd backend && mkdir -p qa/backups && { [ -f qa/platform-qa.db ] || { command -v sqlite3 >/dev/null && sqlite3 src/db/platform.db \".backup 'qa/platform-qa.db'\" || cp src/db/platform.db qa/platform-qa.db; }; } && PORT=4001 SJVN_DB_PATH=qa/platform-qa.db SJVN_BACKUP_DIR=qa/backups node src/server.js"
       ],
       "port": 4001
     },
@@ -40,6 +40,24 @@
         "cd frontend && VITE_API_TARGET=http://localhost:4001 npx vite --port 5174 --strictPort"
       ],
       "port": 5174
+    },
+    {
+      "name": "backend-multisrc",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && mkdir -p qa/backups-multisrc && PORT=4002 SJVN_DB_PATH=qa/platform-qa-multisrc.db SJVN_BACKUP_DIR=qa/backups-multisrc node src/server.js"
+      ],
+      "port": 4002
+    },
+    {
+      "name": "frontend-multisrc",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend && VITE_API_TARGET=http://localhost:4002 npx vite --port 5175 --strictPort"
+      ],
+      "port": 5175
     }
   ]
 }

@@ -19,15 +19,49 @@ export function isCounterparty(user) {
   return counterpartySide(user) !== null;
 }
 
-/** Whether a counterparty may see this contract, and so anything hanging off it. */
+/**
+ * Whether a counterparty may see this contract, and so anything hanging off it.
+ *
+ * Not a DRAFT: that is SJVN's working copy, still being keyed in, and its
+ * tariff is not one anybody has agreed to. The counterparty home already left
+ * drafts out; the contract list and detail showed a buyer a draft PSA at a
+ * tariff nobody had offered it.
+ */
 export function contractVisibleTo(user, contract) {
   if (!user || !contract) return false;
   const side = counterpartySide(user);
   if (side === null) return true;              // internal role, scoped by requireRole instead
   if (!user.linked_entity_id) return false;    // a counterparty with no entity is party to nothing
+  if (contract.status === 'DRAFT') return false;
   if (side === 'SELLER') return contract.seller_id === user.linked_entity_id;
   if (side === 'BUYER') return contract.buyer_id === user.linked_entity_id;
   return false;
+}
+
+// What SJVN keeps to itself on a contract it shows a counterparty: its own
+// margin on the trade, and the desk's remarks (which say things like "carved
+// out from the 250 MW Solar PPA"). Each side contracts with SJVN, not with the
+// other, so a seller is not told who buys its power and a buyer is not told
+// whose plant it comes from — the PPA→PSA routing is SJVN's own business.
+const SJVN_ONLY_TERMS = ['trading_margin_per_mwh', 'remarks'];
+const OTHER_SIDE = {
+  SELLER: ['buyer_id', 'buyer_name'],
+  BUYER: ['seller_id', 'seller_name', 'projects'],
+};
+
+/** A contract as a counterparty may read it. SJVN gets it whole. */
+export function contractForCounterparty(user, contract) {
+  const side = counterpartySide(user);
+  if (side === null || !contract) return contract;
+  const out = { ...contract };
+  for (const k of [...SJVN_ONLY_TERMS, ...OTHER_SIDE[side]]) delete out[k];
+  return out;
+}
+
+/** An amendment's changed terms, without the ones SJVN keeps to itself. */
+export function changedTermsForCounterparty(user, changed) {
+  if (counterpartySide(user) === null || !changed || typeof changed !== 'object') return changed;
+  return Object.fromEntries(Object.entries(changed).filter(([k]) => !SJVN_ONLY_TERMS.includes(k)));
 }
 
 // Statuses at which a bill has actually been put in front of its counterparty.

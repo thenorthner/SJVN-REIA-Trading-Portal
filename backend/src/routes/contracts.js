@@ -4,7 +4,7 @@ import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../midd
 import { newId, logAudit, pushNotification, humanizePaymentTerms, humanizeRebateRule, humanizeLpsRule } from '../util.js';
 import { syncRequirementsFromContract, createInstrumentsFromRequirements } from '../paymentSecurityEngine.js';
 import { allocationsInForce } from '../services/allocations.js';
-import { contractVisibleTo } from '../services/counterpartyScope.js';
+import { contractVisibleTo, contractForCounterparty, changedTermsForCounterparty } from '../services/counterpartyScope.js';
 import { settlementPosition, settlementActions } from '../services/contractSettlement.js';
 import {
   contractFieldErrors, normalizeProjectType, normalizeContractNo, changedTerms, cleanTerms, AMENDABLE_FIELDS, TERMINATION_GROUNDS,
@@ -129,10 +129,10 @@ router.get('/', (req, res) => {
 
   const side = counterpartySide(req.user);
   if (side === 'SELLER') {
-    sql += ' AND c.seller_id = ?';
+    sql += " AND c.seller_id = ? AND c.status <> 'DRAFT'";
     params.push(req.user.linked_entity_id);
   } else if (side === 'BUYER') {
-    sql += ' AND c.buyer_id = ?';
+    sql += " AND c.buyer_id = ? AND c.status <> 'DRAFT'";
     params.push(req.user.linked_entity_id);
   }
 
@@ -145,8 +145,15 @@ router.get('/', (req, res) => {
   const term = typeof q === 'string' ? q.trim() : '';
   if (term) {
     const like = `%${likeEscape(term)}%`;
-    sql += " AND (c.contract_no LIKE ? ESCAPE '\\' OR es.name LIKE ? ESCAPE '\\' OR eb.name LIKE ? ESCAPE '\\')";
-    params.push(like, like, like);
+    // A counterparty searches its own contracts by number. Matching the other
+    // side's name would let it test which buyers or generators it is paired with.
+    if (side) {
+      sql += " AND c.contract_no LIKE ? ESCAPE '\\'";
+      params.push(like);
+    } else {
+      sql += " AND (c.contract_no LIKE ? ESCAPE '\\' OR es.name LIKE ? ESCAPE '\\' OR eb.name LIKE ? ESCAPE '\\')";
+      params.push(like, like, like);
+    }
   }
 
   for (const [value, clause, label] of [
@@ -173,7 +180,7 @@ router.get('/', (req, res) => {
   }
 
   sql += ' ORDER BY c.created_at DESC';
-  const rows = db.prepare(sql).all(...params).map(fetchContractRelations);
+  const rows = db.prepare(sql).all(...params).map((c) => contractForCounterparty(req.user, fetchContractRelations(c)));
   res.json(rows);
 });
 
@@ -200,9 +207,16 @@ router.get('/:id', (req, res) => {
   if (!contractVisibleTo(req.user, contract)) return res.status(404).json({ error: 'Contract not found' });
   // Every version of the contract, from whichever version is opened.
   const family = contract.parent_contract_id || contract.id;
-  const versions = db.prepare('SELECT id, contract_no, version, status, amendment_effective_from, created_at FROM contracts WHERE id = ? OR parent_contract_id = ? ORDER BY version').all(family, family);
-  const amendments = db.prepare('SELECT * FROM contract_amendments WHERE contract_id = ? OR new_contract_id = ? ORDER BY version DESC').all(req.params.id, req.params.id);
-  res.json({ ...fetchContractRelations(contract), versions, amendments });
+  const versions = db.prepare('SELECT id, contract_no, version, status, amendment_effective_from, created_at FROM contracts WHERE id = ? OR parent_contract_id = ? ORDER BY version').all(family, family)
+    .filter((v) => !counterpartySide(req.user) || v.status !== 'DRAFT');
+  const amendments = db.prepare('SELECT * FROM contract_amendments WHERE contract_id = ? OR new_contract_id = ? ORDER BY version DESC').all(req.params.id, req.params.id)
+    .map((a) => {
+      if (!counterpartySide(req.user)) return a;
+      let changed = {};
+      try { changed = JSON.parse(a.changed_fields_json); } catch { /* shown as empty */ }
+      return { ...a, changed_fields_json: JSON.stringify(changedTermsForCounterparty(req.user, changed)) };
+    });
+  res.json({ ...contractForCounterparty(req.user, fetchContractRelations(contract)), versions, amendments });
 });
 
 router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
@@ -653,8 +667,11 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
 // and made — from the PPA, so opening a PSA said nothing about where its energy
 // came from.
 router.get('/:id/allocations', (req, res) => {
-  const contract = db.prepare('SELECT id, contract_type, seller_id, buyer_id FROM contracts WHERE id = ?').get(req.params.id);
+  const contract = db.prepare('SELECT id, contract_type, seller_id, buyer_id, status FROM contracts WHERE id = ?').get(req.params.id);
   if (!contract || !contractVisibleTo(req.user, contract)) return res.status(404).json({ error: 'Contract not found' });
+  // Which PSAs a PPA supplies is SJVN's own book: it names the other side and
+  // puts both tariffs, and so SJVN's margin, side by side.
+  if (counterpartySide(req.user)) return res.status(403).json({ error: 'The PPA–PSA allocation is kept by SJVN' });
   const side = contract.contract_type === 'PSA' ? 'a.psa_id' : 'a.ppa_id';
   const allocations = db.prepare(`
     SELECT a.*, psa.contract_no AS psa_no, eb.name AS buyer_name,
@@ -762,28 +779,41 @@ function shareWindowProblem(ppa, psa, from) {
 }
 
 /**
- * Does a share of `percent` fit the PSA it goes to? One source PPA at a time,
- * no more MW than the PSA buys, and no selling below cost without a reason.
+ * Does a share of `percent` fit the PSA it goes to? No more MW than the PSA
+ * buys, counting what its other source PPAs already give it, and no selling
+ * below cost without a reason.
  */
 function shareFitProblem(ppa, psa, percent, from, to, reason) {
-  // A PSA bill takes its energy from one source PPA for a month, so a second
-  // concurrent source would be shown as supplying the buyer and never billed.
-  const otherSource = db.prepare(`
-    SELECT c.contract_no FROM contract_allocations a JOIN contracts c ON c.id = a.ppa_id
-    WHERE a.psa_id = ? AND a.ppa_id != ? AND c.status NOT IN ('TERMINATED','CLOSED','AMENDED') AND ${OVERLAPS.replace(/effective_/g, 'a.effective_')}
-  `).get(psa.id, ppa.id, to, from);
-  if (otherSource) {
-    return {
-      status: 409,
-      error: `${psa.contract_no} already draws from ${otherSource.contract_no} over these dates. A PSA is billed from one source PPA at a time — end that share first, or map from a date after it ends.`,
-    };
-  }
-  // The buyer cannot be promised more than its PSA contracts for.
+  // The buyer cannot be promised more than its PSA contracts for. A PSA may
+  // draw from several PPAs at once — billing sums them — so the test is the
+  // MW it receives from all of them together, at the busiest point of the
+  // new share's dates. This PPA's own rows are left out: a duplicate share is
+  // refused before this, and a re-split closes them from the same date.
   const shareMw = round2(percent * ppa.capacity_mw / 100);
-  if (psa.capacity_mw && shareMw > psa.capacity_mw + 1e-6) {
+  const others = db.prepare(`
+    SELECT a.allocation_percent, a.effective_from, a.effective_to, c.contract_no, c.capacity_mw
+    FROM contract_allocations a JOIN contracts c ON c.id = a.ppa_id
+    WHERE a.psa_id = ? AND a.ppa_id != ? AND c.status NOT IN ('TERMINATED','CLOSED','AMENDED') AND ${OVERLAPS.replace(/effective_/g, 'a.effective_')}
+  `).all(psa.id, ppa.id, to, from);
+  // The total only changes where a share starts, so those days are the ones to check.
+  const days = [from, ...others.map((o) => o.effective_from).filter((d) => d && d > from && d <= to)];
+  let peak = { mw: 0, sources: [] };
+  for (const day of days) {
+    const live = others.filter((o) => (o.effective_from || '0000-01-01') <= day && (o.effective_to || '9999-12-31') >= day);
+    const mw = round2(live.reduce((t, o) => t + o.allocation_percent * (Number(o.capacity_mw) || 0) / 100, 0));
+    if (mw > peak.mw) peak = { mw, sources: live };
+  }
+  if (psa.capacity_mw && round2(peak.mw + shareMw) > psa.capacity_mw + 1e-6) {
+    const room = round2(Math.max(0, psa.capacity_mw - peak.mw));
+    const fromOthers = peak.mw > 0
+      ? ` It already receives ${peak.mw} MW from ${[...new Set(peak.sources.map((o) => o.contract_no))].join(', ')} over these dates, so ${room} MW is left — at most ${round2(room / ppa.capacity_mw * 100)}% of ${ppa.contract_no}.`
+      : ` The most it can take is ${round2(psa.capacity_mw / ppa.capacity_mw * 100)}%.`;
     return {
       status: 400,
-      error: `${percent}% of ${ppa.contract_no} is ${shareMw} MW, but ${psa.contract_no} contracts for only ${psa.capacity_mw} MW. The most it can take is ${round2(psa.capacity_mw / ppa.capacity_mw * 100)}%.`,
+      error: `${percent}% of ${ppa.contract_no} is ${shareMw} MW, but ${psa.contract_no} contracts for only ${psa.capacity_mw} MW.${fromOthers}`,
+      psa_capacity_mw: psa.capacity_mw,
+      received_from_other_sources_mw: peak.mw,
+      headroom_mw: room,
     };
   }
   // Selling below the purchase price is a loss on every unit. Allowed only on

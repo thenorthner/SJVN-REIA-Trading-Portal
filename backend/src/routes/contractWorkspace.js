@@ -14,6 +14,11 @@
  *               default, cure, termination. A notice cannot be edited once
  *               sent; the other side acknowledges it and may reply.
  *
+ * A PSA is SJVN selling on to a buyer: there is no plant behind it, so none of
+ * the generator's side applies — no project milestones, no performance
+ * guarantee, no extension of either. Its payment security (the buyer's LC or
+ * corpus) is kept in the Payment Security module.
+ *
  * A counterparty sees and acts on its own contracts only. Each request and
  * notice belongs to one side of the contract, so where a contract has both a
  * seller and a buyer, neither reads the other's correspondence with SJVN.
@@ -23,7 +28,7 @@ import db from '../db/index.js';
 import { requireAuth, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
 import { newId, pushNotification } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
-import { contractVisibleTo } from '../services/counterpartyScope.js';
+import { contractVisibleTo, changedTermsForCounterparty } from '../services/counterpartyScope.js';
 import { takeAmendmentOnRecord } from './securityDesk.js';
 
 const router = Router();
@@ -80,6 +85,18 @@ export const NOTICE_TYPES = {
   TERMINATION: 'Termination',
   GENERAL: 'General',
 };
+
+// The parts of a contract that only exist where there is a generating project behind it.
+const GENERATOR_REQUESTS = ['MILESTONE_EXTENSION', 'PBG_RENEWAL'];
+const GENERATOR_GROUNDS = ['GRID_DELAY', 'LAND_DELAY'];
+const hasProject = (contract) => contract.contract_type !== 'PSA';
+
+/** The requests this side may raise on this contract. */
+function requestTypesFor(contract, side) {
+  return Object.keys(REQUEST_TYPES).filter((k) => (hasProject(contract) || !GENERATOR_REQUESTS.includes(k))
+    && (k !== 'PBG_RENEWAL' || side === 'SELLER'));
+}
+const requestGroundsFor = (contract) => Object.keys(REQUEST_GROUNDS).filter((k) => hasProject(contract) || !GENERATOR_GROUNDS.includes(k));
 
 // ── Access ──────────────────────────────────────────────────────────────────
 
@@ -168,6 +185,7 @@ function milestoneFor(user, id) {
 }
 
 function addMilestone(contract, { milestone_type, label, due_date, achieved_date = null, sort_order = 50 }, user) {
+  if (!hasProject(contract)) throw fail(400, 'A PSA has no generating project behind it, so it has no project milestones');
   if (!MILESTONE_TYPES[milestone_type]) throw fail(400, `milestone_type must be one of ${Object.keys(MILESTONE_TYPES).join(', ')}`);
   if (due_date && !DAY.test(due_date)) throw fail(400, 'due_date must be YYYY-MM-DD');
   const name = text(label, 120) || MILESTONE_TYPES[milestone_type];
@@ -224,6 +242,8 @@ const noticesOf = (contractId, side) => db.prepare(`
 // ── The performance guarantee ───────────────────────────────────────────────
 
 function guaranteeOf(contract) {
+  // A PSA's payment security is the buyer's LC or corpus, kept in the Payment Security module.
+  if (!hasProject(contract)) return null;
   let instruments = [];
   try {
     instruments = db.prepare(`
@@ -272,7 +292,7 @@ function attentionOf(contract, side) {
   const requests = requestsOf(contract.id, side);
   const notices = noticesOf(contract.id, side);
   // The performance guarantee is between the seller and SJVN; the buyer is not shown it.
-  const pbg = side === 'BUYER' ? { state: null, days_to_expiry: null, expiry: null } : guaranteeOf(contract);
+  const pbg = (side !== 'BUYER' && guaranteeOf(contract)) || { state: null, days_to_expiry: null, expiry: null };
   const next = milestones.find((m) => m.status === 'PENDING' || m.status === 'DELAYED');
   return {
     contract_id: contract.id,
@@ -306,7 +326,8 @@ router.get('/summary', (req, res) => send(res, () => {
     sql += ` WHERE ${side === 'SELLER' ? 'seller_id' : 'buyer_id'} = ?`;
     params.push(req.user.linked_entity_id);
   }
-  return db.prepare(sql).all(...params).map((c) => ({ contract_no: c.contract_no, ...attentionOf(c, side) }));
+  return db.prepare(sql).all(...params).filter((c) => contractVisibleTo(req.user, c))
+    .map((c) => ({ contract_no: c.contract_no, ...attentionOf(c, side) }));
 }));
 
 // GET /pending — SJVN's desk: everything across contracts that is waiting on SJVN.
@@ -327,11 +348,15 @@ router.get('/pending', (req, res) => send(res, () => {
 router.get('/:contractId', (req, res) => send(res, () => {
   const { contract, side } = contractFor(req.user, req.params.contractId);
   const amendments = db.prepare('SELECT id, version, changed_fields_json, approved_by, created_at FROM contract_amendments WHERE contract_id = ? OR new_contract_id = ? ORDER BY version DESC').all(contract.id, contract.id)
-    .map((a) => { let changed = {}; try { changed = JSON.parse(a.changed_fields_json); } catch { /* shown as empty */ } return { ...a, changed, changed_fields_json: undefined }; });
+    .map((a) => { let changed = {}; try { changed = JSON.parse(a.changed_fields_json); } catch { /* shown as empty */ } return { ...a, changed: changedTermsForCounterparty(req.user, changed), changed_fields_json: undefined }; });
   return {
     contract: { id: contract.id, contract_no: contract.contract_no, contract_type: contract.contract_type, status: contract.status, cod_date: contract.cod_date, tenure_end: contract.tenure_end, has_seller: !!contract.seller_id, has_buyer: !!contract.buyer_id },
     side,
     can_manage: canManage(req.user),
+    // What this contract has room for, so the screen offers only that.
+    has_project: hasProject(contract),
+    request_types: side === 'SJVN' ? [] : requestTypesFor(contract, side),
+    request_grounds: requestGroundsFor(contract),
     milestones: milestonesOf(contract.id),
     guarantee: side === 'BUYER' ? null : guaranteeOf(contract),
     requests: requestsOf(contract.id, side),
@@ -454,9 +479,14 @@ router.post('/:contractId/requests', (req, res) => send(res, () => {
   if (side === 'SJVN') throw fail(400, 'A request is raised by the counterparty. SJVN writes to them with a notice.');
   const b = req.body;
   if (b.request_type === 'PBG_RENEWAL' && side !== 'SELLER') throw fail(400, 'The performance guarantee is the seller\'s to renew');
-  if (!REQUEST_TYPES[b.request_type]) throw fail(400, `request_type must be one of ${Object.keys(REQUEST_TYPES).join(', ')}`);
+  const types = requestTypesFor(contract, side);
+  if (REQUEST_TYPES[b.request_type] && !types.includes(b.request_type)) {
+    throw fail(400, 'A PSA has no project milestones or performance guarantee to ask about — raise an amendment or another request');
+  }
+  if (!REQUEST_TYPES[b.request_type]) throw fail(400, `request_type must be one of ${types.join(', ')}`);
   const ground = b.ground || 'OTHER';
   if (!REQUEST_GROUNDS[ground]) throw fail(400, 'Unknown ground');
+  if (!requestGroundsFor(contract).includes(ground)) throw fail(400, `${REQUEST_GROUNDS[ground]} is a ground for a generating project, which a PSA does not have`);
   const description = text(b.description, 4000);
   if (!description) throw fail(400, 'Explain what is being asked for, and why');
   if (b.requested_date && !DAY.test(b.requested_date)) throw fail(400, 'requested_date must be YYYY-MM-DD');

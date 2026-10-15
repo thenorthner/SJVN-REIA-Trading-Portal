@@ -5,9 +5,9 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import ContractWorkspace from '../../components/ContractWorkspace.jsx';
 import ContractBulkLoad from './ContractBulkLoad.jsx';
-import { PowerRoutingTree3D, routingPosition } from '../../components/PowerRoutingTree3D.jsx';
+import { PowerRoutingTree3D, routingPosition, shareMwOf } from '../../components/PowerRoutingTree3D.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
-import { paymentTermsText, rebateText, lpsText } from '../../lib/contractRules.js';
+import { paymentTermsText, rebateText, lpsText, SECURITY_TYPES, paymentSecurityText } from '../../lib/contractRules.js';
 
 // The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_ADMIN.
 const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
@@ -90,14 +90,6 @@ function renderTariffStructure(selected) {
   );
 }
 
-const SECURITY_TYPES = [
-  { value: 'LETTER_OF_CREDIT', label: 'Letter of Credit (LC)' },
-  { value: 'BANK_GUARANTEE', label: 'Bank Guarantee (BG)' },
-  { value: 'CORPUS_FUND', label: 'Corpus Fund' },
-  { value: 'PAYMENT_SECURITY_FUND', label: 'Payment Security Fund' },
-  { value: 'ESCROW', label: 'Escrow Account' },
-  { value: 'NONE', label: 'None' },
-];
 
 // Live human-readable preview so the user sees exactly what the rule will do.
 function previewRebate(f) {
@@ -507,6 +499,20 @@ export default function Contracts() {
     if (!(pct > 0 && pct <= 100)) problems.push('The share must be more than 0% and at most 100%.');
     if (!allocationForm.effective_from) problems.push('Give the date the share starts from.');
     if (allocationForm.need_reason && !String(allocationForm.negative_spread_reason || '').trim()) problems.push('Record why this PSA may sell below the PPA tariff.');
+    // A PSA may draw from several PPAs, but not more MW in all than it buys.
+    // Checked on the day the share starts; the server also checks later dates.
+    const source = fromPsa && pct > 0 ? (allContracts.length ? allContracts : rows).find((c) => c.id === allocationForm.ppa_id) : null;
+    if (source && Number(selected.capacity_mw) > 0 && allocationForm.effective_from) {
+      const day = allocationForm.effective_from;
+      const supplied = allocations
+        .filter((a) => (!a.effective_from || a.effective_from <= day) && (!a.effective_to || a.effective_to >= day))
+        .reduce((t, a) => t + shareMwOf(a, false, 0), 0);
+      const mw = Math.round(pct * Number(source.capacity_mw)) / 100;
+      const left = Math.max(0, Math.round((Number(selected.capacity_mw) - supplied) * 100) / 100);
+      if (mw > left + 1e-6) {
+        problems.push(`${pct}% of ${source.contract_no} is ${fmtNumber(mw)} MW, but ${selected.contract_no} has only ${fmtNumber(left)} MW of its ${fmtNumber(selected.capacity_mw)} MW left to supply on ${day}${supplied > 0 ? ' — the rest comes from its other source PPAs' : ''}.`);
+      }
+    }
     if (problems.length) { setPopup({ tone: 'error', title: 'The mapping cannot be saved yet', items: problems }); return undefined; }
     return once(async () => {
       setAllocSubmitting(true);
@@ -1059,7 +1065,7 @@ export default function Contracts() {
                   <tr><td>Payment Terms</td><td>{paymentTermsText(selected)}</td></tr>
                   <tr><td>Rebate Rule</td><td>{rebateText(selected)}</td></tr>
                   <tr><td>LPS Rule</td><td>{lpsText(selected)}</td></tr>
-                  <tr><td>Payment Security</td><td>{(SECURITY_TYPES.find((s) => s.value === selected.payment_security_type) || {}).label || selected.payment_security_type || '-'}</td></tr>
+                  <tr><td>Payment Security</td><td>{paymentSecurityText(selected)}</td></tr>
                   <tr><td>Remarks</td><td>{selected.remarks || '-'}</td></tr>
                 </tbody>
               </table>
@@ -1086,11 +1092,19 @@ export default function Contracts() {
             const live = position.live;
             const usedPct = isPpa ? position.coveredPct : Math.round(live.reduce((s2, a) => s2 + Number(a.allocation_percent || 0), 0) * 100) / 100;
             const headroomPct = Math.max(0, Math.round((100 - usedPct) * 100) / 100);
-            // A PSA is billed from one source PPA at a time.
-            const canMapMore = canMap && (isPpa ? headroomPct > 0 : live.length === 0);
+            // A PSA can draw from several PPAs at once — its bill sums them — so
+            // another source can be mapped while the PSA has MW left to fill,
+            // now or from a date a split already scheduled frees some.
+            const scheduled = [...new Set(allocations.map((a) => a.effective_to).filter((d) => d && d >= position.asOf))]
+              .map((d) => { const n = new Date(`${d}T00:00:00Z`); n.setUTCDate(n.getUTCDate() + 1); return n.toISOString().slice(0, 10); });
+            const psaRoomFrom = isPpa ? null
+              : [position.asOf, ...scheduled].sort().find((d) => routingPosition(selected, allocations, d).openMw > 0.005) || null;
+            const canMapMore = canMap && (isPpa ? headroomPct > 0 : psaRoomFrom != null);
             const other = allocationForm ? sourceList.find((c) => c.id === allocationForm[otherKey]) : null;
             const ppaRec = isPpa ? selected : other;
             const psaRec = isPpa ? other : selected;
+            // What the PSA already receives on the day the new share starts.
+            const formPos = !isPpa && /^\d{4}-\d{2}-\d{2}$/.test(allocationForm?.effective_from || '') ? routingPosition(selected, allocations, allocationForm.effective_from) : position;
             const pctNum = Number(allocationForm?.allocation_percent);
             const shareMw = ppaRec && pctNum > 0 ? Math.round(pctNum * Number(ppaRec.capacity_mw) / 100 * 100) / 100 : null;
             const spread = ppaRec && psaRec ? Math.round((Number(psaRec.tariff_per_unit) - Number(ppaRec.tariff_per_unit)) * 100) / 100 : null;
@@ -1144,7 +1158,11 @@ export default function Contracts() {
                     </div>
                     <div style={{ fontSize: 13.5, margin: '8px 0 0', display: 'flex', gap: 18, flexWrap: 'wrap', color: 'var(--slate-600)' }}>
                       {isPpa && <span>Already mapped <strong>{usedPct}%</strong> · left <strong>{headroomPct}%</strong> ({fmtNumber(Math.round(headroomPct * Number(selected.capacity_mw)) / 100)} MW)</span>}
+                      {!isPpa && <span>Supplied on {formPos.asOf} <strong>{fmtNumber(formPos.coveredMw)} MW</strong>{formPos.live.length ? ` from ${formPos.live.map((a) => a.ppa_no).join(', ')}` : ''} · left <strong>{fmtNumber(Math.max(0, formPos.openMw))} MW</strong></span>}
                       {shareMw != null && <span>This share: <strong>{fmtNumber(shareMw)} MW</strong>{psaRec ? ` of ${psaRec.contract_no}'s ${fmtNumber(psaRec.capacity_mw)} MW` : ''}</span>}
+                      {!isPpa && shareMw != null && shareMw > formPos.openMw + 1e-6 && (
+                        <span style={{ color: '#b91c1c', fontWeight: 600 }}>Takes it to {fmtNumber(Math.round((formPos.coveredMw + shareMw) * 100) / 100)} MW — more than the {fmtNumber(selected.capacity_mw)} MW it contracts for</span>
+                      )}
                       {spread != null && (
                         <span style={{ color: spread < 0 ? '#b91c1c' : '#15803d', fontWeight: 600 }}>
                           Spread {spread < 0 ? '−' : '+'}₹{Math.abs(spread).toFixed(2)}/unit {spread < 0 ? '(PSA sells below PPA — a loss on every unit)' : ''}
@@ -1153,7 +1171,7 @@ export default function Contracts() {
                     </div>
                     {!isPpa && (
                       <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '4px 0 0' }}>
-                        The percentage is the share of the chosen PPA’s energy that goes to this PSA. A PPA cannot be allocated beyond 100% across all its PSAs.
+                        The percentage is the share of the chosen PPA’s energy that goes to this PSA. A PSA can draw from several PPAs; its bill adds up the energy from each. A PPA cannot be allocated beyond 100% across all its PSAs.
                       </p>
                     )}
                     {allocationForm.need_reason && (
@@ -1252,7 +1270,7 @@ export default function Contracts() {
                 })() : canMap && (
                   <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     {canMapMore && (
-                      <button className="btn btn-outline btn-sm" onClick={() => setAllocationForm({ psa_id: '', ppa_id: '', allocation_percent: '', effective_from: new Date().toISOString().split('T')[0] })}>
+                      <button className="btn btn-outline btn-sm" onClick={() => { const today = new Date().toISOString().split('T')[0]; setAllocationForm({ psa_id: '', ppa_id: '', allocation_percent: '', effective_from: psaRoomFrom && psaRoomFrom > today ? psaRoomFrom : today }); }}>
                         {isPpa ? '+ Map PSA to this PPA' : '+ Map PPA to this PSA'}
                       </button>
                     )}
@@ -1261,7 +1279,7 @@ export default function Contracts() {
                     )}
                     {!canMapMore && (
                       <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>
-                        {isPpa ? 'This PPA is fully allocated — change the split from a date to give a share to another PSA.' : `This PSA already draws from ${live[0]?.ppa_no || 'a source PPA'}. A PSA is billed from one source at a time — to move it, change that PPA's split from a date.`}
+                        {isPpa ? 'This PPA is fully allocated — change the split from a date to give a share to another PSA.' : (() => { const srcs = [...new Set(live.map((a) => a.ppa_no))]; return `This PSA is fully supplied — ${srcs.join(', ') || 'its source PPAs'} ${srcs.length === 1 ? 'gives' : 'give'} it all ${fmtNumber(selected.capacity_mw)} MW it contracts for. To change a source, change that PPA's split from a date.`; })()}
                       </span>
                     )}
                   </div>

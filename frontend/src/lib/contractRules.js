@@ -20,3 +20,16 @@ export function lpsText(c) {
   }
   return c.lps_rule || 'No late-payment surcharge';
 }
+
+// How the contract's payment security is named, on the form and wherever it is read back.
+export const SECURITY_TYPES = [
+  { value: 'LETTER_OF_CREDIT', label: 'Letter of Credit (LC)' },
+  { value: 'BANK_GUARANTEE', label: 'Bank Guarantee (BG)' },
+  { value: 'CORPUS_FUND', label: 'Corpus Fund' },
+  { value: 'PAYMENT_SECURITY_FUND', label: 'Payment Security Fund' },
+  { value: 'ESCROW', label: 'Escrow Account' },
+  { value: 'NONE', label: 'None' },
+];
+export function paymentSecurityText(c) {
+  return SECURITY_TYPES.find((s) => s.value === c.payment_security_type)?.label || c.payment_security_type || '-';
+}

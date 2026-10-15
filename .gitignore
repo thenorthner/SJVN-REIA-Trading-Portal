@@ -99,3 +99,6 @@ frontend/e2e/.dist/
 frontend/e2e/.results/
 frontend/e2e/.report/
 frontend/e2e/.audit-report/
+
+# QA copy of the database used by the backend-test launch config
+backend/qa/

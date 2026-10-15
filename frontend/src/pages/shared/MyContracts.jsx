@@ -21,8 +21,8 @@ function flagsOf(a) {
 
 /**
  * A counterparty's own contracts — PPAs for a seller, PSAs for a buyer — each
- * opening onto its working file: documents, milestones, guarantee, requests
- * and notices.
+ * opening onto its working file: documents, requests and notices, and on a
+ * PPA its milestones and guarantee.
  */
 export default function MyContracts({ contractType, title, subtitle, sourceLabel, capacityLabel }) {
   const [rows, setRows] = useState([]);
@@ -54,13 +54,22 @@ export default function MyContracts({ contractType, title, subtitle, sourceLabel
     .flatMap((r) => flagsOf(summary[r.id]).map((f) => ({ ...f, row: r })))
     .sort((a, b) => (a.tone === 'red' ? 0 : 1) - (b.tone === 'red' ? 0 : 1)), [rows, summary]);
 
+  // An amendment is a new version under the same number, listed beside the one
+  // it will replace until it is approved — so each row says which it is.
   const columns = [
-    { key: 'contract_no', header: 'Contract No.' },
+    {
+      key: 'contract_no',
+      header: 'Contract No.',
+      render: (r) => (r.version > 1 || rows.some((o) => o.id !== r.id && o.contract_no === r.contract_no)
+        ? <span>{r.contract_no} <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>v{r.version}</span></span>
+        : r.contract_no),
+    },
     { key: 'project_type', header: sourceLabel },
     { key: 'capacity_mw', header: `${capacityLabel} (MW)`, render: (r) => fmtNumber(r.capacity_mw) },
     { key: 'tariff_per_unit', header: 'Tariff (₹/unit)', render: (r) => `₹${r.tariff_per_unit}` },
     { key: 'tenure', header: 'Tenure', render: (r) => `${r.tenure_start} → ${r.tenure_end}` },
-    {
+    // A PSA has no plant behind it, so no milestones.
+    contractType !== 'PSA' && {
       key: 'next',
       header: 'Next milestone',
       render: (r) => {
@@ -80,7 +89,7 @@ export default function MyContracts({ contractType, title, subtitle, sourceLabel
       },
     },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
-  ];
+  ].filter(Boolean);
 
   return (
     <div>
@@ -103,7 +112,7 @@ export default function MyContracts({ contractType, title, subtitle, sourceLabel
       <div className="filters-bar">
         <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })} aria-label="Status">
           <option value="">All statuses</option>
-          {['ACTIVE', 'EXPIRED', 'TERMINATED'].map((s) => <option key={s} value={s}>{s}</option>)}
+          {['ACTIVE', 'PENDING_REGULATORY_APPROVAL', 'AMENDED', 'EXPIRED', 'TERMINATED'].map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
         </select>
         <select value={filters.project_type} onChange={(e) => setFilters({ ...filters, project_type: e.target.value })} aria-label={sourceLabel}>
           <option value="">All {sourceLabel.toLowerCase()}s</option>
