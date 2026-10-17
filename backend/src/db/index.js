@@ -3649,6 +3649,7 @@ function migrateDecisions20261017() {
   addCol('cerc_licence_compliance', 'fee_late_surcharge_paid', 'REAL');
   addCol('power_diversions', 'advance_id', 'TEXT');
   addCol('entities', 'requested_by_user_id', 'TEXT');
+  for (const col of ['finance_signoff_at', 'finance_signoff_by', 'finance_signoff_by_id', 'finance_signoff_note']) addCol('security_releases', col, 'TEXT');
   addCol('power_diversions', 'deficit_note_id', 'TEXT');
   const ownCol = db.pragma('table_info(entities)').map((c) => c.name);
   if (ownCol.length && !ownCol.includes('is_sjvn_own')) {

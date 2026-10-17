@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { paymentMonitoring } from '../services/paymentMonitoring.js';
 import { generationPerformance, rangeProblem } from '../services/generationPerformance.js';
+import { cufTracker } from '../services/cufTracker.js';
 import { contractCompliance, noticeProblem } from '../services/contractCompliance.js';
 import { verificationQueue } from '../services/verificationQueue.js';
 import { cercCompliance, calendarRangeProblem } from '../services/cercCompliance.js';
@@ -267,6 +268,20 @@ router.get('/contract-compliance', requireRole(...REPORT_READ), (req, res) => {
     }));
   } catch (err) {
     console.error('Contract compliance error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/reports/cuf-tracker?contract_id=
+ * G1: each RE PPA's current contract year — CUF so far, what the rest of the
+ * year must average, and the projected year-end shortfall at today's rate.
+ */
+router.get('/cuf-tracker', requireRole(...REPORT_READ), (req, res) => {
+  try {
+    res.json(cufTracker({ contractId: req.query.contract_id || null }));
+  } catch (err) {
+    console.error('CUF tracker error:', err);
     res.status(500).json({ error: err.message });
   }
 });

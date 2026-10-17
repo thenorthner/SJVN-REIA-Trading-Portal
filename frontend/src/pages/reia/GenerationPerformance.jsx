@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/client.js';
+import CufTrackerCard from '../../components/CufTrackerCard.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Badge, StatCard, Field, AlertPopup, fmtNumber, fmtCurrency } from '../../components/ui.jsx';
@@ -92,6 +93,8 @@ export default function GenerationPerformance() {
 
       <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       <AlertPopup open={!!notice} tone="success" title="True-up raised" message={notice} onClose={() => setNotice('')} />
+
+      <CufTrackerCard />
 
       <Card>
         <div className="report-criteria">

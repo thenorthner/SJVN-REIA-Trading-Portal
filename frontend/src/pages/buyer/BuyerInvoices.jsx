@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/client.js';
+import DisputeImpactPanel from '../../components/DisputeImpactPanel.jsx';
 import { PageHeader, Card, StatCard, Badge, Modal, fmtCurrency, fmtNumber, AlertPopup } from '../../components/ui.jsx';
 import { InvoiceBreakdown, InvoiceFinancialStrip, downloadInvoicePdf } from '../../components/invoiceShared.jsx';
 import InvoiceCompliance from '../../components/InvoiceCompliance.jsx';
@@ -347,6 +348,7 @@ export default function BuyerInvoices({ initialTab = 'INVOICES' }) {
               <>
                 <InvoiceBreakdown invoice={{ ...full, direction: 'SJVN_TO_BUYER' }} />
                 <InvoiceFinancialStrip invoice={{ ...full, direction: 'SJVN_TO_BUYER' }} />
+                <DisputeImpactPanel invoice={full} />
               </>
             ) : <p style={{ fontSize: 13, color: 'var(--text-light)' }}>Loading the bill…</p>}
             <p className="inline-note">A bill paid after its due date attracts late payment surcharge on the undisputed amount left unpaid. PSA bills carry no early-payment rebate.</p>

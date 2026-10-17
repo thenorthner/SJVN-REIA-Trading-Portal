@@ -24,6 +24,7 @@ import {
   isLiveToday,
 } from '../paymentSecurityEngine.js';
 import { applyInvoicePayment } from './invoices.js';
+import { securityBoard, requirementVsHeld, reinstatementTracker, releaseChecklist, alertLateReinstatements } from '../services/securityBoard.js';
 import { ACTIVE_STATUSES, WATERFALL_DEFAULTS } from '../paymentSecurityConstants.js';
 import { takeAmendmentOnRecord, remindExpiringSecurity } from './securityDesk.js';
 
@@ -240,7 +241,47 @@ router.get('/releases', requireRole(...REIA_ALL), (_req, res) => {
     JOIN payment_security ps ON ps.id = sr.payment_security_id
     JOIN contracts c ON c.id = sr.contract_id
     ORDER BY sr.created_at DESC
-  `).all().map((r) => (r.status === 'PENDING' ? { ...r, position: releasePosition(r.contract_id) } : r)));
+  `).all().map((r) => (r.status === 'PENDING' ? { ...r, position: releasePosition(r.contract_id), checklist: releaseChecklist(r) } : r)));
+});
+
+// S1: requirement vs held, per live contract.
+router.get('/board', requireRole(...REIA_ALL), (_req, res) => res.json(securityBoard()));
+
+// S1: ask the counterparty to make up the gap.
+router.post('/board/:contractId/request', requireRole(...REIA_WRITE), (req, res) => {
+  const c = db.prepare(`SELECT c.*, s.name AS seller_name, b.name AS buyer_name FROM contracts c
+    LEFT JOIN entities s ON s.id = c.seller_id LEFT JOIN entities b ON b.id = c.buyer_id WHERE c.id = ?`).get(req.params.contractId);
+  if (!c) return res.status(404).json({ error: 'Contract not found' });
+  const row = requirementVsHeld(c);
+  const short = row.heads.filter((h) => h.gap > 0);
+  if (!short.length) return res.status(400).json({ error: `${c.contract_no} holds what it requires — there is nothing to ask for.` });
+  const note = String(req.body?.note || '').trim().slice(0, 500);
+  const lines = short.map((h) => `${h.label}: ${rupees(h.gap)} short (required ${rupees(h.required)}, in force ${rupees(h.held)})`).join('; ');
+  const message = `${c.contract_no}: the payment security in force falls short — ${lines}. Please lodge the shortfall and upload it on the Security Desk.${note ? ` ${note}` : ''}`;
+  notifyCounterparty(c.id, row.paying_side, 'SECURITY_SHORTFALL', message);
+  recordSecurityEvent({ contractId: c.id, user: req.user, eventType: 'SHORTFALL_REQUESTED', details: { heads: short.map((h) => ({ head: h.head, gap: h.gap })), note: note || undefined } });
+  logAudit({ req, user: req.user, action: 'SECURITY_SHORTFALL_REQUESTED', module: 'REIA', entityType: 'contract', entityId: c.id, details: { gap: row.gap_total } });
+  res.json({ ok: true, message, row: requirementVsHeld(c) });
+});
+
+// S4: revolving LCs drawn on and not yet restored.
+router.get('/reinstatements', requireRole(...REIA_ALL), (_req, res) => res.json(reinstatementTracker()));
+
+// S5: Finance signs off a release before the desk releases the instrument.
+router.post('/releases/:id/finance-signoff', requireRole('FINANCE_USER'), (req, res) => {
+  const rel = db.prepare('SELECT * FROM security_releases WHERE id = ?').get(req.params.id);
+  if (!rel) return res.status(404).json({ error: 'Not found' });
+  if (rel.status !== 'PENDING') return res.status(400).json({ error: 'This request has already been decided' });
+  if (rel.finance_signoff_at) return res.status(400).json({ error: `Finance already signed off, ${rel.finance_signoff_by}` });
+  const position = releasePosition(rel.contract_id);
+  if (!position.clear) return res.status(400).json({ error: 'Dues or disputes are still open on the contract; Finance signs off once they are settled.' });
+  const note = String(req.body?.note || '').trim().slice(0, 500);
+  db.prepare(`UPDATE security_releases SET finance_signoff_at = datetime('now'), finance_signoff_by = ?, finance_signoff_by_id = ?, finance_signoff_note = ? WHERE id = ?`)
+    .run(req.user.name, req.user.id || null, note || null, rel.id);
+  recordSecurityEvent({ instrumentId: rel.payment_security_id, contractId: rel.contract_id, user: req.user, eventType: 'RELEASE_FINANCE_SIGNOFF', details: { note: note || undefined } });
+  logAudit({ req, user: req.user, action: 'SECURITY_RELEASE_FINANCE_SIGNOFF', module: 'REIA', entityType: 'payment_security', entityId: rel.payment_security_id, details: { release_id: rel.id } });
+  const fresh = db.prepare('SELECT * FROM security_releases WHERE id = ?').get(rel.id);
+  res.json({ ...fresh, checklist: releaseChecklist(fresh) });
 });
 
 router.get('/overrides', requireRole(...REIA_ALL), (_req, res) => {
@@ -417,7 +458,8 @@ router.post('/alerts/run', requireRole(...REIA_WRITE, 'MANAGEMENT'), (_req, res)
   // has to have it extended — the button ran only the first.
   const cascade = runAlertCascade();
   const holders = remindExpiringSecurity();
-  res.json({ ...cascade, sent: cascade.sent + holders.sent, holders_reminded: holders.sent });
+  const late = alertLateReinstatements();
+  res.json({ ...cascade, sent: cascade.sent + holders.sent + late.sent, holders_reminded: holders.sent, late_reinstatements: late.sent });
 });
 
 // An override is management's call, for a stated time (decided 17-Oct-2026):
@@ -649,6 +691,13 @@ router.post('/releases/:id/act', requireRole(...REIA_WRITE, 'FINANCE_USER'), (re
         cover_needed: live.needed,
       });
     }
+  }
+  // S5: Finance signs off first, and the release itself is someone else's act.
+  if (!rel.finance_signoff_at) {
+    return res.status(400).json({ error: `Finance has not signed off the release of ${ps?.instrument_no || 'this instrument'} yet.`, checklist: releaseChecklist(rel) });
+  }
+  if (rel.finance_signoff_by_id && rel.finance_signoff_by_id === req.user.id) {
+    return res.status(403).json({ error: 'You signed off this release for Finance, so someone else releases it.' });
   }
   db.transaction(() => {
     db.prepare(`UPDATE security_releases SET status = 'RELEASED', decision_note = ?, acted_by = ?, acted_at = datetime('now') WHERE id = ?`)

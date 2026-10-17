@@ -344,6 +344,7 @@ export const api = {
     cancel: (id, reason) => p(`/notes/${id}/cancel`, { reason }),
     downloadPdf: (id) => client.get(`/notes/${id}/pdf`, { responseType: 'blob' }).then((res) => res.data),
     cufTrueUp: (contractId, contractYear) => p('/notes/cuf-true-up', { contract_id: contractId, contract_year: contractYear }),
+    approvalQueue: () => g('/notes/approval-queue'),
   },
   billingTrail: {
     get: (params) => g('/billing-trail', params),
@@ -530,6 +531,7 @@ export const api = {
     paymentMonitoring: (side = 'RECEIVABLE') => g('/reports/payment-monitoring', { side }),
     // Energy against what each contract's capacity could make.
     generationPerformance: (params) => g('/reports/generation-performance', params),
+    cufTracker: (params) => g('/reports/cuf-tracker', params),
     // Tenure, commissioning, security and approvals, per contract.
     contractCompliance: (params) => g('/reports/contract-compliance', params),
     // The technical and commercial checks on developer bills, across the desk.
@@ -757,6 +759,10 @@ export const api = {
     adequacy: (contractId) => g(`/payment-security/adequacy/${contractId}`),
     requirements: (contractId) => g(`/payment-security/requirements/${contractId}`),
     releases: () => g('/payment-security/releases'),
+    board: () => g('/payment-security/board'),
+    requestShortfall: (contractId, note) => p(`/payment-security/board/${contractId}/request`, { note }),
+    reinstatements: () => g('/payment-security/reinstatements'),
+    financeSignoff: (releaseId, note) => p(`/payment-security/releases/${releaseId}/finance-signoff`, { note }),
     overrides: () => g('/payment-security/overrides'),
     invocations: (params) => g('/payment-security/invocations', params),
     create: (body) => p('/payment-security', body),

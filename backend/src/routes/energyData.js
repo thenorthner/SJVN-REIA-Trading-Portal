@@ -10,7 +10,7 @@ import {
 import { announceValidated } from './energyRecords.js';
 import { notifyCounterparty } from '../paymentSecurityEngine.js';
 import { PRESENTED_STATUSES } from '../services/counterpartyScope.js';
-import { energyRowProblems, maxEnergyMwh, hoursInMonth } from '../services/energyRules.js';
+import { energyRowProblems, maxEnergyMwh, hoursInMonth, duplicateOfPreviousMonth } from '../services/energyRules.js';
 import multer from 'multer';
 import { exec } from 'child_process';
 import path from 'path';
@@ -348,6 +348,13 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
     note += ` | Cross-checked against ${compared} other source(s), all within ${crossTolerance}%`;
   }
 
+  // G4: the same reading as last month, to the decimal.
+  const dup = duplicateOfPreviousMonth(row);
+  if (dup) {
+    flagged = true;
+    note += ` | Same as ${dup.period_month} to the decimal (${dup.energy_mwh} MWh, ${dup.source}) — likely a copied reading; check the meter / REA before it is locked`;
+  }
+
   db.prepare(`UPDATE energy_data SET status = ?, deviation_notes = ?, updated_at = datetime('now') WHERE id = ?`)
     .run(flagged ? 'DISPUTED' : 'VALIDATED', note, row.id);
   // A clean period goes to the counterparty to confirm before it is locked for billing.
@@ -414,6 +421,17 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     });
   }
 
+  // G4: a copied reading is caught here too, for a figure validated before the rule.
+  const dupOf = duplicateOfPreviousMonth(row);
+  if (dupOf && !override) {
+    return res.status(400).json({
+      error: `${row.energy_mwh} MWh is exactly ${dupOf.period_month}'s figure — likely a copied reading.`,
+      energy_status: row.status,
+      duplicate_of: dupOf,
+      hint: 'Check the meter / REA and record the right figure, or pass override_reason to lock it as it stands.',
+    });
+  }
+
   if (row.status === 'DISPUTED' && !override) {
     return res.status(400).json({
       error: 'This period failed validation and cannot be locked without a recorded reason.',
@@ -437,7 +455,7 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     }
   }
 
-  const overrodeFlag = (row.status === 'DISPUTED' || (row.response_status === 'OBJECTED' && row.objection_outcome !== 'REJECTED')) && !!override;
+  const overrodeFlag = (row.status === 'DISPUTED' || !!dupOf || (row.response_status === 'OBJECTED' && row.objection_outcome !== 'REJECTED')) && !!override;
   db.prepare(`
     UPDATE energy_data
     SET status = 'LOCKED', locked_at = datetime('now'),

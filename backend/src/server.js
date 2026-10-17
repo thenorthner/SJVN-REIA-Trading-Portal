@@ -26,6 +26,7 @@ import advancesRoutes from './routes/advances.js';
 import sjvnDeskRoutes from './routes/sjvnDesk.js';
 import staffRoutes from './routes/staff.js';
 import securityDeskRoutes, { remindExpiringSecurity } from './routes/securityDesk.js';
+import { alertLateReinstatements } from './services/securityBoard.js';
 import invoicesRoutes from './routes/invoices.js';
 import billingTrailRoutes from './routes/billingTrail.js';
 import disputesRoutes, { runSlaEscalations } from './routes/disputes.js';
@@ -462,6 +463,9 @@ const server = app.listen(PORT, HOST, () => {
       // The counterparty whose guarantee it is, and SJVN's own letters of credit.
       const reminded = remindExpiringSecurity();
       if (reminded.sent > 0) console.log(`[SECURITY] Sent ${reminded.sent} expiry reminder(s)`);
+      // Revolving letters of credit still not restored after a draw.
+      const late = alertLateReinstatements();
+      if (late.sent > 0) console.log(`[SECURITY] Flagged ${late.sent} late LC reinstatement(s)`);
     } catch (err) {
       console.error('[SECURITY] alert cascade failed', err.message);
     }

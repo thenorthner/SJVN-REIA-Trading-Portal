@@ -628,6 +628,32 @@ function enrichApprovals(approvals, inv = null) {
       : null,
   };
 
+  // D1: what disputes and notes do to this bill, in one place.
+  let dispute_impact;
+  {
+    const noteRows = db.prepare(`SELECT id, note_no, note_type, status, amount, applied_amount, reason FROM debit_credit_notes WHERE invoice_id = ? AND model = 'V2' AND status IN ('DRAFT', 'ISSUED', 'SETTLED') ORDER BY created_at`).all(inv.id);
+    const live = disputes.filter((d) => d.status !== 'CLOSED' || (d.resolution_response === 'CONTESTED' && !d.escalation_outcome));
+    if (live.length || noteRows.length || Number(inv.disputed_amount) > 0) {
+      const contested = disputes.filter((d) => d.resolution_response === 'CONTESTED' && d.status !== 'CLOSED' && !d.escalation_outcome)
+        .reduce((t, d) => t + (Number(d.contested_amount) || 0), 0);
+      // A draft note is SJVN's own until it is approved; a counterparty sees issued ones.
+      const pending = isCounterparty ? [] : noteRows.filter((n) => n.status === 'DRAFT');
+      const issued = noteRows.filter((n) => n.status !== 'DRAFT');
+      let netPayable = null;
+      try { netPayable = Math.round(invoiceBalance(inv, new Date()).balance); } catch { /* shown without it */ }
+      dispute_impact = {
+        held: Math.round(Number(inv.disputed_amount) || 0),
+        contested_at_forum: Math.round(contested),
+        open_disputes: live.map((d) => ({ id: d.id, dispute_no: d.dispute_no, status: d.status, amount: d.disputed_amount, contested: d.resolution_response === 'CONTESTED' })),
+        notes_pending: pending.map((n) => ({ id: n.id, note_no: n.note_no, note_type: n.note_type, amount: n.amount, reason: n.reason })),
+        notes_issued: issued.map((n) => ({ id: n.id, note_no: n.note_no, note_type: n.note_type, amount: n.amount, applied: n.applied_amount })),
+        pending_credit: Math.round(pending.filter((n) => n.note_type === 'CREDIT').reduce((t, n) => t + n.amount, 0)),
+        pending_debit: Math.round(pending.filter((n) => n.note_type === 'DEBIT').reduce((t, n) => t + n.amount, 0)),
+        net_payable: netPayable,
+      };
+    }
+  }
+
   // The buyer's advances, beside a bill they could settle (B4).
   let advances;
   if (!isCounterparty && inv.direction === 'SJVN_TO_BUYER' && ['SENT', 'PARTIALLY_PAID', 'DISPUTED'].includes(inv.status)) {
@@ -642,6 +668,7 @@ function enrichApprovals(approvals, inv = null) {
     ...withContract(inv, asOf),
     parent_invoice_no: parent?.invoice_no || null,
     settlement,
+    ...(dispute_impact ? { dispute_impact } : {}),
     ...(advances ? { advances } : {}),
     approvals, approval_history: approvalHistory(inv.id), approval_rules: { distinct_approvers: distinctApprovers() },
     payments, disputes, generator_realization, access_log,

@@ -901,6 +901,10 @@ CREATE TABLE IF NOT EXISTS security_releases (
   acted_by TEXT,
   acted_at TEXT,
   decision_note TEXT,
+  finance_signoff_at TEXT,      -- S5: Finance signs off before the desk releases
+  finance_signoff_by TEXT,
+  finance_signoff_by_id TEXT,
+  finance_signoff_note TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

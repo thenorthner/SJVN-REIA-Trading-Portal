@@ -115,3 +115,21 @@ export function energyRowProblems(contract, r, { today = new Date() } = {}) {
 
   return { errors, cuf };
 }
+
+/**
+ * G4: a month whose energy equals the previous month's to the decimal is far
+ * more likely a copied reading than a coincidence (hydro September repeated
+ * August's figure exactly). Returns the previous month's row when it matches.
+ */
+export function duplicateOfPreviousMonth(row) {
+  if (!row || !(Number(row.energy_mwh) > 0)) return null;
+  const [y, m] = String(row.period_month).split('-').map(Number);
+  const prev = new Date(Date.UTC(y, m - 2, 1));
+  const prevMonth = `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, '0')}`;
+  const p = db.prepare(`
+    SELECT id, period_month, energy_mwh, source, status FROM energy_data
+    WHERE contract_id = ? AND period_month = ? AND status != 'DRAFT'
+    ORDER BY (status = 'LOCKED') DESC, (data_type = 'FINAL') DESC, created_at DESC LIMIT 1
+  `).get(row.contract_id, prevMonth);
+  return p && Math.abs(Number(p.energy_mwh) - Number(row.energy_mwh)) < 0.0005 ? p : null;
+}

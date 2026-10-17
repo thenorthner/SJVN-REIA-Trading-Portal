@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import api from '../../api/client.js';
+import SecurityBoardPanel from '../../components/SecurityBoardPanel.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, AlertPopup, fmtCurrency, DemandLetterViewer } from '../../components/ui.jsx';
@@ -590,6 +591,8 @@ export default function PaymentSecurity() {
         </Card>
       )}
 
+      <div style={{ marginTop: 12 }}><SecurityBoardPanel canAsk={canManage} /></div>
+
       {(pendingReleases.length > 0 || overrides.length > 0) && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 460px), 1fr))', gap: 12, marginTop: 12 }}>
           {pendingReleases.length > 0 && (
@@ -611,11 +614,30 @@ export default function PaymentSecurity() {
                     )),
                 },
                 {
+                  // S5: the release checklist, item by item.
+                  key: 'checklist',
+                  header: 'Checklist',
+                  render: (r) => (r.checklist ? (
+                    <div style={{ fontSize: 13 }}>
+                      {r.checklist.items.map((i) => (
+                        <div key={i.key} style={{ color: i.ok === false ? '#b91c1c' : i.ok ? '#15803d' : 'var(--text-light)' }}>
+                          {i.ok === false ? '✗' : i.ok ? '✓' : '·'} {i.label}{i.detail ? ` — ${i.detail}` : ''}
+                        </div>
+                      ))}
+                      {!r.finance_signoff_at && user?.role === 'FINANCE_USER' && (
+                        <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 4 }} disabled={busy} onClick={async () => {
+                          try { await api.paymentSecurity.financeSignoff(r.id); await load(); } catch (err) { setReleaseError(err.response?.data?.error || err.message); }
+                        }}>Sign off for Finance</button>
+                      )}
+                    </div>
+                  ) : '—'),
+                },
+                {
                   key: 'act',
                   header: '',
                   render: (r) => (canRelease ? (
                     <div className="cell-actions">
-                      <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => actRelease(r, 'APPROVED')}>Release</button>
+                      <button type="button" className="btn btn-primary btn-sm" disabled={busy || !r.checklist?.ready} title={r.checklist?.ready ? undefined : 'Every item on the checklist first'} onClick={() => actRelease(r, 'APPROVED')}>Release</button>
                       <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => { setRefusing(r); setRefuseNote(''); setReleaseError(''); }}>Refuse</button>
                     </div>
                   ) : null),

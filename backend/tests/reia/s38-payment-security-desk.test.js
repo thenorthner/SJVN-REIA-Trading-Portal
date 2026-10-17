@@ -267,11 +267,15 @@ describe('Releasing an instrument', () => {
     const live = await decide(rel, { decision: 'APPROVED' }, finance);
     expect(live.status).toBe(400);
     expect(live.body.error).toMatch(/still active.*Accept a replacement/);
-    // The PSA has run its term: the same request can now be approved.
+    // The PSA has run its term: once Finance has signed off, the desk releases it.
     db.prepare(`UPDATE contracts SET status = 'EXPIRED' WHERE id = ?`).run(psa.id);
+    expect((await decide(rel, { decision: 'APPROVED' }, finance)).body.error).toMatch(/Finance has not signed off/);
+    expect((await post(`/api/payment-security/releases/${rel.id}/finance-signoff`, {}, reia)).status).toBe(403);
+    expect((await post(`/api/payment-security/releases/${rel.id}/finance-signoff`, {}, finance)).status).toBe(200);
+    expect((await decide(rel, { decision: 'APPROVED' }, finance)).status, 'Finance signed off and released it too').toBe(403);
     const queue = (await get('/api/payment-security/releases')).body;
     expect(queue[0].position, 'the queue did not say the request had become clear').toMatchObject({ clear: true, outstanding_dues: 0 });
-    const ok = await decide(rel, { decision: 'APPROVED' }, finance);
+    const ok = await decide(rel, { decision: 'APPROVED' });
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);
     expect(ok.body).toMatchObject({ status: 'RELEASED', checklist_no_dues: 1 });
     expect(row(ps.id).status).toBe('RELEASED');
@@ -287,6 +291,7 @@ describe('Releasing an instrument', () => {
     expect(seen).toMatchObject({ clear: true, outstanding_dues: 0, open_disputes: 0 });
     const rel = (await ask(ps)).body;
     db.prepare(`UPDATE contracts SET status = 'EXPIRED' WHERE id = ?`).run(psa.id);
+    await post(`/api/payment-security/releases/${rel.id}/finance-signoff`, {}, finance);
     const r = await decide(rel, { decision: 'APPROVED' });
     expect(r.status, 'the buyer was told the way was clear and the desk was then refused').toBe(200);
   });

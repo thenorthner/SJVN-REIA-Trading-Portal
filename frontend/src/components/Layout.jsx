@@ -130,6 +130,7 @@ const NAV_INTERNAL = [
       { to: '/reia/energy-data', label: 'Energy Data & Validation' },
       { to: '/reia/invoices', label: 'Billing & Invoicing' },
       { to: '/reia/billing-readiness', label: 'Billing Readiness' },
+      { to: '/reia/note-approvals', label: 'Notes for Approval' },
       // Outstanding, delay days and surcharge, on both sides of the desk.
       // The technical and commercial checks on developer bills, across the desk.
       { to: '/reia/verification', label: 'Invoice Verification' },

@@ -157,6 +157,47 @@ router.get('/', requireRole(...READ), (req, res) => {
   res.json(db.prepare(sql).all(...params).map(present));
 });
 
+/**
+ * D3: Finance's approval queue — every draft note, with what it is for. A
+ * note a dispute asked for carries the dispute, its evidence and the
+ * resolver's reasoning beside the Approve button, so Finance decides on the
+ * record rather than on the amount alone.
+ */
+router.get('/approval-queue', requireRole(...READ), (req, res) => {
+  const rows = db.prepare(`
+    SELECT n.*, i.invoice_no, i.direction, i.billing_period, c.contract_no,
+      CASE WHEN i.direction = 'SJVN_TO_BUYER' THEN b.name ELSE s.name END AS counterparty
+    FROM debit_credit_notes n
+    JOIN invoices i ON i.id = n.invoice_id
+    LEFT JOIN contracts c ON c.id = COALESCE(n.contract_id, i.contract_id)
+    LEFT JOIN entities s ON s.id = c.seller_id LEFT JOIN entities b ON b.id = c.buyer_id
+    WHERE n.status = 'DRAFT' AND n.model = 'V2'
+    ORDER BY n.created_at
+  `).all();
+  const docs = (raw) => { try { return JSON.parse(raw || '[]'); } catch { return []; } };
+  const sourceOf = (n, d) => (d ? 'DISPUTE'
+    : /^Reconciliation /.test(n.reason || '') ? 'RECONCILIATION'
+      : /^CUF true-up/.test(n.reason || '') ? 'CUF_TRUE_UP'
+        : /^Power diversion /.test(n.reason || '') ? 'DIVERSION' : 'DESK');
+  res.json(rows.map((n) => {
+    const d = db.prepare('SELECT * FROM disputes WHERE resolution_note_id = ?').get(n.id);
+    return {
+      ...present(n),
+      invoice_no: n.invoice_no, contract_no: n.contract_no, counterparty: n.counterparty, billing_period: n.billing_period,
+      source: sourceOf(n, d),
+      age_days: Math.floor((Date.now() - Date.parse(`${String(n.created_at).replace(' ', 'T')}Z`)) / 86400000),
+      can_approve: !((n.created_by_id && n.created_by_id === req.user.id) || (!n.created_by_id && n.created_by === req.user.name)),
+      dispute: d ? {
+        id: d.id, dispute_no: d.dispute_no, reason_code: d.reason_code, charge_line: d.charge_line,
+        issue_description: d.issue_description, disputed_amount: d.disputed_amount, raised_by_role: d.raised_by_role,
+        outcome: d.resolution_outcome, accepted_amount: d.accepted_amount, resolution_notes: d.resolution_notes,
+        resolved_by: d.resolved_by, resolved_at: d.resolved_at,
+        evidence: docs(d.supporting_docs).map((f) => ({ name: f.original_name || f.filename, url: `/api/disputes/${d.id}/evidence/${encodeURIComponent(f.filename)}`, uploaded_by: f.uploaded_by, note: f.note })),
+      } : null,
+    };
+  }));
+});
+
 router.get('/reference', requireRole(...READ), (_req, res) => {
   res.json({ reason_codes: REASONS.map((c) => ({ code: c, label: REASON_LABEL[c] })) });
 });

@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import NotesPanel from './NotesPanel.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import BackToBackCard from '../../components/BackToBackCard.jsx';
+import DisputeImpactPanel from '../../components/DisputeImpactPanel.jsx';
 
 // The latest month that can be billed: the one before this one. The form
 // opened on a fixed 2026-10, which became the month still running.
@@ -1063,6 +1064,7 @@ export default function Invoices() {
             <InvoiceBreakdown invoice={selected} />
             <InvoiceFinancialStrip invoice={selected} />
             <BackToBackCard invoice={selected} />
+            <DisputeImpactPanel invoice={selected} />
             {selected.advances?.open_balance > 0 && (
               // B4: the buyer's advances, beside a bill they could settle.
               <div className="inline-note" style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
