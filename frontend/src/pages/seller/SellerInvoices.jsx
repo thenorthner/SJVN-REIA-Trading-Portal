@@ -192,9 +192,13 @@ export default function SellerInvoices() {
     // A dispute's credit note is left out: the bill it answers has already come down by the same amount.
     const live = shown.filter((r) => !['CANCELLED', 'DRAFT', 'PENDING_L2', 'REJECTED'].includes(r.status) && !r.is_dispute_credit);
     const billed = live.reduce((s, r) => s + (Number(r.total_amount) || 0), 0);
-    const paid = live.reduce((s, r) => s + (Number(r.paid_total) || 0), 0);
+    // Money received, not what a credit note settled; what is left is the
+    // server's balance, which already allows for rebate and surcharge.
+    const credited = live.reduce((s, r) => s + (Number(r.credit_settled) || 0), 0);
+    const paid = live.reduce((s, r) => s + (Number(r.paid_total) || 0), 0) - credited;
+    const outstanding = live.reduce((s, r) => s + (r.balance_due != null ? Math.max(0, Number(r.balance_due) || 0) : Math.max(0, (Number(r.total_amount) || 0) - (Number(r.paid_total) || 0))), 0);
     return {
-      billed, paid, outstanding: Math.max(0, billed - paid),
+      billed, paid, credited, outstanding,
       overdue: live.filter((r) => (r.days_past_due || r.days_overdue) > 0).length,
       withSjvn: shown.filter((r) => ['SUBMITTED', 'UNDER_APPROVAL'].includes(r.status)).length,
       toAct: shown.filter((r) => (r.status === 'REJECTED' && canSendToSjvn) || (r.status === 'DRAFT' && isMaker) || (r.status === 'PENDING_L2' && canSendToSjvn)).length,
@@ -471,7 +475,7 @@ export default function SellerInvoices() {
 
       <div className="kpi-grid">
         <StatCard label="Billed" value={fmtCurrency(totals.billed)} tone="blue" hint="Submitted to SJVN, not cancelled" />
-        <StatCard label="Received" value={fmtCurrency(totals.paid)} tone="green" />
+        <StatCard label="Received" value={fmtCurrency(totals.paid)} tone="green" hint={totals.credited > 0 ? `and ${fmtCurrency(totals.credited)} settled by credit notes` : undefined} />
         <StatCard label="Outstanding" value={fmtCurrency(totals.outstanding)} tone={totals.outstanding > 0 ? 'amber' : 'green'} hint={totals.overdue ? `${totals.overdue} past due date` : 'Nothing past due'} />
         <StatCard label="With SJVN for approval" value={totals.withSjvn} />
         <StatCard label="Waiting on you" value={totals.toAct} tone={totals.toAct ? 'red' : 'green'} hint="Drafts, bills to check, and rejections" />

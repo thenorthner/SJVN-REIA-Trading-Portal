@@ -296,8 +296,8 @@ export default function SellerLedgerView({ entityId = null, partySide = 'SELLER'
       </div>
 
       <div className="kpi-grid">
-        <StatCard label="Billed in the period" value={fmtCurrency(s.totals.billed + s.totals.debit_notes + s.totals.lps)} tone="blue" />
-        <StatCard label={buyer ? 'Paid' : 'Received'} value={fmtCurrency(s.totals.received)} tone="green" hint={s.totals.tds + s.totals.deductions + s.totals.rebate > 0 ? `+ ${fmtCurrency(s.totals.tds + s.totals.deductions + s.totals.rebate)} held back or allowed` : undefined} />
+        <StatCard label="Billed in the period" value={fmtCurrency(s.totals.billed + s.totals.debit_notes + s.totals.lps)} tone="blue" hint={s.totals.credit_notes > 0 ? `less ${fmtCurrency(s.totals.credit_notes)} in credit notes` : undefined} />
+        <StatCard label={buyer ? 'Paid' : 'Received'} value={fmtCurrency(s.totals.received)} tone="green" hint={s.totals.tds + s.totals.deductions + s.totals.rebate > 0 ? `+ ${fmtCurrency(s.totals.tds + s.totals.deductions + s.totals.rebate)} held back (TDS, deductions) or allowed as rebate` : undefined} />
         <StatCard label="Outstanding today" value={fmtCurrency(s.outstanding_total)} tone={s.outstanding_total > 0 ? 'amber' : 'green'} hint={`${s.outstanding.length} open bill${s.outstanding.length === 1 ? '' : 's'}`} />
         <StatCard label="Of which overdue" value={fmtCurrency(s.overdue_total)} tone={s.overdue_total > 0 ? 'red' : 'green'} />
         <StatCard label="LPS accrued to date" value={fmtCurrency(s.accrued_lps_total)} hint="Surcharge on what is running late" />

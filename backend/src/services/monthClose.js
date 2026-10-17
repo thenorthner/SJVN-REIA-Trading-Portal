@@ -27,6 +27,8 @@ export function postingChecklist(period) {
   const unlocked = db.prepare(`
     SELECT e.id, e.status, e.energy_mwh, c.contract_no FROM energy_data e JOIN contracts c ON c.id = e.contract_id
     WHERE e.period_month = ? AND e.status IN ('VALIDATED', 'DISPUTED')
+      -- REIA's books: the hydro / thermal desks close their own months.
+      AND COALESCE(c.project_type, '') NOT IN ('Hydro', 'HYDRO', 'PSP', 'Thermal', 'THERMAL')
       AND NOT EXISTS (SELECT 1 FROM energy_data l WHERE l.contract_id = e.contract_id AND l.period_month = e.period_month AND l.status = 'LOCKED')
   `).all(period);
   const board = readinessBoard(period);

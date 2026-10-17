@@ -152,9 +152,9 @@ function billsOf(user, q = {}) {
     SELECT pi.invoice_id, pi.status, SUM(pi.amount + COALESCE(pi.tds_amount, 0) + COALESCE(pi.other_deduction, 0)) s, COUNT(*) n
     FROM payment_intimations pi WHERE pi.entity_id = ? AND pi.status IN ('PENDING_CHECKER','SUBMITTED') GROUP BY pi.invoice_id, pi.status
   `).all(scope.entityId)) {
-    const cur = pending.get(p.invoice_id) || { amount: 0, count: 0, with_checker: 0, with_finance: 0 };
+    const cur = pending.get(p.invoice_id) || { amount: 0, count: 0, with_checker: 0, with_finance: 0, checker_amount: 0, finance_amount: 0 };
     cur.amount = money(cur.amount + p.s); cur.count += p.n;
-    if (p.status === 'PENDING_CHECKER') cur.with_checker += p.n; else cur.with_finance += p.n;
+    if (p.status === 'PENDING_CHECKER') { cur.with_checker += p.n; cur.checker_amount = money(cur.checker_amount + p.s); } else { cur.with_finance += p.n; cur.finance_amount = money(cur.finance_amount + p.s); }
     pending.set(p.invoice_id, cur);
   }
   const bills = rows.map((i) => {
@@ -186,8 +186,12 @@ function billsOf(user, q = {}) {
       due_soon: money(open.filter((b) => !b.overdue && b.days_to_due !== null && b.days_to_due <= 10).reduce((s, b) => s + b.left, 0)),
       due_soon_bills: open.filter((b) => !b.overdue && b.days_to_due !== null && b.days_to_due <= 10).length,
       accrued_lps: money(open.reduce((s, b) => s + b.accrued_lps, 0)),
-      with_finance: money([...pending.values()].reduce((s, p) => s + p.amount, 0)),
-      with_finance_count: [...pending.values()].reduce((s, p) => s + p.count, 0),
+      // Only what has reached SJVN is awaiting SJVN; one still with the
+      // buyer's own checker is counted apart.
+      with_finance: money([...pending.values()].reduce((s, p) => s + p.finance_amount, 0)),
+      with_finance_count: [...pending.values()].reduce((s, p) => s + p.with_finance, 0),
+      with_checker: money([...pending.values()].reduce((s, p) => s + p.checker_amount, 0)),
+      with_checker_count: [...pending.values()].reduce((s, p) => s + p.with_checker, 0),
       unacknowledged: bills.filter((b) => !b.acknowledged_at && b.status !== 'CANCELLED').length,
     },
     my_tier: tierOf(user.role),

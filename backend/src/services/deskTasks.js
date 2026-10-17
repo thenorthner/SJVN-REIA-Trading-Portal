@@ -12,6 +12,7 @@
  */
 import db from '../db/index.js';
 import { newId, pushNotification, logAudit } from '../util.js';
+import { sourcesForPsa } from './allocations.js';
 
 export const ROOT_CAUSE_TASKS = {
   ENERGY_DATA_MISMATCH: { desk: 'ENERGY_DATA', task_type: 'ENERGY_CORRECTION', label: 'Correct and audit the energy record' },
@@ -30,9 +31,13 @@ export function raiseRootCauseTask(dispute, invoice, { outcome, accepted = 0, us
   if (existing) return existing;
   const contract = db.prepare('SELECT id, contract_no, contract_type, tariff_per_unit FROM contracts WHERE id = ?').get(invoice.contract_id);
   const period = invoice.billing_period || null;
+  // A PSA's energy is recorded on the PPAs that feed it, so that is where the
+  // figure is corrected.
+  const sources = contract?.contract_type === 'PSA' && period ? sourcesForPsa(contract.id, period) : [];
+  const energyOn = sources.length ? sources.map((x) => x.ppa_contract_no).join(', ') : (contract?.contract_no || invoice.contract_id);
   const amount = `₹${Number(accepted || 0).toLocaleString('en-IN')}`;
   const title = rule.task_type === 'ENERGY_CORRECTION'
-    ? `Energy for ${contract?.contract_no || invoice.contract_id} ${period || ''} was billed wrong — correct the record`
+    ? `Energy for ${energyOn} ${period || ''} was billed wrong — correct the record${sources.length ? ` (feeds ${contract.contract_no})` : ''}`
     : `Tariff on ${contract?.contract_no || invoice.contract_id} was applied wrong — review the PPA/PSA rate`;
   const detail = rule.task_type === 'ENERGY_CORRECTION'
     ? `Dispute ${dispute.dispute_no} on ${invoice.invoice_no} was accepted (${outcome === 'FULL_CREDIT' ? 'in full' : 'in part'}, ${amount}) for an energy mismatch. Re-check the locked figure against the JMR / SEA / REA it came from, correct or supersede it, and note what source was wrong so the next month is billed right.`

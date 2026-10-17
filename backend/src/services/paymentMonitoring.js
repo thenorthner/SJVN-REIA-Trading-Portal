@@ -51,7 +51,9 @@ function openBills(direction) {
       ${OUTSTANDING_SQL} AS outstanding,
       CASE
         WHEN i.due_date IS NULL THEN NULL
-        ELSE CAST(julianday('now') - julianday(i.due_date) AS INTEGER)
+        -- Whole calendar days, on India's date: julianday('now') carries the
+        -- UTC time of day, and truncating it put a bill a day out.
+        ELSE CAST(julianday(date('now', '+330 minutes')) - julianday(date(i.due_date)) AS INTEGER)
       END AS days_past_due
     FROM invoices i
     ${COUNTERPARTY_JOIN}

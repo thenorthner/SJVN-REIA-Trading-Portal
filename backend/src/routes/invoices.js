@@ -261,6 +261,8 @@ function withContract(inv, asOf = new Date()) {
     project_type: contract?.project_type,
     ...payableNow(inv),
     paid_total: paid,
+    // Of what settled the bill, the part a credit note took rather than money.
+    credit_settled: db.prepare(`SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)), 0) s FROM payments WHERE invoice_id = ? AND mode = 'CREDIT_NOTE'`).get(inv.id).s,
     lps_to_date: lpsToDate,
     balance_due: balance,
     accrued_lps: accrued.lps,

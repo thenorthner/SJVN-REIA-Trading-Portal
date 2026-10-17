@@ -58,6 +58,24 @@
         "cd frontend && VITE_API_TARGET=http://localhost:4002 npx vite --port 5175 --strictPort"
       ],
       "port": 5175
+    },
+    {
+      "name": "backend-finale",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd backend && mkdir -p qa/backups-finale && { [ -f qa/platform-finale.db ] || sqlite3 src/db/platform.db \".backup 'qa/platform-finale.db'\"; } && PORT=4003 SJVN_DB_PATH=qa/platform-finale.db SJVN_BACKUP_DIR=qa/backups-finale node src/server.js"
+      ],
+      "port": 4003
+    },
+    {
+      "name": "frontend-finale",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "cd frontend && VITE_API_TARGET=http://localhost:4003 npx vite --port 5176 --strictPort"
+      ],
+      "port": 5176
     }
   ]
 }

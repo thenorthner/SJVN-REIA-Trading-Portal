@@ -48,7 +48,7 @@ export function readinessBoard(period = lastCompleteMonth()) {
   `).all(...LIVE, ...NOT_REIA, `${period}-31`, `${period}-01`);
 
   const rows = contracts.map((c) => {
-    const billed = standingSystemBill(c, period);
+    let billed = standingSystemBill(c, period);
     let energy;
     let ppaBills = [];
     let blocker = null;
@@ -65,11 +65,17 @@ export function readinessBoard(period = lastCompleteMonth()) {
       const e = lockedEnergy(c.id, period);
       energy = { locked: !!e, energy_mwh: e?.energy_mwh ?? null, data_type: e?.data_type ?? null };
       const own = db.prepare(`
-        SELECT invoice_no, status FROM invoices WHERE contract_id = ? AND billing_period = ? AND direction = 'SELLER_TO_SJVN'
-          AND TRIM(COALESCE(invoice_breakdown_json, '')) = '' AND status NOT IN ('CANCELLED', 'DRAFT')
+        SELECT id, invoice_no, status, invoice_type, total_amount FROM invoices WHERE contract_id = ? AND billing_period = ? AND direction = 'SELLER_TO_SJVN'
+          AND TRIM(COALESCE(invoice_breakdown_json, '')) = '' AND status NOT IN ('CANCELLED', 'DRAFT', 'REJECTED')
+          AND COALESCE((SELECT SUM(n.amount) FROM debit_credit_notes n WHERE n.invoice_id = invoices.id AND n.note_type = 'CREDIT'
+            AND n.model = 'V2' AND n.status IN ('ISSUED', 'SETTLED')), 0) < total_amount - 0.005
         ORDER BY created_at DESC LIMIT 1
       `).get(c.id, period);
       ppaBills = [{ ppa_contract_no: c.contract_no, invoice_no: own?.invoice_no || null, own: !!own, status: own?.status || null }];
+      // The developer's own invoice is the PPA's bill for the month: there is
+      // nothing for SJVN to raise on top of it (a computed bill would only be
+      // superseded by it).
+      if (!billed && own) billed = { id: own.id, invoice_no: own.invoice_no, status: own.status, invoice_type: own.invoice_type, total_amount: own.total_amount, own: true };
     }
     if (c.cod_date && String(c.cod_date).slice(0, 7) > period) blocker = `Not commissioned until ${c.cod_date}`;
     const ppaBillIn = ppaBills.length > 0 && ppaBills.every((p) => p.invoice_no);

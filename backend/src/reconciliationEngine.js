@@ -86,15 +86,19 @@ function getEnergyForPeriod(contract, period) {
   if (!sources.length) return null;
   let mwh = 0;
   let allLocked = true;
+  // Final only when every source PPA's figure is final; one provisional
+  // source makes the PSA's share provisional too.
+  let allFinal = true;
   const parts = [];
   for (const src of sources) {
     const e = pickEnergy(src.ppa_id, period);
     if (!e) return { energy_mwh: null, source: 'source PPAs', data_type: 'PROVISIONAL', status: 'MISSING', missing: src.ppa_contract_no };
     if (e.status !== 'LOCKED') allLocked = false;
+    if (e.data_type !== 'FINAL') allFinal = false;
     mwh += (Number(e.energy_mwh) || 0) * (Number(src.allocation_percent) || 0) / 100;
     parts.push(`${src.ppa_contract_no} ${src.allocation_percent}%`);
   }
-  return { energy_mwh: Math.round(mwh * 1000) / 1000, source: parts.join(' + '), data_type: 'PROVISIONAL', status: allLocked ? 'LOCKED' : 'VALIDATED', availability_percent: null, cuf_percent: null, derived: true };
+  return { energy_mwh: Math.round(mwh * 1000) / 1000, source: parts.join(' + '), data_type: allFinal ? 'FINAL' : 'PROVISIONAL', status: allLocked ? 'LOCKED' : 'VALIDATED', availability_percent: null, cuf_percent: null, derived: true };
 }
 
 // A bill is "billed" once presented — not a draft, one in approval or one
