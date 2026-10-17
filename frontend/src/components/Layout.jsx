@@ -129,7 +129,8 @@ const NAV_INTERNAL = [
       { to: '/reia/cerc-compliance', label: 'CERC Compliance' },
       { to: '/reia/energy-data', label: 'Energy Data & Validation' },
       { to: '/reia/invoices', label: 'Billing & Invoicing' },
-      { to: '/reia/billing-readiness', label: 'Billing Readiness' },
+      { to: '/reia/billing-readiness', label: 'Month-Close Board' },
+      { to: '/reia/release-planner', label: 'Developer Release Planner' },
       { to: '/reia/note-approvals', label: 'Notes for Approval' },
       // Outstanding, delay days and surcharge, on both sides of the desk.
       // The technical and commercial checks on developer bills, across the desk.

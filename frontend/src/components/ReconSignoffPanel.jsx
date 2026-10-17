@@ -308,6 +308,15 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
               <div style={{ fontSize: 13, marginTop: 4 }}>{x.reason}</div>
               <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 2 }}>Raised by {x.raised_by_name} · {fmtDateTime(x.created_at)}</div>
               {x.status !== 'OPEN' && <div style={{ fontSize: 13, marginTop: 6 }}><strong>{x.resolved_by}:</strong> {x.resolution_note}</div>}
+              {x.status === 'ACCEPTED' && d.can_resolve && (
+                // R4: an accepted exception becomes its note — drafted with the decision, or here.
+                x.note_id ? <div style={{ fontSize: 13, marginTop: 4, color: '#15803d' }}>Note drafted for Finance's approval.</div> : (
+                  <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 6 }} disabled={!!busy} onClick={async () => {
+                    setBusy('note');
+                    try { await api.notes.fromException({ kind: 'RECON_EXCEPTION', exception_id: x.id }); await load(); onChanged?.(); } catch (e) { setError(errText(e)); } finally { setBusy(''); }
+                  }}>Draft the note for {fmtCurrency(x.amount)}</button>
+                )
+              )}
               {x.status === 'OPEN' && (
                 <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                   {d.can_resolve && <button className="btn btn-success btn-sm" onClick={() => setSettle({ id: x.id, outcome: 'ACCEPTED', note: '' })}>Accept</button>}

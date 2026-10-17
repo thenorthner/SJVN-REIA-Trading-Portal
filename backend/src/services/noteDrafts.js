@@ -13,7 +13,7 @@ import { newId, pushNotification } from '../util.js';
 
 const err = (status, message) => Object.assign(new Error(message), { status });
 
-export function draftNote({ noteType, invoice, amount, reason, reasonCode = 'OTHER', user }) {
+export function draftNote({ noteType, invoice, amount, reason, reasonCode = 'OTHER', user, sourceKind = null, sourceRef = null }) {
   if (!['DEBIT', 'CREDIT'].includes(noteType)) throw err(400, 'noteType must be DEBIT or CREDIT');
   const total = Math.round((Number(amount) || 0) * 100) / 100;
   if (!(total > 0)) throw err(400, 'A note is for a positive amount');
@@ -30,9 +30,9 @@ export function draftNote({ noteType, invoice, amount, reason, reasonCode = 'OTH
   const id = newId('DCN');
   db.prepare(`
     INSERT INTO debit_credit_notes (id, note_no, note_type, invoice_id, contract_id, period_month,
-      reason_code, amount, taxable_amount, tax_amount, tax_label, reason, status, model, created_by, created_by_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, 'DRAFT', 'V2', ?, ?)
-  `).run(id, `DRAFT-${id}`, noteType, invoice.id, invoice.contract_id, invoice.billing_period, reasonCode, total, total, reason, user?.name || 'system', user?.id || null);
+      reason_code, amount, taxable_amount, tax_amount, tax_label, reason, status, model, created_by, created_by_id, source_kind, source_ref)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, 'DRAFT', 'V2', ?, ?, ?, ?)
+  `).run(id, `DRAFT-${id}`, noteType, invoice.id, invoice.contract_id, invoice.billing_period, reasonCode, total, total, reason, user?.name || 'system', user?.id || null, sourceKind, sourceRef);
   pushNotification({
     role: 'FINANCE_USER', type: 'DC_NOTE_FOR_APPROVAL',
     message: `${noteType === 'DEBIT' ? 'Debit' : 'Credit'} note of Rs.${total.toLocaleString('en-IN')} on ${invoice.invoice_no} awaits approval — ${reason}`,

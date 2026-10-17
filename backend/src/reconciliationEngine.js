@@ -85,14 +85,16 @@ function getEnergyForPeriod(contract, period) {
   const sources = sourcesForPsa(contract.id, period);
   if (!sources.length) return null;
   let mwh = 0;
+  let allLocked = true;
   const parts = [];
   for (const src of sources) {
     const e = pickEnergy(src.ppa_id, period);
     if (!e) return { energy_mwh: null, source: 'source PPAs', data_type: 'PROVISIONAL', status: 'MISSING', missing: src.ppa_contract_no };
+    if (e.status !== 'LOCKED') allLocked = false;
     mwh += (Number(e.energy_mwh) || 0) * (Number(src.allocation_percent) || 0) / 100;
     parts.push(`${src.ppa_contract_no} ${src.allocation_percent}%`);
   }
-  return { energy_mwh: Math.round(mwh * 1000) / 1000, source: parts.join(' + '), data_type: 'PROVISIONAL', status: 'LOCKED', availability_percent: null, cuf_percent: null, derived: true };
+  return { energy_mwh: Math.round(mwh * 1000) / 1000, source: parts.join(' + '), data_type: 'PROVISIONAL', status: allLocked ? 'LOCKED' : 'VALIDATED', availability_percent: null, cuf_percent: null, derived: true };
 }
 
 // A bill is "billed" once presented — not a draft, one in approval or one
@@ -161,6 +163,23 @@ function carryForwardItems(contractId, period, periodType) {
   };
 }
 
+/** What still stands between a month and its reconciliation (R1). */
+function monthGapsForRecon(energy, invoices) {
+  const missing = [];
+  if (!energy || energy.energy_mwh == null) missing.push(`no energy recorded${energy?.missing ? ` on ${energy.missing}` : ''}`);
+  else if (energy.status !== 'LOCKED') missing.push('the energy is not locked');
+  if (!invoices.length) missing.push('no bill has been presented');
+  return missing;
+}
+
+/** Whether a contract's month can be reconciled, and what it waits on. */
+export function reconReadiness(contractId, period) {
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId);
+  if (!contract) return { ready: false, missing: ['contract not found'] };
+  const missing = monthGapsForRecon(getEnergyForPeriod(contract, period), getInvoicesForPeriod(contractId, period));
+  return { ready: !missing.length, missing };
+}
+
 /** Build matching items for a REIA contract period (does not persist). */
 export function buildContractReconItems({ contractId, period, periodType = 'MONTHLY', sapOverride = null }) {
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId);
@@ -176,6 +195,15 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
   // September with nothing in it (17-Oct-2026).
   if ((!energy || energy.energy_mwh == null) && !invoices.length) {
     throw Object.assign(new Error(`Nothing to reconcile for ${contract.contract_no} in ${period}: no energy is recorded and no bill has been presented.`), { status: 400 });
+  }
+  // R1 (17-Oct-2026): a month is reconciled once it is closed on both sides —
+  // its energy locked and its bill presented. A statement on half a month
+  // asked the counterparty to sign figures that were still moving.
+  if (periodType === 'MONTHLY') {
+    const missing = monthGapsForRecon(energy, invoices);
+    if (missing.length) {
+      throw Object.assign(new Error(`${contract.contract_no} ${period} is not ready to reconcile: ${missing.join('; ')}.`), { status: 400, reason: 'NOT_READY', missing });
+    }
   }
   const primaryInv = invoices[0] || null;
   const invoiceIds = invoices.map((i) => i.id);

@@ -200,6 +200,10 @@ export const api = {
     backToBack: (id) => g(`/invoices/${id}/back-to-back`),
     readiness: (period) => g('/invoices/readiness', period ? { period_month: period } : undefined),
     generateReady: (body) => p('/invoices/generate-ready', body),
+    monthClose: (period) => g('/invoices/month-close', period ? { period_month: period } : undefined),
+    releasePlanner: () => g('/invoices/release-planner'),
+    lpsPreview: (period) => g('/invoices/lps-bills/preview', period ? { period_month: period } : undefined),
+    raiseLpsBills: (body) => p('/invoices/lps-bills', body),
     arrear: (body) => p('/invoices/arrear', body),
     supplementary: (body) => p('/invoices/supplementary', body),
     submit: (body) => p('/invoices', body),
@@ -345,6 +349,7 @@ export const api = {
     downloadPdf: (id) => client.get(`/notes/${id}/pdf`, { responseType: 'blob' }).then((res) => res.data),
     cufTrueUp: (contractId, contractYear) => p('/notes/cuf-true-up', { contract_id: contractId, contract_year: contractYear }),
     approvalQueue: () => g('/notes/approval-queue'),
+    fromException: (body) => p('/notes/from-exception', body),
   },
   billingTrail: {
     get: (params) => g('/billing-trail', params),
@@ -1251,6 +1256,7 @@ export const api = {
   reiaFi: {
     postings: (params) => g('/reia-fi', params),
     bookable: (params) => g('/reia-fi/bookable', params),
+    checklist: (period) => g('/reia-fi/checklist', { period_month: period }),
     posting: (id) => g(`/reia-fi/${id}`),
     prepare: (body) => p('/reia-fi/prepare', body),
     post: (id, body) => p(`/reia-fi/${id}/post`, body || {}),

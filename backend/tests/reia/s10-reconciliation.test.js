@@ -2,13 +2,15 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../../src/server.js';
 import db from '../../src/db/index.js';
-import { tokenFor, auth, makeContract, columnsOf, hasTable, resetReia } from '../helpers/reia.js';
+import { tokenFor, auth, makeContract, makeInvoice, columnsOf, hasTable, resetReia } from '../helpers/reia.js';
 
 let reia, contract;
 // A statement needs something to reconcile: the month's energy on record.
 beforeEach(() => {
   resetReia(); reia = tokenFor('REIA_USER'); contract = makeContract({ status: 'ACTIVE' });
   for (const p of ['2026-04', '2026-03']) db.prepare(`INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, status) VALUES (?, ?, ?, 'PROVISIONAL', 'SEA', 100, 'LOCKED')`).run(`ENG-T-${Math.random().toString(36).slice(2, 9)}`, contract.id, p);
+  // R1: a month is reconciled once its bill is presented too.
+  for (const p of ['2026-04', '2026-03']) makeInvoice({ contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'APPROVED', billing_period: p, energy_mwh: 100, energy_charges: 300000, total_amount: 300000, due_date: '2099-12-31' });
 });
 
 const run = () => request(app).post('/api/reconciliation/run').set(auth(reia))

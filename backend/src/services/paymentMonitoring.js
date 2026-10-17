@@ -84,7 +84,8 @@ export function paymentMonitoring(side = 'RECEIVABLE') {
       // Days the surcharge is actually charged for, which is not the calendar
       // gap when the platform counts working days only.
       surcharge_days: accrued.days_overdue || 0,
-      lps_charged: bill.lps || 0,
+      // Charged on the bill itself, plus what an LPS bill has demanded for it (PM5).
+      lps_charged: (Number(bill.lps) || 0) + (Number(bill.lps_invoiced) || 0),
       lps_accrued_unbilled: Math.max(0, Math.round((accrued.lps || 0) - (bill.lps || 0))),
     };
   });

@@ -645,6 +645,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   verified_at TEXT,
   verified_by TEXT,
   verified_by_id TEXT,
+  lps_invoiced REAL NOT NULL DEFAULT 0,  -- surcharge already demanded on separate LPS bills (PM5)
   -- The e-invoice as registered on the GST invoice portal, as the seller gave it,
   -- and how it compares with this bill.
   irn TEXT,
@@ -755,6 +756,8 @@ CREATE TABLE IF NOT EXISTS debit_credit_notes (
   settled_date TEXT,
   created_by TEXT,
   created_by_id TEXT,
+  source_kind TEXT,   -- what drafted it: RECON_EXCEPTION | CUF_SHORTFALL | VERIFICATION_LD (note engine)
+  source_ref TEXT,
   approved_by TEXT,
   approved_by_id TEXT,
   approved_at TEXT,
@@ -1144,6 +1147,7 @@ CREATE TABLE IF NOT EXISTS recon_exceptions (
   reason TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','ACCEPTED','REJECTED')),
   dispute_id TEXT,
+  note_id TEXT,          -- the note an accepted exception was drafted into (R4)
   resolution_note TEXT,
   resolved_by TEXT,
   resolved_at TEXT,

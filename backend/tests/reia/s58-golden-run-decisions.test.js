@@ -53,6 +53,8 @@ describe('S58 Withdrawing a statement that should not exist', () => {
     const signed = statement(psa, '2026-08', { status: 'CLOSED' });
     expect((await post(`/api/reconciliation/${signed}/withdraw`, { reason: 'Made by the scheduler by mistake' })).body.error).toMatch(/has been signed/);
     makeInvoice({ contract_id: psa.id, direction: 'SJVN_TO_BUYER', status: 'SENT', billing_period: '2026-07' });
+    // R1: a month with its bill and its energy locked is one to reconcile.
+    db.prepare(`INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, status) VALUES (?, ?, '2026-07', 'FINAL', 'SEA', 1000, 'LOCKED')`).run(newId('ENG'), psa.id);
     const live = statement(psa, '2026-07', { status: 'NEEDS_REVIEW' });
     expect((await post(`/api/reconciliation/${live}/withdraw`, { reason: 'Made by the scheduler by mistake' })).body.error).toMatch(/regenerate/);
   });

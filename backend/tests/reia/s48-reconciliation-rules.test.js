@@ -43,6 +43,7 @@ describe('S48 Nothing to reconcile is not a match', () => {
 
   it('does not take a missing availability as 100 %', () => {
     energy(ppa, '2026-07', 8184, { availability: null });
+    makeInvoice({ contract_id: ppa.id, direction: 'SELLER_TO_SJVN', status: 'APPROVED', billing_period: '2026-07', energy_mwh: 8184, due_date: '2099-12-31' });
     expect(line(buildContractReconItems({ contractId: ppa.id, period: '2026-07' }), 'PERFORMANCE').match_status).toBe('NOT_CONNECTED');
   });
 });
@@ -69,6 +70,7 @@ describe('S48 What counts as billed', () => {
   it('expects no monthly CUF deduction — the shortfall is settled at the year end — not 1 % of the bill', () => {
     db.prepare('UPDATE contracts SET min_cuf_percent = 19 WHERE id = ?').run(ppa.id);
     energy(ppa, '2026-07', 2000, { availability: 99 }); // CUF 5.38 % on 50 MW
+    makeInvoice({ contract_id: ppa.id, direction: 'SELLER_TO_SJVN', status: 'APPROVED', billing_period: '2026-07', energy_mwh: 2000, energy_charges: 5760000, total_amount: 5760000, due_date: '2099-12-31' });
     const built = buildContractReconItems({ contractId: ppa.id, period: '2026-07' });
     const pen = line(built, 'PENALTY');
     expect(pen.paid_value).toBe(0);
@@ -80,7 +82,9 @@ describe('S48 What counts as billed', () => {
 describe('S48 Signing', () => {
   const statement = async () => {
     energy(ppa, '2026-07', 8184);
-    const r = await run(ppa, '2026-07'); // no bill: the energy line does not match
+    // Billed short of the metered figure, so the energy line does not match.
+    makeInvoice({ contract_id: ppa.id, direction: 'SELLER_TO_SJVN', status: 'APPROVED', billing_period: '2026-07', energy_mwh: 8000, due_date: '2099-12-31' });
+    const r = await run(ppa, '2026-07');
     return r.body;
   };
 

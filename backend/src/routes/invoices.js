@@ -22,6 +22,8 @@ import { lastCompleteMonth } from '../services/energyRules.js';
 import { recordAdvance, openAdvanceBalance } from '../services/advances.js';
 import { backToBack } from '../services/backToBack.js';
 import { readinessBoard } from '../services/billingReadiness.js';
+import { monthCloseBoard } from '../services/monthClose.js';
+import { lpsBillPreview, raiseLpsBills, releaseLpsBill } from '../services/lpsBills.js';
 import { notifyCounterparty, computeCoverage } from '../paymentSecurityEngine.js';
 import {
   compareSellerToSystem,
@@ -476,6 +478,68 @@ router.get('/readiness', requireRole(...ROLE_GROUPS.REIA_ALL), (req, res) => {
   try {
     res.json(readinessBoard(req.query.period_month || undefined));
   } catch (err) {
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong' });
+  }
+});
+
+// PM4: the developer release planner — for each developer bill SJVN has
+// accepted, what the buyers have paid that is the generator's (energy share,
+// no margin, no credit notes), what has been released from it already, and
+// what can be released now.
+router.get('/release-planner', requireRole(...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE), (req, res) => {
+  const bills = db.prepare(`
+    SELECT i.*, c.contract_no, e.name AS developer, e.is_penny_drop_verified, e.pending_bank_json
+    FROM invoices i JOIN contracts c ON c.id = i.contract_id LEFT JOIN entities e ON e.id = c.seller_id
+    WHERE i.direction = 'SELLER_TO_SJVN' AND TRIM(COALESCE(i.invoice_breakdown_json, '')) = ''
+      AND i.status IN ('APPROVED', 'SENT', 'PARTIALLY_PAID') AND i.invoice_no NOT LIKE 'DSM-%'
+    ORDER BY i.due_date IS NULL, i.due_date, i.billing_period
+  `).all();
+  const rows = bills.map((b) => {
+    const { realized, linked_psa: linked } = generatorRealization(b.id);
+    const released = Math.round(db.prepare(`SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)), 0) s FROM payments WHERE invoice_id = ? AND release_source = 'DISCOM_REALIZATION'`).get(b.id).s);
+    const open = Math.round(invoiceBalance(b, new Date()).balance);
+    const available = Math.max(0, realized - released);
+    const bank = b.pending_bank_json ? 'A change of bank account awaits verification' : (!b.is_penny_drop_verified ? 'Bank account not verified' : null);
+    return {
+      invoice_id: b.id, invoice_no: b.invoice_no, contract_no: b.contract_no, developer: b.developer, billing_period: b.billing_period,
+      due_date: b.due_date, status: b.status, total_amount: b.total_amount, open,
+      linked_psa_bills: linked, realized, released, available,
+      releasable_now: bank ? 0 : Math.min(available, open),
+      blocked: bank,
+    };
+  });
+  res.json({
+    rows,
+    totals: {
+      open: rows.reduce((t, r) => t + r.open, 0),
+      realized_unreleased: rows.reduce((t, r) => t + r.available, 0),
+      releasable_now: rows.reduce((t, r) => t + r.releasable_now, 0),
+    },
+  });
+});
+
+// PM5: the month's late payment surcharge bills.
+router.get('/lps-bills/preview', requireRole(...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE), (req, res) => {
+  try { res.json(lpsBillPreview(req.query.period_month || undefined)); } catch (err) {
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong' });
+  }
+});
+router.post('/lps-bills', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  try {
+    const r = raiseLpsBills({ period: req.body?.period_month, contractIds: req.body?.contract_ids, user: req.user, req });
+    res.status(r.raised.length ? 201 : 400).json(r.raised.length ? r : { ...r, error: `No LPS bill to raise for ${r.period}${r.skipped.length ? ' — already raised' : ''}.` });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong' });
+  }
+});
+
+// Month-close board (R1, L2): billing readiness, reconciliation gate and the
+// posting checklist for one month.
+router.get('/month-close', requireRole(...ROLE_GROUPS.REIA_ALL), (req, res) => {
+  try {
+    res.json(monthCloseBoard(req.query.period_month || undefined));
+  } catch (err) {
+    if (!err.status) console.error('[MONTH-CLOSE]', err);
     res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong' });
   }
 });
@@ -2093,6 +2157,8 @@ router.post('/:id/cancel', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
       updated_at = datetime('now')
     WHERE id = ?
   `).run(reason, req.user.name || req.user.email || null, inv.id);
+  // An LPS bill cancelled gives its surcharge back to the bills it was on (PM5).
+  releaseLpsBill(inv);
 
   // Block further approval progress on cancelled bills
   db.prepare(`
@@ -2203,9 +2269,13 @@ router.get('/:id/verification', requireRole(...ROLE_GROUPS.REIA_ALL, ...SELLER_R
     return res.status(400).json({ error: 'The verification checklist is for a developer\'s own bill. SJVN\'s computed bills and DSM pool bills are not verified here.' });
   }
   const live = liveVerification(inv);
+  // Damages already recovered by their own note (V4), and that note.
+  const ldNote = db.prepare(`SELECT id, note_no, status, amount FROM debit_credit_notes WHERE invoice_id = ? AND source_kind = 'VERIFICATION_LD' AND status IN ('DRAFT', 'ISSUED', 'SETTLED') ORDER BY created_at DESC LIMIT 1`).get(inv.id);
   res.json({
     ...live,
     ...verificationWindow(inv),
+    ld_note: ldNote || null,
+    ld_recovered: ldNote ? ldNote.amount : 0,
     verified_at: live.verification_status === 'VERIFIED' ? inv.verified_at : null,
     verified_by: live.verification_status === 'VERIFIED' ? inv.verified_by : null,
   });
@@ -2660,7 +2730,7 @@ router.get('/:id/deliveries', requireRole(...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_A
 // DISCOM realization available to fund a generator (developer) pay-out — the
 // amount the DISCOM(s) have actually paid on the PSA invoices linked to this
 // developer invoice (via invoice_mapping). This is what "pay-when-paid" draws on.
-function generatorRealization(devInvoiceId) {
+export function generatorRealization(devInvoiceId) {
   // The buyer bills this developer bill is paid out of. An explicit link is
   // made when the PSA bill is generated with the developer's bill named; a PSA
   // bill raised first — the usual order on a busy month — had none, and its

@@ -278,7 +278,13 @@ export function acceptSubmission(template, body = {}) {
 
 /** The build-up's figure against the bill's; anything but zero means the bill is wrong. */
 export function commercialGap(invoice, commercial) {
-  return Math.round((Number(commercial?.net_invoice) || 0) - Math.round(Number(invoice.total_amount) || 0));
+  // Damages the verifier assessed are recovered by their own note (V4), not by
+  // the developer rewriting its bill: what such a note covers is not a gap.
+  const recovered = invoice?.id ? Number(db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) s FROM debit_credit_notes
+    WHERE invoice_id = ? AND source_kind = 'VERIFICATION_LD' AND status IN ('DRAFT', 'ISSUED', 'SETTLED')
+  `).get(invoice.id).s) || 0 : 0;
+  return Math.round((Number(commercial?.net_invoice) || 0) + recovered - Math.round(Number(invoice.total_amount) || 0));
 }
 
 /** Overall status: VERIFIED when every technical item is VERIFIED or NA and the build-up meets the bill. */

@@ -4,7 +4,7 @@ import { app } from '../../src/server.js';
 import db from '../../src/db/index.js';
 import { signToken } from '../../src/middleware/auth.js';
 import { runScheduledReconciliations } from '../../src/routes/reconciliation.js';
-import { tokenFor, auth, makeUser, makeEntity, makeContract, resetReia } from '../helpers/reia.js';
+import { tokenFor, auth, makeUser, makeEntity, makeContract, resetReia, makeInvoice } from '../helpers/reia.js';
 
 // The reconciliation desk, as reading it for its first end-to-end test found
 // it: a second statement raised beside an open one (by the hourly sweep, forty
@@ -28,6 +28,8 @@ beforeEach(() => {
   // A statement needs something to reconcile: the month's energy on record.
   const prev = new Date(); prev.setDate(1); prev.setMonth(prev.getMonth() - 1);
   for (const p of ['2026-04', '2026-03', `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`]) db.prepare(`INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, status) VALUES (?, ?, ?, 'PROVISIONAL', 'SEA', 100, 'LOCKED')`).run(`ENG-T-${Math.random().toString(36).slice(2, 9)}`, contract.id, p);
+  // R1: a month is reconciled once its bill is presented too.
+  for (const p of ['2026-04', '2026-03', `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`]) makeInvoice({ contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'APPROVED', billing_period: p, energy_mwh: 100, energy_charges: 300000, total_amount: 300000, due_date: '2099-12-31' });
 });
 
 describe('One open statement for a period', () => {

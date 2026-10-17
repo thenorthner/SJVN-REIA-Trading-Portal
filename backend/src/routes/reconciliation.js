@@ -429,7 +429,7 @@ router.post('/run', requireRole(...REIA_WRITE, 'TRADING_USER'), (req, res) => {
     const items = db.prepare('SELECT * FROM recon_items WHERE reconciliation_id = ?').all(row.id);
     res.status(201).json({ ...row, items });
   } catch (err) {
-    res.status(err.status || 400).json({ error: err.message || 'Run failed' });
+    res.status(err.status || 400).json({ error: err.message || 'Run failed', ...(err.missing ? { missing: err.missing } : {}) });
   }
 });
 
@@ -793,7 +793,7 @@ router.post('/:id/withdraw', requireRole(...REIA_WRITE), (req, res) => {
     buildContractReconItems({ contractId: recon.contract_id, period: recon.period, periodType: recon.period_type });
     return res.status(400).json({ error: `${recon.period} now has energy or a bill to reconcile on this contract — regenerate ${recon.recon_no} instead of withdrawing it.` });
   } catch (err) {
-    if (!/Nothing to reconcile/.test(err.message || '')) return res.status(err.status || 500).json({ error: err.message });
+    if (err.reason !== 'NOT_READY' && !/Nothing to reconcile/.test(err.message || '')) return res.status(err.status || 500).json({ error: err.message });
   }
   const items = db.prepare('SELECT * FROM recon_items WHERE reconciliation_id = ?').all(recon.id);
   db.transaction(() => {

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { secureLogAudit } from '../auditEngine.js';
+import { postingChecklist } from '../services/monthClose.js';
 import {
   CATEGORIES, CATEGORY_LABELS, bookableDocuments, totalsOf,
   preparePosting, postToFinance, reversePosting, getPosting, listPostings,
@@ -47,6 +48,13 @@ router.get('/bookable', requireRole(...READ), (req, res) => {
 });
 
 // GET /reia-fi/:postingId
+// L2: the open items for a month, to see before it is booked.
+router.get('/checklist', requireRole(...READ), (req, res) => {
+  const period = String(req.query.period_month || '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return res.status(400).json({ error: 'period_month must be YYYY-MM' });
+  res.json(postingChecklist(period));
+});
+
 router.get('/:postingId', requireRole(...READ), (req, res) => {
   const p = getPosting(req.params.postingId);
   if (!p) return res.status(404).json({ error: 'Posting not found' });

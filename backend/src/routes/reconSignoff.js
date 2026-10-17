@@ -30,7 +30,7 @@ import { newId, pushNotification, invalidDecision } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { getParam, getParamNumber } from '../mastersService.js';
 import { canAccessRecon, isReia, recordEvent, saveStatement } from './reconciliation.js';
-import { draftNote } from '../services/noteDrafts.js';
+import { noteFromException } from '../services/noteEngine.js';
 import { inspectSignature } from './invoiceCompliance.js';
 import {
   newDoc, header, kpiBand, sectionTitle, table, notes as footNotes, pageNumbers, eachPage, stamp, nowLabel,
@@ -410,27 +410,17 @@ router.post('/exceptions/:id/resolve', (req, res) => send(res, () => {
   if (!['ACCEPTED', 'REJECTED'].includes(outcome)) throw fail(400, 'outcome must be ACCEPTED or REJECTED');
   const note = String(req.body.note || '').trim().slice(0, 1000);
   if (!note) throw fail(400, 'Give the reasons for the decision');
-  // An exception SJVN accepts means the counterparty was right about money, so
-  // the note that puts it right is drafted with it (decided 17-Oct-2026) and
-  // goes to Finance for approval like any other.
-  let drafted = null;
-  if (outcome === 'ACCEPTED' && recon.contract_id && Number(x.amount) > 0) {
-    const item = x.item_id ? db.prepare('SELECT invoice_id FROM recon_items WHERE id = ?').get(x.item_id) : null;
-    const direction = recon.counterparty_role === 'BUYER' ? 'SJVN_TO_BUYER' : 'SELLER_TO_SJVN';
-    const inv = (item?.invoice_id && db.prepare('SELECT * FROM invoices WHERE id = ?').get(item.invoice_id))
-      || db.prepare(`
-        SELECT * FROM invoices WHERE contract_id = ? AND direction = ? AND status IN ('APPROVED','SENT','PARTIALLY_PAID','PAID','DISPUTED')
-          AND invoice_no NOT LIKE 'DSM-%' ORDER BY billing_period DESC, created_at DESC LIMIT 1
-      `).get(recon.contract_id, direction);
-    if (!inv) throw fail(400, `There is no presented bill on this contract to put the accepted ${inr(x.amount)} against. Raise the bill first, or decide the exception once there is one.`);
-    drafted = draftNote({
-      noteType: inv.direction === 'SELLER_TO_SJVN' ? 'DEBIT' : 'CREDIT',
-      invoice: inv, amount: x.amount, user: req.user,
-      reason: `Reconciliation ${recon.recon_no} — exception "${x.label}" accepted: ${note}`,
-    });
-  }
   db.prepare(`UPDATE recon_exceptions SET status = ?, resolution_note = ?, resolved_by = ?, resolved_at = datetime('now') WHERE id = ?`)
-    .run(outcome, drafted ? `${note} (note ${drafted.note_no} drafted for approval)` : note, req.user.name, x.id);
+    .run(outcome, note, req.user.name, x.id);
+  // An exception SJVN accepts means the counterparty was right about money, so
+  // the note that puts it right is drafted with it (R4, through the note engine)
+  // and goes to Finance for approval. Where no bill can carry it yet, the
+  // decision stands and the note can be drafted from the exception later.
+  let drafted = null;
+  let noteProblem = null;
+  if (outcome === 'ACCEPTED' && recon.contract_id && Number(x.amount) > 0) {
+    try { drafted = noteFromException({ kind: 'RECON_EXCEPTION', ref: x.id, user: req.user, req }); } catch (e) { if (!e.status) throw e; noteProblem = e.message; }
+  }
   const left = db.prepare(`SELECT COUNT(*) c FROM recon_exceptions WHERE reconciliation_id = ? AND status = 'OPEN'`).get(recon.id).c;
   if (!left && recon.status === 'AGREED' && recon.sjvn_ack_at && recon.counterparty_ack_at) {
     db.prepare(`UPDATE reconciliations SET status = 'CLOSED', closed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`).run(recon.id);
@@ -442,7 +432,11 @@ router.post('/exceptions/:id/resolve', (req, res) => send(res, () => {
   const told = `${recon.recon_no}: your exception "${x.label}" (Rs ${inr(x.amount)}) was ${outcome === 'ACCEPTED' ? 'accepted' : 'not accepted'} — ${note}`;
   if (recon.contract_id && ['SELLER', 'BUYER'].includes(recon.counterparty_role)) notifyCounterparty(recon.contract_id, recon.counterparty_role, 'RECON_EXCEPTION', told);
   else pushNotification({ role: 'TRADING_USER', type: 'RECON_EXCEPTION', message: told });
-  return detailOf(req.user, db.prepare('SELECT r.*, c.contract_no, c.seller_id, c.buyer_id FROM reconciliations r LEFT JOIN contracts c ON c.id = r.contract_id WHERE r.id = ?').get(recon.id));
+  return {
+    ...detailOf(req.user, db.prepare('SELECT r.*, c.contract_no, c.seller_id, c.buyer_id FROM reconciliations r LEFT JOIN contracts c ON c.id = r.contract_id WHERE r.id = ?').get(recon.id)),
+    note_drafted: drafted ? { id: drafted.id, note_type: drafted.note_type, amount: drafted.amount } : null,
+    note_problem: noteProblem,
+  };
 }));
 
 // POST /:id/signed-copy { version_id } — the statement as this side signed it with a digital signature certificate.

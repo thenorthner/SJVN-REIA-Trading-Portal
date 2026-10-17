@@ -269,7 +269,39 @@ export function runSlaEscalations() {
     }
   }
 
-  return { escalated: count };
+  const deemed = closeDeemedAccepted();
+  return { escalated: count, deemed_accepted: deemed.closed };
+}
+
+/**
+ * D2: a resolution the party has let stand. Once dispute_response_days have
+ * passed since SJVN resolved a dispute and the party has neither accepted nor
+ * contested it, the resolution is deemed accepted and the dispute closes —
+ * unless a note the resolution asked for still waits for approval.
+ */
+export function closeDeemedAccepted(now = new Date()) {
+  const days = getParamNumber('dispute_response_days', 15);
+  const cutoff = new Date(now.getTime() - days * 86400000).toISOString().slice(0, 19).replace('T', ' ');
+  const due = db.prepare(`
+    SELECT d.* FROM disputes d
+    WHERE d.status IN ('RESOLVED_ACCEPTED', 'RESOLVED_REJECTED') AND d.resolution_response IS NULL
+      AND d.resolved_at IS NOT NULL AND REPLACE(substr(d.resolved_at, 1, 19), 'T', ' ') < ?
+      AND NOT EXISTS (SELECT 1 FROM debit_credit_notes n WHERE n.id = d.resolution_note_id AND n.status = 'DRAFT')
+  `).all(cutoff);
+  for (const d of due) {
+    const by = `Deemed accepted — no answer within ${days} days`;
+    db.prepare(`
+      UPDATE disputes SET status = 'CLOSED', resolution_response = 'ACCEPTED', resolution_response_by = ?, resolution_response_at = datetime('now'),
+        resolution_response_note = ?, updated_at = datetime('now') WHERE id = ? AND resolution_response IS NULL
+    `).run(by, `The ${String(d.raised_by_role).toLowerCase()} neither accepted nor contested the resolution of ${String(d.resolved_at).slice(0, 10)} within ${days} days.`, d.id);
+    setInvoiceOpenDispute(d.invoice_id);
+    recordEvent(d.id, { name: 'system' }, 'DEEMED_ACCEPTED', d.status, 'CLOSED', { window_days: days });
+    if (d.raised_by_user_id) {
+      pushNotification({ userId: d.raised_by_user_id, type: 'DISPUTE', message: `${d.dispute_no}: SJVN's resolution is deemed accepted — it was not answered within ${days} days — and the dispute is closed.` });
+    }
+    notifyDesk('DISPUTE', `${d.dispute_no}: resolution deemed accepted after ${days} days without an answer; closed.`);
+  }
+  return { closed: due.length };
 }
 
 /**

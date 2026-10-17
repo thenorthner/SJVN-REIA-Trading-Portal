@@ -55,13 +55,20 @@ export function invoiceDebitNotes(inv) {
 /** LPS the invoice has earned as of `asOf`. */
 export function invoiceLpsAsOf(inv, asOf = new Date()) {
   if (!inv) return { lps: 0, days_overdue: 0, base: 0 };
-  return accruedLpsTimeline(inv, {
+  // A surcharge bill is itself surcharge: it earns none (no surcharge on surcharge).
+  if (String(inv.invoice_no || '').startsWith('LPS-')) return { lps: 0, days_overdue: 0, base: 0 };
+  const t = accruedLpsTimeline(inv, {
     ...lpsTermsFor(inv.contract_id),
     payments: invoicePayments(inv.id),
     notes: invoiceDebitNotes(inv),
     asOf,
     state: payerStateForInvoice(inv),
   });
+  // Surcharge already demanded on a separate LPS bill (PM5) is that bill's to
+  // collect, not this one's: what this bill carries is the rest.
+  const apart = Number(inv.lps_invoiced) || 0;
+  if (!(apart > 0)) return t;
+  return { ...t, lps: Math.max(0, Math.round(((Number(t.lps) || 0) - apart) * 100) / 100), lps_accrued_total: t.lps, lps_invoiced: apart };
 }
 
 /**

@@ -54,6 +54,7 @@ export default function ReiaFinance() {
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
   const [postings, setPostings] = useState([]);
   const [bookable, setBookable] = useState(null);
+  const [checklist, setChecklist] = useState(null);
   const [open, setOpen] = useState(null);
   const [reversing, setReversing] = useState(null);
   const [reason, setReason] = useState('');
@@ -70,7 +71,9 @@ export default function ReiaFinance() {
         if (r?.categories?.length) setCategories(r.categories);
       })
       .catch((e) => setError(e.response?.data?.error || e.message));
-    if (!month) { setBookable(null); return; }
+    if (!month) { setBookable(null); setChecklist(null); return; }
+    // L2: the month's open items, seen before it is booked.
+    Promise.resolve().then(() => api.reiaFi.checklist(month)).then(setChecklist).catch(() => setChecklist(null));
     api.reiaFi.bookable({ period_month: month, category })
       .then(setBookable)
       .catch(() => setBookable(null));
@@ -175,6 +178,15 @@ export default function ReiaFinance() {
       <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
 
+      {checklist && !checklist.clear && (
+        <div className="alert alert-warning" style={{ marginBottom: 12 }}>
+          <strong>{checklist.open_items} open item{checklist.open_items === 1 ? '' : 's'} for {month} before it is booked:</strong>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+            {checklist.items.filter((i) => !i.clear).map((i) => <li key={i.key}>{i.label} — {i.count}{i.amount != null ? `, ₹${Math.abs(i.amount).toLocaleString('en-IN')}` : ''}</li>)}
+          </ul>
+          <div style={{ fontSize: 13, marginTop: 4 }}>Posting is not stopped; the Month-Close Board has the detail.</div>
+        </div>
+      )}
       <Card title="Prepare a month">
         <div className="form-grid">
           <Field label="Month" htmlFor="rf-month">

@@ -157,13 +157,15 @@ export function openPosition(direction) {
 }
 
 /** Late payment surcharge already raised on bills, and what became of it. */
+// An LPS bill (PM5) is surcharge in full; any other bill carries it in its lps column.
+const L = `CASE WHEN i.invoice_no LIKE 'LPS-%' THEN i.total_amount ELSE COALESCE(i.lps, 0) END`;
 export function lpsBilled(direction) {
   const row = db.prepare(`
     SELECT
-      COALESCE(SUM(i.lps), 0) AS charged,
-      COALESCE(SUM(CASE WHEN i.status = 'PAID' THEN i.lps ELSE 0 END), 0) AS recovered,
-      COALESCE(SUM(CASE WHEN i.status NOT IN ('PAID','CANCELLED') THEN i.lps ELSE 0 END), 0) AS open_charged,
-      COALESCE(SUM(CASE WHEN i.status = 'CANCELLED' THEN i.lps ELSE 0 END), 0) AS cancelled
+      COALESCE(SUM(${L}), 0) AS charged,
+      COALESCE(SUM(CASE WHEN i.status = 'PAID' THEN ${L} ELSE 0 END), 0) AS recovered,
+      COALESCE(SUM(CASE WHEN i.status NOT IN ('PAID','CANCELLED','DRAFT') THEN ${L} ELSE 0 END), 0) AS open_charged,
+      COALESCE(SUM(CASE WHEN i.status = 'CANCELLED' THEN ${L} ELSE 0 END), 0) AS cancelled
     FROM invoices i WHERE i.direction = ?
   `).get(direction);
   return row;

@@ -16,14 +16,19 @@ export default function BillingReadiness() {
   const canWrite = ROLE_GROUPS.REIA_WRITE.includes(user?.role);
   const [period, setPeriod] = useState('');
   const [board, setBoard] = useState(null);
+  const [close, setClose] = useState(null);
+  const [lps, setLps] = useState(null);
   const [loading, setLoading] = useState(true);
   const [popup, setPopup] = useState(null);
   const busy = useRef(false);
 
   const load = useCallback((p) => {
     setLoading(true);
-    api.invoices.readiness(p || undefined)
-      .then((b) => { setBoard(b); if (!p) setPeriod(b.period); })
+    api.invoices.monthClose(p || undefined)
+      .then((m) => {
+        setClose(m); setBoard(m.billing); if (!p) setPeriod(m.period);
+        if (!m.month_open) api.invoices.lpsPreview(m.period).then(setLps).catch(() => setLps(null)); else setLps(null);
+      })
       .catch((err) => setPopup({ title: 'Could not load the board', message: err.response?.data?.error || err.message }))
       .finally(() => setLoading(false));
   }, []);
@@ -52,6 +57,18 @@ export default function BillingReadiness() {
     }
   }
 
+  async function act(fn, title) {
+    if (busy.current) return;
+    busy.current = true;
+    try {
+      const r = await fn();
+      setPopup({ tone: 'success', title, message: r?.message || '', items: r?.items });
+      load(board.period);
+    } catch (err) {
+      setPopup({ title: 'Not done', message: err.response?.data?.error || err.message, items: err.response?.data?.missing });
+    } finally { busy.current = false; }
+  }
+
   const columns = [
     { key: 'contract_no', header: 'Contract', render: (r) => <span>{r.contract_no} <span style={{ color: 'var(--text-light)' }}>({r.contract_type})</span></span> },
     { key: 'counterparty', header: 'Counterparty', render: (r) => r.counterparty || '—' },
@@ -75,8 +92,8 @@ export default function BillingReadiness() {
   return (
     <div>
       <PageHeader
-        title="Billing Readiness"
-        subtitle="Per contract for the month: energy locked, PPA bill in, already billed — and every ready one raised in one go"
+        title="Month-Close Board"
+        subtitle="One month, closed in order: energy locked and billed, statements reconciled, surcharge billed, and the open items Finance should see before it books the month"
         actions={(
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <input type="month" value={period} max={board?.last_billable_month} onChange={(e) => { setPeriod(e.target.value); load(e.target.value); }} aria-label="Billing month" />
@@ -96,6 +113,52 @@ export default function BillingReadiness() {
         <Table columns={columns} rows={loading ? [] : board?.rows || []} emptyMessage={loading ? 'Loading…' : 'No live REIA contract for this month.'} />
         <p className="inline-note">Bills are raised as drafts through the same Generate path, one at a time; open them under <Link to="/reia/invoices">Billing &amp; Invoicing</Link> to check and submit.</p>
       </Card>
+      {close && (
+        <Card title={`Reconciliation — ${close.reconciliation.totals.closed} closed, ${close.reconciliation.totals.statements} raised, ${close.reconciliation.totals.ready} ready to run, ${close.reconciliation.totals.waiting} waiting`}>
+          <Table
+            columns={[
+              { key: 'contract_no', header: 'Contract', render: (r) => <span>{r.contract_no} <span style={{ color: 'var(--text-light)' }}>({r.contract_type})</span></span> },
+              { key: 'ready', header: 'Month closed', render: (r) => (r.ready ? yes(true) : <span style={{ color: '#b45309', fontSize: 13 }}>✗ {r.missing.join('; ')}</span>) },
+              { key: 'statement', header: 'Statement', render: (r) => (r.statement ? <span>{r.statement.recon_no} <Badge status={r.statement.status} /></span> : '—') },
+              { key: 'run', header: '', render: (r) => (canWrite && r.ready && !r.statement ? (
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => act(async () => { const x = await api.reconciliation.run({ contract_id: r.contract_id, period: close.period, scope: 'REIA_CONTRACT' }); return { message: `${x.recon_no} raised.` }; }, 'Reconciliation run')}>Run</button>
+              ) : null) },
+            ]}
+            rows={close.reconciliation.rows}
+          />
+          <p className="inline-note">A month is reconciled once its energy is locked and its bill presented.</p>
+        </Card>
+      )}
+      {lps && (
+        <Card title={`Late payment surcharge for ${lps.period} — ${fmtCurrency(lps.total)} to bill`}
+          actions={canWrite && lps.total > 0 ? <button type="button" className="btn btn-primary btn-sm" onClick={() => act(async () => { const r = await api.invoices.raiseLpsBills({ period_month: lps.period }); return { message: 'Raised as drafts for approval.', items: r.raised.map((x) => `${x.contract_no}: ${x.invoice_no} — ${fmtCurrency(x.total)}`) }; }, 'LPS bills raised')}>Raise LPS bills</button> : null}>
+          <Table
+            columns={[
+              { key: 'contract_no', header: 'PSA', render: (r) => <>{r.contract_no}<div style={{ fontSize: 13, color: 'var(--text-light)' }}>{r.buyer}</div></> },
+              { key: 'lines', header: 'Overdue bills', render: (r) => r.lines.map((l) => <div key={l.invoice_id} style={{ fontSize: 13 }}>{l.invoice_no}: {l.days_overdue} days — {fmtCurrency(l.amount)}</div>) },
+              { key: 'total', header: 'Surcharge', render: (r) => (r.existing ? <span>{r.existing.invoice_no} <Badge status={r.existing.status} /></span> : fmtCurrency(r.total)) },
+            ]}
+            rows={lps.rows}
+            emptyMessage="No overdue bill has earned surcharge that is not yet billed."
+          />
+          <p className="inline-note">Electricity (Late Payment Surcharge) Rules, 2022: calendar days past the due date, base rate rising 0.5% a month to 3% above it. Each bill's surcharge is billed once; cancelling an LPS bill gives it back.</p>
+        </Card>
+      )}
+      {close && (
+        <Card title={close.posting.clear ? 'Posting checklist — nothing open' : `Posting checklist — ${close.posting.open_items} open item${close.posting.open_items === 1 ? '' : 's'} before Finance books ${close.period}`}>
+          {close.posting.items.map((i) => (
+            <div key={i.key} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ fontWeight: 600, color: i.clear ? '#15803d' : '#b45309' }}>{i.clear ? '✓' : '✗'} {i.label}{!i.clear ? ` — ${i.count}${i.amount != null ? `, ${fmtCurrency(i.amount)}` : ''}` : ''}</div>
+              {!i.clear && (
+                <div style={{ fontSize: 13, color: 'var(--text-light)' }}>
+                  {i.rows.slice(0, 6).map((r) => r.invoice_no || r.contract_no || r.dispute_no || r.receipt_no).filter(Boolean).join(', ')}{i.count > 6 ? ` and ${i.count - 6} more` : ''}{i.hint ? ` · ${i.hint}` : ''}
+                </div>
+              )}
+            </div>
+          ))}
+        </Card>
+      )}
+
       <AlertPopup open={!!popup} tone={popup?.tone || 'error'} title={popup?.title} message={popup?.message} items={popup?.items} onClose={() => setPopup(null)} />
     </div>
   );

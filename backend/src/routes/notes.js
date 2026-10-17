@@ -19,6 +19,7 @@
  */
 import { Router } from 'express';
 import db from '../db/index.js';
+import { noteFromException } from '../services/noteEngine.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, nextSeriesNo, computeDueDate } from '../util.js';
 import { payableNow } from '../disputesConstants.js';
@@ -175,9 +176,9 @@ router.get('/approval-queue', requireRole(...READ), (req, res) => {
     ORDER BY n.created_at
   `).all();
   const docs = (raw) => { try { return JSON.parse(raw || '[]'); } catch { return []; } };
-  const sourceOf = (n, d) => (d ? 'DISPUTE'
-    : /^Reconciliation /.test(n.reason || '') ? 'RECONCILIATION'
-      : /^CUF true-up/.test(n.reason || '') ? 'CUF_TRUE_UP'
+  const sourceOf = (n, d) => (d ? 'DISPUTE' : n.source_kind ? n.source_kind
+    : /^Reconciliation /.test(n.reason || '') ? 'RECON_EXCEPTION'
+      : /^CUF true-up/.test(n.reason || '') ? 'CUF_SHORTFALL'
         : /^Power diversion /.test(n.reason || '') ? 'DIVERSION' : 'DESK');
   res.json(rows.map((n) => {
     const d = db.prepare('SELECT * FROM disputes WHERE resolution_note_id = ?').get(n.id);
@@ -274,9 +275,24 @@ router.get('/cuf-true-up', requireRole(...READ), (req, res) => {
   }
 });
 
+// R4 / G3 / V4: one click from an accepted exception, a CUF shortfall or the
+// verifier's damages to a draft note (services/noteEngine.js).
+router.post('/from-exception', requireRole(...WRITE), (req, res) => {
+  try {
+    const b = req.body || {};
+    const ref = b.ref || b.exception_id || b.invoice_id || (b.contract_id && b.contract_year ? `${b.contract_id}:${b.contract_year}` : null);
+    const note = noteFromException({ kind: b.kind, ref, user: req.user, req });
+    res.status(201).json(present(getNote(note.id)));
+  } catch (err) {
+    if (!err.status) console.error('[NOTES] from-exception', err);
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong', ...(err.extra || {}) });
+  }
+});
+
 router.post('/cuf-true-up', requireRole(...WRITE), (req, res) => {
   try {
-    res.status(201).json(raiseTrueUp({ contractId: req.body?.contract_id, contractYear: req.body?.contract_year, user: req.user, req }));
+    const note = noteFromException({ kind: 'CUF_SHORTFALL', ref: `${req.body?.contract_id}:${req.body?.contract_year}`, user: req.user, req });
+    res.status(201).json(note.true_up);
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message, ...(err.extra || {}) });
   }

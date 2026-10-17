@@ -50,7 +50,21 @@ export default function VerificationChecklist({ invoiceId, totalAmount, canWrite
   }); };
   const needsReason = (t) => t.auto === 'FAILED' && t.status !== 'FAILED';
   const raised = Number(totalAmount ?? (data.commercial.net_invoice - (data.commercial_gap || 0))) || 0;
-  const gap = Math.round((data.commercial.net_invoice || 0) - raised);
+  // Damages recovered by their own note (V4) are not a gap in the bill.
+  const ld = Math.round(Number(data.commercial.liquidated_damages) || 0);
+  const gap = Math.round((data.commercial.net_invoice || 0) + (Number(data.ld_recovered) || 0) - raised);
+
+  async function draftLdNote() {
+    if (busy.current) return;
+    busy.current = true;
+    try {
+      await api.notes.fromException({ kind: 'VERIFICATION_LD', invoice_id: invoiceId });
+      setData(await api.invoices.getVerification(invoiceId));
+      onSaved?.();
+    } catch (err) {
+      setPopup(err.response?.data?.error || 'Could not draft the note.');
+    } finally { busy.current = false; }
+  }
 
   async function save() {
     if (busy.current) return;
@@ -148,9 +162,20 @@ export default function VerificationChecklist({ invoiceId, totalAmount, canWrite
           </tr>
         </tbody>
       </table>
+      {data.ld_note && (
+        <div className="inline-note" style={{ marginTop: 10 }}>
+          Liquidated damages of {fmtCurrency(data.ld_note.amount)} are recovered by {data.ld_note.status === 'DRAFT' ? 'a draft credit note awaiting Finance\'s approval' : `credit note ${data.ld_note.note_no}`}.
+        </div>
+      )}
       {gap !== 0 && (
         <div className="alert alert-warning" style={{ marginTop: 10 }} role="status">
-          The build-up and the bill differ by {fmtCurrency(Math.abs(gap))}, so the bill cannot be verified as it stands. Send it back to the developer to correct.
+          The build-up and the bill differ by {fmtCurrency(Math.abs(gap))}, so the bill cannot be verified as it stands.
+          {ld > 0 && !data.ld_note && Math.abs(gap) === ld
+            ? ' The difference is the liquidated damages: save the checklist, then recover them by a note on this bill.'
+            : ' Send it back to the developer to correct.'}
+          {canWrite && ld > 0 && !data.ld_note && data.started && (
+            <div style={{ marginTop: 8 }}><button type="button" className="btn btn-primary btn-sm" onClick={draftLdNote}>Draft LD note of {fmtCurrency(ld)}</button></div>
+          )}
         </div>
       )}
 
