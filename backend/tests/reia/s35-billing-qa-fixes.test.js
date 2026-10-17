@@ -78,6 +78,22 @@ describe('Generate Invoice says what is actually wrong', () => {
     expect((await post(`/api/invoices/${first.body.id}/cancel`, reia, { reason: 'raised in error' })).status).toBe(200);
     expect((await post('/api/invoices/generate', reia, body)).status).toBe(201);
   });
+
+  it('lets a month be billed again once its presented bill is wholly reversed by credit notes', async () => {
+    // 17-Oct-2026: a premature bill already presented is reversed by a credit
+    // note, not cancelled; the reversed bill must not block the clean one.
+    lockEnergy(ppa.id);
+    const body = { contract_id: ppa.id, period_month: '2026-04', invoice_type: 'FINAL' };
+    const first = (await post('/api/invoices/generate', reia, body)).body;
+    db.prepare(`UPDATE invoices SET status = 'SENT' WHERE id = ?`).run(first.id);
+    const partial = newId('DCN');
+    const note = (id, amt, status) => db.prepare(`INSERT INTO debit_credit_notes (id, note_no, note_type, invoice_id, contract_id, period_month, reason_code, amount, taxable_amount, tax_amount, reason, status, model, created_by)
+      VALUES (?, ?, 'CREDIT', ?, ?, '2026-04', 'OTHER', ?, ?, 0, 'reversal', ?, 'V2', 'x')`).run(id, `CN-${id}`, first.id, ppa.id, amt, amt, status);
+    note(partial, 1000, 'ISSUED');
+    expect((await post('/api/invoices/generate', reia, body)).status, 'a part credit does not free the month').toBe(409);
+    note(newId('DCN'), first.total_amount - 1000, 'ISSUED');
+    expect((await post('/api/invoices/generate', reia, body)).status).toBe(201);
+  });
 });
 
 describe('Arrear and supplementary bills', () => {

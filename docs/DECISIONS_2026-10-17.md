@@ -132,7 +132,11 @@ Changed master defaults are moved once, and only where the parameter still holds
 
 - **PSPCL under-secured (₹4 L LC against a ₹2.36 Cr bill):** billing is **not blocked**, because stopping a bill only delays SJVN's own money. The levers are the stricter adequacy rule, the Management-only override, and the existing security acknowledgement at approval.
 
-## Real-database items waiting for a go-ahead
+## Real-database items — applied 17-Oct-2026 on the user's go-ahead
+
+Applied by `tools/data-fixes/2026-10-17-real-db-cleanup.mjs` (log beside it), after a backup to `backend/backups/platform-pre-cleanup-2026-10-17.db` and a rehearsal on a copy. Credit notes CN/2026-27/00002–00005 were issued through the notes desk by two labelled data-fix users. Presented bills are reversed by credit note rather than cancelled, and a wholly reversed bill no longer blocks its month from being billed again. Still open: the PSPCL, HPPC and NDMC bills are October 2026 bills raised on 5-Oct, before the month ended; they now carry due dates as approved, but they were raised early like the others.
+
+The items as listed before the clean-up:
 
 Found read-only on 17-Oct-2026:
 

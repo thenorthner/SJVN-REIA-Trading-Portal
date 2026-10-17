@@ -124,6 +124,14 @@ const SEGREGATION_REFUSAL =
  * so nothing already in flight is loosened by this change — the only bills that
  * move are the ones under the first threshold, which drop to one.
  */
+/**
+ * A bill wholly reversed by issued credit notes no longer stands for its month:
+ * the month can be billed again (a premature or wrong bill reversed by a credit
+ * note, as audit practice requires, rather than cancelled after presentation).
+ */
+const notFullyCreditedSql = (a = 'i') => `COALESCE((SELECT SUM(n.amount) FROM debit_credit_notes n
+  WHERE n.invoice_id = ${a}.id AND n.note_type = 'CREDIT' AND n.model = 'V2' AND n.status IN ('ISSUED', 'SETTLED')), 0) < ${a}.total_amount - 0.005`;
+
 const DEFAULT_APPROVAL_BANDS = [{ above: 1000000, levels: 3 }, { above: 100000, levels: 2 }];
 
 function approvalLevelsFor(inv) {
@@ -745,10 +753,11 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   // that exists is a supplementary, which says so; a bill raised in error is
   // cancelled first, with its reason.
   const twin = db.prepare(`
-    SELECT invoice_no, status FROM invoices
-    WHERE contract_id = ? AND billing_period = ? AND direction = ? AND invoice_type = ?
-      AND status != 'CANCELLED' AND TRIM(COALESCE(invoice_breakdown_json, '')) != ''
-    ORDER BY created_at DESC LIMIT 1
+    SELECT i.invoice_no, i.status FROM invoices i
+    WHERE i.contract_id = ? AND i.billing_period = ? AND i.direction = ? AND i.invoice_type = ?
+      AND i.status != 'CANCELLED' AND TRIM(COALESCE(i.invoice_breakdown_json, '')) != ''
+      AND ${notFullyCreditedSql('i')}
+    ORDER BY i.created_at DESC LIMIT 1
   `).get(contract_id, period_month, directionForContract(contract), resolvedType);
   if (twin) {
     throw refuse(409, {
@@ -1602,10 +1611,10 @@ function checkInvoiceRow(raw, user, contractCache, seenKeys) {
     if (seenKeys.has(key)) errors.push(`a FINAL bill for ${row.contract_no} ${row.billing_period} appears twice in this file`);
     else {
       const existing = db.prepare(`
-        SELECT invoice_no FROM invoices
-        WHERE contract_id = ? AND billing_period = ? AND direction = 'SELLER_TO_SJVN'
-          AND invoice_type = 'FINAL' AND status != 'CANCELLED'
-          AND TRIM(COALESCE(invoice_breakdown_json, '')) = ''
+        SELECT i.invoice_no FROM invoices i
+        WHERE i.contract_id = ? AND i.billing_period = ? AND i.direction = 'SELLER_TO_SJVN'
+          AND i.invoice_type = 'FINAL' AND i.status != 'CANCELLED'
+          AND TRIM(COALESCE(i.invoice_breakdown_json, '')) = '' AND ${notFullyCreditedSql('i')}
       `).get(contract.id, row.billing_period);
       if (existing) errors.push(`${row.contract_no} ${row.billing_period} is already billed by ${existing.invoice_no}`);
     }
@@ -1783,10 +1792,10 @@ router.post('/', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), (req, 
   const invoiceType = b.invoice_type || 'FINAL';
   if (invoiceType === 'FINAL') {
     const existing = db.prepare(`
-      SELECT invoice_no, status FROM invoices
-      WHERE contract_id = ? AND billing_period = ? AND direction = 'SELLER_TO_SJVN'
-        AND invoice_type = 'FINAL' AND status != 'CANCELLED'
-        AND TRIM(COALESCE(invoice_breakdown_json, '')) = ''
+      SELECT i.invoice_no, i.status FROM invoices i
+      WHERE i.contract_id = ? AND i.billing_period = ? AND i.direction = 'SELLER_TO_SJVN'
+        AND i.invoice_type = 'FINAL' AND i.status != 'CANCELLED'
+        AND TRIM(COALESCE(i.invoice_breakdown_json, '')) = '' AND ${notFullyCreditedSql('i')}
     `).get(contract.id, b.billing_period);
     if (existing) {
       return res.status(409).json({
