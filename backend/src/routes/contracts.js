@@ -6,6 +6,7 @@ import { syncRequirementsFromContract, createInstrumentsFromRequirements } from 
 import { allocationsInForce } from '../services/allocations.js';
 import { contractVisibleTo, contractForCounterparty, changedTermsForCounterparty } from '../services/counterpartyScope.js';
 import { settlementPosition, settlementActions } from '../services/contractSettlement.js';
+import { holdStatus, setManualHold, overrideHold, requestFromCheck } from '../services/contractHold.js';
 
 const RE_PROJECT_TYPES = new Set(['Solar', 'Wind', 'Hybrid', 'FDRE']);
 import {
@@ -539,6 +540,28 @@ router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     ...fresh,
     ...(position ? { settlement: position, outstanding_actions: settlementActions(position) } : {}),
   });
+});
+
+// ── CC4 contract hold, CC2 compliance requests ──────────────────────────────
+router.get('/:id/hold', (req, res) => {
+  const c = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
+  if (!c || !contractVisibleTo(req.user, c)) return res.status(404).json({ error: 'Contract not found' });
+  res.json(holdStatus(c.id));
+});
+router.post('/:id/hold', requireRole(...ROLE_GROUPS.REIA_WRITE, 'MANAGEMENT'), (req, res) => {
+  try { res.json(setManualHold(req.params.id, { on: !!req.body?.on, reason: req.body?.reason, user: req.user, req })); } catch (e) {
+    res.status(e.status || 500).json({ error: e.status ? e.message : 'Something went wrong' });
+  }
+});
+router.post('/:id/hold/override', requireRole('MANAGEMENT', 'SJVN_ADMIN'), (req, res) => {
+  try { res.json(overrideHold(req.params.id, { reason: req.body?.reason, validUntil: req.body?.valid_until, user: req.user, req })); } catch (e) {
+    res.status(e.status || 500).json({ error: e.status ? e.message : 'Something went wrong' });
+  }
+});
+router.post('/:id/compliance-request', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  try { res.status(201).json(requestFromCheck(req.params.id, String(req.body?.code || ''), { dueDate: req.body?.due_date || null, user: req.user, req })); } catch (e) {
+    res.status(e.status || 500).json({ error: e.status ? e.message : 'Something went wrong' });
+  }
 });
 
 // Amendment -> creates a new version, marks old as AMENDED

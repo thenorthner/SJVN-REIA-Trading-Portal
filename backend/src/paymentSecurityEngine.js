@@ -410,6 +410,14 @@ export function checkAdequacy({ contractId = null, buyerEntityId = null } = {}) 
   if (!psa.length) {
     return { adequate: true, reason: 'No PSA contracts in scope', coverages: [] };
   }
+  // CC4: a PSA put on hold by hand stops scheduling and bidding for its buyer.
+  const held = psa.filter((c) => c.on_hold);
+  if (held.length) {
+    return {
+      adequate: false, coverages: [], held: held.map((c) => c.contract_no),
+      error: `Scheduling/bidding stopped: ${held.map((c) => `${c.contract_no} is on hold (${c.hold_reason})`).join('; ')}.`,
+    };
+  }
   const coverages = psa.map((c) => computeCoverage(c.id));
   const weak = coverages.filter((c) => !c.adequate);
   if (!weak.length) return { adequate: true, coverages };

@@ -55,7 +55,9 @@ describe('S54 Recording a diversion', () => {
   it('calls it a payment default only when a bill on the PSA is past its due date', async () => {
     db.prepare(`UPDATE invoices SET status = 'PAID' WHERE contract_id = ?`).run(psa.id);
     expect((await divert()).body.error).toMatch(/not in payment default/);
-    expect((await divert({ reason: 'NON_REQUISITION' })).status).toBe(201);
+    // Not requisitioned needs the record that shows it (SM1).
+    expect((await divert({ reason: 'NON_REQUISITION' })).status).toBe(400);
+    expect((await divert({ reason: 'NON_REQUISITION', notes: 'SLDC schedule shows zero requisition for the month' })).status).toBe(201);
   });
 });
 
@@ -184,6 +186,9 @@ describe('S54 Banked energy and the buyer', () => {
   it('leaves the PSA\'s share of banked energy out of its month bill: 40 % of (8,200 − 100)', async () => {
     allocate(40);
     expect((await bank()).status).toBe(201);
+    // The PSA holds no security against its overdue bills, so it is on hold
+    // (CC4); Management has lifted it for the month's billing.
+    db.prepare(`INSERT INTO contract_hold_overrides (id, contract_id, reason, approved_by, valid_until) VALUES ('CHO-T', ?, 'LC renewal with the bank, billing to continue', 'Management', date('now', '+10 days'))`).run(psa.id);
     const r = await post('/api/invoices/generate', { contract_id: psa.id, period_month: '2026-08', invoice_type: 'FINAL' });
     expect(r.status, JSON.stringify(r.body)).toBe(201);
     expect(r.body.energy_mwh).toBe(3240);

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/client.js';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Badge, StatCard, Tabs, Tab, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
@@ -32,6 +33,30 @@ export default function VerificationQueue() {
   const [status, setStatus] = useState('');
   const [open, setOpen] = useState(null);
 
+  const { user } = useAuth() || {};
+  const canWrite = ['SJVN_ADMIN', 'REIA_ADMIN', 'IT_SUPER_ADMIN', 'REIA_USER'].includes(user?.role);
+  const [picked, setPicked] = useState([]);
+  const [popup, setPopup] = useState(null);
+  const [reload, setReload] = useState(0);
+  const OPEN_FOR_DESK = ['SUBMITTED', 'UNDER_APPROVAL'];
+  async function verifySelected() {
+    try {
+      const r = await api.invoices.verifyBulk(picked);
+      setPopup({ tone: 'success', title: `${r.verified.length} verified`, message: r.skipped.length ? 'Some were left for a full check:' : '', items: r.skipped.map((x) => `${x.invoice_no || x.invoice_id}: ${x.why}`) });
+    } catch (e) {
+      const d = e.response?.data;
+      setPopup({ title: 'None verified', message: d?.error || e.message, items: (d?.skipped || []).map((x) => `${x.invoice_no || x.invoice_id}: ${x.why}`) });
+    }
+    setPicked([]); setReload((n) => n + 1);
+  }
+  async function sendBack(r) {
+    try {
+      const out = await api.invoices.sendBack(r.invoice_id);
+      setPopup({ tone: 'success', title: `${r.invoice_no} sent back`, message: 'The developer has been told:', items: out.sent_back });
+    } catch (e) { setPopup({ title: 'Not sent back', message: e.response?.data?.error || e.message }); }
+    setReload((n) => n + 1);
+  }
+
   useEffect(() => {
     setLoading(true);
     setError('');
@@ -42,7 +67,7 @@ export default function VerificationQueue() {
         setData(null);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [reload]);
 
   const rows = useMemo(
     () => (data?.invoices || []).filter((i) => !status || i.verification_status === status),
@@ -163,10 +188,17 @@ export default function VerificationQueue() {
               </div>
             </div>
 
+            {canWrite && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0' }}>
+                <button type="button" className="btn btn-primary btn-sm" disabled={!picked.length} onClick={verifySelected}>Verify selected ({picked.length})</button>
+                <span className="audit-muted">Bulk verification takes only bills whose automatic checks all pass and whose build-up meets the bill; capacity is confirmed and curtailment / change in law marked not claimed for each.</span>
+              </div>
+            )}
             <div className="report-table-wrap">
               <table className="report-table">
                 <thead>
                   <tr>
+                    {canWrite && <th scope="col"><span className="sr-only">Select</span></th>}
                     <th scope="col">Invoice</th>
                     <th scope="col">Developer</th>
                     <th scope="col">Contract</th>
@@ -179,16 +211,29 @@ export default function VerificationQueue() {
                 </thead>
                 <tbody>
                   {rows.length === 0 ? (
-                    <tr><td className="empty-cell" colSpan={8}>No developer bill with SJVN in this state.</td></tr>
+                    <tr><td className="empty-cell" colSpan={canWrite ? 9 : 8}>No developer bill with SJVN in this state.</td></tr>
                   ) : rows.map((r) => (
                     <React.Fragment key={r.invoice_id}>
                       <tr className="clickable" onClick={() => setOpen(open === r.invoice_id ? null : r.invoice_id)}>
+                        {canWrite && (
+                          <td onClick={(e) => e.stopPropagation()}>
+                            {r.verification_status !== 'VERIFIED' && OPEN_FOR_DESK.includes(r.status) && r.failed_checks.length === 0 && (
+                              <input type="checkbox" aria-label={`Select ${r.invoice_no}`} checked={picked.includes(r.invoice_id)} onChange={(e) => setPicked(e.target.checked ? [...picked, r.invoice_id] : picked.filter((x) => x !== r.invoice_id))} />
+                            )}
+                          </td>
+                        )}
                         <td>{r.invoice_no}<div className="audit-muted">{r.invoice_type} · {r.status}</div></td>
                         <td>{r.developer_name || '—'}</td>
                         <td>{r.contract_no || '—'}</td>
                         <td>{r.billing_period}</td>
                         <td className="num">{fmtCurrency(r.total_amount)}</td>
-                        <td className="num">{r.days_since_raised != null ? `${r.days_since_raised}d` : '—'}</td>
+                        <td className="num">
+                          {r.days_since_raised != null ? `${r.days_since_raised}d` : '—'}
+                          {r.sla && r.sla.level !== 'DONE' && (
+                            // V2: against the PPA's verification window.
+                            <div><Badge type={r.sla.level === 'RED' ? 'danger' : r.sla.level === 'AMBER' ? 'warning' : 'success'}>{r.sla.level === 'RED' ? `${-r.sla.days_left}d over` : `${r.sla.days_left}d left`}</Badge></div>
+                          )}
+                        </td>
                         <td>{r.validation_status ? <Badge status={r.validation_status}>{r.validation_status}</Badge> : '—'}</td>
                         <td>
                           <Badge type={STATE_TONE[r.verification_status]}>{STATE_LABEL[r.verification_status] || r.verification_status}</Badge>
@@ -199,7 +244,7 @@ export default function VerificationQueue() {
                       </tr>
                       {open === r.invoice_id && (
                         <tr>
-                          <td colSpan={8} style={{ background: 'var(--navy-tint)' }}>
+                          <td colSpan={canWrite ? 9 : 8} style={{ background: 'var(--navy-tint)' }}>
                             <div className="grid-2">
                               <div>
                                 <h4 style={{ margin: '0 0 8px' }}>Technical</h4>
@@ -245,6 +290,10 @@ export default function VerificationQueue() {
                                   <p className="report-count">Verified by {r.verified_by} on {fmtDateTime(r.verified_at)}.</p>
                                 )}
                                 <Link className="btn btn-sm btn-outline" to={`/reia/invoices?id=${encodeURIComponent(r.invoice_id)}`}>Open the bill to verify it</Link>
+                                {canWrite && OPEN_FOR_DESK.includes(r.status) && (r.failed_checks.length > 0) && (
+                                  // V1: back to the developer with exactly what failed.
+                                  <button type="button" className="btn btn-sm btn-danger" style={{ marginLeft: 8 }} onClick={() => sendBack(r)}>Send back to the developer</button>
+                                )}
                               </div>
                             </div>
                           </td>
@@ -264,6 +313,7 @@ export default function VerificationQueue() {
       )}
       </>
       )}
+      <AlertPopup open={!!popup} tone={popup?.tone || 'error'} title={popup?.title} message={popup?.message} items={popup?.items} onClose={() => setPopup(null)} />
     </div>
   );
 }

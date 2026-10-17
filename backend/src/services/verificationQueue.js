@@ -1,4 +1,5 @@
 import db from '../db/index.js';
+import { getParamNumber } from '../mastersService.js';
 import { liveVerification, OPEN_FOR_VERIFICATION, DECIDED } from './invoiceVerification.js';
 import { raisedBySellerSql } from './counterpartyScope.js';
 
@@ -27,6 +28,16 @@ const OUTSTANDING_SQL = `
 // twin of the developer's invoice for the same month) and DSM pool bills, whose
 // zero tariff made every one of them "fail" the tariff check, so four of the
 // seven rows — and the whole "Failed a check" count — were not developer bills.
+/** V2: days a bill has been with SJVN against the verification window. */
+function slaFor(invoice, state) {
+  const window = Number(invoice.verification_window_days) > 0 ? Number(invoice.verification_window_days) : getParamNumber('verification_window_days', 15);
+  const days = Number(invoice.days_since_raised) || 0;
+  const done = state === 'VERIFIED';
+  const level = done ? 'DONE' : days > window ? 'RED' : days >= Math.ceil(window * 0.7) ? 'AMBER' : 'GREEN';
+  const dueOn = new Date(Date.parse(`${String(invoice.created_at).slice(0, 10)}T00:00:00Z`) + window * 86400000).toISOString().slice(0, 10);
+  return { window_days: window, days, level, due_on: dueOn, days_left: window - days };
+}
+
 export function verificationQueue({ status = null, contractId = null, includeClosed = false } = {}) {
   const where = [raisedBySellerSql('i')];
   const params = [];
@@ -38,7 +49,7 @@ export function verificationQueue({ status = null, contractId = null, includeClo
 
   const invoices = db.prepare(`
     SELECT
-      i.*, c.contract_no, c.project_type, c.capacity_mw,
+      i.*, c.contract_no, c.project_type, c.capacity_mw, c.verification_window_days,
       e.name AS developer_name,
       ${OUTSTANDING_SQL} AS outstanding,
       CAST(julianday('now') - julianday(i.created_at) AS INTEGER) AS days_since_raised
@@ -88,6 +99,9 @@ export function verificationQueue({ status = null, contractId = null, includeClo
       pending_checks: pending.map((t) => t.label),
       commercial_net: commercialNet,
       commercial_gap: commercialGap,
+      // V2: the verification window — the PPA's, else the master — and where
+      // the bill stands in it.
+      sla: slaFor(invoice, state),
     };
   }).filter((r) => !status || r.verification_status === status);
 
@@ -137,6 +151,8 @@ export function verificationQueue({ status = null, contractId = null, includeClo
         .filter((r) => r.verification_status !== 'VERIFIED')
         .reduce((a, r) => Math.max(a, r.days_since_raised || 0), 0),
       approved_unverified: decidedUnverified.length,
+      sla_red: rows.filter((r) => r.sla.level === 'RED').length,
+      sla_amber: rows.filter((r) => r.sla.level === 'AMBER').length,
       approved_unverified_value: decidedUnverified.reduce((a, r) => a + (Number(r.total_amount) || 0), 0),
     },
     approved_unverified: decidedUnverified,

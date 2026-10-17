@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
+import { DefaultDashboard, DiversionPnl } from '../../components/DiversionPanels.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 
 const EMPTY = {
@@ -156,9 +157,13 @@ export default function PowerDiversion() {
         <StatCard label="Recovered" value={fmtCurrency(summary.total_recovered || 0)} tone="green" />
       </div>
 
+      <DefaultDashboard refresh={rows} />
+
       <Card>
         <Table columns={columns} rows={loading ? [] : rows} emptyMessage={loading ? 'Loading...' : 'No diversions recorded.'} />
       </Card>
+
+      <DiversionPnl refresh={rows} />
 
       <AlertPopup
         open={!!popup}
@@ -204,7 +209,7 @@ export default function PowerDiversion() {
             Sale: <strong>{fmtCurrency(salePreview)}</strong>{'  ·  '}Net Gain: <Signed v={netPreview} />
             <div style={{ fontSize: 13, color: 'var(--text-light)', marginTop: 2 }}>Positive gain reduces the buyer's dues; a deficit is made good by the buyer.</div>
           </div>
-          <Field label="Notes"><input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
+          <Field label={form.reason === 'NON_REQUISITION' ? 'What shows it was not requisitioned (schedule / SLDC record)' : 'Notes'} required={form.reason === 'NON_REQUISITION'}><input value={form.notes} required={form.reason === 'NON_REQUISITION'} minLength={form.reason === 'NON_REQUISITION' ? 15 : undefined} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
           <div className="form-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setShow(false)}>Cancel</button>
             <button type="submit" className="btn btn-primary">Record</button>

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client.js';
+import { DsmStatementSync, DsmPoolTracker } from '../../components/DsmDeskPanels.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, Tabs, Tab, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
@@ -422,6 +423,9 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
 
       {tab === 'weeks' && (
       <>
+      {/* DSM1 / DSM4: statements against the register, and the pool's payments. */}
+      <DsmStatementSync canWrite={canWrite} onChanged={load} />
+      <DsmPoolTracker />
       {notice && (
         <div className="alert alert-success" role="status" style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
           <span>{notice}</span>

@@ -1,6 +1,7 @@
 import db from '../db/index.js';
 import { computeCoverage, computeRequiredAmount, securityBreakdown, isLiveToday } from '../paymentSecurityEngine.js';
 import { ACTIVE_STATUSES, INSTRUMENTS_BY_SIDE } from '../paymentSecurityConstants.js';
+import { getParamNumber } from '../mastersService.js';
 
 /**
  * Where each contract stands against its own timeline and obligations.
@@ -158,9 +159,12 @@ function checksFor(contract, { approvals, counterparty, sources }, expiryNoticeD
     out.push(check('SECURITY', 'Payment security', live ? 'BREACH' : 'DUE',
       `${rupees(breakdown.lapsed)} lapsed${ago != null ? ` ${ago} days ago` : ''} and not replaced; ${rupees(held)} in force${required > 0 ? ` against ${rupees(required)} required` : ''}`,
       ago != null ? -ago : null));
+    out[out.length - 1].critical = held < Math.max(required, breakdown.lapsed) * (getParamNumber('contract_hold_security_floor_pct', 50) / 100);
   } else if (required > 0 && held + 0.5 < required) {
     out.push(check('SECURITY', 'Payment security', live ? 'BREACH' : 'DUE',
       `${rupees(held)} in force against ${rupees(required)} required${isPsa && cover.exposure > cover.required_amount ? ' (the bills it has to cover)' : ''}${lapsedNote}`));
+    // Critical (CC4): less than the floor share of what is required is in force.
+    out[out.length - 1].critical = held < required * (getParamNumber('contract_hold_security_floor_pct', 50) / 100);
   } else if (soonest != null && soonest <= expiryNoticeDays) {
     out.push(check('SECURITY', 'Payment security', 'DUE', `${rupees(held)} in force; an instrument expires in ${soonest} days`, soonest));
   } else {
@@ -212,10 +216,14 @@ function checksFor(contract, { approvals, counterparty, sources }, expiryNoticeD
   return out;
 }
 
-export function contractCompliance({ status = null, expiryNoticeDays = 90 } = {}) {
+// Breaches serious enough to stop new bills and scheduling (CC4).
+export const HOLD_CODES = ['SECURITY', 'APPROVALS'];
+
+export function contractCompliance({ status = null, expiryNoticeDays = 90, contractId = null } = {}) {
   const where = ["c.status NOT IN ('CLOSED')"];
   const params = [];
   if (status) { where.push('c.status = ?'); params.push(status); }
+  if (contractId) { where.push('c.id = ?'); params.push(contractId); }
 
   const contracts = db.prepare(`
     SELECT
@@ -249,6 +257,10 @@ export function contractCompliance({ status = null, expiryNoticeDays = 90 } = {}
     return map;
   }, new Map());
 
+  const autoHold = getParamNumber('contract_auto_hold', 1) === 1;
+  const overrideFor = new Map(db.prepare(`
+    SELECT * FROM contract_hold_overrides WHERE valid_until >= date('now', '+330 minutes') ORDER BY created_at
+  `).all().map((o) => [o.contract_id, o]));
   const rows = contracts.map((c) => {
     const counterpartyId = c.contract_type === 'PPA' ? c.seller_id : c.buyer_id;
     const checks = checksFor(c, {
@@ -260,7 +272,22 @@ export function contractCompliance({ status = null, expiryNoticeDays = 90 } = {}
 
     const breaches = checks.filter((k) => k.state === 'BREACH');
     const due = checks.filter((k) => k.state === 'DUE');
+    // CC4: a serious breach on a live contract puts it on hold (new bills and
+    // scheduling stop) unless Management has lifted it for a stated time; the
+    // desk can also hold a contract by hand.
+    const serious = autoHold ? breaches.filter((k) => k.code === 'APPROVALS' || (k.code === 'SECURITY' && k.critical)) : [];
+    const override = serious.length ? overrideFor.get(c.id) || null : null;
+    const automatic = live && serious.length > 0 && !override;
+    const hold = {
+      on_hold: !!c.on_hold || automatic,
+      manual: c.on_hold ? { reason: c.hold_reason, by: c.hold_set_by, at: c.hold_set_at } : null,
+      breaches: serious.map((k) => ({ code: k.code, label: k.label, detail: k.detail, critical: !!k.critical })),
+      override,
+      reason: c.on_hold ? `put on hold by ${c.hold_set_by}: ${c.hold_reason}`
+        : automatic ? serious.map((k) => `${k.label} — ${k.detail}`).join('; ') : null,
+    };
     return {
+      hold,
       contract_id: c.id,
       contract_no: c.contract_no,
       contract_type: c.contract_type,
@@ -295,6 +322,7 @@ export function contractCompliance({ status = null, expiryNoticeDays = 90 } = {}
       due: rows.filter((r) => r.state === 'DUE').length,
       ok: rows.filter((r) => r.state === 'OK').length,
       not_live: rows.filter((r) => r.state === 'NOT_LIVE').length,
+      on_hold: rows.filter((r) => r.hold.on_hold).length,
       expiring_within_notice: rows.filter((r) => r.state !== 'NOT_LIVE' && r.days_to_expiry != null && r.days_to_expiry >= 0 && r.days_to_expiry <= expiryNoticeDays).length,
     },
     contracts: rows,

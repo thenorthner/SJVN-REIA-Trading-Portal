@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/client.js';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Badge, StatCard, Tabs, Tab, AlertPopup, fmtNumber } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
@@ -33,6 +34,15 @@ export default function ContractCompliance() {
   const [notice, setNotice] = useState('90');
   const [open, setOpen] = useState(null);
   const loaded = useRef(90);
+  const { user } = useAuth() || {};
+  const canDesk = ['SJVN_ADMIN', 'REIA_ADMIN', 'IT_SUPER_ADMIN', 'REIA_USER'].includes(user?.role);
+  const canLift = ['MANAGEMENT', 'SJVN_ADMIN'].includes(user?.role);
+  const [holdForm, setHoldForm] = useState(null); // { contract, mode: HOLD|RELEASE|OVERRIDE, reason, valid_until }
+  const [notice2, setNotice2] = useState(null);
+  async function act(fn, done) {
+    try { await fn(); setNotice2({ tone: 'success', title: done }); setHoldForm(null); load(); }
+    catch (e) { setNotice2({ title: 'Not done', message: e.response?.data?.error || e.message }); }
+  }
 
   function load(days = Number(notice)) {
     // An unusable window used to be replaced by 90 without a word.
@@ -165,6 +175,7 @@ export default function ContractCompliance() {
                         </td>
                         <td>
                           <Badge type={STATE_TONE[c.state]}>{STATE_LABEL[c.state]}</Badge>
+                          {c.hold?.on_hold && <div><Badge type="danger">ON HOLD</Badge></div>}
                           {c.breach_count + c.due_count > 0 && (
                             <div className="audit-muted">
                               {c.breach_count ? `${c.breach_count} failing` : ''}
@@ -184,9 +195,40 @@ export default function ContractCompliance() {
                                     <tr key={`${k.code}-${k.label}`}>
                                       <th scope="row" style={{ width: '28%', textAlign: 'left' }}>{k.label}</th>
                                       <td style={{ width: 140 }}><Badge type={STATE_TONE[k.state]}>{STATE_LABEL[k.state]}</Badge></td>
-                                      <td>{k.detail}</td>
+                                      <td>
+                                        {k.detail}
+                                        {canDesk && ['BREACH', 'DUE'].includes(k.state) && ['SECURITY', 'APPROVALS', 'TENURE'].includes(k.code) && (
+                                          // CC2: one click to ask the counterparty on the Document Desk.
+                                          <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={(e) => { e.stopPropagation(); act(() => api.contracts.complianceRequest(c.contract_id, k.code), 'Request sent to the counterparty'); }}>Ask the counterparty</button>
+                                        )}
+                                      </td>
                                     </tr>
                                   ))}
+                                  <tr>
+                                    <th scope="row" style={{ textAlign: 'left' }}>Hold</th>
+                                    <td>{c.hold?.on_hold ? <Badge type="danger">On hold</Badge> : <Badge type="success">Not held</Badge>}</td>
+                                    <td>
+                                      {c.hold?.reason || (c.hold?.override ? `Breach lifted by ${c.hold.override.approved_by} until ${fmtDate(c.hold.override.valid_until)}: ${c.hold.override.reason}` : 'New bills and scheduling go ahead.')}
+                                      <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
+                                        {canDesk && !c.hold?.manual && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setHoldForm({ contract: c, mode: 'HOLD', reason: '' })}>Put on hold</button>}
+                                        {(canDesk || canLift) && c.hold?.manual && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setHoldForm({ contract: c, mode: 'RELEASE', reason: '' })}>Release hold</button>}
+                                        {canLift && c.hold?.breaches?.length > 0 && !c.hold?.override && <button type="button" className="btn btn-secondary btn-sm" onClick={() => setHoldForm({ contract: c, mode: 'OVERRIDE', reason: '', valid_until: '' })}>Lift for a stated time</button>}
+                                      </div>
+                                      {holdForm?.contract?.contract_id === c.contract_id && (
+                                        <form className="cw-form" onClick={(e) => e.stopPropagation()} onSubmit={(e) => {
+                                          e.preventDefault();
+                                          const f = holdForm;
+                                          act(() => (f.mode === 'OVERRIDE' ? api.contracts.overrideHold(c.contract_id, { reason: f.reason, valid_until: f.valid_until }) : api.contracts.setHold(c.contract_id, f.mode === 'HOLD', f.reason)),
+                                            f.mode === 'HOLD' ? 'Put on hold' : f.mode === 'RELEASE' ? 'Hold released' : 'Hold lifted');
+                                        }}>
+                                          <input required minLength={15} placeholder="Reason (at least 15 characters)" value={holdForm.reason} onChange={(e) => setHoldForm({ ...holdForm, reason: e.target.value })} style={{ minWidth: 280 }} />
+                                          {holdForm.mode === 'OVERRIDE' && <input type="date" required min={new Date().toISOString().slice(0, 10)} max={new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)} value={holdForm.valid_until} onChange={(e) => setHoldForm({ ...holdForm, valid_until: e.target.value })} aria-label="Lifted until (30 days at most)" />}
+                                          <button type="submit" className="btn btn-primary btn-sm">Save</button>
+                                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setHoldForm(null)}>Cancel</button>
+                                        </form>
+                                      )}
+                                    </td>
+                                  </tr>
                                 </tbody>
                               </table>
                             </div>
@@ -208,6 +250,7 @@ export default function ContractCompliance() {
       )}
       </>
       )}
+      <AlertPopup open={!!notice2} tone={notice2?.tone || 'error'} title={notice2?.title} message={notice2?.message} onClose={() => setNotice2(null)} />
     </div>
   );
 }

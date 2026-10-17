@@ -23,6 +23,7 @@ import { recordAdvance, openAdvanceBalance } from '../services/advances.js';
 import { backToBack } from '../services/backToBack.js';
 import { readinessBoard } from '../services/billingReadiness.js';
 import { monthCloseBoard } from '../services/monthClose.js';
+import { assertNotOnHold } from '../services/contractHold.js';
 import { lpsBillPreview, raiseLpsBills, releaseLpsBill } from '../services/lpsBills.js';
 import { notifyCounterparty, computeCoverage } from '../paymentSecurityEngine.js';
 import {
@@ -768,6 +769,12 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     throw refuse(400, {
       error: `Cannot bill a contract in status ${contract.status} — it must be ACTIVE first.`,
     });
+  }
+
+  // CC4: a contract on hold takes no new bill.
+  try { assertNotOnHold(contract.id, 'a new bill'); } catch (e) {
+    if (!e.status) throw e;
+    throw refuse(e.status, { error: e.message, hold: e.extra?.hold });
   }
 
   // A month is billed once it is over. Energy for the month still running is
@@ -2253,6 +2260,75 @@ router.get('/:id/back-to-back', requireRole(...ROLE_GROUPS.REIA_ALL), (req, res)
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   res.json(backToBack(inv));
+});
+
+// ── V1: send a developer's bill back with its failed checks ─────────────────
+router.post('/:id/send-back', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (!verificationApplies(inv)) return res.status(400).json({ error: 'Only a developer\'s own bill is sent back with its checklist.' });
+  if (!['SUBMITTED', 'UNDER_APPROVAL'].includes(inv.status)) return res.status(400).json({ error: `${inv.invoice_no} is ${inv.status.toLowerCase().replace(/_/g, ' ')} — only a bill with SJVN can be sent back.` });
+  const live = liveVerification(inv);
+  const failed = live.technical.filter((t) => t.status === 'FAILED');
+  const gap = Number(live.commercial_gap) || 0;
+  const extra = String(req.body?.note || '').trim().slice(0, 1000);
+  if (!failed.length && Math.abs(gap) < 1 && extra.length < 10) {
+    return res.status(400).json({ error: 'Nothing on the checklist has failed. Say what the developer should correct (at least 10 characters).' });
+  }
+  const lines = [
+    ...failed.map((t) => `${t.label}: ${t.note || t.hint || 'did not pass'}`),
+    ...(Math.abs(gap) >= 1 ? [`Amount: the bill and SJVN's build-up differ by ₹${Math.abs(Math.round(gap)).toLocaleString('en-IN')}`] : []),
+    ...(extra ? [extra] : []),
+  ];
+  const reason = `Sent back for correction — ${lines.join(' · ')}`;
+  db.transaction(() => {
+    const next = db.prepare(`SELECT * FROM invoice_approvals WHERE invoice_id = ? AND status = 'PENDING' ORDER BY level LIMIT 1`).get(inv.id);
+    if (next) db.prepare(`UPDATE invoice_approvals SET status = 'REJECTED', approver_name = ?, approver_id = ?, comments = ?, acted_at = datetime('now') WHERE id = ?`).run(req.user.name, req.user.id || null, reason, next.id);
+    db.prepare(`UPDATE invoices SET status = 'REJECTED', updated_at = datetime('now') WHERE id = ?`).run(inv.id);
+  })();
+  notifyCounterparty(inv.contract_id, 'SELLER', 'INVOICE_REJECTED', `${inv.invoice_no} was sent back by SJVN to correct: ${lines.join('; ').slice(0, 900)}`);
+  logAudit({ req, user: req.user, action: 'INVOICE_SENT_BACK', module: 'REIA', entityType: 'invoice', entityId: inv.id, reason, details: { failed: failed.map((t) => t.key), gap } });
+  res.json({ ...withContract(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id)), sent_back: lines });
+});
+
+// ── V3: verify several clean bills in one pass ──────────────────────────────
+// Only a bill whose automatic checks all pass and whose build-up meets it;
+// the judgement items (capacity, curtailment, change in law) are confirmed by
+// the verifier for all of them at once, and each bill records it on its own.
+const BULK_JUDGEMENT = { CAPACITY_VERIFIED: 'VERIFIED', CURTAILMENT_CHECKED: 'NA', CHANGE_IN_LAW_VERIFIED: 'NA' };
+export function bulkEligibility(inv) {
+  if (!verificationApplies(inv)) return { eligible: false, why: 'not a developer\'s own bill' };
+  if (!['SUBMITTED', 'UNDER_APPROVAL'].includes(inv.status)) return { eligible: false, why: `bill is ${inv.status.toLowerCase().replace(/_/g, ' ')}` };
+  if (inv.verification_status === 'VERIFIED') return { eligible: false, why: 'already verified' };
+  const template = buildVerificationTemplate(inv);
+  const blocking = template.technical.filter((t) => !(t.auto === 'VERIFIED' || t.auto === 'NA' || (t.auto === 'PENDING' && BULK_JUDGEMENT[t.key])));
+  if (blocking.length) return { eligible: false, why: blocking.map((t) => `${t.label} ${String(t.auto).toLowerCase()}`).join(', '), template };
+  const gap = Math.round(Number(template.commercial.net_invoice) - Math.round(Number(inv.total_amount) || 0));
+  if (Math.abs(gap) >= 1) return { eligible: false, why: `build-up differs by ₹${Math.abs(gap).toLocaleString('en-IN')}`, template };
+  return { eligible: true, template };
+}
+router.post('/verify-bulk', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const ids = Array.isArray(req.body?.invoice_ids) ? req.body.invoice_ids.map(String) : [];
+  if (!ids.length) return res.status(400).json({ error: 'Choose the bills to verify' });
+  if (ids.length > 50) return res.status(400).json({ error: 'At most 50 bills in one pass' });
+  const verified = [];
+  const skipped = [];
+  for (const id of ids) {
+    const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
+    if (!inv) { skipped.push({ invoice_id: id, why: 'not found' }); continue; }
+    const e = bulkEligibility(inv);
+    if (!e.eligible) { skipped.push({ invoice_id: id, invoice_no: inv.invoice_no, why: e.why }); continue; }
+    const technical = e.template.technical.map((t) => ({ key: t.key, status: t.auto === 'PENDING' ? BULK_JUDGEMENT[t.key] : t.auto, note: t.auto === 'PENDING' ? 'Confirmed in a bulk verification' : '' }));
+    const accepted = acceptVerification(e.template, { technical, commercial: {} });
+    if (accepted.error) { skipped.push({ invoice_id: id, invoice_no: inv.invoice_no, why: accepted.error }); continue; }
+    const live = liveVerification({ ...inv, verification_json: JSON.stringify(accepted.checklist) });
+    if (live.verification_status !== 'VERIFIED') { skipped.push({ invoice_id: id, invoice_no: inv.invoice_no, why: `came out ${live.verification_status.toLowerCase()}` }); continue; }
+    db.prepare(`UPDATE invoices SET verification_json = ?, verification_status = 'VERIFIED', verified_at = datetime('now'), verified_by = ?, verified_by_id = ?, updated_at = datetime('now') WHERE id = ?`)
+      .run(JSON.stringify(accepted.checklist), req.user.name, req.user.id || null, inv.id);
+    logAudit({ req, user: req.user, action: 'INVOICE_VERIFICATION', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: { status: 'VERIFIED', bulk: true, confirmed: Object.keys(BULK_JUDGEMENT) } });
+    verified.push({ invoice_id: inv.id, invoice_no: inv.invoice_no });
+  }
+  res.status(verified.length ? 200 : 400).json({ verified, skipped, ...(verified.length ? {} : { error: 'None of the chosen bills could be verified in bulk.' }) });
 });
 
 // ── Structured Verification Checklist (Technical + Commercial) ──────────────

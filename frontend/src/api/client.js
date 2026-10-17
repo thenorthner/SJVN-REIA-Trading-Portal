@@ -145,6 +145,10 @@ export const api = {
     acknowledgeNotice: (nid) => p(`/contract-workspace/notices/${nid}/acknowledge`),
   },
   contracts: {
+    hold: (id) => g(`/contracts/${id}/hold`),
+    setHold: (id, on, reason) => p(`/contracts/${id}/hold`, { on, reason }),
+    overrideHold: (id, body) => p(`/contracts/${id}/hold/override`, body),
+    complianceRequest: (id, code) => p(`/contracts/${id}/compliance-request`, { code }),
     list: (params) => g('/contracts', params),
     get: (id) => g(`/contracts/${id}`),
     create: (body) => p('/contracts', body),
@@ -202,6 +206,8 @@ export const api = {
     generateReady: (body) => p('/invoices/generate-ready', body),
     monthClose: (period) => g('/invoices/month-close', period ? { period_month: period } : undefined),
     releasePlanner: () => g('/invoices/release-planner'),
+    sendBack: (id, note) => p(`/invoices/${id}/send-back`, { note }),
+    verifyBulk: (ids) => p('/invoices/verify-bulk', { invoice_ids: ids }),
     lpsPreview: (period) => g('/invoices/lps-bills/preview', period ? { period_month: period } : undefined),
     raiseLpsBills: (body) => p('/invoices/lps-bills', body),
     arrear: (body) => p('/invoices/arrear', body),
@@ -329,6 +335,8 @@ export const api = {
     // One server-side step: proceeds set against this PSA's dues, surcharge first.
     recover: (id) => p(`/power-diversion/${id}/recover`, {}),
     billDeficit: (id) => p(`/power-diversion/${id}/bill-deficit`, {}),
+    defaultDashboard: () => g('/power-diversion/default-dashboard'),
+    pnl: () => g('/power-diversion/pnl'),
     remove: (id) => del(`/power-diversion/${id}`),
   },
   // Money a counterparty paid that no bill could take, held as its advance.
@@ -364,6 +372,9 @@ export const api = {
     update: (id, body) => put(`/deviation/${id}`, body),
     dispatch: (id, body) => p(`/deviation/${id}/dispatch`, body),
     linkInvoice: (id, body) => p(`/deviation/${id}/link-invoice`, body),
+    statementSync: (params) => g('/deviation/statement-sync', params),
+    raiseFromStatement: (body) => p('/deviation/raise-from-statement', body),
+    poolTracker: () => g('/deviation/pool-tracker'),
     remove: (id) => del(`/deviation/${id}`),
   },
   // NRPC's weekly Deviation Settlement Account: the statement SJVN's DSM bills

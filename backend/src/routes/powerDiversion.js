@@ -4,7 +4,9 @@ import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit, billableCapacityMw } from '../util.js';
 import { daysInMonth } from '../services/cercHydroBilling.js';
 import { applyInvoicePayment, buyerOutstanding } from './invoices.js';
-import { notifyCounterparty } from '../paymentSecurityEngine.js';
+import { notifyCounterparty, isLiveToday } from '../paymentSecurityEngine.js';
+import { ACTIVE_STATUSES, refreshAvailable } from '../paymentSecurityConstants.js';
+import { invoiceBalance } from '../services/invoiceLps.js';
 import { recordAdvance } from '../services/advances.js';
 import { draftNote } from '../services/noteDrafts.js';
 
@@ -69,6 +71,68 @@ function overdueOn(contractId) {
   `).get(contractId, istToday());
 }
 
+/**
+ * SM1: where a PSA stands on default. Power is diverted for a payment default
+ * when the buyer owes past its due date and its letter of credit cannot cover
+ * it (exhausted, lapsed or short) — the LC is drawn first; diversion is the
+ * remedy when it is not enough (PSA Art. 6.6).
+ */
+export function defaultPosition(contract) {
+  const bills = db.prepare(`
+    SELECT i.* FROM invoices i WHERE i.contract_id = ? AND ${OPEN_BILL} AND i.due_date IS NOT NULL AND i.due_date < ?
+    ORDER BY i.due_date
+  `).all(contract.id, istToday());
+  const overdue = Math.round(bills.reduce((t, i) => t + invoiceBalance(i, new Date()).balance, 0));
+  const oldest = bills[0]?.due_date || null;
+  const daysOverdue = oldest ? Math.floor((Date.parse(`${istToday()}T00:00:00Z`) - Date.parse(`${oldest}T00:00:00Z`)) / 86400000) : 0;
+  const lcs = db.prepare(`SELECT * FROM payment_security WHERE contract_id = ? AND mechanism_type = 'LC' AND status IN (${ACTIVE_STATUSES.map(() => '?').join(',')})`).all(contract.id, ...ACTIVE_STATUSES);
+  const lcAvailable = Math.round(lcs.filter((l) => isLiveToday(l)).reduce((t, l) => t + refreshAvailable(l), 0));
+  const inDefault = overdue > 0 && lcAvailable < overdue;
+  return {
+    contract_id: contract.id, contract_no: contract.contract_no,
+    overdue, overdue_bills: bills.length, oldest_due: oldest, days_overdue: daysOverdue,
+    lc_available: lcAvailable, lc_count: lcs.length, lc_exhausted: lcs.length > 0 && lcAvailable <= 0,
+    in_default: inDefault,
+    diversion_enabled: inDefault,
+    reason: !overdue ? 'Nothing past its due date'
+      : inDefault ? `₹${overdue.toLocaleString('en-IN')} overdue (${daysOverdue} days) and only ₹${lcAvailable.toLocaleString('en-IN')} of LC to draw`
+        : `₹${overdue.toLocaleString('en-IN')} overdue, covered by ₹${lcAvailable.toLocaleString('en-IN')} of LC — draw on the LC first`,
+  };
+}
+
+router.get('/default-dashboard', requireRole(...READ), (req, res) => {
+  const psas = db.prepare(`
+    SELECT c.*, b.name AS buyer_name FROM contracts c LEFT JOIN entities b ON b.id = c.buyer_id
+    WHERE c.contract_type = 'PSA' AND c.status IN ('ACTIVE', 'NEARING_EXPIRY', 'AMENDED', 'RENEWED') ORDER BY c.contract_no
+  `).all();
+  const rows = psas.map((c) => ({ ...defaultPosition(c), buyer_name: c.buyer_name, capacity_mw: c.capacity_mw }))
+    .sort((a, b) => b.in_default - a.in_default || b.overdue - a.overdue);
+  res.json({ rows, totals: { psas: rows.length, in_default: rows.filter((r) => r.in_default).length, overdue: rows.reduce((t, r) => t + r.overdue, 0) } });
+});
+
+// SM5: diversion P&L, per buyer and PSA.
+router.get('/pnl', requireRole(...READ), (req, res) => {
+  const rows = db.prepare(`
+    SELECT d.contract_id, c.contract_no, b.name AS buyer_name,
+      COUNT(*) AS diversions, SUM(d.quantum_mwh) AS quantum_mwh, SUM(d.sale_amount) AS sale_amount, SUM(d.expenses) AS expenses,
+      SUM(CASE WHEN d.net_gain > 0 THEN d.net_gain ELSE 0 END) AS gains,
+      SUM(CASE WHEN d.net_gain < 0 THEN -d.net_gain ELSE 0 END) AS deficits,
+      SUM(CASE WHEN d.status = 'RECOVERED' AND d.net_gain > 0 THEN d.applied_amount ELSE 0 END) AS applied_to_dues,
+      COALESCE(SUM((SELECT r.amount FROM unapplied_receipts r WHERE r.id = d.advance_id)), 0) AS surplus_to_advance,
+      COALESCE(SUM((SELECT n.amount FROM debit_credit_notes n WHERE n.id = d.deficit_note_id AND n.status IN ('DRAFT','ISSUED','SETTLED'))), 0) AS deficit_billed,
+      SUM(CASE WHEN d.status = 'RECORDED' THEN d.net_gain ELSE 0 END) AS open_net
+    FROM power_diversions d JOIN contracts c ON c.id = d.contract_id LEFT JOIN entities b ON b.id = d.buyer_id
+    WHERE d.status <> 'CANCELLED'
+    GROUP BY d.contract_id ORDER BY b.name, c.contract_no
+  `).all().map((r) => ({
+    ...r,
+    net: Math.round((r.gains || 0) - (r.deficits || 0)),
+    deficit_unbilled: Math.max(0, Math.round((r.deficits || 0) - (r.deficit_billed || 0))),
+  }));
+  const sum = (k) => Math.round(rows.reduce((t, r) => t + (Number(r[k]) || 0), 0));
+  res.json({ rows, totals: { sale_amount: sum('sale_amount'), expenses: sum('expenses'), gains: sum('gains'), deficits: sum('deficits'), applied_to_dues: sum('applied_to_dues'), surplus_to_advance: sum('surplus_to_advance'), deficit_billed: sum('deficit_billed'), net: sum('net') } });
+});
+
 router.post('/', requireRole(...WRITE), (req, res) => {
   const b = req.body || {};
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(b.contract_id);
@@ -101,6 +165,14 @@ router.post('/', requireRole(...WRITE), (req, res) => {
     if (!due.n) {
       return res.status(400).json({ error: `${contract.contract_no} has no bill past its due date, so the buyer is not in payment default. If the buyer did not schedule the power, record it as not requisitioned.` });
     }
+    // SM1: diverted only once the LC cannot cover what is overdue.
+    const pos = defaultPosition(contract);
+    if (!pos.in_default) {
+      return res.status(400).json({ error: `${contract.contract_no}: ${pos.reason}. Power is diverted for a payment default once the letter of credit cannot cover it.`, default_position: pos });
+    }
+  }
+  if (b.reason === 'NON_REQUISITION' && String(b.notes || '').trim().length < 15) {
+    return res.status(400).json({ error: 'Say what shows the buyer did not requisition the power (its schedule, the SLDC record) in the notes — at least 15 characters.' });
   }
 
   const sale_amount = Math.round(quantum * rate);

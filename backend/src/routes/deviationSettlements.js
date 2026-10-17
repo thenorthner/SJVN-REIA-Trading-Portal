@@ -369,6 +369,116 @@ router.get('/summary', requireRole(...READ), (req, res) => {
   res.json(row);
 });
 
+// ── DSM1: statements against the register ──────────────────────────────────
+// Each current NRPC statement, for every SJVN station on it: what the week's
+// figure is, whether it is raised and billed, and the revision delta still to
+// settle beside what was billed — with one click to raise it.
+const callHandler = (handler, req) => new Promise((resolve) => {
+  const res = { statusCode: 200, status(c) { this.statusCode = c; return this; }, json(b) { resolve({ status: this.statusCode, body: b }); return this; } };
+  handler(req, res);
+});
+
+router.get('/statement-sync', requireRole(...READ), (req, res) => {
+  const limit = Math.min(104, Math.max(1, Number(req.query.weeks) || 26));
+  const accounts = db.prepare(`
+    SELECT * FROM nrpc_dsa_accounts WHERE status <> 'SUPERSEDED' ORDER BY financial_year DESC, week_no DESC LIMIT ?
+  `).all(limit);
+  const contracts = db.prepare(`SELECT * FROM contracts WHERE status IN ('ACTIVE','NEARING_EXPIRY','AMENDED','RENEWED','EXPIRED')`).all()
+    .map((c) => ({ c, st: stationOf(c) })).filter((x) => x.st);
+  const rows = [];
+  for (const a of accounts) {
+    for (const { c, st } of contracts) {
+      const total = db.prepare('SELECT * FROM nrpc_dsa_entity_totals WHERE account_id = ? AND entity_name = ?').get(a.id, st.entity);
+      if (!total) continue;
+      const figure = settlementRupees(total);
+      const row = db.prepare(`SELECT id, dsm_no, status, invoice_no FROM deviation_settlements WHERE contract_id = ? AND dsa_account_id = ? AND status <> 'CANCELLED'`).get(c.id, a.id);
+      const bills = db.prepare(`
+        SELECT i.invoice_no, i.total_amount, i.direction, i.status FROM deviation_settlements d
+        JOIN nrpc_dsa_accounts x ON x.id = d.dsa_account_id JOIN invoices i ON i.id = d.invoice_id
+        WHERE d.contract_id = ? AND d.week_no = ? AND x.financial_year = ? AND i.status <> 'CANCELLED'
+      `).all(c.id, a.week_no, a.financial_year);
+      const billed = Math.round(bills.reduce((t, b) => t + dsmSigned(b), 0));
+      const delta = figure == null ? null : Math.round(figure - billed);
+      const state = !row ? (bills.length ? 'REVISION_NOT_RAISED' : 'NOT_RAISED')
+        : row.status === 'DISPATCHED' ? (delta === 0 ? 'SETTLED' : 'BILLED') : 'RAISED_UNBILLED';
+      rows.push({
+        dsa_account_id: a.id, financial_year: a.financial_year, week_no: a.week_no, revision: a.revision || null,
+        week_start: a.week_start, week_end: a.week_end, due_date: a.due_date,
+        contract_id: c.id, contract_no: c.contract_no, entity_name: st.entity,
+        statement_amount: figure, billed_so_far: billed, delta, row: row || null, bills, state,
+      });
+    }
+  }
+  res.json({ rows, totals: { to_raise: rows.filter((r) => ['NOT_RAISED', 'REVISION_NOT_RAISED', 'RAISED_UNBILLED'].includes(r.state) && r.delta).length } });
+});
+
+// One click: raise the week from the statement and bill it.
+router.post('/raise-from-statement', requireRole(...WRITE), async (req, res) => {
+  const { dsa_account_id: accountId, contract_id: contractId } = req.body || {};
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId);
+  if (!contract) return res.status(404).json({ error: 'Contract not found' });
+  const st = stationOf(contract);
+  if (!st) return res.status(400).json({ error: `${contract.contract_no} is not one of SJVN's stations on the NRPC statement.` });
+  let row = db.prepare(`SELECT * FROM deviation_settlements WHERE contract_id = ? AND dsa_account_id = ? AND status <> 'CANCELLED'`).get(contractId, accountId);
+  if (!row) {
+    const made = await callHandler(fromDsaHandler, { ...req, body: { contract_id: contractId, dsa_account_id: accountId, entity_name: st.entity } });
+    if (made.status >= 400) return res.status(made.status).json(made.body);
+    row = db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(made.body.id);
+  }
+  if (row.status === 'DISPATCHED' && row.invoice_id) return res.status(409).json({ error: `${row.dsm_no} is already billed (${row.invoice_no}).` });
+  const billed = await callHandler(dispatchHandler, { ...req, params: { id: row.id }, body: {} });
+  if (billed.status >= 400) return res.status(billed.status).json({ ...billed.body, raised: row.dsm_no });
+  res.status(201).json(billed.body);
+});
+
+// ── DSM4: what is owed to and from the pool, and paid ───────────────────────
+// Each pool bill with NRPC's due date, the payments (UTR) against it, and the
+// late payment interest the DSM regulations charge on what was late
+// (dsm_late_interest_pct_per_day, 0.04% a day by default).
+router.get('/pool-tracker', requireRole(...READ), (req, res) => {
+  const rate = getParamNumber('dsm_late_interest_pct_per_day', 0.04) / 100;
+  const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  const days = (a, b) => Math.max(0, Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000));
+  const bills = db.prepare(`
+    SELECT i.*, c.contract_no, d.dsm_no, d.week_no, x.financial_year, x.revision FROM invoices i
+    JOIN contracts c ON c.id = i.contract_id
+    LEFT JOIN deviation_settlements d ON d.invoice_id = i.id
+    LEFT JOIN nrpc_dsa_accounts x ON x.id = d.dsa_account_id
+    WHERE i.invoice_no LIKE 'DSM-%' AND i.status NOT IN ('CANCELLED', 'DRAFT', 'REJECTED')
+    ORDER BY i.due_date IS NULL, i.due_date
+  `).all();
+  const rows = bills.map((b) => {
+    const signed = dsmSigned(b);
+    const pays = db.prepare('SELECT amount, deduction, payment_date, reference FROM payments WHERE invoice_id = ? ORDER BY payment_date').all(b.id);
+    const amount = Math.abs(Number(b.total_amount) || 0);
+    let left = amount;
+    let interest = 0;
+    for (const p of pays) {
+      const paid = (Number(p.amount) || 0) + (Number(p.deduction) || 0);
+      if (b.due_date && p.payment_date > b.due_date) interest += Math.min(left, paid) * rate * days(b.due_date, p.payment_date);
+      left = Math.max(0, left - paid);
+    }
+    if (left > 0.5 && b.due_date && today > b.due_date) interest += left * rate * days(b.due_date, today);
+    return {
+      invoice_id: b.id, invoice_no: b.invoice_no, contract_no: b.contract_no, dsm_no: b.dsm_no, week: b.week_no ? `${b.financial_year} W${b.week_no}${b.revision ? `-${b.revision}` : ''}` : null,
+      flow: signed >= 0 ? 'RECEIVABLE' : 'PAYABLE', amount, due_date: b.due_date, status: b.status,
+      paid: Math.round(amount - left), outstanding: Math.round(left),
+      utrs: pays.map((p) => p.reference).filter(Boolean), last_paid_on: pays.length ? pays[pays.length - 1].payment_date : null,
+      days_late: left > 0.5 && b.due_date && today > b.due_date ? days(b.due_date, today) : 0,
+      late_interest: Math.round(interest),
+    };
+  });
+  const sum = (flow, k) => rows.filter((r) => r.flow === flow).reduce((t, r) => t + r[k], 0);
+  res.json({
+    rate_pct_per_day: rate * 100,
+    rows,
+    totals: {
+      receivable_outstanding: sum('RECEIVABLE', 'outstanding'), payable_outstanding: sum('PAYABLE', 'outstanding'),
+      interest_due_to_sjvn: sum('RECEIVABLE', 'late_interest'), interest_due_by_sjvn: sum('PAYABLE', 'late_interest'),
+    },
+  });
+});
+
 router.get('/:id', requireRole(...READ), (req, res) => {
   const row = db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Deviation record not found' });
@@ -385,7 +495,7 @@ router.get('/:id', requireRole(...READ), (req, res) => {
  *
  * Body: { contract_id, dsa_account_id, entity_name, plant_code?, plant_name?, notes? }
  */
-router.post('/from-dsa', requireRole(...WRITE), (req, res) => {
+const fromDsaHandler = (req, res) => {
   const b = req.body || {};
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(b.contract_id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
@@ -510,7 +620,8 @@ router.post('/from-dsa', requireRole(...WRITE), (req, res) => {
     },
   });
   res.status(201).json(withContract(db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(id)));
-});
+};
+router.post('/from-dsa', requireRole(...WRITE), fromDsaHandler);
 
 // Create a weekly deviation entry (data provided by NRPC)
 router.post('/', requireRole(...WRITE), (req, res) => {
@@ -648,7 +759,7 @@ router.put('/:id', requireRole(...WRITE), (req, res) => {
 // raised straight from CALCULATED, and the bill it makes goes through approval.
 
 // Dispatch — creates SUPPLEMENTARY invoice + links invoice_id on DSM
-router.post('/:id/dispatch', requireRole(...WRITE), (req, res) => {
+const dispatchHandler = (req, res) => {
   const row = db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Deviation record not found' });
   if (row.status === 'CANCELLED') return res.status(400).json({ error: 'Cancelled deviation cannot be dispatched' });
@@ -763,7 +874,8 @@ router.post('/:id/dispatch', requireRole(...WRITE), (req, res) => {
     console.error('DSM dispatch failed:', err);
     res.status(500).json({ error: err.message || 'Failed to dispatch DSM and create invoice' });
   }
-});
+};
+router.post('/:id/dispatch', requireRole(...WRITE), dispatchHandler);
 
 /**
  * Backfill: create linked SUPPLEMENTARY invoice for a legacy DISPATCHED DSM
@@ -819,5 +931,6 @@ router.delete('/:id', requireRole(...WRITE), (req, res) => {
   logAudit({ req, user: req.user, action: 'CANCEL', module: 'REIA', entityType: 'deviation_settlement', entityId: req.params.id });
   res.json({ ok: true });
 });
+
 
 export default router;

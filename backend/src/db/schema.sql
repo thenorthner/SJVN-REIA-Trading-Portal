@@ -371,6 +371,11 @@ CREATE TABLE IF NOT EXISTS contracts (
   min_cuf_percent REAL,
   cuf_shortfall_comp_pct REAL,
   banking_cycle_basis TEXT,  -- MONTHLY | SEASONAL | ANNUAL; null = master banking_cycle_basis
+  verification_window_days INTEGER,  -- V2: days SJVN has to verify a developer bill under this PPA (null = master)
+  on_hold INTEGER NOT NULL DEFAULT 0,  -- CC4: held by hand (a serious breach holds it automatically)
+  hold_reason TEXT,
+  hold_set_by TEXT,
+  hold_set_at TEXT,
   -- A peak-power or FDRE PSA buys energy when the system needs it, so it states
   -- a peak window and the availability the project must hold inside it. Null on
   -- a contract with no peak obligation, which is most of them.
@@ -4290,5 +4295,16 @@ CREATE TABLE IF NOT EXISTS unapplied_receipt_events (
   reference TEXT,
   note TEXT,
   actor_name TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- CC4: Management lifting an automatic contract hold, for a stated time.
+CREATE TABLE IF NOT EXISTS contract_hold_overrides (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  reason TEXT NOT NULL,
+  approved_by TEXT NOT NULL,
+  approved_by_id TEXT,
+  valid_until TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
