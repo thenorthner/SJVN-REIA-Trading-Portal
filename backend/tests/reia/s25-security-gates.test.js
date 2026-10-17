@@ -33,8 +33,10 @@ describe('S25 Invoking an instrument draws on the side it answers for', () => {
     bg = instrument(contract.id, { type: 'BANK_GUARANTEE', amount: 500000, priority: 20 });
     lc = instrument(contract.id, { type: 'LC', amount: 800000, priority: 10 });
   });
+  // A seller default is put on record with its ground; a buyer's is what it owes past the rule.
   const invoke = (id, body = {}) =>
-    request(app).post(`/api/payment-security/${id}/invoke`).set(auth(reia)).send({ amount: 300000, ...body });
+    request(app).post(`/api/payment-security/${id}/invoke`).set(auth(reia)).send({ amount: 300000, reason: 'Seller missed the minimum CUF for the year', ...body });
+  const owes = (amount) => makeInvoice({ contract_id: contract.id, direction: 'SJVN_TO_BUYER', status: 'SENT', total_amount: amount, due_date: day(-45) });
   const usedOn = (id) => db.prepare('SELECT utilized_amount FROM payment_security WHERE id = ?').get(id).utilized_amount;
 
   it('draws the guarantee when the guarantee is invoked', async () => {
@@ -45,6 +47,7 @@ describe('S25 Invoking an instrument draws on the side it answers for', () => {
   });
 
   it('draws the letter of credit when that is invoked', async () => {
+    owes(300000);
     const r = await invoke(lc);
     expect(r.status).toBeLessThan(400);
     expect(usedOn(lc)).toBe(300000);

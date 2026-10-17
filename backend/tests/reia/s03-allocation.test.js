@@ -159,6 +159,8 @@ describe('S3 Allocations change over the life of a PPA', () => {
     if (!existing) {
       await request(app).post('/api/energy-data').set(auth(reia))
         .send({ contract_id: ppa.id, period_month: period, data_type: 'PROVISIONAL', source: 'MANUAL', energy_mwh: ppaMwh });
+      // Bills are raised on locked energy; this test is about the split.
+      db.prepare(`UPDATE energy_data SET status = 'LOCKED' WHERE contract_id = ? AND period_month = ?`).run(ppa.id, period);
     }
     const r = await request(app).post('/api/invoices/generate').set(auth(reia))
       .send({ contract_id: psa.id, period_month: period });

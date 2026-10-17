@@ -134,16 +134,35 @@ describe('licence compliance', () => {
 
   it('clears both once the payment and a sufficient net worth are recorded', () => {
     saveLicenceYear('2031-32', {
-      fee_amount: 4000000, fee_paid_on: '2031-04-22', fee_reference: 'UTR123', net_worth_cr: 61.5,
-    }, 'Tester');
+      fee_amount: 4000000, fee_paid_on: '2031-04-22', fee_reference: 'UTR123', net_worth_cr: 61.5, net_worth_as_on: '2031-03-31',
+    }, 'Tester', { asOf });
     expect(year()).toMatchObject({ fee_status: 'PAID', fee_days_past_due: 0, net_worth_status: 'COMPLIANT' });
 
-    saveLicenceYear('2031-32', { fee_paid_on: '2031-04-22', fee_reference: 'UTR123', net_worth_cr: 42 }, 'Tester');
+    saveLicenceYear('2031-32', { fee_amount: 4000000, fee_paid_on: '2031-04-22', fee_reference: 'UTR123', net_worth_cr: 42, net_worth_as_on: '2031-03-31' }, 'Tester', { asOf });
     expect(year().net_worth_status).toBe('SHORTFALL');
   });
 
+  // Found by the audit of 17-Oct-2026: ₹1 paid on a future date read "Paid", a
+  // fee paid five months late read "Paid", a 2019 certificate met the minimum,
+  // and a year far ahead was stored and never shown.
+  it('tells a late or short payment from a paid one, and a stale certificate from a current one', () => {
+    saveLicenceYear('2031-32', { fee_amount: 4000000, fee_paid_on: '2031-05-20', fee_reference: 'UTR-LATE' }, 'Tester', { asOf });
+    expect(year()).toMatchObject({ fee_status: 'PAID_LATE', fee_days_late: 20 });
+    saveLicenceYear('2031-32', { fee_amount: 100, fee_paid_on: '2031-04-20', fee_reference: 'UTR-SHORT', net_worth_cr: 62.5, net_worth_as_on: '2025-03-31' }, 'Tester', { asOf });
+    expect(year()).toMatchObject({ fee_status: 'SHORT', fee_short_by: 3999900, net_worth_status: 'STALE' });
+    expect(licenceCompliance({ asOf }).totals.fee_overdue).toBeGreaterThanOrEqual(1);
+  });
+
+  it('refuses future dates, a payment with no amount, a net worth with no date, and a year beyond the next', () => {
+    expect(() => saveLicenceYear('2031-32', { fee_amount: 4000000, fee_paid_on: '2031-07-01', fee_reference: 'X' }, 'Tester', { asOf })).toThrow(/in the future/);
+    expect(() => saveLicenceYear('2031-32', { fee_paid_on: '2031-04-20', fee_reference: 'X' }, 'Tester', { asOf })).toThrow(/amount paid/);
+    expect(() => saveLicenceYear('2031-32', { net_worth_cr: 60 }, 'Tester', { asOf })).toThrow(/certified as on/);
+    expect(() => saveLicenceYear('2036-37', {}, 'Tester', { asOf })).toThrow(/beyond the next financial year/);
+    expect(() => saveLicenceYear('2032-33', {}, 'Tester', { asOf })).not.toThrow();
+  });
+
   it('refuses a payment with no reference, and a malformed year', () => {
-    expect(() => saveLicenceYear('2031-32', { fee_paid_on: '2031-04-22' }, 'Tester')).toThrow(/reference/);
-    expect(() => saveLicenceYear('2031-33', {}, 'Tester')).toThrow(/2026-27/);
+    expect(() => saveLicenceYear('2031-32', { fee_amount: 4000000, fee_paid_on: '2031-04-22' }, 'Tester', { asOf })).toThrow(/reference/);
+    expect(() => saveLicenceYear('2031-33', {}, 'Tester', { asOf })).toThrow(/2026-27/);
   });
 });

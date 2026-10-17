@@ -25,6 +25,9 @@ beforeEach(() => {
   contract = makeContract({ status: 'ACTIVE', seller_id: sellerCo.id });
   seller = makeUser('SELLER', { linked_entity_id: sellerCo.id });
   other = makeUser('SELLER', { linked_entity_id: otherCo.id });
+  // A statement needs something to reconcile: the month's energy on record.
+  const prev = new Date(); prev.setDate(1); prev.setMonth(prev.getMonth() - 1);
+  for (const p of ['2026-04', '2026-03', `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`]) db.prepare(`INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, status) VALUES (?, ?, ?, 'PROVISIONAL', 'SEA', 100, 'LOCKED')`).run(`ENG-T-${Math.random().toString(36).slice(2, 9)}`, contract.id, p);
 });
 
 describe('One open statement for a period', () => {

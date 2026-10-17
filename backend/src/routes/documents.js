@@ -61,6 +61,7 @@ const isExternal = (user) => EXTERNAL_ROLES.includes(user?.role);
 // each take in and verify their own stakeholders' papers.
 const INTAKE_ROLES = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
 const canVerify = (user) => INTAKE_ROLES.includes(user?.role);
+const ADMIN_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
 
 /** The entity ids an outside login stands for. A trading client's login may
  *  point at the client row or at the entity behind it; both are honoured. */
@@ -479,7 +480,13 @@ router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
       if (actualCategory === 'VERIFY' && (req.user.role === 'SELLER_L1' || req.user.role === 'BUYER_L1')) {
         initialStatus = 'DRAFT';
       }
-      const shouldAutoVerify = canAdminUpload && (req.body.auto_verify === 'true' || req.body.auto_verify === true);
+      // Scanning a paper in and verifying it are two people's work: the desk
+      // screen sent auto_verify on every intake, so whoever scanned a document
+      // also verified it — expired or not, its PAN matching or not. Only an
+      // administrator, as with direct admission, may admit a current paper as verified.
+      const shouldAutoVerify = ADMIN_ROLES.includes(req.user.role)
+        && (req.body.auto_verify === 'true' || req.body.auto_verify === true)
+        && !(expiry_date && daysUntil(expiry_date) < 0);
       if (shouldAutoVerify && actualCategory === 'VERIFY') {
         initialStatus = 'VERIFIED';
       }
@@ -538,6 +545,10 @@ function reviewable(req, res, action = 'review') {
   if (!v) { res.status(404).json({ error: 'Document version not found' }); return null; }
   if (v.category !== 'VERIFY') { res.status(400).json({ error: 'This document is kept for the record and is not verified' }); return null; }
   if (v.version_number !== v.latest) { res.status(400).json({ error: 'A newer version has been uploaded. Review that one.' }); return null; }
+  if (v.created_by && v.created_by === req.user.id) {
+    res.status(403).json({ error: 'You scanned this document in, so another officer reviews it.' });
+    return null;
+  }
   if (v.verification_status !== 'PENDING') {
     res.status(400).json({ error: v.verification_status === 'DRAFT'
       ? 'This document has not been submitted to SJVN yet'
@@ -547,9 +558,17 @@ function reviewable(req, res, action = 'review') {
   return v;
 }
 
+// The review reaches whoever uploaded the file and the company it belongs to.
+// Under physical intake the uploader is an SJVN officer, so a rejection told
+// the desk and never the company that has to bring a corrected copy.
 const tellUploader = (v, message) => {
-  if (!v.created_by) return;
-  try { pushNotification({ userId: v.created_by, type: 'DOCUMENT_REVIEW', message }); } catch { /* the review stands either way */ }
+  const to = new Set(v.created_by ? [v.created_by] : []);
+  if (v.entity_id) {
+    for (const u of db.prepare('SELECT id FROM users WHERE linked_entity_id = ? AND COALESCE(is_active, 1) = 1').all(v.entity_id)) to.add(u.id);
+  }
+  for (const userId of to) {
+    try { pushNotification({ userId, type: 'DOCUMENT_REVIEW', message }); } catch { /* the review stands either way */ }
+  }
 };
 
 // POST /:versionId/verify
@@ -596,7 +615,9 @@ router.post('/:versionId/reject', requireAuth, (req, res) => {
     WHERE id = ?
   `).run(notes, code, req.user.id, v.id);
   audit(req, 'DOCUMENT_REJECTED', v.id, { beforeValue: { status: 'PENDING' }, afterValue: { status: 'REJECTED', reason_code: code, document_type: v.document_type, entity_id: v.entity_id }, reason: notes });
-  tellUploader(v, `Your document "${v.title}" was rejected by SJVN: ${notes}. Upload a corrected copy under My Documents.`);
+  tellUploader(v, `Your document "${v.title}" was rejected by SJVN: ${notes}. ${v.category === 'VERIFY'
+    ? 'Submit a corrected copy to the SJVN office; KYC papers are taken there and scanned in by the desk.'
+    : 'Upload a corrected copy under My Documents.'}`);
   res.json({ success: true });
 });
 

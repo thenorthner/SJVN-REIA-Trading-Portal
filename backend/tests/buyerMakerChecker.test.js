@@ -124,7 +124,7 @@ describe('Buyer Maker-Checker Workflow & Dual Authorization', () => {
     `).run(reconId, 'RCN/TEST/001', psa.id);
 
     const signRes = await request(app)
-      .post(`/api/reconciliation/${reconId}/acknowledge`)
+      .post(`/api/recon-signoff/${reconId}/sign`)
       .set(as(maker))
       .send({ decision: 'AGREE' });
 
@@ -133,7 +133,7 @@ describe('Buyer Maker-Checker Workflow & Dual Authorization', () => {
 
     // Checker CAN sign
     const checkerSignRes = await request(app)
-      .post(`/api/reconciliation/${reconId}/acknowledge`)
+      .post(`/api/recon-signoff/${reconId}/sign`)
       .set(as(checker))
       .send({ decision: 'AGREE', remarks: 'Authorized by Buyer Checker L2' });
 

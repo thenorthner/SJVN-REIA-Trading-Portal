@@ -452,11 +452,26 @@ router.post('/intimations/:id/confirm', (req, res) => send(res, () => {
   const note = text(req.body?.note, 300);
   if (valueDate !== r.payment_date && !note) throw fail(400, 'Say why the value date differs from the date the buyer gave');
 
+  // What it settles, against what the bill has left on the value date. An
+  // intimation already flagged as more than the bill had left was confirmed in
+  // full, the bill went to PAID and the excess vanished from the outstanding.
+  const gross = money((Number(r.amount) || 0) + (Number(r.tds_amount) || 0) + (Number(r.other_deduction) || 0));
+  const { left, accrued_lps: lpsToDate } = leftOn(inv, new Date(`${valueDate}T00:00:00Z`));
+  if (gross > left + 1) {
+    throw fail(400, `${rupees(gross)} is more than the ${rupees(left)} left on ${inv.invoice_no} on ${dayInWords(valueDate)}. Return the intimation with the reason, so the buyer can resubmit what applies to this bill (an excess is an advance, not a payment on it).`);
+  }
+  // Surcharge first, then the bill (PSA Art. 6.3) — as the desk's waterfall
+  // payment does. Confirmed money went to principal, leaving the surcharge
+  // unpaid while the bill cleared.
+  const lpsPaid = db.prepare('SELECT COALESCE(SUM(lps_component), 0) s FROM payments WHERE invoice_id = ?').get(inv.id).s;
+  const lpsComponent = money(Math.min(Number(r.amount) || 0, Math.max(0, lpsToDate - lpsPaid)));
+
   const paymentId = db.transaction(() => {
     const before = db.prepare('SELECT COALESCE(MAX(rowid), 0) m FROM payments').get().m;
     applyInvoicePayment(inv, {
       amount: r.amount, payment_date: valueDate, mode: r.mode, reference: r.reference,
       deduction: money((Number(r.tds_amount) || 0) + (Number(r.other_deduction) || 0)),
+      lps_component: lpsComponent,
       breakup: { tds_amount: r.tds_amount || null, tds_section: r.tds_section || null, deduction_note: r.deduction_note || null },
     }, req);
     const pid = db.prepare('SELECT id FROM payments WHERE invoice_id = ? AND rowid > ? ORDER BY rowid DESC LIMIT 1').get(inv.id, before)?.id || null;

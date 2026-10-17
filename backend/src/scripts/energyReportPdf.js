@@ -154,9 +154,9 @@ export function generateEnergyReportPdf(report, meta, res) {
 
   const deltaTone = (t.delta_mwh || 0) === 0 ? NAVY : ((t.delta_mwh || 0) > 0 ? GREEN : RED);
   const kpis = [
-    { label: 'Provisional Energy', value: fmtMwhShort(t.provisional_mwh), sub: `${t.provisional_count || 0} record(s)`, accent: NAVY },
+    { label: 'Provisional Energy', value: fmtMwhShort(t.provisional_mwh), sub: `${t.provisional_count || 0} record(s)${t.psa_rows_excluded ? ` · ${t.psa_rows_excluded} PSA row(s) not added — fed by their PPA` : ''}`, accent: NAVY },
     { label: 'Final Energy', value: fmtMwhShort(t.final_mwh), sub: `${t.final_count || 0} record(s)`, accent: NAVY },
-    { label: 'Delta Energy (Final - Prov)', value: fmtMwhShort(t.delta_mwh), sub: 'True-up volume', accent: deltaTone },
+    { label: 'Delta Energy (Final - Prov)', value: t.delta_mwh == null ? '—' : fmtMwhShort(t.delta_mwh), sub: t.delta_pairs ? `True-up over ${t.delta_pairs} month(s) with both` : 'No month has both figures yet', accent: deltaTone },
     { label: 'Avg CUF', value: t.avg_cuf != null ? fmtPct(t.avg_cuf) : '—', sub: 'Where available', accent: GREEN },
     { label: 'Locked', value: String(t.locked || 0), sub: 'Ready for billing', accent: GREEN },
     { label: 'Validated', value: String(t.validated || 0), sub: 'Awaiting lock', accent: NAVY },
@@ -254,6 +254,7 @@ export function generateEnergyReportPdf(report, meta, res) {
       provisional_mwh: t.provisional_mwh,
       final_mwh: t.final_mwh,
       delta_mwh: t.delta_mwh,
+      // Averages, not sums — labelled so in the notes below the table.
       cuf_percent: t.avg_cuf,
       availability_percent: t.avg_availability,
     }, { isTotal: true });
@@ -271,7 +272,7 @@ export function generateEnergyReportPdf(report, meta, res) {
   doc.fillColor(MUTED).font('Helvetica').fontSize(7.5);
   const notes = [
     'Provisional = REA/metered preliminary energy  ·  Final = CERC/REA final for the same contract-period (linked via BFR).',
-    'Delta MWh = Final - Provisional. Positive Delta means upward true-up; negative means downward adjustment.',
+    'Delta MWh = Final - Provisional, only for months that have both. TOTAL row: MWh are sums; CUF % and Avail % are averages. A PSA fed by a PPA is listed but not added to the totals (its energy is the PPA\'s).',
     'Status reflects the latest applicable row (prefer Final when present). Locked records are billing-ready.',
     'Awaiting Final = contract-periods with Provisional only. This is a system-generated management report.',
   ];

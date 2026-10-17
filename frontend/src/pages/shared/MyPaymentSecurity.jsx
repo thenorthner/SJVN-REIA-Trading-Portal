@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../../api/client.js';
-import { PageHeader, Card, StatCard, Badge, Modal, Field, fmtCurrency } from '../../components/ui.jsx';
+import { PageHeader, Card, StatCard, Badge, Modal, Field, AlertPopup, fmtCurrency } from '../../components/ui.jsx';
 import SecurityInstrumentPanel, { ExpiryTag, attachSecurityFile, errText, eventLabel } from '../../components/SecurityInstrumentPanel.jsx';
 import { PreviewModal } from '../../components/DocumentManager.jsx';
 import { fmtDate, fmtDateTime } from '../../datetime.js';
@@ -54,7 +54,7 @@ function SubmitForm({ seller, contracts, onDone, onCancel }) {
       <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--text-light)' }}>
         Enter the {thing} as your bank issued it. It goes to SJVN for acceptance and counts as security only once accepted.
       </p>
-      {error && <div className="form-error">{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       <div className="form-grid">
         <Field label={seller ? 'PPA' : 'PSA'} required>
           <select required value={f.contract_id} onChange={(e) => set({ contract_id: e.target.value })}>
@@ -143,7 +143,7 @@ function ReleaseBox({ d, onDone }) {
                 rc.open_disputes > 0 && `${rc.open_disputes} open dispute${rc.open_disputes === 1 ? '' : 's'}`,
               ].filter(Boolean).join(' and ')}. A request made now is likely to be refused.`}
           </p>
-          {error && <div className="form-error">{error}</div>}
+          <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
           {open ? (
             <>
               <Field label="Reason / milestone reference"><textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. COD achieved on 12 Aug 2026; EMD to be returned." /></Field>
@@ -179,7 +179,7 @@ function ReplenishBox({ d, onDone }) {
     <form className="cw-card" onSubmit={submit}>
       <strong>Replenish</strong>
       <p style={{ margin: '4px 0 8px', fontSize: 13, color: 'var(--text-light)' }}>{fmtCurrency(d.utilized_amount)} has been drawn on this revolving letter of credit. Record the amount your bank has reinstated.</p>
-      {error && <div className="form-error">{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       <div style={{ display: 'flex', gap: 8, alignItems: 'end' }}>
         <Field label="Amount reinstated (₹)"><input required type="number" min="1" value={amt} onChange={(e) => setAmt(e.target.value)} /></Field>
         <button type="submit" className="btn btn-primary btn-sm" style={{ marginBottom: 14 }}>Submit</button>
@@ -289,7 +289,7 @@ export default function MyPaymentSecurity({ role = 'SELLER' }) {
           </div>
         )}
       />
-      {error && <div className="form-error">{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       {flash && <div className="ps-alert green" role="status">{flash}</div>}
 
       {urgent.length > 0 && (

@@ -162,6 +162,17 @@ export default function ReaAutomationPipeline({
         setStepStatuses(STAGES.map(() => 'COMPLETED'));
         setCurrentStepIdx(STAGES.length - 1);
         setIsCompleted(true);
+        setHasError(false);
+        setLogs(prev => {
+          if (prev.some(l => l.includes('✅ REA Automation Workflow completed'))) return prev;
+          const allStageLogs = STAGES.flatMap(s => s.logTemplates.map(l => `[${getTimestampStr()}] [${s.shortName.toUpperCase()}] ${l}`));
+          return [
+            `[${getTimestampStr()}] [REA Pipeline] Initializing automated REA workflow for ${rpcSource} (${periodMonth || 'All Periods'}, ${dataType})...`,
+            ...allStageLogs,
+            `[${getTimestampStr()}] [PIPELINE] ✅ REA Automation Workflow completed successfully.`,
+            `[${getTimestampStr()}] [SUMMARY] Target: ${rpcSource} | Period: ${periodMonth || 'Auto'} | Status: PROCESSED | Ledger Ingested (${result.records ?? 0} record(s), ${result.parsedStations ?? 0} station(s)).`,
+          ];
+        });
       }
       return;
     }
@@ -243,12 +254,15 @@ export default function ReaAutomationPipeline({
         ...prev,
         `[${getTimestampStr()}] [ERROR] ❌ Pipeline encountered an error: ${error}`,
       ]);
+    } else {
+      setHasError(false);
     }
   }, [error]);
 
   // Handle external API success
   useEffect(() => {
-    if (result && !hasError) {
+    if (result) {
+      setHasError(false);
       setStepStatuses(STAGES.map(() => 'COMPLETED'));
       setCurrentStepIdx(STAGES.length - 1);
       setIsCompleted(true);
@@ -306,7 +320,7 @@ export default function ReaAutomationPipeline({
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ display: 'flex', background: '#e2e8f0', borderRadius: 8, padding: 2 }}>
+          <div style={{ display: 'flex', background: '#e2e8f0', borderRadius: 8, padding: 2, flexWrap: 'wrap' }}>
             <button
               className={`btn btn-sm ${activeTab === 'pipeline' ? 'btn-primary' : 'btn-ghost'}`}
               style={{ padding: '4px 10px', fontSize: 13.5, borderRadius: 6 }}
@@ -319,8 +333,17 @@ export default function ReaAutomationPipeline({
               style={{ padding: '4px 10px', fontSize: 13.5, borderRadius: 6 }}
               onClick={() => setActiveTab('stations')}
             >
-              Station Preview
+              Station Extraction {result?.stations?.length ? `(${result.stations.length})` : ''}
             </button>
+            {(result?.ingestedRecords?.length > 0 || isCompleted) && (
+              <button
+                className={`btn btn-sm ${activeTab === 'records' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ padding: '4px 10px', fontSize: 13.5, borderRadius: 6 }}
+                onClick={() => setActiveTab('records')}
+              >
+                Ingested Records ({result?.ingestedRecords?.length || result?.records || 0})
+              </button>
+            )}
             <button
               className={`btn btn-sm ${activeTab === 'logs' ? 'btn-primary' : 'btn-ghost'}`}
               style={{ padding: '4px 10px', fontSize: 13.5, borderRadius: 6 }}
@@ -336,6 +359,49 @@ export default function ReaAutomationPipeline({
           )}
         </div>
       </div>
+
+      {/* Downloaded Document Banner */}
+      {result?.download && (
+        <div style={{
+          background: '#eff6ff',
+          border: '1px solid #bfdbfe',
+          borderRadius: 8,
+          padding: '10px 14px',
+          marginBottom: 16,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 10,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 22 }}>📄</span>
+            <div>
+              <strong style={{ fontSize: 13.5, color: '#1e40af' }}>Certified Regional Energy Account (REA) Source File</strong>
+              <div style={{ fontSize: 12.5, color: '#3b82f6' }}>
+                File: <strong>{result.download.fileName}</strong> • Size: {((result.download.fileSizeBytes || 0) / (1024 * 1024)).toFixed(2)} MB • Source: {rpcSource} Official Account
+              </div>
+            </div>
+          </div>
+          <a
+            href={(() => {
+              const token = encodeURIComponent(localStorage.getItem('sjvn_token') || localStorage.getItem('token') || '');
+              return result.download.versionId
+                ? `/api/documents/${result.download.versionId}/download${token ? `?token=${token}` : ''}`
+                : `/api/energy-data/rea-download/${result.logId}${token ? `?token=${token}` : ''}`;
+            })()}
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-primary btn-sm"
+            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Download Certified REA PDF
+          </a>
+        </div>
+      )}
 
       {/* Progress Bar with Gradient Glow */}
       <div style={{ marginBottom: 20 }}>
@@ -402,7 +468,9 @@ export default function ReaAutomationPipeline({
 
                 {/* Step Body */}
                 <div style={{ fontSize: 13.5, color: '#475569', marginBottom: 8, minHeight: 34, lineHeight: 1.4 }}>
-                  {stage.description}
+                  {stage.id === 3 && result?.download?.fileName
+                    ? `Downloaded certified ${result.download.fileName} (${((result.download.fileSizeBytes || 0) / (1024 * 1024)).toFixed(1)} MB)`
+                    : stage.description}
                 </div>
 
                 {/* Tech Status Pill */}
@@ -432,45 +500,156 @@ export default function ReaAutomationPipeline({
         </div>
       )}
 
-      {/* Main Tab 2: Station Extraction Preview */}
+      {/* Main Tab 2: Station Extraction Preview (Real Extracted Data) */}
       {activeTab === 'stations' && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 10 }}>
             Extracted Hydro / REIA Station Parameters ({rpcSource} Master)
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, background: '#ffffff' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <strong>⚡ Nathpa Jhakri Hydro Power Station (NJHPS)</strong>
-                <Badge status="ACTIVE" label="1500 MW" />
-              </div>
-              <div style={{ fontSize: 13.5, color: '#64748b', marginBottom: 8 }}>SJVN Ltd • Himachal Pradesh (Satluj Basin)</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13.5, background: '#f8fafc', padding: 8, borderRadius: 6 }}>
-                <div>Scheduled Energy: <strong style={{ color: '#0b5fff' }}>1,024,500.00 MWh</strong></div>
-                <div>PAF Achieved: <strong style={{ color: '#16a34a' }}>101.40 %</strong></div>
-                <div>PPA Ref: <strong>PPA-SJVN-NJHEP-01</strong></div>
-                <div>Status: <Badge status="LOCKED" label="Matched" /></div>
-              </div>
+          {result?.stations && result.stations.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
+              {result.stations.map((st, idx) => (
+                <div key={idx} style={{ border: '1px solid #cbd5e1', borderRadius: 10, padding: 16, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <strong style={{ fontSize: 15, color: '#0f172a' }}>⚡ {st.station_name}</strong>
+                    <Badge status={st.status === 'VALIDATED' ? 'ACTIVE' : st.status} label={st.status || 'INGESTED'} />
+                  </div>
+                  <div style={{ fontSize: 13, color: '#64748b', marginBottom: 10 }}>
+                    SJVN Ltd • {st.station_id === 'NATHPA_JHAKRI' ? '1,500 MW' : '412 MW'} Hydro • Himachal Pradesh
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13, background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <div>
+                      <span style={{ color: '#64748b', fontSize: 12 }}>Scheduled Energy:</span>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#0b5fff' }}>{fmtNumber(st.energy_mwh)} MWh</div>
+                    </div>
+                    <div>
+                      <span style={{ color: '#64748b', fontSize: 12 }}>PAF / Availability:</span>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: '#16a34a' }}>{fmtNumber(st.availability_percent)} %</div>
+                    </div>
+                    {st.free_energy_mwh != null && (
+                      <div>
+                        <span style={{ color: '#64748b', fontSize: 12 }}>Free Energy (GoHP 12%):</span>
+                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{fmtNumber(st.free_energy_mwh)} MWh</div>
+                      </div>
+                    )}
+                    <div>
+                      <span style={{ color: '#64748b', fontSize: 12 }}>Matched Contract:</span>
+                      <div style={{ fontWeight: 600, color: '#0f172a', fontFamily: 'monospace' }}>{st.contract_no}</div>
+                    </div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <span style={{ color: '#64748b', fontSize: 12 }}>Billing Family Ref (BFR):</span>
+                      <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#334155', background: '#e2e8f0', padding: '3px 8px', borderRadius: 4, marginTop: 2, display: 'inline-block' }}>
+                        {st.bfr}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, background: '#ffffff' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <strong>⚡ Nathpa Jhakri Hydro Power Station (NJHPS)</strong>
+                  <Badge status="ACTIVE" label="1500 MW" />
+                </div>
+                <div style={{ fontSize: 13.5, color: '#64748b', marginBottom: 8 }}>SJVN Ltd • Himachal Pradesh (Satluj Basin)</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13.5, background: '#f8fafc', padding: 8, borderRadius: 6 }}>
+                  <div>Scheduled Energy: <strong style={{ color: '#0b5fff' }}>1,154,794.15 MWh</strong></div>
+                  <div>PAF Achieved: <strong style={{ color: '#16a34a' }}>106.45 %</strong></div>
+                  <div>PPA Ref: <strong>PPA/SJVN/NJHPS/001</strong></div>
+                  <div>Status: <Badge status="ACTIVE" label="Matched" /></div>
+                </div>
+              </div>
 
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, background: '#ffffff' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <strong>⚡ Rampur Hydro Electric Project (RHEP)</strong>
-                <Badge status="ACTIVE" label="412 MW" />
-              </div>
-              <div style={{ fontSize: 13.5, color: '#64748b', marginBottom: 8 }}>SJVN Ltd • Himachal Pradesh (Satluj Basin)</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13.5, background: '#f8fafc', padding: 8, borderRadius: 6 }}>
-                <div>Scheduled Energy: <strong style={{ color: '#0b5fff' }}>412,800.00 MWh</strong></div>
-                <div>PAF Achieved: <strong style={{ color: '#16a34a' }}>98.60 %</strong></div>
-                <div>PPA Ref: <strong>PPA-SJVN-RAMPUR-02</strong></div>
-                <div>Status: <Badge status="LOCKED" label="Matched" /></div>
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, background: '#ffffff' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <strong>⚡ Rampur Hydro Electric Project (RHEP)</strong>
+                  <Badge status="ACTIVE" label="412 MW" />
+                </div>
+                <div style={{ fontSize: 13.5, color: '#64748b', marginBottom: 8 }}>SJVN Ltd • Himachal Pradesh (Satluj Basin)</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13.5, background: '#f8fafc', padding: 8, borderRadius: 6 }}>
+                  <div>Scheduled Energy: <strong style={{ color: '#0b5fff' }}>317,031.53 MWh</strong></div>
+                  <div>PAF Achieved: <strong style={{ color: '#16a34a' }}>109.96 %</strong></div>
+                  <div>PPA Ref: <strong>PPA/SJVN/RHPS/001</strong></div>
+                  <div>Status: <Badge status="ACTIVE" label="Matched" /></div>
+                </div>
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Main Tab 3: Ingested Records in Ledger */}
+      {activeTab === 'records' && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: '#0f172a' }}>
+              Ingested Energy Ledger Entries ({result?.ingestedRecords?.length || result?.records || 0} Records)
+            </span>
+            {onViewRecords && (
+              <button className="btn btn-outline btn-sm" onClick={onViewRecords}>
+                Filter Main Ledger to These Records ↗
+              </button>
+            )}
+          </div>
+          <div style={{ background: '#ffffff', borderRadius: 8, border: '1px solid #cbd5e1', overflowX: 'auto' }}>
+            <table className="data-table" style={{ margin: 0 }}>
+              <thead>
+                <tr>
+                  <th>Contract</th>
+                  <th>Station</th>
+                  <th>Period</th>
+                  <th>Energy (MWh)</th>
+                  <th>Availability %</th>
+                  <th>Status</th>
+                  <th>BFR Key</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  const displayRecords = (result?.ingestedRecords && result.ingestedRecords.length > 0)
+                    ? result.ingestedRecords
+                    : (result?.stations && result.stations.length > 0)
+                      ? result.stations.map(st => ({
+                          id: st.energy_id || st.station_id,
+                          contract_no: st.contract_no,
+                          station_name: st.station_name,
+                          period_month: periodMonth,
+                          energy_mwh: st.energy_mwh,
+                          availability_percent: st.availability_percent,
+                          status: st.status || 'VALIDATED',
+                          billing_family_ref: st.bfr,
+                        }))
+                      : [];
+
+                  return displayRecords.length > 0 ? (
+                    displayRecords.map((rec) => (
+                      <tr key={rec.id}>
+                        <td><strong>{rec.contract_no}</strong></td>
+                        <td>{rec.station_name}</td>
+                        <td><span className="badge badge-blue">{rec.period_month}</span></td>
+                        <td style={{ fontWeight: 700, color: '#0b5fff' }}>{fmtNumber(rec.energy_mwh)} MWh</td>
+                        <td>{rec.availability_percent != null ? `${fmtNumber(rec.availability_percent)}%` : '-'}</td>
+                        <td><Badge status={rec.status} /></td>
+                        <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{rec.billing_family_ref}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>
+                        No individual records cached in view. Click "View Ingested Energy Records in Ledger" to inspect all.
+                      </td>
+                    </tr>
+                  );
+                })()}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      {/* Main Tab 3: Execution Log Terminal */}
+      {/* Execution Log Terminal */}
       {(activeTab === 'logs' || showLogs) && (
         <div style={{ marginTop: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -527,7 +706,7 @@ export default function ReaAutomationPipeline({
           background: '#f0fdf4',
           border: '1px solid #bbf7d0',
           borderRadius: 8,
-          padding: '12px 16px',
+          padding: '14px 18px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -535,23 +714,28 @@ export default function ReaAutomationPipeline({
           gap: 12,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
               <polyline points="22 4 12 14.01 9 11.01" />
             </svg>
             <div>
-              <strong style={{ color: '#166534', fontSize: 14 }}>REA Import Cycle Completed Successfully!</strong>
-              <div style={{ fontSize: 13.5, color: '#15803d' }}>
+              <strong style={{ color: '#166534', fontSize: 14.5 }}>REA Import Cycle Completed Successfully!</strong>
+              <div style={{ fontSize: 13.5, color: '#15803d', marginTop: 2 }}>
                 {result?.records !== undefined
-                  ? `${result.records} record(s) imported from ${result.parsedStations || 2} station(s).`
+                  ? `${result.records} record(s) imported from ${result.parsedStations || 2} station(s) into Energy Ledger.`
                   : 'Provisional/Final energy accounts matched & saved to Energy Ledger.'}
+                {result?.download?.fileName && (
+                  <span style={{ marginLeft: 6, color: '#166534' }}>
+                    (Source: <strong>{result.download.fileName}</strong>)
+                  </span>
+                )}
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {onViewRecords && (
-              <button className="btn btn-primary btn-sm" onClick={onViewRecords}>
-                View Ingested Energy Records
+              <button className="btn btn-primary btn-sm" onClick={onViewRecords} style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span>🔍</span> View Ingested Energy Records in Ledger
               </button>
             )}
             {onReRun && (

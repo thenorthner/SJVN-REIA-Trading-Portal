@@ -54,6 +54,7 @@ describe('REA PDF upload given a state energy account', () => {
     });
     const r = await upload();
     expect(r.status).toBe(200);
-    expect(r.body[0]).toMatchObject({ station_name: 'Nathpa Jhakri HEP', energy_mwh: 81616 });
+    // The account's own month comes back with the stations, so the desk files it under that month.
+    expect(r.body.stations[0]).toMatchObject({ station_name: 'Nathpa Jhakri HEP', energy_mwh: 81616 });
   });
 });

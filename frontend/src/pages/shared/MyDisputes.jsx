@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../../api/client.js';
-import { PageHeader, Card, StatCard, Table, Badge, Modal, Field, fmtCurrency } from '../../components/ui.jsx';
+import { PageHeader, Card, StatCard, Table, Badge, Modal, Field, AlertPopup, fmtCurrency } from '../../components/ui.jsx';
 import DisputeExtrasPanel, { SlaTag } from '../../components/DisputeExtrasPanel.jsx';
 import { REASON_CODES, CHARGE_LINES, OPEN_STATUSES, reasonLabel, chargeLabel, invoiceChargeBreakdown } from '../../disputesMeta.js';
 import { fmtDate, fmtDateTime } from '../../datetime.js';
@@ -83,33 +83,30 @@ export default function MyDisputes({ role, direction }) {
     if (form.reason_code === 'OTHER' && !form.issue_description.trim()) { setError('Description is mandatory for Other'); return; }
     if (chosen.length > 1 && !form.group_title.trim()) { setError('Give the linked disputes a title — what they have in common.'); return; }
     setBusy(true);
-    // One dispute per bill, each holding its own amount on that bill; then tied together.
-    const made = [];
-    const failed = [];
-    for (const inv of chosen) {
-      try {
-        const created = await api.disputes.create({
-          invoice_id: inv.id, raised_by_role: role, reason_code: form.reason_code, charge_line: form.charge_line,
-          issue_description: form.issue_description, disputed_amount: Number(picked[inv.id]),
-        });
-        made.push(created);
-        if (evidenceFile) await api.disputes.uploadEvidence(created.id, evidenceFile);
-      } catch (err) {
-        failed.push(`${inv.invoice_no}: ${err.response?.data?.error || err.message}`);
-      }
+    // One dispute per bill, each holding its own amount on that bill, linked
+    // under one reference — all of them or none. Raised one after another, a
+    // refusal on one bill left the others raised and holding money, unlinked.
+    const common = { raised_by_role: role, reason_code: form.reason_code, charge_line: form.charge_line, issue_description: form.issue_description };
+    let made;
+    try {
+      made = chosen.length > 1
+        ? (await api.disputes.raiseBatch({ ...common, group_title: form.group_title.trim(), items: chosen.map((i) => ({ invoice_id: i.id, disputed_amount: Number(picked[i.id]) })) })).disputes
+        : [await api.disputes.create({ ...common, invoice_id: chosen[0].id, disputed_amount: Number(picked[chosen[0].id]) })];
+    } catch (err) {
+      setBusy(false);
+      setError(errOf(err, 'The dispute could not be raised.'));
+      return;
     }
-    let linkError = '';
-    if (made.length > 1) {
-      try { await api.disputeExtras.link(made.map((d) => d.id), form.group_title.trim()); } catch (err) { linkError = err.response?.data?.error || err.message; }
+    const unfiled = [];
+    if (evidenceFile) {
+      for (const d of made) {
+        try { await api.disputes.uploadEvidence(d.id, evidenceFile); } catch (err) { unfiled.push(`${d.dispute_no}: ${errOf(err, 'not filed')}`); }
+      }
     }
     setBusy(false);
     load();
-    if (failed.length || linkError) {
-      setError(`${made.length} dispute${made.length === 1 ? '' : 's'} raised. Not raised — ${failed.join('; ') || 'none'}${linkError ? `. They could not be linked: ${linkError}` : ''}`);
-      setPicked(Object.fromEntries(Object.entries(picked).filter(([id]) => !made.some((d) => d.invoice_id === id))));
-      return;
-    }
     setNotice(made.length > 1 ? `${made.length} disputes raised and linked.` : `Dispute ${made[0].dispute_no} raised.`);
+    if (unfiled.length) setPageError(`Raised, but the evidence was not filed — ${unfiled.join('; ')}. Add it from the dispute.`);
     setShowCreate(false);
     setForm(EMPTY);
     setPicked({});
@@ -207,7 +204,7 @@ export default function MyDisputes({ role, direction }) {
       />
 
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
-      {pageError && <div className="form-error" role="alert">{pageError}</div>}
+
 
       {totals && (
         <div className="kpi-grid">
@@ -231,7 +228,7 @@ export default function MyDisputes({ role, direction }) {
       </Card>
 
       <Modal open={showCreate} onClose={() => !busy && setShowCreate(false)} title="Raise a Dispute" width={720}>
-        {error && <div className="form-error">{error}</div>}
+
         <form onSubmit={handleCreate}>
           <div className="field">
             <span className="field-label">Invoices — tick every bill this dispute is about</span>
@@ -297,7 +294,7 @@ export default function MyDisputes({ role, direction }) {
               <div className="detail-item"><span className="detail-label">Left to pay on the bill</span><span className="detail-value">{fmtCurrency(detail.invoice?.balance_due ?? detail.invoice?.payable_now)}</span></div>
             </div>
             {detail.issue_description && <p style={{ whiteSpace: 'pre-wrap' }}>{detail.issue_description}</p>}
-            {detailError && <div className="form-error" role="alert">{detailError}</div>}
+
 
             <DisputeExtrasPanel key={`${detail.id}-${detail.updated_at}`} disputeId={detail.id} onChanged={refreshDetail} />
 
@@ -343,6 +340,13 @@ export default function MyDisputes({ role, direction }) {
           </div>
         )}
       </Modal>
+      {/* Refusals as a popup (house rule), whichever part of the page they came from. */}
+      <AlertPopup
+        open={!!(error || pageError || detailError)}
+        title={error ? 'Dispute not raised' : detailError ? 'Not done' : 'Something needs attention'}
+        message={error || detailError || pageError}
+        onClose={() => { setError(''); setPageError(''); setDetailError(''); }}
+      />
     </div>
   );
 }

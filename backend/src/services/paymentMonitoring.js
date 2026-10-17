@@ -1,7 +1,7 @@
 import db from '../db/index.js';
 import { invoiceLpsAsOf } from './invoiceLps.js';
 import { getParamNumber } from '../mastersService.js';
-import { ageingBuckets, openPosition } from './outstanding.js';
+import { ageingBuckets, openPosition, supersededByDeveloperSql } from './outstanding.js';
 
 /**
  * Who owes what, how late it is, and what the lateness has earned.
@@ -55,7 +55,7 @@ function openBills(direction) {
       END AS days_past_due
     FROM invoices i
     ${COUNTERPARTY_JOIN}
-    WHERE i.direction = ? AND i.status IN ('APPROVED','SENT','PARTIALLY_PAID','DISPUTED') AND ${OUTSTANDING_SQL} > 0
+    WHERE i.direction = ? AND i.status IN ('APPROVED','SENT','PARTIALLY_PAID','DISPUTED') AND ${supersededByDeveloperSql('i')} AND ${OUTSTANDING_SQL} > 0
     ORDER BY (i.due_date IS NULL), i.due_date
   `).all(direction);
 }
@@ -69,8 +69,10 @@ export function paymentMonitoring(side = 'RECEIVABLE') {
   const direction = DIRECTIONS[side] || DIRECTIONS.RECEIVABLE;
   const defaults = {
     annualPct: getParamNumber('lps_annual_pct', 15),
-    monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0),
-    stepCapPct: getParamNumber('lps_step_cap_pct', 0),
+    // The same defaults the surcharge engine uses (lpsTermsFor), so the screen
+    // states the rule the figures were worked out on.
+    monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0.5),
+    stepCapPct: getParamNumber('lps_step_cap_pct', 3),
   };
 
   const bills = openBills(direction).map((bill) => {
@@ -131,6 +133,8 @@ export function paymentMonitoring(side = 'RECEIVABLE') {
     direction,
     as_of: new Date().toISOString().slice(0, 10),
     annual_pct: defaults.annualPct,
+    monthly_step_pct: defaults.monthlyStepPct,
+    step_cap_pct: defaults.stepCapPct,
     totals: { ...totals, ...openPosition(direction) },
     ageing: ageingBuckets(direction),
     counterparties,

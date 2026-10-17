@@ -57,7 +57,8 @@ describe('A week that was deleted', () => {
     const again = await post('/api/deviation', manual({ actual_mwh: 1100 }));
     expect(again.status, JSON.stringify(again.body)).toBe(201);
     expect(again.body.deviation_amount).toBe(35000);
-    expect(db.prepare('SELECT COUNT(*) c FROM deviation_settlements').get().c).toBe(1);
+    // The deleted one stays on record, under its own number.
+    expect(db.prepare(`SELECT status FROM deviation_settlements ORDER BY created_at, rowid`).all().map((r) => r.status)).toEqual(['CANCELLED', 'CALCULATED']);
   });
 
   it('still refuses a second live entry for the same week', async () => {

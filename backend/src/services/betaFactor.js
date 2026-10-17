@@ -6,6 +6,7 @@
  */
 import db from '../db/index.js';
 import { getParamNumber } from '../mastersService.js';
+import { sourcesForPsa } from './allocations.js';
 
 export function resolveBetaRow(contract, periodMonth) {
   if (!contract?.id || !periodMonth) return null;
@@ -14,7 +15,10 @@ export function resolveBetaRow(contract, periodMonth) {
   `).get(contract.id, periodMonth);
 
   if (!row && contract.contract_type === 'PSA') {
-    const alloc = db.prepare('SELECT ppa_id FROM contract_allocations WHERE psa_id = ?').get(contract.id);
+    // The station whose certificate counts is the one the PSA drew from that
+    // month — not whichever allocation it ever held. A multi-source hydro PSA
+    // is refused at billing, so the first source in force is the source.
+    const alloc = sourcesForPsa(contract.id, periodMonth)[0];
     if (alloc?.ppa_id) {
       row = db.prepare(`
         SELECT * FROM station_beta WHERE contract_id = ? AND period_month = ?

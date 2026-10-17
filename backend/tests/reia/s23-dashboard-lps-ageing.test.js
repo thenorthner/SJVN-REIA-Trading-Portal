@@ -59,6 +59,7 @@ describe('S23 REIA dashboard — surcharge, split and ageing', () => {
 
     const buckets = ageingBuckets('SJVN_TO_BUYER');
     expect(buckets.map((b) => [b.bucket, b.amount])).toEqual([
+      ['NO_DUE_DATE', 0],
       ['NOT_DUE', 100000],
       ['DAYS_0_30', 200000],
       ['DAYS_31_60', 300000],

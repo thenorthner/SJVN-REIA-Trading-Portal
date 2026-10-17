@@ -48,6 +48,7 @@ import {
 import { consolidate, createPtcBill, listPtcBills } from '../services/hydroPtc.js';
 import { resolveBetaRow } from '../services/betaFactor.js';
 import { reaScraper } from '../services/reaScraper.js';
+import { checkAccountPeriod, isHeldAsSameAsAdjacent } from '../services/reaMonthChecks.js';
 import { syncAllocationFromRea, confirmProvisionalDelhiSplits } from '../services/hydroAllocationSync.js';
 import {
   sendForApproval, actOnApproval, approvalTrail, pendingStep, approvalInbox,
@@ -1012,11 +1013,14 @@ async function runFromRea(body, actor, onProgress) {
       }
       if (!rea.data_type) { bills.push({ ...row, status: 'SKIPPED', reason: 'REA not published for this month' }); blocked.add(c.id); continue; }
       const energy = db.prepare(`
-        SELECT energy_mwh, availability_percent, free_energy_mwh FROM energy_data
+        SELECT energy_mwh, availability_percent, free_energy_mwh, status, deviation_notes FROM energy_data
         WHERE contract_id = ? AND period_month = ? AND data_type = ? AND source = 'REA'
         ORDER BY updated_at DESC LIMIT 1
       `).get(c.id, month, rea.data_type);
       if (!energy) { bills.push({ ...row, status: 'SKIPPED', reason: `station not found in the ${rea.data_type} REA` }); blocked.add(c.id); continue; }
+      // Energy identical to the month beside it is that month's account read
+      // twice; billing it would charge the beneficiaries twice for one month.
+      if (isHeldAsSameAsAdjacent(energy)) { bills.push({ ...row, status: 'SKIPPED', reason: energy.deviation_notes }); blocked.add(c.id); continue; }
       // The energy is this month's; the percentages it is apportioned on have
       // to be this month's too. An account whose entitlements cannot be turned
       // into a sheet is not billed on last month's — that is how a beneficiary
@@ -1120,10 +1124,14 @@ router.post('/upload-rea', requireRole(...WRITE), reaUpload.single('file'), asyn
       throw new Error('No hydro station energy or availability records could be extracted from this PDF. Please ensure it is an authentic NRPC/RPC Regional Energy Account.');
     }
 
-    const detectedPeriod = parsed.period || req.body.period_month || monthFromFileName(originalName);
-    if (!detectedPeriod) {
-      throw new Error('Could not identify billing month from the REA PDF header.');
+    // The account's own month decides where it is filed. A month typed in, or
+    // read off the file name, is only checked against it: it used to stand in
+    // when the account named none, and could file one month's REA as another's.
+    if (!parsed.period) {
+      throw new Error('Could not identify the month from the REA PDF itself, so it is not filed under any month.');
     }
+    const claimed = req.body.period_month || monthFromFileName(originalName) || parsed.period;
+    const detectedPeriod = checkAccountPeriod(parsed, claimed);
 
     const dataType = req.body.data_type || (/_F\.pdf$/i.test(originalName) ? 'FINAL' : 'PROVISIONAL');
 

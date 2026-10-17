@@ -27,6 +27,7 @@
  */
 import db from '../db/index.js';
 import { newId } from '../util.js';
+import { supersededByDeveloperSql } from './outstanding.js';
 
 const money = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
@@ -135,6 +136,9 @@ export function bookableDocuments(periodMonth, category) {
     LEFT JOIN entities be ON be.id = c.buyer_id
     WHERE i.direction = ? AND i.billing_period = ?
       AND i.status IN (${statuses.map(() => '?').join(',')})
+      -- A developer's month is one purchase: its own accepted invoice, not that
+      -- and SJVN's computed bill as well (October booked ₹2.36 crore twice).
+      AND ${supersededByDeveloperSql('i')}
       AND ${NOT_ON_A_LIVE_POSTING.replace('%ID%', 'i.id')}
     ORDER BY c.contract_no, i.created_at
   `).all(direction, periodMonth, ...statuses).map((i) => ({
@@ -172,13 +176,18 @@ export function preparePosting({ periodMonth, category = 'SALE', notes = null, c
     throw Object.assign(new Error(`category must be one of ${CATEGORIES.join(', ')}`), { status: 400 });
   }
 
+  // One batch waiting at a time. A posted month can take a further batch: a
+  // bill raised after the month was booked (a supplementary, a credit note)
+  // used to be blocked for good, since only one live posting per month was
+  // allowed. The documents already on a live posting are left out, so nothing
+  // is booked twice.
   const open = db.prepare(`
-    SELECT posting_no, status FROM reia_fi_postings
-    WHERE period_month = ? AND category = ? AND status <> 'REVERSED'
+    SELECT posting_no FROM reia_fi_postings
+    WHERE period_month = ? AND category = ? AND status = 'PREPARED'
   `).get(periodMonth, category);
   if (open) {
     throw Object.assign(
-      new Error(`${periodMonth} is already ${open.status === 'POSTED' ? 'posted' : 'prepared'} for ${category} — ${open.posting_no}`),
+      new Error(`${open.posting_no} for ${periodMonth} ${category} is prepared and waiting; post it or withdraw it first`),
       { status: 409 },
     );
   }
@@ -227,9 +236,19 @@ export function preparePosting({ periodMonth, category = 'SALE', notes = null, c
 }
 
 /** Book a prepared posting, recording the voucher Finance returned. */
-export function postToFinance(postingId, { fiDocumentNo = null, postedBy = null }) {
+export function postToFinance(postingId, { fiDocumentNo = null, postedBy = null, postedById = null }) {
   const p = db.prepare('SELECT * FROM reia_fi_postings WHERE id = ?').get(postingId);
   if (!p) throw Object.assign(new Error('Posting not found'), { status: 404 });
+  // Posting records the voucher Finance raised for it: without one there is
+  // nothing to trace the entry by. It was optional.
+  const voucher = String(fiDocumentNo || '').trim();
+  if (p.status === 'PREPARED' && voucher.length < 3) {
+    throw Object.assign(new Error('Record the voucher number Finance raised for this entry (e.g. the SAP JV number).'), { status: 400 });
+  }
+  // The person who gathered the batch does not also book it.
+  if (p.status === 'PREPARED' && p.created_by && postedById && p.created_by === postedById) {
+    throw Object.assign(new Error('You prepared this posting, so someone else books it.'), { status: 403 });
+  }
   if (p.status === 'POSTED') {
     throw Object.assign(new Error(`${p.posting_no} was already posted on ${p.posted_at}`), { status: 409 });
   }
@@ -237,12 +256,30 @@ export function postToFinance(postingId, { fiDocumentNo = null, postedBy = null 
     throw Object.assign(new Error(`${p.posting_no} has been reversed — prepare the month again`), { status: 400 });
   }
 
+  // What is booked is what was prepared: a document cancelled or changed since
+  // would be booked at an amount it no longer has.
+  const lines = db.prepare('SELECT * FROM reia_fi_posting_lines WHERE posting_id = ?').all(postingId);
+  const changed = [];
+  for (const l of lines) {
+    if (l.source_type === 'INVOICE') {
+      const inv = db.prepare('SELECT status, total_amount FROM invoices WHERE id = ?').get(l.source_id);
+      const ok = inv && (p.category === 'SALE' ? SALE_STATUSES : PURCHASE_STATUSES).includes(inv.status) && Math.abs(money(inv.total_amount) - l.total_amount) < 0.01;
+      if (!ok) changed.push(l.doc_no);
+    } else {
+      const n = db.prepare('SELECT status, amount FROM debit_credit_notes WHERE id = ?').get(l.source_id);
+      if (!n || !['ISSUED', 'SETTLED'].includes(n.status) || Math.abs(money(n.amount) + l.total_amount) >= 0.01) changed.push(l.doc_no);
+    }
+  }
+  if (changed.length) {
+    throw Object.assign(new Error(`Changed since this posting was prepared: ${changed.join(', ')}. Withdraw it and prepare the month again.`), { status: 409 });
+  }
+
   db.prepare(`
     UPDATE reia_fi_postings
     SET status = 'POSTED', fi_document_no = ?, posted_at = datetime('now'), posted_by = ?,
         updated_at = datetime('now')
     WHERE id = ?
-  `).run(fiDocumentNo, postedBy, postingId);
+  `).run(voucher, postedBy, postingId);
   return getPosting(postingId);
 }
 
@@ -254,11 +291,23 @@ export function postToFinance(postingId, { fiDocumentNo = null, postedBy = null 
  * back. Reversing frees its documents, so the month can be prepared again.
  */
 export function reversePosting(postingId, { reason, reversedBy = null }) {
-  if (!reason) throw Object.assign(new Error('A reversal must say why'), { status: 400 });
+  const why = String(reason || '').trim();
+  if (why.length < 10) throw Object.assign(new Error('Say why the entry is reversed (at least 10 characters) — it is what Finance\'s record shows.'), { status: 400 });
+  reason = why;
   const p = db.prepare('SELECT * FROM reia_fi_postings WHERE id = ?').get(postingId);
   if (!p) throw Object.assign(new Error('Posting not found'), { status: 404 });
   if (p.status === 'REVERSED') {
     throw Object.assign(new Error(`${p.posting_no} is already reversed`), { status: 400 });
+  }
+  if (p.reverses_posting_id) {
+    throw Object.assign(new Error(`${p.posting_no} is itself a reversal`), { status: 400 });
+  }
+  // A batch never booked is withdrawn, not reversed: a counter-entry for an
+  // entry Finance never made would sit in its record as if it had.
+  if (p.status === 'PREPARED') {
+    db.prepare(`UPDATE reia_fi_postings SET status = 'REVERSED', reversed_at = datetime('now'), reversed_by = ?, reversal_reason = ?, updated_at = datetime('now') WHERE id = ?`)
+      .run(reversedBy, `Withdrawn before posting: ${reason}`, postingId);
+    return { reversed: p.posting_no, withdrawn: true, note: 'Withdrawn before it was booked; its documents are free to be prepared again.' };
   }
 
   const id = newId('RFP');

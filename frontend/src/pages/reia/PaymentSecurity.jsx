@@ -2,12 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
-import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, fmtCurrency, DemandLetterViewer } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, AlertPopup, fmtCurrency, DemandLetterViewer } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import SecurityInstrumentPanel, { ExpiryTag, changeText, errText, eventLabel } from '../../components/SecurityInstrumentPanel.jsx';
-import SecurityVaultWaterfall3D from '../../components/SecurityVaultWaterfall3D.jsx';
 import SjvnLcDesk from '../../components/SjvnLcDesk.jsx';
 import { fmtDate, fmtDateTime } from '../../datetime.js';
 
@@ -21,7 +20,7 @@ const CAN_OVERRIDE = [...ROLE_GROUPS.REIA_WRITE, 'MANAGEMENT'];
 const LIVE = ['ACTIVE', 'PARTIALLY_UTILIZED', 'RENEWED'];
 
 const EMPTY_FORM = {
-  contract_id: '', mechanism_type: 'LC', bg_subtype: 'PBG', limit_amount: '', issuing_bank: '',
+  contract_id: '', mechanism_type: 'LC', bg_subtype: 'PBG', limit_amount: '', issuing_bank: '', bank_reference_no: '',
   beneficiary: 'SJVN Limited', validity_start: '', validity_end: '', is_revolving: true, remarks: '',
 };
 const EMPTY_FILTERS = { status: '', mechanism_type: '', bg_subtype: '', expiring_days: '' };
@@ -206,7 +205,7 @@ export default function PaymentSecurity() {
     setBusy(true);
     try {
       if (action === 'utilize') {
-        await api.paymentSecurity.utilize(detail.id, Number(actionValue), actionReason.trim() || undefined);
+        await api.paymentSecurity.utilize(detail.id, Number(actionValue), actionReason.trim());
         setDetailNotice(`${fmtCurrency(Number(actionValue))} drawn on ${detail.instrument_no}.`);
       } else if (action === 'replenish') {
         await api.paymentSecurity.replenish(detail.id, Number(actionValue), actionReason.trim() || undefined);
@@ -242,6 +241,7 @@ export default function PaymentSecurity() {
       const inv = await api.paymentSecurity.startInvocation({
         contract_id: invokeForm.contract_id,
         amount: invokeForm.amount ? Number(invokeForm.amount) : undefined,
+        reason: invokeForm.reason?.trim() || undefined,
       });
       const l = parse(inv.demand_letter_json) || {};
       const from = (l.waterfall || []).map((w) => w.instrument_no).join(', ');
@@ -398,7 +398,6 @@ export default function PaymentSecurity() {
           </div>
         )}
       />
-      {pageError && <div className="form-error" role="alert">{pageError}</div>}
       {notice && <div className="ps-alert green" role="status">{notice}</div>}
 
       <Tabs style={{ marginBottom: 18 }}>
@@ -412,12 +411,6 @@ export default function PaymentSecurity() {
 
       {view === 'instruments' && (
       <>
-      <SecurityVaultWaterfall3D
-        stats={stats}
-        onOpenInvoke={() => setView('instruments')}
-        onRunAlerts={runAlerts}
-      />
-
       {stats && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
           <StatPill label="Total security" value={fmtCurrency(stats.total_security_value)} sub={`${stats.instrument_count} active`} />
@@ -452,7 +445,6 @@ export default function PaymentSecurity() {
               <p style={{ margin: '4px 0 10px', fontSize: 13.5, color: 'var(--text-light)' }}>
                 Scheduling and bidding for this buyer are held while its cover falls short. An override lets them go ahead on your say-so, until the date you give. It is recorded against your name and Management is told.
               </p>
-              {overrideError && <div className="form-error">{overrideError}</div>}
               <div className="form-grid">
                 <Field label="Reason" required><input required value={overrideForm.reason} onChange={(e) => setOverrideForm({ ...overrideForm, reason: e.target.value })} placeholder="e.g. LC enhancement with the bank, advice awaited" /></Field>
                 <Field label="Valid until (blank = until withdrawn)"><input type="date" value={overrideForm.valid_until} onChange={(e) => setOverrideForm({ ...overrideForm, valid_until: e.target.value })} /></Field>
@@ -526,9 +518,9 @@ export default function PaymentSecurity() {
         <Card title="Start waterfall invocation" className="mt-3">
           <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-light)' }}>
             Draws on the contract's security in waterfall order — the counterparty's own instrument first, pooled funds last — and raises a demand notice.
-            On a PSA that is the buyer's letter of credit; on a PPA, the seller's guarantee. Leave the amount blank to invoke what is overdue by 30 days or more.
+            On a PSA that is the buyer's letter of credit, for what the buyer owes 30 days or more past due and not already demanded — leave the amount blank for all of it.
+            On a PPA it is the seller's guarantee: enter the amount and what the seller defaulted on.
           </p>
-          {invokeError && <div className="form-error" role="alert">{invokeError}</div>}
           <form onSubmit={askInvoke} className="form-grid" style={{ alignItems: 'end' }}>
             <Field label="Contract">
               <select required value={invokeForm.contract_id} onChange={(e) => { setInvokeForm({ ...invokeForm, contract_id: e.target.value }); setInvokeConfirm(false); }}>
@@ -536,15 +528,20 @@ export default function PaymentSecurity() {
                 {contracts.map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.contract_type})</option>)}
               </select>
             </Field>
-            <Field label="Amount (optional)">
-              <input type="number" min="0" step="0.01" value={invokeForm.amount} onChange={(e) => { setInvokeForm({ ...invokeForm, amount: e.target.value }); setInvokeConfirm(false); }} />
+            <Field label={invokeContract?.contract_type === 'PPA' ? 'Amount' : 'Amount (optional)'}>
+              <input type="number" min="0" step="0.01" required={invokeContract?.contract_type === 'PPA'} value={invokeForm.amount} onChange={(e) => { setInvokeForm({ ...invokeForm, amount: e.target.value }); setInvokeConfirm(false); }} />
             </Field>
+            {invokeContract?.contract_type === 'PPA' && (
+              <Field label="What the seller defaulted on" required>
+                <input required minLength={15} value={invokeForm.reason || ''} onChange={(e) => { setInvokeForm({ ...invokeForm, reason: e.target.value }); setInvokeConfirm(false); }} placeholder="Goes on the demand to the bank" />
+              </Field>
+            )}
             {!invokeConfirm && <button type="submit" className="btn btn-danger">Invoke waterfall</button>}
           </form>
           {invokeConfirm && (
             <div className="ps-alert red" role="alertdialog" aria-label="Confirm invocation" style={{ marginTop: 10, marginBottom: 0 }}>
               <strong>Invoke the security on {invokeContract?.contract_no}?</strong>{' '}
-              {invokeForm.amount ? `${fmtCurrency(Number(invokeForm.amount))} will be` : 'Whatever is overdue by 30 days or more will be'} drawn on the {invokeContract?.contract_type === 'PPA' ? "seller's guarantee" : "buyer's letter of credit"} and any pooled cover,
+              {invokeForm.amount ? `${fmtCurrency(Number(invokeForm.amount))} will be` : 'What is overdue by 30 days or more, and not already demanded, will be'} drawn on the {invokeContract?.contract_type === 'PPA' ? "seller's guarantee" : "buyer's letter of credit"} and any pooled cover,
               a demand notice will be raised, and the counterparty will be told. This cannot be undone from this screen.
               <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setInvokeConfirm(false)}>Cancel</button>
@@ -557,7 +554,6 @@ export default function PaymentSecurity() {
 
       {invocations.length > 0 && (
         <Card title="Invocation tracker" className="mt-3">
-          {invocationError && <div className="form-error" role="alert">{invocationError}</div>}
           <Table
             columns={[
               { key: 'invocation_no', header: 'No.' },
@@ -597,7 +593,6 @@ export default function PaymentSecurity() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 460px), 1fr))', gap: 12, marginTop: 12 }}>
           {pendingReleases.length > 0 && (
           <Card title="Release queue">
-            {releaseError && <div className="form-error" role="alert">{releaseError}</div>}
             <Table
               columns={[
                 { key: 'instrument_no', header: 'Instrument', render: (r) => <><strong>{r.instrument_no}</strong><div style={{ fontSize: 13, color: 'var(--text-light)' }}>{r.contract_no}</div></> },
@@ -667,7 +662,6 @@ export default function PaymentSecurity() {
       )}
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Add payment security" width={560}>
-        {createError && <div className="form-error" role="alert">{createError}</div>}
         <form onSubmit={handleCreate}>
           <Field label="Contract">
             <select required value={form.contract_id} onChange={(e) => setForm({ ...form, contract_id: e.target.value })}>
@@ -694,6 +688,12 @@ export default function PaymentSecurity() {
             <Field label="Issuing bank">
               <input value={form.issuing_bank} onChange={(e) => setForm({ ...form, issuing_bank: e.target.value })} />
             </Field>
+            {['LC', 'BANK_GUARANTEE'].includes(form.mechanism_type) && (
+              // The bank's own number for the document — what ties the row to the paper.
+              <Field label={form.mechanism_type === 'LC' ? "Bank's LC number" : "Bank's guarantee number"} required>
+                <input required value={form.bank_reference_no} onChange={(e) => setForm({ ...form, bank_reference_no: e.target.value })} />
+              </Field>
+            )}
             <Field label="Validity start">
               <input required type="date" value={form.validity_start} onChange={(e) => setForm({ ...form, validity_start: e.target.value })} />
             </Field>
@@ -741,7 +741,6 @@ export default function PaymentSecurity() {
               <div className="detail-item"><span className="detail-label">Revolving</span><span className="detail-value">{detail.is_revolving ? 'Yes' : 'No'}</span></div>
             </div>
 
-            {detailError && <div className="form-error" role="alert" style={{ marginTop: 12 }}>{detailError}</div>}
             {detailNotice && <div className="ps-alert green" role="status" style={{ marginTop: 12, marginBottom: 0 }}>{detailNotice}</div>}
 
             {(canDraw || canReinstate || canAskRelease) && (
@@ -772,8 +771,8 @@ export default function PaymentSecurity() {
                       <input required type="number" min="0.01" step="0.01" value={actionValue} onChange={(e) => setActionValue(e.target.value)} />
                     </Field>
                     {action === 'utilize' && (
-                      <Field label="What it is drawn for">
-                        <input value={actionReason} onChange={(e) => setActionReason(e.target.value)} placeholder="e.g. Default on the May bill" />
+                      <Field label="What it is drawn for" required>
+                        <input required minLength={10} value={actionReason} onChange={(e) => setActionReason(e.target.value)} placeholder="e.g. Default on the May bill (the holder is told)" />
                       </Field>
                     )}
                     {action === 'replenish' && (
@@ -849,6 +848,13 @@ export default function PaymentSecurity() {
           </div>
         )}
       </Modal>
+      {/* Refusals as a popup (house rule), whichever form they came from. */}
+      {(() => {
+        const errs = [[pageError, setPageError], [createError, setCreateError], [detailError, setDetailError], [invokeError, setInvokeError],
+          [invocationError, setInvocationError], [releaseError, setReleaseError], [overrideError, setOverrideError]];
+        const hit = errs.find(([m]) => m);
+        return <AlertPopup open={!!hit} title="Not done" message={hit?.[0]} onClose={() => hit?.[1]('')} />;
+      })()}
     </div>
   );
 }

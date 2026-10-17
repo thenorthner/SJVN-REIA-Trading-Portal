@@ -65,14 +65,14 @@ describe('S2 Contract management', () => {
       // A five-year tenure, because this bills a year-2 period and the default
       // fixture runs only to 2027-03-31 — billing past a contract's end is now
       // refused, which is what made this fixture's own dates matter.
-      tenure_start: '2026-04-01', tenure_end: '2031-03-31',
-      tariff_structure_json: JSON.stringify({ type: 'ESCALATING', base: 3.0, escalation_pct: 2, from: '2026-04-01' }),
+      tenure_start: '2024-04-01', tenure_end: '2031-03-31',
+      tariff_structure_json: JSON.stringify({ type: 'ESCALATING', base: 3.0, escalation_pct: 2, from: '2024-04-01' }),
     });
     db.prepare(`INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, status)
-                VALUES ('ENG-ESC', ?, '2027-05', 'FINAL', 'SEA', 1000, 'LOCKED')`).run(c.id);
+                VALUES ('ENG-ESC', ?, '2025-05', 'FINAL', 'SEA', 1000, 'LOCKED')`).run(c.id);
     // Year 2 of the contract should bill at 3.06, not the base 3.00.
     const r = await request(app).post('/api/invoices/generate').set(auth(reia))
-      .send({ contract_id: c.id, period_month: '2027-05' });
+      .send({ contract_id: c.id, period_month: '2025-05' });
     expect(r.status).toBe(201);
     const inv = db.prepare('SELECT tariff_per_unit FROM invoices WHERE id = ?').get(r.body.id);
     expect(inv.tariff_per_unit).toBeCloseTo(3.06, 2);

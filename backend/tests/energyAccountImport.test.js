@@ -19,9 +19,10 @@ let reia, finance, njhps, rampur, luhri;
 // The two stations stand for the whole file: a contract number is unique, so
 // they are made once and the energy they carry is cleared between tests.
 beforeAll(() => {
-  njhps = makeContract({ contract_no: 'PPA/NJHPS/001', seller_id: makeEntity('SELLER', { name: 'Nathpa Jhakri HEP' }).id });
-  rampur = makeContract({ contract_no: 'PPA/RHPS/002', seller_id: makeEntity('SELLER', { name: 'Rampur HEP' }).id });
-  luhri = makeContract({ contract_no: 'PPA/LUHRI/003', seller_id: makeEntity('SELLER', { name: 'Luhri Stage-I HEP' }).id });
+  // Real station sizes: the import now refuses a month's energy above what the plant can make.
+  njhps = makeContract({ contract_no: 'PPA/NJHPS/001', project_type: 'Hydro', capacity_mw: 1500, seller_id: makeEntity('SELLER', { name: 'Nathpa Jhakri HEP' }).id });
+  rampur = makeContract({ contract_no: 'PPA/RHPS/002', project_type: 'Hydro', capacity_mw: 412, seller_id: makeEntity('SELLER', { name: 'Rampur HEP' }).id });
+  luhri = makeContract({ contract_no: 'PPA/LUHRI/003', project_type: 'Hydro', capacity_mw: 210, seller_id: makeEntity('SELLER', { name: 'Luhri Stage-I HEP' }).id });
   // One station selling under two contracts: its name alone cannot say which.
   const dhaulasidh = makeEntity('SELLER', { name: 'Dhaulasidh HEP' }).id;
   makeContract({ contract_no: 'PPA/DHEP/005', seller_id: dhaulasidh });

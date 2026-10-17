@@ -12,6 +12,13 @@
  *    master parameter because the Commission revises the schedule.
  *  - Net worth must stay at or above the category minimum. The figure recorded
  *    here is the one on the auditor's certificate.
+ *
+ * Held to what was recorded (17-Oct-2026 audit): a year read "Paid" on any
+ * payment date — one in the future, ₹1 against ₹40 lakh, or one paid five
+ * months late — and "Meets minimum" on a certificate as on 2019. A payment now
+ * reads paid, paid late or short; a certificate older than the last two
+ * balance-sheet dates is stale; dates in the future, and years beyond the next,
+ * are refused.
  */
 import db from '../db/index.js';
 import { getParam, getParamNumber } from '../mastersService.js';
@@ -23,12 +30,18 @@ const iso = (d) => d.toISOString().slice(0, 10);
 
 const fyOfStartYear = (y) => `${y}-${String((y + 1) % 100).padStart(2, '0')}`;
 
-function assertFy(fy) {
+function assertFy(fy, today) {
   const m = FY_RE.exec(String(fy || ''));
   if (!m || Number(m[2]) !== (Number(m[1]) + 1) % 100) {
     throw new Error('Financial year must look like 2026-27');
   }
-  return Number(m[1]);
+  const start = Number(m[1]);
+  const current = Number(financialYear(today.slice(0, 7)).slice(0, 4));
+  // The tracker lists up to the current year, and the fee for the next one may
+  // be paid ahead of it; anything later was stored and never shown.
+  if (start > current + 1) throw new Error(`FY ${fy} is beyond the next financial year (${fyOfStartYear(current + 1)}).`);
+  if (start < 2000) throw new Error(`FY ${fy} is before this licence's records could start.`);
+  return start;
 }
 
 /** Energy on the Form-IV returns of a financial year, in MU — the volume the category limit is read against. */
@@ -68,10 +81,22 @@ export function licenceCompliance({ asOf = new Date() } = {}) {
     const fy = fyOfStartYear(y);
     const row = stored.get(fy) || {};
     const dueDate = `${y}-04-30`;
-    const feeStatus = row.fee_paid_on ? 'PAID' : dueDate < today ? 'OVERDUE' : 'DUE';
-    const netWorthStatus = row.net_worth_cr == null
-      ? 'PENDING'
-      : row.net_worth_cr >= minNetWorth ? 'COMPLIANT' : 'SHORTFALL';
+    const shortBy = row.fee_paid_on ? Math.max(0, Math.round(feeDue - (Number(row.fee_amount) || 0))) : 0;
+    const daysLate = row.fee_paid_on && row.fee_paid_on > dueDate
+      ? Math.floor((new Date(`${row.fee_paid_on}T00:00:00Z`) - new Date(`${dueDate}T00:00:00Z`)) / 86400000)
+      : 0;
+    let feeStatus;
+    if (!row.fee_paid_on) feeStatus = dueDate < today ? 'OVERDUE' : 'DUE';
+    else if (shortBy > 0) feeStatus = 'SHORT';
+    else if (daysLate > 0) feeStatus = 'PAID_LATE';
+    else feeStatus = 'PAID';
+    // The certificate for a year is on the last audited balance sheet: 31 March
+    // before the year, or the one before that while the audit is still out.
+    const staleBefore = `${y - 1}-03-31`;
+    let netWorthStatus;
+    if (row.net_worth_cr == null) netWorthStatus = 'PENDING';
+    else if (!row.net_worth_as_on || row.net_worth_as_on < staleBefore) netWorthStatus = 'STALE';
+    else netWorthStatus = row.net_worth_cr >= minNetWorth ? 'COMPLIANT' : 'SHORTFALL';
 
     years.push({
       fy,
@@ -82,7 +107,9 @@ export function licenceCompliance({ asOf = new Date() } = {}) {
       fee_paid_on: row.fee_paid_on || null,
       fee_reference: row.fee_reference || null,
       fee_status: feeStatus,
-      fee_days_past_due: feeStatus === 'OVERDUE'
+      fee_short_by: shortBy,
+      fee_days_late: daysLate,
+      fee_days_past_due: (feeStatus === 'OVERDUE' || feeStatus === 'SHORT') && dueDate < today
         ? Math.floor((new Date(`${today}T00:00:00Z`) - new Date(`${dueDate}T00:00:00Z`)) / 86400000)
         : 0,
       min_net_worth_cr: minNetWorth,
@@ -91,6 +118,7 @@ export function licenceCompliance({ asOf = new Date() } = {}) {
       certificate_ref: row.certificate_ref || null,
       certificate_filed_on: row.certificate_filed_on || null,
       net_worth_status: netWorthStatus,
+      net_worth_stale_before: staleBefore,
       // The year before is the volume this year's category was judged on.
       prev_fy_volume_mu: tradedVolumeMu(y - 1),
       volume_mu: tradedVolumeMu(y),
@@ -113,17 +141,20 @@ export function licenceCompliance({ asOf = new Date() } = {}) {
     min_net_worth_cr: minNetWorth,
     next_fee: { fy: fyOfStartYear(currentStart + 1), due_date: nextDue, days_left: daysToNext },
     totals: {
-      fee_overdue: years.filter((r) => r.fee_status === 'OVERDUE').length,
-      net_worth_pending: years.filter((r) => r.net_worth_status === 'PENDING').length,
+      // A part-paid fee past its date is as unpaid as one never paid.
+      fee_overdue: years.filter((r) => r.fee_status === 'OVERDUE' || (r.fee_status === 'SHORT' && r.fee_due_date < today)).length,
+      fee_paid_late: years.filter((r) => r.fee_status === 'PAID_LATE').length,
+      net_worth_pending: years.filter((r) => r.net_worth_status === 'PENDING' || r.net_worth_status === 'STALE').length,
       net_worth_shortfall: years.filter((r) => r.net_worth_status === 'SHORTFALL').length,
     },
     years,
   };
 }
 
-const optionalDate = (v, label) => {
+const optionalDate = (v, label, today) => {
   if (v == null || v === '') return null;
-  if (!DATE_RE.test(String(v))) throw new Error(`${label} must be a date (YYYY-MM-DD)`);
+  if (!DATE_RE.test(String(v)) || Number.isNaN(new Date(`${v}T00:00:00Z`).getTime())) throw new Error(`${label} must be a date (YYYY-MM-DD)`);
+  if (today && String(v) > today) throw new Error(`${label} (${v}) is in the future.`);
   return String(v);
 };
 
@@ -135,23 +166,30 @@ const optionalAmount = (v, label) => {
 };
 
 /** Record (or correct) what was paid and certified for one financial year. */
-export function saveLicenceYear(fy, body, userName) {
-  assertFy(fy);
+export function saveLicenceYear(fy, body, userName, { asOf = new Date() } = {}) {
+  const today = iso(asOf);
+  assertFy(fy, today);
   const row = {
     fy,
     fee_amount: optionalAmount(body.fee_amount, 'Fee paid'),
-    fee_paid_on: optionalDate(body.fee_paid_on, 'Fee payment date'),
+    fee_paid_on: optionalDate(body.fee_paid_on, 'Fee payment date', today),
     fee_reference: body.fee_reference ? String(body.fee_reference).trim() : null,
     net_worth_cr: optionalAmount(body.net_worth_cr, 'Net worth'),
-    net_worth_as_on: optionalDate(body.net_worth_as_on, 'Net worth date'),
+    net_worth_as_on: optionalDate(body.net_worth_as_on, 'Net worth date', today),
     certificate_ref: body.certificate_ref ? String(body.certificate_ref).trim() : null,
-    certificate_filed_on: optionalDate(body.certificate_filed_on, 'Certificate filing date'),
+    certificate_filed_on: optionalDate(body.certificate_filed_on, 'Certificate filing date', today),
     notes: body.notes ? String(body.notes).trim() : null,
     updated_by: userName || null,
   };
   // A payment date with nothing to tie it to cannot be checked later.
   if (row.fee_paid_on && !row.fee_reference) {
     throw new Error('Record the payment reference (UTR / receipt no.) along with the payment date.');
+  }
+  if (row.fee_paid_on && !(row.fee_amount > 0)) {
+    throw new Error('Record the amount paid along with the payment date.');
+  }
+  if (row.net_worth_cr != null && !row.net_worth_as_on) {
+    throw new Error('Record the date the net worth is certified as on (the balance-sheet date).');
   }
 
   db.prepare(`

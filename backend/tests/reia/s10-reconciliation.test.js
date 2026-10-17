@@ -5,7 +5,11 @@ import db from '../../src/db/index.js';
 import { tokenFor, auth, makeContract, columnsOf, hasTable, resetReia } from '../helpers/reia.js';
 
 let reia, contract;
-beforeEach(() => { resetReia(); reia = tokenFor('REIA_USER'); contract = makeContract({ status: 'ACTIVE' }); });
+// A statement needs something to reconcile: the month's energy on record.
+beforeEach(() => {
+  resetReia(); reia = tokenFor('REIA_USER'); contract = makeContract({ status: 'ACTIVE' });
+  for (const p of ['2026-04', '2026-03']) db.prepare(`INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, status) VALUES (?, ?, ?, 'PROVISIONAL', 'SEA', 100, 'LOCKED')`).run(`ENG-T-${Math.random().toString(36).slice(2, 9)}`, contract.id, p);
+});
 
 const run = () => request(app).post('/api/reconciliation/run').set(auth(reia))
   .send({ contract_id: contract.id, period: '2026-04', scope: 'REIA_CONTRACT' });
@@ -38,7 +42,11 @@ describe('S10 Reconciliation', () => {
   it('closes only when both sides have acknowledged', async () => {
     await run();
     const recon = db.prepare('SELECT * FROM reconciliations ORDER BY rowid DESC').get();
-    await request(app).post(`/api/reconciliation/${recon.id}/acknowledge`).set(auth(reia)).send({ decision: 'AGREE' });
+    // Explain every line that did not match, then sign for SJVN.
+    for (const it of db.prepare(`SELECT id FROM recon_items WHERE reconciliation_id = ? AND match_status IN ('EXCEPTION','CARRIED')`).all(recon.id)) {
+      await request(app).post(`/api/reconciliation/${recon.id}/override`).set(auth(reia)).send({ item_id: it.id, reason: 'accepted for the test' });
+    }
+    await request(app).post(`/api/recon-signoff/${recon.id}/sign`).set(auth(reia)).send({ decision: 'AGREE' });
     const after = db.prepare('SELECT status, sjvn_ack_at, counterparty_ack_at FROM reconciliations WHERE id = ?').get(recon.id);
     expect(after.sjvn_ack_at).toBeTruthy();
     expect(after.status, 'closed on one signature alone').not.toBe('CLOSED');

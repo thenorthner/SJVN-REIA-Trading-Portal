@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import ReconSignoffPanel from '../../components/ReconSignoffPanel.jsx';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, fmtCurrency, fmtNumber, StatementViewer } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, AlertPopup, fmtCurrency, fmtNumber, StatementViewer } from '../../components/ui.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
@@ -372,7 +372,6 @@ export default function Reconciliation() {
 
       {view === 'main' && (
       <>
-      {pageError && <div className="form-error" role="alert">{pageError}</div>}
       {stats && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
           <StatPill label="Auto-match avg" value={`${stats.avg_auto_match_pct}%`} />
@@ -449,7 +448,6 @@ export default function Reconciliation() {
       )}
 
       <Modal open={showRun} onClose={() => setShowRun(false)} title="Run Reconciliation" width={560}>
-        {error && <div className="form-error">{error}</div>}
         <form onSubmit={handleRun}>
           <Field label="Scope">
             <select value={runForm.scope} onChange={(e) => setRunForm({ ...runForm, scope: e.target.value })}>
@@ -512,7 +510,6 @@ export default function Reconciliation() {
               </div>
             )}
 
-            {actionError && <div className="form-error" role="alert">{actionError}</div>}
 
             {/* Quick Metrics Grid */}
             <div className="detail-grid">
@@ -723,7 +720,6 @@ export default function Reconciliation() {
         width={560}
       >
         <div>
-          {ackError && <div className="form-error" role="alert">{ackError}</div>}
           {ackModal.decision === 'AGREE' ? (
             <div>
               <div style={{
@@ -838,6 +834,12 @@ export default function Reconciliation() {
           )}
         </div>
       </Modal>
+      {/* Refusals as a popup (house rule). */}
+      {(() => {
+        const errs = [[pageError, setPageError], [error, setError], [actionError, setActionError], [ackError, setAckError]];
+        const hit = errs.find(([m]) => m);
+        return <AlertPopup open={!!hit} title="Not done" message={hit?.[0]} onClose={() => hit?.[1]('')} />;
+      })()}
     </div>
   );
 }

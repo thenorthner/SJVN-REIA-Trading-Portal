@@ -3,6 +3,18 @@ import request from 'supertest';
 import { app } from '../../src/server.js';
 import db from '../../src/db/index.js';
 import { tokenFor, auth, makeEntity, makeContract, makeInvoice, resetReia } from '../helpers/reia.js';
+import { newId } from '../../src/util.js';
+
+// A staged account goes live only against a bank proof verified after the
+// change was asked for, and on someone else's verification (17-Oct-2026).
+const proveNewAccount = (entityId) => {
+  const later = new Date(Date.now() + 2000).toISOString();
+  const row = db.prepare(`SELECT id FROM entity_regulatory_approvals WHERE entity_id = ? AND approval_code = 'BANK_ACCOUNT_PROOF'`).get(entityId);
+  if (row) db.prepare(`UPDATE entity_regulatory_approvals SET status = 'VERIFIED', verified_at = ?, reference_no = 'CHQ-NEW' WHERE id = ?`).run(later, row.id);
+  else db.prepare(`INSERT INTO entity_regulatory_approvals (id, entity_id, approval_code, label, is_mandatory, status, verified_at, reference_no)
+    VALUES (?, ?, 'BANK_ACCOUNT_PROOF', 'Bank Account Proof', 1, 'VERIFIED', ?, 'CHQ-NEW')`).run(newId('REG'), entityId, later);
+};
+const checker = () => tokenFor('REIA_ADMIN');
 import { runStakeholderAlerts } from '../../src/stakeholderEngine.js';
 
 let reia;
@@ -42,7 +54,8 @@ describe('S19 A change of bank account is not the live one until it is verified'
 
   it('promotes the change once the account is verified', async () => {
     await changeBank();
-    const r = await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(reia)).send({});
+    proveNewAccount(ent.id);
+    const r = await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(checker())).send({});
     expect(r.status).toBe(200);
     expect(row().account_no, 'a verified change never became the live account').toBe('999988887777');
     expect(row().pending_bank_json).toBeNull();
@@ -51,7 +64,8 @@ describe('S19 A change of bank account is not the live one until it is verified'
 
   it('records what the account was and what it became', async () => {
     await changeBank();
-    await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(reia)).send({});
+    proveNewAccount(ent.id);
+    await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(checker())).send({});
     const a = db.prepare(`SELECT * FROM audit_logs WHERE entity_id = ? AND action = 'BANK_CHANGE_VERIFIED'`).get(ent.id);
     expect(a, 'promoting an account to live left no trail').toBeTruthy();
     expect(String(a.before_value ?? a.beforeValue ?? '')).toContain('111122223333');
@@ -63,10 +77,12 @@ describe('S19 A change of bank account is not the live one until it is verified'
     // also where the account it proves becomes the one that is paid.
     await changeBank();
     db.prepare(`UPDATE entity_regulatory_approvals SET status = 'VERIFIED' WHERE entity_id = ?`).run(ent.id);
+    proveNewAccount(ent.id);
     const r = await request(app).post(`/api/entities/${ent.id}/approve`).set(auth(reia)).send({ decision: 'APPROVED' });
     if (r.status === 400) {
       // The checklist is seeded on first approval; verify it and go again.
       db.prepare(`UPDATE entity_regulatory_approvals SET status = 'VERIFIED' WHERE entity_id = ?`).run(ent.id);
+      proveNewAccount(ent.id);
       await request(app).post(`/api/entities/${ent.id}/approve`).set(auth(reia)).send({ decision: 'APPROVED' });
     }
     expect(row().status).toBe('APPROVED');
@@ -123,7 +139,8 @@ describe('S19 Money does not move to an unverified account', () => {
 
   it('releases again once the change has been verified', async () => {
     await request(app).put(`/api/entities/${ent.id}`).set(auth(reia)).send({ account_no: '999988887777' });
-    await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(reia)).send({});
+    proveNewAccount(ent.id);
+    await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(checker())).send({});
     const r = await release();
     expect(r.status, 'a verified account still could not be paid').toBeLessThan(400);
   });

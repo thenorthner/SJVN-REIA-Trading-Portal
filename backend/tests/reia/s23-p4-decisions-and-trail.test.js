@@ -47,7 +47,7 @@ describe('S23 An approve/reject endpoint needs an actual decision', () => {
     });
 
     it('still approves on APPROVED', async () => {
-      expect((await act({ decision: 'APPROVED' })).status).toBeLessThan(400);
+      expect((await act({ decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk' })).status).toBeLessThan(400);
       expect(statusOf()).toBe('APPROVED');
     });
 

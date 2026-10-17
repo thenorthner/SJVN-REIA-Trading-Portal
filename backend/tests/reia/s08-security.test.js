@@ -8,9 +8,14 @@ let reia, contract;
 beforeEach(() => { resetReia(); reia = tokenFor('REIA_USER'); contract = makeContract({ status: 'ACTIVE' }); });
 
 const mkLc = (over = {}) => request(app).post('/api/payment-security').set(auth(reia)).send({
-  contract_id: contract.id, mechanism_type: 'LC', limit_amount: 1000000,
+  contract_id: contract.id, mechanism_type: 'LC', limit_amount: 1000000, bank_reference_no: `LC-${Math.random()}`,
   issuing_bank: 'SBI', validity_start: '2026-04-01', validity_end: '2027-03-31', ...over,
 });
+// A buyer's security is invoked for what it owes past the invocation rule.
+const overdue = (amount) => db.prepare(`INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period,
+  energy_mwh, tariff_per_unit, energy_charges, total_amount, status, due_date)
+  VALUES (?, ?, ?, 'FINAL', 'SJVN_TO_BUYER', '2026-04', 100, 3, ?, ?, 'SENT', date('now', '-45 days'))`)
+  .run(`INV-OD-${amount}`, `INV-OD-${amount}`, contract.id, amount, amount);
 
 describe('S8 Payment security', () => {
   it('records an LC with bank, validity and amount', async () => {
@@ -23,7 +28,7 @@ describe('S8 Payment security', () => {
 
   it('reduces the available limit as it is drawn against', async () => {
     const r = await mkLc();
-    await request(app).post(`/api/payment-security/${r.body.id}/utilize`).set(auth(reia)).send({ amount: 250000, reason: 'default' });
+    await request(app).post(`/api/payment-security/${r.body.id}/utilize`).set(auth(reia)).send({ amount: 250000, reason: 'Buyer default on the June bill' });
     const row = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(r.body.id);
     const available = row.available_amount ?? (row.limit_amount - (row.utilized_amount || 0));
     expect(available).toBe(750000);
@@ -43,6 +48,7 @@ describe('S8 Payment security', () => {
       issuing_bank: 'Pool', validity_start: '2026-04-01', validity_end: '2027-03-31',
     });
 
+    overdue(300000);
     const r = await request(app).post('/api/payment-security/invocations').set(auth(reia))
       .send({ contract_id: contract.id, amount: 300000, side: 'BUYER' });
     expect(r.status).toBe(201);
@@ -56,11 +62,12 @@ describe('S8 Payment security', () => {
 
   it('does not reach for a seller guarantee to cover a buyer default', async () => {
     await request(app).post('/api/payment-security').set(auth(reia)).send({
-      contract_id: contract.id, mechanism_type: 'BANK_GUARANTEE', limit_amount: 5000000,
+      contract_id: contract.id, mechanism_type: 'BANK_GUARANTEE', limit_amount: 5000000, bank_reference_no: 'BG-S8',
       issuing_bank: 'SBI', validity_start: '2026-04-01', validity_end: '2027-03-31',
     });
     const bg = db.prepare(`SELECT id FROM payment_security WHERE mechanism_type = 'BANK_GUARANTEE'`).get();
 
+    overdue(100000);
     const r = await request(app).post('/api/payment-security/invocations').set(auth(reia))
       .send({ contract_id: contract.id, amount: 100000, side: 'BUYER' });
     expect(r.status).toBeLessThan(500);
@@ -71,6 +78,7 @@ describe('S8 Payment security', () => {
 
   it('reports the shortfall when security does not cover the default', async () => {
     await mkLc({ limit_amount: 50000 });
+    overdue(200000);
     const r = await request(app).post('/api/payment-security/invocations').set(auth(reia))
       .send({ contract_id: contract.id, amount: 200000, side: 'BUYER' });
     expect(r.status).toBe(201);

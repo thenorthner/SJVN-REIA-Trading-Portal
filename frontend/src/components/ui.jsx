@@ -201,10 +201,10 @@ export function Modal({ open, onClose, title, children, width, height, style, cl
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  // Scaled modal: User requested all modals/windows cover 90% area with 10% side boundary (5vw left, 5vw right)
+  // Scaled modal: User requested all modals/windows cover 90% area with 10% side boundary (5vw left, 5vw right, 5vh top, 5vh bottom)
   const isCompact = width === 'compact' || width === 'small';
   const computedWidth = React.useMemo(() => {
-    if (isCompact) return 'min(520px, 90vw)';
+    if (isCompact) return 'min(580px, 92vw)';
     if (typeof width === 'string' && (width.endsWith('vw') || width.endsWith('%') || width.includes('calc'))) {
       return width;
     }
@@ -212,7 +212,7 @@ export function Modal({ open, onClose, title, children, width, height, style, cl
   }, [width, isCompact]);
 
   const computedHeight = React.useMemo(() => {
-    if (isCompact) return 'auto';
+    if (isCompact || height === 'auto') return 'auto';
     if (typeof height === 'string' && (height.endsWith('vh') || height.endsWith('%') || height.includes('calc'))) {
       return height;
     }

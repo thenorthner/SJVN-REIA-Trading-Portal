@@ -234,7 +234,7 @@ describe('an estimate cannot become a bill', () => {
     // settles. They exist so finance can accrue a provision while the
     // statement is still a week away — not so a beneficiary can be invoiced.
     const { body: row } = await request(app).post('/api/deviation').set(auth(writer)).send({
-      contract_id: contract.id, period_month: '2026-02', week_no: 7,
+      contract_id: contract.id, period_month: '2026-02', week_no: 46,
       scheduled_mwh: 1000, actual_mwh: 1050, deviation_rate: 2500,
     });
     expect(row.source).toBe('MANUAL');
@@ -267,7 +267,7 @@ describe('an estimate cannot become a bill', () => {
 describe('GET /api/deviation/summary — pending reconciliation', () => {
   it('counts estimates whose statement has not arrived', async () => {
     await request(app).post('/api/deviation').set(auth(writer)).send({
-      contract_id: contract.id, period_month: '2026-02', week_no: 7, week_date: '2026-02-09',
+      contract_id: contract.id, period_month: '2026-02', week_no: 46, week_date: '2026-02-09',
       scheduled_mwh: 1000, actual_mwh: 1050, deviation_rate: 2500,
     });
     const res = await request(app).get('/api/deviation/summary').set(auth(writer));

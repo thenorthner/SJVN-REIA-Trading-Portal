@@ -20,9 +20,11 @@ import {
   standingStatus,
   notifyCounterparty,
   notifyDesk,
+  isLiveToday,
 } from '../paymentSecurityEngine.js';
+import { applyInvoicePayment } from './invoices.js';
 import { ACTIVE_STATUSES, WATERFALL_DEFAULTS } from '../paymentSecurityConstants.js';
-import { takeAmendmentOnRecord } from './securityDesk.js';
+import { takeAmendmentOnRecord, remindExpiringSecurity } from './securityDesk.js';
 
 export {
   computeCoverage,
@@ -112,7 +114,9 @@ router.get('/meta', (_req, res) => {
 
 router.get('/stats', requireRole(...REIA_ALL), (_req, res) => {
   const instruments = db.prepare(`SELECT * FROM payment_security`).all();
-  const active = instruments.filter((i) => ACTIVE_STATUSES.includes(i.status));
+  // In force today, not merely labelled so: a lapsed guarantee the nightly sweep
+  // has not relabelled yet is not security.
+  const active = instruments.filter((i) => isLiveToday(i));
   const totalSecurity = active.reduce((s, i) => s + refreshAvailable(i), 0);
 
   // Broken out by instrument. A single total said how much security existed and
@@ -343,6 +347,15 @@ router.post('/', requireRole(...REIA_WRITE), (req, res) => {
   if (validityStart && validityEnd && validityEnd < validityStart) {
     return res.status(400).json({ error: 'The validity cannot end before it starts' });
   }
+  // A letter of credit or a guarantee is a bank's document with its own number;
+  // the desk recorded them with none, so nothing tied the row to the paper.
+  const bankRef = String(b.bank_reference_no || '').trim().slice(0, 80);
+  if (['LC', 'BANK_GUARANTEE'].includes(b.mechanism_type) && !bankRef) {
+    return res.status(400).json({ error: `Enter the bank's ${isBg ? 'guarantee' : 'letter of credit'} number` });
+  }
+  if (bankRef && db.prepare(`SELECT 1 FROM payment_security WHERE contract_id = ? AND bank_reference_no = ? AND status != 'CLOSED'`).get(c.id, bankRef)) {
+    return res.status(409).json({ error: `${bankRef} is already on record for this contract` });
+  }
   const instrumentNo = String(b.instrument_no || '').trim()
     || genInstrumentNo(isBg ? (b.bg_subtype || 'BG') : b.mechanism_type);
   if (db.prepare('SELECT 1 FROM payment_security WHERE instrument_no = ?').get(instrumentNo)) {
@@ -361,8 +374,8 @@ router.post('/', requireRole(...REIA_WRITE), (req, res) => {
     INSERT INTO payment_security (
       id, instrument_no, contract_id, entity_id, mechanism_type, bg_subtype, is_revolving,
       limit_amount, utilized_amount, available_amount, required_amount, waterfall_priority,
-      issuing_bank, beneficiary, validity_start, validity_end, status, remarks
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      issuing_bank, beneficiary, validity_start, validity_end, status, remarks, bank_reference_no
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     instrumentNo,
@@ -380,7 +393,8 @@ router.post('/', requireRole(...REIA_WRITE), (req, res) => {
     validityStart,
     validityEnd,
     status,
-    b.remarks || null
+    b.remarks || null,
+    bankRef || null
   );
 
   recordSecurityEvent({ instrumentId: id, contractId: c.id, user: req.user, eventType: 'CREATE', details: b });
@@ -398,7 +412,11 @@ router.post('/from-contract/:contractId', requireRole(...REIA_WRITE), (req, res)
 });
 
 router.post('/alerts/run', requireRole(...REIA_WRITE, 'MANAGEMENT'), (_req, res) => {
-  res.json(runAlertCascade());
+  // The desk's own cascade, and the reminder to whoever holds the instrument and
+  // has to have it extended — the button ran only the first.
+  const cascade = runAlertCascade();
+  const holders = remindExpiringSecurity();
+  res.json({ ...cascade, sent: cascade.sent + holders.sent, holders_reminded: holders.sent });
 });
 
 router.post('/overrides', requireRole(...REIA_WRITE, 'MANAGEMENT', 'SJVN_ADMIN'), (req, res) => {
@@ -437,13 +455,9 @@ router.post('/invocations', requireRole(...REIA_WRITE), (req, res) => {
     return res.status(400).json({ error: "side must be BUYER or SELLER" });
   }
   const defaultingSide = given || defaultSideOf(contract);
-  const elig = evaluateInvocationEligibility(contract.id);
-  const stated = amount != null && amount !== '';
-  const amt = stated ? Number(amount) : elig.amount;
-  if (stated && !(amt > 0)) return res.status(400).json({ error: 'The amount to invoke must be more than zero' });
-  if (!(amt > 0)) {
-    return res.status(400).json({ error: `Nothing on ${contract.contract_no} is overdue by ${elig.rule_days} days or more. Enter the amount to invoke.` });
-  }
+  const refusal = invocationRefusal(contract, defaultingSide, amount, req.body.reason);
+  if (refusal.error) return res.status(400).json(refusal);
+  const { amt, elig } = refusal;
   const inv = invokeWaterfall(contract.id, amt, Array.isArray(invoice_ids) ? invoice_ids : elig.overdue_invoices, req.user, defaultingSide);
   if (!inv) {
     return res.status(400).json({
@@ -454,6 +468,42 @@ router.post('/invocations', requireRole(...REIA_WRITE), (req, res) => {
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: 'INVOKE_WATERFALL', module: 'REIA', entityType: 'security_invocation', entityId: inv.id, details: { amount: amt, side: defaultingSide, drawn: inv.amount } });
   res.status(201).json(inv);
 });
+
+/**
+ * How much may be demanded, or why nothing may.
+ *
+ * A buyer's letter of credit answers for bills overdue past the invocation
+ * rule, less what is already demanded and not back — the amount typed was
+ * drawn whatever it was, ₹2 lakh against ₹1 lakh owed, and a blank one drew
+ * the same overdue bill again while the first notice was still with the bank.
+ * A seller's guarantee answers for a performance default that no bill states,
+ * so the amount and the ground for it are the desk's to put on record.
+ */
+function invocationRefusal(contract, side, amount, reason) {
+  const elig = evaluateInvocationEligibility(contract.id);
+  const stated = amount != null && amount !== '';
+  const amt = stated ? Number(amount) : elig.amount;
+  if (stated && !(amt > 0)) return { error: 'The amount to invoke must be more than zero' };
+  if (side === 'BUYER') {
+    if (!(elig.amount > 0)) {
+      return {
+        error: elig.already_demanded > 0
+          ? `Everything overdue on ${contract.contract_no} (${rupees(elig.overdue_amount)}) is already demanded under notices still with the bank.`
+          : `Nothing on ${contract.contract_no} is overdue by ${elig.rule_days} days or more, so the buyer's security cannot be invoked.`,
+        eligibility: elig,
+      };
+    }
+    if (amt > elig.amount + 1) {
+      return { error: `Only ${rupees(elig.amount)} can be demanded on ${contract.contract_no} — what is overdue by ${elig.rule_days}+ days and not already demanded.`, eligibility: elig };
+    }
+  } else {
+    if (!stated) return { error: 'Enter the amount to invoke on the seller\'s guarantee — a performance default has no bill to read it from.' };
+    if (String(reason || '').trim().length < 15) {
+      return { error: 'Say what the seller defaulted on (at least 15 characters) — it goes on the demand to the bank.' };
+    }
+  }
+  return { amt, elig };
+}
 
 // A demand moves one way: notice, claim lodged with the bank, funds in. It
 // could be sent to any status from any other, so one already paid could be put
@@ -478,9 +528,40 @@ router.post('/invocations/:id/transition', requireRole(...REIA_WRITE), (req, res
   db.prepare(`UPDATE security_invocations SET status = ?, notes = COALESCE(?, notes), updated_at = datetime('now') WHERE id = ?`)
     .run(status, notes ?? null, inv.id);
 
+  let letterSide = 'BUYER';
+  try { letterSide = JSON.parse(inv.demand_letter_json || '{}').side || letterSide; } catch { /* an older notice names no side */ }
+  // The bank refused: nothing was drawn after all, so the cover is back.
+  if (status === 'REJECTED') {
+    let draws = [];
+    try { draws = JSON.parse(inv.waterfall_used || '[]'); } catch { draws = []; }
+    for (const d of draws) {
+      db.prepare(`UPDATE payment_security SET utilized_amount = MAX(0, COALESCE(utilized_amount, 0) - ?), updated_at = datetime('now') WHERE id = ?`).run(Number(d.amount) || 0, d.id);
+      syncInstrumentAvailable(d.id);
+      recordSecurityEvent({ instrumentId: d.id, contractId: inv.contract_id, user: req.user, eventType: 'DRAW_REVERSED', details: { amount: d.amount, invocation_no: inv.invocation_no, notes } });
+    }
+  }
+  // The money is in: it pays the bills it was demanded for, oldest first. They
+  // stayed overdue — surcharge running, and invocable again — after SJVN had
+  // already been paid by the bank.
+  let settled = [];
+  if (status === 'FUNDS_RECEIVED' && letterSide === 'BUYER') {
+    let ids = [];
+    try { ids = JSON.parse(inv.invoice_ids || '[]'); } catch { ids = []; }
+    let left = Number(inv.amount) || 0;
+    const bills = ids.length ? db.prepare(`SELECT * FROM invoices WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY due_date, created_at`).all(...ids) : [];
+    for (const b of bills) {
+      if (left <= 0.005) break;
+      const paid = db.prepare('SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)), 0) s FROM payments WHERE invoice_id = ?').get(b.id).s;
+      const open = Math.max(0, Math.max(0, (Number(b.total_amount) || 0) - (Number(b.rebate) || 0) + (Number(b.lps) || 0) - (Number(b.disputed_amount) || 0)) - paid);
+      const take = Math.round(Math.min(open, left) * 100) / 100;
+      if (take <= 0) continue;
+      applyInvoicePayment(b, { amount: take, payment_date: new Date().toISOString().slice(0, 10), mode: 'SECURITY_INVOCATION', reference: inv.invocation_no }, req);
+      settled.push({ invoice_no: b.invoice_no, amount: take });
+      left -= take;
+    }
+  }
   if (status === 'FUNDS_RECEIVED') {
-    let side = 'BUYER';
-    try { side = JSON.parse(inv.demand_letter_json || '{}').side || side; } catch { /* an older notice names no side */ }
+    const side = letterSide;
     const contractNo = db.prepare('SELECT contract_no FROM contracts WHERE id = ?').get(inv.contract_id)?.contract_no || inv.contract_id;
     notifyCounterparty(inv.contract_id, side, 'SECURITY_REPLENISH_DEMAND',
       `${contractNo}: SJVN has received ${rupees(inv.amount)} under ${inv.invocation_no}.${side === 'BUYER' ? ' Have the letter of credit reinstated to its full value.' : ''}`);
@@ -490,9 +571,9 @@ router.post('/invocations/:id/transition', requireRole(...REIA_WRITE), (req, res
     contractId: inv.contract_id,
     user: req.user,
     eventType: `INVOCATION_${status}`,
-    details: { invocation_id: inv.id, invocation_no: inv.invocation_no, notes },
+    details: { invocation_id: inv.id, invocation_no: inv.invocation_no, notes, settled: settled.length ? settled : undefined },
   });
-  res.json(db.prepare('SELECT * FROM security_invocations WHERE id = ?').get(inv.id));
+  res.json({ ...db.prepare('SELECT * FROM security_invocations WHERE id = ?').get(inv.id), settled });
 });
 
 router.post('/releases/:id/act', requireRole(...REIA_WRITE, 'FINANCE_USER'), (req, res) => {
@@ -596,6 +677,10 @@ router.post('/:id/utilize', requireRole(...REIA_WRITE), (req, res) => {
     return res.status(400).json({ error: `${ps.instrument_no} expired on ${ps.validity_end} — it cannot be drawn on. Record the bank's extension first.` });
   }
   if (!(amount > 0)) return res.status(400).json({ error: 'The amount to draw must be more than zero' });
+  // A draw is money taken under someone's security; it says why.
+  if (String(req.body.reason || '').trim().length < 10) {
+    return res.status(400).json({ error: 'Say why the instrument is drawn on (at least 10 characters) — the holder is told.' });
+  }
   if (amount > refreshAvailable(ps)) {
     return res.status(400).json({ error: `Only ${rupees(refreshAvailable(ps))} is available on ${ps.instrument_no}` });
   }
@@ -741,11 +826,12 @@ router.post('/:id/invoke', requireRole(...REIA_WRITE), (req, res) => {
     });
   }
 
-  const elig = evaluateInvocationEligibility(existing.contract_id);
-  const amt = amount != null ? Number(amount) : elig.amount || refreshAvailable(existing);
-  if (!(amt > 0)) {
-    return res.status(400).json({ error: 'Nothing to invoke: no amount given and no overdue exposure on this contract.' });
-  }
+  // The same rules as the contract-level invocation: it used to draw the
+  // instrument's whole balance when nothing was overdue.
+  const contractRow = db.prepare('SELECT * FROM contracts WHERE id = ?').get(existing.contract_id);
+  const refusal = invocationRefusal(contractRow, side, amount, req.body.reason);
+  if (refusal.error) return res.status(400).json(refusal);
+  const { amt, elig } = refusal;
 
   const inv = invokeWaterfall(existing.contract_id, amt, elig.overdue_invoices, req.user, side);
   const draws = JSON.parse(inv?.waterfall_used || '[]');

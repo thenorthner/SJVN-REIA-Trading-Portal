@@ -256,7 +256,10 @@ export function releasePosition(contractId) {
  * guarantee that expired last month is not security this month, whatever the
  * row still says.
  */
-function isLiveToday(row, asOf = new Date().toISOString().slice(0, 10)) {
+/** Today on the desk's calendar (IST). An instrument starting today did not count until 05:30, when UTC caught up. */
+export const istToday = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+
+export function isLiveToday(row, asOf = istToday()) {
   if (!ACTIVE_STATUSES.includes(row.status)) return false;
   if (row.validity_end && String(row.validity_end) < asOf) return false;
   if (row.validity_start && String(row.validity_start) > asOf) return false;
@@ -280,10 +283,17 @@ function isLiveToday(row, asOf = new Date().toISOString().slice(0, 10)) {
  * rule is turned on.
  */
 export function securityBreakdown(contractId) {
+  // Only what answers for this contract's paying side: a buyer's letter of
+  // credit and pooled funds on a PSA, a seller's guarantee and pooled funds on a
+  // PPA. A PSA counted bank guarantees as payment cover that the waterfall would
+  // never draw for a buyer's default.
+  const c = db.prepare('SELECT contract_type FROM contracts WHERE id = ?').get(contractId);
+  const types = INSTRUMENTS_BY_SIDE[c?.contract_type === 'PPA' ? 'SELLER' : 'BUYER'];
   const rows = db.prepare(`
     SELECT * FROM payment_security
     WHERE contract_id = ? AND status IN (${ACTIVE_STATUSES.map(() => '?').join(',')})
-  `).all(contractId, ...ACTIVE_STATUSES);
+      AND mechanism_type IN (${types.map(() => '?').join(',')})
+  `).all(contractId, ...ACTIVE_STATUSES, ...types);
 
   let verified = 0;
   let unverified = 0;
@@ -395,15 +405,25 @@ export function evaluateInvocationEligibility(contractId) {
       AND julianday('now') - julianday(due_date) >= ?
   `).all(contractId, INVOCATION_OVERDUE_DAYS);
 
-  const amount = overdue.reduce((s, inv) => {
+  const owed = overdue.reduce((s, inv) => {
     const paid = db.prepare(`SELECT COALESCE(SUM(amount + COALESCE(deduction,0)),0) s FROM payments WHERE invoice_id = ?`).get(inv.id).s;
     return s + Math.max(0, payableNow(inv).payable_now - paid);
   }, 0);
+  // Less what is already demanded from a bank and not yet back. The same
+  // overdue bill could be invoked again while the first notice was with the
+  // bank, and again after the money came in.
+  const demanded = db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) s FROM security_invocations
+    WHERE contract_id = ? AND status IN ('NOTICE_ISSUED', 'CLAIMED')
+  `).get(contractId).s;
+  const amount = Math.max(0, owed - demanded);
 
   return {
     eligible: overdue.length > 0 && amount > 0,
     overdue_invoices: overdue.map((i) => i.id),
     amount: Math.round(amount),
+    overdue_amount: Math.round(owed),
+    already_demanded: Math.round(demanded),
     rule_days: INVOCATION_OVERDUE_DAYS,
   };
 }
@@ -575,55 +595,19 @@ export function runAlertCascade() {
   return { sent, expired };
 }
 
-export function createInstrumentsFromRequirements(contractId, user) {
-  const reqs = syncRequirementsFromContract(contractId);
-  const c = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId);
-  const created = [];
-  for (const r of reqs) {
-    // Across every version of the contract: an amended version is the same
-    // contract, and activating it raised a second guarantee for the one already held.
-    const family = c.parent_contract_id || c.id;
-    const exists = db.prepare(`
-      SELECT id FROM payment_security
-      WHERE contract_id IN (SELECT id FROM contracts WHERE id = ? OR parent_contract_id = ?)
-        AND mechanism_type = ? AND COALESCE(bg_subtype,'') = COALESCE(?, '')
-        AND status IN ('ACTIVE','PARTIALLY_UTILIZED','RENEWED','DRAFT')
-    `).get(family, family, r.mechanism_type, r.bg_subtype);
-    if (exists) continue;
-
-    const required = r.months_cover > 0
-      ? Math.max(r.min_amount, trailingMonthlyBilledAvg(contractId) * r.months_cover)
-      : r.min_amount;
-    const id = newId('PSC');
-    const entityId = c.contract_type === 'PSA' ? c.buyer_id : c.seller_id;
-    db.prepare(`
-      INSERT INTO payment_security (
-        id, instrument_no, contract_id, entity_id, mechanism_type, bg_subtype, is_revolving,
-        limit_amount, utilized_amount, available_amount, required_amount, waterfall_priority,
-        issuing_bank, beneficiary, validity_start, validity_end, status, remarks
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, date('now'), ?, 'ACTIVE', ?)
-    `).run(
-      id,
-      genInstrumentNo(r.mechanism_type === 'BANK_GUARANTEE' ? (r.bg_subtype || 'BG') : r.mechanism_type),
-      contractId,
-      entityId,
-      r.mechanism_type,
-      r.bg_subtype,
-      r.is_revolving ? 1 : 0,
-      required,
-      required,
-      required,
-      r.waterfall_priority,
-      'To be confirmed',
-      'SJVN Limited',
-      // Unknown until the instrument is lodged; a made-up year-end date read as a real expiry.
-      (r.mechanism_type === 'BANK_GUARANTEE' ? c.pbg_expiry : null) || null,
-      `Auto-synced from contract requirement (${r.mechanism_type})`
-    );
-    recordSecurityEvent({ instrumentId: id, contractId, user, eventType: 'CREATE', details: { from: 'requirement' } });
-    created.push(db.prepare('SELECT * FROM payment_security WHERE id = ?').get(id));
-  }
-  return created;
+/**
+ * The requirement a contract sets, and nothing more.
+ *
+ * This used to raise an ACTIVE instrument for the full requirement — bank "To
+ * be confirmed", no reference, no document — the moment a contract went live.
+ * It counted as cover and the waterfall drew on it: a demand notice went out
+ * against a letter of credit no bank had issued. What a contract asks for is a
+ * requirement; it is held when the instrument is actually furnished, and the
+ * desk's register shows the shortfall until then.
+ */
+export function createInstrumentsFromRequirements(contractId) {
+  syncRequirementsFromContract(contractId);
+  return [];
 }
 
 export { genInstrumentNo, genInvocationNo, refreshAvailable, ACTIVE_STATUSES };

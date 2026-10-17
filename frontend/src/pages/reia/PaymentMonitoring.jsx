@@ -23,6 +23,8 @@ const SIDES = [
 
 function ageTone(bucket) {
   if (bucket === 'NOT_DUE') return 'default';
+  // Presented without a due date: it will never age by itself, so it is flagged.
+  if (bucket === 'NO_DUE_DATE') return 'amber';
   if (bucket === 'DAYS_0_30') return 'blue';
   if (bucket === 'DAYS_31_60') return 'amber';
   return 'red';
@@ -143,7 +145,7 @@ export default function PaymentMonitoring() {
             <StatCard
               label="Surcharge earned, not billed"
               value={fmtCurrency(totals.lps_accrued_unbilled)}
-              hint={`At ${data.annual_pct}% a year, or the contract's own rate`}
+              hint={`At ${data.annual_pct}% a year (or the contract's rate)${data.monthly_step_pct > 0 ? `, rising ${data.monthly_step_pct}% each month late, up to +${data.step_cap_pct}%` : ''}`}
               tone={totals.lps_accrued_unbilled ? 'amber' : 'default'}
             />
           </div>

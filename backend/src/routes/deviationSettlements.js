@@ -99,9 +99,43 @@ function computeNet(scheduled, actual, rate) {
  * hundreds to thousands of ₹/MWh, so a non-zero rate below the floor is a unit
  * slip rather than a real price.
  */
+/**
+ * The Monday an NRPC financial-year week starts on. Week 1 starts on the Monday
+ * on or before 1 April (FY 2025-26 W40 = 29 Dec 2025, FY 2022-23 W44 =
+ * 23 Jan 2023, both as printed on the statements).
+ */
+export function fyWeekStart(fyStartYear, weekNo) {
+  const apr1 = new Date(Date.UTC(fyStartYear, 3, 1));
+  const back = (apr1.getUTCDay() + 6) % 7; // days since Monday
+  const d = new Date(apr1.getTime() - back * 86400000 + (weekNo - 1) * 7 * 86400000);
+  return d.toISOString().slice(0, 10);
+}
+
+/** The week's start date if week n falls in the month given (either FY it could belong to), else null. */
+function weekInMonth(periodMonth, weekNo) {
+  const [y, m] = periodMonth.split('-').map(Number);
+  const fy = m >= 4 ? y : y - 1;
+  for (const start of [fyWeekStart(fy, weekNo), fyWeekStart(fy + 1, weekNo)]) {
+    if (start.slice(0, 7) === periodMonth) return start;
+  }
+  return null;
+}
+
+/** The most a station can put out in a week: its capacity for 168 hours (hydro may run 10% over). */
+function weeklyCeilingMwh(contract) {
+  const mw = Number(contract?.commissioned_capacity_mw) > 0 ? Number(contract.commissioned_capacity_mw) : Number(contract?.capacity_mw) || 0;
+  const overload = ['Hydro', 'PSP'].includes(contract?.project_type) ? 1.1 : 1;
+  return mw > 0 ? Math.round(mw * 168 * overload * 1000) / 1000 : null;
+}
+
 function implausibleRate(rate) {
   const r = Number(rate);
   if (!Number.isFinite(r) || r === 0) return null;
+  // The sign of a week comes from its deviation; a negative rate flipped it, so
+  // an over-injection read as a payable.
+  if (r < 0) {
+    return { error: 'The deviation rate is a price and is never negative — the sign comes from the deviation (actual − scheduled).', given_rate_per_mwh: r };
+  }
   const floor = getParamNumber('dsm_rate_min_per_mwh', 50);
   if (Math.abs(r) >= floor) return null;
   return {
@@ -116,8 +150,12 @@ function implausibleRate(rate) {
  * Create a SUPPLEMENTARY invoice for a DSM row and link it back.
  * Caller must validate eligibility; runs inside its own transaction.
  */
-function createDsmInvoice(row, contract, { invoice_no: overrideNo, dispatch_date, created_by, created_by_id = null }) {
-  const amount = Math.round(Number(row.deviation_amount) || 0);
+function createDsmInvoice(row, contract, { invoice_no: overrideNo, dispatch_date, created_by, created_by_id = null, prior = [] }) {
+  // A revised statement replaces the week's figure: what is billed is the
+  // difference from what earlier bills for the week already asked for.
+  const statementAmount = Math.round(Number(row.deviation_amount) || 0);
+  const priorBilled = prior.reduce((t, p) => t + (Number(p.total_amount) || 0), 0);
+  const amount = statementAmount - priorBilled;
   const direction = directionForContract(contract);
   const billingFamilyRef = buildBillingFamilyRef(contract.contract_no, row.period_month, direction);
   const invoiceId = newId('INV');
@@ -154,7 +192,11 @@ function createDsmInvoice(row, contract, { invoice_no: overrideNo, dispatch_date
         : 'Payable by SJVN — paid to the NRPC deviation pool for this week',
       value: null,
     },
-    { code: 'AMT', label: `Net DSM amount (${signLabel})`, value: amount },
+    ...(prior.length ? [
+      { code: 'STMT', label: `Week's figure per this statement (${row.dsa_entity_name || 'revised'})`, value: statementAmount },
+      ...prior.map((p) => ({ code: 'PRIOR', label: `Less: already billed on ${p.invoice_no}`, value: -(Number(p.total_amount) || 0) })),
+    ] : []),
+    { code: 'AMT', label: `${prior.length ? 'Difference to settle' : 'Net DSM amount'} (${signLabel})`, value: amount },
     { code: 'TOTAL', label: 'Supplementary Bill Total', value: amount },
   ];
 
@@ -200,15 +242,6 @@ function createDsmInvoice(row, contract, { invoice_no: overrideNo, dispatch_date
 }
 
 /**
- * Free the slot a cancelled row is still holding.
- *
- * A week is one row per (contract, month, week, entry type), and "Delete" only
- * marks a row CANCELLED — so a week entered wrongly and deleted could never be
- * entered again: the form answered "already exists, edit it", about a row that
- * can no longer be edited. The cancelled row is removed to make way; that it
- * existed and was cancelled stays in the audit trail.
- */
-/**
  * The section of the NRPC statement a station's contract is printed under, and
  * the plant code SJVN files it by. A week raised for Rampur's contract from
  * Nathpa Jhakri's section — or another company's — is another plant's money on
@@ -220,12 +253,6 @@ const STATIONS = [
   { match: 'SGEL', entity: 'SJVN GREEN ENERGY', plant_code: null },
 ];
 const stationOf = (contract) => STATIONS.find((st) => String(contract?.contract_no || '').toUpperCase().includes(st.match)) || null;
-
-function clearCancelledSlot(dup, req) {
-  if (!dup || dup.status !== 'CANCELLED') return;
-  db.prepare(`DELETE FROM deviation_settlements WHERE id = ? AND status = 'CANCELLED'`).run(dup.id);
-  logAudit({ req, user: req.user, action: 'REPLACE_CANCELLED', module: 'REIA', entityType: 'deviation_settlement', entityId: dup.id });
-}
 
 // List — filter by contract / period / status
 router.get('/', requireRole(...READ), (req, res) => {
@@ -369,15 +396,20 @@ router.post('/from-dsa', requireRole(...WRITE), (req, res) => {
   const period_month = account.week_start.slice(0, 7);
   const entry_type = account.revision ? 'REVISED' : 'PRIMARY';
 
-  const dup = db.prepare(
-    'SELECT id, source, status, dsm_no FROM deviation_settlements WHERE contract_id=? AND period_month=? AND week_no=? AND entry_type=?',
-  ).get(b.contract_id, period_month, account.week_no, entry_type);
-  if (dup && dup.status !== 'CANCELLED') {
+  // One row per statement. Raised once, it is not raised again; a later
+  // revision of the same week is a row of its own (it used to have nowhere to go
+  // once the first revision was billed).
+  const same = db.prepare(`SELECT id, dsm_no FROM deviation_settlements WHERE contract_id = ? AND dsa_account_id = ? AND status <> 'CANCELLED'`)
+    .get(b.contract_id, account.id);
+  if (same) {
+    return res.status(409).json({ error: `Week ${account.week_no} of ${account.financial_year}${account.revision ? ` (${account.revision})` : ''} is already raised for this contract as ${same.dsm_no}.`, existing_id: same.id, existing_source: 'NRPC_DSA' });
+  }
+  const estimate = db.prepare(`SELECT id, dsm_no FROM deviation_settlements WHERE contract_id = ? AND period_month = ? AND week_no = ? AND source = 'MANUAL' AND status <> 'CANCELLED'`)
+    .get(b.contract_id, period_month, account.week_no);
+  if (estimate) {
     return res.status(409).json({
-      error: dup.source === 'NRPC_DSA'
-        ? `Week ${account.week_no} is already raised for this contract in ${period_month} as ${dup.dsm_no}.`
-        : `Week ${account.week_no} already holds a manual estimate for this contract in ${period_month} (${dup.dsm_no}). Delete the estimate, then raise the published figure in its place.`,
-      existing_id: dup.id, existing_source: dup.source,
+      error: `Week ${account.week_no} already holds a manual estimate for this contract in ${period_month} (${estimate.dsm_no}). Delete the estimate, then raise the published figure in its place.`,
+      existing_id: estimate.id, existing_source: 'MANUAL',
     });
   }
 
@@ -390,7 +422,20 @@ router.post('/from-dsa', requireRole(...WRITE), (req, res) => {
 
   const id = newId('DSM');
   const dsm_no = `DSM/${contract.contract_no?.replace(/[^A-Za-z0-9]+/g, '-')}/${account.financial_year}/W${account.week_no}${account.revision ? `-${account.revision}` : ''}`;
-  clearCancelledSlot(dup, req);
+  if (db.prepare('SELECT 1 FROM deviation_settlements WHERE dsm_no = ?').get(dsm_no)) {
+    return res.status(409).json({ error: `${dsm_no} is already on record (cancelled). Ask the desk to restore it rather than raising it twice.` });
+  }
+  // Rows for this week from statements since superseded, still unbilled, are
+  // stale: the new statement takes their place.
+  const stale = db.prepare(`
+    SELECT d.id FROM deviation_settlements d JOIN nrpc_dsa_accounts a ON a.id = d.dsa_account_id
+    WHERE d.contract_id = ? AND d.week_no = ? AND a.financial_year = ? AND a.status = 'SUPERSEDED' AND d.status IN ('DRAFT','CALCULATED','SUBMITTED')
+  `).all(b.contract_id, account.week_no, account.financial_year);
+  for (const r of stale) {
+    db.prepare(`UPDATE deviation_settlements SET status = 'CANCELLED', notes = COALESCE(notes || ' · ', '') || ?, updated_at = datetime('now') WHERE id = ?`)
+      .run(`Superseded by ${dsm_no}`, r.id);
+    logAudit({ req, user: req.user, action: 'CANCEL', module: 'REIA', entityType: 'deviation_settlement', entityId: r.id, details: { superseded_by: dsm_no } });
+  }
   db.prepare(`
     INSERT INTO deviation_settlements (id, dsm_no, contract_id, plant_code, plant_name, period_month,
       week_no, week_date, entry_type, source, dsa_account_id, dsa_entity_name,
@@ -451,16 +496,34 @@ router.post('/', requireRole(...WRITE), (req, res) => {
     if (!Number.isFinite(Number(b[k])) || Number(b[k]) < 0) return res.status(400).json({ error: `${k} must be a number, zero or more` });
   }
 
-  const dup = db.prepare(`SELECT id, status FROM deviation_settlements WHERE contract_id=? AND period_month=? AND week_no=? AND entry_type=?`)
+  // Deviation is the generator's with the grid; a buyer's PSA has no DSM of SJVN's to estimate.
+  if (contract.contract_type !== 'PPA') {
+    return res.status(400).json({ error: `${contract.contract_no} is a ${contract.contract_type}. Deviation is settled for the station's PPA.` });
+  }
+  const weekStart = weekInMonth(String(b.period_month), weekNo);
+  if (!weekStart) {
+    return res.status(400).json({ error: `Week ${weekNo} of the financial year does not fall in ${b.period_month}. NRPC files a week under the month it starts in.` });
+  }
+  const ceiling = weeklyCeilingMwh(contract);
+  for (const k of ['scheduled_mwh', 'actual_mwh']) {
+    if (ceiling && Number(b[k]) > ceiling) {
+      return res.status(400).json({ error: `${k === 'actual_mwh' ? 'Actual' : 'Scheduled'} ${Number(b[k]).toLocaleString('en-IN')} MWh is more than ${contract.contract_no} can deliver in a week (${contract.capacity_mw} MW × 168 h${['Hydro', 'PSP'].includes(contract.project_type) ? ' × 110%' : ''} = ${ceiling.toLocaleString('en-IN')} MWh).` });
+    }
+  }
+  const dup = db.prepare(`SELECT id, status FROM deviation_settlements WHERE contract_id=? AND period_month=? AND week_no=? AND entry_type=? AND status <> 'CANCELLED'`)
     .get(b.contract_id, b.period_month, weekNo, entry_type);
-  if (dup && dup.status !== 'CANCELLED') return res.status(409).json({ error: `A ${entry_type} entry for week ${b.week_no} already exists this period. Edit it or use REVISED.` });
+  if (dup) return res.status(409).json({ error: `A ${entry_type} entry for week ${b.week_no} already exists this period. Edit it or use REVISED.` });
 
   const badRate = implausibleRate(b.deviation_rate);
   if (badRate) return res.status(400).json(badRate);
 
   const { deviation_mwh, deviation_amount } = computeNet(b.scheduled_mwh, b.actual_mwh, b.deviation_rate);
   const id = newId('DSM');
-  clearCancelledSlot(dup, req);
+  // A cancelled row keeps its place on record; the replacement needs its own number.
+  let manualNo = `DSM/${contract.contract_no?.replace(/[^A-Za-z0-9]+/g, '-')}/${b.period_month}/W${b.week_no}${entry_type === 'REVISED' ? '-R' : ''}`;
+  for (let n = 2; db.prepare('SELECT 1 FROM deviation_settlements WHERE dsm_no = ?').get(manualNo); n += 1) {
+    manualNo = `${manualNo.replace(/~\d+$/, '')}~${n}`;
+  }
   db.prepare(`
     INSERT INTO deviation_settlements (id, dsm_no, contract_id, plant_code, plant_name, period_month,
       week_no, week_date, entry_type, scheduled_mwh, actual_mwh, deviation_mwh, deviation_rate,
@@ -470,13 +533,13 @@ router.post('/', requireRole(...WRITE), (req, res) => {
       @deviation_amount, 'CALCULATED', @notes, @created_by)
   `).run({
     id,
-    dsm_no: `DSM/${contract.contract_no?.replace(/[^A-Za-z0-9]+/g, '-')}/${b.period_month}/W${b.week_no}${entry_type === 'REVISED' ? '-R' : ''}`,
+    dsm_no: manualNo,
     contract_id: b.contract_id,
     plant_code: b.plant_code || null,
     plant_name: b.plant_name || null,
     period_month: b.period_month,
     week_no: Number(b.week_no),
-    week_date: b.week_date || null,
+    week_date: weekStart,
     entry_type,
     scheduled_mwh: Number(b.scheduled_mwh) || 0,
     actual_mwh: Number(b.actual_mwh) || 0,
@@ -515,6 +578,17 @@ router.put('/:id', requireRole(...WRITE), (req, res) => {
   if (b.deviation_rate !== undefined) {
     const badRate = implausibleRate(b.deviation_rate);
     if (badRate) return res.status(400).json(badRate);
+  }
+  if (row.source !== 'NRPC_DSA') {
+    const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(row.contract_id);
+    const ceiling = weeklyCeilingMwh(contract);
+    for (const k of ['scheduled_mwh', 'actual_mwh']) {
+      const v = b[k] ?? row[k];
+      if (!Number.isFinite(Number(v)) || Number(v) < 0) return res.status(400).json({ error: `${k} must be a number, zero or more` });
+      if (ceiling && Number(v) > ceiling) {
+        return res.status(400).json({ error: `${Number(v).toLocaleString('en-IN')} MWh is more than ${contract.contract_no} can deliver in a week (${ceiling.toLocaleString('en-IN')} MWh).` });
+      }
+    }
   }
   const { deviation_mwh, deviation_amount } = row.source === 'NRPC_DSA'
     ? { deviation_mwh: row.deviation_mwh, deviation_amount: row.deviation_amount }
@@ -591,13 +665,32 @@ router.post('/:id/dispatch', requireRole(...WRITE), (req, res) => {
     });
   }
 
-  const amount = Math.round(Number(row.deviation_amount) || 0);
-  if (amount === 0) {
-    return res.status(400).json({ error: 'Cannot dispatch DSM with zero deviation amount' });
-  }
-
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(row.contract_id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
+
+  // Earlier bills for the same week (from statements this one revises). A bill
+  // nobody has been given yet is withdrawn and this one stands in its place; one
+  // already presented stays, and only the difference is billed. Dispatching R1
+  // billed its whole figure again, so the week was settled twice.
+  const earlier = row.dsa_account_id ? db.prepare(`
+    SELECT d.id AS row_id, d.dsm_no, i.id, i.invoice_no, i.total_amount, i.status
+    FROM deviation_settlements d
+    JOIN nrpc_dsa_accounts a ON a.id = d.dsa_account_id
+    JOIN nrpc_dsa_accounts mine ON mine.id = ?
+    JOIN invoices i ON i.id = d.invoice_id
+    WHERE d.contract_id = ? AND d.id <> ? AND d.status = 'DISPATCHED' AND d.week_no = ?
+      AND a.financial_year = mine.financial_year AND i.status <> 'CANCELLED'
+  `).all(row.dsa_account_id, row.contract_id, row.id, row.week_no) : [];
+  const unpresented = earlier.filter((e) => ['DRAFT', 'SUBMITTED', 'PENDING_L2', 'UNDER_APPROVAL', 'REJECTED'].includes(e.status));
+  const prior = earlier.filter((e) => !unpresented.includes(e));
+  const amount = Math.round(Number(row.deviation_amount) || 0) - prior.reduce((t, p) => t + (Number(p.total_amount) || 0), 0);
+  if (amount === 0) {
+    return res.status(400).json({
+      error: prior.length
+        ? `Nothing more to bill: ${prior.map((p) => p.invoice_no).join(', ')} already settle${prior.length === 1 ? 's' : ''} this week at the revised figure.`
+        : 'Cannot dispatch DSM with zero deviation amount',
+    });
+  }
 
   const wantedNo = String(req.body.invoice_no || '').trim();
   if (wantedNo && db.prepare('SELECT 1 FROM invoices WHERE invoice_no = ?').get(wantedNo)) {
@@ -609,12 +702,22 @@ router.post('/:id/dispatch', requireRole(...WRITE), (req, res) => {
   }
 
   try {
-    const { invoice_no, dispatch_date, amount: amt } = createDsmInvoice(row, contract, {
-      invoice_no: wantedNo || null,
-      dispatch_date: req.body.dispatch_date || null,
-      created_by: req.user.name,
-      created_by_id: req.user.id || null,
-    });
+    const result = db.transaction(() => {
+      for (const u of unpresented) {
+        db.prepare(`UPDATE invoices SET status = 'CANCELLED', cancel_reason = ?, cancelled_at = datetime('now'), cancelled_by = ?, updated_at = datetime('now') WHERE id = ?`)
+          .run(`Superseded by revised NRPC statement (${row.dsm_no})`, req.user.name, u.id);
+        db.prepare(`UPDATE deviation_settlements SET status = 'CANCELLED', notes = COALESCE(notes || ' · ', '') || ?, updated_at = datetime('now') WHERE id = ?`)
+          .run(`Bill ${u.invoice_no} withdrawn — superseded by ${row.dsm_no}`, u.row_id);
+      }
+      return createDsmInvoice(row, contract, {
+        invoice_no: wantedNo || null,
+        dispatch_date: req.body.dispatch_date || null,
+        created_by: req.user.name,
+        created_by_id: req.user.id || null,
+        prior,
+      });
+    })();
+    const { invoice_no, dispatch_date, amount: amt } = result;
     logAudit({
       req, user: req.user, action: 'DISPATCH', module: 'REIA', entityType: 'deviation_settlement',
       entityId: req.params.id,

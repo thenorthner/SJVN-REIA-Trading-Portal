@@ -1,6 +1,11 @@
 import db from '../db/index.js';
-import { computeActualCufPercent, resolveMinCufPercent } from './cufPenalty.js';
+import { computeCufPenalty } from './cufPenalty.js';
 import { daysInMonth } from './cercHydroBilling.js';
+import { resolveTariff } from './tariffStructure.js';
+import { lastCompleteMonth } from './energyRules.js';
+import { billableCapacityMw } from '../util.js';
+import { trueUpPosition } from './cufTrueUp.js';
+import { contractYearBounds } from './cufPenalty.js';
 
 /**
  * What each project actually generated, against what its contract expects.
@@ -12,57 +17,79 @@ import { daysInMonth } from './cercHydroBilling.js';
  *
  * One row per contract per month: the energy accounted, the CUF it works out to,
  * the CUF the contract requires, the gap, and the availability the meter data
- * reported. FINAL supersedes PROVISIONAL for the same month — a superseded
- * provisional figure is not a second month of generation.
+ * reported. The monthly shortfall is an indicator: CUF is assessed over the
+ * contract year and settled by the year-end true-up (cufTrueUp.js), whose
+ * position for each contract year is listed alongside.
+ *
+ * Held to what billing does (17-Oct-2026 audit): a CUF obligation is a solar /
+ * wind / hybrid PPA's, so hydro stations (124 of 129 rows, all judged against
+ * the 22 % solar default and making 30 of the 31 "months below CUF") and a PSA's
+ * own copy of its source PPA's energy are left out; one reading per month, the
+ * one billing uses (locked first, then final, then the latest), so two
+ * provisional readings are not two months; and a month not over yet is not
+ * judged against a whole month's capacity.
  */
 
-/** The energy on record for each contract-month, FINAL winning over PROVISIONAL. */
-function energyRows({ from, to }) {
-  const where = ['1=1'];
-  const params = [];
+export const CUF_TYPES = ['Solar', 'Wind', 'Hybrid', 'FDRE'];
+const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** Why a from/to pair cannot be read, or null. */
+export function rangeProblem(from, to) {
+  if (from && !MONTH.test(from)) return 'from must be a month, YYYY-MM';
+  if (to && !MONTH.test(to)) return 'to must be a month, YYYY-MM';
+  if (from && to && from > to) return `The range starts (${from}) after it ends (${to}).`;
+  return null;
+}
+
+/** The reading billing would use for each contract-month of a CUF-bound PPA. */
+function energyRows({ from, to, upTo }) {
+  const where = [`c.contract_type = 'PPA'`, `c.project_type IN (${CUF_TYPES.map(() => '?').join(',')})`, 'e.period_month <= ?'];
+  const params = [...CUF_TYPES, upTo];
   if (from) { where.push('e.period_month >= ?'); params.push(from); }
   if (to) { where.push('e.period_month <= ?'); params.push(to); }
 
   return db.prepare(`
-    SELECT
-      e.contract_id, e.period_month, e.energy_mwh, e.cuf_percent, e.availability_percent,
-      e.data_type, e.status, e.source,
-      c.contract_no, c.project_type, c.capacity_mw, c.commissioned_capacity_mw,
-      c.min_cuf_percent, c.tariff_per_unit, c.status AS contract_status,
-      s.name AS seller_name
-    FROM energy_data e
-    JOIN contracts c ON c.id = e.contract_id
-    LEFT JOIN entities s ON s.id = c.seller_id
-    WHERE ${where.join(' AND ')}
-      AND e.status != 'DRAFT'
-      -- A provisional figure that a final one has replaced is not a second month.
-      AND NOT EXISTS (
-        SELECT 1 FROM energy_data f
-        WHERE f.contract_id = e.contract_id AND f.period_month = e.period_month
-          AND f.data_type = 'FINAL' AND f.status != 'DRAFT' AND e.data_type = 'PROVISIONAL'
-      )
-    ORDER BY e.period_month DESC, c.contract_no
+    SELECT * FROM (
+      SELECT
+        e.contract_id, e.period_month, e.energy_mwh, e.cuf_percent, e.availability_percent,
+        e.data_type, e.status, e.source,
+        c.contract_no, c.contract_type, c.project_type, c.capacity_mw, c.commissioned_capacity_mw,
+        c.min_cuf_percent, c.tariff_per_unit, c.tariff_type, c.tariff_structure_json, c.tenure_start,
+        c.billing_cycle, c.annual_afc, c.status AS contract_status,
+        s.name AS seller_name,
+        ROW_NUMBER() OVER (
+          PARTITION BY e.contract_id, e.period_month
+          ORDER BY (e.status = 'LOCKED') DESC, (e.data_type = 'FINAL') DESC, e.created_at DESC
+        ) AS pick
+      FROM energy_data e
+      JOIN contracts c ON c.id = e.contract_id
+      LEFT JOIN entities s ON s.id = c.seller_id
+      WHERE ${where.join(' AND ')}
+        AND e.status NOT IN ('DRAFT', 'REJECTED')
+    ) WHERE pick = 1
+    ORDER BY period_month DESC, contract_no
   `).all(...params);
 }
 
 export function generationPerformance({ from = null, to = null, contractId = null } = {}) {
-  const rows = energyRows({ from, to })
+  const upTo = lastCompleteMonth();
+  const rows = energyRows({ from, to, upTo })
     .filter((r) => !contractId || r.contract_id === contractId)
     .map((r) => {
       // Billing measures against what is commissioned, not what was contracted:
       // a 100 MW PPA with 60 MW built is not underperforming by 40 MW.
-      const capacity = Number(r.commissioned_capacity_mw) > 0
-        ? Number(r.commissioned_capacity_mw)
-        : Number(r.capacity_mw) || 0;
-      const actualCuf = computeActualCufPercent({
-        energyMwh: r.energy_mwh,
-        capacityMw: capacity,
-        periodMonth: r.period_month,
-        cufPercent: r.cuf_percent,
-      });
-      const minCuf = resolveMinCufPercent(r);
+      const capacity = billableCapacityMw(r);
       const possibleMwh = capacity * 24 * daysInMonth(r.period_month);
-      const shortfallPct = actualCuf == null ? null : Math.max(0, minCuf - actualCuf);
+      // The month's shortfall against the minimum, as an indicator only: nothing
+      // is deducted for a month on its own.
+      const cuf = computeCufPenalty({
+        contract: r, periodMonth: r.period_month, energyMwh: Number(r.energy_mwh) || 0,
+        capacityMw: capacity, cufPercent: r.cuf_percent,
+        tariffPerUnit: resolveTariff(r, r.period_month).rate || r.tariff_per_unit,
+      });
+      const actualCuf = cuf.actualCuf;
+      const minCuf = cuf.minCuf;
+      const shortfallPct = actualCuf == null || minCuf == null ? null : Math.max(0, minCuf - actualCuf);
       return {
         contract_id: r.contract_id,
         contract_no: r.contract_no,
@@ -79,9 +106,9 @@ export function generationPerformance({ from = null, to = null, contractId = nul
         actual_cuf_percent: actualCuf == null ? null : Math.round(actualCuf * 100) / 100,
         min_cuf_percent: minCuf,
         cuf_shortfall_percent: shortfallPct == null ? null : Math.round(shortfallPct * 100) / 100,
-        shortfall_mwh: shortfallPct == null ? 0 : Math.round(shortfallPct / 100 * possibleMwh * 100) / 100,
+        shortfall_mwh: Math.round((cuf.shortfallMwh || 0) * 100) / 100,
         availability_percent: r.availability_percent == null ? null : Number(r.availability_percent),
-        meets_cuf: actualCuf == null ? null : actualCuf >= minCuf,
+        meets_cuf: actualCuf == null || minCuf == null ? null : actualCuf >= minCuf,
       };
     });
 
@@ -131,7 +158,7 @@ export function generationPerformance({ from = null, to = null, contractId = nul
       : null,
     availability_sum: undefined,
     availability_months: undefined,
-  })).sort((a, b) => b.shortfall_mwh - a.shortfall_mwh);
+  })).sort((a, b) => b.shortfall_mwh - a.shortfall_mwh || a.contract_no.localeCompare(b.contract_no));
 
   const totals = rows.reduce((acc, r) => ({
     months: acc.months + 1,
@@ -141,15 +168,55 @@ export function generationPerformance({ from = null, to = null, contractId = nul
     months_below_cuf: acc.months_below_cuf + (r.meets_cuf === false ? 1 : 0),
   }), { months: 0, energy_mwh: 0, possible_mwh: 0, shortfall_mwh: 0, months_below_cuf: 0 });
 
+  // Each CUF-bound contract's contract years — the one in progress and the one
+  // before it — with where the annual assessment stands: in progress, waiting
+  // on energy, met, due for its true-up note, or raised.
+  const yearRows = [];
+  const cufContracts = db.prepare(`
+    SELECT * FROM contracts WHERE project_type IN (${CUF_TYPES.map(() => '?').join(',')})
+      AND contract_type IN ('PPA', 'PSA') AND status IN ('ACTIVE', 'AMENDED', 'NEARING_EXPIRY', 'RENEWED', 'EXPIRED')
+      AND tenure_start IS NOT NULL
+    ORDER BY contract_no
+  `).all(...CUF_TYPES);
+  for (const c of cufContracts) {
+    if (contractId && c.id !== contractId) continue;
+    const start = String(c.tenure_start).slice(0, 7);
+    if (start > upTo) continue;
+    const current = contractYearBounds(c, upTo).contract_year;
+    for (const year of [current - 1, current]) {
+      if (year < 1) continue;
+      try {
+        const y = trueUpPosition(c, year);
+        if (y.assessed_from > y.year_end) continue; // commissioned after this year
+        yearRows.push({
+          contract_id: c.id, contract_no: c.contract_no, contract_type: c.contract_type, project_type: c.project_type,
+          contract_year: y.contract_year, year_start: y.year_start, year_end: y.year_end,
+          months_counted: y.months_counted, months_missing: y.months_missing,
+          energy_mwh: y.energy_mwh, possible_mwh: y.possible_mwh,
+          cuf_percent: y.cuf_percent, min_cuf_percent: y.min_cuf_percent,
+          state: y.state, shortfall_mwh: y.shortfall_mwh, penalty: y.penalty,
+          note: y.note, anchor_invoice: y.anchor_invoice,
+        });
+      } catch { /* a contract whose years cannot be counted is left out */ }
+    }
+  }
+  const due = yearRows.filter((y) => y.state === 'DUE');
+
   return {
     from,
     to,
+    contract_years: yearRows,
+    // The latest month judged: the one in progress is not over, so a whole
+    // month's capacity cannot be held against it yet.
+    judged_up_to: upTo,
     totals: {
       ...totals,
       energy_mwh: Math.round(totals.energy_mwh * 100) / 100,
       possible_mwh: Math.round(totals.possible_mwh * 100) / 100,
       shortfall_mwh: Math.round(totals.shortfall_mwh * 100) / 100,
       projects: projects.length,
+      true_up_due: due.length,
+      true_up_due_amount: due.reduce((a, y) => a + y.penalty, 0),
       period_cuf_percent: totals.possible_mwh > 0
         ? Math.round(totals.energy_mwh / totals.possible_mwh * 10000) / 100
         : null,

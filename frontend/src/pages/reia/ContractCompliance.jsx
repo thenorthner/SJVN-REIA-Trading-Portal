@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/client.js';
-import { PageHeader, Card, Badge, StatCard, Field, Tabs, Tab, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Badge, StatCard, Tabs, Tab, AlertPopup, fmtNumber } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { fmtDate } from '../../datetime.js';
@@ -14,13 +14,14 @@ import { fmtDate } from '../../datetime.js';
 // contract manager actually asks — which PPAs expire this quarter, which are live
 // without their guarantee, whose licences have lapsed — had nowhere to be asked.
 
-const STATE_TONE = { BREACH: 'danger', DUE: 'warning', OK: 'success', NOT_APPLICABLE: 'neutral' };
-const STATE_LABEL = { BREACH: 'Not compliant', DUE: 'Action due', OK: 'In order', NOT_APPLICABLE: 'n/a' };
+const STATE_TONE = { BREACH: 'danger', DUE: 'warning', OK: 'success', NOT_APPLICABLE: 'neutral', NOT_LIVE: 'neutral' };
+const STATE_LABEL = { BREACH: 'Not compliant', DUE: 'Action due', OK: 'In order', NOT_APPLICABLE: 'n/a', NOT_LIVE: 'Not live' };
 const FILTERS = [
   { key: '', label: 'Everything' },
   { key: 'BREACH', label: 'Not compliant' },
   { key: 'DUE', label: 'Action due' },
   { key: 'OK', label: 'In order' },
+  { key: 'NOT_LIVE', label: 'Not live' },
 ];
 
 export default function ContractCompliance() {
@@ -29,10 +30,18 @@ export default function ContractCompliance() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [state, setState] = useState('');
-  const [notice, setNotice] = useState(90);
+  const [notice, setNotice] = useState('90');
   const [open, setOpen] = useState(null);
+  const loaded = useRef(90);
 
-  function load(days = notice) {
+  function load(days = Number(notice)) {
+    // An unusable window used to be replaced by 90 without a word.
+    if (!Number.isInteger(days) || days < 1 || days > 3650) {
+      setError('The notice window must be a whole number of days from 1 to 3650.');
+      setNotice(String(loaded.current));
+      return;
+    }
+    loaded.current = days;
     setLoading(true);
     setError('');
     api.reports.contractCompliance({ expiry_notice_days: days })
@@ -68,7 +77,7 @@ export default function ContractCompliance() {
 
       {view === 'main' && (
       <>
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      <AlertPopup open={!!error} title="Could not show the register" message={error} onClose={() => setError('')} />
 
       {loading && !data ? (
         <Card><div className="audit-placeholder">Loading…</div></Card>
@@ -82,7 +91,7 @@ export default function ContractCompliance() {
               tone={data.totals.breach ? 'red' : 'green'}
             />
             <StatCard label="Action due" value={fmtNumber(data.totals.due, 0)} tone={data.totals.due ? 'amber' : 'default'} />
-            <StatCard label="In order" value={fmtNumber(data.totals.ok, 0)} tone="green" />
+            <StatCard label="In order" value={fmtNumber(data.totals.ok, 0)} tone={data.totals.ok ? 'green' : 'default'} hint={data.totals.not_live ? `${data.totals.not_live} not live, not counted` : undefined} />
             <StatCard
               label={`Expiring within ${data.expiry_notice_days} days`}
               value={fmtNumber(data.totals.expiring_within_notice, 0)}
@@ -111,9 +120,13 @@ export default function ContractCompliance() {
                   min="1"
                   className="input"
                   style={{ width: 90 }}
+                  step="1"
+                  max="3650"
+                  aria-label="Notice window in days"
                   value={notice}
-                  onChange={(e) => setNotice(Number(e.target.value))}
-                  onBlur={() => load(notice)}
+                  onChange={(e) => setNotice(e.target.value)}
+                  onBlur={() => { if (Number(notice) !== loaded.current || notice === '') load(notice === '' ? NaN : Number(notice)); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
                 />
                 days
               </label>
@@ -168,7 +181,7 @@ export default function ContractCompliance() {
                               <table className="data-table">
                                 <tbody>
                                   {c.checks.map((k) => (
-                                    <tr key={k.code}>
+                                    <tr key={`${k.code}-${k.label}`}>
                                       <th scope="row" style={{ width: '28%', textAlign: 'left' }}>{k.label}</th>
                                       <td style={{ width: 140 }}><Badge type={STATE_TONE[k.state]}>{STATE_LABEL[k.state]}</Badge></td>
                                       <td>{k.detail}</td>
@@ -187,7 +200,8 @@ export default function ContractCompliance() {
             </div>
             <p className="report-count">
               Showing {rows.length} of {data.contracts.length} contracts. Click one to see each check.
-              A contract that is not live is judged by what it is rather than held to a tenure it has left.
+              A contract that is not live (draft, terminated, expired) is listed as such and kept out of the counts.
+              Payment security is the Payment Security desk&apos;s figure: instruments of the paying side in force today, net of draws.
             </p>
           </Card>
         </>

@@ -115,10 +115,11 @@ describe('answering the resolution', () => {
     expect(done.body.resolution.escalation_outcome).toMatch(/Arbitral award/);
   });
 
-  it('lets the submitter withdraw an open dispute, which frees the amount held on the bill', async () => {
+  it('lets the submitter withdraw an open dispute', async () => {
     const inv = bill('A/1');
     const d = await raise(inv, 100000);
-    expect(db.prepare('SELECT disputed_amount FROM invoices WHERE id = ?').get(inv.id).disputed_amount).toBe(100000);
+    // A seller disputes its own bill to be paid more; nothing SJVN owes it is held back.
+    expect(db.prepare('SELECT disputed_amount FROM invoices WHERE id = ?').get(inv.id).disputed_amount).toBe(0);
     expect((await post(seller, `/${d.id}/withdraw`, {})).status).toBe(400);
     expect((await post(reia, `/${d.id}/withdraw`, { note: 'x' })).status).toBe(403);
     const w = await post(seller, `/${d.id}/withdraw`, { note: 'Raised on the wrong bill' });

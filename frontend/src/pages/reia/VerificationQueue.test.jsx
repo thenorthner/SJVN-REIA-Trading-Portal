@@ -101,6 +101,6 @@ describe('verification queue', () => {
     expect(rows()).toHaveLength(1);
     expect(rows()[0].textContent).toMatch(/SELLER\/2026\/08\/02/);
     await act(async () => { button('Verified').click(); });
-    expect(host.textContent).toMatch(/No bill in this state/);
+    expect(host.textContent).toMatch(/No developer bill with SJVN in this state/);
   });
 });

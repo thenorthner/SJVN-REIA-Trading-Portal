@@ -21,6 +21,7 @@ import { requireAuth, ROLE_GROUPS, counterpartySide } from '../middleware/auth.j
 import { newId, pushNotification } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { invoiceLpsAsOf } from '../services/invoiceLps.js';
+import { supersededByDeveloperSql } from '../services/outstanding.js';
 import {
   newDoc, header, kpiBand, sectionTitle, table, notes as footNotes, pageNumbers, M, CONTENT_W, INK, MUTED, nowLabel,
 } from '../scripts/reportPdfKit.js';
@@ -45,8 +46,10 @@ const money = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const dayOf = (v) => String(v || '').slice(0, 10);
 const inr = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// A bill counts once it has gone to SJVN and has not been withdrawn.
-const NOT_BILLED = ['DRAFT', 'PENDING_L2', 'REJECTED', 'CANCELLED'];
+// A developer's bill is owed once SJVN has accepted it: one still submitted or
+// in approval is not (yet), and counting it showed Sunrise's July bill, under
+// approval, as money SJVN owed (17-Oct-2026 audit).
+const NOT_BILLED = ['DRAFT', 'PENDING_L2', 'SUBMITTED', 'UNDER_APPROVAL', 'REJECTED', 'CANCELLED'];
 
 /**
  * Whose account is being read: the counterparty's own, or the one SJVN asked for.
@@ -90,6 +93,10 @@ function entriesOf(sellerId, contractId, partySide = 'SELLER') {
     SELECT i.*, c.contract_no FROM invoices i JOIN contracts c ON c.id = i.contract_id
     WHERE ${of.col} = ? AND i.direction = '${of.direction}'
       AND i.status NOT IN (${of.notBilled.map(() => '?').join(',')})
+      -- SJVN's computed bill of a month is not owed once the developer's own
+      -- invoice for it is accepted: both were lines, and Sunrise's October
+      -- stood at twice its ₹2.36 crore.
+      AND ${supersededByDeveloperSql('i')}
       ${contractId ? 'AND i.contract_id = ?' : ''}
   `).all(sellerId, ...of.notBilled, ...(contractId ? [contractId] : []));
   if (!invoices.length) return { invoices, entries: [] };

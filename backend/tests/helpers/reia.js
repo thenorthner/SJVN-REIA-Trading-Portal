@@ -1,6 +1,7 @@
 import db from '../../src/db/index.js';
 import { signToken } from '../../src/middleware/auth.js';
 import { newId } from '../../src/util.js';
+import { buildTemplate as buildVerificationTemplate } from '../../src/services/invoiceVerification.js';
 
 // Shared fixtures for the REIA module tests. Each helper creates the minimum a
 // test needs and returns the row, so a test reads as the scenario it describes
@@ -106,7 +107,7 @@ export function auditFor(entityId) {
 
 export function resetReia() {
   const order = [
-    'payment_intimations', 'invoice_approvals', 'invoice_deliveries', 'payments', 'invoices',
+    'energy_banking', 'power_diversions', 'payment_intimations', 'invoice_approvals', 'invoice_deliveries', 'payments', 'invoices',
     'dispute_comments', 'dispute_events', 'disputes',
     'recon_items', 'recon_events', 'recon_statements', 'recon_reopen_requests', 'reconciliations',
     'security_amendments', 'sjvn_lc_events', 'sjvn_lcs',
@@ -119,4 +120,21 @@ export function resetReia() {
     if (hasTable(t)) { try { db.prepare(`DELETE FROM ${t}`).run(); } catch { /* leave it */ } }
   }
   db.pragma('foreign_keys = ON');
+}
+
+/**
+ * Record a completed verification checklist on a developer's bill, as the desk
+ * would — approval waits for one. Each check is cleared against the automatic
+ * result it currently reads, with a note.
+ */
+export function markVerified(invoiceId) {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
+  const template = buildVerificationTemplate(inv);
+  const technical = template.technical.map((t) => ({
+    key: t.key, auto: t.auto, note: 'checked (test fixture)',
+    status: ['CURTAILMENT_CHECKED', 'CHANGE_IN_LAW_VERIFIED'].includes(t.key) || t.auto === 'NA' ? 'NA' : 'VERIFIED',
+  }));
+  db.prepare(`UPDATE invoices SET verification_status = 'VERIFIED', verification_json = ?, verified_by = 'Test Verifier', verified_at = datetime('now') WHERE id = ?`)
+    .run(JSON.stringify({ technical, commercial: {} }), invoiceId);
+  return db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
 }

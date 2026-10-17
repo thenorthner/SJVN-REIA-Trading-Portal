@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../api/client.js';
-import { Badge, Field, fmtCurrency } from './ui.jsx';
+import { Badge, Field, AlertPopup, fmtCurrency } from './ui.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
 
 // What makes a dispute a claim rather than a ticket: whose move it is and how
@@ -73,7 +73,8 @@ export default function DisputeExtrasPanel({ disputeId, onChanged }) {
     }
   }
 
-  if (!x) return error ? <div className="alert alert-error">{error}</div> : null;
+  const popup = <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />;
+  if (!x) return popup;
   const { sla, lps_estimate: lps, resolution: r, group } = x;
   const red = sla.breached && sla.stage !== 'RESPONSE' && sla.stage !== 'DONE';
   const clock = sla.stage === 'DONE' ? null : (
@@ -85,7 +86,7 @@ export default function DisputeExtrasPanel({ disputeId, onChanged }) {
 
   return (
     <div style={{ margin: '12px 0' }}>
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      {popup}
       {clock}
 
       {lps.base > 0 && (
@@ -134,12 +135,12 @@ export default function DisputeExtrasPanel({ disputeId, onChanged }) {
 
           {x.can.respond && !form && (
             <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-              <button className="btn btn-success btn-sm" disabled={!!busy} onClick={() => window.confirm('Accept SJVN\'s resolution? This closes the dispute.') && run(() => api.disputeExtras.respond(x.id, { response: 'ACCEPT' }))}>Accept resolution</button>
+              <button className="btn btn-success btn-sm" disabled={!!busy} onClick={() => setForm({ kind: 'ACCEPT' })}>Accept resolution</button>
               {r.not_accepted > 0 && <button className="btn btn-danger btn-sm" onClick={() => setForm({ kind: 'ESCALATE', forum: 'LEGAL', note: '', contested_amount: r.not_accepted })}>Escalate — not accepted</button>}
             </div>
           )}
           {x.can.conclude && !form && (
-            <div style={{ marginTop: 10 }}><button className="btn btn-primary btn-sm" onClick={() => setForm({ kind: 'CONCLUDE', note: '' })}>Record how the escalation ended</button></div>
+            <div style={{ marginTop: 10 }}><button className="btn btn-primary btn-sm" onClick={() => setForm({ kind: 'CONCLUDE', note: '', awarded: '0' })}>Record how the escalation ended</button></div>
           )}
         </div>
       )}
@@ -147,6 +148,16 @@ export default function DisputeExtrasPanel({ disputeId, onChanged }) {
         <div className="inline-note" style={{ marginTop: 10 }}>Withdrawn by {r.response_by} on {fmtDateTime(r.response_at)} — {r.response_note}</div>
       )}
 
+      {/* A confirmation in the page, not the browser's own dialog. */}
+      <AlertPopup
+        open={form?.kind === 'ACCEPT'}
+        tone="warning"
+        title="Accept SJVN's resolution?"
+        message="This closes the dispute. You will not be able to contest it afterwards."
+        okLabel="Cancel"
+        onClose={() => setForm(null)}
+        actions={<button type="button" className="btn btn-success" disabled={!!busy} onClick={() => run(() => api.disputeExtras.respond(x.id, { response: 'ACCEPT' }), () => setForm(null))}>Accept and close</button>}
+      />
       {form?.kind === 'ESCALATE' && (
         <form className="cw-form" onSubmit={(e) => { e.preventDefault(); run(() => api.disputeExtras.respond(x.id, { response: 'ESCALATE', forum: form.forum, note: form.note, contested_amount: form.contested_amount }), () => setForm(null)); }}>
           <div className="form-grid">
@@ -165,9 +176,13 @@ export default function DisputeExtrasPanel({ disputeId, onChanged }) {
         </form>
       )}
       {form?.kind === 'CONCLUDE' && (
-        <form className="cw-form" onSubmit={(e) => { e.preventDefault(); run(() => api.disputeExtras.conclude(x.id, form.note), () => setForm(null)); }}>
+        <form className="cw-form" onSubmit={(e) => { e.preventDefault(); run(() => api.disputeExtras.conclude(x.id, form.note, form.awarded === '' ? undefined : Number(form.awarded)), () => setForm(null)); }}>
           <Field label="How it ended — the order, award or settlement" required>
             <textarea required rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+          </Field>
+          <Field label={`Amount awarded to the ${String(x.raised_by_role || 'party').toLowerCase()} (₹) — up to ${fmtCurrency(r?.contested_amount || 0)}`}>
+            <input type="number" min="0" step="any" max={r?.contested_amount || 0} value={form.awarded} onChange={(e) => setForm({ ...form, awarded: e.target.value })} />
+            <p className="inline-note" style={{ marginTop: 4 }}>Anything awarded becomes a {x.raised_by_role === 'SELLER' ? 'debit' : 'credit'} note for approval. Leave 0 if the claim failed.</p>
           </Field>
           <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={() => setForm(null)}>Cancel</button><button type="submit" className="btn btn-primary" disabled={!!busy}>Close the dispute</button></div>
         </form>

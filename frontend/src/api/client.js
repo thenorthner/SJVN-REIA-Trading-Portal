@@ -111,7 +111,10 @@ export const api = {
       fileName: (r.headers['content-disposition'] || '').match(/filename="?([^";]+)"?/i)?.[1] || 'documents.zip',
     })),
     submitL2: (versionId) => p(`/documents/${versionId}/submit-l2`),
-    downloadUrl: (versionId) => `/api/documents/${versionId}/download`,
+    downloadUrl: (versionId) => {
+      const token = localStorage.getItem('sjvn_token') || localStorage.getItem('token');
+      return `/api/documents/${versionId}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    },
     download: (versionId) => client.get(`/documents/${versionId}/download`, { responseType: 'blob' }).then((r) => ({
       blob: r.data,
       fileName: (() => {
@@ -201,7 +204,7 @@ export const api = {
     submitL2: (id) => p(`/invoices/${id}/submit-l2`),
     approveL2: (id, comments) => p(`/invoices/${id}/approve-l2`, { comments }),
     submitForApproval: (id) => p(`/invoices/${id}/submit-for-approval`),
-    act: (id, level, decision, comments) => p(`/invoices/${id}/approvals/${level}/act`, { decision, comments }),
+    act: (id, level, decision, comments, extra = {}) => p(`/invoices/${id}/approvals/${level}/act`, { decision, comments, ...extra }),
     send: (id, body) => p(`/invoices/${id}/send`, body || {}),
     deliveries: (id) => g(`/invoices/${id}/deliveries`),
     cancel: (id, reason) => p(`/invoices/${id}/cancel`, { reason }),
@@ -237,7 +240,7 @@ export const api = {
     overview: () => g('/dispute-extras/overview'),
     get: (id) => g(`/dispute-extras/${id}`),
     respond: (id, body) => p(`/dispute-extras/${id}/respond`, body),
-    conclude: (id, note) => p(`/dispute-extras/${id}/conclude`, { note }),
+    conclude: (id, note, awarded_amount) => p(`/dispute-extras/${id}/conclude`, { note, awarded_amount }),
     withdraw: (id, note) => p(`/dispute-extras/${id}/withdraw`, { note }),
     link: (ids, title) => p('/dispute-extras/link', { ids, title }),
     dossier: (id, format) => client.get(`/dispute-extras/${id}/dossier.${format}`, { responseType: 'blob' }).then((r) => r.data),
@@ -313,7 +316,8 @@ export const api = {
     list: (params) => g('/power-diversion', params),
     summary: () => g('/power-diversion/summary'),
     create: (body) => p('/power-diversion', body),
-    markRecovered: (id, body) => p(`/power-diversion/${id}/mark-recovered`, body),
+    // One server-side step: proceeds set against this PSA's dues, surcharge first.
+    recover: (id) => p(`/power-diversion/${id}/recover`, {}),
     remove: (id) => del(`/power-diversion/${id}`),
   },
   notes: {
@@ -325,6 +329,7 @@ export const api = {
     apply: (id, invoiceId) => p(`/notes/${id}/apply`, { invoice_id: invoiceId }),
     cancel: (id, reason) => p(`/notes/${id}/cancel`, { reason }),
     downloadPdf: (id) => client.get(`/notes/${id}/pdf`, { responseType: 'blob' }).then((res) => res.data),
+    cufTrueUp: (contractId, contractYear) => p('/notes/cuf-true-up', { contract_id: contractId, contract_year: contractYear }),
   },
   billingTrail: {
     get: (params) => g('/billing-trail', params),
@@ -521,9 +526,18 @@ export const api = {
     cercAnnexures: (periodType, period) => g('/reports/cerc-compliance/annexures', { period_type: periodType, period }),
     // The same split as the Excel workbook the Commission takes the soft copy in.
     cercAnnexuresXlsx: async (periodType, period) => {
-      const res = await client.get('/reports/cerc-compliance/annexures/xlsx', {
-        params: { period_type: periodType, period }, responseType: 'blob',
-      });
+      let res;
+      try {
+        res = await client.get('/reports/cerc-compliance/annexures/xlsx', {
+          params: { period_type: periodType, period }, responseType: 'blob',
+        });
+      } catch (err) {
+        // A refusal comes back as a blob too; read the reason out of it rather
+        // than showing "Request failed with status code 400".
+        let msg = 'Could not build the Form-IV workbook';
+        try { msg = JSON.parse(await err.response.data.text()).error || msg; } catch { /* keep default */ }
+        throw new Error(msg);
+      }
       if (res.data?.type && res.data.type.includes('json')) {
         let msg = 'Could not build the Form-IV workbook';
         try { msg = JSON.parse(await res.data.text()).error || msg; } catch { /* keep default */ }
@@ -705,8 +719,9 @@ export const api = {
     meta: () => g('/disputes/meta'),
     stats: () => g('/disputes/stats'),
     create: (body) => p('/disputes', body),
+    // Several bills for one cause: all raised and linked, or none.
+    raiseBatch: (body) => p('/disputes/batch', body),
     transition: (id, status, note) => p(`/disputes/${id}/transition`, { status, note }),
-    setStatus: (id, status) => p(`/disputes/${id}/status`, { status }),
     resolve: (id, body) => p(`/disputes/${id}/resolve`, body),
     comment: (id, body, is_internal = false) => p(`/disputes/${id}/comments`, { body, is_internal }),
     assign: (id, assigned_to) => p(`/disputes/${id}/assign`, { assigned_to }),
@@ -765,7 +780,6 @@ export const api = {
     actReopen: (id, decision) => p(`/reconciliation/reopen-requests/${id}/act`, { decision }),
     statement: (id, version) => g(`/reconciliation/${id}/statement`, version ? { version } : undefined),
     regenerateStatement: (id) => p(`/reconciliation/${id}/regenerate-statement`),
-    resolve: (id, notes) => p(`/reconciliation/${id}/resolve`, { notes }),
   },
   tradingClients: {
     list: (params) => g('/trading-clients', params),

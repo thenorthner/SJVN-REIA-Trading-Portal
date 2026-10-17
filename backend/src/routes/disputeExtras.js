@@ -29,7 +29,7 @@ import { secureLogAudit } from '../auditEngine.js';
 import { getParamNumber } from '../mastersService.js';
 import { OPEN_STATUSES, REASON_LABELS, CHARGE_LABELS } from '../disputesConstants.js';
 import { billPresentedOn } from '../services/counterpartyScope.js';
-import { canAccessDispute, recordEvent, setInvoiceOpenDispute, disputeUploadDir } from './disputes.js';
+import { canAccessDispute, recordEvent, setInvoiceOpenDispute, disputeUploadDir, raiseResolutionNote } from './disputes.js';
 import {
   newDoc, header, kpiBand, sectionTitle, table, notes as footNotes, pageNumbers, stamp, nowLabel, M, CONTENT_W, INK, MUTED,
 } from '../scripts/reportPdfKit.js';
@@ -100,7 +100,10 @@ export function slaOf(d, now = new Date()) {
   const stage = d.status === 'RAISED' ? 'ACKNOWLEDGE' : 'RESOLVE';
   const due = stage === 'ACKNOWLEDGE' ? d.sla_ack_due : d.sla_resolve_due;
   if (!due) return { stage, owner: 'SJVN', label: 'No time limit recorded', breached: !!d.sla_breached_at };
-  const t = left(due);
+  // While SJVN waits on the party the clock stands still: time left is what
+  // was left when the question went out.
+  const paused = d.status === 'INFO_REQUESTED' && d.info_requested_at;
+  const t = paused ? (() => { const ms = at(due) - at(d.info_requested_at); return { due, days_left: Math.ceil(ms / 86400000), hours_left: Math.round(ms / 3600000), overdue: ms < 0 }; })() : left(due);
   const breached = !!d.sla_breached_at || t.overdue;
   const what = stage === 'ACKNOWLEDGE' ? 'acknowledge' : 'resolve';
   const span = (n) => (Math.abs(n) >= 48 ? `${Math.abs(Math.round(n / 24))} days` : `${Math.abs(n)} hour${Math.abs(n) === 1 ? '' : 's'}`);
@@ -108,8 +111,10 @@ export function slaOf(d, now = new Date()) {
     ? `SJVN's time to ${what} ran out ${span(t.hours_left)} ago`
     : `SJVN has ${span(t.hours_left)} left to ${what}`;
   // The clock is SJVN's, but while it waits on the submitter the next move is theirs.
-  if (d.status === 'INFO_REQUESTED') label = `SJVN is waiting for the ${d.raised_by_role.toLowerCase()}'s reply — ${breached ? `time to resolve ran out ${span(t.hours_left)} ago` : `${span(t.hours_left)} left to resolve`}`;
-  return { stage, owner: d.status === 'INFO_REQUESTED' ? 'SUBMITTER' : 'SJVN', ...t, breached, label };
+  if (d.status === 'INFO_REQUESTED') label = paused
+    ? `SJVN is waiting for the ${d.raised_by_role.toLowerCase()}'s reply — its clock is paused with ${span(t.hours_left)} left to resolve`
+    : `SJVN is waiting for the ${d.raised_by_role.toLowerCase()}'s reply — ${breached ? `time to resolve ran out ${span(t.hours_left)} ago` : `${span(t.hours_left)} left to resolve`}`;
+  return { stage, owner: d.status === 'INFO_REQUESTED' ? 'SUBMITTER' : 'SJVN', ...t, breached, paused: !!paused, label };
 }
 
 // ── The surcharge ───────────────────────────────────────────────────────────
@@ -253,7 +258,22 @@ router.post('/:id/conclude', (req, res) => send(res, () => {
   if (!RESOLVED.includes(d.status) || d.resolution_response !== 'CONTESTED') throw fail(400, 'This dispute is not under escalation');
   const note = String(req.body.note || '').trim().slice(0, 2000);
   if (!note) throw fail(400, 'Record how it ended — the order, award or settlement');
-  db.prepare(`UPDATE disputes SET status = 'CLOSED', escalation_outcome = ?, updated_at = datetime('now') WHERE id = ?`).run(note, d.id);
+  // What the forum awarded the party, if anything. It was recorded as words
+  // only, so an order allowing the claim moved no money.
+  const awarded = req.body.awarded_amount === undefined || req.body.awarded_amount === '' ? 0 : Number(req.body.awarded_amount);
+  if (!Number.isFinite(awarded) || awarded < 0 || awarded > (Number(d.contested_amount) || 0) + 0.01) {
+    throw fail(400, `The amount awarded must be between 0 and the ₹${inr(d.contested_amount)} contested`);
+  }
+  db.transaction(() => {
+    db.prepare(`UPDATE disputes SET status = 'CLOSED', escalation_outcome = ?, awarded_amount = ?, updated_at = datetime('now') WHERE id = ?`).run(note, money(awarded), d.id);
+    if (awarded > 0) {
+      const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(d.invoice_id);
+      const prior = d.resolution_note_id;
+      raiseResolutionNote(d, invoice, money(awarded), 0, req.user, `awarded on escalation (${note.slice(0, 120)})`);
+      // The resolution's own note, if any, stays on record against the dispute's events.
+      if (prior) recordEvent(d.id, req.user, 'NOTE_REPLACED', d.status, d.status, { previous_note_id: prior });
+    }
+  })();
   setInvoiceOpenDispute(d.invoice_id);
   recordEvent(d.id, req.user, 'ESCALATION_CONCLUDED', d.status, 'CLOSED', { note });
   audit(req, 'DISPUTE_ESCALATION_CONCLUDED', d.id, { reason: note });

@@ -40,6 +40,36 @@ const VERTICAL_LABELS = { REIA: 'REIA', HYDRO: 'Hydro Billing', THERMAL: 'Therma
 const verticalsOf = (entity) => String(entity?.verticals || 'REIA').split(',').map((v) => v.trim()).filter(Boolean);
 
 /**
+ * Why this desk may not act on this stakeholder, or null. Onboarding decisions
+ * belong to the stakeholder's own vertical: the Hydro desk approved a REIA-only
+ * developer (17-Oct-2026 audit). Administrators across SJVN act on all.
+ */
+function outsideDesk(user, entity) {
+  const own = deskVerticals(user);
+  if (!own) return null;
+  const theirs = verticalsOf(entity);
+  if (theirs.some((v) => own.includes(v))) return null;
+  return `${entity.name} is a ${theirs.map((v) => VERTICAL_LABELS[v] || v).join(' / ')} stakeholder; your desk acts on ${own.map((v) => VERTICAL_LABELS[v]).join(', ')} stakeholders only.`;
+}
+
+/**
+ * Whether the bank proof on file proves the account being made live: it must
+ * be VERIFIED, and — where a change of account is staged — verified after the
+ * change was asked for, or it is the proof of the old account. A staged
+ * account used to go live on the desk's click with the proof NOT_STARTED.
+ */
+function bankProofProblem(entity) {
+  const proof = db.prepare(`SELECT * FROM entity_regulatory_approvals WHERE entity_id = ? AND approval_code = 'BANK_ACCOUNT_PROOF'`).get(entity.id);
+  if (!proof || proof.status !== 'VERIFIED') {
+    return 'Verify the bank proof (cancelled cheque or bank letter) on the regulatory checklist first; the account is checked against it.';
+  }
+  if (entity.pending_bank_json && entity.pending_bank_requested_at && String(proof.verified_at || '').replace(' ', 'T') < String(entity.pending_bank_requested_at).replace(' ', 'T')) {
+    return `The bank proof was verified before the change of account was asked for (${entity.pending_bank_requested_at}), so it proves the old account. Verify the proof of the new account first.`;
+  }
+  return null;
+}
+
+/**
  * PAN and GSTIN each identify one legal entity, so neither may sit on two
  * records. Compared trimmed and case-insensitively; `exceptId` is the record
  * being edited.
@@ -299,6 +329,12 @@ router.post('/', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) => 
   // A PAN or GST identifies one legal entity. Onboarding the same one twice
   // splits its contracts, exposure and payment history across two records that
   // nothing later reconciles, so it is refused rather than quietly created.
+  // A clearance waived at onboarding carries its reason; the desk's own form
+  // only, and a short or missing one is refused rather than dropped.
+  if (Array.isArray(body.regulatory_checklist_init) && !isCounterparty(req.user)) {
+    const thin = body.regulatory_checklist_init.find((i) => i?.status === 'NOT_APPLICABLE' && String(i.notes || '').trim().length < 10);
+    if (thin) return res.status(400).json({ error: `Say why ${thin.approval_code.replace(/_/g, ' ').toLowerCase()} does not apply (at least 10 characters).` });
+  }
   const dup = findDuplicate(body);
   if (dup) {
     const inVertical = verticalsOf(dup.clash).includes(vertical);
@@ -386,16 +422,18 @@ router.post('/', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) => 
 
     seedRegulatoryChecklist(id, body.entity_type);
 
-    // Optional initial status hints from create form (e.g. mark N/A)
-    if (Array.isArray(body.regulatory_checklist_init)) {
+    // Optional initial hints from the desk's create form: an item marked N/A
+    // with its reason. Nothing more — this set any item to any status, so a
+    // seller created a company with all eight clearances VERIFIED.
+    if (Array.isArray(body.regulatory_checklist_init) && !isCounterparty(req.user)) {
       const upd = db.prepare(`
         UPDATE entity_regulatory_approvals
         SET status = ?, notes = COALESCE(?, notes), updated_at = datetime('now')
         WHERE entity_id = ? AND approval_code = ?
       `);
       for (const item of body.regulatory_checklist_init) {
-        if (!item.approval_code || !APPROVAL_STATUSES.includes(item.status)) continue;
-        upd.run(item.status, item.notes || null, id, item.approval_code);
+        if (!item.approval_code || item.status !== 'NOT_APPLICABLE' || String(item.notes || '').trim().length < 10) continue;
+        upd.run(item.status, String(item.notes).trim(), id, item.approval_code);
       }
       refreshRegulatorySummary(id);
     }
@@ -573,18 +611,45 @@ router.put('/:id/regulatory-approvals/:approvalId', requireRole(...ENTITY_WRITE,
     return res.status(400).json({ error: `status must be one of: ${APPROVAL_STATUSES.join(', ')}` });
   }
 
-  const canVerify = ENTITY_WRITE.includes(req.user.role);
-  if (status === 'VERIFIED' && !canVerify) {
-    return res.status(403).json({ error: 'Only SJVN/REIA roles can mark an approval as VERIFIED' });
+  const desk = ENTITY_WRITE.includes(req.user.role) && !isCounterparty(req.user);
+  if (desk) {
+    const outside = outsideDesk(req.user, entity);
+    if (outside) return res.status(403).json({ error: outside });
   }
-  if (status === 'NOT_APPLICABLE' && row.is_mandatory && !(b.notes || row.notes)) {
-    return res.status(400).json({ error: 'Notes required when marking a mandatory item as Not Applicable' });
+  // A counterparty submits its evidence; deciding on it is SJVN's. It could set
+  // anything but VERIFIED — and NOT_APPLICABLE, which counts as cleared, let it
+  // waive its own mandatory items.
+  if (!desk && !['SUBMITTED', row.status].includes(status)) {
+    return res.status(403).json({ error: `Only SJVN can mark a clearance ${status.replace(/_/g, ' ').toLowerCase()}; submit the evidence and the desk decides.` });
   }
-
-  const verified_by = status === 'VERIFIED' ? (req.user.name || req.user.id) : (status === row.status ? row.verified_by : null);
-  const verified_at = status === 'VERIFIED'
-    ? (row.status === 'VERIFIED' ? row.verified_at : new Date().toISOString())
-    : null;
+  if (!desk && row.status === 'VERIFIED') {
+    return res.status(403).json({ error: `${row.label} has been verified by SJVN. Ask the desk to reopen it if something on it has changed.` });
+  }
+  const notes = b.notes !== undefined ? b.notes : row.notes;
+  if (status === 'NOT_APPLICABLE' && row.is_mandatory && String(notes || '').trim().length < 10) {
+    return res.status(400).json({ error: 'Say why a mandatory clearance does not apply (at least 10 characters) — it is what the audit trail shows.' });
+  }
+  // The evidence a verification rests on. Changing any of it on a VERIFIED item
+  // used to leave it verified; now it goes back for checking unless the desk
+  // verifies it again in the same step.
+  const EVIDENCE = ['reference_no', 'issued_by', 'issued_on', 'valid_until', 'document_id'];
+  const evidenceChanged = EVIDENCE.some((f) => b[f] !== undefined && String(b[f] ?? '') !== String(row[f] ?? ''));
+  let finalStatus = status;
+  if (row.status === 'VERIFIED' && status === 'VERIFIED' && evidenceChanged && b.status !== 'VERIFIED') finalStatus = 'SUBMITTED';
+  if (finalStatus === 'VERIFIED') {
+    const validUntil = b.valid_until !== undefined ? b.valid_until : row.valid_until;
+    if (validUntil && String(validUntil) < new Date().toISOString().slice(0, 10)) {
+      return res.status(400).json({ error: `${row.label} lapsed on ${validUntil}; it cannot be verified as it stands.` });
+    }
+    const documentId = b.document_id !== undefined ? b.document_id : row.document_id;
+    const reference = b.reference_no !== undefined ? b.reference_no : row.reference_no;
+    if (!documentId && !String(reference || '').trim()) {
+      return res.status(400).json({ error: `Verify ${row.label} against something: attach the scanned document or record its reference number.` });
+    }
+  }
+  const reverify = finalStatus === 'VERIFIED' && (row.status !== 'VERIFIED' || evidenceChanged);
+  const verified_by = finalStatus === 'VERIFIED' ? (reverify ? (req.user.name || req.user.id) : row.verified_by) : null;
+  const verified_at = finalStatus === 'VERIFIED' ? (reverify ? new Date().toISOString() : row.verified_at) : null;
 
   db.prepare(`
     UPDATE entity_regulatory_approvals SET
@@ -592,12 +657,12 @@ router.put('/:id/regulatory-approvals/:approvalId', requireRole(...ENTITY_WRITE,
       notes = ?, document_id = ?, verified_by = ?, verified_at = ?, updated_at = datetime('now')
     WHERE id = ?
   `).run(
-    status,
+    finalStatus,
     b.reference_no !== undefined ? b.reference_no : row.reference_no,
     b.issued_by !== undefined ? b.issued_by : row.issued_by,
     b.issued_on !== undefined ? b.issued_on : row.issued_on,
     b.valid_until !== undefined ? b.valid_until : row.valid_until,
-    b.notes !== undefined ? b.notes : row.notes,
+    notes,
     b.document_id !== undefined ? b.document_id : row.document_id,
     verified_by,
     verified_at,
@@ -608,7 +673,7 @@ router.put('/:id/regulatory-approvals/:approvalId', requireRole(...ENTITY_WRITE,
   logAudit({
     req, user: req.user, action: 'UPDATE', module: 'REIA',
     entityType: 'entity_regulatory_approval', entityId: row.id,
-    details: { entity_id: entity.id, approval_code: row.approval_code, status },
+    details: { entity_id: entity.id, approval_code: row.approval_code, status: finalStatus, from: row.status, evidence_changed: evidenceChanged || undefined },
   });
 
   res.json({
@@ -625,6 +690,14 @@ router.put('/:id/regulatory-approvals/:approvalId', requireRole(...ENTITY_WRITE,
 router.post(['/:id/verify-bank', '/:id/penny-drop'], requireRole(...ENTITY_WRITE), (req, res) => {
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  const outside = outsideDesk(req.user, entity);
+  if (outside) return res.status(403).json({ error: outside });
+  const problem = bankProofProblem(entity);
+  if (problem) return res.status(400).json({ error: problem });
+  // The person who asked for the change of account does not also make it live.
+  if (entity.pending_bank_json && entity.pending_bank_requested_by && entity.pending_bank_requested_by === (req.user.name || req.user.id)) {
+    return res.status(403).json({ error: 'You asked for this change of account, so someone else has to verify it.' });
+  }
 
   // A requested change of account becomes the live one at this point — not at
   // the edit that requested it. Without this the new details would sit staged
@@ -653,6 +726,8 @@ router.post(['/:id/verify-bank', '/:id/penny-drop'], requireRole(...ENTITY_WRITE
 router.post('/:id/blacklist', requireRole(...BLACKLIST_ROLES), (req, res) => {
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  const outside = outsideDesk(req.user, entity);
+  if (outside) return res.status(403).json({ error: outside });
   const blacklisted = req.body?.blacklisted !== false;
   const reason = String(req.body?.reason ?? '').trim();
   if (reason.length < 10) {
@@ -715,6 +790,12 @@ router.post('/:id/approve', requireRole(...ENTITY_WRITE), (req, res) => {
   if (badDecision) return res.status(400).json({ error: badDecision });
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  const outside = outsideDesk(req.user, entity);
+  if (outside) return res.status(403).json({ error: outside });
+  const directAdmit = !!admin_direct_admit;
+  if (directAdmit && !['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Direct admission is for administrators; verify the checklist instead.' });
+  }
 
   if (decision === 'APPROVED') {
     if (entity.is_blacklisted) {
@@ -724,7 +805,7 @@ router.post('/:id/approve', requireRole(...ENTITY_WRITE), (req, res) => {
     }
     seedRegulatoryChecklist(entity.id, entity.entity_type);
 
-    if (admin_direct_admit && ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'].includes(req.user.role)) {
+    if (directAdmit) {
       db.prepare(`
         UPDATE entity_regulatory_approvals
         SET status = 'VERIFIED', verified_by = ?, verified_at = datetime('now'), notes = COALESCE(notes, 'Admitted & cleared directly by SJVN Admin')
@@ -751,8 +832,14 @@ router.post('/:id/approve', requireRole(...ENTITY_WRITE), (req, res) => {
   // mandatory item on the checklist that has just been confirmed verified, so
   // the account it proves becomes the one that may be paid, and a requested
   // change of account goes live with it.
+  // An admitted stakeholder's account is not thereby checked: a direct admission
+  // marks the clearances, not the bank proof against the account, so it neither
+  // makes a staged account live nor calls the account verified. Nor does an
+  // approval whose bank proof predates a staged change of account.
   let promotedBank = null;
-  if (decision === 'APPROVED') {
+  const bankOk = decision === 'APPROVED' && !directAdmit
+    && !bankProofProblem(db.prepare('SELECT * FROM entities WHERE id = ?').get(entity.id));
+  if (bankOk) {
     promotedBank = promotePendingBank(entity);
     db.prepare(`UPDATE entities SET is_penny_drop_verified = 1 WHERE id = ?`).run(entity.id);
     if (promotedBank) {

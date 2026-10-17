@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/client.js';
-import { PageHeader, Card, StatCard, Badge, Modal, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, StatCard, Badge, Modal, fmtCurrency, fmtNumber, AlertPopup } from '../../components/ui.jsx';
 import { InvoiceBreakdown, InvoiceFinancialStrip, downloadInvoicePdf } from '../../components/invoiceShared.jsx';
 import InvoiceCompliance from '../../components/InvoiceCompliance.jsx';
 import { IntimationForm, IntimationRow, errText } from '../../components/PaymentIntimations.jsx';
@@ -85,6 +85,11 @@ export default function BuyerInvoices({ initialTab = 'INVOICES' }) {
     return (d?.bills || []).filter((b) => test(b) && (!needle || [b.invoice_no, b.contract_no, b.billing_period].some((v) => String(v).toLowerCase().includes(needle))));
   }, [d, view, q]);
 
+  // Every hook before the early returns: this one sat after them, so the page
+  // crashed ("Rendered more hooks than during the previous render") the moment
+  // the bills arrived.
+  const [selectedPins, setSelectedPins] = useState({});
+
   if (error && !d) return <div className="form-error">{error}</div>;
   if (!d) return <div style={{ padding: 24, color: 'var(--text-light)' }}>Loading…</div>;
 
@@ -98,7 +103,6 @@ export default function BuyerInvoices({ initialTab = 'INVOICES' }) {
   const chosen = Object.keys(picked).filter((id) => picked[id]);
   const maker = d.my_tier === 'L1';
   const approvablePins = waitingChecker.filter((i) => i.prepared_by !== pins?.my_id);
-  const [selectedPins, setSelectedPins] = useState({});
 
   async function handleBulkApprove() {
     const ids = Object.keys(selectedPins).filter((id) => selectedPins[id]);
@@ -185,7 +189,7 @@ export default function BuyerInvoices({ initialTab = 'INVOICES' }) {
 
       {activeTab === 'INVOICES' ? (
         <>
-          {error && <div className="form-error">{error}</div>}
+          <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setErrorText('')} />
           {flash && <div className="ps-alert green" role="status">{flash}</div>}
 
           {t.overdue_bills > 0 && (

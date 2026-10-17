@@ -71,7 +71,8 @@ function contractsFor(user, contractId) {
   const params = [];
   if (side !== 'SJVN') {
     if (!user.linked_entity_id) return { side, contracts: [] };
-    sql += ` AND ${side === 'SELLER' ? 'seller_id' : 'buyer_id'} = ?`;
+    // Same as the list: a contract still being drafted is not shown to the counterparty.
+    sql += ` AND ${side === 'SELLER' ? 'seller_id' : 'buyer_id'} = ? AND status NOT IN ('DRAFT', 'UNDER_NEGOTIATION')`;
     params.push(user.linked_entity_id);
   }
   if (contractId) { sql += ' AND id = ?'; params.push(contractId); }
@@ -86,8 +87,16 @@ function cufOf(row, contract) {
   return { cuf: round((row.energy_mwh / (mw * hoursIn(row.period_month))) * 100), computed: true };
 }
 
-/** Of a period's records, the one that stands: final over provisional, then the latest. */
-const standing = (rows) => [...rows].sort((a, b) => (b.data_type === 'FINAL') - (a.data_type === 'FINAL') || String(b.created_at).localeCompare(String(a.created_at)))[0];
+/**
+ * Of a period's records, the one that stands: the locked figure (the one billed),
+ * else a validated one; final over provisional; then the latest. Picking the
+ * latest of any status put an unvalidated draft — or a disputed figure — at the
+ * head of the counterparty's trend in place of what was billed.
+ */
+const STANDING_RANK = { LOCKED: 3, VALIDATED: 2, DISPUTED: 1, DRAFT: 0 };
+const standing = (rows) => [...rows].sort((a, b) => (STANDING_RANK[b.status] ?? 0) - (STANDING_RANK[a.status] ?? 0)
+  || (b.data_type === 'FINAL') - (a.data_type === 'FINAL')
+  || String(b.created_at).localeCompare(String(a.created_at)))[0];
 
 const notifyCounterparty = (contract, message) => {
   try {
@@ -120,8 +129,10 @@ router.get('/analytics', (req, res) => send(res, () => {
   const byId = new Map(effectiveContracts.map((c) => [c.id, c]));
   if (!effectiveContracts.length) return { series: [], totals: null, contracts: [] };
 
+  // A counterparty's trend is built from figures SJVN has finished with.
   const rows = db.prepare(`
     SELECT * FROM energy_data WHERE contract_id IN (${effectiveContracts.map(() => '?').join(',')})
+    ${side === 'SJVN' ? '' : "AND status != 'DRAFT'"}
   `).all(...effectiveContracts.map((c) => c.id));
 
   // One standing record per contract per period, then the periods summed across contracts.
@@ -317,7 +328,13 @@ function asDay(v) {
 router.post('/:id/blocks', upload.single('file'), (req, res) => send(res, () => {
   if (!canManage(req.user)) throw fail(403, 'Only the REIA desk can load block data');
   const { row, contract } = recordFor(req.user, req.params.id);
+  // The blocks behind a billed month are part of what was billed.
+  if (row.status === 'LOCKED') throw fail(400, `${row.period_month} is locked for billing; its 15-minute blocks cannot be replaced.`);
   if (!req.file) throw fail(400, 'Attach the block-wise file');
+  // No block can hold more than the plant makes in a quarter-hour.
+  const blockMax = billableCapacityMw(contract) > 0
+    ? Math.round(billableCapacityMw(contract) * 0.25 * (['HYDRO', 'PSP'].includes(String(contract.project_type || '').toUpperCase()) ? 1.1 : 1) * 10000) / 10000
+    : null;
   let table;
   try {
     const wb = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
@@ -347,6 +364,8 @@ router.post('/:id/blocks', upload.single('file'), (req, res) => send(res, () => 
     else if (!date.startsWith(row.period_month)) errors.push(`Row ${line}: ${date} is not in ${row.period_month}`);
     else if (!Number.isInteger(block) || block < 1 || block > BLOCKS_PER_DAY) errors.push(`Row ${line}: block must be 1 to ${BLOCKS_PER_DAY}`);
     else if ([sched, actual].some((v) => v !== null && !Number.isFinite(v))) errors.push(`Row ${line}: the energy is not a number`);
+    else if ([sched, actual].some((v) => v !== null && v < 0)) errors.push(`Row ${line}: energy cannot be negative`);
+    else if (blockMax != null && [sched, actual].some((v) => v !== null && v > blockMax)) errors.push(`Row ${line}: ${Math.max(sched ?? 0, actual ?? 0)} MWh in 15 minutes is more than ${contract.contract_no} can make (${blockMax} MWh)`);
     else if (seen.has(`${date}|${block}`)) errors.push(`Row ${line}: ${date} block ${block} appears twice`);
     else { seen.add(`${date}|${block}`); parsed.push({ date, block, sched, actual }); }
   });

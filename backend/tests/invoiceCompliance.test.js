@@ -9,7 +9,7 @@ import db from '../src/db/index.js';
 import { signToken } from '../src/middleware/auth.js';
 import { inspectSignature } from '../src/routes/invoiceCompliance.js';
 import { invalidateParamCache } from '../src/mastersService.js';
-import { auth, makeUser, makeEntity, makeContract, makeInvoice, auditFor, resetReia } from './helpers/reia.js';
+import { auth, makeUser, makeEntity, makeContract, makeInvoice, auditFor, resetReia, markVerified } from './helpers/reia.js';
 
 // What goes with a seller's invoice: the e-invoice reference and how it compares
 // with the bill, the signed copy, an estimate of the tax deducted at source, and
@@ -118,6 +118,7 @@ describe('signed copy', () => {
     const approver = makeUser('REIA_ADMIN', { name: 'Ravi REIA' });
     db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES ('AP1', ?, 1, 'PENDING')`).run(inv.id);
     db.prepare(`UPDATE invoices SET validation_status = 'MATCHED', status = 'UNDER_APPROVAL' WHERE id = ?`).run(inv.id);
+    markVerified(inv.id);
     setParam('seller_invoice_requires_signed_copy', 1);
     try {
       const refused = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(as(approver)).send({ decision: 'APPROVED' });

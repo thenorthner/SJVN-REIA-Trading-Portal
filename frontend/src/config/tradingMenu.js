@@ -192,6 +192,7 @@ export const TRADING_MENU = [
   {
     group: 'CERC Reports',
     items: [
+      { label: 'CERC filing calendar & licence', to: '/reia/cerc-compliance' },
       { label: 'CERC Form-IV (built)', to: '/trading/form-iv' },
       { label: 'Form IV-A', to: '/cerc/form-iv-a' },
       { label: 'Form IV-B', to: '/cerc/form-iv-b' },

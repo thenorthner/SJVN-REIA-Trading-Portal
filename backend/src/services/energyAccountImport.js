@@ -22,6 +22,7 @@
 import XLSX from 'xlsx';
 import db from '../db/index.js';
 import { newId, buildBillingFamilyRef, directionForContract } from '../util.js';
+import { energyRowProblems } from './energyRules.js';
 
 export const ACCOUNT_TYPES = {
   JMR: 'Joint meter reading',
@@ -259,13 +260,17 @@ export function matchContracts(rows) {
   });
 }
 
-/** What is already held for the same contract, month and data type. */
-function existingRow(contractId, periodMonth, dataType) {
+/**
+ * What is already held from the same source for the same contract, month and
+ * data type. Matching on the month alone made an SLDC import overwrite the
+ * desk's MANUAL draft and relabel it as SLDC.
+ */
+function existingRow(contractId, periodMonth, dataType, source) {
   return db.prepare(`
     SELECT * FROM energy_data
-    WHERE contract_id = ? AND period_month = ? AND data_type = ?
+    WHERE contract_id = ? AND period_month = ? AND data_type = ? AND COALESCE(source, 'MANUAL') = ?
     ORDER BY created_at DESC LIMIT 1
-  `).get(contractId, periodMonth, dataType);
+  `).get(contractId, periodMonth, dataType, source);
 }
 
 /**
@@ -305,11 +310,27 @@ export function importEnergyAccount(buffer, {
         results.push({ ...row, action: 'SKIPPED', reason: row.match_error });
         continue;
       }
-      const existing = existingRow(row.contract_id, row.period_month, dataType);
+      const contractRow = db.prepare('SELECT * FROM contracts WHERE id = ?').get(row.contract_id);
+      // The same rules as a figure typed on the desk: no future or unfinished
+      // month, inside the tenure, no more than the plant can make.
+      const { errors: problems, cuf } = energyRowProblems(contractRow, row);
+      if (problems.length) {
+        results.push({ ...row, action: 'SKIPPED', reason: problems.join(' ') });
+        continue;
+      }
+      if (row.cuf_percent == null && cuf != null) row.cuf_percent = cuf;
+      const existing = existingRow(row.contract_id, row.period_month, dataType, source);
       if (existing && existing.status === 'LOCKED') {
         results.push({
           ...row, action: 'SKIPPED',
           reason: `${row.period_month} is already locked on this contract at ${existing.energy_mwh} MWh; a locked month is superseded, not overwritten.`,
+        });
+        continue;
+      }
+      if (existing && existing.status === 'VALIDATED') {
+        results.push({
+          ...row, action: 'SKIPPED',
+          reason: `${row.period_month} already has a validated ${source} figure of ${existing.energy_mwh} MWh; it is not overwritten by a file.`,
         });
         continue;
       }
@@ -321,20 +342,20 @@ export function importEnergyAccount(buffer, {
         });
         if (dryRun) continue;
         db.prepare(`
-          UPDATE energy_data SET energy_mwh = ?, source = ?,
+          UPDATE energy_data SET energy_mwh = ?,
             availability_percent = COALESCE(?, availability_percent),
             peak_availability_percent = COALESCE(?, peak_availability_percent),
-            cuf_percent = COALESCE(?, cuf_percent),
-            status = 'DRAFT', updated_at = datetime('now')
+            cuf_percent = ?,
+            status = 'DRAFT', deviation_notes = NULL, updated_at = datetime('now')
           WHERE id = ?
         `).run(
-          row.energy_mwh, source, row.availability_percent, row.peak_availability_percent,
+          row.energy_mwh, row.availability_percent, row.peak_availability_percent,
           row.cuf_percent, existing.id,
         );
         continue;
       }
 
-      const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(row.contract_id);
+      const contract = contractRow;
       const bfr = buildBillingFamilyRef(contract.contract_no, row.period_month, directionForContract(contract));
       const supersedes = dataType === 'FINAL'
         ? db.prepare(`

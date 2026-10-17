@@ -1,5 +1,5 @@
 import db from '../db/index.js';
-import { resolvePeriod, dueDateFor } from './cercFormIv.js';
+import { resolvePeriod, dueDateFor, deriveLines } from './cercFormIv.js';
 
 /**
  * The CERC filing calendar: every period that should have a return, and where
@@ -15,6 +15,33 @@ import { resolvePeriod, dueDateFor } from './cercFormIv.js';
  */
 
 const iso = (d) => d.toISOString().slice(0, 10);
+const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** Why a from/to pair cannot be read, or null. A bad one used to return an empty calendar or a 500. */
+export function calendarRangeProblem(from, to) {
+  if (from && !MONTH.test(from)) return 'from must be a month, YYYY-MM';
+  if (to && !MONTH.test(to)) return 'to must be a month, YYYY-MM';
+  if (from && to && from > to) return `The range starts (${from}) after it ends (${to}).`;
+  return null;
+}
+
+/**
+ * What the trade book holds for a period nobody has started a return for: how
+ * many trades there are to report (none means a NIL return is still owed) and
+ * how many bilateral lines are over the margin cap. An unstarted month used to
+ * show no breaches whatever its trades, because breaches were read off a
+ * prepared return alone.
+ */
+function tradeBook(from, to) {
+  const lines = deriveLines(from, to);
+  const cleared = db.prepare(`
+    SELECT COUNT(*) n FROM bids WHERE status IN ('CLEARED', 'PARTIALLY_CLEARED') AND delivery_date BETWEEN ? AND ?
+  `).get(from, to).n;
+  return {
+    trade_count: lines.length + cleared,
+    breach_count: lines.filter((l) => l.compliance_status === 'BREACH').length,
+  };
+}
 const monthKey = (d) => iso(d).slice(0, 7);
 
 /** The financial year a month belongs to: April to March, named 2026-27. */
@@ -71,8 +98,10 @@ export function cercCompliance({ from = null, to = null, asOf = new Date() } = {
   const describe = (periodType, period) => {
     const bounds = resolvePeriod(periodType, period);
     const filing = byPeriod.get(`${periodType}|${period}`) || null;
-    const due = filing?.due_date || dueDateFor(bounds.to);
+    // The rule, not a date stored when the return was started under an older one.
+    const due = dueDateFor(bounds.to, periodType);
     const status = filing ? filing.status : 'MISSING';
+    const book = filing ? null : tradeBook(bounds.from, bounds.to);
     const overdue = status !== 'SUBMITTED' && !!due && due < todayIso;
     return {
       period_type: periodType,
@@ -94,7 +123,11 @@ export function cercCompliance({ from = null, to = null, asOf = new Date() } = {
       line_count: filing?.line_count ?? null,
       // Transactions over the CERC margin cap: the thing a filing can be on time
       // and still be in trouble about.
-      breach_count: filing?.breach_count ?? 0,
+      breach_count: filing ? (filing.breach_count ?? 0) : book.breach_count,
+      // Read from the trade book for a period with no return yet; null once one exists.
+      trade_count: book ? book.trade_count : null,
+      nil_return: book ? book.trade_count === 0 : null,
+      breaches_from: filing ? 'RETURN' : 'TRADE_BOOK',
     };
   };
 

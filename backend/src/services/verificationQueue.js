@@ -1,5 +1,6 @@
 import db from '../db/index.js';
-import { buildTemplate, mergeSaved, rollupStatus } from './invoiceVerification.js';
+import { liveVerification, OPEN_FOR_VERIFICATION, DECIDED } from './invoiceVerification.js';
+import { raisedBySellerSql } from './counterpartyScope.js';
 
 /**
  * Every developer bill waiting to be verified, and what each one is waiting on.
@@ -13,9 +14,6 @@ import { buildTemplate, mergeSaved, rollupStatus } from './invoiceVerification.j
  * whatever the verifier has saved, so the queue and the bill cannot disagree.
  */
 
-// A bill nobody is waiting on any more.
-const CLOSED = ['PAID', 'CANCELLED', 'REJECTED'];
-
 const OUTSTANDING_SQL = `
   (
     COALESCE(i.total_amount, 0) - COALESCE(i.rebate, 0) + COALESCE(i.lps, 0)
@@ -24,12 +22,17 @@ const OUTSTANDING_SQL = `
   )
 `;
 
+// The queue is the developers' own bills that are with SJVN for a decision. It
+// used to take every Seller → SJVN bill not closed: SJVN's computed bills (the
+// twin of the developer's invoice for the same month) and DSM pool bills, whose
+// zero tariff made every one of them "fail" the tariff check, so four of the
+// seven rows — and the whole "Failed a check" count — were not developer bills.
 export function verificationQueue({ status = null, contractId = null, includeClosed = false } = {}) {
-  const where = ["i.direction = 'SELLER_TO_SJVN'"];
+  const where = [raisedBySellerSql('i')];
   const params = [];
   if (!includeClosed) {
-    where.push(`i.status NOT IN (${CLOSED.map(() => '?').join(',')})`);
-    params.push(...CLOSED);
+    where.push(`i.status IN (${OPEN_FOR_VERIFICATION.map(() => '?').join(',')})`);
+    params.push(...OPEN_FOR_VERIFICATION);
   }
   if (contractId) { where.push('i.contract_id = ?'); params.push(contractId); }
 
@@ -47,10 +50,9 @@ export function verificationQueue({ status = null, contractId = null, includeClo
   `).all(...params);
 
   const rows = invoices.map((invoice) => {
-    let saved = null;
-    try { saved = invoice.verification_json ? JSON.parse(invoice.verification_json) : null; } catch { /* ignore */ }
-    const checklist = mergeSaved(buildTemplate(invoice), saved);
-    const state = invoice.verification_status || rollupStatus(checklist.technical);
+    // Worked out from the figures as they stand, not read off the stored status.
+    const checklist = liveVerification(invoice);
+    const state = checklist.verification_status;
 
     const failed = checklist.technical.filter((t) => t.status === 'FAILED');
     const pending = checklist.technical.filter((t) => t.status === 'PENDING');
@@ -59,7 +61,7 @@ export function verificationQueue({ status = null, contractId = null, includeClo
     // was raised for. A gap here is the thing the commercial check exists to find.
     const commercialNet = Number(checklist.commercial?.net_invoice) || 0;
     const raised = Number(invoice.total_amount) || 0;
-    const commercialGap = Math.round(commercialNet - raised);
+    const commercialGap = checklist.commercial_gap;
 
     return {
       invoice_id: invoice.id,
@@ -76,12 +78,13 @@ export function verificationQueue({ status = null, contractId = null, includeClo
       energy_mwh: invoice.energy_mwh,
       validation_status: invoice.validation_status,
       verification_status: state,
-      verified_by: invoice.verified_by,
-      verified_at: invoice.verified_at,
+      verified_by: state === 'VERIFIED' ? invoice.verified_by : null,
+      verified_at: state === 'VERIFIED' ? invoice.verified_at : null,
+      started: checklist.started,
       days_since_raised: invoice.days_since_raised,
       technical: checklist.technical,
       commercial: checklist.commercial,
-      failed_checks: failed.map((t) => t.label),
+      failed_checks: [...failed.map((t) => t.label), ...(commercialGap ? ['Commercial build-up'] : [])],
       pending_checks: pending.map((t) => t.label),
       commercial_net: commercialNet,
       commercial_gap: commercialGap,
@@ -110,6 +113,16 @@ export function verificationQueue({ status = null, contractId = null, includeClo
     .map(([label, invoices_blocked]) => ({ label, invoices_blocked }))
     .sort((a, b) => b.invoices_blocked - a.invoices_blocked);
 
+  // Bills already approved, sent or paid with no completed verification —
+  // before the approval gate existed, or by any route around it.
+  const decidedUnverified = db.prepare(`
+    SELECT i.id AS invoice_id, i.invoice_no, i.total_amount, i.status, i.verification_status FROM invoices i
+    WHERE ${raisedBySellerSql('i')} AND i.status IN (${DECIDED.map(() => '?').join(',')})
+      AND COALESCE(i.verification_status, '') <> 'VERIFIED'
+      ${contractId ? 'AND i.contract_id = ?' : ''}
+    ORDER BY i.created_at
+  `).all(...DECIDED, ...(contractId ? [contractId] : []));
+
   return {
     totals: {
       invoices: rows.length,
@@ -120,8 +133,13 @@ export function verificationQueue({ status = null, contractId = null, includeClo
       value_awaiting: rows
         .filter((r) => r.verification_status !== 'VERIFIED')
         .reduce((a, r) => a + r.total_amount, 0),
-      oldest_days: rows.reduce((a, r) => Math.max(a, r.days_since_raised || 0), 0),
+      oldest_days: rows
+        .filter((r) => r.verification_status !== 'VERIFIED')
+        .reduce((a, r) => Math.max(a, r.days_since_raised || 0), 0),
+      approved_unverified: decidedUnverified.length,
+      approved_unverified_value: decidedUnverified.reduce((a, r) => a + (Number(r.total_amount) || 0), 0),
     },
+    approved_unverified: decidedUnverified,
     blockers,
     invoices: rows,
   };

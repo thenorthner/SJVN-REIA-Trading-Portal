@@ -9,7 +9,7 @@ import { Card, StatCard, fmtNumber } from './ui.jsx';
 
 const monthLabel = (ym) => new Date(`${ym}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
 
-export default function EnergyOverview({ contractId, rows = [], onShow }) {
+export default function EnergyOverview({ contractId, period, status, rows = [], onShow }) {
   // Read again whenever the list behind it changes — a record, a validation, a lock.
   const stamp = rows.map((r) => `${r.id}:${r.status}:${r.energy_mwh}`).join('|');
   const [a, setA] = useState(null);
@@ -25,12 +25,43 @@ export default function EnergyOverview({ contractId, rows = [], onShow }) {
   const series = a?.series || [];
   const t = a?.totals;
   const minCuf = series.find((s) => s.min_cuf_percent != null)?.min_cuf_percent ?? null;
+  // With a month or status chosen below, the cards describe the rows shown —
+  // they kept showing the 12-month total over an empty, filtered list.
+  const filtered = !!(period || status);
+  // One standing figure per contract and month — the locked one, else validated,
+  // final over provisional — and no PSA whose energy is already its PPA's.
+  const RANK = { LOCKED: 3, VALIDATED: 2, DISPUTED: 1, DRAFT: 0 };
+  const byKey = new Map();
+  for (const r of live) {
+    if (r.fed_by_ppa) continue;
+    const k = `${r.contract_id}|${r.period_month}`;
+    const cur = byKey.get(k);
+    const better = !cur || (RANK[r.status] ?? 0) > (RANK[cur.status] ?? 0)
+      || ((RANK[r.status] ?? 0) === (RANK[cur.status] ?? 0) && (r.data_type === 'FINAL') > (cur.data_type === 'FINAL'));
+    if (better) byKey.set(k, r);
+  }
+  const standing = [...byKey.values()];
+  const hours = (ym) => { const [y, m] = String(ym).split('-').map(Number); return new Date(Date.UTC(y, m, 0)).getUTCDate() * 24; };
+  const mwOf = (r) => (Number(r.commissioned_capacity_mw) > 0 ? Number(r.commissioned_capacity_mw) : Number(r.capacity_mw) || 0);
+  const shownMwh = Math.round(standing.reduce((s, r) => s + (Number(r.energy_mwh) || 0), 0) * 1000) / 1000;
+  const capHours = standing.reduce((s, r) => s + mwOf(r) * hours(r.period_month), 0);
+  const shownCuf = capHours > 0 ? Math.round((shownMwh / capHours) * 10000) / 100 : null;
+  const scope = [period, status].filter(Boolean).join(' · ');
 
   return (
     <>
       <div className="kpi-grid">
-        <StatCard label={t && t.months > 0 ? `Energy — last ${t.months} month${t.months === 1 ? '' : 's'}` : 'Energy'} value={t ? `${fmtNumber(t.energy_mwh)} MWh` : '—'} tone="blue" />
-        <StatCard label="Average CUF" value={t?.avg_cuf_percent != null ? `${fmtNumber(t.avg_cuf_percent)}%` : '—'} hint={contractId && minCuf != null ? `Contractual minimum ${fmtNumber(minCuf)}%` : contractId ? undefined : 'Across the contracts shown'} />
+        {filtered ? (
+          <>
+            <StatCard label={`Energy — ${scope}`} value={`${fmtNumber(shownMwh)} MWh`} tone="blue" hint={`${standing.length} contract-month(s): one standing figure each; PSAs fed by a PPA not added`} />
+            <StatCard label="Average CUF" value={shownCuf != null ? `${fmtNumber(shownCuf)}%` : '—'} hint="Energy ÷ (capacity × hours) for the figures counted" />
+          </>
+        ) : (
+          <>
+            <StatCard label={t && t.months > 0 ? `Energy — last ${t.months} month${t.months === 1 ? '' : 's'}` : 'Energy'} value={t ? `${fmtNumber(t.energy_mwh)} MWh` : '—'} tone="blue" hint="One standing figure per contract and month" />
+            <StatCard label="Average CUF" value={t?.avg_cuf_percent != null ? `${fmtNumber(t.avg_cuf_percent)}%` : '—'} hint={contractId && minCuf != null ? `Contractual minimum ${fmtNumber(minCuf)}%` : contractId ? undefined : 'Across the contracts shown'} />
+          </>
+        )}
         <StatCard label="Objections to answer" value={objected} tone={objected ? 'red' : 'green'} hint="A counterparty does not accept the figure" onClick={objected && onShow ? () => onShow('OBJECTED') : undefined} />
         <StatCard label="Awaiting the counterparty" value={awaiting} tone={awaiting ? 'amber' : 'default'} hint="Validated, not yet accepted or objected to" />
         <StatCard label="Still to validate" value={toValidate} tone={toValidate ? 'amber' : 'default'} hint="Recorded, not yet validated" />

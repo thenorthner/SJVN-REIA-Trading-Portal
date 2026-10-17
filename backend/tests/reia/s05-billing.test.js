@@ -3,6 +3,7 @@ import request from 'supertest';
 import { app } from '../../src/server.js';
 import db from '../../src/db/index.js';
 import { tokenFor, auth, makeContract, makeInvoice, columnsOf, hasTable, resetReia } from '../helpers/reia.js';
+import { settleExpiredBanking } from '../../src/services/energyBanking.js';
 
 let reia, finance, contract;
 const energy = (cid, period, mwh, id) => db.prepare(
@@ -15,6 +16,9 @@ beforeEach(() => {
   finance = tokenFor('FINANCE_USER');
   contract = makeContract({ status: 'ACTIVE', tariff_per_unit: 3.0, payment_terms_days: 30, rebate_pct: 2, rebate_days: 5, lps_annual_pct: 12 });
 });
+
+// Banking is of a locked month's generation, so the banking tests lock April's.
+const lockApril = () => energy(contract.id, '2026-04', 1000, `ENG-BNK-${Math.random().toString(36).slice(2, 8)}`);
 
 describe('S5 Billing engine', () => {
   it('bills energy x tariff', async () => {
@@ -90,13 +94,13 @@ describe('S5 Billing engine', () => {
 
   it('settles expired banked energy at 75% of tariff, not full tariff', async () => {
     // 100 MWh banked at 3/kWh, cycle already closed and nothing drawn back.
+    lockApril();
     await request(app).post('/api/energy-banking').set(auth(reia)).send({
       contract_id: contract.id, cycle: 'FY2026-27', period_month: '2026-04',
       banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
-    });
-    const r = await request(app).post('/api/energy-banking/settle').set(auth(reia)).send({ as_of: '2027-04-01' });
-    expect(r.status).toBe(200);
-    expect(r.body.settled).toBe(1);
+    }).then((r) => expect(r.status, JSON.stringify(r.body)).toBe(201));
+    // The cycle closes on 31 March; the sweep runs on 1 April.
+    expect(settleExpiredBanking('2027-04-01').settled).toBe(1);
 
     const row = db.prepare(`SELECT * FROM energy_banking WHERE contract_id = ?`).get(contract.id);
     expect(row.status).toBe('SETTLED');
@@ -107,29 +111,31 @@ describe('S5 Billing engine', () => {
   });
 
   it('settles only what was left unused at cycle end', async () => {
+    lockApril();
     await request(app).post('/api/energy-banking').set(auth(reia)).send({
-      contract_id: contract.id, cycle: 'FY2026-27', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
+      contract_id: contract.id, cycle: 'FY2026-27', period_month: '2026-04', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
     });
     await request(app).post('/api/energy-banking/draw').set(auth(reia))
       .send({ contract_id: contract.id, cycle: 'FY2026-27', draw_mwh: 60 });
-    await request(app).post('/api/energy-banking/settle').set(auth(reia)).send({ as_of: '2027-04-01' });
+    settleExpiredBanking('2027-04-01');
     const row = db.prepare(`SELECT * FROM energy_banking WHERE contract_id = ?`).get(contract.id);
     expect(row.settled_mwh).toBe(40);
     expect(row.settlement_amount).toBe(90000);   // 40,000 kWh x 2.25
   });
 
   it('leaves an open cycle alone until it closes', async () => {
+    lockApril();
     await request(app).post('/api/energy-banking').set(auth(reia)).send({
-      contract_id: contract.id, cycle: 'FY2026-27', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
+      contract_id: contract.id, cycle: 'FY2026-27', period_month: '2026-04', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
     });
-    const r = await request(app).post('/api/energy-banking/settle').set(auth(reia)).send({ as_of: '2026-12-31' });
-    expect(r.body.settled).toBe(0);
+    expect(settleExpiredBanking('2026-12-31').settled).toBe(0);
     expect(db.prepare(`SELECT status FROM energy_banking WHERE contract_id = ?`).get(contract.id).status).toBe('OPEN');
   });
 
   it('refuses to draw more than was banked', async () => {
+    lockApril();
     await request(app).post('/api/energy-banking').set(auth(reia)).send({
-      contract_id: contract.id, cycle: 'FY2026-27', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
+      contract_id: contract.id, cycle: 'FY2026-27', period_month: '2026-04', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
     });
     const r = await request(app).post('/api/energy-banking/draw').set(auth(reia))
       .send({ contract_id: contract.id, cycle: 'FY2026-27', draw_mwh: 150 });
@@ -138,12 +144,13 @@ describe('S5 Billing engine', () => {
   });
 
   it('pays nothing out on a cycle that was fully drawn back', async () => {
+    lockApril();
     await request(app).post('/api/energy-banking').set(auth(reia)).send({
-      contract_id: contract.id, cycle: 'FY2026-27', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
+      contract_id: contract.id, cycle: 'FY2026-27', period_month: '2026-04', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
     });
     await request(app).post('/api/energy-banking/draw').set(auth(reia))
       .send({ contract_id: contract.id, cycle: 'FY2026-27', draw_mwh: 100 });
-    await request(app).post('/api/energy-banking/settle').set(auth(reia)).send({ as_of: '2027-04-01' });
+    settleExpiredBanking('2027-04-01');
     const row = db.prepare(`SELECT * FROM energy_banking WHERE contract_id = ?`).get(contract.id);
     expect(row.status).toBe('EXPIRED');
     expect(row.settlement_amount).toBe(0);
@@ -153,10 +160,11 @@ describe('S5 Billing engine', () => {
     // Once a cycle is settled the undrawn energy has been paid out in cash. If the
     // position still counts it as available, the screen offers a draw that the
     // engine will always refuse.
+    lockApril();
     await request(app).post('/api/energy-banking').set(auth(reia)).send({
-      contract_id: contract.id, cycle: 'FY2026-27', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
+      contract_id: contract.id, cycle: 'FY2026-27', period_month: '2026-04', banked_mwh: 100, tariff_per_unit: 3, cycle_ends_on: '2027-03-31',
     });
-    await request(app).post('/api/energy-banking/settle').set(auth(reia)).send({ as_of: '2027-04-01' });
+    settleExpiredBanking('2027-04-01');
 
     const pos = await request(app).get(`/api/energy-banking/${contract.id}`).set(auth(reia));
     const cycle = pos.body.find((c) => c.cycle === 'FY2026-27');

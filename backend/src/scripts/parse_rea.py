@@ -93,12 +93,48 @@ MONTHS = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY',
           'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER']
 
 
+PERIOD_RE = re.compile(r'for\s+the\s+Month\s+of\s+([A-Za-z]+)\s*,?\s*(\d{4})', re.I)
+
+
+def _mentions(text):
+    """(YYYY-MM, month word as printed) for each "for the Month of X, YYYY"."""
+    return [('%s-%02d' % (y, MONTHS.index(m.upper()) + 1), m)
+            for m, y in PERIOD_RE.findall(text) if m.upper() in MONTHS]
+
+
+def account_periods(text):
+    """Every month the REA names ("REA for the Month of DECEMBER, 2025"), as YYYY-MM, most often named first."""
+    from collections import Counter
+    return [p for p, _ in Counter(p for p, _ in _mentions(text)).most_common()]
+
+
 def account_period(text):
-    """The month the REA itself says it is for ("REA for the Month of DECEMBER, 2025"), as YYYY-MM."""
-    m = re.search(r'for\s+the\s+Month\s+of\s+([A-Za-z]+)\s*,?\s*(\d{4})', text, re.I)
-    if not m or m.group(1).upper() not in MONTHS:
+    """The month the REA itself says it is for, as YYYY-MM (the most often named: its page headers)."""
+    periods = account_periods(text)
+    return periods[0] if periods else None
+
+
+def account_period_conflict(text):
+    """
+    Months the account's own titles name when none of them names its header month.
+
+    Every page carries an upper-case running header ("for the Month of AUGUST,
+    2026"); the cover letter and some table titles are typed in mixed case
+    ("for the month of August 2026"). The "September 2026" REA imported on
+    16 Oct 2026 was August's account with the headers relabelled: 478 said
+    SEPTEMBER, the four titles still said August, and none said September.
+
+    A genuine account can carry one stray month — NRPC's cover letters have
+    named the previous month (May 2026's says April) and Nov 2025 has one title
+    saying October — but its titles always name its own month as well. So the
+    test is not "one month only" but "the titles agree with the header at least
+    once". Returns the other months, or None when there is no conflict.
+    """
+    header = account_period(text)
+    titled = {p for p, word in _mentions(text) if not word.isupper()}
+    if not header or not titled or header in titled:
         return None
-    return '%s-%02d' % (m.group(2), MONTHS.index(m.group(1).upper()) + 1)
+    return sorted(titled)
 
 
 def parse_c1_entitlements(text):
@@ -382,6 +418,8 @@ def main():
                 'mode': 'rea',
                 'description': 'Regional Energy Account (Station-level)',
                 'period': account_period(text),
+                'periods_named': account_periods(text),
+                'period_conflict': account_period_conflict(text),
                 'data': data
             }, indent=2))
     

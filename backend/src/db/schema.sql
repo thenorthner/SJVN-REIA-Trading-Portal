@@ -3898,10 +3898,10 @@ CREATE TABLE IF NOT EXISTS reia_fi_postings (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- One live posting per month and category; a reversed one frees the month.
+-- One batch waiting per month and category; a posted month may take further batches (documents are never on two live postings).
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reia_fi_posting_period
   ON reia_fi_postings (period_month, category)
-  WHERE status <> 'REVERSED';
+  WHERE status = 'PREPARED';
 
 -- Which documents a posting booked, frozen at the amounts it booked them at.
 CREATE TABLE IF NOT EXISTS reia_fi_posting_lines (

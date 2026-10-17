@@ -46,9 +46,11 @@ describe('S9 Guards on the money paths', () => {
     // A bill held three weeks in draft reached the seller with its five-day
     // window already spent — the same basis error the dispute window had.
     const inv = makeInvoice({ contract_id: contract2.id, direction: 'SELLER_TO_SJVN', status: 'SENT', total_amount: 100000 });
-    db.prepare(`UPDATE invoices SET created_at = datetime('now','-21 days'), issued_at = date('now'), due_date = date('now','+30 days') WHERE id = ?`).run(inv.id);
+    // Issued two days ago, so the payment today is day 2 — a payment cannot be
+    // dated in the future.
+    db.prepare(`UPDATE invoices SET created_at = datetime('now','-23 days'), issued_at = date('now','-2 days'), due_date = date('now','+28 days') WHERE id = ?`).run(inv.id);
 
-    const payDate = new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10);  // day 2 after issue
+    const payDate = new Date().toISOString().slice(0, 10);
     const r = await request(app).post(`/api/invoices/${inv.id}/payments`).set(auth(reia2))
       .send({ amount: 100000, payment_date: payDate, mode: 'NEFT', reference: 'R' });
     expect(r.status).toBe(201);
@@ -87,7 +89,7 @@ describe('S9 Guards on the money paths', () => {
     // deviation_rate is ₹/MWh while every contract tariff is ₹/kWh. Entering
     // 2.00 for a ₹2/kWh rate billed ₹6 where ₹6,000 was meant.
     const r = await request(app).post('/api/deviation').set(auth(reia2)).send({
-      contract_id: contract2.id, period_month: '2026-10', week_no: 1, week_date: '2026-10-07',
+      contract_id: contract2.id, period_month: '2026-10', week_no: 28, week_date: '2026-10-05',
       entry_type: 'PRIMARY', scheduled_mwh: 50, actual_mwh: 53, deviation_rate: 2.0,
     });
     expect(r.status, 'a rate a thousand times too small was accepted').toBe(400);
@@ -97,7 +99,7 @@ describe('S9 Guards on the money paths', () => {
 
   it('accepts a real DSM rate', async () => {
     const r = await request(app).post('/api/deviation').set(auth(reia2)).send({
-      contract_id: contract2.id, period_month: '2026-11', week_no: 2, week_date: '2026-11-10',
+      contract_id: contract2.id, period_month: '2026-11', week_no: 32, week_date: '2026-11-02',
       entry_type: 'PRIMARY', scheduled_mwh: 50, actual_mwh: 53, deviation_rate: 2000,
     });
     expect(r.status).toBe(201);

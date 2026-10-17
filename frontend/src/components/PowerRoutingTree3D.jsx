@@ -241,6 +241,9 @@ function RoutingTreeCanvas({
 }) {
   const isPpa = contract?.contract_type === 'PPA';
   const count = allocations.length;
+  // Counterparties in force, each once: an ended row and the re-split that
+  // replaced it are one PPA (or PSA), not two.
+  const liveCounterparties = new Set(pos.live.map((a) => (isPpa ? a.psa_id : a.ppa_id))).size;
   // The margin actually earned: each live share's PSA tariff less its PPA tariff, weighted by MW.
   const weighted = pos.live.map((a) => [shareMwOf(a, isPpa, totalCapacity), spreadOf(a)]).filter(([, sp]) => sp != null);
   const weightMw = weighted.reduce((s, [mw]) => s + mw, 0);
@@ -509,7 +512,7 @@ function RoutingTreeCanvas({
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#94a3b8' }}>
                 <span>{isPpa ? 'Carve-Out Branches' : 'Source PPAs'}</span>
-                <strong style={{ color: '#10b981' }}>{count} {isPpa ? 'DISCOMs' : 'Generators'}</strong>
+                <strong style={{ color: '#10b981' }}>{liveCounterparties} {isPpa ? 'DISCOMs' : 'Generators'}</strong>
               </div>
             </div>
 

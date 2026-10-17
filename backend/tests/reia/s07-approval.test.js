@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../../src/server.js';
 import db from '../../src/db/index.js';
-import { tokenFor, auth, makeUser, makeContract, makeInvoice, columnsOf, hasTable, resetReia } from '../helpers/reia.js';
+import { tokenFor, auth, makeUser, makeContract, makeInvoice, columnsOf, hasTable, resetReia, markVerified } from '../helpers/reia.js';
 import { signToken } from '../../src/middleware/auth.js';
 import { invalidateParamCache } from '../../src/mastersService.js';
 
@@ -20,7 +20,7 @@ describe('S7 Invoice approval and distribution', () => {
   it('marks the invoice approved once every level signs off', async () => {
     const inv = makeInvoice({ contract_id: contract.id, status: 'UNDER_APPROVAL' });
     db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES ('AP-2', ?, 1, 'PENDING')`).run(inv.id);
-    const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(auth(reia)).send({ decision: 'APPROVED' });
+    const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(auth(reia)).send({ decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk' });
     expect(r.status).toBe(200);
     expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('APPROVED');
   });
@@ -63,7 +63,7 @@ describe('S7 Invoice approval and distribution', () => {
     });
     pending(inv.id);
     const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`)
-      .set(auth(signToken(maker))).send({ decision: 'APPROVED' });
+      .set(auth(signToken(maker))).send({ decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk' });
     expect(r.status, 'the invoice creator was allowed to approve their own invoice').toBe(403);
     expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('UNDER_APPROVAL');
   });
@@ -77,7 +77,7 @@ describe('S7 Invoice approval and distribution', () => {
     });
     pending(inv.id, 'AP-5');
     const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`)
-      .set(auth(signToken(checker))).send({ decision: 'APPROVED' });
+      .set(auth(signToken(checker))).send({ decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk' });
     expect(r.status, 'segregation of duties blocked a legitimate second approver').toBeLessThan(400);
   });
 
@@ -89,7 +89,7 @@ describe('S7 Invoice approval and distribution', () => {
     db.prepare('UPDATE invoices SET created_by_id = NULL WHERE id = ?').run(inv.id);
     pending(inv.id, 'AP-6');
     const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`)
-      .set(auth(signToken(maker))).send({ decision: 'APPROVED' });
+      .set(auth(signToken(maker))).send({ decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk' });
     expect(r.status, 'a legacy row let its maker approve it').toBe(403);
   });
 
@@ -118,11 +118,13 @@ describe('S7 A found validation problem blocks approval', () => {
   const submitted = (validation_status) => {
     const inv = makeInvoice({ contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'UNDER_APPROVAL', total_amount: 180000 });
     if (validation_status) db.prepare('UPDATE invoices SET validation_status = ? WHERE id = ?').run(validation_status, inv.id);
+    // Verified, so what is under test here is the validation result alone.
+    markVerified(inv.id);
     db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, 'PENDING')`).run(`APV-${inv.id}`, inv.id);
     return inv;
   };
   const act = (inv, decision = 'APPROVED') =>
-    request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(auth(reia)).send({ decision, comments: 'x' });
+    request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(auth(reia)).send({ decision, comments: 'x', security_ack: 'test fixture: cover is tracked on the security desk' });
 
   for (const status of ['PARTIAL', 'MISMATCH']) {
     it(`refuses to clear one flagged ${status}`, async () => {
@@ -169,8 +171,15 @@ describe('S7 A bill is approved out of the approval stage, level by level', () =
     }
     return inv;
   };
+  // Each level is signed by its own role: REIA, then Finance, then Management.
+  const byLevel = {};
+  const tokenForLevel = (level) => {
+    if (level === 1) return reia;
+    byLevel[level] ||= tokenFor(level === 2 ? 'FINANCE_USER' : 'MANAGEMENT');
+    return byLevel[level];
+  };
   const act = (inv, level, decision = 'APPROVED') =>
-    request(app).post(`/api/invoices/${inv.id}/approvals/${level}/act`).set(auth(reia)).send({ decision, comments: 'x' });
+    request(app).post(`/api/invoices/${inv.id}/approvals/${level}/act`).set(auth(tokenForLevel(level))).send({ decision, comments: 'x', security_ack: 'test fixture: cover is tracked on the security desk' });
   const statusOf = (inv) => db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status;
 
   for (const status of ['DRAFT', 'SUBMITTED', 'REJECTED', 'PENDING_L2']) {
@@ -252,33 +261,49 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
     return inv;
   };
   const act = (inv, level, who, decision = 'APPROVED') =>
-    request(app).post(`/api/invoices/${inv.id}/approvals/${level}/act`).set(auth(signToken(who))).send({ decision, comments: 'x' });
+    request(app).post(`/api/invoices/${inv.id}/approvals/${level}/act`).set(auth(signToken(who))).send({ decision, comments: 'x', security_ack: 'test fixture: cover is tracked on the security desk' });
 
-  it('is off unless switched on, so one approver can still clear a bill', async () => {
-    const solo = makeUser('REIA_USER', { name: 'Only Approver' });
+  it('is off unless switched on, so one person holding two levels\' role can sign both', async () => {
+    // SJVN Admin may sign level 1 and level 3; Finance signs level 2.
+    const admin = makeUser('SJVN_ADMIN', { name: 'Only Admin' });
+    const fin = makeUser('FINANCE_USER', { name: 'Only Finance' });
     const inv = threeLevels();
-    for (const level of [1, 2, 3]) expect((await act(inv, level, solo)).status).toBe(200);
+    expect((await act(inv, 1, admin)).status).toBe(200);
+    expect((await act(inv, 2, fin)).status).toBe(200);
+    expect((await act(inv, 3, admin)).status).toBe(200);
     expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('APPROVED');
   });
 
   it('stops one person signing two levels once it is on', async () => {
     set(1);
-    const a = makeUser('REIA_USER', { name: 'Approver A' });
+    const a = makeUser('SJVN_ADMIN', { name: 'Approver A' });
     const b = makeUser('FINANCE_USER', { name: 'Approver B' });
-    const c = makeUser('REIA_ADMIN', { name: 'Approver C' });
+    const c = makeUser('MANAGEMENT', { name: 'Approver C' });
     const inv = threeLevels();
 
     expect((await act(inv, 1, a)).status).toBe(200);
     const again = await act(inv, 2, a);
     expect(again.status, 'the same person signed a second level').toBe(403);
-    expect(again.body.error).toMatch(/You approved level 1/i);
     expect((await act(inv, 2, b)).status).toBe(200);
-    expect((await act(inv, 3, a)).status).toBe(403);
-    expect((await act(inv, 3, b)).status).toBe(403);
+    const third = await act(inv, 3, a);
+    expect(third.status).toBe(403);
+    expect(third.body.error).toMatch(/You approved level 1/i);
     expect((await act(inv, 3, c)).status).toBe(200);
     expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('APPROVED');
     expect(db.prepare('SELECT approver_id FROM invoice_approvals WHERE invoice_id = ? ORDER BY level').all(inv.id).map((r) => r.approver_id))
       .toEqual([a.id, b.id, c.id]);
+  });
+
+  it('keeps each level to its own role', async () => {
+    const ops = makeUser('REIA_USER', { name: 'Ops' });
+    const fin = makeUser('FINANCE_USER', { name: 'Fin' });
+    const inv = threeLevels();
+    expect((await act(inv, 1, fin)).status, 'Finance signed the REIA level').toBe(403);
+    expect((await act(inv, 1, ops)).status).toBe(200);
+    const r = await act(inv, 2, makeUser('REIA_ADMIN', { name: 'RA' }));
+    expect(r.status, 'REIA signed Finance concurrence').toBe(403);
+    expect(r.body.error).toMatch(/Level 2 is approved by Finance/);
+    expect((await act(inv, 2, ops, 'REJECTED')).status, 'any reviewer may send a bill back').toBe(200);
   });
 
   it('still lets someone who signed an earlier level send the bill back', async () => {

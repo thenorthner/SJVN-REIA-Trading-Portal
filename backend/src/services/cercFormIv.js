@@ -56,9 +56,18 @@ export function resolvePeriod(periodType, period) {
   return { period: p, from: `${p}-01`, to: iso(new Date(Date.UTC(y, mo, 0))) };
 }
 
-/** Filing deadline = period end + the configured grace days. */
-export function dueDateFor(periodTo) {
+/**
+ * Filing deadline. A monthly return is due by the 15th of the following month,
+ * as the filed format states (decided 17-Oct-2026; it was period end + 30 days,
+ * which showed every month fifteen days less late than it was). The annual
+ * return keeps period end + the configured days (30 April).
+ */
+export const MONTHLY_DUE_DAY = 15;
+export function dueDateFor(periodTo, periodType = 'MONTHLY') {
   const d = new Date(`${periodTo}T00:00:00Z`);
+  if (periodType === 'MONTHLY') {
+    return iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, MONTHLY_DUE_DAY)));
+  }
   d.setUTCDate(d.getUTCDate() + getParamNumber('cerc_form_iv_due_days', 30));
   return iso(d);
 }

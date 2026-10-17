@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import DisputeExtrasPanel, { SlaTag } from '../../components/DisputeExtrasPanel.jsx';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, fmtCurrency } from '../../components/ui.jsx';
 import { fmtDate, fmtDateTime } from '../../datetime.js';
 import {
   REASON_CODES, CHARGE_LINES, DISPUTE_STATUSES, OPEN_STATUSES,
@@ -54,7 +54,7 @@ export default function Disputes() {
       if (filters.status) params.status = filters.status;
       await api.reports.disputeSummaryPdf(params);
     } catch (err) {
-      alert(err.message || 'Failed to download dispute PDF');
+      setActionError(err.message || 'The dispute report could not be downloaded.');
     } finally {
       setPdfLoading(false);
     }
@@ -356,7 +356,6 @@ export default function Disputes() {
       </Card>
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Raise Dispute" width={620}>
-        {error && <div className="form-error">{error}</div>}
         <form onSubmit={handleCreate}>
           <Field label="Invoice">
             <select required value={form.invoice_id} onChange={(e) => setForm({ ...form, invoice_id: e.target.value })}>
@@ -430,15 +429,24 @@ export default function Disputes() {
             <DisputeExtrasPanel key={`${detail.id}-${detail.updated_at}`} disputeId={detail.id} onChanged={refreshDetail} />
 
             {detail.resolution_notes && (
-              <div className="inline-note"><strong>Resolution ({detail.resolution_outcome}):</strong> {detail.resolution_notes}
-                {detail.credit_amount > 0 && <> — Credit {fmtCurrency(detail.credit_amount)} (before {fmtCurrency(detail.before_total)} → after {fmtCurrency(detail.after_total)})</>}
+              <div className="inline-note"><strong>Resolution ({String(detail.resolution_outcome || '').replace(/_/g, ' ').toLowerCase()}):</strong> {detail.resolution_notes}
+                {detail.credit_amount > 0 && (detail.invoice?.direction === 'SELLER_TO_SJVN'
+                  ? <> — SJVN pays the seller {fmtCurrency(detail.credit_amount)} more ({fmtCurrency(detail.before_total)} → {fmtCurrency(detail.after_total)})</>
+                  : <> — {fmtCurrency(detail.credit_amount)} off what the buyer owes ({fmtCurrency(detail.before_total)} → {fmtCurrency(detail.after_total)})</>)}
+              </div>
+            )}
+            {detail.resolution_note && (
+              <div className="inline-note">
+                {detail.resolution_note.note_type === 'DEBIT' ? 'Debit' : 'Credit'} note {detail.resolution_note.status === 'DRAFT' ? '(draft)' : detail.resolution_note.note_no} for {fmtCurrency(detail.resolution_note.amount)} —{' '}
+                {detail.resolution_note.status === 'DRAFT'
+                  ? 'awaiting approval by someone other than the resolver (Notes desk). The bill as issued is unchanged.'
+                  : `${detail.resolution_note.status.toLowerCase()}${detail.resolution_note.approved_by ? ` by ${detail.resolution_note.approved_by}` : ''}.`}
               </div>
             )}
             {detail.supplementary_invoice && (
               <div className="inline-note">Supplementary: {detail.supplementary_invoice.invoice_no} ({fmtCurrency(detail.supplementary_invoice.total_amount)})</div>
             )}
 
-            {actionError && <div className="form-error" role="alert">{actionError}</div>}
 
             {CAN_WRITE.includes(user?.role) && OPEN_STATUSES.includes(detail.status) && (
               <div className="form-actions" style={{ flexWrap: 'wrap' }}>
@@ -446,16 +454,14 @@ export default function Disputes() {
                   <button type="button" className="btn btn-secondary" onClick={() => handleTransition('UNDER_REVIEW')}>Start Review</button>
                 )}
                 {['ACKNOWLEDGED', 'UNDER_REVIEW', 'ESCALATED'].includes(detail.status) && (
-                  <button type="button" className="btn btn-ghost" onClick={() => {
-                    const note = infoNote || 'Please provide additional clarification / evidence.';
-                    handleTransition('INFO_REQUESTED', note);
-                  }}>Request Info</button>
+                  // What is wanted, in the officer's own words — a blank request used
+                  // to go out as a stock line in their name.
+                  <button type="button" className="btn btn-ghost" disabled={infoNote.trim().length < 10} title={infoNote.trim().length < 10 ? 'Write what information is needed first' : undefined} onClick={() => handleTransition('INFO_REQUESTED', infoNote.trim())}>Request Info</button>
                 )}
                 {detail.status === 'INFO_REQUESTED' && (
                   <button type="button" className="btn btn-secondary" onClick={() => handleTransition('UNDER_REVIEW')}>Resume Review</button>
                 )}
-                {['RESOLVED_ACCEPTED', 'RESOLVED_REJECTED'].includes(detail.status) === false && null}
-                <input type="text" placeholder="Info request note..." value={infoNote} onChange={(e) => setInfoNote(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+                <input type="text" placeholder="What information is needed (needed to request it)" value={infoNote} onChange={(e) => setInfoNote(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
                 {detail.assigned_to !== user?.id && <button type="button" className="btn btn-ghost" onClick={() => handleAssign(user.id)}>Assign to me</button>}
               </div>
             )}
@@ -472,7 +478,7 @@ export default function Disputes() {
                     </select>
                   </Field>
                   {resolveForm.outcome === 'PARTIAL_CREDIT' && (
-                    <Field label={`Accepted / credit amount (₹) — up to ${fmtCurrency(detail.disputed_amount)}`}>
+                    <Field label={`Amount accepted (₹) — up to ${fmtCurrency(detail.disputed_amount)}`}>
                       <input required type="number" min="0.01" step="any" max={detail.disputed_amount} value={resolveForm.accepted_amount} onChange={(e) => setResolveForm({ ...resolveForm, accepted_amount: e.target.value })} />
                     </Field>
                   )}
@@ -488,6 +494,11 @@ export default function Disputes() {
                       </div>
                     )}
                   </Field>
+                  {resolveForm.outcome !== 'REJECTED' && (
+                    <p className="inline-note">
+                      An accepted amount becomes a {detail.invoice?.direction === 'SELLER_TO_SJVN' ? 'debit note (SJVN pays the seller more)' : 'credit note against the bill'}, raised as a draft for someone else to approve. The bill as issued is not changed.
+                    </p>
+                  )}
                   <div className="form-actions">
                     <button type="submit" className="btn btn-primary" disabled={!!busy}>{busy === 'resolve' ? 'Recording…' : 'Confirm Resolution'}</button>
                   </div>
@@ -495,11 +506,24 @@ export default function Disputes() {
               </>
             )}
 
-            {CAN_WRITE.includes(user?.role) && ['RESOLVED_ACCEPTED', 'RESOLVED_REJECTED'].includes(detail.status) && detail.resolution_response !== 'CONTESTED' && (
-              <div className="form-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => handleTransition('CLOSED')}>Close Dispute</button>
-              </div>
-            )}
+            {CAN_WRITE.includes(user?.role) && ['RESOLVED_ACCEPTED', 'RESOLVED_REJECTED'].includes(detail.status) && detail.resolution_response !== 'CONTESTED' && (() => {
+              // The party answers a resolution first; the desk closes it after
+              // that, or once the answer window has run out.
+              const windowDays = detail.response_window_days ?? 15;
+              const waited = detail.resolved_at ? Math.floor((Date.now() - new Date(`${String(detail.resolved_at).replace(' ', 'T')}Z`).getTime()) / 86400000) : 0;
+              const noteWaiting = detail.resolution_note?.status === 'DRAFT';
+              const canClose = !noteWaiting && (detail.resolution_response || waited >= windowDays);
+              return canClose ? (
+                <div className="form-actions">
+                  <button type="button" className="btn btn-secondary" onClick={() => handleTransition('CLOSED')}>Close Dispute</button>
+                </div>
+              ) : (
+                <p className="inline-note">
+                  {noteWaiting ? 'Closes once its note is approved. ' : ''}
+                  {!detail.resolution_response ? `The ${String(detail.raised_by_role || '').toLowerCase()} has ${Math.max(0, windowDays - waited)} more day(s) to accept or contest this resolution; it can be closed after that.` : ''}
+                </p>
+              );
+            })()}
 
             {/* This dispute's own evidence, not the platform document store: the
                 generic manager listed every document on the platform here, and
@@ -512,7 +536,6 @@ export default function Disputes() {
                   <input type="file" onChange={handleEvidence} disabled={evidenceBusy} hidden />
                 </label>
               </div>
-              {evidenceError && <div className="form-error" style={{ margin: '10px 16px 0' }}>{evidenceError}</div>}
               <div className="table-wrap">
                 <table className="data-table" style={{ margin: 0 }}>
                   <thead>
@@ -585,6 +608,13 @@ export default function Disputes() {
           </div>
         )}
       </Modal>
+      {/* Refusals as a popup (house rule). */}
+      <AlertPopup
+        open={!!(error || actionError || evidenceError)}
+        title={error ? 'Dispute not raised' : evidenceError ? 'Evidence not filed' : 'Not done'}
+        message={error || actionError || evidenceError}
+        onClose={() => { setError(''); setActionError(''); setEvidenceError(''); }}
+      />
     </div>
   );
 }

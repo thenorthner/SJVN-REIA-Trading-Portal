@@ -57,8 +57,10 @@ export function summariseItems(items = []) {
     not_connected: notConnected,
     checkable,
     auto_match_pct: checkable ? Number(((matched / checkable) * 100).toFixed(2)) : 0,
+    // Rupees only. Energy (MWh) and availability (%) variances were added in,
+    // so 2,000 MWh unbilled read as ₹2,000 of exposure.
     unreconciled_amount: items
-      .filter((i) => OPEN_ITEM_STATUSES.includes(i.match_status))
+      .filter((i) => OPEN_ITEM_STATUSES.includes(i.match_status) && (i.unit || 'INR') === 'INR')
       .reduce((s, i) => s + Math.abs(i.variance || 0), 0),
   };
 }

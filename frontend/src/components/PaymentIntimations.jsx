@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import api from '../api/client.js';
-import { Badge, Field, fmtCurrency } from './ui.jsx';
+import { Badge, Field, fmtCurrency, AlertPopup } from './ui.jsx';
 import { PreviewModal } from './DocumentManager.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
 
@@ -68,7 +68,7 @@ export function IntimationForm({ bill, modes, sections, maker, onDone, onCancel 
         {fmtCurrency(bill.left)} is left on this bill{onWay > 0 ? `, of which ${fmtCurrency(onWay)} is already awaiting confirmation` : ''}.
         The bill is marked paid only after SJVN Finance matches this to its bank statement{maker ? ' — and, before that, your checker passes it on' : ''}.
       </p>
-      {error && <div className="form-error">{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       <div className="form-grid">
         <Field label="Amount credited to SJVN (₹)" required><input required type="number" min="0.01" step="0.01" value={f.amount} onChange={(e) => set({ amount: e.target.value })} /></Field>
         <Field label="Payment date" required><input required type="date" max={today} value={f.payment_date} onChange={(e) => set({ payment_date: e.target.value })} /></Field>
@@ -166,7 +166,7 @@ export function IntimationRow({ i, side, tier, myId, canConfirm, onChanged, onPr
           </div>
         </div>
       </div>
-      {error && <div className="form-error" style={{ marginTop: 8 }}>{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       {mode === 'return_to_maker' && (
         <form className="cw-form" onSubmit={(e) => { e.preventDefault(); run(() => api.buyerBills.returnToMaker(i.id, note)); }}>
           <Field label="Remarks for Maker (what needs correction)" required>

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../api/client.js';
-import { Badge, Field, Modal, fmtCurrency } from './ui.jsx';
+import { Badge, Field, Modal, AlertPopup, fmtCurrency } from './ui.jsx';
 import { PreviewModal } from './DocumentManager.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
 
@@ -117,7 +117,7 @@ export function ReconSignModal({ recon, signoff, mode, signatory, onClose, onSig
   return (
     <Modal open onClose={() => !busy && onClose()} title={partial ? 'Agree with exceptions' : 'Agree and sign off'} width={640}>
       <form onSubmit={submit}>
-        {error && <div className="alert alert-error" role="alert">{error}</div>}
+        <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
         <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8, padding: 12, marginBottom: 14, color: '#065f46', fontSize: 13 }}>
           <div><strong>Statement:</strong> {recon.recon_no} · {recon.period} ({recon.data_basis})</div>
           <div><strong>Contract:</strong> {recon.contract_no}</div>
@@ -261,7 +261,7 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
 
   return (
     <div style={{ marginTop: 16 }}>
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <div className="section-title" style={{ margin: 0 }}>Balance roll-forward</div>

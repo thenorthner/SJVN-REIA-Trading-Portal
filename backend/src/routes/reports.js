@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { paymentMonitoring } from '../services/paymentMonitoring.js';
-import { generationPerformance } from '../services/generationPerformance.js';
-import { contractCompliance } from '../services/contractCompliance.js';
+import { generationPerformance, rangeProblem } from '../services/generationPerformance.js';
+import { contractCompliance, noticeProblem } from '../services/contractCompliance.js';
 import { verificationQueue } from '../services/verificationQueue.js';
-import { cercCompliance } from '../services/cercCompliance.js';
+import { cercCompliance, calendarRangeProblem } from '../services/cercCompliance.js';
 import { buildAnnexures, annexuresWorkbook } from '../services/cercAnnexures.js';
 import { licenceCompliance, saveLicenceYear } from '../services/cercLicence.js';
 import { pooledForecastAccuracy } from '../services/marketForecast.js';
@@ -182,7 +182,11 @@ router.get('/verification-queue', requireRole(...REPORT_READ), (req, res) => {
  * The filing calendar: every period that owes CERC a return, including the ones
  * nobody has started — which a register of prepared filings cannot show.
  */
-router.get('/cerc-compliance', requireRole(...REPORT_READ), (req, res) => {
+// The trading desk prepares and files Form-IV, so it reads the calendar too;
+// it was refused here while the annexures and licence beside it let it in.
+router.get('/cerc-compliance', requireRole(...TRADING_REPORT_READ), (req, res) => {
+  const bad = calendarRangeProblem(req.query.from || null, req.query.to || null);
+  if (bad) return res.status(400).json({ error: bad });
   try {
     res.json(cercCompliance({ from: req.query.from || null, to: req.query.to || null }));
   } catch (err) {
@@ -252,11 +256,14 @@ router.put('/cerc-compliance/licence/:fy', requireRole(...LICENCE_WRITE), (req, 
  * counterparty's statutory approvals.
  */
 router.get('/contract-compliance', requireRole(...REPORT_READ), (req, res) => {
-  const notice = Number(req.query.expiry_notice_days);
+  // An unusable window used to be replaced by 90 without a word, so a desk that
+  // typed 0 or -5 read a 90-day count as theirs.
+  const bad = noticeProblem(req.query.expiry_notice_days);
+  if (bad) return res.status(400).json({ error: bad });
   try {
     res.json(contractCompliance({
       status: req.query.status || null,
-      expiryNoticeDays: Number.isFinite(notice) && notice > 0 ? notice : 90,
+      expiryNoticeDays: req.query.expiry_notice_days ? Number(req.query.expiry_notice_days) : 90,
     }));
   } catch (err) {
     console.error('Contract compliance error:', err);
@@ -271,6 +278,10 @@ router.get('/contract-compliance', requireRole(...REPORT_READ), (req, res) => {
  * required, the shortfall, and the availability the meter data reported.
  */
 router.get('/generation-performance', requireRole(...REPORT_READ), (req, res) => {
+  // A malformed or reversed range used to come back as an empty page, which
+  // reads as "nothing was generated".
+  const bad = rangeProblem(req.query.from || null, req.query.to || null);
+  if (bad) return res.status(400).json({ error: bad });
   try {
     res.json(generationPerformance({
       from: req.query.from || null,
@@ -424,13 +435,23 @@ export function buildEnergySummary({ from, to, contract_id } = {}) {
     else if (ed.status === 'DISPUTED') disputed += 1;
   }
 
+  // A PSA fed by a PPA carries the same energy the PPA does; adding both counted
+  // it twice. Its rows still list, but the totals take the generation side.
+  const fedPsa = new Set(db.prepare(`
+    SELECT DISTINCT a.psa_id FROM contract_allocations a JOIN contracts c ON c.id = a.psa_id WHERE c.contract_type = 'PSA'
+  `).all().map((x) => x.psa_id));
   let provisional_mwh = 0, final_mwh = 0, provisional_count = 0, final_count = 0;
+  // The true-up is only meaningful where a month has both figures.
+  let delta_mwh = 0, paired = 0;
   let awaiting_final = 0;
   const cufs = [];
   const avails = [];
   for (const r of rows) {
+    r.counted_in_totals = !fedPsa.has(r.contract_id);
+    if (!r.counted_in_totals) continue;
     if (r.provisional_mwh != null) { provisional_mwh += r.provisional_mwh; provisional_count += 1; }
     if (r.final_mwh != null) { final_mwh += r.final_mwh; final_count += 1; }
+    if (r.delta_mwh != null) { delta_mwh += r.delta_mwh; paired += 1; }
     if (r.provisional_mwh != null && r.final_mwh == null) awaiting_final += 1;
     if (r.cuf_percent != null) cufs.push(r.cuf_percent);
     if (r.availability_percent != null) avails.push(r.availability_percent);
@@ -446,7 +467,9 @@ export function buildEnergySummary({ from, to, contract_id } = {}) {
     totals: {
       provisional_mwh: Math.round(provisional_mwh * 100) / 100,
       final_mwh: Math.round(final_mwh * 100) / 100,
-      delta_mwh: Math.round((final_mwh - provisional_mwh) * 100) / 100,
+      delta_mwh: paired ? Math.round(delta_mwh * 100) / 100 : null,
+      delta_pairs: paired,
+      psa_rows_excluded: rows.filter((r) => !r.counted_in_totals).length,
       provisional_count,
       final_count,
       locked,

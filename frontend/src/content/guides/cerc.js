@@ -17,7 +17,7 @@ const cercGuide = {
   facts: [
     { label: 'Return', value: 'Form-IV', hint: 'Filed transaction-wise, not as a period total' },
     { label: 'Periods owed', value: 'Monthly + annual', hint: 'A period is owed once it has ended' },
-    { label: 'Deadline', value: 'Period end + 30 days', hint: 'Configurable in masters' },
+    { label: 'Deadline', value: 'Monthly: 15th of the next month · Annual: 30 April', hint: 'As the filed format states' },
     { label: 'Margin cap', value: '4p / 7p per kWh', hint: 'CERC Trading Margin Regulations, 2010' },
   ],
 

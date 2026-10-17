@@ -1,5 +1,8 @@
 import db from './db/index.js';
-import { newId } from './util.js';
+import { newId, billableCapacityMw } from './util.js';
+import { sourcesForPsa } from './services/allocations.js';
+import { cufYearPosition } from './services/cufPenalty.js';
+import { supersededByDeveloperSql } from './services/outstanding.js';
 import { payableNow } from './disputesConstants.js';
 import { OPEN_STATUSES as OPEN_DISPUTE_STATUSES } from './disputesConstants.js';
 import {
@@ -64,20 +67,47 @@ function checkPatternFlag(contractId, tradingClientId, itemType) {
   return rows.length >= PATTERN_EXCEPTION_THRESHOLD;
 }
 
-function getEnergyForPeriod(contractId, period) {
-  return db.prepare(`
-    SELECT * FROM energy_data
-    WHERE contract_id = ? AND period_month = ?
-    ORDER BY (data_type = 'FINAL') DESC, (status = 'LOCKED') DESC, created_at DESC
-    LIMIT 1
-  `).get(contractId, period);
+// The month's standing figure: the locked one, final before provisional. A
+// FINAL draft used to win over the locked provisional figure the bill was raised on.
+const pickEnergy = (contractId, period) => db.prepare(`
+  SELECT * FROM energy_data
+  WHERE contract_id = ? AND period_month = ? AND status <> 'DRAFT'
+  ORDER BY (status = 'LOCKED') DESC, (data_type = 'FINAL') DESC, created_at DESC
+  LIMIT 1
+`).get(contractId, period);
+
+function getEnergyForPeriod(contract, period) {
+  const own = pickEnergy(contract.id, period);
+  if (own || contract.contract_type !== 'PSA') return own;
+  // A PSA's energy is recorded on the PPAs that feed it: its share of each.
+  // Read off the PSA's own (empty) rows, every PSA statement opened with an
+  // energy exception.
+  const sources = sourcesForPsa(contract.id, period);
+  if (!sources.length) return null;
+  let mwh = 0;
+  const parts = [];
+  for (const src of sources) {
+    const e = pickEnergy(src.ppa_id, period);
+    if (!e) return { energy_mwh: null, source: 'source PPAs', data_type: 'PROVISIONAL', status: 'MISSING', missing: src.ppa_contract_no };
+    mwh += (Number(e.energy_mwh) || 0) * (Number(src.allocation_percent) || 0) / 100;
+    parts.push(`${src.ppa_contract_no} ${src.allocation_percent}%`);
+  }
+  return { energy_mwh: Math.round(mwh * 1000) / 1000, source: parts.join(' + '), data_type: 'PROVISIONAL', status: 'LOCKED', availability_percent: null, cuf_percent: null, derived: true };
 }
 
+// A bill is "billed" once presented — not a draft, one in approval or one
+// rejected — and SJVN's computed bill of a month stops counting once the
+// developer's own invoice for it is approved. Both were added, so Sunrise's
+// October reconciled 16,368 MWh billed against 8,184 metered. DSM bills settle
+// with the pool, not with this counterparty.
 function getInvoicesForPeriod(contractId, period) {
   return db.prepare(`
-    SELECT * FROM invoices
-    WHERE contract_id = ? AND billing_period = ? AND status != 'CANCELLED'
-    ORDER BY created_at DESC
+    SELECT * FROM invoices i
+    WHERE i.contract_id = ? AND i.billing_period = ?
+      AND i.status IN ('APPROVED','SENT','PARTIALLY_PAID','DISPUTED','PAID')
+      AND i.invoice_no NOT LIKE 'DSM-%'
+      AND ${supersededByDeveloperSql('i')}
+    ORDER BY i.created_at DESC
   `).all(contractId, period);
 }
 
@@ -136,11 +166,25 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId);
   if (!contract) throw new Error('Contract not found');
 
-  const energy = getEnergyForPeriod(contractId, period);
+  const energy = getEnergyForPeriod(contract, period);
   const invoices = getInvoicesForPeriod(contractId, period);
+  // Nothing to reconcile is not a match. A month with no energy and no bill —
+  // including one not yet over — came out 100 % matched and was sent to the
+  // counterparty to sign.
+  // A PSA whose source PPA has no energy comes back as a "missing" marker,
+  // which is no energy either: the three Adani-fed PSAs got a statement for a
+  // September with nothing in it (17-Oct-2026).
+  if ((!energy || energy.energy_mwh == null) && !invoices.length) {
+    throw Object.assign(new Error(`Nothing to reconcile for ${contract.contract_no} in ${period}: no energy is recorded and no bill has been presented.`), { status: 400 });
+  }
   const primaryInv = invoices[0] || null;
   const invoiceIds = invoices.map((i) => i.id);
-  const billedMwh = invoices.reduce((s, i) => s + (i.energy_mwh || 0), 0);
+  // Banked energy is billed on its own bills (BNK-…) when drawn or when it
+  // lapses, in a later month; the month's bill leaves it out. So the energy
+  // line compares the month's bill with the energy less what was banked from
+  // it, and leaves those bills out of the quantity.
+  const billedMwh = invoices.filter((i) => !String(i.invoice_no || '').startsWith('BNK-'))
+    .reduce((s, i) => s + (i.energy_mwh || 0), 0);
   const billedTotal = invoices.reduce((s, i) => s + (i.total_amount || 0), 0);
   const billedTaxes = invoices.reduce((s, i) => s + (i.taxes || 0), 0);
   const billedPenalty = invoices.reduce((s, i) => s + (i.penalty || 0), 0);
@@ -152,7 +196,11 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
   const items = [];
 
   // 1. Energy three-way (metered vs billed qty)
-  const metered = energy?.energy_mwh ?? null;
+  const bankedFrom = (ppaId) => Number(db.prepare('SELECT COALESCE(SUM(banked_mwh), 0) s FROM energy_banking WHERE contract_id = ? AND period_month = ?').get(ppaId, period).s) || 0;
+  const banked = contract.contract_type === 'PSA'
+    ? sourcesForPsa(contract.id, period).reduce((t, src) => t + bankedFrom(src.ppa_id) * (Number(src.allocation_percent) || 0) / 100, 0)
+    : bankedFrom(contract.id);
+  const metered = energy?.energy_mwh == null ? null : Math.round((energy.energy_mwh - banked) * 1000) / 1000;
   const energyCls = classifyQty(metered ?? 0, billedMwh);
   items.push(makeItem({
     item_type: 'ENERGY_THREE_WAY',
@@ -163,12 +211,18 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
     unit: 'MWh',
     ...energyCls,
     invoice_id: primaryInv?.id,
-    notes: energy ? `Source ${energy.source}, ${energy.data_type}/${energy.status}` : 'No energy data',
+    notes: energy?.missing ? `No energy recorded on ${energy.missing}` : energy ? `Source ${energy.source}, ${energy.data_type}/${energy.status}${banked ? `; ${Math.round(banked * 1000) / 1000} MWh banked, billed when drawn or settled` : ''}` : 'No energy data',
     pattern_flag: checkPatternFlag(contractId, null, 'ENERGY_THREE_WAY') && energyCls.match_status === 'EXCEPTION',
   }));
 
-  // 2. Financial three-way (billed vs paid)
-  const finCls = classifyAmount(billedTotal, paidTotal);
+  // 2. Financial three-way (billed vs paid). What was due is the bill less the
+  // early-payment rebate allowed on it, plus surcharge charged: a bill settled
+  // in full with a rebate showed the rebate as an unexplained gap for ever
+  // (17-Oct-2026 golden run: Sunrise September).
+  const rebateTotal = invoices.reduce((s, i) => s + (Number(i.rebate) || 0), 0);
+  const lpsBilled = invoices.reduce((s, i) => s + (Number(i.lps) || 0), 0);
+  const dueTotal = Math.round((billedTotal - rebateTotal + lpsBilled) * 100) / 100;
+  const finCls = classifyAmount(dueTotal, paidTotal);
   items.push(makeItem({
     item_type: 'FINANCIAL_THREE_WAY',
     label: 'Financial: Billed vs Paid (₹)',
@@ -178,7 +232,7 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
     unit: 'INR',
     ...finCls,
     invoice_id: primaryInv?.id,
-    notes: `Payable now (ex-disputed): ₹${payableAgg.toLocaleString('en-IN')}; disputed ₹${disputedTotal.toLocaleString('en-IN')}`,
+    notes: `Due ₹${dueTotal.toLocaleString('en-IN')}${rebateTotal ? ` (after ₹${Math.round(rebateTotal).toLocaleString('en-IN')} rebate)` : ''}${lpsBilled ? ` incl. ₹${Math.round(lpsBilled).toLocaleString('en-IN')} surcharge` : ''}; payable now (ex-disputed): ₹${payableAgg.toLocaleString('en-IN')}; disputed ₹${disputedTotal.toLocaleString('en-IN')}`,
     pattern_flag: checkPatternFlag(contractId, null, 'FINANCIAL_THREE_WAY') && finCls.match_status === 'EXCEPTION',
   }));
 
@@ -209,25 +263,40 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
       notes: 'Filed figure supplied with the run',
     }));
 
-  // 4. Performance
-  const availability = energy?.availability_percent ?? 100;
-  const perfVariance = availability - AVAILABILITY_THRESHOLD;
-  const perfOk = availability >= AVAILABILITY_THRESHOLD;
-  items.push(makeItem({
-    item_type: 'PERFORMANCE',
-    label: `Performance: Availability vs ${AVAILABILITY_THRESHOLD}%`,
-    metered_value: availability,
-    billed_value: AVAILABILITY_THRESHOLD,
-    unit: 'PCT',
-    variance: perfVariance,
-    variance_pct: null,
-    match_status: perfOk ? 'EXACT' : 'EXCEPTION',
-    notes: `CUF ${energy?.cuf_percent != null ? Number(energy.cuf_percent).toFixed(1) : 'n/a'}%`,
-  }));
+  // 4. Performance. With no availability on record there is nothing to judge;
+  // it used to be taken as 100 % and reported as met.
+  const availability = energy?.availability_percent;
+  if (availability == null) {
+    items.push(makeItem({
+      item_type: 'PERFORMANCE', label: `Performance: Availability vs ${AVAILABILITY_THRESHOLD}%`, metered_value: null, billed_value: AVAILABILITY_THRESHOLD,
+      unit: 'PCT', variance: 0, variance_pct: null, match_status: NOT_CONNECTED, notes: 'No availability recorded for the month — nothing to check',
+    }));
+  } else {
+    const perfOk = availability >= AVAILABILITY_THRESHOLD;
+    items.push(makeItem({
+      item_type: 'PERFORMANCE',
+      label: `Performance: Availability vs ${AVAILABILITY_THRESHOLD}%`,
+      metered_value: availability,
+      billed_value: AVAILABILITY_THRESHOLD,
+      unit: 'PCT',
+      variance: availability - AVAILABILITY_THRESHOLD,
+      variance_pct: null,
+      match_status: perfOk ? 'EXACT' : 'EXCEPTION',
+      notes: `CUF ${energy?.cuf_percent != null ? Number(energy.cuf_percent).toFixed(1) : 'n/a'}%`,
+    }));
+  }
 
-  // 5. Penalty
-  const expectedPenalty = perfOk ? 0 : Math.round(billedTotal * 0.01);
-  const penCls = classifyAmount(expectedPenalty, billedPenalty);
+  // 5. Penalty, worked out the way billing works it out. CUF is assessed over
+  // the contract year and settled by the year-end true-up note, so no monthly
+  // bill should carry a CUF deduction: expected is nil, and the year-to-date
+  // position is given as the note. (It used to expect the month's own shortfall
+  // — and before that 1 % of the bill whenever availability fell below 90 %.)
+  const expectedPenalty = 0;
+  let penaltyNote = 'No shortfall penalty on this contract';
+  if (energy && energy.energy_mwh != null && contract.contract_type === 'PPA') {
+    const cuf = cufYearPosition(contract, period, { capacityMw: billableCapacityMw(contract), tariffPerUnit: contract.tariff_per_unit });
+    penaltyNote = cuf.applicable ? cuf.label : 'No CUF obligation for this technology';
+  }
   items.push(makeItem({
     item_type: 'PENALTY',
     label: 'Penalty: Expected vs Billed',
@@ -236,7 +305,7 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
     unit: 'INR',
     variance: billedPenalty - expectedPenalty,
     ...classifyVariance(billedPenalty - expectedPenalty, expectedPenalty || billedPenalty || 1),
-    notes: expectedPenalty ? 'Shortfall penalty expected' : 'No shortfall expected',
+    notes: penaltyNote,
   }));
 
   // 6. Internal SAP. Same shape as the tax line: with no finance-system

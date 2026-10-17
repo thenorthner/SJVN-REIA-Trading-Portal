@@ -11,10 +11,16 @@ vi.mock('../../api/client.js', () => {
     reports: {
       generationPerformance: (params) => { state.calls.push(params); return Promise.resolve(state.answer); },
     },
+    notes: {
+      cufTrueUp: (contractId, year) => { state.raised = [contractId, year]; return Promise.resolve({ penalty: 35596800, anchor_invoice: { invoice_no: 'INV-PPA/2025/000012' } }); },
+    },
   };
   return { api, default: api };
 });
 
+vi.mock('../../context/AuthContext.jsx', () => ({ useAuth: () => ({ user: { role: 'REIA_USER' } }) }));
+
+const { MemoryRouter } = await import('react-router-dom');
 const GenerationPerformance = (await import('./GenerationPerformance.jsx')).default;
 
 const ANSWER = {
@@ -41,7 +47,7 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
-const render = async () => { await act(async () => { root.render(<GenerationPerformance />); }); };
+const render = async () => { await act(async () => { root.render(<MemoryRouter><GenerationPerformance /></MemoryRouter>); }); };
 const rows = (selector) => [...host.querySelectorAll(selector)].map((tr) => tr.textContent);
 
 describe('generation performance', () => {
@@ -58,7 +64,7 @@ describe('generation performance', () => {
 
   it('marks a month that missed its CUF and one that met it', async () => {
     await render();
-    const monthRows = [...host.querySelectorAll('.report-table')][1].querySelectorAll('tbody tr');
+    const monthRows = [...host.querySelectorAll('.report-table')].at(-1).querySelectorAll('tbody tr');
     expect(monthRows[0].querySelector('.badge-red, .badge-danger, .badge')).toBeTruthy();
     // fmtNumber does not pad decimals, so 20 stays 20%.
     expect(monthRows[0].textContent).toMatch(/20%/);
@@ -72,7 +78,7 @@ describe('generation performance', () => {
     await render();
     const row = [...host.querySelectorAll('.report-table tbody tr')].find((tr) => tr.textContent.includes('PPA/SOLAR/002') && tr.className.includes('clickable'));
     await act(async () => { row.click(); });
-    const monthRows = [...host.querySelectorAll('.report-table')][1].querySelectorAll('tbody tr');
+    const monthRows = [...host.querySelectorAll('.report-table')].at(-1).querySelectorAll('tbody tr');
     expect(monthRows).toHaveLength(1);
     expect(monthRows[0].textContent).toMatch(/PPA\/SOLAR\/002/);
     expect(host.textContent).toMatch(/Showing one project's months below/);
@@ -106,5 +112,23 @@ describe('generation performance', () => {
     };
     await render();
     expect(host.textContent).toMatch(/capacity not on record/);
+  });
+
+  it('lists contract years and raises a due true-up from its row', async () => {
+    state.answer = {
+      ...ANSWER,
+      totals: { ...ANSWER.totals, true_up_due: 1, true_up_due_amount: 35596800 },
+      contract_years: [
+        { contract_id: 'CON-1', contract_no: 'PPA/SOLAR/001', contract_type: 'PPA', project_type: 'Solar', contract_year: 1, year_start: '2025-01', year_end: '2025-12', months_counted: 12, months_missing: [], energy_mwh: 84000, possible_mwh: 438000, cuf_percent: 19.18, min_cuf_percent: 22, state: 'DUE', shortfall_mwh: 12360, penalty: 35596800, note: null, anchor_invoice: { id: 'INV-12', invoice_no: 'INV-PPA/2025/000012' } },
+        { contract_id: 'CON-1', contract_no: 'PPA/SOLAR/001', contract_type: 'PPA', project_type: 'Solar', contract_year: 2, year_start: '2026-01', year_end: '2026-12', months_counted: 9, months_missing: [], energy_mwh: 60000, possible_mwh: 328800, cuf_percent: 18.25, min_cuf_percent: 22, state: 'IN_PROGRESS', shortfall_mwh: 0, penalty: 0, note: null, anchor_invoice: null },
+      ],
+    };
+    await render();
+    expect(host.textContent).toMatch(/CUF true-up due/);
+    expect(host.textContent).toMatch(/Year in progress/);
+    const button = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Raise true-up note');
+    await act(async () => { button.click(); });
+    expect(state.raised).toEqual(['CON-1', 1]);
+    expect(document.body.textContent).toMatch(/raised as a draft on INV-PPA\/2025\/000012/);
   });
 });

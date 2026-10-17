@@ -5,6 +5,7 @@ import { buildBillingFamilyRef, directionForContract } from '../util.js';
 import { contractVisibleTo, raisedBySeller } from '../services/counterpartyScope.js';
 import { resolveBetaRow, computeBetaFromAnnualAfc, billedIncentiveTotal } from '../services/betaFactor.js';
 import { resolveAnnualAfc } from '../services/cercHydroBilling.js';
+import { sourcesForPsa } from '../services/allocations.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -19,39 +20,76 @@ function paidOnInvoices(invoiceIds) {
   return row?.paid || 0;
 }
 
-// Energy lives on the PPA; a PSA's bill resolves to it through the allocation
-// in force for the period — the same row billing reads — and failing that
-// through any allocation the PSA has ever held.
+// Energy lives on the PPA; a PSA's bill resolves to it through the sources in
+// force for the period — the same rows billing reads, one per PPA, since a
+// PSA can draw from several at once — and failing that through the latest
+// allocation the PSA has ever held.
 function energySourceFor(contract, period) {
-  if (contract.contract_type !== 'PSA') return { ids: [contract.id], unallocated: false };
-  const start = `${period}-01`;
-  const alloc = db.prepare(`
-    SELECT ppa_id FROM contract_allocations
-    WHERE psa_id = ? AND COALESCE(effective_from, '0000-01-01') <= ? AND COALESCE(effective_to, '9999-12-31') >= ?
-    ORDER BY COALESCE(effective_from, '0000-01-01') DESC LIMIT 1
-  `).get(contract.id, start, start)
-    || db.prepare('SELECT ppa_id FROM contract_allocations WHERE psa_id = ? ORDER BY COALESCE(effective_from, \'0000-01-01\') DESC LIMIT 1').get(contract.id);
-  return alloc?.ppa_id ? { ids: [alloc.ppa_id, contract.id], unallocated: false } : { ids: [contract.id], unallocated: true };
+  if (contract.contract_type !== 'PSA') return { ids: [contract.id], sources: [], unallocated: false };
+  let sources = sourcesForPsa(contract.id, period);
+  if (!sources.length) {
+    const latest = db.prepare(`
+      SELECT a.*, p.contract_no AS ppa_contract_no, p.capacity_mw AS ppa_capacity_mw
+      FROM contract_allocations a JOIN contracts p ON p.id = a.ppa_id
+      WHERE a.psa_id = ? ORDER BY COALESCE(a.effective_from, '0000-01-01') DESC LIMIT 1
+    `).get(contract.id);
+    sources = latest ? [latest] : [];
+  }
+  if (!sources.length) return { ids: [contract.id], sources: [], unallocated: true };
+  return { ids: [sources[0].ppa_id, contract.id], sources, unallocated: false };
+}
+
+const ENERGY_ORDER = `ORDER BY (status = 'LOCKED') DESC, (status = 'VALIDATED') DESC, created_at DESC LIMIT 1`;
+const STATUS_RANK = ['DISPUTED', 'DRAFT', 'VALIDATED', 'LOCKED'];
+
+// One energy figure for a PSA drawn from several PPAs: the sum of each
+// source's row for the month. Stated only when every source has one — a sum
+// missing a source would read as the month's whole supply. The status is the
+// least advanced of the sources', since the month is only as settled as that.
+function sumSourceEnergy(rows, sources) {
+  if (rows.some((r) => !r)) return null;
+  const round = (n) => Math.round(n * 1e6) / 1e6;
+  const status = rows.map((r) => r.status)
+    .sort((a, b) => STATUS_RANK.indexOf(a) - STATUS_RANK.indexOf(b))[0];
+  return {
+    id: null,
+    multi_source: true,
+    data_type: rows[0].data_type,
+    period_month: rows[0].period_month,
+    status,
+    source: [...new Set(rows.map((r) => r.source).filter(Boolean))].join(' + '),
+    energy_mwh: round(rows.reduce((t, r) => t + (Number(r.energy_mwh) || 0), 0)),
+    allocated_mwh: round(rows.reduce((t, r, i) => t + ((Number(r.energy_mwh) || 0) * sources[i].allocation_percent) / 100, 0)),
+    energy_data_ids: rows.map((r) => r.id),
+  };
 }
 
 function buildTrail({ bfr, contract, period, direction, focus = null }) {
   const source = energySourceFor(contract, period);
+  const multiSource = source.sources.length > 1;
   const contractIds = source.ids;
-  const energyPlaceholders = contractIds.map(() => '?').join(',');
 
-  const provisionalEnergy = db.prepare(`
+  // Two energy rows can stand for one month. The one in force is the one that
+  // was locked — the oldest row was shown, which could be the figure validation
+  // threw out.
+  const energyRow = (ids, type) => db.prepare(`
     SELECT * FROM energy_data
-    WHERE contract_id IN (${energyPlaceholders}) AND period_month = ? AND data_type = 'PROVISIONAL'
-    -- Two sources can stand for one month. The one in force is the one that was
-    -- locked — the oldest row was shown, which could be the figure validation threw out.
-    ORDER BY (status = 'LOCKED') DESC, (status = 'VALIDATED') DESC, created_at DESC LIMIT 1
-  `).get(...contractIds, period);
+    WHERE contract_id IN (${ids.map(() => '?').join(',')}) AND period_month = ? AND data_type = ?
+    ${ENERGY_ORDER}
+  `).get(...ids, period, type);
 
-  const finalEnergy = db.prepare(`
-    SELECT * FROM energy_data
-    WHERE contract_id IN (${energyPlaceholders}) AND period_month = ? AND data_type = 'FINAL'
-    ORDER BY (status = 'LOCKED') DESC, (status = 'VALIDATED') DESC, created_at DESC LIMIT 1
-  `).get(...contractIds, period);
+  // Each source PPA's own rows, which a multi-source PSA's figures are the sum of.
+  const sourceEnergy = source.sources.map((s) => ({
+    provisional: energyRow([s.ppa_id], 'PROVISIONAL') || null,
+    final: energyRow([s.ppa_id], 'FINAL') || null,
+  }));
+
+  const provisionalEnergy = multiSource
+    ? sumSourceEnergy(sourceEnergy.map((e) => e.provisional), source.sources)
+    : energyRow(contractIds, 'PROVISIONAL');
+  const finalEnergy = multiSource
+    ? sumSourceEnergy(sourceEnergy.map((e) => e.final), source.sources)
+    : energyRow(contractIds, 'FINAL');
 
   const provisionalInvoices = db.prepare(`
     SELECT * FROM invoices
@@ -124,17 +162,45 @@ function buildTrail({ bfr, contract, period, direction, focus = null }) {
   let psaContract = contract.contract_type === 'PSA' ? contract : null;
   let allocationPercent = 100;
 
+  const invoicesOf = (contractId) => db.prepare(`
+    SELECT id, invoice_no, invoice_type, total_amount, energy_mwh, status, due_date, validation_status
+    FROM invoices WHERE contract_id = ? AND billing_period = ? AND status != 'CANCELLED'
+    ORDER BY created_at ASC
+  `).all(contractId, period);
+  const sellerName = (c) => (c?.seller_id
+    ? db.prepare('SELECT name FROM entities WHERE id = ?').get(c.seller_id)?.name
+    : null) || 'Power Producer (IPP)';
+
+  // A PSA's sources for the period, every one of them — the same rows its bill
+  // was worked on. The first (largest share) stands as "the" PPA for views that
+  // show one.
+  let sources = [];
   if (contract.contract_type === 'PSA') {
-    const alloc = db.prepare(`
-      SELECT ca.*, p.contract_no, p.capacity_mw, p.tariff_per_unit, p.seller_id, p.project_type
-      FROM contract_allocations ca
-      JOIN contracts p ON p.id = ca.ppa_id
-      WHERE ca.psa_id = ?
-      ORDER BY COALESCE(ca.effective_from, '0000-01-01') DESC LIMIT 1
-    `).get(contract.id);
-    if (alloc) {
-      allocationPercent = alloc.allocation_percent;
-      ppaContract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(alloc.ppa_id);
+    sources = source.sources.map((s, i) => {
+      const ppa = db.prepare('SELECT * FROM contracts WHERE id = ?').get(s.ppa_id);
+      const { provisional, final } = sourceEnergy[i];
+      const energyMwh = Number(final?.energy_mwh ?? provisional?.energy_mwh ?? 0);
+      return {
+        ppa_id: s.ppa_id,
+        contract_no: ppa?.contract_no || s.ppa_contract_no,
+        project_type: ppa?.project_type,
+        capacity_mw: ppa?.capacity_mw,
+        tariff_per_unit: ppa?.tariff_per_unit,
+        seller_name: sellerName(ppa),
+        allocation_percent: s.allocation_percent,
+        effective_from: s.effective_from || null,
+        effective_to: s.effective_to || null,
+        provisional_mwh: provisional ? provisional.energy_mwh : null,
+        final_mwh: final ? final.energy_mwh : null,
+        energy_mwh: energyMwh,
+        allocated_mwh: Math.round(((energyMwh * s.allocation_percent) / 100) * 1e6) / 1e6,
+        invoices: invoicesOf(s.ppa_id),
+        _contract: ppa,
+      };
+    });
+    if (sources.length) {
+      ppaContract = sources[0]._contract;
+      allocationPercent = multiSource ? null : sources[0].allocation_percent;
     }
   } else if (contract.contract_type === 'PPA') {
     const alloc = db.prepare(`
@@ -150,41 +216,39 @@ function buildTrail({ bfr, contract, period, direction, focus = null }) {
     }
   }
 
-  const sellerEntity = ppaContract?.seller_id
-    ? db.prepare('SELECT id, name, entity_type FROM entities WHERE id = ?').get(ppaContract.seller_id)
-    : null;
   const buyerEntity = psaContract?.buyer_id
     ? db.prepare('SELECT id, name, entity_type FROM entities WHERE id = ?').get(psaContract.buyer_id)
     : null;
 
-  const ppaInvoices = ppaContract ? db.prepare(`
-    SELECT id, invoice_no, invoice_type, total_amount, energy_mwh, status, due_date, validation_status
-    FROM invoices WHERE contract_id = ? AND billing_period = ? AND status != 'CANCELLED'
-    ORDER BY created_at ASC
-  `).all(ppaContract.id, period) : [];
-
-  const psaInvoices = psaContract ? db.prepare(`
-    SELECT id, invoice_no, invoice_type, total_amount, energy_mwh, status, due_date, validation_status
-    FROM invoices WHERE contract_id = ? AND billing_period = ? AND status != 'CANCELLED'
-    ORDER BY created_at ASC
-  `).all(psaContract.id, period) : [];
+  const ppaInvoices = ppaContract ? invoicesOf(ppaContract.id) : [];
+  const psaInvoices = psaContract ? invoicesOf(psaContract.id) : [];
 
   const effectiveMwh = Number(finalEnergy?.energy_mwh || provisionalEnergy?.energy_mwh || 0);
-  const tradingMarginPerUnit = (psaContract && ppaContract)
-    ? Math.max(0, Math.round(((Number(psaContract.tariff_per_unit) || 0) - (Number(ppaContract.tariff_per_unit) || 0)) * 1000) / 1000)
-    : 0.07;
-  const totalSpread = Math.round(effectiveMwh * 1000 * tradingMarginPerUnit);
+  const marginOn = (ppaTariff) => Math.max(0, Math.round(((Number(psaContract?.tariff_per_unit) || 0) - (Number(ppaTariff) || 0)) * 1000) / 1000);
+  let tradingMarginPerUnit = (psaContract && ppaContract) ? marginOn(ppaContract.tariff_per_unit) : 0.07;
+  let totalSpread = Math.round(effectiveMwh * 1000 * tradingMarginPerUnit);
+  let allocatedMwh = null;
+  if (multiSource) {
+    // Each source is bought at its own tariff, so the spread is worked per
+    // source on the share this PSA takes, and the margin shown is their
+    // energy-weighted average.
+    allocatedMwh = Math.round(sources.reduce((t, s) => t + s.allocated_mwh, 0) * 1e6) / 1e6;
+    totalSpread = Math.round(sources.reduce((t, s) => t + s.allocated_mwh * 1000 * marginOn(s.tariff_per_unit), 0));
+    tradingMarginPerUnit = allocatedMwh > 0 ? Math.round((totalSpread / (allocatedMwh * 1000)) * 1000) / 1000 : 0;
+  }
 
   const linkedTopology = {
     has_link: !!(ppaContract && psaContract),
     allocation_percent: allocationPercent,
+    source_count: sources.length,
+    sources: sources.map(({ _contract, ...s }) => s),
     ppa: ppaContract ? {
       id: ppaContract.id,
       contract_no: ppaContract.contract_no,
       project_type: ppaContract.project_type,
       capacity_mw: ppaContract.capacity_mw,
       tariff_per_unit: ppaContract.tariff_per_unit,
-      seller_name: sellerEntity?.name || 'Power Producer (IPP)',
+      seller_name: sellerName(ppaContract),
       invoices: ppaInvoices,
     } : null,
     hub: {
@@ -192,6 +256,7 @@ function buildTrail({ bfr, contract, period, direction, focus = null }) {
       allocation_percent: allocationPercent,
       trading_margin_per_unit: tradingMarginPerUnit,
       energy_mwh: effectiveMwh,
+      allocated_mwh: allocatedMwh,
       spread_amount: totalSpread,
       validation_status: ppaInvoices[0]?.validation_status || 'MATCHED',
     },

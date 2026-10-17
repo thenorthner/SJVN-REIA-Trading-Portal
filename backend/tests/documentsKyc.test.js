@@ -6,11 +6,13 @@ import db from '../src/db/index.js';
 import { signToken } from '../src/middleware/auth.js';
 import { auth, makeUser, makeEntity, makeContract, auditFor } from './helpers/reia.js';
 
-// Documents & KYC: a company reads and uploads only its own, the REIA desk
-// reviews what has actually been submitted and never its own upload, and every
-// step leaves a line in the audit trail.
+// Documents & KYC: a company reads only its own; its KYC papers are submitted
+// physically and scanned in by an SJVN intake officer on its behalf (the policy
+// of commit d8883d4 — these tests predated it and failed since); another desk
+// officer reviews them, never the one who uploaded; and every step leaves a
+// line in the audit trail.
 
-let admin, reia, finance, seller, sellerL1, otherSeller, loose, alpha, beta;
+let admin, reia, finance, intake, seller, sellerL1, otherSeller, loose, alpha, beta;
 const as = (u) => auth(signToken(u));
 
 const pdf = (text) => new Promise((resolve) => {
@@ -38,6 +40,7 @@ beforeEach(() => {
   beta = makeEntity('SELLER', { name: 'Beta Wind', pan_no: 'PQRSX9876K' });
   admin = makeUser('SJVN_ADMIN', { name: 'Asha Admin' });
   reia = makeUser('REIA_USER', { name: 'Riya REIA' });
+  intake = makeUser('REIA_ADMIN', { name: 'Ishan Intake' });
   finance = makeUser('FINANCE_USER', { name: 'Farhan Finance' });
   seller = makeUser('SELLER', { name: 'Arun Alpha', linked_entity_id: alpha.id });
   sellerL1 = makeUser('SELLER_L1', { name: 'Anu Alpha', linked_entity_id: alpha.id });
@@ -47,7 +50,7 @@ beforeEach(() => {
 
 describe('who may read a document', () => {
   it('keeps a company to its own, and a login with no company to nothing', async () => {
-    const mine = await upload(seller, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
+    const mine = await upload(intake, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
     expect(mine.status, JSON.stringify(mine.body)).toBe(200);
     // A contract document with no company on it — the case that used to leak.
     const contract = makeContract({ seller_id: beta.id });
@@ -69,10 +72,17 @@ describe('who may read a document', () => {
   });
 
   it('will not let a company add a version to another company’s document', async () => {
-    const mine = await upload(seller, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
+    const mine = await upload(intake, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
     const sneak = await upload(otherSeller, { document_id: mine.body.document_id }, await pdf('a different file altogether'));
     expect(sneak.status).toBe(403);
     expect((await upload(otherSeller, kyc(alpha), await pdf('x'.repeat(40)))).status).toBe(403);
+  });
+
+  it('takes a company\'s KYC papers at the SJVN office, not from its own login', async () => {
+    const own = await upload(seller, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
+    expect(own.status).toBe(403);
+    expect(own.body.error).toMatch(/submitted physically/);
+    expect((await upload(intake, kyc(alpha), await pdf('Company PAN ABCDE1234F'))).status).toBe(200);
   });
 });
 
@@ -80,7 +90,7 @@ describe('review', () => {
   const act = (u, id, what, body) => request(app).post(`/api/documents/${id}/${what}`).set(as(u)).send(body);
 
   it('is the REIA desk’s, on a submitted latest version, and leaves an audit trail', async () => {
-    const up = await upload(seller, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
+    const up = await upload(intake, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
     const id = up.body.version_id;
     expect((await act(finance, id, 'verify')).status).toBe(403);
     expect((await act(seller, id, 'verify')).status).toBe(403);
@@ -92,23 +102,21 @@ describe('review', () => {
     expect(auditFor(id).map((a) => a.action)).toEqual(expect.arrayContaining(['DOCUMENT_UPLOADED', 'DOCUMENT_VERIFIED']));
   });
 
-  it('refuses a draft, a superseded version and an expired document', async () => {
-    const draft = await upload(sellerL1, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
-    expect((await act(reia, draft.body.version_id, 'verify')).status).toBe(400);
-
-    const v1 = await upload(seller, kyc(alpha, { document_type: 'GST_CERT', title: 'GST' }), await pdf('GSTIN 02ABCDE1234F1Z5 first copy'));
-    const v2 = await upload(seller, { document_id: v1.body.document_id }, await pdf('GSTIN 02ABCDE1234F1Z5 second copy'));
+  // A desk intake is submitted as it is scanned, so there is no company draft to refuse here.
+  it('refuses a superseded version and an expired document', async () => {
+    const v1 = await upload(intake, kyc(alpha, { document_type: 'GST_CERT', title: 'GST' }), await pdf('GSTIN 02ABCDE1234F1Z5 first copy'));
+    const v2 = await upload(intake, { document_id: v1.body.document_id }, await pdf('GSTIN 02ABCDE1234F1Z5 second copy'));
     expect(v2.status, JSON.stringify(v2.body)).toBe(200);
     expect((await act(reia, v1.body.version_id, 'verify')).status).toBe(400);
 
-    const old = await upload(seller, kyc(alpha, { document_type: 'LICENCE', title: 'Licence', expiry_date: '2020-01-01' }), await pdf('Generation licence valid till 2020'));
+    const old = await upload(intake, kyc(alpha, { document_type: 'LICENCE', title: 'Licence', expiry_date: '2020-01-01' }), await pdf('Generation licence valid till 2020'));
     const r = await act(reia, old.body.version_id, 'verify');
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/expired/);
   });
 
   it('sends a document back with a reason the company can read', async () => {
-    const up = await upload(seller, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
+    const up = await upload(intake, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
     expect((await act(reia, up.body.version_id, 'reject', {})).status).toBe(400);
     expect((await act(reia, up.body.version_id, 'reject', { reason_code: 'NOPE' })).status).toBe(400);
     const r = await act(reia, up.body.version_id, 'reject', { reason_code: 'NOT_LEGIBLE', reason: 'Image is blurry, upload a clear scan' });
@@ -122,31 +130,31 @@ describe('review', () => {
 
   it('will not take back the very file that was rejected', async () => {
     const file = await pdf('Company PAN ABCDE1234F');
-    const up = await upload(seller, kyc(alpha), file);
+    const up = await upload(intake, kyc(alpha), file);
     await act(reia, up.body.version_id, 'reject', { reason_code: 'WRONG_DOCUMENT' });
-    const again = await upload(seller, { document_id: up.body.document_id }, file);
+    const again = await upload(intake, { document_id: up.body.document_id }, file);
     expect(again.status).toBe(400);
     expect(again.body.error).toMatch(/same file that was rejected/);
-    expect((await upload(seller, { document_id: up.body.document_id }, await pdf('A corrected copy, PAN ABCDE1234F'))).status).toBe(200);
+    expect((await upload(intake, { document_id: up.body.document_id }, await pdf('A corrected copy, PAN ABCDE1234F'))).status).toBe(200);
   });
 });
 
 describe('what the file says', () => {
   it('reads the PAN and GSTIN and compares them with the company record', async () => {
-    const good = await upload(seller, kyc(alpha), await pdf('Permanent Account Number ABCDE1234F  GSTIN 02ABCDE1234F1Z5'));
+    const good = await upload(intake, kyc(alpha), await pdf('Permanent Account Number ABCDE1234F  GSTIN 02ABCDE1234F1Z5'));
     expect(good.body.extracted).toMatchObject({ readable: true, gstin: ['02ABCDE1234F1Z5'] });
     expect(good.body.extracted.checks.every((c) => c.ok)).toBe(true);
 
-    const bad = await upload(seller, kyc(alpha, { document_type: 'PAN_2', title: 'Other PAN' }), await pdf('Permanent Account Number ZZZZZ0000Z'));
+    const bad = await upload(intake, kyc(alpha, { document_type: 'PAN_2', title: 'Other PAN' }), await pdf('Permanent Account Number ZZZZZ0000Z'));
     expect(bad.body.extracted.checks).toEqual([expect.objectContaining({ ok: false })]);
     expect((await list(reia, `?entity_id=${alpha.id}`)).find((d) => d.title === 'Other PAN').extracted.pan).toEqual(['ZZZZZ0000Z']);
   });
 
   it('says so when a file has no text to read, and flags the same file under two companies', async () => {
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFUlEQVR42mNk+M9Qz0AEYBxVSF+FAP5FDvcfRYWgAAAAAElFTkSuQmCC', 'base64');
-    const a = await upload(seller, kyc(alpha), png, 'pan.png');
+    const a = await upload(intake, kyc(alpha), png, 'pan.png');
     expect(a.body.extracted).toMatchObject({ readable: false, pan: [] });
-    const b = await upload(otherSeller, kyc(beta), png, 'pan.png');
+    const b = await upload(intake, kyc(beta), png, 'pan.png');
     expect(b.body.extracted.checks[0]).toMatchObject({ ok: false });
     expect(b.body.extracted.checks[0].text).toMatch(/Alpha Solar/);
   });
@@ -155,7 +163,7 @@ describe('what the file says', () => {
 describe('expiry, history, queue and report', () => {
   it('marks a dated document as expiring or expired', async () => {
     const soon = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
-    const up = await upload(seller, kyc(alpha, { expiry_date: soon }), await pdf('Company PAN ABCDE1234F'));
+    const up = await upload(intake, kyc(alpha, { expiry_date: soon }), await pdf('Company PAN ABCDE1234F'));
     await request(app).post(`/api/documents/${up.body.version_id}/verify`).set(as(reia));
     expect((await list(seller))[0]).toMatchObject({ expiry_state: 'EXPIRING', days_to_expiry: 10, effective_status: 'VERIFIED' });
     db.prepare(`UPDATE document_versions SET expiry_date = '2020-01-01'`).run();
@@ -163,9 +171,9 @@ describe('expiry, history, queue and report', () => {
   });
 
   it('keeps every version, and shows the desk what is waiting', async () => {
-    const v1 = await upload(seller, kyc(alpha), await pdf('Company PAN ABCDE1234F copy one'));
+    const v1 = await upload(intake, kyc(alpha), await pdf('Company PAN ABCDE1234F copy one'));
     await request(app).post(`/api/documents/${v1.body.version_id}/reject`).set(as(reia)).send({ reason_code: 'NOT_SIGNED' });
-    await upload(seller, { document_id: v1.body.document_id }, await pdf('Company PAN ABCDE1234F copy two'));
+    await upload(intake, { document_id: v1.body.document_id }, await pdf('Company PAN ABCDE1234F copy two'));
 
     const h = await request(app).get(`/api/documents/history/${v1.body.document_id}`).set(as(seller));
     expect(h.body.versions.map((v) => [v.version_number, v.verification_status])).toEqual([[2, 'PENDING'], [1, 'REJECTED']]);
@@ -181,7 +189,7 @@ describe('expiry, history, queue and report', () => {
   });
 
   it('hands over a company’s documents as one zip, to those who may read them', async () => {
-    await upload(seller, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
+    await upload(intake, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
     const zip = await request(app).get(`/api/documents/zip?entity_id=${alpha.id}`).set(as(seller)).buffer().parse((res, cb) => {
       const chunks = []; res.on('data', (c) => chunks.push(c)); res.on('end', () => cb(null, Buffer.concat(chunks)));
     });
@@ -204,7 +212,7 @@ describe('asking for a document', () => {
     expect(mine.body).toEqual([expect.objectContaining({ document_type: 'PAN_CARD', status: 'OPEN', overdue: true })]);
     expect((await request(app).get('/api/documents/requests').set(as(otherSeller))).body).toEqual([]);
 
-    await upload(seller, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
+    await upload(intake, kyc(alpha), await pdf('Company PAN ABCDE1234F'));
     expect((await request(app).get('/api/documents/requests').set(as(seller))).body[0].status).toBe('FULFILLED');
   });
 });

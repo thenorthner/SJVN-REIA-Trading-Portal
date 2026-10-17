@@ -16,7 +16,9 @@ export const INVOCATION_OVERDUE_DAYS = 30;
 // PSA Art. 6.5.2: Letter of Credit = 110% of estimated average monthly billing.
 export const DEFAULT_MONTHS_COVER = 1.1;
 export const ALERT_CASCADE_DAYS = [60, 30, 15, 7, 0];
-export const ACTIVE_STATUSES = ['ACTIVE', 'PARTIALLY_UTILIZED', 'RENEWED'];
+// RELEASE_PENDING is still security: a release asked for is not a release
+// given. It stopped counting — and could not be drawn — the moment anyone asked.
+export const ACTIVE_STATUSES = ['ACTIVE', 'PARTIALLY_UTILIZED', 'RENEWED', 'RELEASE_PENDING'];
 
 // The order security is drawn in on a default. An instrument dedicated to one
 // counterparty is exhausted before anything pooled: a corpus or payment-security

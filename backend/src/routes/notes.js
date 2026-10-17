@@ -22,6 +22,9 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, nextSeriesNo, computeDueDate } from '../util.js';
 import { payableNow } from '../disputesConstants.js';
+import { notifyCounterparty } from '../paymentSecurityEngine.js';
+import { onResolutionNoteDecided, setInvoiceOpenDispute } from './disputes.js';
+import { trueUpPosition, raiseTrueUp } from '../services/cufTrueUp.js';
 import {
   newDoc, header, sectionTitle, table, notes as footNotes, pageNumbers, M, CONTENT_W, INK, MUTED,
 } from '../scripts/reportPdfKit.js';
@@ -217,6 +220,27 @@ router.post('/', requireRole(...WRITE), (req, res) => {
   res.status(201).json(present(getNote(id)));
 });
 
+// ── Year-end CUF true-up ─────────────────────────────────────────────────────
+// CUF is assessed over the contract year; a finished year's shortfall is raised
+// here as a DRAFT credit note and approved like any other note.
+router.get('/cuf-true-up', requireRole(...READ), (req, res) => {
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.query.contract_id);
+  if (!contract) return res.status(404).json({ error: 'Contract not found' });
+  try {
+    res.json(trueUpPosition(contract, Number(req.query.contract_year)));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+router.post('/cuf-true-up', requireRole(...WRITE), (req, res) => {
+  try {
+    res.status(201).json(raiseTrueUp({ contractId: req.body?.contract_id, contractYear: req.body?.contract_year, user: req.user, req }));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message, ...(err.extra || {}) });
+  }
+});
+
 // ── Approve → issue ──────────────────────────────────────────────────────────
 router.post('/:id/approve', requireRole(...WRITE), (req, res) => {
   try {
@@ -265,13 +289,23 @@ router.post('/:id/approve', requireRole(...WRITE), (req, res) => {
           inv.id, inv.billing_family_ref || null, issued, req.user.name, req.user.id || null);
         db.prepare('UPDATE debit_credit_notes SET supp_invoice_id = ? WHERE id = ?').run(suppId, note.id);
       } else {
-        applied = applyCredit(issuedNote, inv, issued, note.amount);
+        // A credit agreed on a dispute was held off the bill while it waited for
+        // approval; the hold is lifted first, or there is nothing open to set it against.
+        let target = inv;
+        if (db.prepare('SELECT 1 FROM disputes WHERE resolution_note_id = ?').get(note.id)) {
+          setInvoiceOpenDispute(inv.id);
+          target = db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id);
+        }
+        applied = applyCredit(issuedNote, target, issued, note.amount);
       }
     })();
 
     logAudit({ req, user: req.user, action: 'ISSUE_NOTE', module: 'REIA', entityType: 'debit_credit_note', entityId: note.id, details: { note_no: noteNo, note_type: note.note_type, amount: note.amount, supp_invoice_id: suppId, applied } });
-    const role = inv.direction === 'SELLER_TO_SJVN' ? 'SELLER' : 'BUYER';
-    pushNotification({ role, type: 'DC_NOTE_ISSUED', message: `${note.note_type === 'DEBIT' ? 'Debit' : 'Credit'} Note ${noteNo} of Rs.${note.amount.toLocaleString('en-IN')} issued against ${inv.invoice_no}` });
+    // A note that settles a dispute tells the dispute it has been issued.
+    onResolutionNoteDecided(note.id, 'ISSUED', req.user, { note_no: noteNo });
+    // To the bill's own company, not every buyer or seller on the platform.
+    notifyCounterparty(inv.contract_id, inv.direction === 'SELLER_TO_SJVN' ? 'SELLER' : 'BUYER', 'DC_NOTE_ISSUED',
+      `${note.note_type === 'DEBIT' ? 'Debit' : 'Credit'} Note ${noteNo} of Rs.${note.amount.toLocaleString('en-IN')} issued against ${inv.invoice_no}`);
     res.json(present(getNote(note.id)));
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message });
@@ -287,6 +321,8 @@ router.post('/:id/reject', requireRole(...WRITE), (req, res) => {
   db.prepare(`UPDATE debit_credit_notes SET status = 'REJECTED', rejected_reason = ?, approved_by = ?, approved_by_id = ?, approved_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`)
     .run(reason, req.user.name, req.user.id || null, note.id);
   logAudit({ req, user: req.user, action: 'REJECT_NOTE', module: 'REIA', entityType: 'debit_credit_note', entityId: note.id, details: { reason } });
+  // Not approving the credit a dispute resolution asked for reopens that dispute.
+  onResolutionNoteDecided(note.id, 'REJECTED', req.user, { reason });
   res.json(present(getNote(note.id)));
 });
 

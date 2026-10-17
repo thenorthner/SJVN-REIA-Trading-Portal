@@ -90,7 +90,7 @@ describe('buyer portal — every user of the company', () => {
 describe('reconciliation sign-off', () => {
   it('lets a buyer sub-user sign off its own statement', async () => {
     const recon = statement(psaX, 'BUYER');
-    const r = await post(`/api/reconciliation/${recon}/acknowledge`, t.l2, { decision: 'AGREE', remarks: 'Checked' });
+    const r = await post(`/api/recon-signoff/${recon}/sign`, t.l2, { decision: 'AGREE', remarks: 'Checked' });
     expect(r.status).toBe(200);
     const row = db.prepare('SELECT counterparty_ack_at, counterparty_ack_by FROM reconciliations WHERE id = ?').get(recon);
     expect(row.counterparty_ack_at).toBeTruthy();
@@ -99,12 +99,12 @@ describe('reconciliation sign-off', () => {
 
   it('lets a seller sub-user sign off theirs too', async () => {
     const recon = statement(psaX, 'SELLER');
-    expect((await post(`/api/reconciliation/${recon}/acknowledge`, t.sellerL2, { decision: 'AGREE' })).status).toBe(200);
+    expect((await post(`/api/recon-signoff/${recon}/sign`, t.sellerL2, { decision: 'AGREE' })).status).toBe(200);
   });
 
   it("refuses another company's statement", async () => {
     const recon = statement(psaY, 'BUYER');
-    expect((await post(`/api/reconciliation/${recon}/acknowledge`, t.l2, { decision: 'AGREE' })).status).toBe(403);
+    expect((await post(`/api/recon-signoff/${recon}/sign`, t.l2, { decision: 'AGREE' })).status).toBe(403);
   });
 });
 

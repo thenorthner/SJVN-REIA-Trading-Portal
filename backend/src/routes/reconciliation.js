@@ -13,6 +13,7 @@ import {
   TOLERANCE_AMOUNT,
 } from '../reconciliationEngine.js';
 import { OPEN_RECON_STATUSES, summariseItems } from '../reconciliationConstants.js';
+import { lastCompleteMonth } from '../services/energyRules.js';
 import { OPEN_STATUSES as OPEN_DISPUTE_STATUSES, genDisputeNo, REASON_CODES, CHARGE_LINES, addDaysIso, SLA_ACK_DAYS, SLA_RESOLVE_DAYS } from '../disputesConstants.js';
 
 const router = Router();
@@ -401,6 +402,11 @@ router.post('/run', requireRole(...REIA_WRITE, 'TRADING_USER'), (req, res) => {
     return res.status(400).json({ error: `A ${period_type.toLowerCase()} period is written ${period_type === 'MONTHLY' ? 'YYYY-MM, e.g. 2026-09' : period_type === 'QUARTERLY' ? 'YYYY-Qn, e.g. 2026-Q2' : 'as the financial year, e.g. 2026-27'}` });
   }
 
+  // A month is reconciled once it is over; one still running (or ahead) has
+  // nothing settled to agree on.
+  if (period_type === 'MONTHLY' && String(period) > lastCompleteMonth()) {
+    return res.status(400).json({ error: `${period} has not ended yet. The latest month that can be reconciled is ${lastCompleteMonth()}.` });
+  }
   const runScope = scope || (trading_client_id ? 'TRADING_CLIENT' : 'REIA_CONTRACT');
   if (runScope === 'REIA_CONTRACT' && !contract_id) {
     return res.status(400).json({ error: 'Choose the contract to reconcile' });
@@ -439,6 +445,11 @@ router.post('/reopen-requests/:id/act', requireRole('SJVN_ADMIN', 'FINANCE_USER'
   const rr = db.prepare('SELECT * FROM recon_reopen_requests WHERE id = ?').get(req.params.id);
   if (!rr) return res.status(404).json({ error: 'Request not found' });
   if (rr.status !== 'PENDING') return res.status(400).json({ error: `This reopen request has already been ${words(rr.status)}` });
+  // Reopening a signed statement undoes both signatures' effect; the person who
+  // asked for it does not also grant it.
+  if (rr.requested_by && rr.requested_by === req.user.id) {
+    return res.status(403).json({ error: 'You asked for this reopen, so someone else has to decide it.' });
+  }
 
   if (decision === 'REJECTED') {
     db.prepare(`UPDATE recon_reopen_requests SET status = 'REJECTED', acted_by = ?, acted_at = datetime('now') WHERE id = ?`)
@@ -655,6 +666,13 @@ router.post('/:id/acknowledge', (req, res) => {
     }
   }
 
+  // Agreeing is done through /recon-signoff/:id/sign, which holds the rules
+  // (SJVN signs only with every line explained, the counterparty only after
+  // SJVN's review) and records what was signed. This older door skipped them:
+  // SJVN signed a statement with two lines unexplained and it closed.
+  if (decision === 'AGREE') {
+    return res.status(400).json({ error: 'Sign the statement from its sign-off panel (/api/recon-signoff/:id/sign).' });
+  }
   if (decision === 'DISAGREE' && !String(note || remarks || '').trim()) return res.status(400).json({ error: 'Say what is not agreed' });
   if (decision === 'DISAGREE' && isReia(req.user) && !REIA_WRITE.includes(req.user.role)) return res.status(403).json({ error: 'Only the REIA desk disagrees with a statement for SJVN' });
   const finalNote = note || remarks || 'Digitally acknowledged and verified';
@@ -759,12 +777,65 @@ router.post('/:id/reopen-request', (req, res) => {
 });
 
 // ---- regenerate statement ----
+// Withdraw a statement that should never have been made: unsigned, and for a
+// period that still has nothing to reconcile. The scheduler made one for every
+// active contract each month — ten for September 2026 with no energy and no
+// bill, each sent to its counterparty as "ready for your sign-off" (reia-15).
+// The statement table has no cancelled state, so it is removed, with its full
+// record kept in the audit log and the counterparty told.
+router.post('/:id/withdraw', requireRole(...REIA_WRITE), (req, res) => {
+  const recon = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(req.params.id);
+  if (!recon) return res.status(404).json({ error: 'Not found' });
+  const reason = String(req.body?.reason || '').trim();
+  if (reason.length < 10) return res.status(400).json({ error: 'Say why the statement is withdrawn (at least 10 characters).' });
+  if (recon.scope === 'TRADING_CLIENT' || !recon.contract_id) return res.status(400).json({ error: 'Only a contract statement can be withdrawn here.' });
+  if (recon.sjvn_ack_at || recon.counterparty_ack_at || ['CLOSED', 'AGREED'].includes(recon.status)) {
+    return res.status(400).json({ error: `${recon.recon_no} has been signed, so it stands. Ask for the period to be reopened instead.` });
+  }
+  if (db.prepare('SELECT 1 FROM recon_items WHERE reconciliation_id = ? AND dispute_id IS NOT NULL').get(recon.id)
+    || db.prepare('SELECT 1 FROM recon_reopen_requests WHERE reconciliation_id = ?').get(recon.id)) {
+    return res.status(400).json({ error: `${recon.recon_no} has a dispute or a reopen request on it, so it stands.` });
+  }
+  try {
+    buildContractReconItems({ contractId: recon.contract_id, period: recon.period, periodType: recon.period_type });
+    return res.status(400).json({ error: `${recon.period} now has energy or a bill to reconcile on this contract — regenerate ${recon.recon_no} instead of withdrawing it.` });
+  } catch (err) {
+    if (!/Nothing to reconcile/.test(err.message || '')) return res.status(err.status || 500).json({ error: err.message });
+  }
+  const items = db.prepare('SELECT * FROM recon_items WHERE reconciliation_id = ?').all(recon.id);
+  db.transaction(() => {
+    for (const t of ['recon_events', 'recon_statements', 'recon_exceptions', 'recon_items']) {
+      db.prepare(`DELETE FROM ${t} WHERE reconciliation_id = ?`).run(recon.id);
+    }
+    db.prepare('DELETE FROM reconciliations WHERE id = ?').run(recon.id);
+  })();
+  logAudit({
+    req, user: req.user, action: 'RECON_WITHDRAWN', module: 'REIA', entityType: 'reconciliation', entityId: recon.id, reason,
+    beforeValue: { ...recon, items: items.length },
+  });
+  if (recon.contract_id) {
+    const c = db.prepare('SELECT contract_type FROM contracts WHERE id = ?').get(recon.contract_id);
+    notifyCounterparty(recon.contract_id, c?.contract_type === 'PSA' ? 'BUYER' : 'SELLER', 'RECON_WITHDRAWN',
+      `Reconciliation ${recon.recon_no} for ${recon.period} was withdrawn: there was nothing to reconcile for that month. No sign-off is needed.`);
+  }
+  res.json({ withdrawn: recon.recon_no, period: recon.period });
+});
+
 router.post('/:id/regenerate-statement', requireRole(...REIA_WRITE, 'TRADING_USER', 'MANAGEMENT'), (req, res) => {
   const recon = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(req.params.id);
   if (!recon) return res.status(404).json({ error: 'Not found' });
-  // Its figures are what the two signatures are on.
-  if (['CLOSED', 'AGREED'].includes(recon.status) || recon.sjvn_ack_at || recon.counterparty_ack_at) {
+  // Its figures are what the two signatures are on — unless the other side has
+  // rejected the statement outright. A disputed statement SJVN had already
+  // signed could then be neither regenerated, overridden nor reopened: it sat
+  // there for good. Regenerating it starts the review again, with the
+  // signatures on the rejected figures set aside (they stay in the events).
+  const disputed = recon.status === 'DISPUTED';
+  if (!disputed && (['CLOSED', 'AGREED'].includes(recon.status) || recon.sjvn_ack_at || recon.counterparty_ack_at)) {
     return res.status(400).json({ error: `${recon.recon_no} has been signed, so its figures stand. To change them, ask for the period to be reopened.` });
+  }
+  if (disputed && (recon.sjvn_ack_at || recon.counterparty_ack_at)) {
+    recordEvent(recon.id, req.user, 'SIGNATURES_SET_ASIDE', { sjvn: recon.sjvn_ack_by || null, counterparty: recon.counterparty_ack_by || null, reason: 'statement disputed; regenerated for review' });
+    db.prepare(`UPDATE reconciliations SET sjvn_ack_at = NULL, sjvn_ack_by = NULL, sjvn_sign_json = NULL, counterparty_ack_at = NULL, counterparty_ack_by = NULL, counterparty_sign_json = NULL WHERE id = ?`).run(recon.id);
   }
 
   try {
@@ -790,7 +861,19 @@ router.post('/:id/regenerate-statement', requireRole(...REIA_WRITE, 'TRADING_USE
         SELECT * FROM recon_items 
         WHERE reconciliation_id = ? AND (match_status = 'OVERRIDDEN' OR dispute_id IS NOT NULL)
       `).all(recon.id);
-      const preservedLabels = new Set(preservedItems.map(i => i.label));
+      // An override accepted a particular variance. If the figures behind the
+      // line have moved, the override no longer speaks to them: the line comes
+      // back as calculated, to be looked at again.
+      const same = (a, b) => Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
+      const fresh = new Map(built.items.map((i) => [i.label, i]));
+      const stale = preservedItems.filter((p) => p.match_status === 'OVERRIDDEN' && !p.dispute_id && fresh.has(p.label)
+        && !(same(p.metered_value, fresh.get(p.label).metered_value) && same(p.billed_value, fresh.get(p.label).billed_value) && same(p.paid_value, fresh.get(p.label).paid_value)));
+      for (const p of stale) {
+        db.prepare('DELETE FROM recon_items WHERE id = ?').run(p.id);
+        const f = fresh.get(p.label);
+        f.notes = `${f.notes ? `${f.notes} · ` : ''}Earlier override ("${p.override_reason}") dropped — the figures changed`;
+      }
+      const preservedLabels = new Set(preservedItems.filter((p) => !stale.includes(p)).map(i => i.label));
 
       // Remove old non-preserved items
       db.prepare(`
@@ -803,6 +886,9 @@ router.post('/:id/regenerate-statement', requireRole(...REIA_WRITE, 'TRADING_USE
       insertItems(recon.id, itemsToInsert);
     }
   } catch (recalcErr) {
+    // "Nothing to reconcile" and the like are answers, not hiccups to log and
+    // carry on past with the old figures.
+    if (recalcErr.status) return res.status(recalcErr.status).json({ error: recalcErr.message });
     console.warn('[Recon] Recalculate items on regenerate:', recalcErr.message);
   }
 
@@ -844,27 +930,6 @@ router.post('/:id/regenerate-statement', requireRole(...REIA_WRITE, 'TRADING_USE
     reconciliation: { ...fresh, items, statement },
     statement
   });
-});
-
-// Backward-compat resolve
-router.post('/:id/resolve', requireRole(...REIA_WRITE), (req, res) => {
-  const { notes } = req.body;
-  const recon = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(req.params.id);
-  if (!recon) return res.status(404).json({ error: 'Not found' });
-  const openExc = db.prepare(`
-    SELECT COUNT(*) c FROM recon_items WHERE reconciliation_id = ? AND match_status IN ('EXCEPTION','CARRIED')
-  `).get(recon.id).c;
-  if (openExc > 0) {
-    return res.status(400).json({ error: 'Override or dispute exceptions first, or use acknowledge flow' });
-  }
-  db.prepare(`
-    UPDATE reconciliations SET status = 'CLOSED', closed_at = datetime('now'),
-      discrepancy_notes = ?, sjvn_ack_at = COALESCE(sjvn_ack_at, datetime('now')),
-      sjvn_ack_by = COALESCE(sjvn_ack_by, ?), updated_at = datetime('now')
-    WHERE id = ?
-  `).run(notes ?? recon.discrepancy_notes, req.user.name, recon.id);
-  recordEvent(recon.id, req.user, 'RESOLVED_CLOSED', { notes });
-  res.json(db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(recon.id));
 });
 
 export default router;

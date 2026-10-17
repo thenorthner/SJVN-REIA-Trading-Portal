@@ -13,6 +13,8 @@ const router = Router();
 router.use(requireAuth);
 
 const READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE, 'COMPLIANCE_AUDITOR'])];
+// REIA hands the month over and records the voucher Finance returns; Finance
+// reads (tests/reiaFiPosting.test.js holds this as the design).
 const WRITE = [...ROLE_GROUPS.REIA_WRITE];
 
 const month = (v) => (/^\d{4}-\d{2}$/.test(String(v || '')) ? String(v) : null);
@@ -84,6 +86,7 @@ router.post('/:postingId/post', requireRole(...WRITE), (req, res) => {
     const posting = postToFinance(req.params.postingId, {
       fiDocumentNo: req.body.fi_document_no || null,
       postedBy: req.user?.name || req.user?.email || null,
+      postedById: req.user?.id || null,
     });
     secureLogAudit(req, {
       action: 'REIA_FI_POSTING_POSTED',

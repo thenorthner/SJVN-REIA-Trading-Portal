@@ -12,8 +12,11 @@ beforeEach(() => { resetReia(); reia = tokenFor('REIA_USER'); });
 const energy = (contractId, period, mwh) =>
   request(app).post('/api/energy-data').set(auth(reia))
     .send({ contract_id: contractId, period_month: period, data_type: 'PROVISIONAL', source: 'MANUAL', energy_mwh: mwh });
-const bill = (contractId, period) =>
-  request(app).post('/api/invoices/generate').set(auth(reia)).send({ contract_id: contractId, period_month: period });
+// Bills are raised on locked energy; these tests are about the dates.
+const bill = (contractId, period) => {
+  db.prepare(`UPDATE energy_data SET status = 'LOCKED' WHERE contract_id = ? AND period_month = ?`).run(contractId, period);
+  return request(app).post('/api/invoices/generate').set(auth(reia)).send({ contract_id: contractId, period_month: period });
+};
 
 describe('S20 A contract bills only the periods it covered', () => {
   // EXPIRED is a billable status on purpose — a final bill for a period the

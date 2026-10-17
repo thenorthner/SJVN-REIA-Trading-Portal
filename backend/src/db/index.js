@@ -3186,6 +3186,71 @@ try {
 }
 
 /**
+ * Let a week carry every revision NRPC issues for it.
+ *
+ * The table allowed one row per (contract, month, week, PRIMARY|REVISED), so
+ * once R1 of a week was raised and billed, R2 had nowhere to go — and NRPC does
+ * issue R2 and R3. Rows are now unique per statement for published figures and
+ * per week for manual estimates, and only while they are live: a cancelled row
+ * stays on record instead of being deleted to free its slot.
+ */
+function migrateDeviationSettlementsRevisions() {
+  const t = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'deviation_settlements'").get();
+  if (!t || !/UNIQUE\s*\(\s*contract_id\s*,\s*period_month\s*,\s*week_no\s*,\s*entry_type\s*\)/i.test(t.sql)) return;
+  const cols = db.prepare('PRAGMA table_info(deviation_settlements)').all().map((c) => c.name);
+  if (!cols.includes('source')) return; // provenance first
+  const keep = ['id', 'dsm_no', 'contract_id', 'plant_code', 'plant_name', 'period_month', 'week_no', 'week_date', 'entry_type', 'source',
+    'dsa_account_id', 'dsa_entity_name', 'scheduled_mwh', 'actual_mwh', 'deviation_mwh', 'deviation_rate', 'deviation_amount', 'status',
+    'invoice_no', 'dispatch_date', 'notes', 'created_by', 'created_at', 'updated_at', 'invoice_id'].filter((c) => cols.includes(c));
+  db.exec(`
+    CREATE TABLE deviation_settlements_new (
+      id TEXT PRIMARY KEY,
+      dsm_no TEXT UNIQUE NOT NULL,
+      contract_id TEXT NOT NULL REFERENCES contracts(id),
+      plant_code TEXT,
+      plant_name TEXT,
+      period_month TEXT NOT NULL,
+      week_no INTEGER NOT NULL,
+      week_date TEXT,
+      entry_type TEXT NOT NULL DEFAULT 'PRIMARY' CHECK (entry_type IN ('PRIMARY','REVISED')),
+      source TEXT NOT NULL DEFAULT 'MANUAL' CHECK (source IN ('MANUAL','NRPC_DSA')),
+      dsa_account_id TEXT REFERENCES nrpc_dsa_accounts(id),
+      dsa_entity_name TEXT,
+      scheduled_mwh REAL NOT NULL DEFAULT 0,
+      actual_mwh REAL NOT NULL DEFAULT 0,
+      deviation_mwh REAL NOT NULL DEFAULT 0,
+      deviation_rate REAL,
+      deviation_amount REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'DRAFT'
+        CHECK (status IN ('DRAFT','CALCULATED','SUBMITTED','DISPATCHED','CANCELLED')),
+      invoice_no TEXT,
+      dispatch_date TEXT,
+      notes TEXT,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      invoice_id TEXT
+    );
+    INSERT INTO deviation_settlements_new (${keep.join(', ')}) SELECT ${keep.join(', ')} FROM deviation_settlements;
+    DROP TABLE deviation_settlements;
+    ALTER TABLE deviation_settlements_new RENAME TO deviation_settlements;
+    CREATE INDEX IF NOT EXISTS idx_deviation_settlements_dsa ON deviation_settlements(dsa_account_id, dsa_entity_name);
+    CREATE INDEX IF NOT EXISTS idx_deviation_settlements_week ON deviation_settlements(contract_id, period_month, week_no);
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_deviation_manual_week ON deviation_settlements(contract_id, period_month, week_no, entry_type)
+      WHERE source = 'MANUAL' AND status <> 'CANCELLED';
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_deviation_statement ON deviation_settlements(contract_id, dsa_account_id)
+      WHERE source = 'NRPC_DSA' AND status <> 'CANCELLED';
+  `);
+  console.log('[MIGRATE] deviation_settlements: one row per statement revision, cancelled rows kept');
+}
+
+try {
+  migrateDeviationSettlementsRevisions();
+} catch (e) {
+  console.error('deviation_settlements revisions migration failed:', e.message);
+}
+
+/**
  * Mail, second pass: a formatted body beside the plain one, and blind copies.
  * BCC is a new value of a CHECKed column, so mail_boxes is rebuilt in place.
  */
@@ -3289,12 +3354,82 @@ try {
   console.error('Payment security desk migration failed:', e.message);
 }
 
+/**
+ * Security "instruments" the system made up. Activating a contract raised an
+ * ACTIVE instrument for its whole requirement — bank "To be confirmed", no
+ * reference, no document — and it counted as cover. Those nobody has drawn on
+ * or confirmed are closed here with the reason; the requirement itself stays on
+ * the contract and shows as a shortfall until the real instrument is recorded.
+ */
+function migrateSecurityPlaceholders() {
+  const cols = db.pragma('table_info(payment_security)').map((c) => c.name);
+  if (!cols.includes('rejection_note')) return;
+  db.prepare(`
+    UPDATE payment_security SET status = 'CLOSED',
+      rejection_note = 'Placeholder raised automatically from the contract requirement — no instrument was lodged. The requirement stands; record the instrument when it is furnished.',
+      updated_at = datetime('now')
+    WHERE issuing_bank = 'To be confirmed' AND remarks LIKE 'Auto-synced from contract requirement%'
+      AND verified_at IS NULL AND COALESCE(utilized_amount, 0) = 0 AND status IN ('ACTIVE', 'RENEWED')
+  `).run();
+}
+
+try {
+  migrateSecurityPlaceholders();
+} catch (e) {
+  console.error('Security placeholder migration failed:', e.message);
+}
+
+/**
+ * Form-IV monthly returns are due by the 15th of the following month (decided
+ * 17-Oct-2026); returns already started carried period end + 30 days. Restated
+ * from the period, so the register and the calendar give one date.
+ */
+function migrateFormIvMonthlyDueDates() {
+  const cols = db.pragma('table_info(cerc_form_iv)').map((c) => c.name);
+  if (!cols.includes('due_date')) return;
+  db.prepare(`
+    UPDATE cerc_form_iv SET due_date = date(period || '-01', '+1 month', '+14 days')
+    WHERE period_type = 'MONTHLY' AND period GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'
+      AND COALESCE(due_date, '') <> date(period || '-01', '+1 month', '+14 days')
+  `).run();
+}
+
+try {
+  migrateFormIvMonthlyDueDates();
+} catch (e) {
+  console.error('Form-IV due date migration failed:', e.message);
+}
+
+/**
+ * REIA Finance postings: one batch waiting per month and category, but a posted
+ * month may take further batches for bills raised after it was booked — the
+ * documents already on a live posting are still left out of each new one. The
+ * index allowed one live posting per month, so those bills could never be booked.
+ */
+function migrateReiaFiPostingIndex() {
+  const idx = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_reia_fi_posting_period'`).get();
+  if (!idx || /status\s*=\s*'PREPARED'/.test(idx.sql || '')) return;
+  db.exec(`
+    DROP INDEX idx_reia_fi_posting_period;
+    CREATE UNIQUE INDEX idx_reia_fi_posting_period ON reia_fi_postings (period_month, category) WHERE status = 'PREPARED';
+  `);
+}
+
+try {
+  migrateReiaFiPostingIndex();
+} catch (e) {
+  console.error('REIA FI posting index migration failed:', e.message);
+}
+
 /** Disputes: groups, the submitter's answer to a resolution, and where a contested one went. */
 function migrateDisputeResponses() {
   const cols = db.pragma('table_info(disputes)').map((c) => c.name);
   if (!cols.length) return;
   for (const [col, type] of [['group_ref', 'TEXT'], ['group_title', 'TEXT'], ['resolution_response', 'TEXT'], ['resolution_response_by', 'TEXT'],
-    ['resolution_response_at', 'TEXT'], ['resolution_response_note', 'TEXT'], ['escalation_forum', 'TEXT'], ['contested_amount', 'REAL'], ['escalation_outcome', 'TEXT']]) {
+    ['resolution_response_at', 'TEXT'], ['resolution_response_note', 'TEXT'], ['escalation_forum', 'TEXT'], ['contested_amount', 'REAL'], ['escalation_outcome', 'TEXT'],
+    // When SJVN asked the party for information (its clock stands still meanwhile), the
+    // credit or debit note an accepted claim became, and what a forum awarded.
+    ['info_requested_at', 'TEXT'], ['resolution_note_id', 'TEXT'], ['awarded_amount', 'REAL']]) {
     if (!cols.includes(col)) db.exec(`ALTER TABLE disputes ADD COLUMN ${col} ${type}`);
   }
 }

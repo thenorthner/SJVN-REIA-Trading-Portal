@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
-import { PageHeader, Card, Badge, StatCard, Tabs, Tab, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Badge, StatCard, Tabs, Tab, Modal, Field, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { fmtDate } from '../../datetime.js';
@@ -49,7 +49,7 @@ function AnnexurePanel({ row }) {
     return () => { live = false; };
   }, [row.period_type, row.period]);
 
-  if (error) return <div className="alert alert-error" role="alert">{error}</div>;
+  if (error) return <div className="audit-placeholder" role="status">{error}</div>;
   if (!data) return <div className="audit-placeholder">Loading…</div>;
 
   const shown = data.annexures.find((a) => a.code === open);
@@ -145,7 +145,7 @@ function PeriodTable({ title, rows, emptyText, canOpenForm }) {
 
   return (
     <Card title={title}>
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       <div className="report-table-wrap">
         <table className="report-table">
           <thead>
@@ -187,6 +187,9 @@ function PeriodTable({ title, rows, emptyText, canOpenForm }) {
                 <td className="num">{r.trading_margin != null ? fmtNumber(r.trading_margin, 0) : '—'}</td>
                 <td className="num">
                   {r.breach_count ? <Badge type="danger">{r.breach_count}</Badge> : '—'}
+                  {r.breaches_from === 'TRADE_BOOK' && (
+                    <div className="audit-muted">{r.nil_return ? 'No trades: a NIL return is owed' : `${r.trade_count} trade${r.trade_count === 1 ? '' : 's'} in the book`}</div>
+                  )}
                 </td>
                 <td>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -228,10 +231,10 @@ function PeriodTable({ title, rows, emptyText, canOpenForm }) {
   );
 }
 
-const FEE_TONE = { PAID: 'success', DUE: 'warning', OVERDUE: 'danger' };
-const FEE_LABEL = { PAID: 'Paid', DUE: 'Due', OVERDUE: 'Overdue' };
-const NW_TONE = { COMPLIANT: 'success', PENDING: 'warning', SHORTFALL: 'danger' };
-const NW_LABEL = { COMPLIANT: 'Meets minimum', PENDING: 'Not recorded', SHORTFALL: 'Below minimum' };
+const FEE_TONE = { PAID: 'success', PAID_LATE: 'warning', SHORT: 'danger', DUE: 'warning', OVERDUE: 'danger' };
+const FEE_LABEL = { PAID: 'Paid', PAID_LATE: 'Paid late', SHORT: 'Paid short', DUE: 'Due', OVERDUE: 'Overdue' };
+const NW_TONE = { COMPLIANT: 'success', PENDING: 'warning', STALE: 'warning', SHORTFALL: 'danger' };
+const NW_LABEL = { COMPLIANT: 'Meets minimum', PENDING: 'Not recorded', STALE: 'Certificate out of date', SHORTFALL: 'Below minimum' };
 
 const EMPTY_YEAR = {
   fee_amount: '', fee_paid_on: '', fee_reference: '', net_worth_cr: '', net_worth_as_on: '',
@@ -261,6 +264,14 @@ function LicenceTracker({ canWrite }) {
 
   async function save(e) {
     e.preventDefault();
+    if (saving) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const future = [['fee_paid_on', 'Fee paid on'], ['net_worth_as_on', 'Net worth as on'], ['certificate_filed_on', 'Certificate filed on']]
+      .find(([k]) => form[k] && form[k] > today);
+    if (future) { setFormError(`${future[1]} (${form[future[0]]}) is in the future.`); return; }
+    if (form.fee_paid_on && !(Number(form.fee_amount) > 0)) { setFormError('Record the amount paid along with the payment date.'); return; }
+    if (form.fee_paid_on && !String(form.fee_reference || '').trim()) { setFormError('Record the payment reference (UTR / receipt no.) along with the payment date.'); return; }
+    if (form.net_worth_cr !== '' && !form.net_worth_as_on) { setFormError('Record the date the net worth is certified as on (the balance-sheet date).'); return; }
     setSaving(true);
     setFormError('');
     try {
@@ -273,7 +284,7 @@ function LicenceTracker({ canWrite }) {
     }
   }
 
-  if (error) return <div className="alert alert-error" role="alert">{error}</div>;
+  if (error) return <AlertPopup open title="Could not load the licence tracker" message={error} onClose={() => setError('')} />;
   if (!data) return <Card><div className="audit-placeholder">Loading…</div></Card>;
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -284,7 +295,7 @@ function LicenceTracker({ canWrite }) {
         <StatCard
           label="Licence fees unpaid"
           value={fmtNumber(data.totals.fee_overdue, 0)}
-          hint="Past 30 April with no payment recorded"
+          hint="Past 30 April, not paid or paid short"
           tone={data.totals.fee_overdue ? 'red' : 'green'}
         />
         <StatCard
@@ -294,7 +305,7 @@ function LicenceTracker({ canWrite }) {
           tone={data.next_fee.days_left <= 45 ? 'amber' : 'default'}
         />
         <StatCard
-          label="Net worth not recorded"
+          label="Net worth not recorded or out of date"
           value={fmtNumber(data.totals.net_worth_pending, 0)}
           hint={`Category ${data.category} minimum ₹${fmtNumber(data.min_net_worth_cr, 0)} crore`}
           tone={data.totals.net_worth_pending ? 'amber' : 'green'}
@@ -333,6 +344,8 @@ function LicenceTracker({ canWrite }) {
                   <td>
                     <Badge type={FEE_TONE[y.fee_status]}>{FEE_LABEL[y.fee_status]}</Badge>
                     {y.fee_status === 'OVERDUE' && <div className="audit-muted">{y.fee_days_past_due} days past due</div>}
+                    {y.fee_status === 'PAID_LATE' && <div className="audit-muted">{y.fee_days_late} days after the due date</div>}
+                    {y.fee_status === 'SHORT' && <div className="audit-muted">{fmtCurrency(y.fee_short_by)} short</div>}
                   </td>
                   <td>
                     {y.fee_paid_on ? fmtDate(y.fee_paid_on) : '—'}
@@ -346,7 +359,10 @@ function LicenceTracker({ canWrite }) {
                     {y.net_worth_cr != null ? fmtNumber(y.net_worth_cr, 2) : '—'}
                     {y.net_worth_as_on && <div className="audit-muted">as on {fmtDate(y.net_worth_as_on)}</div>}
                   </td>
-                  <td><Badge type={NW_TONE[y.net_worth_status]}>{NW_LABEL[y.net_worth_status]}</Badge></td>
+                  <td>
+                    <Badge type={NW_TONE[y.net_worth_status]}>{NW_LABEL[y.net_worth_status]}</Badge>
+                    {y.net_worth_status === 'STALE' && <div className="audit-muted">Needs one as on {fmtDate(y.net_worth_stale_before)} or later</div>}
+                  </td>
                   <td>
                     {y.certificate_ref || '—'}
                     {y.certificate_filed_on && <div className="audit-muted">filed {fmtDate(y.certificate_filed_on)}</div>}
@@ -369,20 +385,20 @@ function LicenceTracker({ canWrite }) {
       </Card>
 
       <Modal open={!!edit} onClose={() => setEdit(null)} title={edit ? `Licence compliance · FY ${edit.fy}` : ''} width={620}>
-        {formError && <div className="form-error">{formError}</div>}
+        <AlertPopup open={!!formError} title="Not saved" message={formError} onClose={() => setFormError('')} />
         <form onSubmit={save}>
           <div className="form-grid">
-            <Field label="Fee paid on"><input type="date" value={form.fee_paid_on} onChange={set('fee_paid_on')} /></Field>
+            <Field label="Fee paid on"><input type="date" max={new Date().toISOString().slice(0, 10)} value={form.fee_paid_on} onChange={set('fee_paid_on')} /></Field>
             <Field label="Amount paid (₹)"><input type="number" min="0" step="0.01" value={form.fee_amount} onChange={set('fee_amount')} /></Field>
           </div>
           <Field label="Payment reference (UTR / receipt no.)"><input value={form.fee_reference} onChange={set('fee_reference')} /></Field>
           <div className="form-grid">
             <Field label="Net worth (₹ crore)"><input type="number" min="0" step="0.01" value={form.net_worth_cr} onChange={set('net_worth_cr')} /></Field>
-            <Field label="Net worth as on"><input type="date" value={form.net_worth_as_on} onChange={set('net_worth_as_on')} /></Field>
+            <Field label="Net worth as on"><input type="date" max={new Date().toISOString().slice(0, 10)} value={form.net_worth_as_on} onChange={set('net_worth_as_on')} /></Field>
           </div>
           <div className="form-grid">
             <Field label="Certificate reference"><input value={form.certificate_ref} onChange={set('certificate_ref')} /></Field>
-            <Field label="Certificate filed on"><input type="date" value={form.certificate_filed_on} onChange={set('certificate_filed_on')} /></Field>
+            <Field label="Certificate filed on"><input type="date" max={new Date().toISOString().slice(0, 10)} value={form.certificate_filed_on} onChange={set('certificate_filed_on')} /></Field>
           </div>
           <Field label="Notes"><input value={form.notes} onChange={set('notes')} /></Field>
           <div className="form-actions">
@@ -409,6 +425,10 @@ export default function CercCompliance() {
   const [range, setRange] = useState({ from: '', to: '' });
 
   function load(next = range) {
+    if (next.from && next.to && next.from > next.to) {
+      setError(`The range starts (${next.from}) after it ends (${next.to}). Pick a From month on or before the To month.`);
+      return;
+    }
     setLoading(true);
     setError('');
     const params = {};
@@ -446,7 +466,7 @@ export default function CercCompliance() {
 
       {view === 'calendar' && (
       <>
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      <AlertPopup open={!!error} title="Could not show the calendar" message={error} onClose={() => setError('')} />
 
       <Card>
         <div className="report-criteria">

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/client.js';
-import { PageHeader, Card, Badge, StatCard, Tabs, Tab, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Badge, StatCard, Tabs, Tab, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { fmtDateTime } from '../../datetime.js';
@@ -67,7 +67,7 @@ export default function VerificationQueue() {
 
       {view === 'queue' && (
       <>
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      <AlertPopup open={!!error} title="Could not load" message={error} onClose={() => setError('')} />
 
       {loading && !data ? (
         <Card><div className="audit-placeholder">Loading…</div></Card>
@@ -77,17 +77,52 @@ export default function VerificationQueue() {
             <StatCard
               label="Failed a check"
               value={fmtNumber(totals.failed, 0)}
-              hint="Cannot be paid as they stand"
+              hint="Cannot be approved as they stand"
               tone={totals.failed ? 'red' : 'green'}
             />
             <StatCard label="In progress" value={fmtNumber(totals.in_progress, 0)} tone={totals.in_progress ? 'amber' : 'default'} />
             <StatCard label="Not started" value={fmtNumber(totals.pending, 0)} tone={totals.pending ? 'amber' : 'default'} />
+            <StatCard
+              label="Approved without verification"
+              value={fmtNumber(totals.approved_unverified, 0)}
+              hint={totals.approved_unverified ? `${fmtCurrency(totals.approved_unverified_value)} · ${(data.approved_unverified || []).map((b) => b.invoice_no).join(', ')}` : 'None'}
+              tone={totals.approved_unverified ? 'red' : 'green'}
+            />
             <StatCard
               label="Value awaiting verification"
               value={fmtCurrency(totals.value_awaiting)}
               hint={totals.oldest_days ? `Oldest raised ${totals.oldest_days} days ago` : undefined}
             />
           </div>
+
+          {(data.approved_unverified || []).length > 0 && (
+            <Card title="Approved without a completed verification">
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Invoice</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Checklist</th>
+                      <th scope="col" className="num">Amount</th>
+                      <th scope="col"><span className="sr-only">Open</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.approved_unverified.map((b) => (
+                      <tr key={b.invoice_id}>
+                        <td>{b.invoice_no}</td>
+                        <td>{b.status.replace(/_/g, ' ')}</td>
+                        <td>{b.verification_status ? STATE_LABEL[b.verification_status] || b.verification_status : 'Never worked'}</td>
+                        <td className="num">{fmtCurrency(b.total_amount)}</td>
+                        <td><Link className="btn btn-sm btn-outline" to={`/reia/invoices?id=${encodeURIComponent(b.invoice_id)}`}>Verify after the fact</Link></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
 
           {data.blockers.length > 0 && (
             <Card title="What is holding bills up">
@@ -144,7 +179,7 @@ export default function VerificationQueue() {
                 </thead>
                 <tbody>
                   {rows.length === 0 ? (
-                    <tr><td className="empty-cell" colSpan={8}>No bill in this state.</td></tr>
+                    <tr><td className="empty-cell" colSpan={8}>No developer bill with SJVN in this state.</td></tr>
                   ) : rows.map((r) => (
                     <React.Fragment key={r.invoice_id}>
                       <tr className="clickable" onClick={() => setOpen(open === r.invoice_id ? null : r.invoice_id)}>
@@ -174,7 +209,7 @@ export default function VerificationQueue() {
                                       {r.technical.map((t) => (
                                         <tr key={t.key}>
                                           <th scope="row" style={{ width: '38%', textAlign: 'left' }}>{t.label}</th>
-                                          <td style={{ width: 110 }}><Badge type={CHECK_TONE[t.status] || 'neutral'}>{t.status}</Badge></td>
+                                          <td style={{ width: 110 }}><Badge type={CHECK_TONE[t.status] || 'neutral'}>{t.status}</Badge>{t.auto === 'FAILED' && t.status !== 'FAILED' && <div className="audit-muted">automatic check failed</div>}</td>
                                           <td>
                                             {t.hint}
                                             {t.note && <div className="audit-muted">{t.note}</div>}
@@ -191,6 +226,7 @@ export default function VerificationQueue() {
                                   <table className="data-table">
                                     <tbody>
                                       <tr><th scope="row" style={{ textAlign: 'left' }}>Energy charges</th><td className="num">{fmtCurrency(r.commercial.energy_charges)}</td></tr>
+                                      <tr><th scope="row" style={{ textAlign: 'left' }}>Other lines on the bill</th><td className="num">{fmtCurrency(r.commercial.other_bill_lines)}</td></tr>
                                       <tr><th scope="row" style={{ textAlign: 'left' }}>Change in law</th><td className="num">{fmtCurrency(r.commercial.change_in_law)}</td></tr>
                                       <tr><th scope="row" style={{ textAlign: 'left' }}>Compensation event</th><td className="num">{fmtCurrency(r.commercial.compensation_event)}</td></tr>
                                       <tr><th scope="row" style={{ textAlign: 'left' }}>Liquidated damages</th><td className="num">− {fmtCurrency(r.commercial.liquidated_damages)}</td></tr>
@@ -205,10 +241,10 @@ export default function VerificationQueue() {
                                     The build-up and the bill differ by {fmtCurrency(Math.abs(r.commercial_gap))}.
                                   </div>
                                 )}
-                                {r.verified_by && (
+                                {r.verification_status === 'VERIFIED' && r.verified_by && (
                                   <p className="report-count">Verified by {r.verified_by} on {fmtDateTime(r.verified_at)}.</p>
                                 )}
-                                <Link className="btn btn-sm btn-outline" to="/reia/invoices">Open the bill to verify it</Link>
+                                <Link className="btn btn-sm btn-outline" to={`/reia/invoices?id=${encodeURIComponent(r.invoice_id)}`}>Open the bill to verify it</Link>
                               </div>
                             </div>
                           </td>

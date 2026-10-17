@@ -128,7 +128,7 @@ router.post('/', requireRole(...WRITE), (req, res) => {
       form_no: `FORM-IV/${window.period}/${String(seq).padStart(3, '0')}`,
       period_type,
       period: window.period,
-      due_date: dueDateFor(window.to),
+      due_date: dueDateFor(window.to, period_type),
       reference_no: b.reference_no || null,
       notes: b.notes || null,
       created_by: req.user.name,

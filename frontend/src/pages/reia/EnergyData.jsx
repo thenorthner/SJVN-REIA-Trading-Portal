@@ -2,13 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import api from '../../api/client.js';
 import EnergyOverview from '../../components/EnergyOverview.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, AlertPopup, fmtNumber } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
 import ReaAutomationPipeline from '../../components/ReaAutomationPipeline.jsx';
 import EnergyAccountUpload from '../../components/EnergyAccountUpload.jsx';
-import BusbarLossPipeline3D from '../../components/BusbarLossPipeline3D.jsx';
 import EnergyRecordDetail, { ResponseBadge } from '../../components/EnergyRecordDetail.jsx';
 import { fmtDateTime } from '../../datetime.js';
 import { ROLE_GROUPS } from '../../roles.js';
@@ -17,8 +16,12 @@ import { ROLE_GROUPS } from '../../roles.js';
 const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
 
 const lastMonth = () => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const hoursIn = (ym) => { const [y, m] = String(ym).split('-').map(Number); return y && m ? new Date(Date.UTC(y, m, 0)).getUTCDate() * 24 : null; };
+const capacityOf = (c) => (Number(c?.commissioned_capacity_mw) > 0 ? Number(c.commissioned_capacity_mw) : Number(c?.capacity_mw) || 0);
+// Energy is recorded against a signed contract.
+const recordable = (c) => !['DRAFT', 'UNDER_NEGOTIATION'].includes(c.status);
 
-const EMPTY_FORM = { contract_id: '', period_month: '', data_type: 'PROVISIONAL', source: 'MANUAL', energy_mwh: '', cuf_percent: '', availability_percent: '', peak_availability_percent: '' };
+const EMPTY_FORM = { contract_id: '', period_month: '', data_type: 'PROVISIONAL', source: 'MANUAL', energy_mwh: '', availability_percent: '', peak_availability_percent: '' };
 
 export default function EnergyData() {
   const [view, setView] = useState('main');
@@ -29,10 +32,15 @@ export default function EnergyData() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [error, setError] = useState('');
   // What went wrong on the page, and what was just done — said here, not in a browser pop-up.
-  const [pageError, setPageError] = useState('');
+  // Every error on this page is a popup; an empty message clears nothing.
+  const showError = (title) => (msg) => { if (msg) setPopup({ tone: 'error', title, message: msg }); };
+  const setPageError = showError('Something went wrong');
+  const setError = showError('Check the upload');
   const [notice, setNotice] = useState('');
+  // Errors are shown as a popup, the house rule for anything that has to be read.
+  const [popup, setPopup] = useState(null);
+  const [reaAccountPeriod, setReaAccountPeriod] = useState(null);
   // A lock the server will only take with a recorded reason.
   const [lockAsk, setLockAsk] = useState(null);
   const [lockReason, setLockReason] = useState('');
@@ -70,6 +78,69 @@ export default function EnergyData() {
   const [pipelineResult, setPipelineResult] = useState(null);
   const [pipelineError, setPipelineError] = useState(null);
 
+  // Dedicated Ingested Records Inspector Modal State
+  const [viewingLogRecords, setViewingLogRecords] = useState(null);
+  const [logRecordsData, setLogRecordsData] = useState([]);
+  const [logRecordsLoading, setLogRecordsLoading] = useState(false);
+
+  function handleFilterMainTable(periodMonth) {
+    const target = { contract_id: '', period_month: periodMonth || '', status: '' };
+    setFilters(target);
+    load(target);
+    setNotice(`Showing energy ledger records for ${periodMonth || 'selected period'}`);
+    
+    // Collapse REA panel and pipeline monitor so main ledger table has full focus
+    setShowReaPanel(false);
+    setShowPipelineMonitor(false);
+
+    // Blur any active element so focus does not pull viewport back down
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
+
+    const scrollToTarget = () => {
+      const scroller = document.querySelector('.main-col') || window;
+      // Target the filters bar right above the table so filters and table headers are fully visible
+      const targetEl = document.querySelector('.filters-bar') || document.getElementById('energy-records-table');
+      if (targetEl) {
+        if (scroller !== window && scroller.getBoundingClientRect) {
+          const scrollerRect = scroller.getBoundingClientRect();
+          const targetRect = targetEl.getBoundingClientRect();
+          // 80px clearance accounts for sticky topbar (64px) + comfortable spacing
+          const targetY = scroller.scrollTop + (targetRect.top - scrollerRect.top) - 80;
+          scroller.scrollTo({ top: Math.max(0, targetY), behavior: 'smooth' });
+        } else {
+          targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        
+        const tableCard = document.getElementById('energy-records-table');
+        if (tableCard) {
+          tableCard.style.transition = 'box-shadow 0.4s ease, border-color 0.4s ease';
+          tableCard.style.boxShadow = '0 0 0 3px rgba(11, 95, 255, 0.45)';
+          setTimeout(() => {
+            if (tableCard) tableCard.style.boxShadow = '';
+          }, 2500);
+        }
+      }
+    };
+
+    setTimeout(scrollToTarget, 60);
+    setTimeout(scrollToTarget, 220);
+  }
+
+  async function handleViewLogRecords(log) {
+    setViewingLogRecords(log);
+    setLogRecordsLoading(true);
+    try {
+      const data = await api.energyData.list({ period_month: log.period_month });
+      setLogRecordsData(data);
+    } catch (err) {
+      setLogRecordsData([]);
+    } finally {
+      setLogRecordsLoading(false);
+    }
+  }
+
   async function downloadEnergyPdf() {
     setPdfLoading(true);
     setError('');
@@ -88,10 +159,11 @@ export default function EnergyData() {
     }
   }
 
-  function load() {
+  function load(overrideFilters) {
     setLoading(true);
+    const activeFilters = overrideFilters !== undefined ? overrideFilters : filters;
     const params = {};
-    Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
+    Object.entries(activeFilters).forEach(([k, v]) => { if (v) params[k] = v; });
     return api.energyData.list(params).then(setRows).catch((err) => setPageError(errOf(err, 'The energy records could not be loaded.'))).finally(() => setLoading(false));
   }
 
@@ -113,10 +185,10 @@ export default function EnergyData() {
     setError('');
     setBusy(true);
     try {
+      // CUF is worked out from the energy and the capacity, on the server.
       const made = await api.energyData.create({
         ...form,
         energy_mwh: Number(form.energy_mwh),
-        cuf_percent: form.cuf_percent ? Number(form.cuf_percent) : null,
         availability_percent: form.availability_percent ? Number(form.availability_percent) : null,
         peak_availability_percent: form.peak_availability_percent ? Number(form.peak_availability_percent) : null,
       });
@@ -124,11 +196,14 @@ export default function EnergyData() {
       setForm(EMPTY_FORM);
       setPageError('');
       setNotice(made.replaced
-        ? `The ${made.period_month} figure was corrected to ${fmtNumber(made.energy_mwh)} MWh and is a draft again. Validate it before it can be locked.`
+        ? (made.changed === false
+          ? `The ${made.period_month} figure is unchanged at ${fmtNumber(made.energy_mwh)} MWh and is a draft again. Validate it before it can be locked.`
+          : `The ${made.period_month} figure was corrected to ${fmtNumber(made.energy_mwh)} MWh and is a draft again — any earlier answer from the counterparty no longer applies. Validate it before it can be locked.`)
         : `${fmtNumber(made.energy_mwh)} MWh recorded for ${made.period_month} as a draft. Validate it before it can be locked.`);
       load();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to record energy data.');
+      const data = err.response?.data;
+      setPopup({ tone: 'error', title: 'The figure was not recorded', message: data?.errors?.length > 1 ? `${data.errors.length} things need attention.` : (data?.error || 'Failed to record energy data.'), items: data?.errors?.length > 1 ? data.errors : undefined });
     } finally {
       setBusy(false);
     }
@@ -142,35 +217,46 @@ export default function EnergyData() {
     try {
       const fd = new FormData();
       fd.append('file', uploadFile);
-      const data = await api.energyData.parseREA(fd);
+      const res = await api.energyData.parseREA(fd);
+      const data = Array.isArray(res) ? res : (res.stations || []);
+      // The account says which month it is for; that is the month it is filed under.
+      setReaAccountPeriod(res.period || null);
+      if (res.period) setReaPeriod(res.period);
       setParsedData(data.map(d => {
         let cid = '';
         const stName = (d.station_name || '').toUpperCase();
         const stId = (d.station_id || '').toUpperCase();
         if (stId.includes('NATHPA') || stName.includes('NATHPA') || stName.includes('JHAKRI')) {
-          const c = contracts.find(c => c.contract_no.includes('NJHPS') || c.contract_no.includes('NJHEP') || c.contract_no.includes('NJH'));
+          const c = contracts.find(c => c.contract_type === 'PPA' && (c.contract_no.includes('NJHPS') || c.contract_no.includes('NJHEP') || c.contract_no.includes('NJH')));
           if (c) cid = c.id;
         } else if (stId.includes('RAMPUR') || stName.includes('RAMPUR')) {
-          const c = contracts.find(c => c.contract_no.includes('RHPS') || c.contract_no.includes('RHEP') || c.contract_no.includes('RAMPUR'));
+          const c = contracts.find(c => c.contract_type === 'PPA' && (c.contract_no.includes('RHPS') || c.contract_no.includes('RHEP') || c.contract_no.includes('RAMPUR')));
           if (c) cid = c.id;
         }
         return { ...d, contract_id: cid };
       }));
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to parse REA');
+      setPopup({ tone: 'error', title: 'The REA could not be read', message: err.response?.data?.error || 'Failed to parse REA' });
     } finally {
       setUploading(false);
     }
   }
 
   async function handleSaveParsed() {
-    if (!reaPeriod) return setError('Please select a period month');
-    const invalid = parsedData.find(d => !d.contract_id);
-    if (invalid) return setError('Please assign a contract for all parsed stations');
-    
+    if (lock.current) return;
+    const problems = [];
+    if (!reaPeriod) problems.push('Choose the month the account is for.');
+    parsedData.filter((d) => !d.contract_id).forEach((d) => problems.push(`${d.station_name}: assign the contract.`));
+    if (problems.length) { setPopup({ tone: 'error', title: 'The REA cannot be saved yet', items: problems }); return; }
+
+    setBusy(true);
     setUploading(true);
-    try {
-      for (const row of parsedData) {
+    // Station by station, saying which went in and which did not — a failure
+    // part-way used to leave some stations saved and say only the last error.
+    const saved = [];
+    const failed = [];
+    for (const row of parsedData) {
+      try {
         await api.energyData.create({
           contract_id: row.contract_id,
           period_month: reaPeriod,
@@ -179,16 +265,22 @@ export default function EnergyData() {
           energy_mwh: row.energy_mwh,
           availability_percent: row.availability_percent,
         });
+        saved.push(`${row.station_name}: ${fmtNumber(row.energy_mwh)} MWh`);
+      } catch (err) {
+        failed.push(`${row.station_name}: ${err.response?.data?.error || 'not saved'}`);
       }
+    }
+    setUploading(false);
+    setBusy(false);
+    load();
+    if (!failed.length) {
       setShowUploadREA(false);
       setParsedData(null);
       setUploadFile(null);
       setReaPeriod('');
-      load();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save parsed data');
-    } finally {
-      setUploading(false);
+      setPopup({ tone: 'success', title: `REA for ${reaPeriod} recorded`, message: 'Each station is a DRAFT, to validate before it can be locked.', items: saved, okLabel: 'OK' });
+    } else {
+      setPopup({ tone: saved.length ? 'warning' : 'error', title: saved.length ? 'Some stations were not recorded' : 'Nothing was recorded', items: [...failed, ...saved.map((x) => `Recorded — ${x}`)] });
     }
   }
 
@@ -203,7 +295,7 @@ export default function EnergyData() {
         : `${row.contract_no} ${row.period_month} failed validation and is marked DISPUTED — ${done.deviation_notes || 'see the Notes column'}.`);
     } catch (err) {
       setNotice('');
-      setPageError(errOf(err, 'This period could not be validated.'));
+      setPopup({ tone: 'error', title: 'Not validated', message: errOf(err, 'This period could not be validated.') });
     } finally {
       setBusy(false);
     }
@@ -232,7 +324,7 @@ export default function EnergyData() {
         setLockError(data.error || 'Could not lock this period');
       } else {
         setNotice('');
-        setPageError(data.error || 'Could not lock this period');
+        setPopup({ tone: 'error', title: 'Not locked', message: data.error || 'Could not lock this period' });
       }
     } finally {
       setBusy(false);
@@ -241,14 +333,24 @@ export default function EnergyData() {
   }
 
   const columns = [
-    { key: 'contract_no', header: 'Contract' },
+    { key: 'contract_no', header: 'Contract & Plant', render: (r) => {
+      const plant = r.contract_no?.includes('NJHPS') ? 'Nathpa Jhakri HEP' : r.contract_no?.includes('RHPS') ? 'Rampur HEP' : null;
+      return (
+        <div>
+          <div style={{ fontWeight: 600, color: '#0f172a' }}>{r.contract_no}</div>
+          {plant && <div style={{ fontSize: 12, color: 'var(--slate-500)', fontWeight: 500 }}>{plant}</div>}
+        </div>
+      );
+    }},
     { key: 'period_month', header: 'Period' },
     { key: 'billing_family_ref', header: 'BFR', render: (r) => (
       <BfrChip bfr={r.billing_family_ref} onClick={() => setTrailEnergyId(r.id)} />
     )},
     { key: 'data_type', header: 'Type', render: (r) => <Badge status={r.data_type} /> },
     { key: 'source', header: 'Source' },
-    { key: 'energy_mwh', header: 'Energy (MWh)', render: (r) => fmtNumber(r.energy_mwh) },
+    { key: 'energy_mwh', header: 'Energy (MWh)', render: (r) => (
+      <span style={{ fontWeight: 700, color: '#0b5fff' }}>{fmtNumber(r.energy_mwh)}</span>
+    )},
     { key: 'cuf_percent', header: 'CUF %', render: (r) => r.cuf_percent != null ? `${fmtNumber(r.cuf_percent)}%` : '-' },
     { key: 'availability_percent', header: 'Availability %', render: (r) => r.availability_percent != null ? `${fmtNumber(r.availability_percent)}%` : '-' },
     { key: 'peak_availability_percent', header: 'Peak Avail. %', render: (r) => r.peak_availability_percent != null ? `${fmtNumber(r.peak_availability_percent)}%` : '-' },
@@ -310,7 +412,6 @@ export default function EnergyData() {
 
       {view === 'main' && (
       <>
-      {pageError && <div className="form-error" role="alert">{pageError}</div>}
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
       {accountResult && (
         <div className="alert alert-success" role="status">
@@ -319,12 +420,7 @@ export default function EnergyData() {
         </div>
       )}
 
-      <BusbarLossPipeline3D
-        selectedContractId={filters.contract_id}
-        contracts={contracts}
-      />
-
-      <EnergyOverview contractId={filters.contract_id} rows={rows} />
+      <EnergyOverview contractId={filters.contract_id} period={filters.period_month} status={filters.status} rows={rows} />
 
       <div className="filters-bar">
         <select value={filters.contract_id} onChange={(e) => setFilters({ ...filters, contract_id: e.target.value })}>
@@ -341,9 +437,11 @@ export default function EnergyData() {
         )}
       </div>
 
-      <Card>
-        <Table columns={columns} rows={loading ? [] : rows} emptyMessage={loading ? 'Loading...' : 'No energy data records found.'} />
-      </Card>
+      <div id="energy-records-table" style={{ minHeight: 320 }}>
+        <Card>
+          <Table columns={columns} rows={loading ? [] : rows} emptyMessage={loading ? 'Loading...' : 'No energy data records found.'} />
+        </Card>
+      </div>
 
       {/* REA Automation Panel */}
       {CAN_WRITE.includes(user?.role) && (
@@ -354,20 +452,6 @@ export default function EnergyData() {
             </h3>
             {showReaPanel && (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #cbd5e1' }}
-                  onClick={() => {
-                    setPipelineMode('DEMO');
-                    setPipelineResult(null);
-                    setPipelineError(null);
-                    setShowPipelineMonitor(true);
-                    setPipelineRunning(true);
-                  }}
-                  title="Simulate and visualize each step of the automated REA pipeline"
-                >
-                  Explore Step-by-Step Flow
-                </button>
                 <button
                   className="btn btn-secondary btn-sm"
                   disabled={scanning || pipelineRunning}
@@ -382,7 +466,8 @@ export default function EnergyData() {
                     try {
                       const res = await api.energyData.reaScan({});
                       const total = res.results?.reduce((s, r) => s + (r.records || 0), 0) || 0;
-                      setPipelineResult({ records: total, parsedStations: 2, success: true });
+                      const stations = res.results?.reduce((s, r) => s + (r.parsedStations || r.stations || 0), 0) || 0;
+                      setPipelineResult({ records: total, parsedStations: stations, success: true });
                       setReaMsg(`Scan complete! ${total} new record(s) imported.`);
                       loadReaStatus();
                       load();
@@ -406,129 +491,9 @@ export default function EnergyData() {
             <Card>
               {reaMsg && <div style={{ padding: '8px 16px', background: '#f0f9ff', color: '#0369a1', fontSize: 13, borderBottom: '1px solid #e0f2fe' }}>{reaMsg}</div>}
 
-              {/* Embedded Visual Interactive Pipeline Banner */}
-              <div style={{ padding: '16px', background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-                  <div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                      </svg> Regional REA Automated Ingestion Pipeline
-                    </div>
-                    <div style={{ fontSize: 13.5, color: '#475569', marginTop: 3 }}>
-                      Fully automated 6-stage ingestion engine: Discovery → Retrieval → Extraction → Validation → Settlement Commit
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      style={{ background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', display: 'inline-flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 4px rgba(37,99,235,0.2)' }}
-                      onClick={() => {
-                        setPipelineMode('DEMO');
-                        setPipelineResult(null);
-                        setPipelineError(null);
-                        setShowPipelineMonitor(true);
-                        setPipelineRunning(true);
-                      }}
-                    >
-                      <span>▶</span> Watch Live Step-by-Step Animation
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-outline btn-sm"
-                      style={{ background: '#ffffff' }}
-                      onClick={() => setShowPipelineMonitor(!showPipelineMonitor)}
-                    >
-                      {showPipelineMonitor ? 'Hide Pipeline Monitor ▲' : 'Open Pipeline Monitor ▼'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* 6 Stage Interactive Pills */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginTop: 10 }}>
-                  {[
-                    {
-                      num: '1', title: 'TLS Handshake', sub: 'nrpc.gov.in',
-                      svg: (
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                        </svg>
-                      )
-                    },
-                    {
-                      num: '2', title: 'Bulletin Scan', sub: 'REA Gazette',
-                      svg: (
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                        </svg>
-                      )
-                    },
-                    {
-                      num: '3', title: 'PDF Ingest', sub: 'Audit Vault',
-                      svg: (
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                      )
-                    },
-                    {
-                      num: '4', title: 'OCR & Parser', sub: 'Scheduled MWh',
-                      svg: (
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" />
-                          <line x1="9" y1="1" x2="9" y2="4" /><line x1="15" y1="1" x2="15" y2="4" /><line x1="9" y1="20" x2="9" y2="23" /><line x1="15" y1="20" x2="15" y2="23" />
-                        </svg>
-                      )
-                    },
-                    {
-                      num: '5', title: 'BFR Match', sub: 'PPA Contracts',
-                      svg: (
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" /><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" /><path d="M7 21h10" /><path d="M12 3v18" />
-                        </svg>
-                      )
-                    },
-                    {
-                      num: '6', title: 'Ledger Commit', sub: 'Immutable Sync',
-                      svg: (
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" /><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
-                        </svg>
-                      )
-                    },
-                  ].map((st) => (
-                    <div
-                      key={st.num}
-                      onClick={() => {
-                        setPipelineMode('DEMO');
-                        setPipelineResult(null);
-                        setPipelineError(null);
-                        setShowPipelineMonitor(true);
-                        setPipelineRunning(true);
-                      }}
-                      style={{
-                        background: '#ffffff',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: 6,
-                        padding: '8px 10px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
-                      }}
-                      title="Click to view full animated pipeline"
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span>{st.svg}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, background: '#e0f2fe', color: '#0284c7', padding: '1px 5px', borderRadius: 10 }}>Step {st.num}</span>
-                      </div>
-                      <div style={{ fontSize: 13.5, fontWeight: 600, color: '#1e293b' }}>{st.title}</div>
-                      <div style={{ fontSize: 12.5, color: '#64748b' }}>{st.sub}</div>
-                    </div>
-                  ))}
-                </div>
+              <div style={{ padding: '12px 16px', fontSize: 13.5, color: 'var(--slate-600)', borderBottom: '1px solid var(--border)' }}>
+                Fetches the Regional Energy Account from the RPC's website for a month, reads the stations and records them as drafts.
+                "Trigger Fetch" and "Scan All RPCs Now" reach the RPC site from the server.
               </div>
 
               {/* Live Step-by-Step Pipeline Monitor */}
@@ -544,10 +509,9 @@ export default function EnergyData() {
                     error={pipelineError}
                     onClose={() => setShowPipelineMonitor(false)}
                     onViewRecords={() => {
-                      if (triggerForm.period_month) {
-                        setFilters(prev => ({ ...prev, period_month: triggerForm.period_month }));
-                      }
+                      const period = triggerForm.period_month;
                       setShowPipelineMonitor(false);
+                      handleFilterMainTable(period);
                     }}
                     onReRun={() => {
                       setPipelineResult(null);
@@ -632,7 +596,10 @@ export default function EnergyData() {
                 {/* Fetch Log Table */}
                 {reaLog.length > 0 && (
                   <div style={{ borderTop: '1px solid var(--border)' }}>
-                    <div style={{ padding: '8px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-light)' }}>Fetch Audit Log</div>
+                    <div style={{ padding: '10px 16px', fontSize: 13.5, fontWeight: 600, color: '#0f172a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>Audit Trail & Downloaded Accounts</span>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>Latest {reaLog.length} pipeline fetch cycles</span>
+                    </div>
                     <table className="data-table" style={{ margin: 0 }}>
                       <thead>
                         <tr>
@@ -640,27 +607,93 @@ export default function EnergyData() {
                           <th scope="col">Period</th>
                           <th scope="col">Type</th>
                           <th scope="col">Status</th>
-                          <th scope="col">Records</th>
-                          <th scope="col">Fetched</th>
-                          <th scope="col">Error</th>
+                          <th scope="col">Certified REA PDF</th>
+                          <th scope="col">Ledger Records</th>
+                          <th scope="col">Fetched At</th>
+                          <th scope="col">Audit Info</th>
                         </tr>
                       </thead>
-                    <tbody>
-                      {reaLog.map(log => (
-                        <tr key={log.id}>
-                          <td>{log.rpc_source}</td>
-                          <td>{log.period_month}</td>
-                          <td><Badge status={log.data_type} /></td>
-                          <td><Badge status={log.status === 'PROCESSED' ? 'ACTIVE' : log.status === 'FAILED' ? 'REJECTED' : log.status} label={log.status} /></td>
-                          <td>{log.records_created}</td>
-                          <td>{fmtDateTime(log.fetched_at)}</td>
-                          <td style={{ fontSize: 13, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{log.error_message || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                      <tbody>
+                        {reaLog.map(log => (
+                          <tr key={log.id}>
+                            <td><strong>{log.rpc_source}</strong></td>
+                            <td><span className="badge badge-blue">{log.period_month}</span></td>
+                            <td><Badge status={log.data_type} /></td>
+                            <td><Badge status={log.status === 'PROCESSED' ? 'ACTIVE' : log.status === 'FAILED' ? 'REJECTED' : log.status} label={log.status} /></td>
+                            <td>
+                              {log.version_id ? (
+                                <a
+                                  href={api.documents.downloadUrl(log.version_id)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="btn btn-ghost btn-sm"
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#0b5fff', textDecoration: 'none', padding: '3px 8px' }}
+                                  title="Download certified REA PDF document"
+                                >
+                                  <span>📄</span>
+                                  <span style={{ maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {log.file_name || `REA_${log.rpc_source}_${log.period_month}.pdf`}
+                                  </span>
+                                  {log.file_size_bytes ? (
+                                    <span style={{ color: '#64748b', fontSize: 11 }}>({(log.file_size_bytes / (1024 * 1024)).toFixed(1)} MB)</span>
+                                  ) : null}
+                                </a>
+                              ) : log.local_file_path ? (
+                                <a
+                                  href={`/api/energy-data/rea-download/${log.id}?token=${encodeURIComponent(localStorage.getItem('sjvn_token') || localStorage.getItem('token') || '')}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="btn btn-ghost btn-sm"
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#0b5fff', textDecoration: 'none', padding: '3px 8px' }}
+                                  title="Download certified REA PDF document"
+                                >
+                                  <span>📄</span>
+                                  <span>Download PDF</span>
+                                </a>
+                              ) : (
+                                <span style={{ color: '#94a3b8' }}>-</span>
+                              )}
+                            </td>
+                            <td>
+                              {log.records_created > 0 ? (
+                                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                  <button
+                                    type="button"
+                                    className="btn btn-primary btn-sm"
+                                    style={{ padding: '4px 10px', fontSize: 12.5, fontWeight: 600, borderRadius: 6, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                                    onClick={() => handleViewLogRecords(log)}
+                                    title="Click to view station records in inspector"
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                                      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                                      <circle cx="12" cy="12" r="3" />
+                                    </svg>
+                                    <span>View {log.records_created} Records</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ color: '#0b5fff', fontSize: 12, padding: '3px 6px' }}
+                                    onClick={() => handleFilterMainTable(log.period_month)}
+                                    title="Filter main ledger table above to this month"
+                                  >
+                                    Filter Table ↗
+                                  </button>
+                                </div>
+                              ) : (
+                                <span style={{ color: '#94a3b8' }}>0</span>
+                              )}
+                            </td>
+                            <td>{fmtDateTime(log.fetched_at)}</td>
+                            <td style={{ fontSize: 12.5, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', color: log.error_message ? '#b91c1c' : '#64748b' }}>
+                              {log.error_message || `Log: ${log.id}`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
             </Card>
           )}
       </div>
@@ -670,17 +703,16 @@ export default function EnergyData() {
       )}
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Record Energy Data" width={560}>
-        {error && <div className="form-error">{error}</div>}
         <form onSubmit={handleCreate}>
           <Field label="Contract">
             <select required value={form.contract_id} onChange={(e) => setForm({ ...form, contract_id: e.target.value })}>
               <option value="">Select contract...</option>
-              {contracts.map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.project_type})</option>)}
+              {contracts.filter(recordable).map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.project_type} · {fmtNumber(capacityOf(c))} MW)</option>)}
             </select>
           </Field>
           <div className="form-grid">
             <Field label="Period (Month)">
-              <input required type="month" value={form.period_month} onChange={(e) => setForm({ ...form, period_month: e.target.value })} />
+              <input required type="month" max={lastMonth()} value={form.period_month} onChange={(e) => setForm({ ...form, period_month: e.target.value })} />
             </Field>
             <Field label="Data Type">
               <select value={form.data_type} onChange={(e) => setForm({ ...form, data_type: e.target.value })}>
@@ -696,9 +728,21 @@ export default function EnergyData() {
             <Field label="Energy (MWh)">
               <input required type="number" step="0.01" value={form.energy_mwh} onChange={(e) => setForm({ ...form, energy_mwh: e.target.value })} />
             </Field>
-            <Field label="CUF (%)">
-              <input type="number" step="0.01" value={form.cuf_percent} onChange={(e) => setForm({ ...form, cuf_percent: e.target.value })} />
-            </Field>
+            {(() => {
+              const c = contracts.find((x) => x.id === form.contract_id);
+              const mw = capacityOf(c);
+              const h = hoursIn(form.period_month);
+              const e = Number(form.energy_mwh);
+              const max = mw && h ? mw * h * (['HYDRO', 'PSP'].includes(String(c?.project_type).toUpperCase()) ? 1.1 : 1) : null;
+              return (
+                <Field label="CUF (worked out)">
+                  <div style={{ padding: '8px 0', fontSize: 13.5, color: max != null && e > max ? '#b91c1c' : 'var(--slate-600)' }}>
+                    {mw && h && form.energy_mwh !== '' ? `${fmtNumber(Math.round((e / (mw * h)) * 10000) / 100)}% — ${fmtNumber(e)} MWh on ${fmtNumber(mw)} MW over ${h} h` : 'Choose the contract, month and energy'}
+                    {max != null && e > max ? ` · above the ${fmtNumber(max)} MWh the plant can make` : ''}
+                  </div>
+                </Field>
+              );
+            })()}
             <Field label="Availability (%)">
               <input type="number" step="0.01" value={form.availability_percent} onChange={(e) => setForm({ ...form, availability_percent: e.target.value })} />
             </Field>
@@ -721,7 +765,6 @@ export default function EnergyData() {
       </Modal>
 
       <Modal open={showUploadREA} onClose={() => { setShowUploadREA(false); setParsedData(null); setUploadFile(null); setReaPeriod(''); }} title="Upload NRPC REA PDF" width={800}>
-        {error && <div className="form-error">{error}</div>}
         
         {!parsedData ? (
           <form onSubmit={handleParseREA}>
@@ -738,9 +781,12 @@ export default function EnergyData() {
         ) : (
           <div>
             <div style={{ marginBottom: 16 }}>
-              <Field label="Apply to Period (Month)">
-                <input required type="month" value={reaPeriod} onChange={e => setReaPeriod(e.target.value)} />
+              <Field label="Account month">
+                <input required type="month" max={lastMonth()} value={reaPeriod} readOnly={!!reaAccountPeriod} onChange={e => setReaPeriod(e.target.value)} />
               </Field>
+              <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '4px 0 0' }}>
+                {reaAccountPeriod ? `Read from the account itself ("REA for the month of …") — it is filed under ${reaAccountPeriod}.` : 'The account did not state its month — choose it.'}
+              </p>
             </div>
             <Table 
               columns={[
@@ -758,7 +804,7 @@ export default function EnergyData() {
                     style={{ padding: '4px 8px', fontSize: 13 }}
                   >
                     <option value="">Select contract...</option>
-                    {contracts.map(c => <option key={c.id} value={c.id}>{c.contract_no}</option>)}
+                    {contracts.filter((c) => c.contract_type === 'PPA' && recordable(c)).map(c => <option key={c.id} value={c.id}>{c.contract_no}</option>)}
                   </select>
                 )}
               ]}
@@ -793,11 +839,12 @@ export default function EnergyData() {
             </div>
             {lockError && <div className="form-error" role="alert">{lockError}</div>}
             <Field label="Reason for locking it anyway (kept on record, and the desk is told)" required>
-              <textarea required rows={3} value={lockReason} onChange={(e) => setLockReason(e.target.value)} style={{ width: '100%' }} />
+              <textarea required rows={3} minLength={15} placeholder="e.g. CERC order 14/2026 — NRLDC certified curtailment for the month" value={lockReason} onChange={(e) => setLockReason(e.target.value)} style={{ width: '100%' }} />
+              <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>At least 15 characters — an auditor reads this.</span>
             </Field>
             <div className="form-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setLockAsk(null)}>Cancel</button>
-              <button type="submit" className="btn btn-danger" disabled={busy || !lockReason.trim()}>{busy ? 'Locking…' : 'Lock with this reason'}</button>
+              <button type="submit" className="btn btn-danger" disabled={busy || lockReason.trim().length < 15}>{busy ? 'Locking…' : 'Lock with this reason'}</button>
             </div>
           </form>
         )}
@@ -810,6 +857,119 @@ export default function EnergyData() {
       <Modal open={!!recordId} onClose={() => setRecordId(null)} title="Energy record" width={940}>
         {recordId && <EnergyRecordDetail key={recordId} id={recordId} onChanged={load} />}
       </Modal>
+
+      {/* Dedicated Ingested Records Inspector Modal */}
+      <Modal
+        open={!!viewingLogRecords}
+        onClose={() => setViewingLogRecords(null)}
+        title={`Certified REA Ingested Records — ${viewingLogRecords?.rpc_source || 'NRPC'} (${viewingLogRecords?.period_month || ''})`}
+        width={980}
+      >
+        <div style={{ padding: '4px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '12px 16px', borderRadius: 8, marginBottom: 16, border: '1px solid #e2e8f0', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 13, color: '#64748b' }}>RPC Source & Period</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a' }}>
+                {viewingLogRecords?.rpc_source} REA — {viewingLogRecords?.period_month} ({viewingLogRecords?.data_type || 'PROVISIONAL'})
+              </div>
+            </div>
+            {(viewingLogRecords?.version_id || viewingLogRecords?.local_file_path) && (
+              <a
+                href={viewingLogRecords.version_id
+                  ? api.documents.downloadUrl(viewingLogRecords.version_id)
+                  : `/api/energy-data/rea-download/${viewingLogRecords.id}?token=${encodeURIComponent(localStorage.getItem('sjvn_token') || localStorage.getItem('token') || '')}`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-secondary btn-sm"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <span>📄</span> Download Certified REA PDF
+                {viewingLogRecords.file_size_bytes ? ` (${(viewingLogRecords.file_size_bytes / (1024 * 1024)).toFixed(1)} MB)` : ''}
+              </a>
+            )}
+          </div>
+
+          {logRecordsLoading ? (
+            <div style={{ padding: 30, textAlign: 'center', color: '#64748b' }}>Loading records from ledger...</div>
+          ) : logRecordsData.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', color: '#64748b', background: '#f8fafc', borderRadius: 8 }}>
+              No records found in energy ledger for period {viewingLogRecords?.period_month}.
+            </div>
+          ) : (
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+              <table className="data-table" style={{ margin: 0 }}>
+                <thead>
+                  <tr>
+                    <th>Plant / Station</th>
+                    <th>Contract</th>
+                    <th>Energy (MWh)</th>
+                    <th>Availability %</th>
+                    <th>Free Energy (MWh)</th>
+                    <th>BFR Key</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logRecordsData.map((rec) => {
+                    const plant = rec.contract_no?.includes('NJHPS') ? 'Nathpa Jhakri HEP' : rec.contract_no?.includes('RHPS') ? 'Rampur HEP' : (rec.station_name || rec.contract_no);
+                    return (
+                      <tr key={rec.id}>
+                        <td><strong>{plant}</strong></td>
+                        <td style={{ fontSize: 12.5 }}>{rec.contract_no}</td>
+                        <td style={{ fontWeight: 700, color: '#0b5fff', fontSize: 14 }}>{fmtNumber(rec.energy_mwh)} MWh</td>
+                        <td>{rec.availability_percent != null ? `${fmtNumber(rec.availability_percent)}%` : '-'}</td>
+                        <td>{rec.free_energy_mwh != null ? fmtNumber(rec.free_energy_mwh) : '-'}</td>
+                        <td style={{ fontFamily: 'monospace', fontSize: 11.5 }}>
+                          <BfrChip bfr={rec.billing_family_ref} onClick={() => { setViewingLogRecords(null); setTrailEnergyId(rec.id); }} />
+                        </td>
+                        <td><Badge status={rec.status} /></td>
+                        <td>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            {['DRAFT', 'DISPUTED'].includes(rec.status) && !rec.is_superseded && (
+                              <button className="btn btn-secondary btn-sm" style={{ padding: '2px 6px', fontSize: 11.5 }} onClick={() => { handleValidate(rec); handleViewLogRecords(viewingLogRecords); }}>Validate</button>
+                            )}
+                            {['VALIDATED', 'DISPUTED'].includes(rec.status) && !rec.is_superseded && (
+                              <button className="btn btn-success btn-sm" style={{ padding: '2px 6px', fontSize: 11.5 }} onClick={() => { handleLock(rec); handleViewLogRecords(viewingLogRecords); }}>Lock</button>
+                            )}
+                            <button className="btn btn-outline btn-sm" style={{ padding: '2px 6px', fontSize: 11.5 }} onClick={() => { setViewingLogRecords(null); setRecordId(rec.id); }}>Record</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 18 }}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                const p = viewingLogRecords?.period_month;
+                setViewingLogRecords(null);
+                handleFilterMainTable(p);
+              }}
+            >
+              🔍 Manage in Main Ledger Table
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setViewingLogRecords(null)}>
+              Close
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <AlertPopup
+        open={!!popup}
+        tone={popup?.tone}
+        title={popup?.title}
+        message={popup?.message}
+        items={popup?.items}
+        okLabel={popup?.okLabel}
+        onClose={() => setPopup(null)}
+      />
     </div>
   );
 }

@@ -33,7 +33,7 @@ describe('S33 Verification queue', () => {
   it('lists developer bills with the checklist the invoice screen draws', async () => {
     const inv = makeInvoice({
       contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'SUBMITTED',
-      billing_period: '2026-08', total_amount: 500000, energy_charges: 500000, tariff_per_unit: 3,
+      billing_period: '2026-08', energy_mwh: 1000, total_amount: 3000000, energy_charges: 3000000, tariff_per_unit: 3,
     });
     const r = await queue();
     expect(r.status).toBe(200);
@@ -80,11 +80,16 @@ describe('S33 Verification queue', () => {
       contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'SUBMITTED',
       billing_period: '2026-08', total_amount: 600000, energy_charges: 500000, tariff_per_unit: 3,
     });
-    const { body } = await queue();
-    const row = body.invoices.find((i) => i.invoice_id === inv.id);
+    let row = (await queue()).body.invoices.find((i) => i.invoice_id === inv.id);
     expect(row.commercial.energy_charges).toBe(500000);
-    // Raised for 6 lakh against a 5 lakh build-up: a lakh that has to be explained.
+    // The bill's other lakh is on the bill, so an untouched build-up meets it.
+    expect(row.commercial.other_bill_lines).toBe(100000);
+    expect(row.commercial_gap).toBe(0);
+    // A lakh of damages the bill does not take off is a gap that has to be explained.
+    await request(app).post(`/api/invoices/${inv.id}/verification`).set(auth(reia)).send({ technical: [], commercial: { liquidated_damages: 100000 } });
+    row = (await queue()).body.invoices.find((i) => i.invoice_id === inv.id);
     expect(row.commercial_gap).toBe(-100000);
+    expect(row.failed_checks).toContain('Commercial build-up');
   });
 
   it('keeps a verifier’s saved answer rather than recomputing over it', async () => {
@@ -171,9 +176,9 @@ describe('S33 CERC filing calendar', () => {
     mkBid('2026-06-10');
     const { body } = await cerc();
     const june = body.monthly.find((m) => m.period === '2026-06');
-    // Period end plus the configured grace days (30 by default).
+    // By the 15th of the following month, as the filed format states.
     expect(june.period_to).toBe('2026-06-30');
-    expect(june.due_date).toBe('2026-07-30');
+    expect(june.due_date).toBe('2026-07-15');
     expect(june.overdue).toBe(true);
     expect(june.days_past_due).toBeGreaterThan(0);
   });

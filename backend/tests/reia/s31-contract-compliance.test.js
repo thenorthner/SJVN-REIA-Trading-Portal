@@ -70,7 +70,7 @@ describe('S31 Contract compliance', () => {
     expect(row.state).toBe('OK');
     expect(row.checks.map((k) => k.state)).not.toContain('BREACH');
     expect(checkOf(row, 'SECURITY').state).toBe('OK');
-    expect(checkOf(row, 'APPROVALS').detail).toMatch(/1 in order/);
+    expect(checkOf(row, 'APPROVALS').detail).toMatch(/1 verified/);
   });
 
   it('calls a live contract past its end date a breach', async () => {
@@ -130,7 +130,7 @@ describe('S31 Contract compliance', () => {
     const { body } = await report();
     const row = body.contracts.find((r) => r.contract_no === 'PPA/SHORT/1');
     expect(checkOf(row, 'SECURITY').state).toBe('BREACH');
-    expect(checkOf(row, 'SECURITY').detail).toMatch(/2000000 lodged against 5000000 required/);
+    expect(checkOf(row, 'SECURITY').detail).toMatch(/₹20,00,000 in force against ₹50,00,000 required/);
   });
 
   it('warns before a guarantee lapses and breaches after', async () => {

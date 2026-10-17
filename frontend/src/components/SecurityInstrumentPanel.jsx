@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../api/client.js';
-import { Badge, Field, fmtCurrency } from './ui.jsx';
+import { Badge, Field, AlertPopup, fmtCurrency } from './ui.jsx';
 import { PreviewModal } from './DocumentManager.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
 
@@ -130,7 +130,7 @@ function AmendForm({ d, sjvn, onDone, onCancel }) {
         Fill in only what the bank changed. Currently {fmtCurrency(d.limit_amount)}, valid until {fmtDate(d.validity_end)}{d.claim_deadline ? `, claims until ${fmtDate(d.claim_deadline)}` : ''}.
         {!sjvn && ' Nothing changes on the instrument until SJVN accepts the amendment.'}
       </p>
-      {error && <div className="form-error">{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       <div className="form-grid">
         <Field label="New validity (valid until)"><input type="date" value={f.new_validity_end} onChange={(e) => set({ new_validity_end: e.target.value })} /></Field>
         <Field label="New claim period ends"><input type="date" value={f.new_claim_deadline} onChange={(e) => set({ new_claim_deadline: e.target.value })} /></Field>
@@ -173,7 +173,7 @@ function DecideForm({ label, defaultType, onDecide }) {
   return (
     <div className="cw-form">
       <strong>{label}</strong>
-      {error && <div className="form-error" style={{ marginTop: 8 }}>{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       <div style={{ marginTop: 8 }}><SfmsFields form={f} set={set} defaultType={defaultType} optional /></div>
       <Field label="Note (needed to refuse)"><textarea value={f.note} onChange={(e) => set({ note: e.target.value })} /></Field>
       <div className="form-actions">
@@ -204,7 +204,7 @@ function SfmsForm({ d, onDone, onCancel }) {
   return (
     <form className="cw-form" onSubmit={submit}>
       <strong>Record the bank's SFMS advice</strong>
-      {error && <div className="form-error" style={{ marginTop: 8 }}>{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       <div style={{ marginTop: 8 }}><SfmsFields form={f} set={set} /></div>
       <Field label="Bank's guarantee / LC number"><input value={f.bank_reference_no} onChange={(e) => set({ bank_reference_no: e.target.value })} /></Field>
       <div className="form-actions">
@@ -259,7 +259,7 @@ export default function SecurityInstrumentPanel({ instrumentId, onChanged }) {
 
   return (
     <div>
-      {error && <div className="form-error">{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       <ExpiryBanner d={d} onExtend={amendable && !sjvn && mode !== 'amend' ? () => setMode('amend') : null} />
 
       {/* SJVN's decision on a counterparty's submission */}

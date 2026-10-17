@@ -37,6 +37,7 @@ import {
 } from '../scripts/reportPdfKit.js';
 
 import { notifyCounterparty } from '../paymentSecurityEngine.js';
+import { supersededByDeveloperSql } from '../services/outstanding.js';
 const router = Router();
 router.use(requireAuth);
 
@@ -51,8 +52,12 @@ const money = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const inr = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const parse = (v) => { try { return v ? JSON.parse(v) : null; } catch { return null; } };
 const dayOf = (v) => String(v || '').slice(0, 10);
-const NOT_BILLED = ['DRAFT', 'PENDING_L2', 'REJECTED', 'CANCELLED'];
+const NOT_BILLED = ['DRAFT', 'PENDING_L2', 'SUBMITTED', 'UNDER_APPROVAL', 'REJECTED', 'CANCELLED'];
 const SIGNABLE = ['PENDING_SIGN_OFF', 'AUTO_MATCHED', 'NEEDS_REVIEW'];
+// The counterparty signs a statement SJVN has finished reviewing. Signing one
+// still under review froze its figures before SJVN had explained them, and
+// flipped it to "pending sign-off" with a line still open.
+const COUNTERPARTY_SIGNABLE = ['PENDING_SIGN_OFF', 'AUTO_MATCHED'];
 
 function reconFor(user, id) {
   const recon = db.prepare(`
@@ -107,10 +112,13 @@ export function rollForward(recon) {
   const direction = recon.counterparty_role === 'BUYER' ? 'SJVN_TO_BUYER' : 'SELLER_TO_SJVN';
   const start = `${win.from}-01`;
   const end = lastDay(win.to);
+  // Bills presented to the counterparty: not DSM pool bills, and not SJVN's
+  // computed bill of a month the developer has invoiced itself.
   const invoices = db.prepare(`
-    SELECT * FROM invoices WHERE contract_id = ? AND direction = ? AND billing_period <= ?
-      AND status NOT IN (${NOT_BILLED.map(() => '?').join(',')})
-    ORDER BY billing_period, created_at
+    SELECT * FROM invoices i WHERE i.contract_id = ? AND i.direction = ? AND i.billing_period <= ?
+      AND i.status NOT IN (${NOT_BILLED.map(() => '?').join(',')})
+      AND i.invoice_no NOT LIKE 'DSM-%' AND ${supersededByDeveloperSql('i')}
+    ORDER BY i.billing_period, i.created_at
   `).all(recon.contract_id, direction, win.to, ...NOT_BILLED);
   const pays = invoices.length ? db.prepare(`
     SELECT * FROM payments WHERE invoice_id IN (${invoices.map(() => '?').join(',')})
@@ -206,7 +214,7 @@ function detailOf(user, recon) {
   return {
     id: recon.id, recon_no: recon.recon_no, status: recon.status, period: recon.period, period_type: recon.period_type, contract_id: recon.contract_id,
     side,
-    can_sign: SIGNABLE.includes(recon.status) && !mine,
+    can_sign: (side === 'SJVN' ? SIGNABLE : COUNTERPARTY_SIGNABLE).includes(recon.status) && !mine,
     can_attach_certificate: side === 'COUNTERPARTY' && recon.scope === 'REIA_CONTRACT',
     can_resolve: side === 'SJVN' && ROLE_GROUPS.REIA_WRITE.includes(user.role),
     certificate_required: certRequiredFor().includes(recon.period_type),
@@ -244,6 +252,12 @@ router.post('/:id/sign', (req, res) => send(res, () => {
       || (recon.counterparty_role === 'TRADING_CLIENT' && ['TRADING_CLIENT', 'TRADING_USER'].includes(req.user.role));
     if (!ok) throw fail(403, 'Only counterparty can acknowledge on this side');
     if (recon.counterparty_ack_at) throw fail(400, `This statement was already signed for your company by ${recon.counterparty_ack_by}`);
+    // A company's maker prepares; its checker or admin signs. This rule lived
+    // only on the older acknowledge route, so the sign-off panel let a maker sign.
+    if (/_L1$/.test(String(req.user.role || ''))) {
+      throw fail(403, 'Maker (Level 1) cannot execute final legal sign-off on balance reconciliation. Designated Checker (Level 2/3) or Company Admin authorization required.');
+    }
+    if (!COUNTERPARTY_SIGNABLE.includes(recon.status)) throw fail(400, `${recon.recon_no} is still under SJVN's review. It can be signed once SJVN has explained every line that did not match.`);
   } else {
     if (recon.sjvn_ack_at) throw fail(400, `This statement was already signed for SJVN by ${recon.sjvn_ack_by}`);
     if (!ROLE_GROUPS.REIA_WRITE.includes(req.user.role)) throw fail(403, 'Only the REIA desk signs a statement for SJVN');

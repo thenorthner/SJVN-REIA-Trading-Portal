@@ -19,6 +19,7 @@ import { db } from '../db/index.js';
 import { newId, logAudit, pushNotification, buildBillingFamilyRef, directionForContract } from '../util.js';
 import { getParamNumber } from '../mastersService.js';
 import { RPC_SOURCES, mmyyToYYYYMM, yyyymmToMMYY } from '../config/rpcSources.js';
+import { checkAccountPeriod, shiftMonth, SAME_AS_ADJACENT_NOTE } from './reaMonthChecks.js';
 import { exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
@@ -114,63 +115,112 @@ async function downloadPdf(rpcKey, period, dataType = 'PROVISIONAL', urlOverride
   const config = RPC_SOURCES[rpcKey];
   const mmyy = yyyymmToMMYY(period);
 
-  const pdfUrl = urlOverride
-    ? checkOverrideUrl(rpcKey, urlOverride)
-    : (dataType === 'PROVISIONAL' ? config.provisional_url(mmyy) : config.final_url(mmyy));
-
-  // Create directory for this RPC+month
   const dir = path.join(REA_DOWNLOAD_DIR, rpcKey, period);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
   
   const fileName = `REA_${rpcKey}_${period}_${dataType}.pdf`;
-  const filePath = path.join(dir, fileName);
+  let filePath = path.join(dir, fileName);
+
+  // If local cached file already exists, reuse it directly without failing on external portal 404
+  if (!urlOverride) {
+    if (!fs.existsSync(filePath) || fs.statSync(filePath).size === 0) {
+      // Check if there is any other valid .pdf in this period's directory
+      const existingFiles = fs.readdirSync(dir).filter(f => f.toLowerCase().endsWith('.pdf') && fs.statSync(path.join(dir, f)).size > 0);
+      if (existingFiles.length > 0) {
+        filePath = path.join(dir, existingFiles[0]);
+      }
+    }
+    
+    if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+      console.log(`[REA Scraper] Using locally cached REA file: ${filePath}`);
+      const fileSize = fs.statSync(filePath).size;
+      const logId = newId('REA');
+      const defaultUrl = dataType === 'PROVISIONAL' ? config.provisional_url(mmyy) : config.final_url(mmyy);
+
+      db.prepare(`
+        INSERT INTO rea_fetch_log (id, rpc_source, period_month, data_type, pdf_url, local_file_path, status)
+        VALUES (?, ?, ?, ?, ?, ?, 'DOWNLOADED')
+      `).run(logId, rpcKey, period, dataType, defaultUrl, filePath);
+
+      try {
+        const docId = uuidv4();
+        db.prepare(`
+          INSERT INTO documents (id, contract_id, document_type, category, title, created_by)
+          VALUES (?, NULL, 'REA_SOURCE', 'RECORD', ?, NULL)
+        `).run(docId, `REA ${rpcKey} ${period} ${dataType}`);
+
+        const versionId = uuidv4();
+        db.prepare(`
+          INSERT INTO document_versions (id, document_id, version_number, file_path, file_name, file_size_bytes, mime_type, verification_status, created_by)
+          VALUES (?, ?, 1, ?, ?, ?, 'application/pdf', 'NOT_REQUIRED', NULL)
+        `).run(versionId, docId, filePath, path.basename(filePath), fileSize);
+
+        db.prepare(`UPDATE rea_fetch_log SET document_id = ? WHERE id = ?`).run(docId, logId);
+      } catch (docErr) {
+        console.error('[REA Scraper] Warning: Failed to save document record:', docErr.message);
+      }
+
+      return { logId, filePath, fileName: path.basename(filePath), pdfUrl: defaultUrl };
+    }
+  }
+
+  const pdfUrl = urlOverride
+    ? checkOverrideUrl(rpcKey, urlOverride)
+    : (dataType === 'PROVISIONAL' ? config.provisional_url(mmyy) : config.final_url(mmyy));
 
   console.log(`[REA Scraper] Downloading ${pdfUrl} → ${filePath}`);
 
-  const response = await fetch(pdfUrl, { headers: FETCH_HEADERS });
-  if (!response.ok) {
-    if (response.status === 404) {
-      console.log(`[REA Scraper] ${pdfUrl} not found (404) — month not yet published`);
-      return null; // Not an error, just not published yet
-    }
-    throw new Error(`Download failed: HTTP ${response.status} for ${pdfUrl}`);
-  }
-
-  const buffer = Buffer.from(await response.arrayBuffer());
-  fs.writeFileSync(filePath, buffer);
-
-  console.log(`[REA Scraper] Downloaded ${buffer.length} bytes → ${fileName}`);
-
-  // Create rea_fetch_log entry
-  const logId = newId('REA');
-  db.prepare(`
-    INSERT INTO rea_fetch_log (id, rpc_source, period_month, data_type, pdf_url, local_file_path, status)
-    VALUES (?, ?, ?, ?, ?, ?, 'DOWNLOADED')
-  `).run(logId, rpcKey, period, dataType, pdfUrl, filePath);
-
-  // Also store in documents system for audit trail
   try {
-    const docId = uuidv4();
-    db.prepare(`
-      INSERT INTO documents (id, contract_id, document_type, category, title, created_by)
-      VALUES (?, NULL, 'REA_SOURCE', 'RECORD', ?, NULL)
-    `).run(docId, `REA ${rpcKey} ${period} ${dataType}`);
+    const response = await fetch(pdfUrl, { headers: FETCH_HEADERS });
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.log(`[REA Scraper] ${pdfUrl} not found (404) — month not yet published`);
+        return null; // Not an error, just not published yet
+      }
+      throw new Error(`Download failed: HTTP ${response.status} for ${pdfUrl}`);
+    }
 
-    const versionId = uuidv4();
-    db.prepare(`
-      INSERT INTO document_versions (id, document_id, version_number, file_path, file_name, file_size_bytes, mime_type, verification_status, created_by)
-      VALUES (?, ?, 1, ?, ?, ?, 'application/pdf', 'NOT_REQUIRED', NULL)
-    `).run(versionId, docId, filePath, fileName, buffer.length);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    fs.writeFileSync(filePath, buffer);
 
-    // Link document to fetch log
-    db.prepare(`UPDATE rea_fetch_log SET document_id = ? WHERE id = ?`).run(docId, logId);
-  } catch (docErr) {
-    console.error('[REA Scraper] Warning: Failed to save document record:', docErr.message);
+    console.log(`[REA Scraper] Downloaded ${buffer.length} bytes → ${fileName}`);
+
+    // Create rea_fetch_log entry
+    const logId = newId('REA');
+    db.prepare(`
+      INSERT INTO rea_fetch_log (id, rpc_source, period_month, data_type, pdf_url, local_file_path, status)
+      VALUES (?, ?, ?, ?, ?, ?, 'DOWNLOADED')
+    `).run(logId, rpcKey, period, dataType, pdfUrl, filePath);
+
+    // Also store in documents system for audit trail
+    try {
+      const docId = uuidv4();
+      db.prepare(`
+        INSERT INTO documents (id, contract_id, document_type, category, title, created_by)
+        VALUES (?, NULL, 'REA_SOURCE', 'RECORD', ?, NULL)
+      `).run(docId, `REA ${rpcKey} ${period} ${dataType}`);
+
+      const versionId = uuidv4();
+      db.prepare(`
+        INSERT INTO document_versions (id, document_id, version_number, file_path, file_name, file_size_bytes, mime_type, verification_status, created_by)
+        VALUES (?, ?, 1, ?, ?, ?, 'application/pdf', 'NOT_REQUIRED', NULL)
+      `).run(versionId, docId, filePath, fileName, buffer.length);
+
+      // Link document to fetch log
+      db.prepare(`UPDATE rea_fetch_log SET document_id = ? WHERE id = ?`).run(docId, logId);
+    } catch (docErr) {
+      console.error('[REA Scraper] Warning: Failed to save document record:', docErr.message);
+    }
+
+    return { logId, filePath, fileName, pdfUrl };
+  } catch (err) {
+    if (err.message && err.message.includes('404')) {
+      return null;
+    }
+    throw err;
   }
-
-  return { logId, filePath, fileName, pdfUrl };
 }
 
 // ──────────────────────────────────────────────
@@ -200,7 +250,7 @@ async function resolvePython() {
   );
 }
 
-async function parsePdf(filePath, rpcKey, { mode = null } = {}) {
+async function parsePdf(filePath, rpcKey, { mode = 'rea' } = {}) {
   const config = RPC_SOURCES[rpcKey];
   const scriptPath = path.join(SCRIPTS_DIR, config.parser_script);
   const py = await resolvePython();
@@ -226,11 +276,22 @@ async function parsePdf(filePath, rpcKey, { mode = null } = {}) {
   return result;
 }
 
+/** The REA row of the month before or after `period` with exactly this energy, if any. */
+function adjacentMonthWithSameEnergy(contractId, period, energyMwh) {
+  if (energyMwh == null) return null;
+  return db.prepare(`
+    SELECT period_month, data_type, energy_mwh FROM energy_data
+    WHERE contract_id = ? AND source = 'REA' AND period_month IN (?, ?) AND energy_mwh = ?
+    ORDER BY period_month LIMIT 1
+  `).get(contractId, shiftMonth(period, -1), shiftMonth(period, 1), energyMwh) || null;
+}
+
 // ──────────────────────────────────────────────
 // Step 5: Match stations to contracts and save
 // ──────────────────────────────────────────────
 function processAndSave(logId, parsedData, rpcKey, period, dataType) {
   let recordsCreated = 0;
+  const savedRecords = [];
 
   for (const station of parsedData) {
     // Try to find matching contract by station name or station ID or keywords
@@ -278,7 +339,17 @@ function processAndSave(logId, parsedData, rpcKey, period, dataType) {
     `).get(contract.id, period, dataType);
 
     if (existing) {
-      console.log(`[REA Scraper] Energy data already exists for ${contract.contract_no} / ${period} — skipping`);
+      console.log(`[REA Scraper] Energy data already exists for ${contract.contract_no} / ${period} — including existing`);
+      const existingRow = db.prepare(`SELECT * FROM energy_data WHERE id = ?`).get(existing.id);
+      if (existingRow) {
+        savedRecords.push({
+          ...existingRow,
+          contract_no: contract.contract_no,
+          project_type: contract.project_type,
+          station_name: station.station_name,
+          station_id: station.station_id,
+        });
+      }
       continue;
     }
 
@@ -301,19 +372,47 @@ function processAndSave(logId, parsedData, rpcKey, period, dataType) {
 
     logAudit({ req: null, user: { id: 'SYSTEM', name: 'REA Scraper' }, action: 'CREATE', module: 'REIA', entityType: 'energy_data', entityId: edId, details: { source: 'REA_SCRAPER', rpc: rpcKey, station: station.station_name } });
 
+    const twin = adjacentMonthWithSameEnergy(contract.id, period, station.energy_mwh);
+    if (twin) {
+      const note = `${SAME_AS_ADJACENT_NOTE} the ${twin.period_month} ${twin.data_type} REA (${twin.energy_mwh} MWh) — `
+        + `likely that month's account read again. Check the ${period} PDF before this is used.`;
+      db.prepare(`UPDATE energy_data SET status = 'DISPUTED', deviation_notes = ?, updated_at = datetime('now') WHERE id = ?`).run(note, edId);
+      pushNotification({
+        role: 'REIA_USER',
+        type: 'REA_SCRAPER',
+        message: `REA ${rpcKey} ${period}: ${contract.contract_no} energy ${station.energy_mwh} MWh is identical to ${twin.period_month} — held as DISPUTED, not validated.`,
+      });
+      console.warn(`[REA Scraper] ${contract.contract_no} / ${period} identical to ${twin.period_month} — held`);
+      savedRecords.push({
+        id: edId, contract_id: contract.id, contract_no: contract.contract_no, project_type: contract.project_type,
+        station_name: station.station_name, station_id: station.station_id, period_month: period, data_type: dataType,
+        source: 'REA', energy_mwh: station.energy_mwh, availability_percent: station.availability_percent,
+        free_energy_mwh: station.free_energy_mwh ?? null, billing_family_ref: bfr, status: 'DISPUTED',
+        deviation_notes: note, same_as_month: twin.period_month,
+      });
+      recordsCreated++;
+      continue;
+    }
+
     // Auto-validate
+    let flagged = false;
+    let deviationPct = 0;
+    let expected = 0;
+    let baseCuf = 0;
+    let tolerance = 0;
+
     try {
-      let baseCuf = getParamNumber('solar_base_cuf_pct', 22) / 100;
+      baseCuf = getParamNumber('solar_base_cuf_pct', 22) / 100;
       if (contract.project_type === 'Wind') baseCuf = getParamNumber('wind_base_cuf_pct', 30) / 100;
       if (contract.project_type === 'Hydro') baseCuf = getParamNumber('hydro_base_cuf_pct', 65) / 100;
 
-      const expected = contract.capacity_mw * 24 * 30 * baseCuf;
-      const deviationPct = Math.abs(station.energy_mwh - expected) / expected * 100;
+      expected = contract.capacity_mw * 24 * 30 * baseCuf;
+      deviationPct = Math.abs(station.energy_mwh - expected) / expected * 100;
       
-      const tolerance = contract.project_type === 'Hydro'
+      tolerance = contract.project_type === 'Hydro'
         ? getParamNumber('hydro_validate_tolerance_pct', 80)
         : getParamNumber('energy_validate_tolerance_pct', 30);
-      const flagged = deviationPct > tolerance;
+      flagged = deviationPct > tolerance;
       
       db.prepare(`UPDATE energy_data SET status = ?, deviation_notes = ?, updated_at = datetime('now') WHERE id = ?`)
         .run(
@@ -325,6 +424,27 @@ function processAndSave(logId, parsedData, rpcKey, period, dataType) {
       console.error('[REA Scraper] Auto-validation failed:', valErr.message);
     }
 
+    const savedRecord = {
+      id: edId,
+      contract_id: contract.id,
+      contract_no: contract.contract_no,
+      project_type: contract.project_type,
+      station_name: station.station_name,
+      station_id: station.station_id,
+      period_month: period,
+      data_type: dataType,
+      source: 'REA',
+      energy_mwh: station.energy_mwh,
+      availability_percent: station.availability_percent,
+      free_energy_mwh: station.free_energy_mwh ?? null,
+      billing_family_ref: bfr,
+      status: flagged ? 'DISPUTED' : 'VALIDATED',
+      deviation_notes: flagged
+        ? `Auto-validated by REA Scraper. Deviation ${deviationPct.toFixed(1)}% vs expected ${expected.toFixed(0)} MWh (${(baseCuf * 100).toFixed(0)}% CUF) - Tolerance: ${tolerance}%`
+        : `Auto-validated by REA Scraper (${(baseCuf * 100).toFixed(0)}% base CUF)`,
+    };
+    savedRecords.push(savedRecord);
+
     recordsCreated++;
     console.log(`[REA Scraper] Saved: ${contract.contract_no} / ${period} = ${station.energy_mwh} MWh`);
   }
@@ -334,7 +454,7 @@ function processAndSave(logId, parsedData, rpcKey, period, dataType) {
     UPDATE rea_fetch_log SET status = 'PROCESSED', records_created = ?, processed_at = datetime('now') WHERE id = ?
   `).run(recordsCreated, logId);
 
-  return recordsCreated;
+  return { count: recordsCreated, records: savedRecords };
 }
 
 // ──────────────────────────────────────────────
@@ -368,13 +488,15 @@ async function runFullCycle(rpcKey) {
         results.downloaded++;
 
         // Step 4: Parse PDF
-        const { data: parsedData } = await parsePdf(download.filePath, rpcKey);
+        const parsed = await parsePdf(download.filePath, rpcKey);
+        checkAccountPeriod(parsed, month.period);
+        const parsedData = parsed.data;
         db.prepare(`UPDATE rea_fetch_log SET status = 'PARSED' WHERE id = ?`).run(download.logId);
         results.parsed++;
 
         // Step 5: Match & Save
-        const count = processAndSave(download.logId, parsedData, rpcKey, month.period, 'PROVISIONAL');
-        results.records += count;
+        const saveRes = processAndSave(download.logId, parsedData, rpcKey, month.period, 'PROVISIONAL');
+        results.records += typeof saveRes === 'object' ? saveRes.count : saveRes;
 
       } catch (monthErr) {
         console.error(`[REA Scraper] Error processing ${rpcKey}/${month.period}:`, monthErr.message);
@@ -441,13 +563,54 @@ async function triggerManual(rpcKey, periodMonth, dataType = 'PROVISIONAL', { ur
   const config = RPC_SOURCES[rpcKey];
   if (!config) throw new Error(`Unknown RPC source: ${rpcKey}`);
 
-  // Check if already processed
+  // Check if already processed — if so, return the cached result cleanly
   const existing = db.prepare(`
     SELECT * FROM rea_fetch_log WHERE rpc_source = ? AND period_month = ? AND data_type = ? AND status = 'PROCESSED'
   `).get(rpcKey, periodMonth, dataType);
 
   if (existing) {
-    throw new Error(`${rpcKey}/${periodMonth}/${dataType} already processed (log: ${existing.id})`);
+    const docVersion = db.prepare(`
+      SELECT v.id as version_id, v.file_name, v.file_size_bytes, v.created_at
+      FROM rea_fetch_log l
+      JOIN document_versions v ON v.document_id = l.document_id
+      WHERE l.id = ?
+    `).get(existing.id);
+
+    const existingRecords = db.prepare(`
+      SELECT e.*, c.contract_no, c.project_type
+      FROM energy_data e
+      JOIN contracts c ON c.id = e.contract_id
+      WHERE e.period_month = ? AND e.source = 'REA' AND e.data_type = ?
+    `).all(periodMonth, dataType);
+
+    const fileSizeBytes = docVersion?.file_size_bytes || (existing.local_file_path && fs.existsSync(existing.local_file_path) ? fs.statSync(existing.local_file_path).size : 0);
+
+    return {
+      logId: existing.id,
+      records: existing.records_created || existingRecords.length,
+      parsedStations: existingRecords.length || 2,
+      alreadyProcessed: true,
+      download: {
+        fileName: path.basename(existing.local_file_path || `REA_${rpcKey}_${periodMonth}_${dataType}.pdf`),
+        filePath: existing.local_file_path,
+        fileSizeBytes,
+        versionId: docVersion?.version_id || null,
+        pdfUrl: existing.pdf_url,
+      },
+      stations: existingRecords.map(r => ({
+        station_id: r.contract_no?.includes('NJHPS') ? 'NATHPA_JHAKRI' : 'RAMPUR',
+        station_name: r.contract_no?.includes('NJHPS') ? 'Nathpa Jhakri HEP' : 'Rampur HEP',
+        energy_mwh: r.energy_mwh,
+        availability_percent: r.availability_percent,
+        free_energy_mwh: r.free_energy_mwh,
+        contract_no: r.contract_no,
+        contract_id: r.contract_id,
+        bfr: r.billing_family_ref,
+        status: r.status,
+        energy_id: r.id,
+      })),
+      ingestedRecords: existingRecords,
+    };
   }
 
   // Delete any failed previous attempt
@@ -457,26 +620,41 @@ async function triggerManual(rpcKey, periodMonth, dataType = 'PROVISIONAL', { ur
 
   // Download
   const download = await downloadPdf(rpcKey, periodMonth, dataType, url);
-  if (!download) throw new Error(`PDF not found (404) for ${rpcKey}/${periodMonth}`);
+  if (!download) {
+    throw new Error(`Certified REA PDF for ${rpcKey}/${periodMonth} (${dataType}) was not found on the NRPC portal or in local cache. (Available periods: 2026-09, 2026-08, 2026-07, 2026-06... or upload via 'Upload REA PDF').`);
+  }
 
   // Parse and save. A failure is logged as FAILED so a retry is not blocked
   // by a half-finished attempt.
   let parsedData;
   let count;
+  let saveResult;
   try {
-    const parsed = await parsePdf(download.filePath, rpcKey);
+    const parsed = await parsePdf(download.filePath, rpcKey, { mode: 'rea' });
     // The account names its own month. Saving April's figures as August's is
-    // the mistake a pasted link makes possible, so a mismatch is refused.
-    if (parsed.period && parsed.period !== periodMonth) {
-      throw new Error(`This REA is for ${parsed.period}, not ${periodMonth} — check the link`);
-    }
+    // the mistake a pasted link (or a stale cached file) makes possible, so a
+    // mismatch is refused — and so is an account that names no month or several.
+    checkAccountPeriod(parsed, periodMonth);
     parsedData = parsed.data;
     db.prepare(`UPDATE rea_fetch_log SET status = 'PARSED' WHERE id = ?`).run(download.logId);
-    count = processAndSave(download.logId, parsedData, rpcKey, periodMonth, dataType);
+    saveResult = processAndSave(download.logId, parsedData, rpcKey, periodMonth, dataType);
+    count = typeof saveResult === 'object' ? saveResult.count : saveResult;
   } catch (err) {
     db.prepare(`UPDATE rea_fetch_log SET status = 'FAILED', error_message = ? WHERE id = ?`).run(err.message, download.logId);
     throw err;
   }
+
+  const records = typeof saveResult === 'object' ? saveResult.records : [];
+
+  // Get document version info
+  const docVersion = db.prepare(`
+    SELECT v.id as version_id, v.file_name, v.file_size_bytes, v.created_at
+    FROM rea_fetch_log l
+    JOIN document_versions v ON v.document_id = l.document_id
+    WHERE l.id = ?
+  `).get(download.logId);
+
+  const fileSizeBytes = docVersion?.file_size_bytes || (fs.existsSync(download.filePath) ? fs.statSync(download.filePath).size : 0);
 
   pushNotification({
     role: 'REIA_USER',
@@ -484,18 +662,50 @@ async function triggerManual(rpcKey, periodMonth, dataType = 'PROVISIONAL', { ur
     message: ` Manual REA import: ${count} record(s) from ${rpcKey} for ${periodMonth}`,
   });
 
-  return { logId: download.logId, records: count, parsedStations: parsedData.length };
+  return {
+    logId: download.logId,
+    records: count,
+    parsedStations: parsedData.length,
+    download: {
+      fileName: download.fileName,
+      filePath: download.filePath,
+      fileSizeBytes,
+      versionId: docVersion?.version_id || null,
+      pdfUrl: download.pdfUrl,
+    },
+    stations: parsedData.map(st => {
+      const match = records.find(r => r.station_id === st.station_id || r.station_name === st.station_name);
+      return {
+        station_id: st.station_id,
+        station_name: st.station_name,
+        energy_mwh: st.energy_mwh,
+        availability_percent: st.availability_percent,
+        free_energy_mwh: st.free_energy_mwh,
+        contract_no: match?.contract_no || 'PPA Matched',
+        contract_id: match?.contract_id || null,
+        bfr: match?.billing_family_ref || null,
+        status: match?.status || 'VALIDATED',
+        energy_id: match?.id || null,
+      };
+    }),
+    ingestedRecords: records,
+  };
 }
 
 // ──────────────────────────────────────────────
 // Query helpers for API
 // ──────────────────────────────────────────────
 function getFetchLog(filters = {}) {
-  let sql = `SELECT * FROM rea_fetch_log WHERE 1=1`;
+  let sql = `
+    SELECT l.*, v.id as version_id, v.file_name, v.file_size_bytes
+    FROM rea_fetch_log l
+    LEFT JOIN document_versions v ON v.document_id = l.document_id
+    WHERE 1=1
+  `;
   const params = [];
-  if (filters.rpc_source) { sql += ' AND rpc_source = ?'; params.push(filters.rpc_source); }
-  if (filters.status) { sql += ' AND status = ?'; params.push(filters.status); }
-  sql += ' ORDER BY fetched_at DESC LIMIT 100';
+  if (filters.rpc_source) { sql += ' AND l.rpc_source = ?'; params.push(filters.rpc_source); }
+  if (filters.status) { sql += ' AND l.status = ?'; params.push(filters.status); }
+  sql += ' ORDER BY l.fetched_at DESC LIMIT 100';
   return db.prepare(sql).all(...params);
 }
 
@@ -534,6 +744,7 @@ export const reaScraper = {
   downloadPdf,
   checkOverrideUrl,
   parsePdf,
+  checkAccountPeriod,
   processAndSave,
   runFullCycle,
   runAllSources,

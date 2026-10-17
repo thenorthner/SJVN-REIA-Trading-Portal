@@ -22,6 +22,8 @@ beforeEach(() => {
   db.prepare('DELETE FROM reconciliations').run();
   writer = tokenFor('REIA_USER');
   contract = makeContract({ contract_type: 'PPA', project_type: 'Solar' });
+  // A statement needs something to reconcile: the month's energy on record.
+  for (const p of ['2026-01']) db.prepare(`INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, availability_percent, status) VALUES (?, ?, ?, 'PROVISIONAL', 'SEA', 100, 95, 'LOCKED')`).run(`ENG-T-${Math.random().toString(36).slice(2, 9)}`, contract.id, p);
 });
 
 const lineOf = (items, type) => items.find((i) => i.item_type === type);

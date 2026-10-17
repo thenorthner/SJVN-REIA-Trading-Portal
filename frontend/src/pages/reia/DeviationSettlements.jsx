@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
-import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, Tabs, Tab, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, Tabs, Tab, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 
@@ -251,8 +251,10 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
     }
   }
 
+  // Asked in the page, not with the browser's own dialog.
+  const [confirmDelete, setConfirmDelete] = useState(null);
   async function doCancel(r) {
-    if (!window.confirm(`Delete deviation week ${r.dsm_no}? It stays in the list as cancelled.`)) return;
+    setConfirmDelete(null);
     setPageError('');
     try {
       await api.deviation.remove(r.id);
@@ -324,7 +326,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
               type="button"
               className="btn btn-ghost"
               style={{ padding: 0, fontSize: 13, textAlign: 'left', color: 'var(--primary)', fontWeight: 600 }}
-              onClick={(e) => { e.stopPropagation(); navigate('/reia/invoices'); }}
+              onClick={(e) => { e.stopPropagation(); navigate(r.invoice_id ? `/reia/invoices?id=${r.invoice_id}` : '/reia/invoices'); }}
               title={r.invoice_status ? `Invoice ${r.invoice_status}` : 'Open Invoices'}
             >
               {r.invoice_no || r.invoice_id}
@@ -343,7 +345,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
         return (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
             {billed && (
-              <button className="btn btn-xs btn-outline" onClick={() => navigate('/reia/invoices')}>
+              <button className="btn btn-xs btn-outline" onClick={() => navigate(r.invoice_id ? `/reia/invoices?id=${r.invoice_id}` : '/reia/invoices')}>
                 View invoice
               </button>
             )}
@@ -364,13 +366,9 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
             {/* An estimate is priced off a rate, which is not how NRPC settles.
                 The server refuses to bill one; saying so here saves the trip. */}
             {!billed && !official && (
-              <button
-                className="btn btn-xs btn-success"
-                disabled
-                title="An estimate cannot be billed. Import the NRPC statement for this week and raise the bill from that."
-              >
-                Generate supplementary bill
-              </button>
+              <span style={{ fontSize: 13, color: 'var(--text-light)', alignSelf: 'center' }} title="Import the NRPC statement for this week and raise the bill from that.">
+                Estimate — not billable
+              </span>
             )}
 
             {official && r.dsa_account_id && (
@@ -389,7 +387,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
             {!billed && official && (
               <button className="btn btn-xs btn-outline" onClick={() => openEdit(r)}>Notes</button>
             )}
-            {!billed && <button className="btn btn-xs btn-danger" onClick={() => doCancel(r)}>Delete</button>}
+            {!billed && <button className="btn btn-xs btn-danger" onClick={() => setConfirmDelete(r)}>Delete</button>}
           </div>
         );
       },
@@ -427,7 +425,6 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
 
       {tab === 'weeks' && (
       <>
-      {pageError && <div className="form-error" role="alert">{pageError}</div>}
       {notice && (
         <div className="alert alert-success" role="status" style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
           <span>{notice}</span>
@@ -506,11 +503,6 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
               />
             </Field>
 
-            {uploadError && (
-              <div className="form-error" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.55 }}>
-                {uploadError}
-              </div>
-            )}
 
             <div style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.6, marginTop: 8 }}>
               Each entity&apos;s daily rows are added up and checked against the total the
@@ -583,11 +575,10 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
             NRPC published — nothing is computed here — and nothing is billed until you generate the
             supplementary bill from it.
           </p>
-          {raiseError && <div className="form-error" role="alert">{raiseError}</div>}
           <Field label="Contract (the station's PPA)" required>
             <select required value={raise.contract_id} onChange={(e) => pickRaiseContract(e.target.value)}>
               <option value="">Select contract...</option>
-              {contracts.map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.project_type})</option>)}
+              {contracts.filter((c) => c.contract_type === 'PPA').map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.project_type})</option>)}
             </select>
           </Field>
           <Field label="NRPC statement (week)" required>
@@ -648,7 +639,6 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
       </Modal>
 
       <Modal open={show} onClose={() => setShow(false)} title={editId ? 'Edit Deviation Week' : 'Add Deviation Week'} width={600}>
-        {error && <div className="form-error">{error}</div>}
         <form onSubmit={save}>
           
           <h4 style={{ fontSize: 14, color: 'var(--primary)', marginBottom: 12, borderBottom: '1px solid var(--border)', paddingBottom: 6 }}>1. Station & Time Details</h4>
@@ -665,7 +655,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
               setForm({ ...form, contract_id: cid, plant_code: pCode, plant_name: pName });
             }}>
               <option value="">Select contract...</option>
-              {contracts.map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.project_type})</option>)}
+              {contracts.filter((c) => c.contract_type === 'PPA').map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.project_type})</option>)}
             </select>
           </Field>
           <div className="form-grid">
@@ -677,7 +667,6 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
             <Field label="Week No. (financial-year week, 1–53)"><input required type="number" min="1" max="53" step="1" disabled={!!editId} value={form.week_no} onChange={(e) => setForm({ ...form, week_no: e.target.value })} /></Field>
           </div>
           <div className="form-grid" style={{ marginBottom: 24 }}>
-            <Field label="Week Date"><input type="date" value={form.week_date} onChange={(e) => setForm({ ...form, week_date: e.target.value })} /></Field>
             <Field label="Entry Type">
               <select disabled={!!editId} value={form.entry_type} onChange={(e) => setForm({ ...form, entry_type: e.target.value })}>
                 <option value="PRIMARY">Primary</option>
@@ -741,7 +730,6 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
       <Modal open={!!dispatchRow} onClose={() => { setDispatchRow(null); setDispatchError(''); }} title="Generate supplementary bill" width={460}>
         {dispatchRow && (
           <form onSubmit={doDispatch}>
-            {dispatchError && <div className="form-error">{dispatchError}</div>}
             <p className="inline-note">{dispatchRow.dsm_no} · Net <SignedAmount v={dispatchRow.deviation_amount} /></p>
             {dispatchRow.dsa_statement && (
               <p style={{ fontSize: 13.5, color: 'var(--text-light)', margin: '0 0 10px', lineHeight: 1.6 }}>
@@ -769,6 +757,21 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
           </form>
         )}
       </Modal>
+      {/* Refusals as a popup (house rule). */}
+      {(() => {
+        const errs = [[pageError, setPageError], [raiseError, setRaiseError], [error, setError], [dispatchError, setDispatchError], [uploadError, setUploadError]];
+        const hit = errs.find(([m]) => m);
+        return <AlertPopup open={!!hit} title="Not done" message={hit?.[0]} onClose={() => hit?.[1]('')} />;
+      })()}
+      <AlertPopup
+        open={!!confirmDelete}
+        tone="warning"
+        title={`Delete ${confirmDelete?.dsm_no || 'this week'}?`}
+        message="It stays on the list as cancelled, and the week can be entered again."
+        okLabel="Keep it"
+        onClose={() => setConfirmDelete(null)}
+        actions={<button type="button" className="btn btn-danger" onClick={() => doCancel(confirmDelete)}>Delete</button>}
+      />
     </div>
   );
 }

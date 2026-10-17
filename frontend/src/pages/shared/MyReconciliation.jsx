@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, StatementViewer } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, fmtCurrency, StatementViewer } from '../../components/ui.jsx';
 import ReconSignoffPanel, { ReconSignModal } from '../../components/ReconSignoffPanel.jsx';
 import { fmtDateTime } from '../../datetime.js';
 
@@ -87,11 +87,12 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
   ];
   const canAct = detail && ['PENDING_SIGN_OFF', 'AUTO_MATCHED', 'NEEDS_REVIEW'].includes(detail.status) && !detail.counterparty_ack_at;
+  // Signing waits for SJVN's review of the lines; disagreeing does not.
+  const canSign = canAct && detail.status !== 'NEEDS_REVIEW';
 
   return (
     <div>
       <PageHeader title="Reconciliation Statements" subtitle={subtitle} />
-      {pageError && <div className="form-error" role="alert">{pageError}</div>}
       <Card>
         <Table columns={columns} rows={loading ? [] : rows} onRowClick={openDetail} emptyMessage={loading ? 'Loading...' : 'No reconciliation statements yet.'} />
       </Card>
@@ -151,13 +152,18 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
 
             {canAct && (
               <div className="form-actions" style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 14, flexWrap: 'wrap' }}>
-                <button type="button" className="btn btn-success" onClick={() => setSignMode('AGREE')}>I agree — sign off</button>
-                <button type="button" className="btn btn-secondary" onClick={() => setSignMode('AGREE_WITH_EXCEPTIONS')}>Agree with exceptions</button>
+                {canSign ? (
+                  <>
+                    <button type="button" className="btn btn-success" onClick={() => setSignMode('AGREE')}>I agree — sign off</button>
+                    <button type="button" className="btn btn-secondary" onClick={() => setSignMode('AGREE_WITH_EXCEPTIONS')}>Agree with exceptions</button>
+                  </>
+                ) : (
+                  <span className="inline-note" style={{ alignSelf: 'center', margin: 0 }}>SJVN is still reviewing the lines that did not match — you can sign once it has explained them.</span>
+                )}
                 <button type="button" className="btn btn-danger" onClick={() => setDisagree('')}>Disagree with the whole statement</button>
               </div>
             )}
 
-            {error && reopen === null && disagree === null && <div className="form-error" role="alert">{error}</div>}
             {['CLOSED', 'AGREED'].includes(detail.status) && reopen === null && (
               <div className="form-actions" style={{ marginTop: 16 }}>
                 <button type="button" className="btn btn-secondary" onClick={() => { setReopen(''); setError(''); }}>Request Period Reopen</button>
@@ -165,7 +171,6 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
             )}
             {reopen !== null && (
               <form className="cw-form" onSubmit={submitReopen}>
-                {error && <div className="form-error" role="alert">{error}</div>}
                 <Field label="Why should this closed period be reopened?" required>
                   <textarea rows={2} required value={reopen} onChange={(e) => setReopen(e.target.value)} style={{ width: '100%' }} />
                 </Field>
@@ -193,7 +198,6 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
 
       <Modal open={disagree !== null} onClose={() => !busy && setDisagree(null)} title="Disagree with the statement" width={540}>
         <form onSubmit={submitDisagree}>
-          {error && <div className="form-error" role="alert">{error}</div>}
           <div className="alert alert-error" style={{ fontSize: 13 }}>
             This marks the whole statement <strong>disputed</strong> and holds everything on it. If you accept most of it, use <strong>Agree with exceptions</strong> instead, so what is not in question can be settled.
           </div>
@@ -206,6 +210,7 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
           </div>
         </form>
       </Modal>
+      <AlertPopup open={!!(error || pageError)} title="Not done" message={error || pageError} onClose={() => { setError(''); setPageError(''); }} />
     </div>
   );
 }

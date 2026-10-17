@@ -250,12 +250,18 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
   const ppa = topo.ppa;
   const hub = topo.hub || {};
   const psa = topo.psa;
+  // A PSA can draw from several PPAs at once; the trail shows every one.
+  const sources = topo.sources || [];
+  const multiSource = sources.length > 1;
+  const sharesLabel = sources.map((s) => `${fmtNumber(s.allocation_percent)}%`).join(' + ');
   const effectiveMwh = hub.energy_mwh || trail.final_energy?.energy_mwh || trail.provisional_energy?.energy_mwh || 0;
+  // What reaches the PSA: its share of each source, not the sources' whole generation.
+  const deliveredMwh = multiSource ? (hub.allocated_mwh ?? 0) : effectiveMwh;
   const tradingMargin = hub.trading_margin_per_unit != null ? hub.trading_margin_per_unit : 0.07;
   const totalSpread = hub.spread_amount != null ? hub.spread_amount : Math.round(effectiveMwh * 1000 * tradingMargin);
 
   // Invoices
-  const ppaInvoices = ppa?.invoices?.length ? ppa.invoices : (trail.direction === 'SELLER_TO_SJVN' ? [...(trail.provisional_invoices || []), ...(trail.final_invoices || [])] : []);
+  const ppaInvoices = multiSource ? sources.flatMap((s) => s.invoices || []) : ppa?.invoices?.length ? ppa.invoices : (trail.direction === 'SELLER_TO_SJVN' ? [...(trail.provisional_invoices || []), ...(trail.final_invoices || [])] : []);
   const psaInvoices = psa?.invoices?.length ? psa.invoices : (trail.direction === 'SJVN_TO_BUYER' ? [...(trail.provisional_invoices || []), ...(trail.final_invoices || [])] : []);
 
   return (
@@ -337,7 +343,9 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
             BACK-TO-BACK LINKED & BALANCED
           </span>
           <span style={{ fontSize: 13, color: '#94a3b8' }}>
-            Allocation: <strong style={{ color: '#38bdf8' }}>{topo.allocation_percent || 100}%</strong>
+            {multiSource
+              ? <>Sources: <strong style={{ color: '#38bdf8' }}>{sources.length} PPAs · {sharesLabel}</strong></>
+              : <>Allocation: <strong style={{ color: '#38bdf8' }}>{topo.allocation_percent || 100}%</strong></>}
           </span>
         </div>
       </div>
@@ -389,11 +397,19 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
             </div>
 
             <div style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc', marginBottom: 3 }}>
-              {ppa?.seller_name || 'Power Producer (IPP)'}
+              {multiSource ? `${sources.length} source PPAs` : (ppa?.seller_name || 'Power Producer (IPP)')}
             </div>
-            <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 14 }}>
-              {ppa?.contract_no || trail.contract_no || 'PPA Agreement'} · {ppa?.capacity_mw || 50} MW
-            </div>
+            {multiSource ? (
+              <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 14, lineHeight: 1.6 }}>
+                {sources.map((s) => (
+                  <div key={s.ppa_id}>{s.contract_no} · {fmtNumber(s.allocation_percent)}% of {fmtNumber(s.capacity_mw)} MW</div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 14 }}>
+                {ppa?.contract_no || trail.contract_no || 'PPA Agreement'} · {ppa?.capacity_mw || 50} MW
+              </div>
+            )}
 
             <div style={{
               background: 'rgba(0, 0, 0, 0.35)',
@@ -404,7 +420,9 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: '#94a3b8', marginBottom: 6 }}>
                 <span>PPA Base Tariff</span>
-                <strong style={{ color: '#f8fafc', fontSize: 14 }}>₹{ppa?.tariff_per_unit ?? '2.88'} / kWh</strong>
+                <strong style={{ color: '#f8fafc', fontSize: 14 }}>{multiSource
+                  ? [...new Set(sources.map((s) => `₹${s.tariff_per_unit}`))].join(' / ')
+                  : `₹${ppa?.tariff_per_unit ?? '2.88'}`} / kWh</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: '#94a3b8' }}>
                 <span>Metered Generation</span>
@@ -570,7 +588,7 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
                   {fmtCurrency(totalSpread)}
                 </div>
                 <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
-                  Throughput: {fmtNumber(effectiveMwh)} MWh
+                  Throughput: {fmtNumber(deliveredMwh)} MWh
                 </div>
               </div>
             </div>
@@ -645,7 +663,7 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
               boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
               textAlign: 'center',
             }}>
-              <div>Allocated {topo.allocation_percent || 100}%</div>
+              <div>{multiSource ? `Allocated ${fmtNumber(hub.allocated_mwh ?? 0)} MWh` : `Allocated ${topo.allocation_percent || 100}%`}</div>
               <div style={{ color: '#f59e0b', fontSize: 13, marginTop: 1 }}>₹{psa?.tariff_per_unit ?? (Number(ppa?.tariff_per_unit || 2.88) + tradingMargin).toFixed(2)}</div>
             </div>
           </div>
@@ -705,7 +723,7 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: '#94a3b8' }}>
                 <span>Allocated Energy</span>
-                <strong style={{ color: '#818cf8', fontSize: 14 }}>{fmtNumber(effectiveMwh)} MWh</strong>
+                <strong style={{ color: '#818cf8', fontSize: 14 }}>{fmtNumber(deliveredMwh)} MWh</strong>
               </div>
             </div>
 
@@ -734,7 +752,7 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
                 {selectedNode === 'PPA' ? '☀️' : selectedNode === 'HUB' ? '🏛️' : '🏢'}
               </span>
               <strong style={{ color: '#f8fafc', fontSize: 14 }}>
-                {selectedNode === 'PPA' && `PPA Source Details: ${ppa?.seller_name || 'Power Producer'}`}
+                {selectedNode === 'PPA' && (multiSource ? `Source PPAs: ${sources.length} for this PSA` : `PPA Source Details: ${ppa?.seller_name || 'Power Producer'}`)}
                 {selectedNode === 'HUB' && 'SJVN REIA Clearing & Back-to-Back Matching Engine'}
                 {selectedNode === 'PSA' && `PSA Off-Taker Details: ${psa?.buyer_name || 'Buyer DISCOM'}`}
               </strong>
@@ -755,7 +773,24 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
             </button>
           </div>
 
-          {selectedNode === 'PPA' && (
+          {selectedNode === 'PPA' && multiSource && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, fontSize: 13.5 }}>
+              {sources.map((s) => (
+                <div key={s.ppa_id} style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
+                  <div style={{ color: '#94a3b8', fontSize: 13 }}>{s.seller_name}</div>
+                  <div style={{ fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>{s.contract_no} · {fmtNumber(s.allocation_percent)}%</div>
+                  <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 4 }}>
+                    {fmtNumber(s.capacity_mw)} MW · ₹{s.tariff_per_unit} / unit
+                  </div>
+                  <div style={{ color: '#10b981', fontSize: 12.5, marginTop: 4 }}>
+                    {fmtNumber(s.energy_mwh)} MWh × {fmtNumber(s.allocation_percent)}% = {fmtNumber(s.allocated_mwh)} MWh
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {selectedNode === 'PPA' && !multiSource && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, fontSize: 13.5 }}>
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
                 <div style={{ color: '#94a3b8', fontSize: 13 }}>PPA Contract Number</div>
@@ -1007,6 +1042,11 @@ function VisualPipeline3D({ trail, topo, selectedNode, setSelectedNode }) {
  */
 function AuditLedgerView({ trail }) {
   const s = trail.summary || {};
+  const sources = trail.linked_topology?.sources || [];
+  const multiSource = sources.length > 1;
+  // A multi-source month has a summed figure only once every source has one;
+  // until then, say which sources it is waiting on.
+  const waitingOn = (key) => sources.filter((src) => src[key] == null).map((src) => src.contract_no).join(', ');
 
   return (
     <div style={{
@@ -1060,7 +1100,9 @@ function AuditLedgerView({ trail }) {
 
       {trail.direction === 'SJVN_TO_BUYER' && !trail.psa_unallocated && (
         <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginBottom: 12, padding: '8px 12px', background: '#eef2ff', borderRadius: 8, lineHeight: 1.5 }}>
-          Energy shown below is the <strong>source PPA</strong> generation for this period. The PSA bill uses the allocated share (see invoice breakdown: Source PPA Energy × Allocation %).
+          {multiSource
+            ? <>Energy shown below is the generation of this PSA&apos;s <strong>{sources.length} source PPAs</strong>, added together. The PSA bill uses its share of each (Σ Source PPA Energy × Allocation %), set out per PPA below.</>
+            : <>Energy shown below is the <strong>source PPA</strong> generation for this period. The PSA bill uses the allocated share (see invoice breakdown: Source PPA Energy × Allocation %).</>}
         </div>
       )}
       {trail.psa_unallocated && (
@@ -1074,22 +1116,64 @@ function AuditLedgerView({ trail }) {
           {trail.provisional_energy ? (
             <>
               <div style={{ fontSize: 15, fontWeight: 600 }}>{fmtNumber(trail.provisional_energy.energy_mwh)} MWh · {trail.provisional_energy.source}</div>
-              <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}><Badge status={trail.provisional_energy.status} /> · {trail.provisional_energy.id}</div>
+              {multiSource && <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 2 }}>{fmtNumber(trail.provisional_energy.allocated_mwh)} MWh to this PSA</div>}
+              <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}><Badge status={trail.provisional_energy.status} /> · {multiSource ? `${sources.length} source PPAs` : trail.provisional_energy.id}</div>
             </>
-          ) : <span style={{ fontSize: 14, color: 'var(--text-subtle)' }}>{trail.psa_unallocated ? 'No source PPA' : 'None'}</span>}
+          ) : <span style={{ fontSize: 14, color: 'var(--text-subtle)' }}>{trail.psa_unallocated ? 'No source PPA' : multiSource && waitingOn('provisional_mwh') ? `Awaiting ${waitingOn('provisional_mwh')}` : 'None'}</span>}
         </TrailBlock>
         <TrailBlock title="Final Energy">
           {trail.final_energy ? (
             <>
               <div style={{ fontSize: 15, fontWeight: 600 }}>{fmtNumber(trail.final_energy.energy_mwh)} MWh · {trail.final_energy.source}</div>
+              {multiSource && <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 2 }}>{fmtNumber(trail.final_energy.allocated_mwh)} MWh to this PSA</div>}
               <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
                 <Badge status={trail.final_energy.status} />
                 {trail.final_energy.supersedes_energy_id && ' · replaces the provisional figure'}
+                {multiSource && ` · ${sources.length} source PPAs`}
               </div>
             </>
-          ) : <span style={{ fontSize: 14, color: 'var(--text-subtle)' }}>{trail.psa_unallocated ? 'No source PPA' : 'Awaiting CERC final'}</span>}
+          ) : <span style={{ fontSize: 14, color: 'var(--text-subtle)' }}>{trail.psa_unallocated ? 'No source PPA' : multiSource && waitingOn('final_mwh') ? `Awaiting final from ${waitingOn('final_mwh')}` : 'Awaiting CERC final'}</span>}
         </TrailBlock>
       </div>
+
+      {sources.length > 0 && (
+        <TrailBlock title={multiSource ? `Source PPAs (${sources.length})` : 'Source PPA'} style={{ marginTop: 14 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+            <thead>
+              <tr style={{ textAlign: 'left', color: 'var(--slate-500)', fontSize: 13 }}>
+                <th style={{ padding: '4px 8px 6px 0' }}>PPA</th>
+                <th style={{ padding: '4px 8px 6px' }}>Share</th>
+                <th style={{ padding: '4px 8px 6px', textAlign: 'right' }}>Provisional MWh</th>
+                <th style={{ padding: '4px 8px 6px', textAlign: 'right' }}>Final MWh</th>
+                <th style={{ padding: '4px 0 6px 8px', textAlign: 'right' }}>To this PSA</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sources.map((src) => (
+                <tr key={src.ppa_id} style={{ borderTop: '1px solid var(--slate-100)' }}>
+                  <td style={{ padding: '6px 8px 6px 0' }}>
+                    <div style={{ fontWeight: 600 }}>{src.contract_no}</div>
+                    <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>{src.seller_name}</div>
+                  </td>
+                  <td style={{ padding: '6px 8px' }}>{fmtNumber(src.allocation_percent)}%</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{src.provisional_mwh == null ? '—' : fmtNumber(src.provisional_mwh)}</td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right' }}>{src.final_mwh == null ? '—' : fmtNumber(src.final_mwh)}</td>
+                  <td style={{ padding: '6px 0 6px 8px', textAlign: 'right', fontWeight: 600 }}>{fmtNumber(src.allocated_mwh)} MWh</td>
+                </tr>
+              ))}
+            </tbody>
+            {multiSource && (
+              <tfoot>
+                <tr style={{ borderTop: '1px solid var(--slate-200)', fontWeight: 700 }}>
+                  <td style={{ padding: '6px 8px 0 0' }} colSpan={4}>Total billed to this PSA</td>
+                  <td style={{ padding: '6px 0 0 8px', textAlign: 'right' }}>{fmtNumber(sources.reduce((t, src) => t + (src.allocated_mwh || 0), 0))} MWh</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+          <div style={{ fontSize: 13, color: 'var(--text-subtle)', marginTop: 6 }}>Each PPA&apos;s final energy where it has one, otherwise its provisional — as the bill takes it.</div>
+        </TrailBlock>
+      )}
 
       <TrailBlock title="Provisional Invoices" style={{ marginTop: 14 }}>
         {trail.provisional_invoices?.length ? (

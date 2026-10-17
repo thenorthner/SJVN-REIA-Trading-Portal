@@ -35,7 +35,19 @@ const OUTSTANDING_SQL = `
 // "Not PAID or CANCELLED" also took in drafts, bills still in approval and bills
 // that had been rejected — so a draft nobody had been sent was ageing debt, and
 // a rejected bill went on being chased as money outstanding.
-const OPEN = `i.status IN ('APPROVED','SENT','PARTIALLY_PAID','DISPUTED')`;
+//
+// And once a developer has raised its own invoice for a month, that invoice is
+// what SJVN owes; SJVN's computed bill of the same month (the figure the
+// developer's invoice was validated against) is not owed a second time. Both
+// were counted, so Sunrise's October stood in payables twice.
+export function supersededByDeveloperSql(alias = 'i') {
+  return `NOT (${alias}.direction = 'SELLER_TO_SJVN' AND TRIM(COALESCE(${alias}.invoice_breakdown_json, '')) <> ''
+    AND ${alias}.invoice_type IN ('PROVISIONAL', 'FINAL')
+    AND EXISTS (SELECT 1 FROM invoices s WHERE s.contract_id = ${alias}.contract_id AND s.billing_period = ${alias}.billing_period
+      AND s.id <> ${alias}.id AND s.direction = 'SELLER_TO_SJVN' AND TRIM(COALESCE(s.invoice_breakdown_json, '')) = ''
+      AND s.status IN ('APPROVED','SENT','PARTIALLY_PAID','DISPUTED','PAID')))`;
+}
+const OPEN = `i.status IN ('APPROVED','SENT','PARTIALLY_PAID','DISPUTED') AND ${supersededByDeveloperSql('i')}`;
 
 function sum(where, params = []) {
   return db.prepare(`SELECT COALESCE(SUM(${OUTSTANDING_SQL}), 0) s FROM invoices i WHERE ${where}`).get(...params).s;
@@ -91,7 +103,10 @@ export function overdueCount() {
 
 /** Days past due → bucket name. `date('now')` is the cut, as everywhere else. */
 const AGEING_BUCKETS = [
-  { bucket: 'NOT_DUE', label: 'Not yet due', where: `(i.due_date IS NULL OR date(i.due_date) >= date('now'))` },
+  // A bill presented with no due date never falls due and never earns
+  // surcharge; filed as "not yet due" it looked current for ever.
+  { bucket: 'NO_DUE_DATE', label: 'No due date set', where: `i.due_date IS NULL` },
+  { bucket: 'NOT_DUE', label: 'Not yet due', where: `i.due_date IS NOT NULL AND date(i.due_date) >= date('now')` },
   { bucket: 'DAYS_0_30', label: '1–30 days', where: `date(i.due_date) < date('now') AND date(i.due_date) >= date('now','-30 days')` },
   { bucket: 'DAYS_31_60', label: '31–60 days', where: `date(i.due_date) < date('now','-30 days') AND date(i.due_date) >= date('now','-60 days')` },
   { bucket: 'DAYS_61_90', label: '61–90 days', where: `date(i.due_date) < date('now','-60 days') AND date(i.due_date) >= date('now','-90 days')` },

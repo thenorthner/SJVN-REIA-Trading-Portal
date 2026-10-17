@@ -10,6 +10,7 @@ import {
 import { announceValidated } from './energyRecords.js';
 import { notifyCounterparty } from '../paymentSecurityEngine.js';
 import { PRESENTED_STATUSES } from '../services/counterpartyScope.js';
+import { energyRowProblems, maxEnergyMwh, hoursInMonth } from '../services/energyRules.js';
 import multer from 'multer';
 import { exec } from 'child_process';
 import path from 'path';
@@ -50,7 +51,10 @@ router.get('/', (req, res) => {
   const billed = PRESENTED_STATUSES.filter((s) => s !== 'CANCELLED').map((s) => `'${s}'`).join(',');
   const invoice = (col) => `(SELECT i.${col} FROM invoices i WHERE i.contract_id = ed.contract_id AND i.billing_period = ed.period_month AND i.status IN (${billed}) ORDER BY i.created_at DESC LIMIT 1)`;
   let sql = `
-    SELECT ed.*, c.contract_no, c.min_cuf_percent,
+    SELECT ed.*, c.contract_no, c.min_cuf_percent, c.contract_type, c.capacity_mw, c.commissioned_capacity_mw,
+           -- A PSA whose energy is its share of a PPA's; totals count the PPA, not both.
+           EXISTS (SELECT 1 FROM contract_allocations a WHERE a.psa_id = ed.contract_id
+                   AND a.effective_from <= ed.period_month || '-31' AND COALESCE(a.effective_to, '9999-12-31') >= ed.period_month || '-01') AS fed_by_ppa,
            ${invoice('id')} AS invoice_id, ${invoice('invoice_no')} AS invoice_no,
            EXISTS (SELECT 1 FROM energy_blocks b WHERE b.contract_id = ed.contract_id AND b.period_month = ed.period_month) AS has_blocks,
            -- A provisional figure that a final one has since replaced.
@@ -59,11 +63,13 @@ router.get('/', (req, res) => {
   const params = [];
   
   const side = counterpartySide(req.user);
+  // A counterparty sees a figure once SJVN has finished preparing it; a draft
+  // is the desk's working copy and was shown to them as if it were the record.
   if (side === 'SELLER') {
-    sql += ' AND c.seller_id = ?';
+    sql += " AND c.seller_id = ? AND ed.status != 'DRAFT' AND c.status NOT IN ('DRAFT','UNDER_NEGOTIATION')";
     params.push(req.user.linked_entity_id);
   } else if (side === 'BUYER') {
-    sql += ' AND c.buyer_id = ?';
+    sql += " AND c.buyer_id = ? AND ed.status != 'DRAFT' AND c.status NOT IN ('DRAFT','UNDER_NEGOTIATION')";
     params.push(req.user.linked_entity_id);
   } else if (![...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'].includes(req.user.role)) {
     // Neither SJVN nor a party to any contract: this used to fall through and return every record.
@@ -113,7 +119,16 @@ router.post('/parse-rea', requireRole(...ROLE_GROUPS.REIA_WRITE), upload.single(
           use: '/api/energy-data/upload-account',
         });
       }
-      res.json(result.data);
+      // The account names its own month; the desk used to type one in, and could
+      // file June's REA under any month it liked. One whose titles disagree with
+      // its page headers is another month's account relabelled (see
+      // services/reaMonthChecks.js).
+      if (Array.isArray(result.period_conflict) && result.period_conflict.length) {
+        return res.status(422).json({
+          error: `This REA's page headers say ${result.period} but its own titles say ${result.period_conflict.join(', ')} — it looks like another month's account relabelled.`,
+        });
+      }
+      res.json({ period: result.period || null, stations: result.data });
     } catch (parseErr) {
       console.error('Invalid JSON from script:', stdout);
       res.status(500).json({ error: 'Invalid output from parser script' });
@@ -190,39 +205,36 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const b = req.body;
   const dataType = b.data_type || 'PROVISIONAL';
   if (!['PROVISIONAL', 'FINAL'].includes(dataType)) return res.status(400).json({ error: 'Data type is Provisional or Final' });
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(b.period_month || ''))) return res.status(400).json({ error: 'The period is a month, written YYYY-MM' });
-  // A month that has not ended has no energy account yet.
-  if (String(b.period_month) > new Date().toISOString().slice(0, 7)) return res.status(400).json({ error: 'Energy cannot be recorded for a month that has not begun' });
-  const energy = Number(b.energy_mwh);
-  if (b.energy_mwh === '' || b.energy_mwh == null || !Number.isFinite(energy) || energy < 0) return res.status(400).json({ error: 'Energy must be a number of MWh, zero or more' });
-  for (const [key, label] of [['cuf_percent', 'CUF'], ['availability_percent', 'Availability'], ['peak_availability_percent', 'Peak-window availability']]) {
-    if (b[key] == null || b[key] === '') continue;
-    const v = Number(b[key]);
-    if (!Number.isFinite(v) || v < 0 || v > 100) return res.status(400).json({ error: `${label} is a percentage between 0 and 100` });
-  }
   const resolved = resolveEnergyBfr(b.contract_id, b.period_month, dataType);
   if (!resolved) return res.status(400).json({ error: 'Contract not found' });
-  // Energy belongs to a month the contract was in force.
-  const from = String(resolved.contract.tenure_start || '').slice(0, 7);
-  const to = String(resolved.contract.tenure_end || '').slice(0, 7);
-  if ((from && b.period_month < from) || (to && b.period_month > to)) {
-    return res.status(400).json({ error: `${resolved.contract.contract_no} runs from ${from || '—'} to ${to || '—'}; ${b.period_month} is outside it` });
-  }
+  const { errors, cuf } = energyRowProblems(resolved.contract, b);
+  if (errors.length) return res.status(400).json({ error: errors.length === 1 ? errors[0] : `${errors.length} problems: ${errors.join(' ')}`, errors });
+  const energy = Number(b.energy_mwh);
+  const storedCuf = b.cuf_percent == null || b.cuf_percent === '' ? cuf : Number(b.cuf_percent);
   const source = b.source || 'MANUAL';
   // The same account entered twice was two rows, each of which could be validated and locked.
-  const twin = db.prepare(`SELECT id, status FROM energy_data WHERE contract_id = ? AND period_month = ? AND data_type = ? AND COALESCE(source, 'MANUAL') = ?`)
+  const twin = db.prepare(`SELECT * FROM energy_data WHERE contract_id = ? AND period_month = ? AND data_type = ? AND COALESCE(source, 'MANUAL') = ?`)
     .get(b.contract_id, b.period_month, dataType, source);
-  if (twin && !['DRAFT', 'DISPUTED'].includes(twin.status)) {
+  // A figure the counterparty showed to be wrong, and SJVN agreed, has to be
+  // correctable — otherwise "record the corrected figure" led nowhere.
+  const correctable = twin && (['DRAFT', 'DISPUTED'].includes(twin.status)
+    || (twin.status === 'VALIDATED' && twin.response_status === 'OBJECTED' && twin.objection_outcome === 'UPHELD'));
+  if (twin && !correctable) {
     return res.status(409).json({ error: `${resolved.contract.contract_no} already has a ${dataType.toLowerCase()} ${source} figure for ${b.period_month} (${twin.status.toLowerCase()}). Record a different source, or the final figure, rather than the same one again.` });
   }
-  // A figure not yet validated, or one validation threw out, is corrected by
-  // recording it again — there is no other way to mend a mistyped draft.
   if (twin) {
+    // A changed figure is a new figure for the counterparty to answer; the old
+    // answer stayed attached and blocked the corrected figure's lock.
+    const changed = Number(twin.energy_mwh) !== energy;
     db.prepare(`UPDATE energy_data SET energy_mwh = ?, deemed_generation_mwh = ?, cuf_percent = ?, availability_percent = ?, peak_availability_percent = ?,
       status = 'DRAFT', deviation_notes = NULL, updated_at = datetime('now') WHERE id = ?`)
-      .run(energy, Number(b.deemed_generation_mwh) || 0, b.cuf_percent ?? null, b.availability_percent ?? null, b.peak_availability_percent ?? null, twin.id);
-    logAudit({ req, user: req.user, action: 'UPDATE', module: 'REIA', entityType: 'energy_data', entityId: twin.id, details: { ...b, replaced_status: twin.status } });
-    return res.status(200).json({ ...db.prepare('SELECT * FROM energy_data WHERE id = ?').get(twin.id), replaced: true });
+      .run(energy, Number(b.deemed_generation_mwh) || 0, storedCuf, b.availability_percent ?? null, b.peak_availability_percent ?? null, twin.id);
+    if (changed && twin.response_status) {
+      db.prepare(`UPDATE energy_data SET response_status = NULL, response_note = NULL, claimed_mwh = NULL, response_version_id = NULL, response_by = NULL, response_at = NULL,
+        objection_outcome = NULL, objection_resolution = NULL, objection_resolved_by = NULL, objection_resolved_at = NULL WHERE id = ?`).run(twin.id);
+    }
+    logAudit({ req, user: req.user, action: 'UPDATE', module: 'REIA', entityType: 'energy_data', entityId: twin.id, details: { ...b, replaced_status: twin.status, was_energy_mwh: twin.energy_mwh, prior_response: twin.response_status, prior_objection_outcome: twin.objection_outcome } });
+    return res.status(200).json({ ...db.prepare('SELECT * FROM energy_data WHERE id = ?').get(twin.id), replaced: true, changed });
   }
 
   const id = newId('ENG');
@@ -238,7 +250,7 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
     energy_mwh: energy,
 
     deemed_generation_mwh: Number(b.deemed_generation_mwh) || 0,
-    cuf_percent: b.cuf_percent ?? null,
+    cuf_percent: storedCuf,
     availability_percent: b.availability_percent ?? null,
     // What the peak window did, for a contract that has a peak obligation.
     peak_availability_percent: b.peak_availability_percent ?? null,
@@ -277,6 +289,9 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
     return res.status(400).json({ error: `${contract.contract_no} has no commissioned capacity on record, so there is nothing to validate the energy against. Enter the capacity on the contract first.` });
   }
   const deviationPct = Math.abs(row.energy_mwh - expected) / expected * 100;
+  // A figure above what the plant can physically make is not a deviation to weigh
+  // against a tolerance — hydro's 80% band let 107% CUF through as VALIDATED.
+  const physicalMax = maxEnergyMwh(contract, row.period_month);
   
   // Case-insensitive for the same reason as the CUF above: "HYDRO" and "Hydro"
   // are the same plant, and only one of them was getting hydro's wider tolerance.
@@ -285,36 +300,52 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
     ? getParamNumber('hydro_validate_tolerance_pct', 80)
     : getParamNumber('energy_validate_tolerance_pct', 30);
   let flagged = deviationPct > tolerance;
+  const overMax = physicalMax != null && row.energy_mwh > physicalMax;
+  if (overMax) flagged = true;
   const capNote = ratedMw !== Number(contract.capacity_mw)
     ? ` on ${ratedMw} MW commissioned of ${contract.capacity_mw} MW contracted`
     : '';
-  let note = `Deviation ${deviationPct.toFixed(1)}% vs expected ${expected.toFixed(0)} MWh (${(baseCuf * 100).toFixed(0)}% CUF over ${daysInMonth} days${capNote}) - Tolerance: ${tolerance}%`;
+  // Two decimals: at one, 29.997% (passed) and 30.01% (failed) both read "30.0%".
+  let note = `Deviation ${deviationPct.toFixed(2)}% vs expected ${expected.toFixed(0)} MWh (${(baseCuf * 100).toFixed(0)}% CUF over ${daysInMonth} days${capNote}) - Tolerance: ${tolerance}%`;
+
+  if (overMax) {
+    note += ` | ${row.energy_mwh} MWh is above the most the plant can make: ${physicalMax} MWh (${billableCapacityMw(contract)} MW × ${hoursInMonth(row.period_month)} h${['HYDRO', 'PSP'].includes(String(contract.project_type || '').toUpperCase()) ? ' × 110%' : ''})`;
+  }
 
   // Cross-source check. A plausible total can still be wrong: if the seller's
   // own figure and the SEA/meter figure for the same period disagree, one of
-  // them is, and billing either without saying so hides it. Sources close enough
-  // to each other pass; a wider gap is flagged for someone to look at.
+  // them is, and billing either without saying so hides it. Only figures of the
+  // same kind are compared — a final account is expected to differ from the
+  // provisional one, and that difference is the true-up, not a mismatch.
   const others = db.prepare(`
-    SELECT source, energy_mwh FROM energy_data
-    WHERE contract_id = ? AND period_month = ? AND id != ? AND source IS NOT NULL AND source != ?
+    SELECT id, source, energy_mwh, status FROM energy_data
+    WHERE contract_id = ? AND period_month = ? AND data_type = ? AND id != ? AND source IS NOT NULL AND source != ?
     ORDER BY created_at DESC
-  `).all(row.contract_id, row.period_month, row.id, row.source || '');
+  `).all(row.contract_id, row.period_month, row.data_type, row.id, row.source || '');
 
   const crossTolerance = getParamNumber('energy_cross_source_tolerance_pct', 2);
   const disagreeing = [];
+  let compared = 0;
   for (const other of others) {
     if (!(other.energy_mwh > 0)) continue;
+    compared += 1;
     // Measured against the larger figure, so the pair reads the same from either row.
     const gapPct = Math.abs(row.energy_mwh - other.energy_mwh) / Math.max(row.energy_mwh, other.energy_mwh) * 100;
     if (gapPct > crossTolerance) {
-      disagreeing.push(`${other.source} ${other.energy_mwh} MWh (${gapPct.toFixed(1)}% apart)`);
+      disagreeing.push({ ...other, gapPct });
     }
   }
   if (disagreeing.length) {
     flagged = true;
-    note += ` | Source mismatch: this ${row.source} figure of ${row.energy_mwh} MWh disagrees with ${disagreeing.join('; ')} — tolerance ${crossTolerance}%`;
-  } else if (others.length) {
-    note += ` | Cross-checked against ${others.length} other source(s), all within ${crossTolerance}%`;
+    note += ` | Source mismatch: this ${row.source} figure of ${row.energy_mwh} MWh disagrees with ${disagreeing.map((o) => `${o.source} ${o.energy_mwh} MWh (${o.gapPct.toFixed(1)}% apart)`).join('; ')} — tolerance ${crossTolerance}%`;
+    // The disagreement is about both figures. The one validated first stayed
+    // VALIDATED and lockable while the later one was flagged.
+    for (const o of disagreeing.filter((x) => x.status === 'VALIDATED')) {
+      db.prepare(`UPDATE energy_data SET status = 'DISPUTED', deviation_notes = COALESCE(deviation_notes, '') || ?, updated_at = datetime('now') WHERE id = ?`)
+        .run(` | Source mismatch: ${row.source} ${row.energy_mwh} MWh for the same month is ${o.gapPct.toFixed(1)}% away — tolerance ${crossTolerance}%`, o.id);
+    }
+  } else if (compared) {
+    note += ` | Cross-checked against ${compared} other source(s), all within ${crossTolerance}%`;
   }
 
   db.prepare(`UPDATE energy_data SET status = ?, deviation_notes = ?, updated_at = datetime('now') WHERE id = ?`)
@@ -336,6 +367,21 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   // period could be locked and billed whether it had been validated or not, and
   // a period validation had actively flagged locked as readily as a clean one.
   const override = (req.body?.override_reason || '').trim();
+  if (override && override.length < 15) {
+    return res.status(400).json({ error: 'Give the reason in a sentence (at least 15 characters) — it is what an auditor will read.' });
+  }
+
+  // One figure per contract, month and kind goes to billing. Several sources
+  // were each lockable, and two different figures sat LOCKED for one month.
+  const lockedTwin = db.prepare(`
+    SELECT source, energy_mwh FROM energy_data
+    WHERE contract_id = ? AND period_month = ? AND data_type = ? AND status = 'LOCKED' AND id != ?
+  `).get(row.contract_id, row.period_month, row.data_type, row.id);
+  if (lockedTwin) {
+    return res.status(409).json({
+      error: `${row.period_month} is already locked for billing on this contract at ${lockedTwin.energy_mwh} MWh (${lockedTwin.source}). Only one ${String(row.data_type).toLowerCase()} figure can be locked — record the final figure to correct it.`,
+    });
+  }
 
   if (row.status === 'DRAFT') {
     return res.status(400).json({
@@ -357,7 +403,9 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
 
   // SJVN has agreed the figure is wrong. Locking it unchanged bills the figure
   // both sides say is not right — allowed, but not without saying why.
-  if (row.response_status === 'OBJECTED' && row.objection_outcome === 'UPHELD' && !override) {
+  // Corrected to the very figure the counterparty claimed, the objection is met.
+  const meetsClaim = row.claimed_mwh != null && Number(row.claimed_mwh) === Number(row.energy_mwh);
+  if (row.response_status === 'OBJECTED' && row.objection_outcome === 'UPHELD' && !meetsClaim && !override) {
     return res.status(400).json({
       error: 'SJVN upheld the counterparty\'s objection to this figure, and the figure has not changed since.',
       energy_status: row.status,
@@ -476,6 +524,18 @@ router.get('/rea-log', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// GET /rea-download/:logId — Download certified REA PDF from fetch log
+router.get('/rea-download/:logId', requireRole(...ROLE_GROUPS.REIA_ALL), (req, res) => {
+  const log = db.prepare('SELECT * FROM rea_fetch_log WHERE id = ?').get(req.params.logId);
+  if (!log || !log.local_file_path || !fs.existsSync(log.local_file_path)) {
+    return res.status(404).json({ error: 'Certified REA PDF not found on disk' });
+  }
+  const fileName = path.basename(log.local_file_path);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+  fs.createReadStream(log.local_file_path).pipe(res);
 });
 
 // POST /rea-trigger — Manually trigger scrape

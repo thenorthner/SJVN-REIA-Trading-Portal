@@ -16,8 +16,10 @@ import { allocationsInForce, sourcesForPsa } from '../services/allocations.js';
 import { contractVisibleTo, invoicePresentedTo, authoredBy, billPresentedOn, presentedSql, raisedBySellerSql, raisedBySeller } from '../services/counterpartyScope.js';
 import { asOfFrom, isProjection } from '../services/clock.js';
 import { computeCercHydroBill } from '../services/cercHydroBilling.js';
-import { computeCufPenalty } from '../services/cufPenalty.js';
+import { cufYearPosition, contractYearBounds } from '../services/cufPenalty.js';
 import { computePeakAvailabilityPenalty } from '../services/peakAvailability.js';
+import { lastCompleteMonth } from '../services/energyRules.js';
+import { notifyCounterparty, computeCoverage } from '../paymentSecurityEngine.js';
 import {
   compareSellerToSystem,
   findSystemCounterpart,
@@ -25,8 +27,11 @@ import {
 } from '../services/sellerInvoiceMatch.js';
 import {
   buildTemplate as buildVerificationTemplate,
-  mergeSaved as mergeSavedVerification,
-  rollupStatus as rollupVerification,
+  acceptSubmission as acceptVerification,
+  liveVerification,
+  verificationBlock,
+  verifiable as verificationApplies,
+  verificationWindow,
 } from '../services/invoiceVerification.js';
 
 const router = Router();
@@ -44,6 +49,24 @@ function paidTotalFor(invoiceId) {
 // Submitted → Under Verification → Commercial Verification → Finance Approval →
 // Approved → Payment Released. Derived from existing signals (verification,
 // approval status, payment) so every invoice reflects a real stage.
+/** Where the buyer's security stands against what a buyer's bill adds to its exposure. */
+function securityPosition(inv) {
+  if (inv.direction !== 'SJVN_TO_BUYER') return null;
+  try {
+    const c = computeCoverage(inv.contract_id);
+    // This bill counts as owed even before it is sent.
+    const owed = ['SENT', 'PARTIALLY_PAID', 'DISPUTED', 'APPROVED'].includes(inv.status) ? 0 : Number(inv.total_amount) || 0;
+    const needed = Math.max(c.required_amount || 0, (c.exposure || 0) + owed);
+    return {
+      adequate: (c.available_security || 0) + 0.5 >= needed,
+      available: Math.round(c.available_security || 0),
+      needed: Math.round(needed),
+      shortfall: Math.max(0, Math.round(needed - (c.available_security || 0))),
+      coverage_ratio: needed > 0 ? Math.round(((c.available_security || 0) / needed) * 1000) / 1000 : null,
+    };
+  } catch { return null; }
+}
+
 const DEV_STAGES = ['SUBMITTED', 'UNDER_VERIFICATION', 'COMMERCIAL_VERIFICATION', 'FINANCE_APPROVAL', 'APPROVED', 'PAYMENT_RELEASED'];
 function computeDevStage(inv) {
   if (inv.status === 'PAID') return 'PAYMENT_RELEASED';
@@ -65,7 +88,7 @@ const OTHER_CHARGE_TYPES = {
   OTHER: 'Other pass-through charges',
 };
 const SEGREGATION_REFUSAL =
-  'Segregation of duties: this invoice was raised by you (Maker). It must be approved by the designated authority: Manager (Commercial & Billing) — Sunil (Commercial Admin) / Meera (REIA Admin).';
+  'Segregation of duties: you raised this invoice, so another approver has to decide it.';
 
 /**
  * Whether this user raising and clearing the same bill would be one person
@@ -120,6 +143,31 @@ function approvalLevelsFor(inv) {
   return minLevels;
 }
 
+/**
+ * Who may approve each level. Level 2 is Finance's concurrence and level 3
+ * the final commercial sanction, and the screen said so — but any REIA writer
+ * could sign any level, so a ₹2.54 crore bill was approved with no Finance
+ * signature at all. SJVN can re-map the roles in the
+ * invoice_approval_level_roles master ({ "1": [...], "2": [...], "3": [...] });
+ * a level above the last one mapped takes the last one's roles.
+ */
+const DEFAULT_LEVEL_ROLES = {
+  1: ['REIA_USER', 'REIA_ADMIN', 'SJVN_ADMIN'],
+  2: ['FINANCE_USER'],
+  3: ['SJVN_ADMIN', 'MANAGEMENT'],
+};
+export function approvalRolesFor(level) {
+  let map = getParam('invoice_approval_level_roles', null);
+  if (typeof map === 'string') { try { map = JSON.parse(map); } catch { map = null; } }
+  if (!map || typeof map !== 'object') map = DEFAULT_LEVEL_ROLES;
+  const keys = Object.keys(map).map(Number).filter((n) => Number.isFinite(n) && Array.isArray(map[n]) && map[n].length).sort((a, b) => a - b);
+  if (!keys.length) return DEFAULT_LEVEL_ROLES[Math.min(3, level)] || DEFAULT_LEVEL_ROLES[3];
+  const k = keys.filter((n) => n <= level).pop() ?? keys[0];
+  return map[k];
+}
+const ROLE_LABEL = { REIA_USER: 'REIA Ops', REIA_ADMIN: 'REIA Admin', SJVN_ADMIN: 'SJVN Admin', FINANCE_USER: 'Finance', MANAGEMENT: 'Management', COMMERCIAL_ADMIN: 'Commercial Admin' };
+const rolesText = (roles) => roles.map((r) => ROLE_LABEL[r] || r.replace(/_/g, ' ')).join(' / ');
+
 /** Whether each approval level of a bill has to be decided by a different person. */
 const distinctApprovers = () => String(getParam('invoice_approval_distinct_approvers', '0')) === '1';
 
@@ -139,8 +187,9 @@ function unresolvedValidation(inv, user) {
 
 function makerCheckerConflict(inv, user) {
   if (!inv || !user) return null;
-  // Super admins, SJVN admins, and REIA/Commercial admins have administrative override authority across all levels
-  if (['IT_SUPER_ADMIN', 'SJVN_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN'].includes(user.role)) return null;
+  // No role is exempt. An exemption for every admin role let the admin who
+  // raised a ₹2.5 crore bill approve its first level themselves — the one
+  // check this exists for.
   if (inv.created_by_id && user.id) {
     return inv.created_by_id === user.id ? SEGREGATION_REFUSAL : null;
   }
@@ -202,6 +251,7 @@ function withContract(inv, asOf = new Date()) {
     // already come down by the same amount, so a total that adds both counts the credit twice.
     is_dispute_credit: !!db.prepare('SELECT 1 FROM disputes WHERE supplementary_invoice_id = ?').get(inv.id),
     dev_stage: inv.direction === 'SELLER_TO_SJVN' ? computeDevStage(inv) : null,
+    security_position: inv.direction === 'SJVN_TO_BUYER' && !['PAID', 'CANCELLED'].includes(inv.status) ? securityPosition(inv) : null,
     dev_stages: inv.direction === 'SELLER_TO_SJVN' ? DEV_STAGES : null,
     other_charges: parseOtherCharges(inv),
   };
@@ -431,26 +481,32 @@ router.get('/:id', (req, res) => {
     ORDER BY rowid DESC LIMIT 100
   `).all(inv.id);
 
-function enrichApprovals(approvals) {
-  const l1Users = db.prepare("SELECT name FROM users WHERE role IN ('REIA_ADMIN', 'COMMERCIAL_ADMIN', 'SJVN_ADMIN') AND is_active = 1").all().map(u => u.name);
-  const l2Users = db.prepare("SELECT name FROM users WHERE role = 'FINANCE_USER' AND is_active = 1").all().map(u => u.name);
-  const l3Users = db.prepare("SELECT name FROM users WHERE role IN ('MANAGEMENT', 'IT_SUPER_ADMIN', 'SJVN_ADMIN') AND is_active = 1").all().map(u => u.name);
+function enrichApprovals(approvals, inv = null) {
+  // Real people only, each once, and never the one who raised the bill — the
+  // list named the maker as level 1's approver, and a name twice where two
+  // logins share it.
+  const namesFor = (roles) => [...new Set(db.prepare(`SELECT id, name FROM users WHERE role IN (${roles.map(() => '?').join(',')}) AND is_active = 1`).all(...roles)
+    .filter((u) => !(inv && (inv.created_by_id ? u.id === inv.created_by_id : u.name === inv.created_by)))
+    .map((u) => u.name))];
+  const l1Users = namesFor(approvalRolesFor(1));
+  const l2Users = namesFor(approvalRolesFor(2));
+  const l3Users = namesFor(approvalRolesFor(3));
 
   const LEVEL_CONFIG = {
     1: {
       stage_title: 'Commercial Review & Verification',
       designation: 'Manager (Commercial & Billing)',
-      candidates: l1Users.length ? l1Users : ['Sunil (Commercial Admin)', 'Meera (REIA Admin)'],
+      candidates: l1Users,
     },
     2: {
       stage_title: 'Finance Concurrence',
       designation: 'DGM / Senior Manager (Finance)',
-      candidates: l2Users.length ? l2Users : ['Vikas (Finance)'],
+      candidates: l2Users,
     },
     3: {
       stage_title: 'Final Administrative Sanction',
       designation: 'Head of Commercial / CGM',
-      candidates: l3Users.length ? l3Users : ['Divyankur (Management)', 'Admin User'],
+      candidates: l3Users,
     },
   };
 
@@ -465,12 +521,14 @@ function enrichApprovals(approvals) {
       stage_title: cfg.stage_title,
       designation: cfg.designation,
       designated_names: cfg.candidates.join(' / '),
+      approver_roles: approvalRolesFor(a.level),
+      approver_roles_label: rolesText(approvalRolesFor(a.level)),
     };
   });
 }
 
   const rawApprovals = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? ORDER BY level').all(req.params.id);
-  const approvals = enrichApprovals(rawApprovals);
+  const approvals = enrichApprovals(rawApprovals, inv);
   const payments = db.prepare('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date').all(req.params.id);
   const disputes = db.prepare('SELECT * FROM disputes WHERE invoice_id = ? ORDER BY created_at DESC').all(req.params.id);
 
@@ -529,6 +587,15 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   if (!BILLABLE_STATUSES.includes(contract.status)) {
     throw refuse(400, {
       error: `Cannot bill a contract in status ${contract.status} — it must be ACTIVE first.`,
+    });
+  }
+
+  // A month is billed once it is over. Energy for the month still running is
+  // part of a month — a bill on it was raised on whatever had been recorded so
+  // far, and the twin check then stopped the real one.
+  if (period_month && String(period_month) > lastCompleteMonth()) {
+    throw refuse(400, {
+      error: `Cannot bill ${period_month}: the month has not ended yet. The latest month that can be billed is ${lastCompleteMonth()}.`,
     });
   }
 
@@ -619,11 +686,11 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   const pickEnergy = db.prepare(`
     SELECT * FROM energy_data WHERE contract_id = ? AND period_month = ?
     ORDER BY
+      -- the locked figure is the month's figure; anything else is still open
+      (status = 'LOCKED') DESC,
       CASE WHEN ? = 'FINAL' THEN (data_type = 'FINAL') ELSE (data_type = 'PROVISIONAL') END DESC,
       (data_type = 'FINAL') DESC,
-      -- of two sources for the month, the one that was locked
-      (status = 'LOCKED') DESC,
-      created_at DESC
+      created_at DESC, rowid DESC
     LIMIT 1
   `);
   const supplies = sources.map((source) => ({
@@ -694,8 +761,16 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
         validation_note: e.deviation_notes,
       });
     }
-    if (resolvedType === 'FINAL' && e.status !== 'LOCKED') {
-      throw refuse(400, { error: `${whose}Cannot generate FINAL invoice because energy data is not LOCKED.` });
+    // Every bill, provisional or final, is raised on the locked figure. A
+    // provisional bill used to take DRAFT or VALIDATED energy — the July bill
+    // picked a 0 MWh draft over the validated 8,000 MWh beside it and came out
+    // at minus ₹2.36 crore. Locking is the step where the month's figure is
+    // accepted; until then there is nothing to bill.
+    if (e.status !== 'LOCKED') {
+      throw refuse(400, {
+        error: `${whose}Energy for ${period_month} is ${e.status}, not LOCKED. Validate and lock it on the Energy Data desk before billing.`,
+        energy_status: e.status,
+      });
     }
     if (resolvedType === 'FINAL' && e.data_type !== 'FINAL') {
       throw refuse(400, { error: `${whose}Cannot generate FINAL invoice: no FINAL energy row for this period (provisional must remain separate).` });
@@ -715,11 +790,25 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   // tariff_per_unit is ₹/kWh (per "unit"); energy is in MWh → convert MWh→kWh (×1000).
   const UNITS_PER_MWH = 1000;
   const shareOf = (mwh, pct) => ((Number(mwh) || 0) * pct) / 100;
-  const allocated_energy_mwh = multiSource
+  const metered_energy_mwh = multiSource
     ? Math.round(supplies.reduce((t, s) => t + shareOf(s.energy.energy_mwh, s.source.allocation_percent), 0) * 1e6) / 1e6
     : (energy.energy_mwh * alloc_percent) / 100;
+  // Energy a generator banked from this month is not sold this month: it is
+  // billed when it is drawn back — to SJVN by the generator, to the buyer by
+  // SJVN — or settled at a discount if it lapses (services/energyBanking.js).
+  // Billed here as well, it was paid for twice. A PSA leaves out its share of
+  // what each source PPA banked; a PPA is its own source at 100 %.
+  const bankedOf = db.prepare('SELECT COALESCE(SUM(banked_mwh), 0) s FROM energy_banking WHERE contract_id = ? AND period_month = ?');
+  const bankedOut = Math.round(supplies.reduce((t, s) => t + shareOf(bankedOf.get(s.source.ppa_id, period_month).s, s.source.allocation_percent), 0) * 1e6) / 1e6;
+  const allocated_energy_mwh = Math.round((metered_energy_mwh - bankedOut) * 1e6) / 1e6;
   const allocated_units_kwh = allocated_energy_mwh * UNITS_PER_MWH;
   const breakdown = [];
+  if (bankedOut > 0) {
+    breakdown.push({ code: 'EM', label: `Energy for ${period_month} (locked${contract.contract_type === 'PSA' ? ', this PSA\'s share' : ''})`, value: metered_energy_mwh, format: 'mwh' });
+    breakdown.push({ code: 'BNK', label: contract.contract_type === 'PSA'
+      ? 'Less: banked by the source generator — billed to you when it is drawn back'
+      : 'Less: banked — billed when drawn back, or settled at a discount if it lapses', value: -bankedOut, format: 'mwh' });
+  }
   let capacityCharges = 0;
   let incentiveCharges = 0;
   let freePowerDeduction = 0;
@@ -771,6 +860,16 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   }
 
   const isHydro = ['Hydro', 'PSP'].includes(contract.project_type);
+  // Trading Margin: per-contract override (contracts.trading_margin_per_mwh) else global billing master default (₹70/MWh).
+  const isPsa = contract.contract_type === 'PSA';
+  const marginOverride = contract.trading_margin_per_mwh != null && contract.trading_margin_per_mwh !== '';
+  const marginPerMwh = marginOverride ? Number(contract.trading_margin_per_mwh) : getParamNumber('trading_margin_per_mwh', 70);
+  // Whether the margin is already inside the PSA rate. A PSA's tariff is the
+  // PPA rate plus SJVN's margin (₹2.88 + ₹0.07 = ₹2.95), so the margin line is
+  // carved out of it, not added to it — adding it charged the buyer ₹140/MWh
+  // over the generator, twice the margin. A CERC hydro rate carries no margin
+  // and still has it added.
+  let marginInsideTariff = false;
   let appliedTariff = contract.tariff_per_unit;
   let transmissionCharges = 0;
   let deemedEnergyMwh = 0;
@@ -840,10 +939,45 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     // two-part contract is billed on its actual terms rather than its base rate.
     const tariff = resolveTariff(contract, period_month);
     appliedTariff = tariff.rate;
-    energyCharges = Math.round(allocated_units_kwh * tariff.rate);
     breakdown.push({ code: 'E1', label: 'Total Energy (MWh)', value: allocated_energy_mwh });
     if (tariff.type !== 'FLAT') breakdown.push({ code: 'TS', label: tariff.label, value: tariff.rate, format: 'ecr' });
-    breakdown.push({ code: 'EE1', label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${tariff.rate}/unit)`, value: energyCharges });
+    if (isPsa && marginPerMwh > 0) {
+      marginInsideTariff = true;
+      const marginPerUnit = marginPerMwh / UNITS_PER_MWH;
+      const passThrough = Math.round((tariff.rate - marginPerUnit) * 1e6) / 1e6;
+      if (!(passThrough > 0)) {
+        throw refuse(400, {
+          error: `${contract.contract_no}: the PSA tariff ₹${tariff.rate}/unit does not cover the trading margin of ₹${marginPerMwh}/MWh (₹${marginPerUnit}/unit). Correct the tariff or the margin on the contract.`,
+        });
+      }
+      // Energy at the pass-through rate; the margin goes on its own line below,
+      // and the two add up to MWh × the PSA tariff.
+      energyCharges = Math.round(allocated_units_kwh * tariff.rate) - Math.round(allocated_energy_mwh * marginPerMwh);
+      breakdown.push({
+        code: 'EE1',
+        label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${passThrough}/unit — PSA tariff ₹${tariff.rate} less ₹${marginPerUnit} trading margin)`,
+        value: energyCharges,
+      });
+      // The pass-through rate should be what the generator is paid. Where it is
+      // not, the bill says so rather than quietly earning or losing the gap.
+      const srcRates = supplies.map(({ source }) => {
+        const ppa = db.prepare('SELECT * FROM contracts WHERE id = ?').get(source.ppa_id);
+        return ppa && ppa.id !== contract.id ? resolveTariff(ppa, period_month).rate : null;
+      });
+      if (srcRates.every((r) => r != null)) {
+        const off = srcRates.map((r, i) => ({ r, no: supplies[i].source.ppa_contract_no })).filter(({ r }) => Math.abs(r - passThrough) > 0.0005);
+        if (off.length) {
+          breakdown.push({
+            code: 'NOTE',
+            label: `Pass-through rate ₹${passThrough}/unit differs from the source PPA tariff (${off.map(({ r, no }) => `${no || 'PPA'} ₹${r}`).join(', ')}) — SJVN's spread on this bill is not the ₹${marginPerMwh}/MWh margin alone`,
+            value: 0,
+          });
+        }
+      }
+    } else {
+      energyCharges = Math.round(allocated_units_kwh * tariff.rate);
+      breakdown.push({ code: 'EE1', label: `Energy Charges (${allocated_energy_mwh} MWh × ₹${tariff.rate}/unit)`, value: energyCharges });
+    }
     // Deemed generation: energy the seller stood ready to deliver but the buyer
     // or grid could not take. It is paid for at the same rate, on its own line,
     // so it is never mistaken for energy that actually flowed.
@@ -874,14 +1008,13 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     breakdown.push({ code: 'TX', label: `Transmission / Wheeling (₹${txPerMwh}/MWh)`, value: transmissionCharges });
   }
 
-  // Trading Margin: per-contract override (contracts.trading_margin_per_mwh) else global billing master default (₹70/MWh).
-  const marginPerMwh = (contract.trading_margin_per_mwh != null && contract.trading_margin_per_mwh !== '')
-    ? Number(contract.trading_margin_per_mwh)
-    : getParamNumber('trading_margin_per_mwh', 70);
-  const tradingMargin = contract.contract_type === 'PSA' ? Math.round(allocated_energy_mwh * marginPerMwh) : 0;
+  const tradingMargin = isPsa ? Math.round(allocated_energy_mwh * marginPerMwh) : 0;
   if (tradingMargin) {
-    const isOverride = contract.trading_margin_per_mwh != null && contract.trading_margin_per_mwh !== '';
-    breakdown.push({ code: 'TM', label: `Trading Margin (₹${marginPerMwh}/MWh${isOverride ? ', contract-specific' : ''})`, value: tradingMargin });
+    breakdown.push({
+      code: 'TM',
+      label: `Trading Margin (₹${marginPerMwh}/MWh${marginOverride ? ', contract-specific' : ''}${marginInsideTariff ? ', within the PSA tariff' : ''})`,
+      value: tradingMargin,
+    });
   }
 
   // GST on the taxable service component (trading margin). Sale of electricity
@@ -893,27 +1026,18 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     breakdown.push({ code: 'GST', label: `GST @ ${gstRate}% (on trading margin; energy is exempt)`, value: gstAmount });
   }
 
-  // CUF shortfall penalty (Solar/Wind/Hybrid only — Hydro capacity already uses PAFM/NAPAF).
-  const cufPen = computeCufPenalty({
-    contract,
-    periodMonth: period_month,
-    energyMwh: allocated_energy_mwh,
-    // cufPenalty already prefers commissioned capacity when it is left to work
-    // it out; passing contracted capacity here overrode that and judged the
-    // plant on MW it has not commissioned.
+  // CUF (Solar/Wind/Hybrid only — Hydro capacity already uses PAFM/NAPAF) is
+  // an annual obligation, assessed over the contract year and settled by a
+  // credit note at the year-end true-up (POST /cuf-true-up). A monthly bill
+  // carries the year-to-date position as an indicator and deducts nothing: a
+  // monsoon month's shortfall priced on its own came to more than the bill
+  // (Sunrise July 2026: ₹1.78 crore against ₹57.6 lakh) and stopped it.
+  const cufYear = cufYearPosition(contract, period_month, {
     capacityMw: billableCapacityMw(contract),
-    cufPercent: energy.cuf_percent,
     tariffPerUnit: appliedTariff || contract.tariff_per_unit,
   });
-  const cufPenalty = cufPen.penalty || 0;
-  if (cufPen.applicable && cufPen.breakdown && cufPenalty > 0) {
-    breakdown.push(cufPen.breakdown);
-  } else if (cufPen.applicable && cufPen.label && cufPenalty === 0 && cufPen.actualCuf != null) {
-    breakdown.push({
-      code: 'PEN',
-      label: cufPen.label,
-      value: 0,
-    });
+  if (cufYear.applicable && cufYear.label) {
+    breakdown.push({ code: 'PEN', label: cufYear.label, value: 0 });
   }
 
   // Peak availability shortfall. A peak-power or FDRE PSA buys energy when the
@@ -932,7 +1056,7 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   } else if (peakPen.label) {
     breakdown.push({ code: 'PEAKPEN', label: peakPen.label, value: 0 });
   }
-  const penalty = cufPenalty + (peakPen.penalty || 0);
+  const penalty = peakPen.penalty || 0;
 
   const grossTotal = capacityCharges + energyCharges + deemedCharges + incentiveCharges + tradingMargin + nrldcFees + transmissionCharges + gstAmount - freePowerDeduction - penalty;
   breakdown.push({ code: 'GROSS', label: 'Gross Amount (before provisional true-up)', value: grossTotal });
@@ -969,7 +1093,31 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     }
   }
 
+  // A bill is a demand for money. One that comes out below zero is not a bill
+  // — it was saved as a DRAFT invoice for minus ₹2.36 crore, payable by nobody.
+  if (grossTotal < 0) {
+    throw refuse(400, {
+      error: `${contract.contract_no} ${period_month}: the deductions (₹${Math.round(penalty + freePowerDeduction).toLocaleString('en-IN')}) exceed the charges, so the bill would be minus ₹${Math.abs(grossTotal).toLocaleString('en-IN')}. Check the month's energy; a shortfall owed by the generator is recovered by a debit note, not a negative bill.`,
+      gross_total: grossTotal,
+    });
+  }
+  // Nor is a bill for nothing. A month with no energy and no fixed charge used
+  // to be stopped by its own CUF deduction; with CUF assessed annually it would
+  // go out as a bill for ₹0.
+  if (grossTotal === 0) {
+    throw refuse(400, {
+      error: `${contract.contract_no} ${period_month}: nothing to bill — the month has ${allocated_energy_mwh} MWh and no fixed charge. A shortfall in generation is assessed over the contract year, at the year-end CUF true-up.`,
+      gross_total: 0,
+    });
+  }
   const total = grossTotal + otherAdjustments;
+  if (total < 0) {
+    throw refuse(400, {
+      error: `${contract.contract_no} ${period_month}: more was paid on the provisional bill than the final bill comes to, so the final would be minus ₹${Math.abs(total).toLocaleString('en-IN')}. Refund the excess by a credit note against the provisional bill.`,
+      gross_total: grossTotal,
+      already_paid: alreadyPaid,
+    });
+  }
   breakdown.push({ code: 'TOTAL', label: 'Net Payable Amount', value: total });
 
   // A bill raised on energy that was locked over a validation flag says so. The
@@ -983,6 +1131,29 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
       label: `Energy ${multiSource ? `of ${source.ppa_contract_no} ` : ''}for this period was locked over a validation flag — ${e.lock_override_reason}`,
       value: 0,
     });
+  }
+
+  // The developer bills this PSA bill is backed by. Any id was written as sent,
+  // so a bill for another plant or another month could be linked, and an id
+  // that did not exist failed on the foreign key after the bill was saved. Each
+  // one has to be a live bill from a source PPA of this PSA, for this month.
+  const linkIds = [...new Set(Array.isArray(seller_invoice_ids) ? seller_invoice_ids.filter(Boolean).map(String) : [])];
+  if (linkIds.length) {
+    if (!isPsa) throw refuse(400, { error: 'Developer bills are linked to a PSA bill — this is a PPA.' });
+    const sourceIds = new Set(sources.map((x) => x.ppa_id));
+    for (const sid of linkIds) {
+      const si = db.prepare('SELECT id, invoice_no, contract_id, direction, billing_period, status FROM invoices WHERE id = ?').get(sid);
+      if (!si) throw refuse(400, { error: `Developer bill ${sid} does not exist.` });
+      if (si.direction !== 'SELLER_TO_SJVN' || !sourceIds.has(si.contract_id)) {
+        throw refuse(400, { error: `${si.invoice_no} is not a developer bill on a PPA that supplies ${contract.contract_no}.` });
+      }
+      if (si.billing_period !== period_month) {
+        throw refuse(400, { error: `${si.invoice_no} is for ${si.billing_period}, not ${period_month}.` });
+      }
+      if (['CANCELLED', 'REJECTED'].includes(si.status)) {
+        throw refuse(400, { error: `${si.invoice_no} is ${si.status.toLowerCase()} and cannot back a bill.` });
+      }
+    }
   }
 
   const id = newId('INV');
@@ -1034,11 +1205,9 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   `).run({ ...invoice, created_by: req.user.name, created_by_id: req.user?.id ?? null });
 
   // Map to seller invoices (Many-to-Many)
-  if (seller_invoice_ids && Array.isArray(seller_invoice_ids)) {
+  if (linkIds.length) {
     const insertMapping = db.prepare('INSERT INTO invoice_mapping (buyer_invoice_id, seller_invoice_id) VALUES (?, ?)');
-    for (const sid of seller_invoice_ids) {
-      insertMapping.run(id, sid);
-    }
+    for (const sid of linkIds) insertMapping.run(id, sid);
   }
 
   logAudit({
@@ -1125,7 +1294,8 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
       return res.status(201).json({ billing_family_ref: familyRef, invoices: raised, count: raised.length, already_billed: alreadyBilled });
     }
 
-    res.status(201).json(generateInvoiceFor(req.body, req));
+    // One transaction: the bill, its links and its audit entry land together.
+    res.status(201).json(db.transaction(() => generateInvoiceFor(req.body, req))());
   } catch (err) {
     if (err.status) return res.status(err.status).json(err.payload);
     throw err;
@@ -1708,7 +1878,10 @@ router.put('/:id/revise', requireRole(...SELLER_ROLES), (req, res) => {
   db.prepare(`
     UPDATE invoices SET energy_mwh = @energy_mwh, tariff_per_unit = @tariff_per_unit, energy_charges = @energy_charges,
       transmission_charges = @transmission_charges, taxes = @taxes, other_adjustments = @other_adjustments,
-      adjustment_remarks = @remarks, total_amount = @total, version = COALESCE(version, 1) + 1, updated_at = datetime('now')
+      adjustment_remarks = @remarks, total_amount = @total, version = COALESCE(version, 1) + 1,
+      -- The checklist described the bill as it was; the revised one is verified afresh.
+      verification_status = NULL, verification_json = NULL, verified_at = NULL, verified_by = NULL,
+      updated_at = datetime('now')
     WHERE id = @id
   `).run({ ...next, remarks: remarks || null, total, id: inv.id });
 
@@ -1866,34 +2039,59 @@ router.post('/:id/validation/waive', requireRole(...ROLE_GROUPS.REIA_WRITE), (re
 // ── Structured Verification Checklist (Technical + Commercial) ──────────────
 // GET returns the saved checklist overlaid on a fresh auto-derived template so
 // the auto-hints (REA/energy/tariff/CUF/COD) stay current.
+//
+// The checklist is for a developer's own bill. A seller sees only its own: the
+// route took any seller role and any invoice id, so Sunrise could read the
+// checks on Adani's bill (the invoice itself already answered 404).
 router.get('/:id/verification', requireRole(...ROLE_GROUPS.REIA_ALL, ...SELLER_ROLES), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
-  const template = buildVerificationTemplate(inv);
-  let saved = null;
-  try { saved = inv.verification_json ? JSON.parse(inv.verification_json) : null; } catch { /* ignore */ }
-  const merged = mergeSavedVerification(template, saved);
+  if (!inv || !ownsInvoice(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
+  if (!verificationApplies(inv)) {
+    return res.status(400).json({ error: 'The verification checklist is for a developer\'s own bill. SJVN\'s computed bills and DSM pool bills are not verified here.' });
+  }
+  const live = liveVerification(inv);
   res.json({
-    ...merged,
-    verification_status: inv.verification_status || rollupVerification(merged.technical),
-    verified_at: inv.verified_at, verified_by: inv.verified_by,
+    ...live,
+    ...verificationWindow(inv),
+    verified_at: live.verification_status === 'VERIFIED' ? inv.verified_at : null,
+    verified_by: live.verification_status === 'VERIFIED' ? inv.verified_by : null,
   });
 });
 
+// Saving used to take any bill (a buyer's, a paid one, a DSM pool bill), any
+// status string, energy charges from the request, negative damages, and stamp
+// "verified by" whatever the result. It now takes a developer's bill that is
+// with SJVN, and only the checks and adjustments the verifier owns.
 router.post('/:id/verification', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  if (!verificationApplies(inv)) {
+    return res.status(400).json({ error: 'The verification checklist is for a developer\'s own bill. SJVN\'s computed bills and DSM pool bills are not verified here.' });
+  }
+  const win = verificationWindow(inv);
+  if (!win.editable) {
+    return res.status(400).json({
+      error: inv.verification_status === 'VERIFIED' && !['SUBMITTED', 'UNDER_APPROVAL'].includes(inv.status)
+        ? `This bill is ${inv.status.replace(/_/g, ' ')} and was verified; its checklist is closed.`
+        : `This bill is ${inv.status.replace(/_/g, ' ')}; it is verified while it is with SJVN for a decision (submitted or under approval).`,
+    });
+  }
   const template = buildVerificationTemplate(inv);
-  // Only accept known technical keys / commercial fields — recompute net server-side.
-  const merged = mergeSavedVerification(template, {
-    technical: Array.isArray(req.body.technical) ? req.body.technical : [],
-    commercial: req.body.commercial || {},
+  const accepted = acceptVerification(template, req.body || {});
+  if (accepted.error) return res.status(400).json({ error: accepted.error });
+
+  db.prepare('UPDATE invoices SET verification_json = ? WHERE id = ?').run(JSON.stringify(accepted.checklist), inv.id);
+  const live = liveVerification({ ...inv, verification_json: JSON.stringify(accepted.checklist) });
+  const done = live.verification_status === 'VERIFIED';
+  db.prepare(`UPDATE invoices SET verification_status = ?, verified_at = ${done ? "datetime('now')" : 'NULL'}, verified_by = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(live.verification_status, done ? req.user.name : null, inv.id);
+  const overrides = live.technical.filter((t) => t.auto === 'FAILED' && t.status !== 'FAILED').map((t) => ({ key: t.key, status: t.status, note: t.note }));
+  logAudit({
+    req, user: req.user, action: 'INVOICE_VERIFICATION', module: 'REIA', entityType: 'invoice', entityId: inv.id,
+    details: { status: live.verification_status, commercial_gap: live.commercial_gap, overrides, retrospective: win.retrospective || undefined, bill_status: inv.status },
   });
-  const status = rollupVerification(merged.technical);
-  db.prepare(`UPDATE invoices SET verification_status=?, verification_json=?, verified_at=datetime('now'), verified_by=?, updated_at=datetime('now') WHERE id=?`)
-    .run(status, JSON.stringify(merged), req.user.name, inv.id);
-  logAudit({ req, user: req.user, action: 'INVOICE_VERIFICATION', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: { status } });
-  res.json({ ...merged, verification_status: status, verified_at: new Date().toISOString(), verified_by: req.user.name });
+  const after = db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id);
+  res.json({ ...live, ...verificationWindow(after), retrospective: win.retrospective, verified_at: after.verified_at, verified_by: after.verified_by });
 });
 
 // G. Invoice Approval Workflow
@@ -1937,7 +2135,7 @@ router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, '
   res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
 });
 
-router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER'), (req, res) => {
+router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER', 'MANAGEMENT'), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status === 'CANCELLED') {
@@ -1975,12 +2173,25 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
     // Where SJVN has made the signed copy or the IRN mandatory, a bill without it is not approved.
     const missing = complianceBlock(inv);
     if (missing) return res.status(400).json({ error: missing });
+    // A developer's bill is approved on a completed verification. Nothing read
+    // the checklist, so a bill billed at ₹3.10 on a ₹2.88 PPA was approved at
+    // all three levels with its tariff check FAILED.
+    const unverified = verificationBlock(inv);
+    if (unverified) return res.status(400).json({ error: unverified, verification_status: inv.verification_status });
   }
 
   const approval = db.prepare('SELECT * FROM invoice_approvals WHERE invoice_id = ? AND level = ?').get(req.params.id, req.params.level);
   if (!approval) return res.status(404).json({ error: 'Approval step not found' });
   if (approval.status !== 'PENDING') {
     return res.status(400).json({ error: `Level ${approval.level} has already been ${approval.status.toLowerCase()}${approval.approver_name ? ` by ${approval.approver_name}` : ''}.` });
+  }
+  // Each level is signed by the role it belongs to. Sending a bill back stays
+  // open to every reviewer on the route: stopping a bill needs no seniority.
+  if (decision === 'APPROVED' && !approvalRolesFor(approval.level).includes(req.user.role)) {
+    return res.status(403).json({
+      error: `Level ${approval.level} is approved by ${rolesText(approvalRolesFor(approval.level))}, not ${ROLE_LABEL[req.user.role] || req.user.role}.`,
+      approver_roles: approvalRolesFor(approval.level),
+    });
   }
   // Levels are taken in order: level 2 signs what level 1 has passed.
   const next = db.prepare(`SELECT MIN(level) l FROM invoice_approvals WHERE invoice_id = ? AND status = 'PENDING'`).get(req.params.id).l;
@@ -1991,34 +2202,56 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
   // several people's judgement; one person clicking through all of them is one
   // approval recorded three times. Sending a bill back is open to anyone who
   // may approve, including someone who signed an earlier level.
-  // Super admins and SJVN admins have administrative override authority across all levels.
-  if (decision === 'APPROVED' && distinctApprovers() && !['IT_SUPER_ADMIN', 'SJVN_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN'].includes(req.user.role)) {
+  // No role is exempt: an admin clicking through every level is still one
+  // person's judgement recorded several times.
+  if (decision === 'APPROVED' && distinctApprovers()) {
     const mine = db.prepare(`SELECT level, approver_id, approver_name FROM invoice_approvals WHERE invoice_id = ? AND status = 'APPROVED' ORDER BY level`).all(req.params.id)
       .find((a) => (a.approver_id ? a.approver_id === req.user.id : a.approver_name === req.user.name));
     if (mine) {
-      const nextDesignation = approval.level === 2 ? 'DGM / Senior Manager (Finance) — Vikas (Finance)' : 'Head of Commercial / CGM — Divyankur (Management)';
       return res.status(403).json({
-        error: `You approved Level ${mine.level} of this bill. Level ${approval.level} requires a distinct designated authority: ${nextDesignation}.`,
+        error: `You approved Level ${mine.level} of this bill. Level ${approval.level} has to be decided by someone else.`,
       });
     }
   }
+  // A buyer's bill for energy already supplied is not held back for want of
+  // security — the bill is what starts its due date and surcharge. But whoever
+  // gives the final approval does so knowing the buyer is under-secured, and
+  // says so (decided 17-Oct-2026; PSPCL's PSA stood at ₹4 lakh of LC against a
+  // ₹2.36 crore bill).
+  let securityAck = null;
+  if (decision === 'APPROVED' && inv.direction === 'SJVN_TO_BUYER') {
+    const last = db.prepare('SELECT MAX(level) l FROM invoice_approvals WHERE invoice_id = ?').get(inv.id).l;
+    const cover = approval.level === last ? securityPosition(inv) : null;
+    if (cover && !cover.adequate) {
+      const ack = String(req.body?.security_ack || '').trim();
+      if (ack.length < 10) {
+        return res.status(400).json({
+          error: `The buyer is under-secured: ₹${cover.available.toLocaleString('en-IN')} of security in force against ₹${cover.needed.toLocaleString('en-IN')} owed or about to be. The bill can still go — say why it is approved as it stands (security_ack, at least 10 characters).`,
+          security_position: cover,
+        });
+      }
+      securityAck = ack;
+    }
+  }
   db.prepare(`UPDATE invoice_approvals SET status = ?, approver_name = ?, approver_id = ?, comments = ?, acted_at = datetime('now') WHERE id = ?`)
-    .run(decision, req.user.name, req.user.id || null, comments ?? null, approval.id);
+    .run(decision, req.user.name, req.user.id || null,
+      securityAck ? `${comments ? `${comments} · ` : ''}Approved under-secured: ${securityAck}` : (comments ?? null), approval.id);
+  if (securityAck) {
+    logAudit({ req, user: req.user, action: 'APPROVED_UNDER_SECURED', module: 'REIA', entityType: 'invoice', entityId: inv.id, reason: securityAck, details: securityPosition(inv) });
+  }
 
   if (decision === 'REJECTED') {
     db.prepare(`UPDATE invoices SET status = 'REJECTED', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
     if (inv.direction === 'SELLER_TO_SJVN') {
-      pushNotification({ role: 'SELLER', type: 'INVOICE_REJECTED', message: `Invoice ${inv.invoice_no} was returned by SJVN${comments ? `: ${String(comments).slice(0, 200)}` : ''}` });
+      notifyCounterparty(inv.contract_id, 'SELLER', 'INVOICE_REJECTED', `Invoice ${inv.invoice_no} was returned by SJVN${comments ? `: ${String(comments).slice(0, 200)}` : ''}`);
     }
   } else {
     const pending = db.prepare(`SELECT COUNT(*) c FROM invoice_approvals WHERE invoice_id = ? AND status = 'PENDING'`).get(req.params.id).c;
     if (pending === 0) {
       db.prepare(`UPDATE invoices SET status = 'APPROVED', updated_at = datetime('now') WHERE id = ?`).run(req.params.id);
-      // By its number, and to the party the bill is actually for.
-      pushNotification({
-        role: inv.direction === 'SJVN_TO_BUYER' ? 'BUYER' : 'SELLER', type: 'INVOICE_APPROVED',
-        message: `Invoice ${inv.invoice_no} has been approved by SJVN`,
-      });
+      // By its number, and to the party the bill is actually for — its
+      // company's users, not every buyer or seller on the platform.
+      notifyCounterparty(inv.contract_id, inv.direction === 'SJVN_TO_BUYER' ? 'BUYER' : 'SELLER', 'INVOICE_APPROVED', `Invoice ${inv.invoice_no} has been approved by SJVN`);
     }
   }
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: `APPROVAL_${decision}`, module: 'REIA', entityType: 'invoice', entityId: req.params.id, details: { level: req.params.level, comments } });
@@ -2237,12 +2470,8 @@ router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res
       details: { to: uniqueEmails, mode: mailResult.mode, delivery_status: deliveryStatus },
     });
 
-    const notifyRole = inv.direction === 'SJVN_TO_BUYER' ? 'BUYER' : 'SELLER';
-    pushNotification({
-      role: notifyRole,
-      type: 'INVOICE_SENT',
-      message: `Invoice ${inv.invoice_no} has been emailed (${mailResult.mode}) for payment`,
-    });
+    notifyCounterparty(inv.contract_id, inv.direction === 'SJVN_TO_BUYER' ? 'BUYER' : 'SELLER', 'INVOICE_SENT',
+      `Invoice ${inv.invoice_no} has been emailed (${mailResult.mode}) for payment`);
 
     const deliveries = db.prepare(`
       SELECT * FROM invoice_deliveries WHERE invoice_id = ? ORDER BY created_at DESC LIMIT 10
@@ -2251,6 +2480,7 @@ router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res
     res.json({
       ...withContract(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id)),
       delivery: mailResult,
+      quick_connect_delivered: qcDelivered,
       deliveries,
     });
   } catch (err) {
@@ -2272,11 +2502,49 @@ router.get('/:id/deliveries', requireRole(...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_A
 // amount the DISCOM(s) have actually paid on the PSA invoices linked to this
 // developer invoice (via invoice_mapping). This is what "pay-when-paid" draws on.
 function generatorRealization(devInvoiceId) {
-  const psa = db.prepare('SELECT buyer_invoice_id FROM invoice_mapping WHERE seller_invoice_id = ?')
+  // The buyer bills this developer bill is paid out of. An explicit link is
+  // made when the PSA bill is generated with the developer's bill named; a PSA
+  // bill raised first — the usual order on a busy month — had none, and its
+  // receipts could never be passed on (17-Oct-2026 golden run). Without a
+  // link, the PSA bills of the same month on PSAs this PPA supplies are used.
+  const dev = db.prepare('SELECT contract_id, billing_period FROM invoices WHERE id = ?').get(devInvoiceId);
+  let psa = db.prepare('SELECT buyer_invoice_id FROM invoice_mapping WHERE seller_invoice_id = ?')
     .all(devInvoiceId).map((r) => r.buyer_invoice_id);
+  if (!psa.length && dev) {
+    const psaIds = allocationsInForce(dev.contract_id, dev.billing_period).map((a) => a.psa_id);
+    if (psaIds.length) {
+      psa = db.prepare(`
+        SELECT id FROM invoices WHERE contract_id IN (${psaIds.map(() => '?').join(',')}) AND billing_period = ?
+          AND direction = 'SJVN_TO_BUYER' AND invoice_type IN ('PROVISIONAL', 'FINAL')
+          AND status IN ('SENT', 'PARTIALLY_PAID', 'PAID', 'DISPUTED')
+      `).all(...psaIds, dev.billing_period).map((r) => r.id);
+    }
+  }
   if (!psa.length) return { linked_psa: 0, realized: 0 };
-  const ph = psa.map(() => '?').join(',');
-  const realized = db.prepare(`SELECT COALESCE(SUM(amount + COALESCE(deduction,0)),0) s FROM payments WHERE invoice_id IN (${ph})`).get(...psa).s;
+
+  // What the generator may be paid from each: real receipts only (a credit
+  // note's deduction is not money in), the part of the bill that is the
+  // generator's energy (not SJVN's trading margin or pass-through charges),
+  // and — where a PSA draws on several PPAs — this PPA's share of its supply.
+  let realized = 0;
+  for (const id of psa) {
+    const bill = db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
+    if (!bill || !(Number(bill.total_amount) > 0)) continue;
+    const cash = db.prepare(`SELECT COALESCE(SUM(amount + COALESCE(tds_amount, 0)), 0) s FROM payments WHERE invoice_id = ? AND COALESCE(mode, '') <> 'CREDIT_NOTE'`).get(id).s;
+    const energyPart = Math.min(1, Math.max(0, (Number(bill.energy_charges) || 0) / Number(bill.total_amount)));
+    let sourceShare = 1;
+    const sources = sourcesForPsa(bill.contract_id, bill.billing_period);
+    if (dev && sources.length > 1) {
+      const weigh = (src) => {
+        const e = db.prepare(`SELECT energy_mwh FROM energy_data WHERE contract_id = ? AND period_month = ? AND status = 'LOCKED' ORDER BY (data_type = 'FINAL') DESC, created_at DESC LIMIT 1`).get(src.ppa_id, bill.billing_period);
+        return (Number(e?.energy_mwh) || 0) * (Number(src.allocation_percent) || 0) / 100;
+      };
+      const all = sources.reduce((t, src) => t + weigh(src), 0);
+      const mine = sources.filter((src) => src.ppa_id === dev.contract_id).reduce((t, src) => t + weigh(src), 0);
+      sourceShare = all > 0 ? mine / all : 0;
+    }
+    realized += cash * energyPart * sourceShare;
+  }
   return { linked_psa: psa.length, realized: Math.round(realized) };
 }
 
@@ -2365,13 +2633,14 @@ export function applyInvoicePayment(inv, { amount, payment_date, mode, reference
 // payment taken off principal — so a receipt the waterfall had applied to
 // surcharge left the surcharge figure where it was and the principal lower,
 // which is the opposite of what PSA Art. 6.3 and the screen both say.
-function buyerOutstanding(buyerId) {
+export function buyerOutstanding(buyerId, contractId = null) {
   const invs = db.prepare(`
     SELECT i.* FROM invoices i JOIN contracts c ON c.id = i.contract_id
     WHERE c.buyer_id = ? AND i.direction = 'SJVN_TO_BUYER'
       AND i.status IN ('SENT','PARTIALLY_PAID','APPROVED','DISPUTED')
+      ${contractId ? 'AND i.contract_id = ?' : ''}
     ORDER BY i.billing_period ASC, i.created_at ASC
-  `).all(buyerId);
+  `).all(buyerId, ...(contractId ? [contractId] : []));
   return invs.map((inv) => {
     const paid = paidTotalFor(inv.id);
     const lpsPaid = db.prepare('SELECT COALESCE(SUM(lps_component), 0) s FROM payments WHERE invoice_id = ?').get(inv.id).s;
@@ -2460,7 +2729,34 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, ...BUYER_ROLES)
       return res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong' });
     }
   }
-  const updated = applyInvoicePayment(inv, req.body, req);
+  // What Finance records is a receipt the bank has shown. One dated next
+  // January, or ten times the bill, was taken and the bill marked PAID — and a
+  // PSA bill's receipts are what may be released to the generator.
+  const amt = Number(req.body.amount);
+  const ded = Number(req.body.deduction) || 0;
+  if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'A positive payment amount is required.' });
+  if (ded < 0) return res.status(400).json({ error: 'A deduction cannot be negative.' });
+  const todayIst = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().split('T')[0];
+  const payDate = req.body.payment_date || todayIst;
+  const asDate = /^\d{4}-\d{2}-\d{2}$/.test(payDate) ? new Date(`${payDate}T00:00:00Z`) : null;
+  const realDate = !!asDate && !Number.isNaN(asDate.getTime()) && asDate.toISOString().slice(0, 10) === payDate;
+  if (!realDate || payDate > todayIst) {
+    return res.status(400).json({ error: `The payment date must be a real date, not after today (${todayIst}).` });
+  }
+  if (inv.status === 'PAID') {
+    return res.status(400).json({ error: `${inv.invoice_no} is already paid in full.` });
+  }
+  // Up to what is owed on the payment date: the bill less rebate and payments,
+  // plus surcharge earned by then, and the disputed part if it is paid under
+  // protest. ₹1 over is rounding.
+  const owed = invoiceBalance(inv, new Date(payDate)).balance + (Number(inv.disputed_amount) || 0);
+  if (amt + ded > owed + 1) {
+    return res.status(400).json({
+      error: `₹${(amt + ded).toLocaleString('en-IN')} is more than the ₹${owed.toLocaleString('en-IN')} outstanding on ${inv.invoice_no} as of ${payDate}. Record the amount that settles this bill; an excess is a separate advance.`,
+      outstanding: owed,
+    });
+  }
+  const updated = applyInvoicePayment(inv, { ...req.body, payment_date: payDate }, req);
   logAudit({ req, user: req.user, action: 'PAYMENT_RECORDED', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: req.body });
 
   const paid = Number(req.body.amount) || 0;
@@ -2511,6 +2807,24 @@ router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...
     }
   }
 
+  // One month is owed once. When the developer has raised its own invoice for
+  // the month, that is the bill to pay; SJVN's computed bill of the month was
+  // the figure it was checked against. Both could be released against, so the
+  // same month could be paid twice.
+  const computed = !raisedBySeller(inv) && ['PROVISIONAL', 'FINAL'].includes(inv.invoice_type);
+  const twin = db.prepare(`
+    SELECT id, invoice_no, status FROM invoices
+    WHERE contract_id = ? AND billing_period = ? AND id <> ? AND direction = 'SELLER_TO_SJVN' AND invoice_type IN ('PROVISIONAL', 'FINAL')
+      AND ${computed ? "TRIM(COALESCE(invoice_breakdown_json, '')) = ''" : "TRIM(COALESCE(invoice_breakdown_json, '')) <> ''"}
+      AND status <> 'CANCELLED'
+  `).get(inv.contract_id, inv.billing_period, inv.id);
+  if (computed && twin && ['APPROVED', 'SENT', 'PARTIALLY_PAID', 'DISPUTED', 'PAID'].includes(twin.status)) {
+    return res.status(400).json({ error: `Release against ${twin.invoice_no}, the developer's own invoice for ${inv.billing_period}. ${inv.invoice_no} is SJVN's computed bill of the same month and is not paid as well.`, invoice_no: twin.invoice_no });
+  }
+  const twinPaid = !computed && twin
+    ? db.prepare('SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)), 0) s FROM payments WHERE invoice_id = ?').get(twin.id).s
+    : 0;
+
   const { amount, source, payment_date, reference } = req.body;
   if (!RELEASE_SOURCES.includes(source)) {
     return res.status(400).json({ error: `source must be one of ${RELEASE_SOURCES.join(', ')}` });
@@ -2526,6 +2840,16 @@ router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...
   const deductionNote = String(req.body.deduction_note || '').trim().slice(0, 200);
   if (otherDeduction > 0 && !deductionNote) return res.status(400).json({ error: 'Say what the other deduction is for' });
   const held = Math.round((tds + otherDeduction) * 100) / 100;
+  // No more than the bill has left — less anything already paid on SJVN's
+  // computed bill of the same month. Own Fund and Payment Security releases had
+  // no ceiling at all.
+  const left = Math.max(0, invoiceBalance(inv).balance - twinPaid);
+  if (amt + held > left + 1) {
+    return res.status(400).json({
+      error: `₹${(amt + held).toLocaleString('en-IN')} is more than the ₹${Math.round(left).toLocaleString('en-IN')} left on ${inv.invoice_no}${twinPaid ? ` after ₹${Math.round(twinPaid).toLocaleString('en-IN')} already paid on ${twin.invoice_no}` : ''}.`,
+      left,
+    });
+  }
 
   // Enforce pay-when-paid for the DISCOM-realization source: can only release
   // what the DISCOM(s) have actually paid, net of what was already released from
@@ -2552,7 +2876,7 @@ router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...
     breakup: { tds_amount: tds || null, tds_section: tds > 0 ? String(getParam('seller_invoice_tds_section', '194Q')) : null, deduction_note: deductionNote || null },
   }, req);
   logAudit({ req, user: req.user, action: 'RELEASE_TO_GENERATOR', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: { amount: amt, tds_amount: tds, other_deduction: otherDeduction, source, reference } });
-  pushNotification({ role: 'SELLER', type: 'PAYMENT_RELEASED', message: `Payment of Rs.${amt.toLocaleString('en-IN')} released for ${inv.invoice_no} (${source.replace(/_/g, ' ').toLowerCase()})` });
+  notifyCounterparty(inv.contract_id, 'SELLER', 'PAYMENT_RELEASED', `Payment of Rs.${amt.toLocaleString('en-IN')} released for ${inv.invoice_no} (${source.replace(/_/g, ' ').toLowerCase()})`);
   res.status(201).json(updated);
 });
 

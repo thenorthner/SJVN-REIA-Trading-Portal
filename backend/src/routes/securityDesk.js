@@ -73,7 +73,7 @@ const money = (v, label) => {
 };
 const rupees = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
-const LIVE = ['ACTIVE', 'PARTIALLY_UTILIZED', 'RENEWED'];
+const LIVE = ['ACTIVE', 'PARTIALLY_UTILIZED', 'RENEWED', 'RELEASE_PENDING'];
 export const SFMS_TYPES = {
   MT760: 'MT760 / IFN 760 COV — guarantee issued',
   MT767: 'MT767 / IFN 767 COV — guarantee amended',
@@ -612,6 +612,10 @@ router.post('/instruments/:id/decide', (req, res) => send(res, () => {
   const note = text(req.body.note, 1000);
   if (decision === 'REJECTED' && !note) throw fail(400, 'Say why the instrument is refused');
   const sfms = decision === 'ACCEPTED' ? sfmsFrom(req.body || {}) : {};
+  // One that ran out while it waited is not taken on as cover.
+  if (decision === 'ACCEPTED' && ps.validity_end && String(ps.validity_end).slice(0, 10) < today()) {
+    throw fail(400, `${ps.bank_reference_no || ps.instrument_no} expired on ${dayInWords(ps.validity_end)} while it awaited acceptance. Refuse it and ask for the extended instrument.`);
+  }
 
   db.transaction(() => {
     if (decision === 'REJECTED') {

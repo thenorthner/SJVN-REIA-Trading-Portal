@@ -58,14 +58,16 @@ describe('S11 Dispute management', () => {
     expect(db.prepare('SELECT status FROM disputes WHERE id = ?').get(r.body.id || latestDisputeId()).status).toBe('ESCALATED');
   });
 
-  it('raises a supplementary invoice when resolution changes the amount', async () => {
+  it('raises a credit note for approval when resolution changes the amount, and leaves the bill as issued', async () => {
     const r = await raise();
     await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/transition`).set(auth(reia)).send({ status: 'UNDER_REVIEW' });
     const res = await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/resolve`).set(auth(reia))
       .send({ outcome: 'PARTIAL_CREDIT', accepted_amount: 30000, resolution_notes: 'partly upheld' });
     expect(res.status).toBeLessThan(400);
-    const supp = db.prepare(`SELECT COUNT(*) c FROM invoices WHERE invoice_type = 'SUPPLEMENTARY'`).get().c;
-    expect(supp, 'resolving a dispute did not raise a supplementary invoice').toBeGreaterThan(0);
+    const note = db.prepare(`SELECT note_type, status, amount FROM debit_credit_notes WHERE invoice_id = ?`).get(invoice.id);
+    expect(note).toMatchObject({ note_type: 'CREDIT', status: 'DRAFT', amount: 30000 });
+    expect(db.prepare('SELECT total_amount FROM invoices WHERE id = ?').get(invoice.id).total_amount).toBe(400000);
+    expect(db.prepare(`SELECT COUNT(*) c FROM invoices WHERE invoice_type = 'SUPPLEMENTARY'`).get().c).toBe(0);
   });
 
   it('keeps the comment thread and event history', async () => {

@@ -4,11 +4,18 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import NotesPanel from './NotesPanel.jsx';
-import { PageHeader, Card, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+
+// The latest month that can be billed: the one before this one. The form
+// opened on a fixed 2026-10, which became the month still running.
+const lastCompleteMonth = () => {
+  const d = new Date();
+  const m = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+  return `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}`;
+};
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import { SettlementTrailPanel, BfrChip } from '../../components/SettlementTrail.jsx';
 import VerificationChecklist from '../../components/VerificationChecklist.jsx';
-import InvoiceClearanceCorridor3D from '../../components/InvoiceClearanceCorridor3D.jsx';
 import DevStageStepper from '../../components/DevStageStepper.jsx';
 import {
   InvoiceBreakdown,
@@ -27,7 +34,7 @@ import { ROLE_GROUPS } from '../../roles.js';
 // left out REIA_ADMIN and IT_SUPER_ADMIN, so those two were allowed by the API
 // and never offered the buttons — a REIA admin could not approve a bill on screen.
 const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
-const CAN_APPROVE = [...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER'];
+const CAN_APPROVE = [...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER', 'MANAGEMENT'];
 // Recording a buyer's payment is Finance's group; releasing to a generator is
 // open to the REIA desk as well.
 const CAN_RECORD_PAYMENT = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'REIA_USER'];
@@ -63,7 +70,9 @@ export default function Invoices() {
   const [showSupp, setShowSupp] = useState(false);
   const [suppForm, setSuppForm] = useState(SUPP_FORM);
   const [suppError, setSuppError] = useState('');
-  const [error, setError] = useState('');
+  // Why Generate was refused, shown as a popup: a banner at the top of the
+  // modal sat out of view of the button that was just clicked.
+  const [genPopup, setGenPopup] = useState(null);
   // Which request is in flight, so a second click cannot raise a second bill.
   const [busy, setBusy] = useState('');
   const [flash, setFlash] = useState('');
@@ -102,8 +111,11 @@ export default function Invoices() {
 
   const [activeTab, setActiveTab] = useState(() => new URLSearchParams(location.search).get('tab') === 'trail' ? 'TRAIL' : 'INVOICES');
   const [trailContractId, setTrailContractId] = useState('');
-  const [trailPeriod, setTrailPeriod] = useState('2026-10');
+  const [trailPeriod, setTrailPeriod] = useState(lastCompleteMonth);
   const [trailDirection, setTrailDirection] = useState('');
+  // The PPAs feeding the PSA picked in Generate, so only their bills for the
+  // month can be linked. The list offered every developer bill on record.
+  const [genSources, setGenSources] = useState([]);
 
   useEffect(() => {
     if (contracts.length > 0 && !trailContractId) {
@@ -118,7 +130,7 @@ export default function Invoices() {
     setContractDetail({ id: contractId }); // open modal immediately with a loading state
     api.contracts.get(contractId)
       .then(setContractDetail)
-      .catch(() => alert('Failed to load contract details'))
+      .catch((err) => setGenPopup({ title: 'Contract not loaded', message: err.response?.data?.error || 'The contract details could not be loaded.' }))
       .finally(() => setContractLoading(false));
   }
 
@@ -131,6 +143,13 @@ export default function Invoices() {
 
   useEffect(load, [filters.status, filters.direction, filters.billing_period]);
   useEffect(() => { api.contracts.list().then(setContracts).catch(() => {}); }, []);
+  useEffect(() => {
+    const c = contracts.find((x) => x.id === genForm.contract_id);
+    if (!showGenerate || c?.contract_type !== 'PSA') { setGenSources([]); return; }
+    let live = true;
+    api.contracts.allocations(c.id).then((a) => { if (live) setGenSources(a || []); }).catch(() => { if (live) setGenSources([]); });
+    return () => { live = false; };
+  }, [showGenerate, genForm.contract_id, contracts]);
 
   // Handle opening an invoice passed from another page or deep-link query params
   useEffect(() => {
@@ -259,7 +278,7 @@ export default function Invoices() {
         setShowValidation(true);
         if (err.response?.data?.invoice) setSelected(err.response.data.invoice);
       } else {
-        alert(err.response?.data?.error || 'Validation failed');
+        setGenPopup({ title: 'Validation failed', message: err.response?.data?.error || 'The bill could not be validated.' });
       }
     }
   }
@@ -289,29 +308,29 @@ export default function Invoices() {
       setValidationResult(JSON.parse(selected.validation_json));
       setShowValidation(true);
     } catch {
-      alert('Could not parse stored validation result');
+      setGenPopup({ title: 'Validation result unreadable', message: 'The stored validation result could not be read. Validate the bill again.' });
     }
   }
 
   function openGenerate() {
-    const defaultPeriod = filters.billing_period || '2026-10';
+    const defaultPeriod = filters.billing_period && filters.billing_period <= lastCompleteMonth() ? filters.billing_period : lastCompleteMonth();
     setGenForm({ ...GEN_FORM, period_month: defaultPeriod });
-    setError('');
+    setGenPopup(null);
     setShowGenerate(true);
   }
 
   async function handleGenerate(e) {
     e.preventDefault();
     if (!genForm.contract_id) {
-      setError('Please select a contract.');
+      setGenPopup({ title: 'Choose a contract', message: 'Select the contract to bill.' });
       return;
     }
     if (!genForm.period_month) {
-      setError('Please select a billing period (month).');
+      setGenPopup({ title: 'Choose a billing period', message: 'Select the month to bill.' });
       return;
     }
     if (busy) return;
-    setError('');
+    setGenPopup(null);
     setBusy('generate');
     try {
       const made = await api.invoices.generate(genForm);
@@ -322,7 +341,7 @@ export default function Invoices() {
         : `${made?.count || 'The'} invoice(s) generated as drafts.`);
       load();
     } catch (err) {
-      setError(errOf(err, 'Failed to generate invoice.'));
+      setGenPopup({ title: 'Invoice not generated', message: errOf(err, 'Failed to generate invoice.') });
     } finally {
       setBusy('');
     }
@@ -401,7 +420,15 @@ export default function Invoices() {
       setApprovalError('Say why the bill is being sent back — the reason is what its raiser reads.');
       return;
     }
-    const ok = await onInvoice(`act-${level}`, () => api.invoices.act(selected.id, level, decision, approveComments[level] || ''), setApprovalError, 'The decision could not be recorded.');
+    // The final approval of an under-secured buyer's bill says why it goes as it stands.
+    const lastLevel = Math.max(...(selected.approvals || []).map((a) => a.level));
+    const underSecured = decision === 'APPROVED' && level === lastLevel && selected.security_position && !selected.security_position.adequate;
+    const comment = (approveComments[level] || '').trim();
+    if (underSecured && comment.length < 10) {
+      setApprovalError('The buyer is under-secured. Say in the comment why the bill is approved as it stands (at least 10 characters) — it is recorded with the approval.');
+      return;
+    }
+    const ok = await onInvoice(`act-${level}`, () => api.invoices.act(selected.id, level, decision, approveComments[level] || '', underSecured ? { security_ack: comment } : {}), setApprovalError, 'The decision could not be recorded.');
     if (ok) setApproveComments({ ...approveComments, [level]: '' });
   }
 
@@ -411,8 +438,18 @@ export default function Invoices() {
     setBusy('send');
     try {
       const res = await api.invoices.send(selected.id);
-      const to = (res.delivery?.to || []).join(', ');
-      alert(`Invoice marked SENT.\n\n✓ Delivered via Quick Connect (Operational Desk)\nRecipient: ${to || (selected.direction === 'SJVN_TO_BUYER' ? 'Buyer DISCOM' : 'Seller IPP')}\n\nInvoice PDF has been attached to the Quick Connect message.`);
+      const to = [].concat(res.delivery?.to || []).join(', ');
+      // Say what actually happened to the e-mail: without a mail server it is
+      // written to the outbox folder, and nobody has received anything.
+      setGenPopup({
+        title: `${res.invoice_no || selected.invoice_no} marked SENT`,
+        message: [
+          res.quick_connect_delivered ? 'Posted with the PDF to the counterparty\'s Quick Connect inbox on the portal.' : 'Not posted to Quick Connect.',
+          res.delivery?.mode === 'FILE_OUTBOX'
+            ? `No mail server is configured, so the e-mail${to ? ` to ${to}` : ''} was saved to the outbox folder and has not been delivered.`
+            : `E-mailed${to ? ` to ${to}` : ''} with the bill PDF attached.`,
+        ].join(' '),
+      });
       refreshSelected(selected.id);
     } catch (err) {
       setActionError(errOf(err, 'Send failed'));
@@ -426,7 +463,7 @@ export default function Invoices() {
       await downloadInvoicePdf(api, selected);
     } catch (err) {
       console.error(err);
-      alert('Failed to download PDF: ' + (err.response?.data?.error || err.message || err));
+      setGenPopup({ title: 'PDF not downloaded', message: err.response?.data?.error || err.message || String(err) });
     }
   }
 
@@ -499,13 +536,31 @@ export default function Invoices() {
   const payingBuyers = psaBuyerIds.size ? buyers.filter((b) => psaBuyerIds.has(b.id)) : buyers;
   const approvalsOpen = selected?.status === 'UNDER_APPROVAL';
   const nextLevel = (selected?.approvals || []).find((a) => a.status === 'PENDING')?.level ?? null;
-  const isAdmin = ['IT_SUPER_ADMIN', 'SJVN_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN'].includes(user?.role);
-  const raisedByMe = !isAdmin && !!selected && (selected.created_by_id ? selected.created_by_id === user?.id : selected.created_by === user?.name);
+  // Nobody approves a bill they raised, admins included — the server refuses it.
+  const raisedByMe = !!selected && (selected.created_by_id ? selected.created_by_id === user?.id : selected.created_by === user?.name);
   // The level this person has already signed on this round, where each level
-  // has to be a different person's (bypassed for admins).
-  const mySignedLevel = (!isAdmin && selected?.approval_rules?.distinct_approvers)
+  // has to be a different person's.
+  const mySignedLevel = (selected?.approval_rules?.distinct_approvers)
     ? (selected.approvals || []).find((a) => a.status === 'APPROVED' && (a.approver_id ? a.approver_id === user?.id : a.approver_name === user?.name))?.level ?? null
     : null;
+
+  // A refusal is shown as a popup, not a red strip at the top of a long modal
+  // that is easy to scroll past (house rule). The validation refusal stays
+  // inline because it carries the button that answers it.
+  const refusals = [
+    [actionError, setActionError, 'Not done'], [payError, setPayError, 'Payment not recorded'],
+    [releaseError, setReleaseError, 'Payment not released'], [wfError, setWfError, 'Buyer payment not applied'],
+    [arrearError, setArrearError, 'Arrear bill not raised'], [suppError, setSuppError, 'Supplementary not raised'],
+    [ocError, setOcError, 'Other charges not saved'], [cancelError, setCancelError, 'Invoice not cancelled'],
+    [waiveError, setWaiveError, 'Validation not waived'],
+    [approvalError.includes('waive the validation') ? '' : approvalError, setApprovalError, 'Decision not recorded'],
+  ];
+  useEffect(() => {
+    const hit = refusals.find(([msg]) => msg);
+    if (!hit) return;
+    setGenPopup({ title: hit[2], message: hit[0] });
+    hit[1]('');
+  }, [actionError, payError, releaseError, wfError, arrearError, suppError, ocError, cancelError, waiveError, approvalError]);
 
   return (
     <div>
@@ -682,42 +737,6 @@ export default function Invoices() {
               </div>
             </div>
 
-            {/* Quick Portfolios Shortcuts */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>Quick Portfolios:</span>
-              <button
-                type="button"
-                onClick={() => { setTrailContractId('CON-SOLAR-250MW'); setTrailPeriod('2026-10'); }}
-                style={{
-                  background: trailContractId === 'CON-SOLAR-250MW' ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                  border: trailContractId === 'CON-SOLAR-250MW' ? '1px solid #38bdf8' : '1px solid rgba(255, 255, 255, 0.1)',
-                  color: trailContractId === 'CON-SOLAR-250MW' ? '#38bdf8' : '#94a3b8',
-                  padding: '5px 10px',
-                  borderRadius: 6,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                250 MW Mega Solar (Adani ➔ PB, HR, DL)
-              </button>
-              <button
-                type="button"
-                onClick={() => { setTrailContractId('CON-572a3db958704c6b'); setTrailPeriod('2026-10'); }}
-                style={{
-                  background: trailContractId === 'CON-572a3db958704c6b' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                  border: trailContractId === 'CON-572a3db958704c6b' ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.1)',
-                  color: trailContractId === 'CON-572a3db958704c6b' ? '#10b981' : '#94a3b8',
-                  padding: '5px 10px',
-                  borderRadius: 6,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                50 MW Solar (Sunrise Solar)
-              </button>
-            </div>
           </div>
 
           {/* Full Screen 3D Settlement Trail Panel */}
@@ -737,10 +756,9 @@ export default function Invoices() {
       )}
 
       <Modal open={showGenerate} onClose={() => setShowGenerate(false)} title="Generate Invoice" width={520}>
-        {error && <div className="form-error" style={{ marginBottom: 16 }}>{error}</div>}
         <form onSubmit={handleGenerate}>
           <Field label="Contract">
-            <select required value={genForm.contract_id} onChange={(e) => setGenForm({ ...genForm, contract_id: e.target.value })} style={{ padding: '10px 12px', fontSize: 14 }}>
+            <select required value={genForm.contract_id} onChange={(e) => setGenForm({ ...genForm, contract_id: e.target.value, seller_invoice_ids: [] })} style={{ padding: '10px 12px', fontSize: 14 }}>
               <option value="">Select contract...</option>
               {contracts.map((c) => <option key={c.id} value={c.id}>{c.contract_no} ({c.project_type})</option>)}
             </select>
@@ -748,7 +766,7 @@ export default function Invoices() {
           
           <div className="form-grid" style={{ marginTop: 16, marginBottom: 16 }}>
             <Field label="Billing Period">
-              <input required type="month" value={genForm.period_month} onChange={(e) => setGenForm({ ...genForm, period_month: e.target.value })} style={{ padding: '10px 12px', fontSize: 14 }} />
+              <input required type="month" max={lastCompleteMonth()} value={genForm.period_month} onChange={(e) => setGenForm({ ...genForm, period_month: e.target.value, seller_invoice_ids: [] })} style={{ padding: '10px 12px', fontSize: 14 }} />
             </Field>
             <Field label="Invoice Type">
               <select value={genForm.invoice_type} onChange={(e) => setGenForm({ ...genForm, invoice_type: e.target.value })} style={{ padding: '10px 12px', fontSize: 14 }}>
@@ -759,12 +777,17 @@ export default function Invoices() {
           </div>
           
           {contracts.find(c => c.id === genForm.contract_id)?.contract_type === 'PSA' && (() => {
-            const validInvoices = rows.filter(r => r.direction === 'SELLER_TO_SJVN' && !['CANCELLED', 'REJECTED'].includes(r.status));
+            const first = `${genForm.period_month}-01`;
+            const feeding = new Set(genSources
+              .filter((a) => String(a.effective_from || '') <= first && (!a.effective_to || String(a.effective_to) >= first))
+              .map((a) => a.ppa_id));
+            const validInvoices = rows.filter(r => r.direction === 'SELLER_TO_SJVN' && !['CANCELLED', 'REJECTED'].includes(r.status)
+              && feeding.has(r.contract_id) && r.billing_period === genForm.period_month);
             return (
               <Field label="Link Developer / Seller Invoices (Optional)" style={{ marginTop: 20 }}>
                 {validInvoices.length === 0 ? (
                   <div style={{ padding: '16px', background: 'var(--bg)', borderRadius: 8, color: 'var(--text-muted)', fontSize: 13, textAlign: 'center', border: '1px dashed var(--border)' }}>
-                    No developer bills on record. (Optional — you can still generate the DISCOM bill directly).
+                    No developer bill for {genForm.period_month} on a PPA feeding this PSA. (Optional — you can still generate the DISCOM bill directly.)
                   </div>
                 ) : (
                   <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: '8px', background: 'var(--bg)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -811,7 +834,7 @@ export default function Invoices() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
             </div>
             <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Invoice amount is auto-computed from locked/final energy data and the contract tariff. <strong style={{color: 'var(--text)'}}>FINAL</strong> invoices require <strong style={{color: 'var(--text)'}}>LOCKED</strong> energy data.
+              The amount is worked out from the month's <strong style={{color: 'var(--text)'}}>LOCKED</strong> energy and the contract tariff — lock the month on the Energy Data desk first. A <strong style={{color: 'var(--text)'}}>FINAL</strong> bill needs locked FINAL energy. Only a month that has ended can be billed.
             </p>
           </div>
 
@@ -850,7 +873,6 @@ export default function Invoices() {
           </div>
           <Field label="Reference"><input value={wfForm.reference} onChange={(e) => setWfForm({ ...wfForm, reference: e.target.value })} /></Field>
           <p className="inline-note">Payment is applied first to LPS (oldest bill first), then to the oldest bill's principal — per PSA Art. 6.3.</p>
-          {wfError && <div className="form-error">{wfError}</div>}
           {wfResult && (
             <div style={{ marginTop: 8 }}>
               <div className="inline-note">Allocated {fmtCurrency(wfResult.allocated)}{wfResult.unallocated > 0 ? ` · ${fmtCurrency(wfResult.unallocated)} unallocated (no more dues)` : ''}:</div>
@@ -878,7 +900,6 @@ export default function Invoices() {
       </Modal>
 
       <Modal open={showArrear} onClose={() => setShowArrear(false)} title="Raise Arrear Bill" width={480}>
-        {arrearError && <div className="form-error">{arrearError}</div>}
         <form onSubmit={handleArrear}>
           <Field label="Contract">
             <select required value={arrearForm.contract_id} onChange={(e) => setArrearForm({ ...arrearForm, contract_id: e.target.value })}>
@@ -914,7 +935,6 @@ export default function Invoices() {
       </Modal>
 
       <Modal open={showSupp} onClose={() => setShowSupp(false)} title="Manual Supplementary Invoice" width={520}>
-        {suppError && <div className="form-error">{suppError}</div>}
         <form onSubmit={handleSupp}>
           <Field label="Contract">
             <select required value={suppForm.contract_id} onChange={(e) => setSuppForm({ ...suppForm, contract_id: e.target.value, parent_invoice_id: '' })}>
@@ -1050,12 +1070,15 @@ export default function Invoices() {
             {/* A seller's invoice carries what the seller added; SJVN's own bill, the IRN and signed copy its desk records for the buyer. */}
             {(selected.direction === 'SELLER_TO_SJVN' || PRESENTED.includes(selected.status)) && <InvoiceCompliance key={selected.id} invoice={selected} onChanged={load} />}
 
-            {selected.direction === 'SELLER_TO_SJVN' && (
+            {/* The checklist is for a developer's own bill, not SJVN's computed bill or a DSM pool bill. */}
+            {selected.direction === 'SELLER_TO_SJVN' && selected.raised_by_seller && (
               <details style={{ marginTop: 18 }} open>
                 <summary className="section-title" style={{ cursor: 'pointer' }}>Verification Checklist (Technical &amp; Commercial)</summary>
                 <div style={{ marginTop: 10 }}>
                   <VerificationChecklist
+                    key={`${selected.id}-${selected.status}`}
                     invoiceId={selected.id}
+                    totalAmount={selected.total_amount}
                     canWrite={CAN_WRITE.includes(user?.role)}
                     onSaved={() => refreshSelected(selected.id)}
                   />
@@ -1066,25 +1089,14 @@ export default function Invoices() {
             {selected.approvals?.length > 0 && (
               <>
                 <div className="section-title" style={{ marginTop: 18 }}>Approval Workflow</div>
+                {selected.security_position && !selected.security_position.adequate && (
+                  <div className="alert alert-warning" role="status" style={{ marginBottom: 10 }}>
+                    The buyer is under-secured: {fmtCurrency(selected.security_position.available)} of security in force against {fmtCurrency(selected.security_position.needed)} owed or about to be
+                    (short by {fmtCurrency(selected.security_position.shortfall)}). The bill can still go — supplied energy is billed so its due date and surcharge run —
+                    but the final approver says why in the comment.
+                  </div>
+                )}
                 
-                <InvoiceClearanceCorridor3D
-                  invoice={selected}
-                  approvalLevels={selected.approvals || []}
-                  designatedMap={{
-                    1: { postName: 'Manager (Commercial Operations)', names: ['Sunil (Commercial)', 'Meera (REIA)'] },
-                    2: { postName: 'DGM (Finance & Accounts)', names: ['Vikas (Finance Desk)'] },
-                    3: { postName: 'CGM / ED (Head of Commercial)', names: ['Divyankur (Management)', 'SJVN Executive Board'] },
-                  }}
-                  canApprove={CAN_APPROVE.includes(user?.role) && !isCancelled && approvalsOpen && (isAdmin || mySignedLevel == null)}
-                  canReject={CAN_APPROVE.includes(user?.role) && !isCancelled && (approvalsOpen || (selected.status === 'SUBMITTED' && selected.direction === 'SELLER_TO_SJVN'))}
-                  isAdmin={isAdmin}
-                  busy={busy}
-                  approveComments={approveComments}
-                  setApproveComments={setApproveComments}
-                  onApprove={(level) => handleAct(level, 'APPROVED')}
-                  onReject={(level) => handleAct(level, 'REJECTED')}
-                />
-
                 {/* A level is decided only once the bill is in the approval stage,
                     in order, and never by whoever raised it. The buttons used to
                     sit on every pending level of every bill — a draft included. */}
@@ -1104,7 +1116,7 @@ export default function Invoices() {
                           type="button"
                           className="btn btn-sm btn-secondary"
                           style={{ background: '#fff', color: '#b91c1c', border: '1px solid #b91c1c', fontWeight: 600 }}
-                          onClick={() => { setWaiveReason('Accepted for testing / counterpart pending'); setWaiveError(''); setShowWaive(true); }}
+                          onClick={() => { setWaiveReason(''); setWaiveError(''); setShowWaive(true); }}
                         >
                           Waive Validation Now →
                         </button>
@@ -1116,13 +1128,15 @@ export default function Invoices() {
                   {selected.approvals.map((a) => {
                     const isNext = a.status === 'PENDING' && a.level === nextLevel;
                     const canDecide = CAN_APPROVE.includes(user?.role) && !isCancelled && isNext;
-                    const canApprove = canDecide && approvalsOpen && (isAdmin || mySignedLevel == null);
+                    // Each level is signed by its own role (L2 Finance, L3 Management / SJVN Admin).
+                    const myLevel = !a.approver_roles || a.approver_roles.includes(user?.role);
+                    const canApprove = canDecide && approvalsOpen && mySignedLevel == null && myLevel;
                     // A seller's bill can be returned as soon as it arrives.
                     const canReject = canDecide && (approvalsOpen || (selected.status === 'SUBMITTED' && selected.direction === 'SELLER_TO_SJVN'));
                     
                     const stageTitle = a.stage_title || (a.level === 1 ? 'Commercial Review & Verification' : a.level === 2 ? 'Finance Concurrence' : 'Final Administrative Sanction');
                     const postName = a.designation || (a.level === 1 ? 'Manager (Commercial & Billing)' : a.level === 2 ? 'DGM / Senior Manager (Finance)' : 'Head of Commercial / CGM');
-                    const designatedNames = a.designated_names || (a.level === 1 ? 'Sunil (Commercial Admin) / Meera (REIA Admin)' : a.level === 2 ? 'Vikas (Finance)' : 'Divyankur (Management) / Admin User');
+                    const designatedNames = a.designated_names || 'an approver other than the one who raised it';
 
                     return (
                       <div className="timeline-item" key={a.id} style={{ paddingBottom: 18, paddingTop: 14 }}>
@@ -1141,7 +1155,7 @@ export default function Invoices() {
                         
                         {approvalsOpen && a.status === 'PENDING' && !isNext && (
                           <div className="t-meta" style={{ marginTop: 6, fontSize: 14, color: 'var(--text-muted)' }}>
-                            Designated Authority: <strong style={{ color: 'var(--text)' }}>{designatedNames}</strong> ({postName}) · Waits for Level {a.level - 1} approval.
+                            Signed by: <strong style={{ color: 'var(--text)' }}>{a.approver_roles_label || postName}</strong>{designatedNames ? ` — ${designatedNames}` : ''} · Waits for Level {a.level - 1} approval.
                           </div>
                         )}
 
@@ -1152,7 +1166,8 @@ export default function Invoices() {
                         ) : (
                           <div style={{ marginTop: 10 }}>
                             <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>
-                              Designated Approver: <strong style={{ color: 'var(--text)' }}>{designatedNames}</strong> ({postName})
+                              Signed by: <strong style={{ color: 'var(--text)' }}>{a.approver_roles_label || postName}</strong>{designatedNames ? ` — ${designatedNames}` : ''}
+                              {!myLevel && <div style={{ color: '#b45309', marginTop: 4 }}>This level is not yours to approve; you can still send the bill back.</div>}
                             </div>
                             <input
                               placeholder={canApprove ? 'Comments (optional for approve, needed to reject)' : 'Why it is being sent back'}
@@ -1161,14 +1176,14 @@ export default function Invoices() {
                               onChange={(e) => setApproveComments({ ...approveComments, [a.level]: e.target.value })}
                               style={{ marginBottom: 10, width: '100%', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', fontSize: 15 }}
                             />
-                            {canReject && approvalsOpen && !isAdmin && mySignedLevel != null && (
+                            {canReject && approvalsOpen && mySignedLevel != null && (
                               <div className="t-meta" style={{ marginBottom: 8, fontSize: 14, color: '#b45309' }}>
                                 You approved Level {mySignedLevel}. Level {a.level} must be approved by <strong>{designatedNames}</strong> [Post: <strong>{postName}</strong>]. You can still send the bill back.
                               </div>
                             )}
                             <div className="cell-actions" style={{ gap: 10 }}>
                               {canReject && <button className="btn btn-danger" style={{ padding: '8px 18px', fontSize: 14.5 }} disabled={!!busy} onClick={() => handleAct(a.level, 'REJECTED')}>{approvalsOpen ? 'Reject' : 'Return to seller'}</button>}
-                              {canApprove && <button className="btn btn-success" style={{ padding: '8px 18px', fontSize: 14.5 }} disabled={!!busy} onClick={() => handleAct(a.level, 'APPROVED')}>{busy === `act-${a.level}` ? 'Recording…' : `Approve as ${postName}`}</button>}
+                              {canApprove && <button className="btn btn-success" style={{ padding: '8px 18px', fontSize: 14.5 }} disabled={!!busy} onClick={() => handleAct(a.level, 'APPROVED')}>{busy === `act-${a.level}` ? 'Recording…' : `Approve Level ${a.level}`}</button>}
                             </div>
                           </div>
                         ))}
@@ -1238,7 +1253,6 @@ export default function Invoices() {
               />
             </div>
 
-            {actionError && <div className="form-error" role="alert">{actionError}</div>}
             <div className="form-actions" style={{ flexWrap: 'wrap' }}>
               {!isCancelled && CAN_WRITE.includes(user?.role) && ['DRAFT', 'SUBMITTED', 'REJECTED'].includes(selected.status) && (
                 <button className="btn btn-secondary" disabled={!!busy} onClick={handleSubmitForApproval}>{busy === 'submit' ? 'Submitting…' : 'Submit for SJVN Approval'}</button>
@@ -1305,7 +1319,6 @@ export default function Invoices() {
                     </div>
                   </div>
                 )}
-                {releaseError && <div className="form-error">{releaseError}</div>}
                 <form onSubmit={handleRelease}>
                   <div className="form-grid">
                     <Field label="Net amount paid (₹)">
@@ -1355,7 +1368,6 @@ export default function Invoices() {
                 <div className="section-title" style={{ marginTop: 18 }}>
                   Record Payment (Incoming from Buyer)
                 </div>
-                {payError && <div className="form-error" role="alert">{payError}</div>}
                 <form onSubmit={handlePayment}>
                   <div className="form-grid">
                     <Field label="Amount (₹)">
@@ -1410,7 +1422,6 @@ export default function Invoices() {
 
                 {showOC && (
                   <>
-                    {ocError && <div className="form-error">{ocError}</div>}
                     <form onSubmit={handleSaveOtherCharges}>
                       {ocRows.map((row, i) => (
                         <div className="form-grid" key={i} style={{ alignItems: 'end' }}>
@@ -1525,7 +1536,6 @@ export default function Invoices() {
       </Modal>
 
       <Modal open={showCancel} onClose={() => setShowCancel(false)} title="Cancel Invoice" width={480}>
-        {cancelError && <div className="form-error">{cancelError}</div>}
         <p style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 13 }}>
           Cancels <strong>{selected?.invoice_no}</strong> and blocks further approval/send. Only allowed for draft / submitted / rejected / under-approval invoices with no payments or open disputes.
         </p>
@@ -1548,7 +1558,6 @@ export default function Invoices() {
       </Modal>
 
       <Modal open={showWaive} onClose={() => setShowWaive(false)} title="Waive Validation" width={480}>
-        {waiveError && <div className="form-error">{waiveError}</div>}
         <p style={{ marginBottom: 12, color: 'var(--text-light)', fontSize: 13 }}>
           Mark seller vs system validation as waived for <strong>{selected?.invoice_no}</strong> despite mismatch/partial result.
         </p>
@@ -1578,6 +1587,14 @@ export default function Invoices() {
         perspective="reia"
         canWaive={CAN_WRITE.includes(user?.role)}
         onWaive={() => { setShowValidation(false); setShowWaive(true); }}
+      />
+
+      <AlertPopup
+        open={!!genPopup}
+        title={genPopup?.title}
+        message={genPopup?.message}
+        okLabel="OK"
+        onClose={() => setGenPopup(null)}
       />
     </div>
   );

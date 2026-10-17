@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { PageHeader, Card, StatCard, Badge, Modal, Field } from '../../components/ui.jsx';
+import { PageHeader, Card, StatCard, Badge, Modal, Field, AlertPopup } from '../../components/ui.jsx';
 import {
   ReviewModal, PreviewModal, ExpiryTag, canReviewDocuments, downloadAllDocuments,
 } from '../../components/DocumentManager.jsx';
@@ -128,10 +128,7 @@ function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDo
     try {
       const res = await api.documents.upload(formData);
       const wrong = (res.extracted?.checks || []).filter((c) => !c.ok);
-      if (wrong.length) {
-        alert(`Document uploaded. Note OCR findings:\n\n${wrong.map((c) => `• ${c.text}`).join('\n')}`);
-      }
-      onDone();
+      onDone({ findings: wrong.map((c) => c.text) });
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Upload failed');
     } finally {
@@ -144,7 +141,7 @@ function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDo
   return (
     <Modal open onClose={onClose} title="Direct upload & verify compliance document" width={720}>
       <form onSubmit={submit}>
-        {error && <div className="alert alert-error" role="alert">{error}</div>}
+        <AlertPopup open={!!error} title="Not uploaded" message={error} onClose={() => setError('')} />
 
         <div style={{ background: 'var(--slate-50, #f8fafc)', border: '1px solid var(--slate-200, #e2e8f0)', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#0369a1', fontWeight: 600, fontSize: 13.5 }}>
@@ -211,11 +208,14 @@ function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDo
 
 const VERTICAL_LABELS = { REIA: 'REIA', HYDRO: 'Hydro', THERMAL: 'Thermal' };
 const ADMIN_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'THERMAL_ADMIN', 'THERMAL_USER'];
+// Direct admission, and admitting a scanned paper as verified, are administrators' (as on the server).
+const DIRECT_ADMIT_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
 
 export default function DocumentDesk({ vertical = 'REIA' }) {
   const { user } = useAuth();
   const canReview = canReviewDocuments(user?.role);
-  const canDirectAdmit = ADMIN_ROLES.includes(user?.role);
+  const canDirectAdmit = DIRECT_ADMIT_ROLES.includes(user?.role);
+  const [popup, setPopup] = useState(null);
   const canAdminUpload = ADMIN_ROLES.includes(user?.role);
 
   const [tab, setTab] = useState(canReview ? 'QUEUE' : 'REPORT');
@@ -256,12 +256,19 @@ export default function DocumentDesk({ vertical = 'REIA' }) {
   const activeCount = report.filter((r) => r.onboarding_status === 'APPROVED' || r.onboarding_status === 'ACTIVE').length;
   const pendingCount = report.filter((r) => r.onboarding_status === 'PENDING').length;
 
-  async function handleQuickVerify(d) {
+  function handleQuickVerify(d) {
     const bad = (d.extracted?.checks || []).filter((c) => !c.ok).length;
-    const msg = bad > 0
-      ? `Notice: This document has ${bad} file check mismatch(es).\n\nAre you sure you want to verify "${d.title}" for ${d.entity_name || 'this stakeholder'}?`
-      : `Verify "${d.title}" for ${d.entity_name || 'this stakeholder'}?`;
-    if (!window.confirm(msg)) return;
+    setPopup({
+      tone: bad ? 'warning' : 'info',
+      title: `Verify "${d.title}"`,
+      message: bad
+        ? `This document has ${bad} file check mismatch${bad === 1 ? '' : 'es'}. Verify it for ${d.entity_name || 'this stakeholder'} anyway?`
+        : `Verify "${d.title}" for ${d.entity_name || 'this stakeholder'}?`,
+      confirm: { label: 'Verify', run: () => doVerify(d) },
+    });
+  }
+
+  async function doVerify(d) {
     setActionLoading(true);
     try {
       await api.documents.verify(d.latest_version_id);
@@ -273,10 +280,16 @@ export default function DocumentDesk({ vertical = 'REIA' }) {
     }
   }
 
-  async function handleDirectAdmit(r) {
-    if (!window.confirm(`Directly admit and activate stakeholder "${r.name}"?\n\nThis will clear pending mandatory checklist items, confirm the bank account as verified, and immediately activate their account.`)) {
-      return;
-    }
+  function handleDirectAdmit(r) {
+    setPopup({
+      tone: 'warning',
+      title: `Directly admit ${r.name}`,
+      message: 'Its pending mandatory clearances are marked verified by you and the stakeholder is activated. The bank account is not thereby verified: confirm it against the bank proof before any payment.',
+      confirm: { label: 'Admit', run: () => doDirectAdmit(r) },
+    });
+  }
+
+  async function doDirectAdmit(r) {
     setActionLoading(true);
     try {
       await api.entities.approve(r.entity_id, 'APPROVED', 'Admitted directly from KYC Desk by SJVN Admin', { admin_direct_admit: true });
@@ -306,7 +319,17 @@ export default function DocumentDesk({ vertical = 'REIA' }) {
         }
       />
 
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
+      <AlertPopup
+        open={!!popup}
+        tone={popup?.tone || 'info'}
+        title={popup?.title}
+        message={popup?.message}
+        items={popup?.items}
+        okLabel={popup?.confirm ? 'Back' : undefined}
+        actions={popup?.confirm ? <button type="button" className="btn btn-primary" onClick={() => { const run = popup.confirm.run; setPopup(null); run(); }}>{popup.confirm.label}</button> : undefined}
+        onClose={() => setPopup(null)}
+      />
 
       <div className="kpi-grid">
         <StatCard label="Waiting for review" value={canReview ? queue.length : sum('pending')} tone={sum('pending') ? 'amber' : 'green'} hint={queue[0] ? `Oldest: ${queue[0].waiting_days} day(s)` : 'Nothing waiting'} />
@@ -492,7 +515,18 @@ export default function DocumentDesk({ vertical = 'REIA' }) {
           companies={report}
           presetEntityId={directUploadEntityId}
           onClose={() => setDirectUploadEntityId(null)}
-          onDone={() => { setDirectUploadEntityId(null); load(); }}
+          onDone={({ findings = [] } = {}) => {
+            setDirectUploadEntityId(null);
+            load();
+            setPopup({
+              tone: findings.length ? 'warning' : 'success',
+              title: 'Scanned in',
+              message: canDirectAdmit
+                ? 'The document is on file and, as an administrator\'s intake, verified unless it has expired.'
+                : 'The document is on file and waiting in the queue: another officer verifies it.',
+              items: findings.length ? findings.map((f) => ({ label: 'File check', message: f })) : undefined,
+            });
+          }}
         />
       )}
     </div>

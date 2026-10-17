@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '../api/client.js';
-import { Card, StatCard, Badge, Modal, Field, fmtCurrency } from './ui.jsx';
+import { Card, StatCard, Badge, Modal, Field, AlertPopup, fmtCurrency } from './ui.jsx';
 import { PreviewModal } from './DocumentManager.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
 
@@ -46,7 +46,7 @@ function PaymentAdvice({ paymentId, onClose }) {
   );
   return (
     <Modal open onClose={onClose} title={p?.party_side === 'BUYER' ? 'Payment receipt' : 'Payment advice'} width={620}>
-      {error && <div className="alert alert-error">{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       {!p && !error && <div style={{ padding: 20 }}>Loading…</div>}
       {p && (
         <div>
@@ -124,7 +124,7 @@ function Certificates({ entityId }) {
 
   return (
     <Card title="TDS certificates (Form 16A)">
-      {error && <div className="alert alert-error">{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       <p className="inline-note" style={{ marginTop: 0 }}>
         {data.party_side === 'BUYER'
           ? (data.can_file
@@ -273,7 +273,7 @@ export default function SellerLedgerView({ entityId = null, partySide = 'SELLER'
 
   return (
     <div>
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
 
       <div className="filters-bar">
         <select value={contractId} onChange={(e) => setContractId(e.target.value)} aria-label="Contract">

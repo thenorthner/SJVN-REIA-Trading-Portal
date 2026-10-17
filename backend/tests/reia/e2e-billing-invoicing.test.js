@@ -98,9 +98,10 @@ function lockEnergy(mwh, period = '2026-04') {
 /** Three approvers who are not the maker, each acting on their own level. */
 async function clearApprovalChain(invoiceId, levels) {
   for (let lvl = 1; lvl <= levels; lvl += 1) {
-    const checker = makeUser('REIA_USER', { name: `Checker L${lvl} ${Math.random()}` });
+    const role = lvl === 1 ? 'REIA_USER' : lvl === 2 ? 'FINANCE_USER' : 'MANAGEMENT';
+    const checker = makeUser(role, { name: `Checker L${lvl} ${Math.random()}` });
     const r = await post(`/api/invoices/${invoiceId}/approvals/${lvl}/act`, signFor(checker),
-      { decision: 'APPROVED', comments: `cleared at level ${lvl}` });
+      { decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk', comments: `cleared at level ${lvl}` });
     expect(r.status, `level ${lvl}: ${JSON.stringify(r.body)}`).toBe(200);
   }
 }
@@ -117,8 +118,10 @@ describe('E2E: a PSA month from energy data to a settled bill', () => {
     const inv = gen.body;
     expect(inv.status).toBe('DRAFT');
     expect(inv.direction).toBe('SJVN_TO_BUYER');
-    expect(inv.energy_charges).toBeCloseTo(2000 * 3.0 * 1000, 0);
-    expect(inv.total_amount).toBeGreaterThan(inv.energy_charges - 1); // margin/tax sit on top
+    // The ₹70/MWh margin is carved out of the ₹3 PSA rate, not added to it.
+    expect(inv.energy_charges + inv.trading_margin).toBeCloseTo(2000 * 3.0 * 1000, 0);
+    expect(inv.trading_margin).toBe(2000 * 70);
+    expect(inv.total_amount).toBeGreaterThan(inv.energy_charges - 1);
     expect(inv.due_date, 'a raised bill carries no due date').toBeTruthy();
 
     // A draft has not been asked for, so nothing can be paid against it.
@@ -133,17 +136,11 @@ describe('E2E: a PSA month from energy data to a settled bill', () => {
     expect(earlySend.body.error).toMatch(/APPROVED/);
 
     // ── 2. Technical and commercial verification ────────────────────────────
+    // The checklist is for a developer's own bill; SJVN's bill to a buyer is
+    // not verified through it (it used to take one, with any status string).
     const template = await get(`/api/invoices/${inv.id}/verification`, reia);
-    expect(template.status).toBe(200);
-    expect(Array.isArray(template.body.technical)).toBe(true);
-
-    const verified = await post(`/api/invoices/${inv.id}/verification`, reia, {
-      technical: template.body.technical.map((t) => ({ ...t, status: 'OK' })),
-      commercial: template.body.commercial || {},
-    });
-    expect(verified.status).toBe(200);
-    expect(db.prepare('SELECT verification_status, verified_by FROM invoices WHERE id = ?').get(inv.id).verified_by)
-      .toBeTruthy();
+    expect(template.status).toBe(400);
+    expect(template.body.error).toMatch(/developer's own bill/);
 
     // ── 3. Into approval — banded on value ──────────────────────────────────
     const submitted = await post(`/api/invoices/${inv.id}/submit-for-approval`, signFor(maker));
@@ -155,20 +152,20 @@ describe('E2E: a PSA month from energy data to a settled bill', () => {
 
     // The maker cannot clear their own bill, at any level.
     const selfApprove = await post(`/api/invoices/${inv.id}/approvals/1/act`, signFor(maker),
-      { decision: 'APPROVED' });
+      { decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk' });
     expect(selfApprove.status).toBe(403);
     expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('UNDER_APPROVAL');
 
     // Two of three levels is not approval.
     const l1 = makeUser('REIA_USER', { name: 'Checker One' });
-    const l2 = makeUser('REIA_USER', { name: 'Checker Two' });
-    await post(`/api/invoices/${inv.id}/approvals/1/act`, signFor(l1), { decision: 'APPROVED' });
-    await post(`/api/invoices/${inv.id}/approvals/2/act`, signFor(l2), { decision: 'APPROVED' });
+    const l2 = makeUser('FINANCE_USER', { name: 'Checker Two' });
+    await post(`/api/invoices/${inv.id}/approvals/1/act`, signFor(l1), { decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk' });
+    await post(`/api/invoices/${inv.id}/approvals/2/act`, signFor(l2), { decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk' });
     expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('UNDER_APPROVAL');
 
-    const l3 = makeUser('REIA_USER', { name: 'Checker Three' });
+    const l3 = makeUser('MANAGEMENT', { name: 'Checker Three' });
     const final = await post(`/api/invoices/${inv.id}/approvals/3/act`, signFor(l3),
-      { decision: 'APPROVED', comments: 'released for despatch' });
+      { decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk', comments: 'released for despatch' });
     expect(final.status).toBe(200);
     expect(final.body.status).toBe('APPROVED');
 
@@ -209,7 +206,7 @@ describe('E2E: a PSA month from energy data to a settled bill', () => {
     const trail = db.prepare(
       `SELECT action FROM audit_logs WHERE entity_id = ? ORDER BY rowid`).all(inv.id).map((a) => a.action);
     expect(trail).toEqual(expect.arrayContaining([
-      'GENERATE', 'INVOICE_VERIFICATION', 'SUBMIT_FOR_APPROVAL',
+      'GENERATE', 'SUBMIT_FOR_APPROVAL',
       'APPROVAL_APPROVED', 'SEND', 'PAYMENT_RECORDED',
     ]));
   });
@@ -265,8 +262,10 @@ describe('E2E: a PSA month from energy data to a settled bill', () => {
     await post(`/api/invoices/${inv.id}/send`, reia);
     rememberOutboxFiles(inv.id);
 
+    // Sent and fallen due long ago, paid today — a payment cannot be dated ahead.
+    db.prepare(`UPDATE invoices SET issued_at = date('now','-105 days'), due_date = date('now','-60 days') WHERE id = ?`).run(inv.id);
     const due = db.prepare('SELECT due_date, total_amount FROM invoices WHERE id = ?').get(inv.id);
-    const lateBy = new Date(new Date(due.due_date).getTime() + 60 * 86400000).toISOString().slice(0, 10);
+    const lateBy = new Date().toISOString().slice(0, 10);
 
     const paid = await post(`/api/invoices/${inv.id}/payments`, finance,
       { amount: due.total_amount, payment_date: lateBy, mode: 'RTGS' });

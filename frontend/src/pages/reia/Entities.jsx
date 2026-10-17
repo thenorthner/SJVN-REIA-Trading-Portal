@@ -316,9 +316,9 @@ export default function Entities({ vertical = 'REIA' }) {
 
     const errors = validateStakeholderForm(form);
     for (const [code, notes] of Object.entries(form.regulatory_na || {})) {
-      if (!String(notes || '').trim()) {
+      if (String(notes || '').trim().length < 10) {
         const item = catalogForEntityType(form.entity_type).find((c) => c.code === code);
-        errors.push({ field: `na-${code}`, label: item?.label || code, message: 'Say why this approval is not applicable.' });
+        errors.push({ field: `na-${code}`, label: item?.label || code, message: 'Say why this approval is not applicable (at least 10 characters).' });
       }
     }
     if (errors.length) {
@@ -333,7 +333,7 @@ export default function Entities({ vertical = 'REIA' }) {
         .map(([approval_code, notes]) => ({
           approval_code,
           status: 'NOT_APPLICABLE',
-          notes: notes || 'Marked N/A at onboarding',
+          notes: String(notes).trim(),
         }));
 
       const createdEntity = await api.entities.create({
@@ -446,15 +446,25 @@ export default function Entities({ vertical = 'REIA' }) {
 
   // An officer's confirmation that the account matches the cancelled cheque on
   // file. No money is sent — there is no penny-drop integration behind this.
-  async function confirmBank() {
-    if (!window.confirm(`Confirm that ${selected.name}'s bank account matches the bank proof on file? Payments can be released to it after this.`)) return;
-    try {
-      await api.client.post(`/entities/${selected.id}/verify-bank`);
-      api.entities.get(selected.id).then(setSelected);
-      load();
-    } catch (err) {
-      fail('Bank account was not verified', err, 'Verification failed');
-    }
+  function confirmBank() {
+    setPopup({
+      tone: 'warning',
+      title: 'Confirm the bank account',
+      message: `Confirm that ${selected.name}'s bank account matches the verified bank proof on file? Payments can be released to it after this.${selected.pending_bank_json ? ' The requested change of account becomes the live one.' : ''}`,
+      okLabel: 'Back',
+      actions: (
+        <button type="button" className="btn btn-primary" onClick={async () => {
+          setPopup(null);
+          try {
+            await api.client.post(`/entities/${selected.id}/verify-bank`);
+            api.entities.get(selected.id).then(setSelected);
+            load();
+          } catch (err) {
+            fail('Bank account was not verified', err, 'Verification failed');
+          }
+        }}>Confirm account</button>
+      ),
+    });
   }
 
   async function saveBlacklist(e) {
@@ -1047,11 +1057,13 @@ export default function Entities({ vertical = 'REIA' }) {
                     type="button"
                     className="btn btn-primary"
                     style={{ background: 'linear-gradient(135deg, #059669 0%, #047857 100%)', boxShadow: '0 2px 6px rgba(5, 150, 105, 0.35)' }}
-                    onClick={() => {
-                      if (window.confirm('Directly admit & activate this stakeholder? This will clear mandatory regulatory items and activate their account immediately.')) {
-                        handleApprove('APPROVED', true);
-                      }
-                    }}
+                    onClick={() => setPopup({
+                      tone: 'warning',
+                      title: 'Direct admission',
+                      message: 'Directly admit and activate this stakeholder? Its mandatory clearances are marked verified by you. The bank account is not thereby verified: confirm it against the bank proof separately before any payment.',
+                      okLabel: 'Back',
+                      actions: <button type="button" className="btn btn-primary" onClick={() => { setPopup(null); handleApprove('APPROVED', true); }}>Admit</button>,
+                    })}
                   >
                     Direct Admit & Activate Stakeholder
                   </button>
@@ -1113,30 +1125,186 @@ export default function Entities({ vertical = 'REIA' }) {
       <Modal
         open={!!blacklistForm}
         onClose={() => setBlacklistForm(null)}
-        title={blacklistForm?.blacklisted ? `Blacklist ${selected?.name || ''}` : `Clear blacklist on ${selected?.name || ''}`}
-        width={520}
+        title={blacklistForm?.blacklisted ? `Debarment & Blacklist Action` : `Clear Blacklist Restriction`}
+        width="compact"
       >
         {blacklistForm && (
-          <form onSubmit={saveBlacklist}>
-            <p style={{ fontSize: 13, color: 'var(--slate-600)', marginTop: 0 }}>
-              {blacklistForm.blacklisted
-                ? 'A blacklisted stakeholder cannot be approved and cannot be given a new contract. Contracts already running, and money owed under them, are not affected.'
-                : 'Clearing the blacklist lets this stakeholder be approved and contracted with again.'}
-            </p>
-            <Field label="Reason (recorded in the audit trail)" required>
+          <form onSubmit={saveBlacklist} style={{ margin: 0 }}>
+            {blacklistForm.blacklisted ? (
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 12,
+                padding: '14px 16px',
+                borderRadius: 10,
+                background: 'linear-gradient(135deg, #fff5f5 0%, #fef2f2 100%)',
+                border: '1px solid #fecaca',
+                marginBottom: 16,
+              }}>
+                <div style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: '50%',
+                  background: '#fee2e2',
+                  color: '#dc2626',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  boxShadow: '0 2px 6px rgba(220, 38, 38, 0.15)',
+                }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                  </svg>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Regulatory Debarment Action</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, background: '#fecaca', color: '#991b1b', padding: '1px 6px', borderRadius: 4 }}>RESTRICTED</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: '#7f1d1d', lineHeight: 1.45 }}>
+                    Blacklisting prevents this stakeholder from receiving approvals or participating in new power contracts across SJVN platforms.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 12,
+                padding: '14px 16px',
+                borderRadius: 10,
+                background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
+                border: '1px solid #bbf7d0',
+                marginBottom: 16,
+              }}>
+                <div style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: '50%',
+                  background: '#dcfce7',
+                  color: '#16a34a',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  boxShadow: '0 2px 6px rgba(22, 163, 74, 0.15)',
+                }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                  </svg>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Restore Stakeholder</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, background: '#bbf7d0', color: '#166534', padding: '1px 6px', borderRadius: 4 }}>RE-ADMISSION</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: '#14532d', lineHeight: 1.45 }}>
+                    Clearing the debarment will restore normal standing, permitting fresh regulatory approvals and PPA/PSA allocations.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Entity Target Snapshot */}
+            <div style={{
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: 8,
+              padding: '10px 14px',
+              marginBottom: 14,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}>
+              <div>
+                <span style={{ fontSize: 11.5, fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Target Stakeholder</span>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: '#0f172a' }}>{selected?.name}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {selected?.entity_type && <Badge status={selected.entity_type} />}
+                {selected?.pan_no && (
+                  <span style={{ fontSize: 12, background: '#fff', border: '1px solid #cbd5e1', padding: '2px 8px', borderRadius: 6, color: '#334155', fontFamily: 'monospace' }}>
+                    PAN: {selected.pan_no}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Regulatory Guidance Box */}
+            <div style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 8,
+              padding: '10px 14px',
+              marginBottom: 16,
+              fontSize: 12.5,
+              color: '#475569',
+            }}>
+              <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: 5 }}>Legal & Operational Notes:</div>
+              <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
+                <li><strong>New Allocations Barred:</strong> Cannot be approved or awarded new PPA / PSA contracts.</li>
+                <li><strong>Existing Contracts Protected:</strong> Contracts already running, and payment dues owed, remain active.</li>
+                <li><strong>Audit Trail:</strong> The justification and operating officer are permanently logged for CERC review.</li>
+              </ul>
+            </div>
+
+            <Field label="Official Reason / Regulatory Authority Order Reference" required>
               <textarea
                 required
                 minLength={10}
                 rows={3}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: '1.5px solid #cbd5e1',
+                  fontSize: 13.5,
+                  lineHeight: 1.5,
+                  boxSizing: 'border-box',
+                }}
                 value={blacklistForm.reason}
                 onChange={(e) => setBlacklistForm({ ...blacklistForm, reason: e.target.value })}
-                placeholder={blacklistForm.blacklisted ? 'e.g. Debarred by MNRE order no. … dated …' : 'e.g. Debarment order withdrawn on …'}
+                placeholder={blacklistForm.blacklisted ? 'e.g. Debarred by MNRE Office Memorandum No. 283/54/2026 dated 14-Oct-2026' : 'e.g. Debarment revoked as per MNRE compliance order dated …'}
               />
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 12, color: '#64748b' }}>
+                <span>Recorded in the immutable compliance audit ledger</span>
+                <span style={{ color: (blacklistForm.reason?.trim().length || 0) < 10 ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
+                  {blacklistForm.reason?.trim().length || 0} / 10 min chars
+                </span>
+              </div>
             </Field>
-            <div className="form-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setBlacklistForm(null)}>Cancel</button>
-              <button type="submit" className={blacklistForm.blacklisted ? 'btn btn-danger' : 'btn btn-primary'}>
-                {blacklistForm.blacklisted ? 'Blacklist' : 'Clear blacklist'}
+
+            <div className="form-actions" style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setBlacklistForm(null)}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className={blacklistForm.blacklisted ? 'btn btn-danger' : 'btn btn-success'}
+                disabled={(blacklistForm.reason?.trim().length || 0) < 10}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}
+              >
+                {blacklistForm.blacklisted ? (
+                  <>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                    </svg>
+                    <span>Confirm & Blacklist Stakeholder</span>
+                  </>
+                ) : (
+                  <>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    <span>Confirm & Restore Stakeholder</span>
+                  </>
+                )}
               </button>
             </div>
           </form>

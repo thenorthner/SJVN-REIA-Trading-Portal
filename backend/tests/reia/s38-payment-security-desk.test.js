@@ -33,7 +33,7 @@ function instrument(contract, over = {}) {
   return row(id);
 }
 const create = (over = {}) => post('/api/payment-security', {
-  contract_id: psa.id, mechanism_type: 'LC', limit_amount: 1000000, issuing_bank: 'SBI', validity_start: day(-1), validity_end: day(300), ...over,
+  contract_id: psa.id, mechanism_type: 'LC', limit_amount: 1000000, issuing_bank: 'SBI', bank_reference_no: `LC-${Math.random()}`, validity_start: day(-1), validity_end: day(300), ...over,
 });
 const bill = (contract, over = {}) => makeInvoice({
   contract_id: contract.id, direction: contract.contract_type === 'PSA' ? 'SJVN_TO_BUYER' : 'SELLER_TO_SJVN',
@@ -87,7 +87,7 @@ describe('Invoking the waterfall from the desk', () => {
     // The form names no side and the route assumed the buyer's, so on a PPA —
     // where the only cover is the seller's guarantee — it drew nothing.
     const bg = instrument(ppa, { mechanism_type: 'BANK_GUARANTEE', bg_subtype: 'PBG', is_revolving: 0, waterfall_priority: 20 });
-    const r = await post('/api/payment-security/invocations', { contract_id: ppa.id, amount: 250000 });
+    const r = await post('/api/payment-security/invocations', { contract_id: ppa.id, amount: 250000, reason: 'PBG invoked: commissioning missed the scheduled date' });
     expect(r.status, JSON.stringify(r.body)).toBe(201);
     expect(r.body).toMatchObject({ status: 'NOTICE_ISSUED', amount: 250000, payment_security_id: bg.id });
     expect(row(bg.id)).toMatchObject({ utilized_amount: 250000, status: 'PARTIALLY_UTILIZED' });
@@ -111,6 +111,7 @@ describe('Invoking the waterfall from the desk', () => {
   });
 
   it('files no notice, and tells nobody, when there is nothing to draw', async () => {
+    bill(psa);
     const r = await post('/api/payment-security/invocations', { contract_id: psa.id, amount: 100000 });
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/No demand notice was raised/);
@@ -140,6 +141,7 @@ describe('Invoking the waterfall from the desk', () => {
 
   it("tells the buyer whose letter of credit it is, and no other buyer", async () => {
     const lc = instrument(psa);
+    bill(psa);
     const r = await post('/api/payment-security/invocations', { contract_id: psa.id, amount: 300000 });
     expect(r.status).toBe(201);
     expect(notesFor(buyer).join(' ')).toContain(lc.instrument_no);
@@ -149,6 +151,7 @@ describe('Invoking the waterfall from the desk', () => {
 
   it('moves a demand forwards only', async () => {
     instrument(psa);
+    bill(psa);
     const inv = (await post('/api/payment-security/invocations', { contract_id: psa.id, amount: 300000 })).body;
     const move = (status) => post(`/api/payment-security/invocations/${inv.id}/transition`, { status });
     const skip = await move('FUNDS_RECEIVED');
@@ -164,6 +167,7 @@ describe('Invoking the waterfall from the desk', () => {
     const lc = instrument(psa, { limit_amount: 100000 });
     const pool = instrument(psa, { mechanism_type: 'CORPUS_FUND', is_revolving: 0, waterfall_priority: 40 });
     const untouched = instrument(psa, { mechanism_type: 'BANK_GUARANTEE', is_revolving: 0, waterfall_priority: 20 });
+    bill(psa);
     await post('/api/payment-security/invocations', { contract_id: psa.id, amount: 300000 });
     expect((await get(`/api/payment-security/${lc.id}`)).body.invocations).toHaveLength(1);
     expect((await get(`/api/payment-security/${pool.id}`)).body.invocations, 'the second instrument drawn showed no demand').toHaveLength(1);
@@ -177,12 +181,14 @@ describe('Invoking the waterfall from the desk', () => {
 
 describe('Drawing on an instrument', () => {
   it('is only possible while it is in force', async () => {
-    const draw = (ps, amount = 1000) => post(`/api/payment-security/${ps.id}/utilize`, { amount });
-    for (const status of ['DRAFT', 'RELEASED', 'CLOSED', 'RELEASE_PENDING', 'EXPIRED']) {
+    const draw = (ps, amount = 1000) => post(`/api/payment-security/${ps.id}/utilize`, { amount, reason: 'Drawn for the test default' });
+    for (const status of ['DRAFT', 'RELEASED', 'CLOSED', 'EXPIRED']) {
       const r = await draw(instrument(psa, { status }));
       expect(r.status, `a draw was taken on an instrument that is ${status}`).toBe(400);
       expect(r.body.error).toMatch(/cannot be drawn on/);
     }
+    // A release asked for is not a release given: it is still SJVN's security.
+    expect((await draw(instrument(psa, { status: 'RELEASE_PENDING' }))).status).toBe(200);
     const lapsed = await draw(instrument(psa, { validity_end: day(-2) }));
     expect(lapsed.status).toBe(400);
     expect(lapsed.body.error).toMatch(/expired on/);
@@ -211,7 +217,7 @@ describe('What the first end-to-end run found', () => {
   it('tells the owner of every draw, with dates and money as people write them', async () => {
     // Only a draw that left a revolving LC short was announced.
     const plain = instrument(psa, { is_revolving: 0 });
-    await post(`/api/payment-security/${plain.id}/utilize`, { amount: 100000 });
+    await post(`/api/payment-security/${plain.id}/utilize`, { amount: 100000, reason: 'Drawn for the test default' });
     expect(notesFor(buyer).join(' ')).toMatch(/₹1,00,000 has been drawn on .* leaving ₹9,00,000\./);
     expect(notesFor(otherBuyer)).toEqual([]);
 
@@ -319,8 +325,10 @@ describe('The expiry cascade', () => {
     // Five days out it used to be announced four times in a single run.
     const ps = instrument(psa, { validity_end: day(5) });
     const first = await run();
-    expect(first.body.sent).toBe(1);
-    const alerts = db.prepare(`SELECT days_before, message FROM security_alerts WHERE payment_security_id = ?`).all(ps.id);
+    // The desk's alert, and the reminder to the buyer that has to extend it.
+    expect(first.body.sent).toBe(2);
+    expect(first.body.holders_reminded).toBe(1);
+    const alerts = db.prepare(`SELECT days_before, message FROM security_alerts WHERE payment_security_id = ? AND alert_type = 'EXPIRY'`).all(ps.id);
     expect(alerts).toHaveLength(1);
     expect(alerts[0].days_before).toBe(7);
     expect(alerts[0].message).toMatch(/Final warning: .* expires in 5 days, on/);

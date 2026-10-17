@@ -3,7 +3,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 import {
-  PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtCurrency,
+  PageHeader, Card, Table, Badge, Modal, Field, StatCard, AlertPopup, fmtCurrency,
 } from '../../components/ui.jsx';
 
 // REIA's month-end handover to corporate Finance — the same three steps as the
@@ -104,7 +104,7 @@ export default function ReiaFinance() {
   async function doPost(e) {
     e.preventDefault();
     const r = await run(
-      () => api.reiaFi.post(posting.id, { fi_document_no: voucher || null }),
+      () => api.reiaFi.post(posting.id, { fi_document_no: voucher.trim() }),
       (res) => `${res.posting_no} posted${res.fi_document_no ? ` under ${res.fi_document_no}` : ''}.`,
     );
     if (r) { setPosting(null); setVoucher(''); }
@@ -112,9 +112,10 @@ export default function ReiaFinance() {
 
   async function doReverse(e) {
     e.preventDefault();
+    if (reason.trim().length < 10) { setError('Say why (at least 10 characters) — it is what Finance\'s record shows.'); return; }
     const r = await run(
-      () => api.reiaFi.reverse(reversing.id, reason),
-      (res) => `${res.reversed} reversed by ${res.reversal_posting_no}. ${res.note}`,
+      () => api.reiaFi.reverse(reversing.id, reason.trim()),
+      (res) => (res.withdrawn ? `${res.reversed} withdrawn. ${res.note}` : `${res.reversed} reversed by ${res.reversal_posting_no}. ${res.note}`),
     );
     if (r) { setReversing(null); setReason(''); }
   }
@@ -145,14 +146,18 @@ export default function ReiaFinance() {
           <button type="button" className="btn-link" onClick={() => api.reiaFi.posting(r.id).then(setOpen)}>
             View
           </button>
-          {canWrite && r.status === 'PREPARED' && (
+          {/* Whoever prepared a batch does not also book it. */}
+          {canWrite && r.status === 'PREPARED' && r.created_by !== user?.id && (
             <button type="button" className="btn-link" onClick={() => { setPosting(r); setVoucher(''); }}>
               Post
             </button>
           )}
-          {canWrite && r.status !== 'REVERSED' && (
+          {canWrite && r.status === 'PREPARED' && r.created_by === user?.id && (
+            <span className="audit-muted">prepared by you — another officer posts it</span>
+          )}
+          {canWrite && r.status !== 'REVERSED' && !r.reverses_posting_id && (
             <button type="button" className="btn-link" onClick={() => { setReversing(r); setReason(''); }}>
-              Reverse
+              {r.status === 'PREPARED' ? 'Withdraw' : 'Reverse'}
             </button>
           )}
         </span>
@@ -167,7 +172,7 @@ export default function ReiaFinance() {
         subtitle="The month-end handover of REIA billing to corporate Finance: sales, purchases and credit notes"
       />
 
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
 
       <Card title="Prepare a month">
@@ -236,7 +241,7 @@ export default function ReiaFinance() {
             the voucher number Finance returns, so the entry can be found from either side.
           </p>
           <Field label="Finance document number" htmlFor="rf-vch">
-            <input id="rf-vch" value={voucher} onChange={(e) => setVoucher(e.target.value)} placeholder="e.g. VCH-2026-90412" />
+            <input id="rf-vch" required minLength={3} value={voucher} onChange={(e) => setVoucher(e.target.value)} placeholder="e.g. SAP-JV-2026-08-9901" />
           </Field>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <button type="submit" className="btn btn-primary" disabled={busy}>Post it</button>
@@ -245,14 +250,15 @@ export default function ReiaFinance() {
         </form>
       </Modal>
 
-      <Modal open={!!reversing} onClose={() => setReversing(null)} title={`Reverse ${reversing?.posting_no || ''}`}>
+      <Modal open={!!reversing} onClose={() => setReversing(null)} title={`${reversing?.status === 'PREPARED' ? 'Withdraw' : 'Reverse'} ${reversing?.posting_no || ''}`}>
         <form onSubmit={doReverse}>
           <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
-            The posting is not deleted: a counter-entry is written beside it and both stay visible.
-            The month is then free to be prepared and posted again.
+            {reversing?.status === 'PREPARED'
+              ? 'This batch was never booked, so it is withdrawn without a counter-entry. Its documents are free to be prepared again.'
+              : 'The posting is not deleted: a counter-entry is written beside it and both stay visible. Its documents are then free to be prepared and posted again.'}
           </p>
           <Field label="Reason" required htmlFor="rf-rev">
-            <input id="rf-rev" required value={reason} onChange={(e) => setReason(e.target.value)} />
+            <input id="rf-rev" required minLength={10} value={reason} onChange={(e) => setReason(e.target.value)} />
           </Field>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <button type="submit" className="btn btn-primary" disabled={busy}>Reverse it</button>

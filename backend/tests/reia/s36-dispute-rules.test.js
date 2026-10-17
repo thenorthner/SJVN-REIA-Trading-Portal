@@ -71,7 +71,12 @@ describe('Where a bill stands once its dispute is over', () => {
     pay(inv, 350000);
     const d = await raise(inv);
     await resolve(d.body, { outcome: 'FULL_CREDIT' });
-    expect(db.prepare('SELECT total_amount FROM invoices WHERE id = ?').get(inv.id).total_amount).toBe(350000);
+    // Still held while the credit note waits; settled once someone else approves it.
+    expect(statusOf(inv).status).toBe('DISPUTED');
+    const note = db.prepare('SELECT id FROM debit_credit_notes WHERE invoice_id = ?').get(inv.id);
+    expect((await post(`/api/notes/${note.id}/approve`, reia)).status, 'the resolver approved their own credit').toBe(403);
+    expect((await post(`/api/notes/${note.id}/approve`, finance)).status).toBe(200);
+    expect(db.prepare('SELECT total_amount FROM invoices WHERE id = ?').get(inv.id).total_amount, 'the bill as issued was rewritten').toBe(400000);
     expect(statusOf(inv).status).toBe('PAID');
   });
 
@@ -159,6 +164,11 @@ describe('Who may move a dispute on', () => {
     await resolve(dispute, { outcome: 'REJECTED' });
     expect((await move(buyer, 'CLOSED')).status).toBe(403);
     expect((await move(finance, 'CLOSED')).status).toBe(403);
+    // Not before the party has had its chance to accept or contest.
+    const early = await move(reia, 'CLOSED');
+    expect(early.status).toBe(400);
+    expect(early.body.error).toMatch(/15 days to accept or contest/);
+    db.prepare(`UPDATE disputes SET resolved_at = datetime('now', '-16 days') WHERE id = ?`).run(dispute.id);
     expect((await move(reia, 'CLOSED')).status).toBe(200);
   });
 });
@@ -186,14 +196,11 @@ describe('What the first end-to-end run found', () => {
     expect(again.status, 'a second click raised the dispute twice').toBe(409);
     expect(db.prepare('SELECT COUNT(*) c FROM disputes WHERE invoice_id = ?').get(inv.id).c).toBe(1);
 
+    // The answer to it is a credit note, not a bill — there is no negative bill to dispute.
     const d = db.prepare('SELECT * FROM disputes WHERE invoice_id = ?').get(inv.id);
     await resolve(d, { outcome: 'FULL_CREDIT' });
-    const credit = db.prepare('SELECT supplementary_invoice_id id FROM disputes WHERE id = ?').get(d.id);
-    const onCredit = await post('/api/disputes', buyer, { invoice_id: credit.id, reason_code: 'OTHER', charge_line: 'other_adjustments', disputed_amount: 10, issue_description: 'x' });
-    expect(onCredit.status, 'a dispute was raised on a credit note').toBe(400);
-    expect(onCredit.body.error).toMatch(/credit note/);
-    const listed = (await get('/api/invoices', reia)).body.find((i) => i.id === credit.id);
-    expect(listed.is_dispute_credit).toBe(true);
+    expect(db.prepare(`SELECT COUNT(*) c FROM invoices WHERE total_amount < 0`).get().c).toBe(0);
+    expect(db.prepare('SELECT resolution_note_id FROM disputes WHERE id = ?').get(d.id).resolution_note_id).toBeTruthy();
   });
 
   it('counts interest added on resolution once, and suggests none on a bill nobody has paid', async () => {
@@ -201,10 +208,13 @@ describe('What the first end-to-end run found', () => {
     const d = await raise(inv);
     expect((await get(`/api/disputes/${d.body.id}`, reia)).body.refund_interest_guidance.amount, 'interest was offered on an unpaid bill').toBe(0);
     await resolve(d.body, { outcome: 'FULL_CREDIT', lps_on_resolution: 7 });
-    const after = db.prepare('SELECT total_amount, lps FROM invoices WHERE id = ?').get(inv.id);
-    expect(after).toMatchObject({ total_amount: 350000, lps: 7 });
-    const seen = (await get(`/api/invoices/${inv.id}`, reia)).body;
-    expect(seen.balance_due, 'the rupees added on resolution were asked for twice').toBe(350007);
+    // The credit and the interest on it are one note, counted once.
+    const note = db.prepare('SELECT id, amount FROM debit_credit_notes WHERE invoice_id = ?').get(inv.id);
+    expect(note.amount).toBe(50007);
+    expect(db.prepare('SELECT total_amount, lps FROM invoices WHERE id = ?').get(inv.id)).toMatchObject({ total_amount: 400000, lps: 0 });
+    expect((await get(`/api/invoices/${inv.id}`, reia)).body.balance_due).toBe(350000);
+    await post(`/api/notes/${note.id}/approve`, finance);
+    expect((await get(`/api/invoices/${inv.id}`, reia)).body.balance_due, 'the rupees added on resolution were counted twice').toBe(349993);
   });
 
   it('counts fifteen days from the moment a dispute was raised, whatever clock the server keeps', () => {
