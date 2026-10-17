@@ -6,6 +6,10 @@ import { signToken } from '../../src/middleware/auth.js';
 import { tokenFor, auth, makeUser, makeEntity, resetReia } from '../helpers/reia.js';
 import PDFDocument from 'pdfkit';
 
+// K3 (17-Oct-2026): a change of account is verified after a confirmed call-back.
+const callBack = (entityId) => db.prepare(`INSERT INTO bank_change_callbacks (id, entity_id, change_requested_at, contact_name, phone, called_at, confirmed, officer_name)
+  SELECT 'BCB-' || abs(random()), id, pending_bank_requested_at, 'Known contact', '9999999999', datetime('now'), 1, 'QA' FROM entities WHERE id = ?`).run(entityId);
+
 // Found by the browser audit of stakeholder onboarding (17-Oct-2026): a seller
 // marked its own mandatory clearance "not applicable", which counts as cleared;
 // a seller created a company with all eight clearances VERIFIED; evidence
@@ -105,6 +109,7 @@ describe('S55 A new bank account goes live on proof of it', () => {
 
   it('refuses while the bank proof is not verified', async () => {
     await stage();
+    callBack(ent.id);
     const r = await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(reia)).send({});
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/Verify the bank proof/);
@@ -115,6 +120,7 @@ describe('S55 A new bank account goes live on proof of it', () => {
     await putItem('BANK_ACCOUNT_PROOF', { status: 'VERIFIED', reference_no: 'CHQ-OLD' });
     db.prepare(`UPDATE entity_regulatory_approvals SET verified_at = '2026-01-01T00:00:00.000Z' WHERE entity_id = ? AND approval_code = 'BANK_ACCOUNT_PROOF'`).run(ent.id);
     await stage();
+    callBack(ent.id);
     const r = await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(reia)).send({});
     expect(r.body.error).toMatch(/proves the old account/);
   });
@@ -123,6 +129,7 @@ describe('S55 A new bank account goes live on proof of it', () => {
     await stage();
     await new Promise((r) => setTimeout(r, 1100));
     await putItem('BANK_ACCOUNT_PROOF', { status: 'VERIFIED', reference_no: 'CHQ-NEW' });
+    callBack(ent.id);
     const r = await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(reiaAdmin)).send({});
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(account()).toMatchObject({ account_no: '99990000111122', pending_bank_json: null });

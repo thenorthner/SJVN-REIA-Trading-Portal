@@ -212,10 +212,19 @@ export default function EnergyBanking() {
       <PageHeader
         title="Energy Banking"
         subtitle="Energy the buyer could not take, credited to the seller and drawn back within the cycle. Unused energy settles in cash at a discount to tariff."
-        actions={canWrite && (
+        actions={(
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-ghost" onClick={runSweep}>Settle Closed Cycles</button>
-            <button className="btn btn-primary" disabled={!contractId} onClick={() => { setError(''); setBankForm({ ...EMPTY_BANK }); }}>+ Bank Energy</button>
+            <button className="btn btn-outline" disabled={!contractId} onClick={async () => {
+              try {
+                const blob = await api.energyBanking.statementPdf(contractId);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = `banking-statement-${(contracts.find((c) => c.id === contractId)?.contract_no || contractId).replace(/[^\w.-]+/g, '-')}.pdf`;
+                a.click(); URL.revokeObjectURL(url);
+              } catch { setError('Could not prepare the banking statement.'); }
+            }}>Banking Statement (PDF)</button>
+            {canWrite && <button className="btn btn-ghost" onClick={runSweep}>Settle Closed Cycles</button>}
+            {canWrite && <button className="btn btn-primary" disabled={!contractId} onClick={() => { setError(''); setBankForm({ ...EMPTY_BANK }); }}>+ Bank Energy</button>}
           </div>
         )}
       />

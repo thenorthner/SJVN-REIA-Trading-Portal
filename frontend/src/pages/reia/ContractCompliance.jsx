@@ -176,6 +176,7 @@ export default function ContractCompliance() {
                         <td>
                           <Badge type={STATE_TONE[c.state]}>{STATE_LABEL[c.state]}</Badge>
                           {c.hold?.on_hold && <div><Badge type="danger">ON HOLD</Badge></div>}
+                          {!c.hold?.on_hold && c.hold?.flagged && <div title={c.hold.flag_reason}><Badge type="warning">Would be held</Badge></div>}
                           {c.breach_count + c.due_count > 0 && (
                             <div className="audit-muted">
                               {c.breach_count ? `${c.breach_count} failing` : ''}
@@ -208,6 +209,7 @@ export default function ContractCompliance() {
                                     <th scope="row" style={{ textAlign: 'left' }}>Hold</th>
                                     <td>{c.hold?.on_hold ? <Badge type="danger">On hold</Badge> : <Badge type="success">Not held</Badge>}</td>
                                     <td>
+                                      {c.hold?.flagged && !c.hold?.on_hold && <div style={{ color: '#b45309' }}>Flag only (automatic hold is switched off): {c.hold.flag_reason}</div>}
                                       {c.hold?.reason || (c.hold?.override ? `Breach lifted by ${c.hold.override.approved_by} until ${fmtDate(c.hold.override.valid_until)}: ${c.hold.override.reason}` : 'New bills and scheduling go ahead.')}
                                       <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
                                         {canDesk && !c.hold?.manual && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setHoldForm({ contract: c, mode: 'HOLD', reason: '' })}>Put on hold</button>}

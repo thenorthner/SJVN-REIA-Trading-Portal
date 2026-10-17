@@ -63,6 +63,15 @@ export default function Entities({ vertical = 'REIA' }) {
   const [fieldErrors, setFieldErrors] = useState({});
   // The one message on screen that has to be read: { tone, title, message, items, actions }.
   const [popup, setPopup] = useState(null);
+  // K3: the call-back to a known company contact before a change of account is verified.
+  const [callback, setCallback] = useState(null);
+  const [callbacks, setCallbacks] = useState([]);
+  // K2: clearances lapsing within 60 days, or lapsed.
+  const [expiring, setExpiring] = useState([]);
+  useEffect(() => {
+    if (!CAN_WRITE.includes(user?.role)) return;
+    api.client.get('/entities/clearances/expiring', { params: { days: 60 } }).then((r) => setExpiring(r.data || [])).catch(() => setExpiring([]));
+  }, [user?.role]);
   // The last value each field was flagged for, so leaving a field that is still
   // wrong does not raise the same popup a second time.
   const alerted = useRef({});
@@ -445,6 +454,30 @@ export default function Entities({ vertical = 'REIA' }) {
     }
   }
 
+  useEffect(() => {
+    if (!selected?.id || !selected.pending_bank_json || !CAN_WRITE.includes(user?.role)) { setCallbacks([]); return; }
+    api.client.get(`/entities/${selected.id}/bank-callbacks`).then((r) => setCallbacks(r.data || [])).catch(() => setCallbacks([]));
+  }, [selected?.id, selected?.pending_bank_json]);
+
+  async function saveCallback(e) {
+    e.preventDefault();
+    const missing = [];
+    if (!callback.contact_name.trim()) missing.push('Name of the person called');
+    if (callback.phone.replace(/\D/g, '').length < 10) missing.push('Number called (10 digits)');
+    if (callback.confirmed === '') missing.push('Whether the contact confirmed the change');
+    if (missing.length) return notify('warning', 'Call-back is incomplete', 'Fill these before saving:', missing);
+    try {
+      await api.client.post(`/entities/${selected.id}/bank-callback`, { ...callback, confirmed: callback.confirmed === 'YES' });
+      const r = await api.client.get(`/entities/${selected.id}/bank-callbacks`);
+      setCallbacks(r.data || []);
+      setCallback(null);
+      notify(callback.confirmed === 'YES' ? 'success' : 'error', 'Call-back recorded',
+        callback.confirmed === 'YES' ? 'The change of account can now be verified by an officer other than the one who asked for it.' : 'The contact did not confirm the change. Admins have been alerted; do not verify this account.');
+    } catch (err) {
+      fail('Call-back was not recorded', err, 'Could not save the call-back');
+    }
+  }
+
   // An officer's confirmation that the account matches the cancelled cheque on
   // file. No money is sent — there is no penny-drop integration behind this.
   function confirmBank() {
@@ -538,6 +571,21 @@ export default function Entities({ vertical = 'REIA' }) {
           : `Beneficiaries and generating companies billed under ${VERTICAL_LABELS[vertical]} — KYC, bank and regulatory approvals`}
         actions={CAN_WRITE.includes(user?.role) && <button className="btn btn-primary" onClick={openCreate}>+ Onboard Stakeholder</button>}
       />
+
+      {expiring.length > 0 && (
+        <Card title={`Clearances lapsing within 60 days or lapsed — ${expiring.length}`}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13.5 }}>
+            {expiring.slice(0, 12).map((a) => (
+              <div key={a.id}>
+                <Badge status={a.days_left < 0 || a.status === 'EXPIRED' ? 'REJECTED' : a.days_left <= 7 ? 'PENDING' : 'DRAFT'}
+                  label={a.days_left < 0 || a.status === 'EXPIRED' ? 'Expired' : `${a.days_left} day(s)`} />
+                {' '}<strong>{a.entity_name}</strong> — {getRegulatoryItemLabel(a.approval_code) || a.label || a.approval_code}, valid until {fmtDate(a.valid_until)}
+              </div>
+            ))}
+            {expiring.length > 12 && <div style={{ color: 'var(--slate-500)' }}>…and {expiring.length - 12} more</div>}
+          </div>
+        </Card>
+      )}
 
       <div className="filters-bar">
         <select value={filters.entity_type} onChange={(e) => setFilters({ ...filters, entity_type: e.target.value })}>
@@ -823,6 +871,17 @@ export default function Entities({ vertical = 'REIA' }) {
                       {selected.pending_bank_json && (
                         <div style={{ fontSize: 13, color: 'var(--amber-strong)', marginTop: 4 }}>
                           A change of bank account is waiting. It becomes the live account when this record is re-approved.
+                          {CAN_WRITE.includes(user?.role) && (
+                            <div style={{ marginTop: 6, color: 'var(--slate-600)' }}>
+                              {callbacks[0]
+                                ? <span>Call-back: {callbacks[0].contact_name} on …{String(callbacks[0].phone).slice(-4)}, {callbacks[0].called_at} — <strong>{callbacks[0].confirmed ? 'confirmed' : 'NOT confirmed'}</strong></span>
+                                : <span>No call-back recorded yet — required before the change is verified.</span>}
+                              <button type="button" className="btn btn-sm btn-outline" style={{ marginLeft: 8 }}
+                                onClick={() => setCallback({ contact_name: '', phone: '', called_at: '', confirmed: '', notes: '' })}>
+                                Record call-back
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </td>
@@ -1101,6 +1160,31 @@ export default function Entities({ vertical = 'REIA' }) {
           )}
         </Modal>
       )}
+
+      <Modal open={!!callback} onClose={() => setCallback(null)} title="Bank change call-back" width={520}>
+        {callback && (
+          <form onSubmit={saveCallback} noValidate>
+            <p style={{ fontSize: 13, color: 'var(--slate-600)', marginTop: 0 }}>
+              Phone a number already on record for {selected?.name} (its corporate phone or a listed contact) — never one given with the change request — and ask them to confirm the new account.
+            </p>
+            <Field label="Person called" required><input value={callback.contact_name} onChange={(e) => setCallback({ ...callback, contact_name: e.target.value })} /></Field>
+            <Field label="Number called" required><input value={callback.phone} inputMode="tel" onChange={(e) => setCallback({ ...callback, phone: e.target.value })} /></Field>
+            <Field label="Called at"><input type="datetime-local" value={callback.called_at} onChange={(e) => setCallback({ ...callback, called_at: e.target.value })} /></Field>
+            <Field label="Did they confirm the change?" required>
+              <select value={callback.confirmed} onChange={(e) => setCallback({ ...callback, confirmed: e.target.value })}>
+                <option value="">Select…</option>
+                <option value="YES">Yes — confirmed the new account</option>
+                <option value="NO">No — did not confirm</option>
+              </select>
+            </Field>
+            <Field label="Notes"><textarea rows={2} value={callback.notes} onChange={(e) => setCallback({ ...callback, notes: e.target.value })} /></Field>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button type="button" className="btn btn-outline" onClick={() => setCallback(null)}>Cancel</button>
+              <button type="submit" className="btn btn-primary">Save call-back</button>
+            </div>
+          </form>
+        )}
+      </Modal>
 
       <Modal open={!!editApproval} onClose={() => setEditApproval(null)} title={editApproval ? `Update: ${editApproval.label}` : 'Update approval'} width={560}>
         {editApproval && (

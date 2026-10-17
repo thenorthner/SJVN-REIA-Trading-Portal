@@ -18,6 +18,50 @@ const COMPLIANCE_TONE = { COMPLIANT: 'success', BREACH: 'danger', EXEMPT: 'prima
 const rate = (v) => (v == null ? '—' : `₹${Number(v).toFixed(2)}`);
 const paise = (v) => (v == null ? '—' : `${(Number(v) * 100).toFixed(2)}p`);
 
+const currentFy = () => {
+  const d = new Date();
+  const y = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1;
+  return `${y}-${String((y + 1) % 100).padStart(2, '0')}`;
+};
+
+/** CERC4: the annual return, rolled up from the twelve filed monthlies. */
+function AnnualRollUp({ canWrite, onDone }) {
+  const [fy, setFy] = useState(currentFy());
+  const [pos, setPos] = useState(null);
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const fetchPos = useCallback(() => {
+    setMsg('');
+    api.formIv.annual(fy).then(setPos).catch((err) => { setPos(null); setMsg(err?.response?.data?.error || 'Could not load the year.'); });
+  }, [fy]);
+  useEffect(() => { fetchPos(); }, [fetchPos]);
+  const years = Array.from({ length: 4 }, (_, i) => { const y = Number(currentFy().slice(0, 4)) - i; return `${y}-${String((y + 1) % 100).padStart(2, '0')}`; });
+  return (
+    <Card title="Annual return (roll-up of the monthlies)">
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
+        <select value={fy} onChange={(e) => setFy(e.target.value)} aria-label="Financial year">{years.map((y) => <option key={y} value={y}>FY {y}</option>)}</select>
+        {pos && <span style={{ fontSize: 13 }}>
+          {12 - pos.not_filed.length}/12 monthlies filed · {fmtNumber(pos.sum.total_volume_mu, 4)} MU · margin ₹{fmtNumber(pos.sum.trading_margin, 0)}
+          {pos.annual ? <> · Annual {pos.annual.form_no} <Badge status={pos.annual.status} /></> : ' · no annual return yet'}
+          {pos.differences?.length > 0 && <span style={{ color: 'var(--red-strong, #b91c1c)' }}> · {pos.differences.length} figure(s) differ from the monthlies</span>}
+        </span>}
+        {canWrite && pos && pos.annual?.status !== 'SUBMITTED' && (
+          <button className="btn btn-primary btn-sm" disabled={busy || !pos.ready}
+            title={pos.ready ? '' : `Not yet filed: ${pos.not_filed.join(', ')}`}
+            onClick={async () => {
+              setBusy(true); setMsg('');
+              try { await api.formIv.rollUpAnnual(fy); fetchPos(); onDone?.(); setMsg('Annual return built from the twelve filed monthlies.'); }
+              catch (err) { setMsg(err?.response?.data?.error || 'Roll-up failed.'); }
+              finally { setBusy(false); }
+            }}>{pos.annual ? 'Rebuild annual' : 'Roll up annual'}</button>
+        )}
+      </div>
+      {pos && !pos.ready && <div style={{ fontSize: 12.5, color: 'var(--slate-500)' }}>Waiting on: {pos.not_filed.join(', ')}</div>}
+      {msg && <div style={{ fontSize: 13, marginTop: 6 }}>{msg}</div>}
+    </Card>
+  );
+}
+
 export default function CERCFormIV() {
   const { user } = useAuth();
   const canWrite = ROLE_GROUPS.TRADING_WRITE.includes(user?.role);
@@ -246,6 +290,8 @@ export default function CERCFormIV() {
       />
 
       {error && <div className="form-error">{error}</div>}
+
+      <AnnualRollUp canWrite={canWrite} onDone={() => load()} />
 
       <div className="kpi-grid">
         <StatCard label="Total Filings" value={summary.total ?? 0} hint={`${summary.submitted ?? 0} submitted · ${summary.pending ?? 0} open`} />

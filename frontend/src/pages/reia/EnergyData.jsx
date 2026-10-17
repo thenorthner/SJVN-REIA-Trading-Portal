@@ -43,6 +43,8 @@ export default function EnergyData() {
   const [reaAccountPeriod, setReaAccountPeriod] = useState(null);
   // A lock the server will only take with a recorded reason.
   const [lockAsk, setLockAsk] = useState(null);
+  // G2: certified curtailment hours (they lower CUF's possible generation, not the bill).
+  const [curtail, setCurtail] = useState(null);
   const [lockReason, setLockReason] = useState('');
   const [lockError, setLockError] = useState('');
   const [busy, setBusyState] = useState(false);
@@ -351,7 +353,12 @@ export default function EnergyData() {
     { key: 'energy_mwh', header: 'Energy (MWh)', render: (r) => (
       <span style={{ fontWeight: 700, color: '#0b5fff' }}>{fmtNumber(r.energy_mwh)}</span>
     )},
-    { key: 'cuf_percent', header: 'CUF %', render: (r) => r.cuf_percent != null ? `${fmtNumber(r.cuf_percent)}%` : '-' },
+    { key: 'cuf_percent', header: 'CUF %', render: (r) => (
+      <span>
+        {r.cuf_percent != null ? `${fmtNumber(r.cuf_percent)}%` : '-'}
+        {Number(r.curtailment_hours) > 0 && <div style={{ fontSize: 12, color: 'var(--slate-500)' }} title={r.curtailment_ref || ''}>{fmtNumber(r.curtailment_hours)} h curtailed</div>}
+      </span>
+    ) },
     { key: 'availability_percent', header: 'Availability %', render: (r) => r.availability_percent != null ? `${fmtNumber(r.availability_percent)}%` : '-' },
     { key: 'peak_availability_percent', header: 'Peak Avail. %', render: (r) => r.peak_availability_percent != null ? `${fmtNumber(r.peak_availability_percent)}%` : '-' },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
@@ -365,6 +372,8 @@ export default function EnergyData() {
           {['VALIDATED', 'DISPUTED'].includes(r.status) && !r.is_superseded && <button className="btn btn-success btn-sm" disabled={busy} onClick={(e) => { e.stopPropagation(); handleLock(r); }}>Lock</button>}
           <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); setTrailEnergyId(r.id); }}>Trail</button>
           <button className="btn btn-outline btn-sm" title="Source document, 15-minute blocks and the counterparty's answer" onClick={(e) => { e.stopPropagation(); setRecordId(r.id); }}>Record</button>
+          {!r.is_superseded && <button className="btn btn-outline btn-sm" title="SLDC/RLDC-certified curtailment hours, taken out of CUF's possible generation"
+            onClick={(e) => { e.stopPropagation(); setCurtail({ row: r, hours: r.curtailment_hours ?? '', reference: r.curtailment_ref || '' }); }}>Curtailment</button>}
         </div>
       ),
     }] : [{
@@ -826,6 +835,37 @@ export default function EnergyData() {
             onCancel={() => setShowAccountUpload(false)}
             onDone={(result) => { setShowAccountUpload(false); setAccountResult(result); load(); }}
           />
+        )}
+      </Modal>
+
+      <Modal open={!!curtail} onClose={() => setCurtail(null)} title="Certified curtailment hours" width={520}>
+        {curtail && (
+          <form noValidate onSubmit={async (e) => {
+            e.preventDefault();
+            const hours = Number(curtail.hours);
+            const problems = [];
+            if (curtail.hours === '' || !Number.isFinite(hours) || hours < 0) problems.push('Hours must be 0 or more');
+            if (hours > 0 && curtail.reference.trim().length < 5) problems.push('Give the SLDC / RLDC instruction the hours are certified by');
+            if (problems.length) { setPopup({ tone: 'error', title: 'Curtailment not saved', items: problems }); return; }
+            try {
+              await api.energyData.curtailment(curtail.row.id, { hours, reference: curtail.reference.trim() });
+              setCurtail(null);
+              load();
+              setPopup({ tone: 'success', title: 'Curtailment recorded', message: `${curtail.row.contract_no} ${curtail.row.period_month}: ${hours} h now come off the possible generation its CUF is judged against. The billed energy is unchanged.` });
+            } catch (err) {
+              setPopup({ tone: 'error', title: 'Curtailment not saved', message: errOf(err, 'Could not save the curtailment hours.') });
+            }
+          }}>
+            <p style={{ fontSize: 13, color: 'var(--slate-600)', marginTop: 0 }}>
+              {curtail.row.contract_no} · {curtail.row.period_month}. Only hours an SLDC/RLDC instruction certifies count. Where hours are entered, deemed generation is not added again for the month.
+            </p>
+            <Field label="Curtailed hours" required><input type="number" min="0" step="0.25" value={curtail.hours} onChange={(e) => setCurtail({ ...curtail, hours: e.target.value })} /></Field>
+            <Field label="SLDC / RLDC instruction reference"><input value={curtail.reference} onChange={(e) => setCurtail({ ...curtail, reference: e.target.value })} /></Field>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button type="button" className="btn btn-outline" onClick={() => setCurtail(null)}>Cancel</button>
+              <button type="submit" className="btn btn-primary">Save</button>
+            </div>
+          </form>
         )}
       </Modal>
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import DisputeExtrasPanel, { SlaTag } from '../../components/DisputeExtrasPanel.jsx';
+import ForumTrackerPanel from '../../components/ForumTrackerPanel.jsx';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, fmtCurrency } from '../../components/ui.jsx';
@@ -295,6 +296,8 @@ export default function Disputes() {
           <StatPill label="LPS running on open amounts" value={fmtCurrency(desk.lps_running)} sub={desk.lps_per_day > 0 ? `Growing ${fmtCurrency(desk.lps_per_day)} a day` : undefined} />
         </div>
       )}
+
+      <ForumTrackerPanel canWrite={ROLE_GROUPS.REIA_WRITE.includes(user?.role)} />
 
       {stats?.by_reason?.length > 0 && (
         <Card title="Category patterns (root-cause)">

@@ -275,7 +275,10 @@ export function contractCompliance({ status = null, expiryNoticeDays = 90, contr
     // CC4: a serious breach on a live contract puts it on hold (new bills and
     // scheduling stop) unless Management has lifted it for a stated time; the
     // desk can also hold a contract by hand.
-    const serious = autoHold ? breaches.filter((k) => k.code === 'APPROVALS' || (k.code === 'SECURITY' && k.critical)) : [];
+    // With the automatic hold switched off the breaches are still flagged —
+    // the contract shows what would hold it — but nothing is stopped.
+    const seriousAll = breaches.filter((k) => k.code === 'APPROVALS' || (k.code === 'SECURITY' && k.critical));
+    const serious = autoHold ? seriousAll : [];
     const override = serious.length ? overrideFor.get(c.id) || null : null;
     const automatic = live && serious.length > 0 && !override;
     const hold = {
@@ -283,6 +286,8 @@ export function contractCompliance({ status = null, expiryNoticeDays = 90, contr
       manual: c.on_hold ? { reason: c.hold_reason, by: c.hold_set_by, at: c.hold_set_at } : null,
       breaches: serious.map((k) => ({ code: k.code, label: k.label, detail: k.detail, critical: !!k.critical })),
       override,
+      flagged: live && !autoHold && seriousAll.length > 0,
+      flag_reason: live && !autoHold && seriousAll.length ? seriousAll.map((k) => `${k.label} — ${k.detail}`).join('; ') : null,
       reason: c.on_hold ? `put on hold by ${c.hold_set_by}: ${c.hold_reason}`
         : automatic ? serious.map((k) => `${k.label} — ${k.detail}`).join('; ') : null,
     };
@@ -323,6 +328,7 @@ export function contractCompliance({ status = null, expiryNoticeDays = 90, contr
       ok: rows.filter((r) => r.state === 'OK').length,
       not_live: rows.filter((r) => r.state === 'NOT_LIVE').length,
       on_hold: rows.filter((r) => r.hold.on_hold).length,
+      hold_flagged: rows.filter((r) => r.hold.flagged).length,
       expiring_within_notice: rows.filter((r) => r.state !== 'NOT_LIVE' && r.days_to_expiry != null && r.days_to_expiry >= 0 && r.days_to_expiry <= expiryNoticeDays).length,
     },
     contracts: rows,

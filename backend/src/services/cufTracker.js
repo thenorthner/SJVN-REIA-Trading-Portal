@@ -29,8 +29,11 @@ export function cufTrackerFor(contract, upTo = lastCompleteMonth()) {
   const pos = cufYearPosition(contract, upTo, { upTo, capacityMw: cap });
   if (!pos.applicable) return null;
   const yearMonths = pos.assessed_from > pos.year_end ? [] : monthsBetween(pos.assessed_from, pos.year_end);
-  const yearPossible = yearMonths.reduce((t, p) => t + cap * 24 * daysIn(p), 0);
-  const remainingPossible = Math.max(0, yearPossible - pos.possible_mwh);
+  // Months already counted carry their own possible energy (curtailed hours
+  // taken off, G2); the rest of the year is at full hours.
+  const counted = new Set(pos.months.filter((x) => x.energy_mwh != null).map((x) => x.period));
+  const remainingPossible = yearMonths.filter((p) => !counted.has(p)).reduce((t, p) => t + cap * 24 * daysIn(p), 0);
+  const yearPossible = pos.possible_mwh + remainingPossible;
   const minCuf = Number(pos.min_cuf_percent) || 0;
   const target = (minCuf / 100) * yearPossible;
   const neededMwh = Math.max(0, target - pos.energy_mwh);

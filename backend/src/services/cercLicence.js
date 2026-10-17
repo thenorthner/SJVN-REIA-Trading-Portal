@@ -23,6 +23,7 @@
 import db from '../db/index.js';
 import { getParam, getParamNumber } from '../mastersService.js';
 import { financialYear } from './cercCompliance.js';
+import { categoryWatch } from './cercAnnual.js';
 
 const FY_RE = /^(\d{4})-(\d{2})$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -152,6 +153,7 @@ export function licenceCompliance({ asOf = new Date() } = {}) {
     licence_details: getParam('cerc_licence_details', '') || '',
     fee_amount_due: feeDue,
     min_net_worth_cr: minNetWorth,
+    category_watch: categoryWatch({ asOf }),
     next_fee: { fy: fyOfStartYear(currentStart + 1), due_date: nextDue, days_left: daysToNext },
     totals: {
       // A part-paid fee past its date is as unpaid as one never paid.

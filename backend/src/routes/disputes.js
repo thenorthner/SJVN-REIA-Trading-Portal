@@ -270,7 +270,8 @@ export function runSlaEscalations() {
   }
 
   const deemed = closeDeemedAccepted();
-  return { escalated: count, deemed_accepted: deemed.closed };
+  const hearings = remindHearings();
+  return { escalated: count, deemed_accepted: deemed.closed, hearing_reminders: hearings.sent };
 }
 
 /**
@@ -279,6 +280,23 @@ export function runSlaEscalations() {
  * contested it, the resolution is deemed accepted and the dispute closes —
  * unless a note the resolution asked for still waits for approval.
  */
+/** D5: remind the desk 7 days and 1 day before a forum hearing, once each. */
+export function remindHearings() {
+  const t = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  let sent = 0;
+  for (const d of db.prepare(`SELECT * FROM disputes WHERE next_hearing IS NOT NULL AND status <> 'CLOSED' AND next_hearing >= ?`).all(t)) {
+    const left = Math.floor((Date.parse(`${d.next_hearing}T00:00:00Z`) - Date.parse(`${t}T00:00:00Z`)) / 86400000);
+    const step = left <= 1 ? 1 : left <= 7 ? 7 : null;
+    if (!step) continue;
+    const tag = `HEARING_REMINDER_${step}_${d.next_hearing}`;
+    if (db.prepare('SELECT 1 FROM dispute_events WHERE dispute_id = ? AND event_type = ?').get(d.id, tag)) continue;
+    notifyDesk('DISPUTE', `${d.dispute_no}${d.forum_case_no ? ` (${d.forum_case_no})` : ''}: hearing on ${d.next_hearing} — ${left} day${left === 1 ? '' : 's'} away.`);
+    recordEvent(d.id, { name: 'system' }, tag, d.status, d.status, null);
+    sent += 1;
+  }
+  return { sent };
+}
+
 export function closeDeemedAccepted(now = new Date()) {
   const days = getParamNumber('dispute_response_days', 15);
   const cutoff = new Date(now.getTime() - days * 86400000).toISOString().slice(0, 19).replace('T', ' ');

@@ -317,6 +317,21 @@ function LicenceTracker({ canWrite }) {
         />
       </div>
 
+      {data.category_watch && (
+        <Card title={`Category volume watch — FY ${data.category_watch.fy}`}>
+          {data.category_watch.state === 'NO_LIMIT'
+            ? <p style={{ margin: 0, fontSize: 13 }}>Traded {fmtNumber(data.category_watch.volume_mu, 2)} MU so far. Set <code>cerc_licence_category_limit_mu</code> in Masters to watch it against the Category {data.category_watch.category} ceiling.</p>
+            : (
+              <div style={{ fontSize: 13.5 }}>
+                <Badge status={data.category_watch.state === 'OK' ? 'ACTIVE' : data.category_watch.state === 'OVER' ? 'REJECTED' : 'PENDING'}
+                  label={{ OK: 'Within limit', WARN: `Above ${data.category_watch.warn_pct}%`, PROJECTED_OVER: 'Heading over', OVER: 'Limit exceeded' }[data.category_watch.state]} />
+                {' '}{fmtNumber(data.category_watch.volume_mu, 2)} MU of {fmtNumber(data.category_watch.limit_mu, 0)} MU ({fmtNumber(data.category_watch.pct_of_limit, 1)}%)
+                {data.category_watch.projected_mu != null && <> · projected year-end {fmtNumber(data.category_watch.projected_mu, 0)} MU</>}
+              </div>
+            )}
+        </Card>
+      )}
+
       <Card title={`Category ${data.category} licence — ${data.licensee}`}>
         <div className="report-table-wrap">
           <table className="report-table">

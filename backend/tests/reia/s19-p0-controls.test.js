@@ -17,6 +17,10 @@ const proveNewAccount = (entityId) => {
 const checker = () => tokenFor('REIA_ADMIN');
 import { runStakeholderAlerts } from '../../src/stakeholderEngine.js';
 
+// K3 (17-Oct-2026): a change of account is verified after a confirmed call-back.
+const callBack = (entityId) => db.prepare(`INSERT INTO bank_change_callbacks (id, entity_id, change_requested_at, contact_name, phone, called_at, confirmed, officer_name)
+  SELECT 'BCB-' || abs(random()), id, pending_bank_requested_at, 'Known contact', '9999999999', datetime('now'), 1, 'QA' FROM entities WHERE id = ?`).run(entityId);
+
 let reia;
 beforeEach(() => { resetReia(); reia = tokenFor('REIA_USER'); });
 
@@ -55,6 +59,7 @@ describe('S19 A change of bank account is not the live one until it is verified'
   it('promotes the change once the account is verified', async () => {
     await changeBank();
     proveNewAccount(ent.id);
+    callBack(ent.id);
     const r = await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(checker())).send({});
     expect(r.status).toBe(200);
     expect(row().account_no, 'a verified change never became the live account').toBe('999988887777');
@@ -65,6 +70,7 @@ describe('S19 A change of bank account is not the live one until it is verified'
   it('records what the account was and what it became', async () => {
     await changeBank();
     proveNewAccount(ent.id);
+    callBack(ent.id);
     await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(checker())).send({});
     const a = db.prepare(`SELECT * FROM audit_logs WHERE entity_id = ? AND action = 'BANK_CHANGE_VERIFIED'`).get(ent.id);
     expect(a, 'promoting an account to live left no trail').toBeTruthy();
@@ -140,6 +146,7 @@ describe('S19 Money does not move to an unverified account', () => {
   it('releases again once the change has been verified', async () => {
     await request(app).put(`/api/entities/${ent.id}`).set(auth(reia)).send({ account_no: '999988887777' });
     proveNewAccount(ent.id);
+    callBack(ent.id);
     await request(app).post(`/api/entities/${ent.id}/verify-bank`).set(auth(checker())).send({});
     const r = await release();
     expect(r.status, 'a verified account still could not be paid').toBeLessThan(400);

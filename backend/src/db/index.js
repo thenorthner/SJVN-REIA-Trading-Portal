@@ -3650,6 +3650,10 @@ function migrateDecisions20261017() {
   addCol('power_diversions', 'advance_id', 'TEXT');
   addCol('entities', 'requested_by_user_id', 'TEXT');
   addCol('recon_exceptions', 'note_id', 'TEXT');
+  addCol('energy_data', 'curtailment_hours', 'REAL');
+  for (const col of ['forum_case_no', 'forum_filed_on', 'next_hearing']) addCol('disputes', col, 'TEXT');
+  addCol('disputes', 'expected_exposure', 'REAL');
+  addCol('energy_data', 'curtailment_ref', 'TEXT');
   addCol('contracts', 'on_hold', 'INTEGER NOT NULL DEFAULT 0');
   addCol('contracts', 'verification_window_days', 'INTEGER');
   for (const col of ['hold_reason', 'hold_set_by', 'hold_set_at']) addCol('contracts', col, 'TEXT');

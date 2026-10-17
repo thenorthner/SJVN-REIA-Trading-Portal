@@ -208,6 +208,67 @@ router.get('/overview', (req, res) => send(res, () => {
 }));
 
 // GET /:id
+// ── D5: forum tracker ───────────────────────────────────────────────────────
+// Every dispute taken to a forum: its case number, the hearings held and the
+// next one, and what SJVN stands to lose if it goes against it. The award is
+// recorded with "Record how it ended", which closes the dispute and raises the
+// note for the amount awarded.
+const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+router.get('/forum-tracker', (req, res) => send(res, () => {
+  if (!canManage(req.user) && !['FINANCE_USER', 'MANAGEMENT', 'SJVN_ADMIN'].includes(req.user.role)) throw fail(403, 'Not authorized');
+  const rows = db.prepare(`
+    SELECT d.*, i.invoice_no, c.contract_no FROM disputes d JOIN invoices i ON i.id = d.invoice_id JOIN contracts c ON c.id = i.contract_id
+    WHERE d.resolution_response = 'CONTESTED' ORDER BY (d.status = 'CLOSED'), d.next_hearing IS NULL, d.next_hearing, d.escalated_at
+  `).all().map((d) => {
+    const hearings = db.prepare('SELECT * FROM dispute_hearings WHERE dispute_id = ? ORDER BY hearing_date').all(d.id);
+    const exposure = d.status === 'CLOSED' ? 0 : Number(d.expected_exposure ?? d.contested_amount) || 0;
+    return {
+      id: d.id, dispute_no: d.dispute_no, invoice_no: d.invoice_no, contract_no: d.contract_no, raised_by_role: d.raised_by_role,
+      forum: d.escalation_forum, forum_label: FORUMS[d.escalation_forum] || d.escalation_forum, case_no: d.forum_case_no || null, filed_on: d.forum_filed_on || null,
+      contested_amount: d.contested_amount, expected_exposure: exposure, next_hearing: d.next_hearing || null,
+      days_to_hearing: d.next_hearing ? Math.floor((Date.parse(`${d.next_hearing}T00:00:00Z`) - Date.parse(`${today()}T00:00:00Z`)) / 86400000) : null,
+      hearings, status: d.status === 'CLOSED' ? 'DECIDED' : 'PENDING', outcome: d.escalation_outcome, awarded_amount: d.awarded_amount,
+    };
+  });
+  return { rows, totals: { pending: rows.filter((r) => r.status === 'PENDING').length, exposure: Math.round(rows.reduce((t, r) => t + r.expected_exposure, 0)), hearings_in_7_days: rows.filter((r) => r.days_to_hearing != null && r.days_to_hearing >= 0 && r.days_to_hearing <= 7).length } };
+}));
+
+router.post('/:id/forum', (req, res) => send(res, () => {
+  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk keeps the forum record');
+  const d = disputeFor(req.user, req.params.id);
+  if (d.resolution_response !== 'CONTESTED') throw fail(400, 'This dispute has not been taken to a forum');
+  const b = req.body || {};
+  const caseNo = String(b.case_no || '').trim().slice(0, 80);
+  if (!caseNo) throw fail(400, 'Give the case / petition number');
+  const filed = b.filed_on ? String(b.filed_on) : null;
+  if (filed && (!/^\d{4}-\d{2}-\d{2}$/.test(filed) || filed > today())) throw fail(400, 'The filing date must be a date not in the future');
+  const exposure = b.expected_exposure === undefined || b.expected_exposure === '' ? null : Number(b.expected_exposure);
+  if (exposure != null && (!Number.isFinite(exposure) || exposure < 0 || exposure > (Number(d.contested_amount) || 0) + 0.01)) throw fail(400, `The expected exposure is between 0 and the ₹${inr(d.contested_amount)} contested`);
+  db.prepare(`UPDATE disputes SET forum_case_no = ?, forum_filed_on = COALESCE(?, forum_filed_on), expected_exposure = COALESCE(?, expected_exposure), updated_at = datetime('now') WHERE id = ?`).run(caseNo, filed, exposure, d.id);
+  recordEvent(d.id, req.user, 'FORUM_RECORDED', d.status, d.status, { case_no: caseNo, filed_on: filed, expected_exposure: exposure });
+  audit(req, 'DISPUTE_FORUM_RECORDED', d.id, { afterValue: { case_no: caseNo, filed_on: filed, expected_exposure: exposure } });
+  return view(req.user, disputeFor(req.user, d.id));
+}));
+
+router.post('/:id/hearings', (req, res) => send(res, () => {
+  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk keeps the forum record');
+  const d = disputeFor(req.user, req.params.id);
+  if (d.resolution_response !== 'CONTESTED' || d.status === 'CLOSED') throw fail(400, 'This dispute is not pending before a forum');
+  const b = req.body || {};
+  const date = String(b.hearing_date || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw fail(400, 'Give the hearing date');
+  const next = b.next_date ? String(b.next_date) : null;
+  if (next && (!/^\d{4}-\d{2}-\d{2}$/.test(next) || next <= date)) throw fail(400, 'The next date comes after this hearing');
+  const id = `HRG-${Math.random().toString(36).slice(2, 12)}`;
+  db.prepare('INSERT INTO dispute_hearings (id, dispute_id, hearing_date, purpose, notes, next_date, recorded_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, d.id, date, String(b.purpose || '').slice(0, 200) || null, String(b.notes || '').slice(0, 1000) || null, next, req.user.name);
+  // The next hearing is the latest date known: a hearing in the future, or the next date a past one fixed.
+  const upcoming = date >= today() ? date : next;
+  db.prepare(`UPDATE disputes SET next_hearing = ?, updated_at = datetime('now') WHERE id = ?`).run(upcoming || null, d.id);
+  recordEvent(d.id, req.user, 'HEARING_RECORDED', d.status, d.status, { hearing_date: date, next_date: next });
+  return view(req.user, disputeFor(req.user, d.id));
+}));
+
 router.get('/:id', (req, res) => send(res, () => view(req.user, disputeFor(req.user, req.params.id))));
 
 // POST /:id/respond { response: ACCEPT | ESCALATE, forum, note, contested_amount }

@@ -364,6 +364,22 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
 });
 
 // Freeze / lock — keeps data_type intact (provisional history must survive for BFR trail)
+// G2: certified curtailment / backing-down hours for a month, with the SLDC
+// instruction they rest on. They lower the possible energy CUF is judged
+// against; they do not change the billed figure.
+router.post('/:id/curtailment', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  const row = db.prepare('SELECT * FROM energy_data WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Energy data not found' });
+  const hours = Number(req.body?.hours);
+  const max = hoursInMonth(row.period_month);
+  if (!Number.isFinite(hours) || hours < 0 || hours > max) return res.status(400).json({ error: `Curtailed hours must be between 0 and ${max} for ${row.period_month}.` });
+  const ref = String(req.body?.reference || '').trim();
+  if (hours > 0 && ref.length < 5) return res.status(400).json({ error: 'Give the SLDC / RLDC instruction the hours are certified by.' });
+  db.prepare(`UPDATE energy_data SET curtailment_hours = ?, curtailment_ref = ?, updated_at = datetime('now') WHERE id = ?`).run(hours, ref || null, row.id);
+  logAudit({ req, user: req.user, action: 'CURTAILMENT_RECORDED', module: 'REIA', entityType: 'energy_data', entityId: row.id, beforeValue: { curtailment_hours: row.curtailment_hours ?? 0 }, afterValue: { curtailment_hours: hours, reference: ref || null } });
+  res.json(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id));
+});
+
 router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const row = db.prepare('SELECT * FROM energy_data WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Energy data not found' });

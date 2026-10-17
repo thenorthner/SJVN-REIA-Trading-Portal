@@ -522,6 +522,8 @@ CREATE TABLE IF NOT EXISTS energy_data (
   peak_availability_percent REAL,
   -- Home-state free power as the REA's table D2 accounts it (hydro stations).
   free_energy_mwh REAL,
+  curtailment_hours REAL,  -- G2: certified curtailment / backing-down hours, off the possible energy for CUF
+  curtailment_ref TEXT,
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','VALIDATED','LOCKED','DISPUTED')),
   deviation_notes TEXT,
   billing_family_ref TEXT, -- BFR/{contract}/{YYYY-MM}/{S2S|S2B} — provisional↔final trail key
@@ -1241,6 +1243,10 @@ CREATE TABLE IF NOT EXISTS disputes (
   group_title TEXT,
   -- The submitter's answer to SJVN's resolution: accepted (which closes it),
   -- contested (taken to a named forum), or the dispute withdrawn before one.
+  forum_case_no TEXT,          -- D5: case / petition number before the forum
+  forum_filed_on TEXT,
+  next_hearing TEXT,
+  expected_exposure REAL,
   resolution_response TEXT CHECK (resolution_response IS NULL OR resolution_response IN ('ACCEPTED','CONTESTED','WITHDRAWN')),
   resolution_response_by TEXT,
   resolution_response_at TEXT,
@@ -4306,5 +4312,42 @@ CREATE TABLE IF NOT EXISTS contract_hold_overrides (
   approved_by TEXT NOT NULL,
   approved_by_id TEXT,
   valid_until TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- K2: one reminder per clearance, validity and step (60 / 30 / 7 days).
+CREATE TABLE IF NOT EXISTS clearance_alerts (
+  id TEXT PRIMARY KEY,
+  approval_id TEXT NOT NULL,
+  alert_key TEXT UNIQUE NOT NULL,
+  days_left INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- K3: the call-back made to a known company contact before a change of bank
+-- account is verified.
+CREATE TABLE IF NOT EXISTS bank_change_callbacks (
+  id TEXT PRIMARY KEY,
+  entity_id TEXT NOT NULL REFERENCES entities(id),
+  change_requested_at TEXT,
+  contact_name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  called_at TEXT NOT NULL,
+  confirmed INTEGER NOT NULL,
+  notes TEXT,
+  officer_name TEXT NOT NULL,
+  officer_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- D5: hearings of a dispute taken to a forum.
+CREATE TABLE IF NOT EXISTS dispute_hearings (
+  id TEXT PRIMARY KEY,
+  dispute_id TEXT NOT NULL REFERENCES disputes(id),
+  hearing_date TEXT NOT NULL,
+  purpose TEXT,
+  notes TEXT,
+  next_date TEXT,
+  recorded_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

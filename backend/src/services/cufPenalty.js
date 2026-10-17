@@ -78,7 +78,8 @@ export function computeCufPenalty({
     };
   }
 
-  const cap = Number(capacityMw ?? contract?.commissioned_capacity_mw ?? contract?.capacity_mw) || 0;
+  // commissioned_capacity_mw defaults to 0, which means "not recorded", not a dead plant.
+  const cap = Number(capacityMw) || Number(contract?.commissioned_capacity_mw) || Number(contract?.capacity_mw) || 0;
   const minCuf = resolveMinCufPercent(contract);
   const actualCuf = computeActualCufPercent({
     energyMwh,
@@ -185,9 +186,14 @@ export function contractYearBounds(contract, periodMonth) {
 // not take (curtailment, backing down, grid unavailability, as certified) —
 // counts toward CUF as generated (decided 17-Oct-2026), as SECI-model PPAs
 // provide: the developer is not penalised for what the grid refused.
+// G2: certified curtailment / backing-down hours come off the hours the plant
+// could have run, so the month's possible energy is cap × (hours − curtailed).
+// Where hours are certified, deemed generation MWh is not added as well (it is
+// the same relief counted the other way).
 function pickMonthEnergy(contractId, period) {
   return db.prepare(`
-    SELECT energy_mwh + COALESCE(deemed_generation_mwh, 0) AS energy_mwh, status FROM energy_data
+    SELECT energy_mwh + CASE WHEN COALESCE(curtailment_hours, 0) > 0 THEN 0 ELSE COALESCE(deemed_generation_mwh, 0) END AS energy_mwh,
+      COALESCE(curtailment_hours, 0) AS curtailment_hours, status FROM energy_data
     WHERE contract_id = ? AND period_month = ? AND status NOT IN ('DRAFT', 'REJECTED')
     ORDER BY (status = 'LOCKED') DESC, (data_type = 'FINAL') DESC, created_at DESC LIMIT 1
   `).get(contractId, period);
@@ -196,7 +202,7 @@ function pickMonthEnergy(contractId, period) {
 export function monthEnergyForCuf(contract, period) {
   const own = pickMonthEnergy(contract.id, period);
   if (own || contract.contract_type !== 'PSA') {
-    return own ? { energy_mwh: Number(own.energy_mwh) || 0, locked: own.status === 'LOCKED' } : null;
+    return own ? { energy_mwh: Number(own.energy_mwh) || 0, locked: own.status === 'LOCKED', curtailment_hours: Number(own.curtailment_hours) || 0 } : null;
   }
   const sources = sourcesForPsa(contract.id, period);
   if (!sources.length) return null;
@@ -225,15 +231,17 @@ export function cufYearPosition(contract, periodMonth, { upTo = periodMonth, cap
   const cod = contract.cod_date ? String(contract.cod_date).slice(0, 7) : null;
   const from = cod && cod > bounds.year_start ? cod : bounds.year_start;
   const last = upTo < bounds.year_end ? upTo : bounds.year_end;
-  const cap = Number(capacityMw ?? contract.commissioned_capacity_mw ?? contract.capacity_mw) || 0;
+  const cap = Number(capacityMw) || Number(contract.commissioned_capacity_mw) || Number(contract.capacity_mw) || 0;
   const minCuf = resolveMinCufPercent(contract);
   const months = from > last ? [] : monthsBetween(from, last).map((p) => {
     const e = monthEnergyForCuf(contract, p);
+    const curtailed = Math.min(24 * daysInMonth(p), Number(e?.curtailment_hours) || 0);
     return {
       period: p,
       energy_mwh: e ? e.energy_mwh : null,
       locked: !!e?.locked,
-      possible_mwh: cap * 24 * daysInMonth(p),
+      curtailment_hours: curtailed,
+      possible_mwh: cap * (24 * daysInMonth(p) - curtailed),
     };
   });
   const counted = months.filter((m) => m.energy_mwh != null);

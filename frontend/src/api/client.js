@@ -172,6 +172,8 @@ export const api = {
     create: (body) => p('/energy-data', body),
     validate: (id) => p(`/energy-data/${id}/validate`),
     lock: (id, body) => p(`/energy-data/${id}/lock`, body),
+    // Hours SLDC certified as curtailed: out of the CUF's possible generation (G2).
+    curtailment: (id, body) => p(`/energy-data/${id}/curtailment`, body),
     parseREA: (formData) => client.post('/energy-data/parse-rea', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
     reaStatus: () => g('/energy-data/rea-status'),
     reaLog: (params) => g('/energy-data/rea-log', params),
@@ -260,6 +262,10 @@ export const api = {
     withdraw: (id, note) => p(`/dispute-extras/${id}/withdraw`, { note }),
     link: (ids, title) => p('/dispute-extras/link', { ids, title }),
     dossier: (id, format) => client.get(`/dispute-extras/${id}/dossier.${format}`, { responseType: 'blob' }).then((r) => r.data),
+    // Disputes before a forum: case number, hearings, exposure (D5).
+    forumTracker: () => g('/dispute-extras/forum-tracker'),
+    setForum: (id, body) => p(`/dispute-extras/${id}/forum`, body),
+    addHearing: (id, body) => p(`/dispute-extras/${id}/hearings`, body),
   },
   // Around the signatures of a reconciliation statement.
   reconSignoff: {
@@ -327,6 +333,8 @@ export const api = {
     bank: (body) => p('/energy-banking', body),
     draw: (body) => p('/energy-banking/draw', body),
     settle: (body) => p('/energy-banking/settle', body),
+    statement: (contractId) => g(`/energy-banking/${contractId}/statement`),
+    statementPdf: (contractId) => client.get(`/energy-banking/${contractId}/statement.pdf`, { responseType: 'blob' }).then((r) => r.data),
   },
   powerDiversion: {
     list: (params) => g('/power-diversion', params),
@@ -505,6 +513,8 @@ export const api = {
       a.remove();
       URL.revokeObjectURL(url);
     },
+    annual: (fy) => g(`/form-iv/annual/${fy}`),
+    rollUpAnnual: (fy) => p(`/form-iv/annual/${fy}/roll-up`),
     downloadPdf: (id, formNo) => api.reports.downloadPdf(`/form-iv/${id}/pdf`, `${String(formNo || id).replaceAll('/', '-')}.pdf`),
   },
   stationBeta: {

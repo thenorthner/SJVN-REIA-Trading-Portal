@@ -97,9 +97,19 @@ function entriesOf(sellerId, contractId, partySide = 'SELLER') {
       -- invoice for it is accepted: both were lines, and Sunrise's October
       -- stood at twice its ₹2.36 crore.
       AND ${supersededByDeveloperSql('i')}
+      -- A DSM bill settles with the NRPC pool, not with this party.
+      AND i.invoice_no NOT LIKE 'DSM-%'
       ${contractId ? 'AND i.contract_id = ?' : ''}
   `).all(sellerId, ...of.notBilled, ...(contractId ? [contractId] : []));
-  if (!invoices.length) return { invoices, entries: [] };
+  // Advances the party holds with SJVN (PM2): money received that no bill took
+  // is a credit when it arrives and a debit if it is refunded; applying it to a
+  // bill moves nothing on the account (the payment line it makes is left out).
+  const advanceEvents = buyer ? db.prepare(`
+    SELECT ev.*, r.receipt_no, r.contract_id, c.contract_no FROM unapplied_receipt_events ev
+    JOIN unapplied_receipts r ON r.id = ev.receipt_id LEFT JOIN contracts c ON c.id = r.contract_id
+    WHERE r.entity_id = ? AND ev.event_type IN ('RECEIVED', 'REFUNDED') ${contractId ? 'AND r.contract_id = ?' : ''}
+  `).all(sellerId, ...(contractId ? [contractId] : [])) : [];
+  if (!invoices.length && !advanceEvents.length) return { invoices, entries: [] };
   const marks = invoices.map(() => '?').join(',');
   const ids = invoices.map((i) => i.id);
   const payments = db.prepare(`SELECT * FROM payments WHERE invoice_id IN (${marks}) ORDER BY payment_date, rowid`).all(...ids);
@@ -125,6 +135,7 @@ function entriesOf(sellerId, contractId, partySide = 'SELLER') {
     const i = byInvoice.get(p.invoice_id);
     const base = { date: dayOf(p.payment_date), invoice_no: i.invoice_no, contract_no: i.contract_no, invoice_id: i.id, payment_id: p.id };
     lastPaid.set(i.id, base.date);
+    if (p.mode === 'ADVANCE') continue;
     if (p.mode === 'CREDIT_NOTE') {
       add({ ...base, type: 'CREDIT_NOTE', ref: p.reference, particulars: `Credit note ${p.reference} applied`, credit: money(p.deduction), order: 2 });
       continue;
@@ -149,6 +160,11 @@ function entriesOf(sellerId, contractId, partySide = 'SELLER') {
     const base = { date: on, ref: i.invoice_no, invoice_no: i.invoice_no, contract_no: i.contract_no, invoice_id: i.id };
     if (rest > 0) add({ ...base, type: 'REBATE', particulars: 'Early-payment rebate allowed', credit: rest, order: 5 });
     if (Number(i.lps) > 0) add({ ...base, type: 'LPS', particulars: 'Late payment surcharge', debit: money(i.lps), order: 6 });
+  }
+  for (const ev of advanceEvents) {
+    const base = { date: dayOf(ev.created_at), ref: ev.reference || ev.receipt_no, contract_no: ev.contract_no, invoice_no: null, invoice_id: null };
+    if (ev.event_type === 'RECEIVED') add({ ...base, type: 'ADVANCE', particulars: `Advance received (${ev.receipt_no})${ev.note ? ` — ${ev.note}` : ''}`, credit: money(ev.amount), order: 1 });
+    else add({ ...base, type: 'ADVANCE_REFUND', particulars: `Advance refunded (${ev.receipt_no})`, debit: money(ev.amount), order: 7 });
   }
   entries.sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order || String(a.ref).localeCompare(String(b.ref)));
   return { invoices, entries };
@@ -194,7 +210,7 @@ function statementOf(user, query) {
   let balance = 0;
   let opening = 0;
   const shown = [];
-  const totals = { billed: 0, received: 0, tds: 0, deductions: 0, rebate: 0, credit_notes: 0, debit_notes: 0, lps: 0 };
+  const totals = { billed: 0, received: 0, tds: 0, deductions: 0, rebate: 0, credit_notes: 0, debit_notes: 0, lps: 0, advances: 0, refunds: 0 };
   for (const e of entries) {
     if (to && e.date > to) break;
     balance = money(balance + e.debit - e.credit);
@@ -208,6 +224,8 @@ function statementOf(user, query) {
     if (e.type === 'DEDUCTION') totals.deductions += e.credit;
     if (e.type === 'REBATE') totals.rebate += e.credit;
     if (e.type === 'CREDIT_NOTE') totals.credit_notes += e.credit;
+    if (e.type === 'ADVANCE') totals.advances += e.credit;
+    if (e.type === 'ADVANCE_REFUND') totals.refunds += e.debit;
   }
   for (const k of Object.keys(totals)) totals[k] = money(totals[k]);
   const outstanding = outstandingOf(invoices);
@@ -224,7 +242,7 @@ function statementOf(user, query) {
   };
 }
 
-const TYPE_LABEL = { INVOICE: 'Invoice', DEBIT_NOTE: 'Debit note', CREDIT_NOTE: 'Credit note', PAYMENT: 'Payment', TDS: 'TDS', DEDUCTION: 'Deduction', REBATE: 'Rebate', LPS: 'LPS' };
+const TYPE_LABEL = { INVOICE: 'Invoice', DEBIT_NOTE: 'Debit note', CREDIT_NOTE: 'Credit note', PAYMENT: 'Payment', TDS: 'TDS', DEDUCTION: 'Deduction', REBATE: 'Rebate', LPS: 'LPS', ADVANCE: 'Advance', ADVANCE_REFUND: 'Refund' };
 const closingText = (s) => (s.party_side === 'BUYER' ? 'Closing balance — payable to SJVN' : 'Closing balance — receivable from SJVN');
 const partyWord = (s) => (s.party_side === 'BUYER' ? 'Buyer' : 'Seller');
 const periodText = (s) => `${s.from || 'the beginning'} to ${s.to || today()}`;
@@ -300,8 +318,8 @@ router.get('/statement.pdf', (req, res) => {
   }
   y = kpiBand(doc, y + 6, [
     { label: 'Opening balance', value: `Rs ${inr(s.opening_balance)}` },
-    { label: 'Billed', value: `Rs ${inr(s.totals.billed + s.totals.debit_notes + s.totals.lps)}` },
-    { label: 'Paid & adjusted', value: `Rs ${inr(s.totals.received + s.totals.tds + s.totals.deductions + s.totals.rebate + s.totals.credit_notes)}` },
+    { label: 'Billed', value: `Rs ${inr(s.totals.billed + s.totals.debit_notes + s.totals.lps + s.totals.refunds)}` },
+    { label: 'Paid & adjusted', value: `Rs ${inr(s.totals.received + s.totals.tds + s.totals.deductions + s.totals.rebate + s.totals.credit_notes + s.totals.advances)}` },
     { label: s.party_side === 'BUYER' ? 'Closing — payable' : 'Closing — receivable', value: `Rs ${inr(s.closing_balance)}` },
   ]);
   y = sectionTitle(doc, y, 'Ledger');
@@ -320,7 +338,7 @@ router.get('/statement.pdf', (req, res) => {
   ], ctx, { fontSize: 7, rowH: 15 });
   footNotes(doc, y + 10, [
     s.party_side === 'BUYER'
-      ? 'A debit is an amount SJVN billed; a credit is an amount paid, deducted at source or adjusted by a credit note.'
+      ? 'A debit is an amount SJVN billed or an advance refunded; a credit is an amount paid, an advance received, deducted at source or adjusted by a credit note.'
       : 'A debit is an amount billed to SJVN; a credit is an amount paid, deducted at source, allowed as rebate or adjusted by a credit note.',
     'Generated from the SJVN portal. It reflects the records as they stood when it was generated and is not a signed confirmation of balance.',
   ]);

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { annualPosition, rollUpAnnual, alertCategoryWatch } from '../services/cercAnnual.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { newId, logAudit } from '../util.js';
@@ -232,6 +233,7 @@ router.post('/:id/submit', requireRole(...WRITE), (req, res) => {
   `).run(req.body.submission_date || today(), reference_no, req.user.name, form.id);
 
   logAudit({ req, user: req.user, action: 'SUBMIT', module: 'TRADING', entityType: 'cerc_form_iv', entityId: form.id, details: { reference_no } });
+  try { alertCategoryWatch(); } catch (e) { console.error('[CERC] category watch', e.message); }
   const updated = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(form.id);
   const lines = getLines(form.id);
   res.json({ ...withDerived(updated), lines, blockers: submissionBlockers(updated, lines) });
@@ -245,6 +247,14 @@ router.post('/:id/submit', requireRole(...WRITE), (req, res) => {
  * Takes either an existing period's id, or { period_type, period } for one the
  * platform has never held.
  */
+// CERC4: the annual return against its twelve monthlies, and the roll-up.
+router.get('/annual/:fy', requireRole(...READ), (req, res) => {
+  try { res.json(annualPosition(req.params.fy)); } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+router.post('/annual/:fy/roll-up', requireRole(...WRITE), (req, res) => {
+  try { res.json(rollUpAnnual(req.params.fy, { user: req.user, req })); } catch (e) { res.status(e.status || 500).json({ error: e.message, ...(e.extra || {}) }); }
+});
+
 router.post('/mark-filed-outside', requireRole(...WRITE), (req, res) => {
   const b = req.body || {};
   const reference = String(b.reference_no || '').trim();

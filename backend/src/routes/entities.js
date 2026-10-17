@@ -13,6 +13,7 @@ import multer from 'multer';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { entityVisibleTo, isCounterparty } from '../services/counterpartyScope.js';
+import { clearancesExpiring } from '../services/clearanceExpiry.js';
 import { normaliseKycBody, validateKyc } from '../services/kycValidation.js';
 
 // Onboarding belongs to every vertical that bills a counterparty, not to REIA
@@ -712,6 +713,16 @@ router.post(['/:id/verify-bank', '/:id/penny-drop'], requireRole(...ENTITY_WRITE
     return res.status(403).json({ error: 'You asked for this change of account, so someone else has to verify it.' });
   }
 
+  // K3: a change of account is verified only after a call-back to a known
+  // company contact confirmed it, recorded after the change was asked for.
+  if (entity.pending_bank_json) {
+    const cb = db.prepare(`SELECT * FROM bank_change_callbacks WHERE entity_id = ? AND confirmed = 1 AND COALESCE(change_requested_at, '') = COALESCE(?, '') ORDER BY created_at DESC LIMIT 1`)
+      .get(entity.id, entity.pending_bank_requested_at || null);
+    if (!cb) {
+      return res.status(400).json({ error: 'Record the call-back first: phone a contact already on record for the company, confirm the change of account with them, and record who was called, on which number and when.', needs_callback: true });
+    }
+  }
+
   // A requested change of account becomes the live one at this point — not at
   // the edit that requested it. Without this the new details would sit staged
   // forever.
@@ -750,6 +761,40 @@ router.post('/:id/own-station', requireRole('SJVN_ADMIN', 'IT_SUPER_ADMIN'), (re
   db.prepare(`UPDATE entities SET is_sjvn_own = ?, updated_at = datetime('now') WHERE id = ?`).run(on, entity.id);
   logAudit({ req, user: req.user, action: on ? 'ENTITY_MARKED_OWN_STATION' : 'ENTITY_UNMARKED_OWN_STATION', module: 'REIA', entityType: 'entity', entityId: entity.id, beforeValue: { is_sjvn_own: entity.is_sjvn_own ? 1 : 0 }, afterValue: { is_sjvn_own: on }, reason });
   res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(entity.id)));
+});
+
+// K3: record the call-back that confirms (or does not) a change of bank account.
+router.post('/:id/bank-callback', requireRole(...ENTITY_WRITE), (req, res) => {
+  const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  if (!entity.pending_bank_json) return res.status(400).json({ error: `${entity.name} has no change of bank account waiting.` });
+  const b = req.body || {};
+  const name = String(b.contact_name || '').trim();
+  const digits = (v) => String(v || '').replace(/\D/g, '').slice(-10);
+  const phone = digits(b.phone);
+  if (!name) return res.status(400).json({ error: 'Name the person called.' });
+  if (phone.length < 10) return res.status(400).json({ error: 'Give the number called (10 digits).' });
+  const known = [entity.corporate_phone, ...db.prepare('SELECT phone FROM entity_contacts WHERE entity_id = ?').all(entity.id).map((c) => c.phone)].map(digits).filter((p) => p.length === 10);
+  if (!known.includes(phone)) {
+    return res.status(400).json({ error: 'Call a number already on record for the company (its corporate phone or a listed contact) — not one given with the change of account.', known_numbers: known.length });
+  }
+  const calledAt = String(b.called_at || '').trim() || new Date().toISOString().slice(0, 16).replace('T', ' ');
+  if (b.confirmed === undefined) return res.status(400).json({ error: 'Say whether the contact confirmed the change.' });
+  const id = newId('BCB');
+  db.prepare(`INSERT INTO bank_change_callbacks (id, entity_id, change_requested_at, contact_name, phone, called_at, confirmed, notes, officer_name, officer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, entity.id, entity.pending_bank_requested_at || null, name, phone, calledAt, b.confirmed ? 1 : 0, String(b.notes || '').slice(0, 500) || null, req.user.name, req.user.id || null);
+  logAudit({ req, user: req.user, action: b.confirmed ? 'BANK_CALLBACK_CONFIRMED' : 'BANK_CALLBACK_NOT_CONFIRMED', module: 'REIA', entityType: 'entity', entityId: entity.id, details: { contact_name: name, phone_last4: phone.slice(-4), called_at: calledAt } });
+  if (!b.confirmed) {
+    for (const role of ['REIA_ADMIN', 'SJVN_ADMIN', 'FINANCE_USER']) pushNotification({ role, type: 'BANK_CHANGE', message: `${entity.name}: the company contact called (${name}) did NOT confirm the requested change of bank account. Do not verify it; treat it as possible fraud.` });
+  }
+  res.status(201).json(db.prepare('SELECT * FROM bank_change_callbacks WHERE id = ?').get(id));
+});
+router.get('/:id/bank-callbacks', requireRole(...ENTITY_WRITE), (req, res) => {
+  res.json(db.prepare('SELECT * FROM bank_change_callbacks WHERE entity_id = ? ORDER BY created_at DESC').all(req.params.id));
+});
+// K2: clearances lapsing soon, across counterparties.
+router.get('/clearances/expiring', requireRole(...ENTITY_WRITE, ...ROLE_GROUPS.REIA_ALL), (req, res) => {
+  res.json(clearancesExpiring(Math.min(365, Math.max(1, Number(req.query.days) || 60))));
 });
 
 router.post('/:id/blacklist', requireRole(...BLACKLIST_ROLES), (req, res) => {
