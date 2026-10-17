@@ -43,6 +43,7 @@ export const api = {
       p('/auth/change-password', { current_password, new_password }),
   },
   entities: {
+    setOwnStation: (id, body) => p(`/entities/${id}/own-station`, body),
     list: (params) => g('/entities', params),
     get: (id) => g(`/entities/${id}`),
     create: (body) => p('/entities', body),
@@ -196,6 +197,9 @@ export const api = {
     getVerification: (id) => g(`/invoices/${id}/verification`),
     saveVerification: (id, body) => p(`/invoices/${id}/verification`, body),
     generate: (body) => p('/invoices/generate', body),
+    backToBack: (id) => g(`/invoices/${id}/back-to-back`),
+    readiness: (period) => g('/invoices/readiness', period ? { period_month: period } : undefined),
+    generateReady: (body) => p('/invoices/generate-ready', body),
     arrear: (body) => p('/invoices/arrear', body),
     supplementary: (body) => p('/invoices/supplementary', body),
     submit: (body) => p('/invoices', body),

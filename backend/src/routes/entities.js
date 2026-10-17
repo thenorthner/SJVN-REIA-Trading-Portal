@@ -736,6 +736,22 @@ router.post(['/:id/verify-bank', '/:id/penny-drop'], requireRole(...ENTITY_WRITE
 // Bar a counterparty, or lift the bar. A blacklisted counterparty cannot be
 // approved and cannot be given a new contract; what it already holds is left
 // alone, because money owed under a live contract is still owed.
+// SJVN's own station (NJHPS, RHPS): sells through the platform but is not a
+// developer, so developer KYC does not apply. An administrator's call, with
+// the reason on record.
+router.post('/:id/own-station', requireRole('SJVN_ADMIN', 'IT_SUPER_ADMIN'), (req, res) => {
+  const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
+  if (!entity) return res.status(404).json({ error: 'Entity not found' });
+  const on = req.body?.is_sjvn_own ? 1 : 0;
+  const reason = String(req.body?.reason || '').trim();
+  if (reason.length < 10) return res.status(400).json({ error: 'Say why (at least 10 characters) — it is what the audit trail shows.' });
+  if (on && entity.entity_type !== 'SELLER') return res.status(400).json({ error: 'Only a seller can be one of SJVN\'s own stations.' });
+  if ((entity.is_sjvn_own ? 1 : 0) === on) return res.status(400).json({ error: `${entity.name} is ${on ? 'already' : 'not'} marked as SJVN's own station.` });
+  db.prepare(`UPDATE entities SET is_sjvn_own = ?, updated_at = datetime('now') WHERE id = ?`).run(on, entity.id);
+  logAudit({ req, user: req.user, action: on ? 'ENTITY_MARKED_OWN_STATION' : 'ENTITY_UNMARKED_OWN_STATION', module: 'REIA', entityType: 'entity', entityId: entity.id, beforeValue: { is_sjvn_own: entity.is_sjvn_own ? 1 : 0 }, afterValue: { is_sjvn_own: on }, reason });
+  res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(entity.id)));
+});
+
 router.post('/:id/blacklist', requireRole(...BLACKLIST_ROLES), (req, res) => {
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import SellerHoldReasons from '../../components/SellerHoldReasons.jsx';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, StatCard, Table, Badge, Modal, Field, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
@@ -659,6 +660,7 @@ export default function SellerInvoices() {
 
             <InvoiceBreakdown invoice={selected} />
             <InvoiceFinancialStrip invoice={{ ...selected, direction: selected.direction || 'SELLER_TO_SJVN' }} />
+            <SellerHoldReasons invoice={selected} />
 
             <InvoiceCompliance key={selected.id} invoice={selected} onChanged={load} />
 

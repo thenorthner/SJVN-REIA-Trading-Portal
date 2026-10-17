@@ -5,6 +5,7 @@ import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import NotesPanel from './NotesPanel.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
+import BackToBackCard from '../../components/BackToBackCard.jsx';
 
 // The latest month that can be billed: the one before this one. The form
 // opened on a fixed 2026-10, which became the month still running.
@@ -341,7 +342,8 @@ export default function Invoices() {
         : `${made?.count || 'The'} invoice(s) generated as drafts.`);
       load();
     } catch (err) {
-      setGenPopup({ title: 'Invoice not generated', message: errOf(err, 'Failed to generate invoice.') });
+      // B2: a refusal that names the note to raise offers it, filled in.
+      setGenPopup({ title: 'Invoice not generated', message: errOf(err, 'Failed to generate invoice.'), suggested: err?.response?.data?.suggested_note || null });
     } finally {
       setBusy('');
     }
@@ -1060,6 +1062,29 @@ export default function Invoices() {
 
             <InvoiceBreakdown invoice={selected} />
             <InvoiceFinancialStrip invoice={selected} />
+            <BackToBackCard invoice={selected} />
+            {selected.advances?.open_balance > 0 && (
+              // B4: the buyer's advances, beside a bill they could settle.
+              <div className="inline-note" style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span>The buyer holds <strong>{fmtCurrency(selected.advances.open_balance)}</strong> as advance ({selected.advances.items.map((x) => x.receipt_no).join(', ')}).</span>
+                {user?.role === 'FINANCE_USER' && (
+                  <button type="button" className="btn btn-primary btn-sm" disabled={!!busy} onClick={async () => {
+                    setBusy('advance');
+                    try {
+                      for (const adv of selected.advances.items) {
+                        const fresh = await api.invoices.get(selected.id);
+                        if (!['SENT', 'PARTIALLY_PAID', 'DISPUTED'].includes(fresh.status)) break;
+                        await api.advances.apply(adv.id, { invoice_id: selected.id });
+                      }
+                      await refreshSelected(selected.id);
+                      setFlash('Advance applied to this bill.');
+                    } catch (err) {
+                      setGenPopup({ title: 'Advance not applied', message: errOf(err, 'Could not apply the advance.') });
+                    } finally { setBusy(''); }
+                  }}>Apply to this bill</button>
+                )}
+              </div>
+            )}
 
             {selected.direction === 'SJVN_TO_BUYER' && PRESENTED.includes(selected.status) && (
               <p className="inline-note" style={{ marginTop: 12, color: selected.buyer_ack_at ? '#15803d' : undefined }}>
@@ -1136,7 +1161,10 @@ export default function Invoices() {
                     
                     const stageTitle = a.stage_title || (a.level === 1 ? 'Commercial Review & Verification' : a.level === 2 ? 'Finance Concurrence' : 'Final Administrative Sanction');
                     const postName = a.designation || (a.level === 1 ? 'Manager (Commercial & Billing)' : a.level === 2 ? 'DGM / Senior Manager (Finance)' : 'Head of Commercial / CGM');
-                    const designatedNames = a.designated_names || 'an approver other than the one who raised it';
+                    // B3: only people who can actually sign this level of this bill.
+                    const designatedNames = Array.isArray(a.eligible_signers)
+                      ? (a.eligible_signers.length ? a.eligible_signers.join(' / ') : 'nobody active in that role who may sign it — ask an administrator')
+                      : (a.designated_names || 'an approver other than the one who raised it');
 
                     return (
                       <div className="timeline-item" key={a.id} style={{ paddingBottom: 18, paddingTop: 14 }}>
@@ -1593,7 +1621,20 @@ export default function Invoices() {
         open={!!genPopup}
         title={genPopup?.title}
         message={genPopup?.message}
-        okLabel="OK"
+        items={genPopup?.suggested ? [`Suggested: a ${genPopup.suggested.note_type.toLowerCase()} note of ${fmtCurrency(genPopup.suggested.amount)} on ${genPopup.suggested.invoice_no} — raised as a draft for Finance to approve.`] : undefined}
+        okLabel={genPopup?.suggested ? 'Not now' : 'OK'}
+        actions={genPopup?.suggested && CAN_WRITE.includes(user?.role) ? (
+          <button type="button" className="btn btn-primary" disabled={!!busy} onClick={async () => {
+            setBusy('note');
+            try {
+              const n = await api.notes.create(genPopup.suggested);
+              setGenPopup(null);
+              setFlash(`Draft ${n.note_type.toLowerCase()} note of ${fmtCurrency(n.amount)} raised on ${genPopup.suggested.invoice_no}; it waits for Finance's approval.`);
+            } catch (err) {
+              setGenPopup({ title: 'Note not raised', message: errOf(err, 'Could not raise the note.') });
+            } finally { setBusy(''); }
+          }}>Raise this note</button>
+        ) : undefined}
         onClose={() => setGenPopup(null)}
       />
     </div>

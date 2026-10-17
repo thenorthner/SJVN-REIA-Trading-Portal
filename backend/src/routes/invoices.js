@@ -19,7 +19,9 @@ import { computeCercHydroBill } from '../services/cercHydroBilling.js';
 import { cufYearPosition, contractYearBounds } from '../services/cufPenalty.js';
 import { computePeakAvailabilityPenalty } from '../services/peakAvailability.js';
 import { lastCompleteMonth } from '../services/energyRules.js';
-import { recordAdvance } from '../services/advances.js';
+import { recordAdvance, openAdvanceBalance } from '../services/advances.js';
+import { backToBack } from '../services/backToBack.js';
+import { readinessBoard } from '../services/billingReadiness.js';
 import { notifyCounterparty, computeCoverage } from '../paymentSecurityEngine.js';
 import {
   compareSellerToSystem,
@@ -134,22 +136,22 @@ const notFullyCreditedSql = (a = 'i') => `COALESCE((SELECT SUM(n.amount) FROM de
 
 const DEFAULT_APPROVAL_BANDS = [{ above: 1000000, levels: 3 }, { above: 100000, levels: 2 }];
 
-function approvalLevelsFor(inv) {
+/** The amount band a bill falls in, or null below the lowest. */
+function bandFor(inv) {
   const amount = Math.abs(Number(inv?.total_amount) || 0);
-  const minLevels = Math.max(1, Number(getParamNumber('invoice_approval_min_levels', 1)) || 1);
-
   let bands = getParam('invoice_approval_levels', null);
   if (typeof bands === 'string') { try { bands = JSON.parse(bands); } catch { bands = null; } }
   if (!Array.isArray(bands) || !bands.length) bands = DEFAULT_APPROVAL_BANDS;
-
   const sorted = bands
     .filter((b) => Number.isFinite(Number(b?.above)) && Number.isFinite(Number(b?.levels)))
     .sort((a, b) => Number(b.above) - Number(a.above));
+  return sorted.find((b) => amount > Number(b.above)) || null;
+}
 
-  for (const b of sorted) {
-    if (amount > Number(b.above)) return Math.max(minLevels, Math.round(Number(b.levels)));
-  }
-  return minLevels;
+function approvalLevelsFor(inv) {
+  const minLevels = Math.max(1, Number(getParamNumber('invoice_approval_min_levels', 1)) || 1);
+  const band = bandFor(inv);
+  return band ? Math.max(minLevels, Math.round(Number(band.levels))) : minLevels;
 }
 
 /**
@@ -165,7 +167,14 @@ const DEFAULT_LEVEL_ROLES = {
   2: ['FINANCE_USER'],
   3: ['SJVN_ADMIN', 'MANAGEMENT'],
 };
-export function approvalRolesFor(level) {
+export function approvalRolesFor(level, inv = null) {
+  // A band in invoice_approval_levels may name its own roles per level (B3):
+  // { above, levels, roles: { "1": [...], "2": [...], "3": [...] } } — a
+  // ₹10 crore bill can need REIA Admin at level 1 where a ₹2 lakh one takes
+  // any REIA officer. Without them the general map below applies.
+  const band = inv ? bandFor(inv) : null;
+  const own = band?.roles && Array.isArray(band.roles[level]) && band.roles[level].length ? band.roles[level] : null;
+  if (own) return own;
   let map = getParam('invoice_approval_level_roles', null);
   if (typeof map === 'string') { try { map = JSON.parse(map); } catch { map = null; } }
   if (!map || typeof map !== 'object') map = DEFAULT_LEVEL_ROLES;
@@ -462,6 +471,40 @@ router.get('/upload-template', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_
   res.send(lines.join('\n'));
 });
 
+// ── Billing readiness board (B5) ─────────────────────────────────────────────
+router.get('/readiness', requireRole(...ROLE_GROUPS.REIA_ALL), (req, res) => {
+  try {
+    res.json(readinessBoard(req.query.period_month || undefined));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong' });
+  }
+});
+
+// Raise every READY contract's bill for the month, each through Generate in
+// its own transaction; one refusal does not hold up the rest.
+router.post('/generate-ready', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+  let board;
+  try { board = readinessBoard(req.body?.period_month || undefined); } catch (err) {
+    return res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong' });
+  }
+  const only = Array.isArray(req.body?.contract_ids) && req.body.contract_ids.length ? new Set(req.body.contract_ids.map(String)) : null;
+  const ready = board.rows.filter((r) => r.state === 'READY' && (!only || only.has(r.contract_id)));
+  if (!ready.length) return res.status(400).json({ error: `Nothing is ready to bill for ${board.period}.` });
+  const raised = [];
+  const failed = [];
+  for (const r of ready) {
+    try {
+      const inv = db.transaction(() => generateInvoiceFor({ contract_id: r.contract_id, period_month: board.period }, req))();
+      raised.push({ contract_no: r.contract_no, invoice_id: inv.id, invoice_no: inv.invoice_no, total_amount: inv.total_amount });
+    } catch (err) {
+      if (!err.status) throw err;
+      failed.push({ contract_no: r.contract_no, error: err.payload?.error || err.message, suggested_note: err.payload?.suggested_note || null });
+    }
+  }
+  logAudit({ req, user: req.user, action: 'GENERATE_READY', module: 'REIA', entityType: 'invoice', entityId: board.period, details: { raised: raised.map((x) => x.invoice_no), failed: failed.map((x) => x.contract_no) } });
+  res.status(raised.length ? 201 : 400).json({ period: board.period, raised, failed });
+});
+
 router.get('/:id', (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
@@ -495,12 +538,22 @@ function enrichApprovals(approvals, inv = null) {
   // Real people only, each once, and never the one who raised the bill — the
   // list named the maker as level 1's approver, and a name twice where two
   // logins share it.
-  const namesFor = (roles) => [...new Set(db.prepare(`SELECT id, name FROM users WHERE role IN (${roles.map(() => '?').join(',')}) AND is_active = 1`).all(...roles)
-    .filter((u) => !(inv && (inv.created_by_id ? u.id === inv.created_by_id : u.name === inv.created_by)))
-    .map((u) => u.name))];
-  const l1Users = namesFor(approvalRolesFor(1));
-  const l2Users = namesFor(approvalRolesFor(2));
-  const l3Users = namesFor(approvalRolesFor(3));
+  // Only people who can actually sign this level of this bill (B3): the
+  // band's role, not the maker, not the verifier at level 1, and — where each
+  // level needs a different person — not someone who signed another level.
+  const signedOther = (level) => new Set(approvals.filter((a) => a.level !== level && a.status === 'APPROVED').map((a) => a.approver_id || a.approver_name));
+  const namesFor = (level) => {
+    const roles = approvalRolesFor(level, inv);
+    const others = distinctApprovers() ? signedOther(level) : new Set();
+    return [...new Set(db.prepare(`SELECT id, name FROM users WHERE role IN (${roles.map(() => '?').join(',')}) AND is_active = 1`).all(...roles)
+      .filter((u) => !(inv && (inv.created_by_id ? u.id === inv.created_by_id : u.name === inv.created_by)))
+      .filter((u) => !(level === 1 && inv && (inv.verified_by_id ? u.id === inv.verified_by_id : (inv.verified_by && u.name === inv.verified_by))))
+      .filter((u) => !others.has(u.id) && !others.has(u.name))
+      .map((u) => u.name))];
+  };
+  const l1Users = namesFor(1);
+  const l2Users = namesFor(2);
+  const l3Users = namesFor(3);
 
   const LEVEL_CONFIG = {
     1: {
@@ -531,8 +584,9 @@ function enrichApprovals(approvals, inv = null) {
       stage_title: cfg.stage_title,
       designation: cfg.designation,
       designated_names: cfg.candidates.join(' / '),
-      approver_roles: approvalRolesFor(a.level),
-      approver_roles_label: rolesText(approvalRolesFor(a.level)),
+      eligible_signers: a.level <= 3 ? cfg.candidates : namesFor(a.level),
+      approver_roles: approvalRolesFor(a.level, inv),
+      approver_roles_label: rolesText(approvalRolesFor(a.level, inv)),
     };
   });
 }
@@ -574,10 +628,21 @@ function enrichApprovals(approvals, inv = null) {
       : null,
   };
 
+  // The buyer's advances, beside a bill they could settle (B4).
+  let advances;
+  if (!isCounterparty && inv.direction === 'SJVN_TO_BUYER' && ['SENT', 'PARTIALLY_PAID', 'DISPUTED'].includes(inv.status)) {
+    const buyerId = db.prepare('SELECT buyer_id FROM contracts WHERE id = ?').get(inv.contract_id)?.buyer_id;
+    if (buyerId) {
+      const items = db.prepare(`SELECT id, receipt_no, balance, received_on, source FROM unapplied_receipts WHERE entity_id = ? AND status = 'OPEN' ORDER BY received_on`).all(buyerId);
+      advances = { open_balance: openAdvanceBalance(buyerId), items };
+    }
+  }
+
   res.json({
     ...withContract(inv, asOf),
     parent_invoice_no: parent?.invoice_no || null,
     settlement,
+    ...(advances ? { advances } : {}),
     approvals, approval_history: approvalHistory(inv.id), approval_rules: { distinct_approvers: distinctApprovers() },
     payments, disputes, generator_realization, access_log,
     ...(isProjection(req) ? { projected_as_of: asOf.toISOString().slice(0, 10) } : {}),
@@ -1126,9 +1191,20 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   // A bill is a demand for money. One that comes out below zero is not a bill
   // — it was saved as a DRAFT invoice for minus ₹2.36 crore, payable by nobody.
   if (grossTotal < 0) {
+    // What is owed the other way is recovered by a note on the counterparty's
+    // latest presented bill (B2): on that bill it reduces what its payer owes.
+    const against = db.prepare(`
+      SELECT id, invoice_no FROM invoices WHERE contract_id = ? AND direction = ?
+        AND status IN ('APPROVED','SENT','PARTIALLY_PAID','PAID','DISPUTED') AND invoice_no NOT LIKE 'DSM-%'
+      ORDER BY billing_period DESC, created_at DESC LIMIT 1
+    `).get(contract_id, directionForContract(contract));
     throw refuse(400, {
-      error: `${contract.contract_no} ${period_month}: the deductions (₹${Math.round(penalty + freePowerDeduction).toLocaleString('en-IN')}) exceed the charges, so the bill would be minus ₹${Math.abs(grossTotal).toLocaleString('en-IN')}. Check the month's energy; a shortfall owed by the generator is recovered by a debit note, not a negative bill.`,
+      error: `${contract.contract_no} ${period_month}: the deductions (₹${Math.round(penalty + freePowerDeduction).toLocaleString('en-IN')}) exceed the charges, so the bill would be minus ₹${Math.abs(grossTotal).toLocaleString('en-IN')}. Check the month's energy; ${against ? `the amount can be recovered by a note on ${against.invoice_no}` : 'a shortfall owed by the generator is recovered by a note, not a negative bill — there is no presented bill on this contract to raise it on yet'}.`,
       gross_total: grossTotal,
+      suggested_note: against ? {
+        note_type: 'CREDIT', invoice_id: against.id, invoice_no: against.invoice_no, amount: Math.abs(grossTotal), reason_code: 'OTHER',
+        reason: `${period_month}: deductions exceed the month's charges by ₹${Math.abs(grossTotal).toLocaleString('en-IN')} — recovered here instead of a negative bill`,
+      } : null,
     });
   }
   // Nor is a bill for nothing. A month with no energy and no fixed charge used
@@ -1142,10 +1218,15 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
   }
   const total = grossTotal + otherAdjustments;
   if (total < 0) {
+    const prov = parentInvoiceId ? db.prepare('SELECT id, invoice_no FROM invoices WHERE id = ?').get(parentInvoiceId) : null;
     throw refuse(400, {
       error: `${contract.contract_no} ${period_month}: more was paid on the provisional bill than the final bill comes to, so the final would be minus ₹${Math.abs(total).toLocaleString('en-IN')}. Refund the excess by a credit note against the provisional bill.`,
       gross_total: grossTotal,
       already_paid: alreadyPaid,
+      suggested_note: prov ? {
+        note_type: 'CREDIT', invoice_id: prov.id, invoice_no: prov.invoice_no, amount: Math.abs(total), reason_code: 'REVISED_REA',
+        reason: `${period_month}: the final figure is ₹${Math.abs(total).toLocaleString('en-IN')} below what was paid on ${prov.invoice_no} — excess credited back`,
+      } : null,
     });
   }
   breakdown.push({ code: 'TOTAL', label: 'Net Payable Amount', value: total });
@@ -2074,6 +2155,13 @@ router.post('/:id/validation/waive', requireRole(...ROLE_GROUPS.REIA_WRITE), (re
   res.json({ ...withContract(updated), validation });
 });
 
+// Back-to-back: a PSA bill against the PPA bills it passes through (B1).
+router.get('/:id/back-to-back', requireRole(...ROLE_GROUPS.REIA_ALL), (req, res) => {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  res.json(backToBack(inv));
+});
+
 // ── Structured Verification Checklist (Technical + Commercial) ──────────────
 // GET returns the saved checklist overlaid on a fresh auto-derived template so
 // the auto-hints (REA/energy/tariff/CUF/COD) stay current.
@@ -2231,10 +2319,10 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
   }
   // Each level is signed by the role it belongs to. Sending a bill back stays
   // open to every reviewer on the route: stopping a bill needs no seniority.
-  if (decision === 'APPROVED' && !approvalRolesFor(approval.level).includes(req.user.role)) {
+  if (decision === 'APPROVED' && !approvalRolesFor(approval.level, inv).includes(req.user.role)) {
     return res.status(403).json({
-      error: `Level ${approval.level} is approved by ${rolesText(approvalRolesFor(approval.level))}, not ${ROLE_LABEL[req.user.role] || req.user.role}.`,
-      approver_roles: approvalRolesFor(approval.level),
+      error: `Level ${approval.level} of a bill this size is approved by ${rolesText(approvalRolesFor(approval.level, inv))}, not ${ROLE_LABEL[req.user.role] || req.user.role}.`,
+      approver_roles: approvalRolesFor(approval.level, inv),
     });
   }
   // Levels are taken in order: level 2 signs what level 1 has passed.

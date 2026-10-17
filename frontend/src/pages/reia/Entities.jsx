@@ -72,6 +72,7 @@ export default function Entities({ vertical = 'REIA' }) {
   const [editApproval, setEditApproval] = useState(null);
   const [approvalForm, setApprovalForm] = useState({});
   const [blacklistForm, setBlacklistForm] = useState(null); // { blacklisted, reason }
+  const [ownReason, setOwnReason] = useState('');
   const [editModal, setEditModal] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [editSubmitting, setEditSubmitting] = useState(false);
@@ -770,6 +771,31 @@ export default function Entities({ vertical = 'REIA' }) {
                       )}
                     </td>
                   </tr>
+                  {selected.entity_type === 'SELLER' && (
+                    <tr>
+                      <td>SJVN own station</td>
+                      <td>
+                        {selected.is_sjvn_own ? <Badge status="ACTIVE" label="SJVN's own — developer KYC does not apply" /> : <span>No — a developer</span>}
+                        {['SJVN_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role) && (
+                          <form style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }} onSubmit={async (e) => {
+                            e.preventDefault();
+                            try {
+                              const updated = await api.entities.setOwnStation(selected.id, { is_sjvn_own: !selected.is_sjvn_own, reason: ownReason });
+                              setSelected({ ...selected, ...updated });
+                              setOwnReason('');
+                              load();
+                              notify('success', 'Saved', updated.is_sjvn_own ? `${updated.name} is marked as SJVN's own station.` : `${updated.name} is treated as a developer again.`);
+                            } catch (err) {
+                              fail('Not changed', err, 'Could not change the own-station flag');
+                            }
+                          }}>
+                            <input value={ownReason} onChange={(e) => setOwnReason(e.target.value)} placeholder="Why (at least 10 characters)" style={{ minWidth: 220 }} aria-label="Reason for own-station change" />
+                            <button type="submit" className="btn btn-sm btn-outline" disabled={ownReason.trim().length < 10}>{selected.is_sjvn_own ? 'Treat as a developer' : "Mark as SJVN's own station"}</button>
+                          </form>
+                        )}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

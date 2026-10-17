@@ -29,6 +29,7 @@ const CercCompliance = lazy(() => import('./pages/reia/CercCompliance.jsx'));
 const DeviationSettlements = lazy(() => import('./pages/reia/DeviationSettlements.jsx'));
 const PowerDiversion = lazy(() => import('./pages/reia/PowerDiversion.jsx'));
 const Advances = lazy(() => import('./pages/reia/Advances.jsx'));
+const BillingReadiness = lazy(() => import('./pages/reia/BillingReadiness.jsx'));
 const EnergyBanking = lazy(() => import('./pages/reia/EnergyBanking.jsx'));
 const HydroBilling = lazy(() => import('./pages/hydro-thermal/HydroBilling.jsx'));
 const HydroLedger = lazy(() => import('./pages/hydro-thermal/HydroLedger.jsx'));
@@ -279,6 +280,7 @@ export default function App() {
         <Route path="reia/deviation" element={<ProtectedRoute roles={REIA_ROLES}><DeviationSettlements /></ProtectedRoute>} />
         <Route path="reia/power-diversion" element={<ProtectedRoute roles={REIA_ROLES}><PowerDiversion /></ProtectedRoute>} />
         <Route path="reia/advances" element={<ProtectedRoute roles={REIA_ROLES}><Advances /></ProtectedRoute>} />
+        <Route path="reia/billing-readiness" element={<ProtectedRoute roles={REIA_ROLES}><BillingReadiness /></ProtectedRoute>} />
         <Route path="reia/energy-banking" element={<ProtectedRoute roles={REIA_ROLES}><EnergyBanking /></ProtectedRoute>} />
         {/* Hydro & Thermal Billing Portal */}
         <Route path="hydro-thermal" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroThermalDashboard /></ProtectedRoute>} />

@@ -303,7 +303,7 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
     expect((await act(inv, 1, ops)).status).toBe(200);
     const r = await act(inv, 2, makeUser('REIA_ADMIN', { name: 'RA' }));
     expect(r.status, 'REIA signed Finance concurrence').toBe(403);
-    expect(r.body.error).toMatch(/Level 2 is approved by Finance/);
+    expect(r.body.error).toMatch(/Level 2 of a bill this size is approved by Finance/);
     expect((await act(inv, 2, ops, 'REJECTED')).status, 'any reviewer may send a bill back').toBe(200);
   });
 
