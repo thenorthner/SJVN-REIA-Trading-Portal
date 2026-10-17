@@ -134,7 +134,7 @@ Changed master defaults are moved once, and only where the parameter still holds
 
 ## Real-database items — applied 17-Oct-2026 on the user's go-ahead
 
-Applied by `tools/data-fixes/2026-10-17-real-db-cleanup.mjs` (log beside it), after a backup to `backend/backups/platform-pre-cleanup-2026-10-17.db` and a rehearsal on a copy. Credit notes CN/2026-27/00002–00005 were issued through the notes desk by two labelled data-fix users. Presented bills are reversed by credit note rather than cancelled, and a wholly reversed bill no longer blocks its month from being billed again. Still open: the PSPCL, HPPC and NDMC bills are October 2026 bills raised on 5-Oct, before the month ended; they now carry due dates as approved, but they were raised early like the others.
+Applied by `tools/data-fixes/2026-10-17-real-db-cleanup.mjs` (log beside it), after a backup to `backend/backups/platform-pre-cleanup-2026-10-17.db` and a rehearsal on a copy. Credit notes CN/2026-27/00002–00005 were issued through the notes desk by two labelled data-fix users. Presented bills are reversed by credit note rather than cancelled, and a wholly reversed bill no longer blocks its month from being billed again. The PSPCL, HPPC and NDMC October 2026 bills (raised 5-Oct, before the month ended) were then reversed too, by CN/2026-27/00006–00008, and the 250 MW PPA's October energy unlocked (`tools/data-fixes/2026-10-17-reverse-oct-psa-bills.mjs`, backup `backend/backups/platform-pre-oct-psa-reversal-2026-10-17.db`). No October 2026 energy stays locked; October is billed afresh on the month-end REA.
 
 The items as listed before the clean-up:
 
