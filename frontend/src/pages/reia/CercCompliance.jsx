@@ -346,6 +346,12 @@ function LicenceTracker({ canWrite }) {
                     {y.fee_status === 'OVERDUE' && <div className="audit-muted">{y.fee_days_past_due} days past due</div>}
                     {y.fee_status === 'PAID_LATE' && <div className="audit-muted">{y.fee_days_late} days after the due date</div>}
                     {y.fee_status === 'SHORT' && <div className="audit-muted">{fmtCurrency(y.fee_short_by)} short</div>}
+                    {y.fee_late_surcharge > 0 && (
+                      <div className="audit-muted">
+                        Late surcharge {fmtCurrency(y.fee_late_surcharge)} (1.25% a month)
+                        {y.fee_late_surcharge_paid != null ? ` · paid ${fmtCurrency(y.fee_late_surcharge_paid)}` : ' · not recorded as paid'}
+                      </div>
+                    )}
                   </td>
                   <td>
                     {y.fee_paid_on ? fmtDate(y.fee_paid_on) : '—'}

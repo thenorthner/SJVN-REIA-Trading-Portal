@@ -17,6 +17,9 @@
  *   PURCHASE     developers' bills to SJVN (PPA) that SJVN has accepted — payables
  *   CREDIT_NOTE  credit notes issued against either, which reduce the one they
  *                were raised on
+ *   POOL         DSM bills with the NRPC deviation pool — signed from SJVN's
+ *                side, + recoverable, − payable (decided 17-Oct-2026; they
+ *                were booked as purchases from developers)
  *
  * A debit note is its own supplementary invoice, so it is already in SALE or
  * PURCHASE and is not booked a second time here.
@@ -31,12 +34,13 @@ import { supersededByDeveloperSql } from './outstanding.js';
 
 const money = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
-export const CATEGORIES = ['SALE', 'PURCHASE', 'CREDIT_NOTE'];
+export const CATEGORIES = ['SALE', 'PURCHASE', 'CREDIT_NOTE', 'POOL'];
 
 export const CATEGORY_LABELS = {
   SALE: 'Sale to buyers (receivable)',
   PURCHASE: 'Purchase from developers (payable)',
   CREDIT_NOTE: 'Credit notes issued',
+  POOL: 'Deviation settlement with the NRPC pool',
 };
 
 // A sale is booked once it has gone to the buyer; a developer's bill once SJVN
@@ -125,6 +129,30 @@ export function bookableDocuments(periodMonth, category) {
     }));
   }
 
+  if (category === 'POOL') {
+    return db.prepare(`
+      SELECT i.*, c.contract_no FROM invoices i
+      LEFT JOIN contracts c ON c.id = i.contract_id
+      WHERE i.invoice_no LIKE 'DSM-%' AND i.billing_period = ?
+        AND i.status IN (${PURCHASE_STATUSES.map(() => '?').join(',')})
+        AND ${NOT_ON_A_LIVE_POSTING.replace('%ID%', 'i.id')}
+      ORDER BY c.contract_no, i.created_at
+    `).all(periodMonth, ...PURCHASE_STATUSES).map((i) => {
+      const t = money(i.total_amount);
+      const signed = String(i.invoice_no).startsWith('DSM-POOL') && i.direction === 'SELLER_TO_SJVN' ? -t : t;
+      return {
+        source_type: 'INVOICE',
+        source_id: i.id,
+        doc_no: i.invoice_no,
+        doc_kind: signed >= 0 ? 'DSM receivable' : 'DSM payable',
+        direction: i.direction,
+        contract_no: i.contract_no,
+        counterparty: 'NRPC deviation pool',
+        energy: signed, margin: 0, pass_through: 0, tax: 0, adjustment: 0, total: signed,
+      };
+    });
+  }
+
   const direction = category === 'SALE' ? 'SJVN_TO_BUYER' : 'SELLER_TO_SJVN';
   const statuses = category === 'SALE' ? SALE_STATUSES : PURCHASE_STATUSES;
   return db.prepare(`
@@ -136,6 +164,7 @@ export function bookableDocuments(periodMonth, category) {
     LEFT JOIN entities be ON be.id = c.buyer_id
     WHERE i.direction = ? AND i.billing_period = ?
       AND i.status IN (${statuses.map(() => '?').join(',')})
+      AND i.invoice_no NOT LIKE 'DSM-%'
       -- A developer's month is one purchase: its own accepted invoice, not that
       -- and SJVN's computed bill as well (October booked ₹2.36 crore twice).
       AND ${supersededByDeveloperSql('i')}
@@ -263,7 +292,8 @@ export function postToFinance(postingId, { fiDocumentNo = null, postedBy = null,
   for (const l of lines) {
     if (l.source_type === 'INVOICE') {
       const inv = db.prepare('SELECT status, total_amount FROM invoices WHERE id = ?').get(l.source_id);
-      const ok = inv && (p.category === 'SALE' ? SALE_STATUSES : PURCHASE_STATUSES).includes(inv.status) && Math.abs(money(inv.total_amount) - l.total_amount) < 0.01;
+      const ok = inv && (p.category === 'SALE' ? SALE_STATUSES : PURCHASE_STATUSES).includes(inv.status)
+        && Math.abs(money(inv.total_amount) - (p.category === 'POOL' ? Math.abs(l.total_amount) : l.total_amount)) < 0.01;
       if (!ok) changed.push(l.doc_no);
     } else {
       const n = db.prepare('SELECT status, amount FROM debit_credit_notes WHERE id = ?').get(l.source_id);

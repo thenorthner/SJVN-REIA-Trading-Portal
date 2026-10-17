@@ -175,6 +175,15 @@ function setInvoiceOpenDispute(invoiceId) {
   `).get(invoiceId, ...OPEN_STATUSES).s + db.prepare(`
     SELECT COALESCE(SUM(d.credit_amount), 0) s FROM disputes d JOIN debit_credit_notes n ON n.id = d.resolution_note_id
     WHERE d.invoice_id = ? AND n.status = 'DRAFT'
+  `).get(invoiceId).s
+    // An amount the buyer has taken to a forum stays held until the forum
+    // decides (decided 17-Oct-2026); surcharge on it runs from the original
+    // due date if the award goes SJVN's way, as the bill's LPS is worked out
+    // afresh once nothing is held.
+    + db.prepare(`
+    SELECT COALESCE(SUM(contested_amount), 0) s FROM disputes
+    WHERE invoice_id = ? AND resolution_response = 'CONTESTED' AND status != 'CLOSED'
+      AND escalation_outcome IS NULL
   `).get(invoiceId).s;
 
   if (openSum > 0) {
@@ -625,7 +634,9 @@ function raiseDispute(user, body, req) {
   const windowDays = getParamNumber('dispute_window_days', 15);
   const presentedOn = billPresentedOn(invoice);
   const daysSinceBill = daysBetween(new Date(presentedOn), new Date());
-  if (raisedByCounterparty && daysSinceBill > windowDays) {
+  // A desk raising from a reconciliation line asks for the window too
+  // (decided 17-Oct-2026): it is not a way round a bill that is conclusive.
+  if ((raisedByCounterparty || body.enforce_window) && daysSinceBill > windowDays) {
     throw refuse(400, { error: `This bill is now conclusive — the ${windowDays}-day dispute window (from ${String(presentedOn).split('T')[0]}) has passed.` });
   }
 
@@ -672,8 +683,9 @@ function raiseDispute(user, body, req) {
   const slaAckDue = addDaysIso(now, getParamNumber('dispute_sla_ack_days', SLA_ACK_DAYS));
   const slaResolveDue = addDaysIso(now, getParamNumber('dispute_sla_resolve_days', SLA_RESOLVE_DAYS));
 
-  // Auto-acknowledge immediately for submitter confidence
-  const ackStatus = 'ACKNOWLEDGED';
+  // Acknowledgement is the desk's act (decided 17-Oct-2026), so the 2-day
+  // acknowledge SLA runs against a person; the raiser is told it was received.
+  const ackStatus = 'RAISED';
 
   db.prepare(`
     INSERT INTO disputes (
@@ -683,14 +695,13 @@ function raiseDispute(user, body, req) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, disputeNo, invoice_id, role, user.id, reason_code, charge_line,
-    issue_description || '', amount, ackStatus, now, 'system',
+    issue_description || '', amount, ackStatus, null, null,
     slaAckDue, slaResolveDue, now, now
   );
 
   setInvoiceOpenDispute(invoice_id);
 
   recordEvent(id, user, 'RAISED', null, 'RAISED', { reason_code, charge_line, amount });
-  recordEvent(id, { name: 'system' }, 'ACKNOWLEDGED', 'RAISED', 'ACKNOWLEDGED', { auto: true });
 
   logAudit({ req: typeof req !== "undefined" ? req : null,
     user: user,
@@ -704,11 +715,23 @@ function raiseDispute(user, body, req) {
   notifyDesk('DISPUTE', `New dispute ${disputeNo} raised by ${user.name} on invoice ${invoice.invoice_no} (₹${amount.toLocaleString('en-IN')})`);
   pushNotification({
     userId: user.id,
-    type: 'DISPUTE_ACKNOWLEDGED',
-    message: `Dispute ${disputeNo} received and acknowledged. Tracking ID: ${disputeNo}`,
+    type: 'DISPUTE_RECEIVED',
+    message: `Dispute ${disputeNo} received. SJVN will acknowledge it within ${getParamNumber('dispute_sla_ack_days', SLA_ACK_DAYS)} days. Tracking ID: ${disputeNo}`,
   });
 
   return enrichDispute(db.prepare('SELECT * FROM disputes WHERE id = ?').get(id));
+}
+
+/**
+ * The desk taking up a dispute it has not yet acknowledged acknowledges it:
+ * whoever first acts on it is recorded as having done so, at that moment, so
+ * the acknowledge SLA is measured on a person's act and never on "system".
+ */
+function acknowledgeByAction(dispute, user) {
+  if (dispute.acknowledged_at) return;
+  db.prepare(`UPDATE disputes SET acknowledged_at = datetime('now'), acknowledged_by = ? WHERE id = ? AND acknowledged_at IS NULL`)
+    .run(user?.name || null, dispute.id);
+  recordEvent(dispute.id, user, 'ACKNOWLEDGED', 'RAISED', 'ACKNOWLEDGED', { by_action: true });
 }
 
 const sendRefusal = (res, err) => {
@@ -804,6 +827,7 @@ router.post('/:id/transition', (req, res) => {
   }
 
   const from = dispute.status;
+  if (from === 'RAISED' && toStatus !== 'ACKNOWLEDGED') acknowledgeByAction(dispute, req.user);
   db.prepare(`UPDATE disputes SET status = ?, updated_at = datetime('now') WHERE id = ?`).run(toStatus, dispute.id);
   if (from === 'INFO_REQUESTED') resumeClock(dispute.id);
   if (toStatus === 'INFO_REQUESTED') db.prepare(`UPDATE disputes SET info_requested_at = datetime('now') WHERE id = ?`).run(dispute.id);
@@ -860,7 +884,8 @@ router.post('/:id/resolve', requireRole(...REIA_WRITE), (req, res) => {
   const dispute = db.prepare('SELECT * FROM disputes WHERE id = ?').get(req.params.id);
   if (!dispute) return res.status(404).json({ error: 'Dispute not found' });
 
-  const resolvableFrom = ['UNDER_REVIEW', 'ESCALATED', 'ACKNOWLEDGED', 'INFO_REQUESTED'];
+  const resolvableFrom = ['RAISED', 'UNDER_REVIEW', 'ESCALATED', 'ACKNOWLEDGED', 'INFO_REQUESTED'];
+  if (dispute.status === 'RAISED') acknowledgeByAction(dispute, req.user);
   if (!resolvableFrom.includes(dispute.status)) {
     return res.status(400).json({ error: `Cannot resolve dispute in status ${dispute.status}` });
   }
@@ -1082,4 +1107,4 @@ router.post('/:id/assign', requireRole(...REIA_WRITE), (req, res) => {
 });
 
 export default router;
-export { canAccessDispute, recordEvent, setInvoiceOpenDispute, uploadDir as disputeUploadDir };
+export { canAccessDispute, recordEvent, setInvoiceOpenDispute, raiseDispute, uploadDir as disputeUploadDir };

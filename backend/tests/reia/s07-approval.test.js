@@ -251,7 +251,7 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
   // signed level 1 and was handed the button for level 2.
   const SWITCH = 'invoice_approval_distinct_approvers';
   const set = (v) => { db.prepare('UPDATE system_parameters SET param_value = ? WHERE param_key = ?').run(String(v), SWITCH); invalidateParamCache(); };
-  afterEach(() => set(0));
+  afterEach(() => set(1));
 
   const threeLevels = () => {
     const inv = makeInvoice({ contract_id: contract.id, status: 'UNDER_APPROVAL', total_amount: 36494000 });
@@ -263,7 +263,8 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
   const act = (inv, level, who, decision = 'APPROVED') =>
     request(app).post(`/api/invoices/${inv.id}/approvals/${level}/act`).set(auth(signToken(who))).send({ decision, comments: 'x', security_ack: 'test fixture: cover is tracked on the security desk' });
 
-  it('is off unless switched on, so one person holding two levels\' role can sign both', async () => {
+  it('can be switched off, and then one person holding two levels\' role can sign both', async () => {
+    set(0);
     // SJVN Admin may sign level 1 and level 3; Finance signs level 2.
     const admin = makeUser('SJVN_ADMIN', { name: 'Only Admin' });
     const fin = makeUser('FINANCE_USER', { name: 'Only Finance' });

@@ -75,8 +75,9 @@ describe('S28 Payment monitoring', () => {
     const longOverdue = body.bills.find((b) => b.total_amount === 1000000);
     expect(longOverdue.lps_charged).toBe(0);
     expect(longOverdue.lps_accrued_unbilled).toBeGreaterThan(0);
-    // Counted in working days, which is how this platform charges it.
-    expect(longOverdue.surcharge_days).toBeLessThan(longOverdue.days_past_due);
+    // Counted in calendar days since 17-Oct-2026 (LPS Rules 2022 charge every
+    // day the amount is outstanding past the due date).
+    expect(longOverdue.surcharge_days).toBe(longOverdue.days_past_due);
     expect(body.totals.lps_accrued_unbilled).toBe(
       body.bills.reduce((a, b) => a + b.lps_accrued_unbilled, 0),
     );
@@ -88,10 +89,10 @@ describe('S28 Payment monitoring', () => {
     const bill = payable.body.bills[0];
     expect(bill.lps_annual_pct).toBe(12);
     expect(bill.counterparty_name).toBe('Test Solar Ltd');
-    // 12% a year on 10 lakh for ~43 working days is around 14,000 — the point is
-    // that it follows the contract and not the 15% platform default.
-    expect(bill.lps_accrued_unbilled).toBeGreaterThan(10000);
-    expect(bill.lps_accrued_unbilled).toBeLessThan(20000);
+    // 12% a year on 10 lakh for ~60 calendar days is around 20,000 — the point
+    // is that it follows the contract and not the 15% platform default (~25,000).
+    expect(bill.lps_accrued_unbilled).toBeGreaterThan(18000);
+    expect(bill.lps_accrued_unbilled).toBeLessThan(22000);
   });
 
   it('carries the ageing table, adding up to the same outstanding', async () => {

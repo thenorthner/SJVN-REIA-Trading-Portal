@@ -1,6 +1,6 @@
 import db from '../db/index.js';
 import { newId, genInvoiceNo, buildBillingFamilyRef, computeDueDate } from '../util.js';
-import { getParamNumber } from '../mastersService.js';
+import { getParam, getParamNumber } from '../mastersService.js';
 import { resolveTariff } from './tariffStructure.js';
 import { allocationsInForce } from './allocations.js';
 
@@ -73,6 +73,32 @@ function settlementPct() {
   return pct > 0 && pct <= 100 ? pct : DEFAULT_SETTLEMENT_PCT;
 }
 
+/**
+ * The banking cycle a month's energy falls in, fixed by the contract's basis
+ * rather than typed (decided 17-Oct-2026). MONTHLY follows the Green Energy
+ * Open Access Rules, 2022 (banking settled at least monthly) and is the master
+ * default; a PPA under a state regulation with seasonal or annual banking
+ * carries its own basis.
+ *   MONTHLY   M2026-08,       ends on the month's last day
+ *   SEASONAL  S1-FY2026-27 (Apr–Sep) / S2-FY2026-27 (Oct–Mar)
+ *   ANNUAL    FY2026-27,      ends 31 March
+ */
+export const BANKING_BASES = ['MONTHLY', 'SEASONAL', 'ANNUAL'];
+export function bankingCycleFor(contract, period) {
+  const basis = BANKING_BASES.includes(contract?.banking_cycle_basis)
+    ? contract.banking_cycle_basis
+    : (BANKING_BASES.includes(String(getParam('banking_cycle_basis', 'MONTHLY')).toUpperCase()) ? String(getParam('banking_cycle_basis', 'MONTHLY')).toUpperCase() : 'MONTHLY');
+  const [y, m] = period.split('-').map(Number);
+  const fyStart = m >= 4 ? y : y - 1;
+  const fy = `FY${fyStart}-${String((fyStart + 1) % 100).padStart(2, '0')}`;
+  if (basis === 'MONTHLY') return { basis, cycle: `M${period}`, ends: lastDayOf(period) };
+  if (basis === 'SEASONAL') {
+    const first = m >= 4 && m <= 9;
+    return { basis, cycle: `${first ? 'S1' : 'S2'}-${fy}`, ends: first ? `${fyStart}-09-30` : `${fyStart + 1}-03-31` };
+  }
+  return { basis, cycle: fy, ends: `${fyStart + 1}-03-31` };
+}
+
 /** Credit energy to the bank for a contract's cycle. */
 export function bankEnergy({ contract_id, cycle, period_month, banked_mwh, tariff_per_unit, cycle_ends_on, createdBy, asOf = istToday() }) {
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
@@ -81,14 +107,17 @@ export function bankEnergy({ contract_id, cycle, period_month, banked_mwh, tarif
   if (contract.contract_type !== 'PPA') throw new Error(`${contract.contract_no} is a ${contract.contract_type}; energy is banked to the generator under its PPA.`);
   if (!LIVE.includes(contract.status)) throw new Error(`${contract.contract_no} is ${contract.status}; only a live PPA banks energy.`);
   if (!RE_TYPES.some((t) => t.toUpperCase() === String(contract.project_type || '').toUpperCase())) throw new Error(`${contract.contract_no} is ${contract.project_type}; banking is for solar, wind and hybrid generation.`);
-  const label = String(cycle || '').trim();
-  if (!label) throw new Error('cycle is required, e.g. FY2026-27');
   const mwh = Number(banked_mwh);
   if (!Number.isFinite(mwh) || mwh <= 0) throw new Error('banked_mwh must be a positive number');
   const period = String(period_month || '');
   if (!MONTH.test(period)) throw new Error('period_month is required: the month whose generation is banked (YYYY-MM)');
-  if (!cycle_ends_on || !DATE.test(String(cycle_ends_on))) throw new Error('cycle_ends_on is required (YYYY-MM-DD) — banked energy has to expire somewhere');
-  const ends = String(cycle_ends_on);
+  const derived = bankingCycleFor(contract, period);
+  const label = String(cycle || '').trim() || derived.cycle;
+  const ends = String(cycle_ends_on || '').trim() || derived.ends;
+  if (label !== derived.cycle || ends !== derived.ends) {
+    throw new Error(`${contract.contract_no} banks on a ${derived.basis.toLowerCase()} basis: ${period} falls in cycle ${derived.cycle}, ending ${derived.ends}${cycle ? ` (not ${label}${cycle_ends_on ? ` ending ${ends}` : ''})` : ''}.`);
+  }
+  if (!DATE.test(ends)) throw new Error('cycle_ends_on must be YYYY-MM-DD');
   if (ends < asOf) throw new Error(`The cycle ended on ${ends}; energy cannot be banked into a closed cycle.`);
   if (ends < lastDayOf(period)) throw new Error(`The cycle ends on ${ends}, before ${period} does.`);
   if (ends > addMonths(lastDayOf(period), 12)) throw new Error(`A banking cycle runs at most a year: ${ends} is more than twelve months after ${period}.`);

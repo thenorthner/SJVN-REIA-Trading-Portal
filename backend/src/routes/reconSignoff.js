@@ -28,8 +28,9 @@ import db from '../db/index.js';
 import { requireAuth, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
 import { newId, pushNotification, invalidDecision } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
-import { getParam } from '../mastersService.js';
+import { getParam, getParamNumber } from '../mastersService.js';
 import { canAccessRecon, isReia, recordEvent, saveStatement } from './reconciliation.js';
+import { draftNote } from '../services/noteDrafts.js';
 import { inspectSignature } from './invoiceCompliance.js';
 import {
   newDoc, header, kpiBand, sectionTitle, table, notes as footNotes, pageNumbers, eachPage, stamp, nowLabel,
@@ -71,6 +72,15 @@ const sideOf = (user) => (isReia(user) ? 'SJVN' : 'COUNTERPARTY');
 const audit = (req, action, id, extra = {}) => {
   try { secureLogAudit(req, { action, module: 'REIA', entityType: 'reconciliation', entityId: id, ...extra }); } catch (err) { console.error('[RECON] audit failed', err.message); }
 };
+
+/** Whether a statement is large enough to need Finance's concurrence, and why. */
+export function financeConcurrenceNeeded(recon) {
+  const limit = getParamNumber('recon_finance_signoff_above', 10000000);
+  if (!(limit > 0)) return null;
+  const rf = rollForward(recon);
+  const billed = rf?.billed || 0;
+  return billed > limit ? { billed, limit } : null;
+}
 
 // ── Roll-forward ────────────────────────────────────────────────────────────
 
@@ -218,6 +228,10 @@ function detailOf(user, recon) {
     can_attach_certificate: side === 'COUNTERPARTY' && recon.scope === 'REIA_CONTRACT',
     can_resolve: side === 'SJVN' && ROLE_GROUPS.REIA_WRITE.includes(user.role),
     certificate_required: certRequiredFor().includes(recon.period_type),
+    finance_concurrence: (() => {
+      const need = financeConcurrenceNeeded(recon);
+      return need ? { required: true, limit: need.limit, billed: need.billed, by: recon.finance_ack_by || null, at: recon.finance_ack_at || null } : { required: false };
+    })(),
     rollforward: rf,
     exceptions,
     excepted_amount: money(open.reduce((s, e) => s + e.amount, 0)),
@@ -260,7 +274,24 @@ router.post('/:id/sign', (req, res) => send(res, () => {
     if (!COUNTERPARTY_SIGNABLE.includes(recon.status)) throw fail(400, `${recon.recon_no} is still under SJVN's review. It can be signed once SJVN has explained every line that did not match.`);
   } else {
     if (recon.sjvn_ack_at) throw fail(400, `This statement was already signed for SJVN by ${recon.sjvn_ack_by}`);
+    // Finance concurs on a large statement before the desk signs it (decided
+    // 17-Oct-2026): above recon_finance_signoff_above, money of that size is
+    // not agreed with a counterparty on the desk's word alone.
+    const needsFinance = financeConcurrenceNeeded(recon);
+    if (req.user.role === 'FINANCE_USER') {
+      if (!needsFinance) throw fail(403, `${recon.recon_no} is within the desk's limit — only the REIA desk signs it for SJVN`);
+      if (recon.finance_ack_at) throw fail(400, `Finance already concurred, by ${recon.finance_ack_by}`);
+      if (partial) throw fail(400, 'Exceptions are the counterparty\'s to raise');
+      db.prepare(`UPDATE reconciliations SET finance_ack_at = datetime('now'), finance_ack_by = ?, updated_at = datetime('now') WHERE id = ?`).run(req.user.name, recon.id);
+      recordEvent(recon.id, req.user, 'FINANCE_CONCURRED', { actor: req.user.name, remarks: String(req.body.remarks || '').trim().slice(0, 1000) || undefined });
+      audit(req, 'RECON_FINANCE_CONCURRED', recon.id, { afterValue: { recon_no: recon.recon_no } });
+      const fresh = db.prepare('SELECT r.*, c.contract_no, c.seller_id, c.buyer_id FROM reconciliations r LEFT JOIN contracts c ON c.id = r.contract_id WHERE r.id = ?').get(recon.id);
+      return { success: true, side: 'SJVN', finance_concurred: true, message: `Finance has concurred. The REIA desk can now sign ${recon.recon_no} for SJVN.`, reconciliation: fresh, signoff: detailOf(req.user, fresh) };
+    }
     if (!ROLE_GROUPS.REIA_WRITE.includes(req.user.role)) throw fail(403, 'Only the REIA desk signs a statement for SJVN');
+    if (needsFinance && !recon.finance_ack_at) {
+      throw fail(400, `${recon.recon_no} covers ${inr(needsFinance.billed)} billed, above the ${inr(needsFinance.limit)} limit. Finance concurs before SJVN signs.`);
+    }
     // "Request sign-off" refuses a statement with a line still unexplained;
     // signing it outright went round that, and a second signature then closed it.
     const open = db.prepare(`SELECT COUNT(*) c FROM recon_items WHERE reconciliation_id = ? AND match_status IN ('EXCEPTION','CARRIED') AND dispute_id IS NULL`).get(recon.id).c;
@@ -379,8 +410,27 @@ router.post('/exceptions/:id/resolve', (req, res) => send(res, () => {
   if (!['ACCEPTED', 'REJECTED'].includes(outcome)) throw fail(400, 'outcome must be ACCEPTED or REJECTED');
   const note = String(req.body.note || '').trim().slice(0, 1000);
   if (!note) throw fail(400, 'Give the reasons for the decision');
+  // An exception SJVN accepts means the counterparty was right about money, so
+  // the note that puts it right is drafted with it (decided 17-Oct-2026) and
+  // goes to Finance for approval like any other.
+  let drafted = null;
+  if (outcome === 'ACCEPTED' && recon.contract_id && Number(x.amount) > 0) {
+    const item = x.item_id ? db.prepare('SELECT invoice_id FROM recon_items WHERE id = ?').get(x.item_id) : null;
+    const direction = recon.counterparty_role === 'BUYER' ? 'SJVN_TO_BUYER' : 'SELLER_TO_SJVN';
+    const inv = (item?.invoice_id && db.prepare('SELECT * FROM invoices WHERE id = ?').get(item.invoice_id))
+      || db.prepare(`
+        SELECT * FROM invoices WHERE contract_id = ? AND direction = ? AND status IN ('APPROVED','SENT','PARTIALLY_PAID','PAID','DISPUTED')
+          AND invoice_no NOT LIKE 'DSM-%' ORDER BY billing_period DESC, created_at DESC LIMIT 1
+      `).get(recon.contract_id, direction);
+    if (!inv) throw fail(400, `There is no presented bill on this contract to put the accepted ${inr(x.amount)} against. Raise the bill first, or decide the exception once there is one.`);
+    drafted = draftNote({
+      noteType: inv.direction === 'SELLER_TO_SJVN' ? 'DEBIT' : 'CREDIT',
+      invoice: inv, amount: x.amount, user: req.user,
+      reason: `Reconciliation ${recon.recon_no} — exception "${x.label}" accepted: ${note}`,
+    });
+  }
   db.prepare(`UPDATE recon_exceptions SET status = ?, resolution_note = ?, resolved_by = ?, resolved_at = datetime('now') WHERE id = ?`)
-    .run(outcome, note, req.user.name, x.id);
+    .run(outcome, drafted ? `${note} (note ${drafted.note_no} drafted for approval)` : note, req.user.name, x.id);
   const left = db.prepare(`SELECT COUNT(*) c FROM recon_exceptions WHERE reconciliation_id = ? AND status = 'OPEN'`).get(recon.id).c;
   if (!left && recon.status === 'AGREED' && recon.sjvn_ack_at && recon.counterparty_ack_at) {
     db.prepare(`UPDATE reconciliations SET status = 'CLOSED', closed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`).run(recon.id);

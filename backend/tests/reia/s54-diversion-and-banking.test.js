@@ -29,7 +29,7 @@ beforeEach(() => {
   buyer = makeEntity('BUYER');
   psa = makeContract({ contract_type: 'PSA', buyer_id: buyer.id, capacity_mw: 50, tenure_start: '2026-04-01' });
   otherPsa = makeContract({ contract_type: 'PSA', buyer_id: buyer.id, capacity_mw: 50, tenure_start: '2026-04-01' });
-  ppa = makeContract({ contract_type: 'PPA', capacity_mw: 50, tariff_per_unit: 2.88, tenure_start: '2026-04-01' });
+  ppa = makeContract({ contract_type: 'PPA', capacity_mw: 50, tariff_per_unit: 2.88, tenure_start: '2026-04-01', banking_cycle_basis: 'ANNUAL' });
   // An overdue bill on each PSA: ₹20 lakh on the defaulted one, ₹10 lakh on the other.
   makeInvoice({ contract_id: psa.id, direction: 'SJVN_TO_BUYER', status: 'SENT', billing_period: '2026-06', total_amount: 2000000, due_date: '2026-07-31' });
   makeInvoice({ contract_id: otherPsa.id, direction: 'SJVN_TO_BUYER', status: 'SENT', billing_period: '2026-05', total_amount: 1000000, due_date: '2026-06-30' });
@@ -68,7 +68,11 @@ describe('S54 Recovering a diversion', () => {
     const lps = r.body.allocations[0].to_lps;
     expect(lps).toBeGreaterThan(0);
     expect(r.body).toMatchObject({ status: 'RECOVERED', applied_amount: 2000000 + Math.round(lps) });
-    expect(r.body.applied_amount + r.body.unapplied).toBe(3000000);
+    // What the dues could not take is held as the buyer's advance (17-Oct-2026).
+    expect(r.body.unapplied).toBe(0);
+    expect(r.body.applied_amount + r.body.held_as_advance).toBe(3000000);
+    const adv = db.prepare(`SELECT * FROM unapplied_receipts WHERE source_ref = ?`).get(d.diversion_no);
+    expect(adv).toMatchObject({ source: 'DIVERSION_SURPLUS', status: 'OPEN', balance: r.body.held_as_advance });
     // The other PSA's bill is untouched.
     expect(db.prepare(`SELECT COUNT(*) n FROM payments p JOIN invoices i ON i.id = p.invoice_id WHERE i.contract_id = ?`).get(otherPsa.id).n).toBe(0);
     const pay = db.prepare(`SELECT p.* FROM payments p JOIN invoices i ON i.id = p.invoice_id WHERE i.contract_id = ?`).all(psa.id);
@@ -95,11 +99,11 @@ describe('S54 Energy banking', () => {
 
   it('refuses a PSA, a closed cycle, a typed tariff, more than the month generated, and an unlocked month', async () => {
     expect((await bank({ contract_id: psa.id })).body.error).toMatch(/banked to the generator under its PPA/);
-    expect((await bank({ cycle_ends_on: '2026-01-01' })).body.error).toMatch(/closed cycle/);
+    expect((await bank({ cycle_ends_on: '2026-01-01' })).body.error).toMatch(/annual basis: 2026-08 falls in cycle FY2026-27, ending 2027-03-31/);
     expect((await bank({ tariff_per_unit: 30 })).body.error).toMatch(/contract's tariff/);
     expect((await bank({ banked_mwh: 50000 })).body.error).toMatch(/generated 8200 MWh/);
     expect((await bank({ period_month: '2026-07' })).body.error).toMatch(/no locked energy/);
-    expect((await bank({ cycle_ends_on: '2028-03-31' })).body.error).toMatch(/at most a year/);
+    expect((await bank({ cycle_ends_on: '2028-03-31' })).body.error).toMatch(/annual basis/);
   });
 
   it('settles only cycles that have closed: a future "as of" is refused', async () => {

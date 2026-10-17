@@ -229,9 +229,14 @@ describe('What the first end-to-end run found', () => {
   });
 
   it('does not take the same override twice', async () => {
+    const mgmt = signToken(makeUser('MANAGEMENT'));
     const body = { contract_id: psa.id, reason: 'LC enhancement with the bank', valid_until: day(1) };
-    expect((await post('/api/payment-security/overrides', body)).status).toBe(201);
-    const twin = await post('/api/payment-security/overrides', body);
+    // Management's call, not the desk's (17-Oct-2026), and never open-ended.
+    expect((await post('/api/payment-security/overrides', body)).status).toBe(403);
+    expect((await post('/api/payment-security/overrides', { ...body, valid_until: undefined }, mgmt)).status).toBe(400);
+    expect((await post('/api/payment-security/overrides', { ...body, valid_until: day(120) }, mgmt)).status).toBe(400);
+    expect((await post('/api/payment-security/overrides', body, mgmt)).status).toBe(201);
+    const twin = await post('/api/payment-security/overrides', body, mgmt);
     expect(twin.status).toBe(409);
     expect(db.prepare('SELECT COUNT(*) c FROM security_adequacy_overrides WHERE contract_id = ?').get(psa.id).c).toBe(1);
   });
@@ -257,8 +262,13 @@ describe('Releasing an instrument', () => {
     expect(early.body.error).toMatch(/₹4,00,000 is still outstanding/);
     expect(row(ps.id).status).toBe('RELEASE_PENDING');
 
-    // The bill is paid. The same request can now be approved.
+    // The bill is paid. While the PSA runs, the LC is its cover and stays.
     db.prepare(`UPDATE invoices SET status = 'PAID' WHERE id = ?`).run(owed.id);
+    const live = await decide(rel, { decision: 'APPROVED' }, finance);
+    expect(live.status).toBe(400);
+    expect(live.body.error).toMatch(/still active.*Accept a replacement/);
+    // The PSA has run its term: the same request can now be approved.
+    db.prepare(`UPDATE contracts SET status = 'EXPIRED' WHERE id = ?`).run(psa.id);
     const queue = (await get('/api/payment-security/releases')).body;
     expect(queue[0].position, 'the queue did not say the request had become clear').toMatchObject({ clear: true, outstanding_dues: 0 });
     const ok = await decide(rel, { decision: 'APPROVED' }, finance);
@@ -276,6 +286,7 @@ describe('Releasing an instrument', () => {
     const seen = (await get(`/api/security-desk/instruments/${ps.id}`, signToken(buyer))).body.release_check;
     expect(seen).toMatchObject({ clear: true, outstanding_dues: 0, open_disputes: 0 });
     const rel = (await ask(ps)).body;
+    db.prepare(`UPDATE contracts SET status = 'EXPIRED' WHERE id = ?`).run(psa.id);
     const r = await decide(rel, { decision: 'APPROVED' });
     expect(r.status, 'the buyer was told the way was clear and the desk was then refused').toBe(200);
   });

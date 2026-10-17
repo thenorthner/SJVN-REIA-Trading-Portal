@@ -3,7 +3,7 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
 import { newId, logAudit, pushNotification, invalidDecision } from '../util.js';
 import { notifyCounterparty } from '../paymentSecurityEngine.js';
-import { setInvoiceOpenDispute } from './disputes.js';
+import { raiseDispute } from './disputes.js';
 import {
   buildContractReconItems,
   buildTradingReconItems,
@@ -14,7 +14,7 @@ import {
 } from '../reconciliationEngine.js';
 import { OPEN_RECON_STATUSES, summariseItems } from '../reconciliationConstants.js';
 import { lastCompleteMonth } from '../services/energyRules.js';
-import { OPEN_STATUSES as OPEN_DISPUTE_STATUSES, genDisputeNo, REASON_CODES, CHARGE_LINES, addDaysIso, SLA_ACK_DAYS, SLA_RESOLVE_DAYS } from '../disputesConstants.js';
+import { OPEN_STATUSES as OPEN_DISPUTE_STATUSES, REASON_CODES, CHARGE_LINES } from '../disputesConstants.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -605,33 +605,26 @@ router.post('/:id/raise-dispute', requireRole(...REIA_WRITE), (req, res) => {
   }
   if (!invoiceId) return res.status(400).json({ error: `No approved bill for ${recon.period} on this contract to raise the dispute on. Approve the bill first, or override the line with the reason.` });
 
-  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(recon.contract_id);
-  const role = contract?.contract_type === 'PPA' ? 'SELLER' : 'BUYER';
+  // Through the same door as any dispute (decided 17-Oct-2026): the charge
+  // line's cap, the presented-bill rule and the dispute window all apply, and
+  // the record says the SJVN officer raised it, from which statement.
   const amount = Math.abs(item.variance) || Math.abs(item.billed_value || 0) || 1;
   const rc = REASON_CODES.includes(reason_code) ? reason_code : 'OTHER';
   const cl = CHARGE_LINES.includes(charge_line) ? charge_line : 'other_adjustments';
-
-  const disputeId = newId('DIS');
-  const disputeNo = genDisputeNo();
-  const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-  db.prepare(`
-    INSERT INTO disputes (
-      id, dispute_no, invoice_id, raised_by_role, raised_by_user_id, reason_code, charge_line,
-      issue_description, disputed_amount, status, acknowledged_at, acknowledged_by,
-      sla_ack_due, sla_resolve_due
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACKNOWLEDGED', ?, 'system', ?, ?)
-  `).run(
-    disputeId, disputeNo, invoiceId, role, req.user.id, rc, cl,
-    issue_description || `Raised from reconciliation ${recon.recon_no}: ${item.label}`,
-    amount, now, addDaysIso(now, SLA_ACK_DAYS), addDaysIso(now, SLA_RESOLVE_DAYS)
-  );
-
-  // The same step the dispute desk takes: it remembers where the bill stood, so
-  // the bill goes back there when the dispute is over.
-  setInvoiceOpenDispute(invoiceId);
+  let dispute;
+  try {
+    dispute = raiseDispute(req.user, {
+      invoice_id: invoiceId, reason_code: rc, charge_line: cl, disputed_amount: Math.round(amount * 100) / 100,
+      issue_description: `Raised by SJVN (${req.user.name}) from reconciliation ${recon.recon_no}: ${issue_description || item.label}`,
+      enforce_window: true,
+    }, req);
+  } catch (err) {
+    if (err.status) return res.status(err.status).json(err.payload || { error: err.message });
+    throw err;
+  }
+  const disputeId = dispute.id;
   db.prepare(`UPDATE recon_items SET dispute_id = ? WHERE id = ?`).run(disputeId, item.id);
   recordEvent(recon.id, req.user, 'DISPUTE_LINKED', { dispute_id: disputeId, item_id });
-  pushNotification({ role: 'REIA_USER', type: 'DISPUTE', message: `Dispute ${disputeNo} created from recon ${recon.recon_no}` });
 
   res.status(201).json(db.prepare('SELECT * FROM disputes WHERE id = ?').get(disputeId));
 });

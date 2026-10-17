@@ -53,7 +53,7 @@ const EMPTY_FORM = {
   // Structured billing rules (drive due dates, rebate & LPS calculations)
   payment_terms_days: 30, rebate_pct: '', rebate_days: '', rebate_basis: 'BILL_DATE',
   lps_annual_pct: '', lps_grace_days: 0, payment_security_type: 'LETTER_OF_CREDIT',
-  min_cuf_percent: '',
+  min_cuf_percent: '', cuf_shortfall_comp_pct: '', banking_cycle_basis: '',
   peak_window_start: '', peak_window_end: '', min_peak_availability_percent: '', peak_penalty_per_mwh: '',
   projects: []
 };
@@ -135,6 +135,7 @@ function termErrors(f, add) {
   for (const [k, label] of [['min_cuf_percent', 'Min / Guaranteed CUF (%)'], ['min_peak_availability_percent', 'Min peak availability (%)']]) {
     if (n(f[k]) != null && (n(f[k]) < 0 || n(f[k]) > 100)) add(label, 'Must be between 0% and 100%.');
   }
+  if (n(f.cuf_shortfall_comp_pct) != null && (n(f.cuf_shortfall_comp_pct) <= 0 || n(f.cuf_shortfall_comp_pct) > 200)) add('CUF shortfall compensation (% of tariff)', 'Must be more than 0% and at most 200% of the tariff.');
   if (n(f.min_peak_availability_percent) != null && (!f.peak_window_start || !f.peak_window_end)) add('Peak window from', 'A peak availability obligation needs its peak window (from and to).');
   if (f.peak_window_start && f.peak_window_end && f.peak_window_start === f.peak_window_end) add('Peak window to', 'The peak window cannot start and end at the same time.');
   if (f.tenure_start && f.tenure_end && f.tenure_end > f.tenure_start) {
@@ -953,11 +954,24 @@ export default function Contracts() {
             <h4 style={{ margin: '0 0 12px 0', color: '#0369a1' }}>4b. CUF Performance Threshold</h4>
             <div className="form-grid">
               <Field label="Min / Guaranteed CUF (%)">
-                <input type="number" step="0.01" min="0" max="100" placeholder="Blank = master default (Solar 22 / Wind 30 / Hybrid 25)" value={form.min_cuf_percent || ''} onChange={(e) => setForm({ ...form, min_cuf_percent: e.target.value })} />
+                <input type="number" step="0.01" min="0" max="100" placeholder={form.contract_type === 'PPA' ? 'As the PPA guarantees — needed to make it ACTIVE' : 'Blank = master default'} value={form.min_cuf_percent || ''} onChange={(e) => setForm({ ...form, min_cuf_percent: e.target.value })} />
               </Field>
+              <Field label="CUF shortfall compensation (% of tariff)">
+                <input type="number" step="0.01" min="0" max="200" placeholder="As the PPA says, e.g. 50 (SECI) or 25 — blank = master" value={form.cuf_shortfall_comp_pct || ''} onChange={(e) => setForm({ ...form, cuf_shortfall_comp_pct: e.target.value })} />
+              </Field>
+              {form.contract_type === 'PPA' && (
+                <Field label="Banking cycle">
+                  <select value={form.banking_cycle_basis || ''} onChange={(e) => setForm({ ...form, banking_cycle_basis: e.target.value })}>
+                    <option value="">Master default (Monthly — GEOA Rules 2022)</option>
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="SEASONAL">Seasonal (Apr–Sep / Oct–Mar)</option>
+                    <option value="ANNUAL">Annual (financial year)</option>
+                  </select>
+                </Field>
+              )}
             </div>
             <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '8px 0 0' }}>
-              If actual CUF (from energy data) is below this threshold, invoice generate applies a shortfall penalty = shortfall MWh × tariff (or master ₹/MWh rate).
+              CUF is assessed over the contract year. If the year's CUF (from energy data, deemed generation counted) is below this threshold, the year-end true-up charges shortfall MWh × tariff × the compensation % above.
             </p>
             <h4 style={{ margin: '16px 0 12px 0', color: '#0369a1' }}>4c. Peak Availability Obligation</h4>
             <div className="form-grid">
@@ -1049,7 +1063,13 @@ export default function Contracts() {
                   <tr><td>Tariff Type</td><td>{selected.tariff_type}</td></tr>
                   <tr><td>Tariff / Unit</td><td>₹{fmtTariff(selected.tariff_per_unit)}</td></tr>
                   {['solar', 'wind', 'hybrid', 'fdre'].includes(String(selected.project_type).toLowerCase()) && (
-                    <tr><td>Min CUF %</td><td>{selected.min_cuf_percent != null ? `${selected.min_cuf_percent}%` : 'Master default'}</td></tr>
+                    <>
+                      <tr><td>Min CUF %</td><td>{selected.min_cuf_percent != null ? `${selected.min_cuf_percent}%` : 'Master default'}</td></tr>
+                      <tr><td>CUF shortfall compensation</td><td>{selected.cuf_shortfall_comp_pct != null ? `${selected.cuf_shortfall_comp_pct}% of tariff` : 'Master default'}</td></tr>
+                      {selected.contract_type === 'PPA' && (
+                        <tr><td>Banking cycle</td><td>{selected.banking_cycle_basis ? selected.banking_cycle_basis.charAt(0) + selected.banking_cycle_basis.slice(1).toLowerCase() : 'Master default'}</td></tr>
+                      )}
+                    </>
                   )}
                   {selected.contract_type === 'PSA' && (
                     <tr><td>Trading Margin</td><td>{selected.trading_margin_per_mwh != null
@@ -1540,6 +1560,19 @@ export default function Contracts() {
                   <Field label="Min / Guaranteed CUF (%)">
                     <input type="number" step="0.01" min="0" max="100" value={amendForm.min_cuf_percent ?? ''} onChange={(e) => setAmendForm({ ...amendForm, min_cuf_percent: e.target.value })} />
                   </Field>
+                  <Field label="CUF shortfall compensation (% of tariff)">
+                    <input type="number" step="0.01" min="0" max="200" value={amendForm.cuf_shortfall_comp_pct ?? ''} onChange={(e) => setAmendForm({ ...amendForm, cuf_shortfall_comp_pct: e.target.value })} />
+                  </Field>
+                  {amendForm.contract_type === 'PPA' && (
+                    <Field label="Banking cycle">
+                      <select value={amendForm.banking_cycle_basis || ''} onChange={(e) => setAmendForm({ ...amendForm, banking_cycle_basis: e.target.value })}>
+                        <option value="">Master default (Monthly)</option>
+                        <option value="MONTHLY">Monthly</option>
+                        <option value="SEASONAL">Seasonal (Apr–Sep / Oct–Mar)</option>
+                        <option value="ANNUAL">Annual (financial year)</option>
+                      </select>
+                    </Field>
+                  )}
                 </div>
               </div>
             )}

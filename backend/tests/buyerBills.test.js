@@ -86,7 +86,9 @@ describe('an intimation', () => {
     const passed = await post(checker, `/intimations/${r.body.id}/approve`, {});
     expect(passed.body).toMatchObject({ status: 'SUBMITTED', approved_by_name: 'Chetan Checker' });
 
-    const done = await post(reia, `/intimations/${r.body.id}/confirm`, { payment_date: day(0), note: 'Credited a day later per bank statement' });
+    // The REIA desk does not confirm money in the bank (17-Oct-2026); Finance does.
+    expect((await post(reia, `/intimations/${r.body.id}/confirm`, {})).status).toBe(403);
+    const done = await post(finance, `/intimations/${r.body.id}/confirm`, { payment_date: day(0), note: 'Credited a day later per bank statement' });
     expect(done.body).toMatchObject({ status: 'CONFIRMED', confirmed_date: day(0) });
     expect(row(inv.id).status).toBe('PARTIALLY_PAID');
     expect((await get(admin)).body.bills[0].left).toBe(600000);

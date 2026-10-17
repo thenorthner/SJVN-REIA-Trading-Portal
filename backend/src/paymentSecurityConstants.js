@@ -21,21 +21,22 @@ export const ALERT_CASCADE_DAYS = [60, 30, 15, 7, 0];
 export const ACTIVE_STATUSES = ['ACTIVE', 'PARTIALLY_UTILIZED', 'RENEWED', 'RELEASE_PENDING'];
 
 // The order security is drawn in on a default. An instrument dedicated to one
-// counterparty is exhausted before anything pooled: a corpus or payment-security
-// fund covers every contract, so spending it on one buyer's default removes cover
-// that protects all the others. Lower number is drawn first.
+// counterparty is exhausted before a fund: a corpus or payment-security fund is
+// held per contract on this platform (decided 17-Oct-2026 — SJVN runs no
+// portfolio-wide PSF today), but it is the last line of cover, so it is drawn
+// after the counterparty's own instrument. Lower number is drawn first.
 export const WATERFALL_DEFAULTS = {
   LC: 10,                     // the buyer's own letter of credit
   BANK_GUARANTEE: 20,         // the seller's own performance guarantee
-  PAYMENT_SECURITY_FUND: 30,  // pooled
-  CORPUS_FUND: 40,            // pooled
+  PAYMENT_SECURITY_FUND: 30,  // contract fund, drawn after the instrument
+  CORPUS_FUND: 40,            // contract fund, drawn last
   OTHER: 90,
 };
 
 // Which instruments answer for whose default. A letter of credit is the buyer's
 // payment instrument and a bank guarantee is the seller's performance
 // instrument; invoking one for the other's failure is not a fallback, it is the
-// wrong instrument. Pooled funds back either side.
+// wrong instrument. A contract's funds back either side.
 export const INSTRUMENTS_BY_SIDE = {
   BUYER: ['LC', 'CORPUS_FUND', 'PAYMENT_SECURITY_FUND', 'OTHER'],
   SELLER: ['BANK_GUARANTEE', 'CORPUS_FUND', 'PAYMENT_SECURITY_FUND', 'OTHER'],

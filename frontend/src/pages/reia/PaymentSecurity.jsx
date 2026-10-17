@@ -16,7 +16,8 @@ import { fmtDate, fmtDateTime } from '../../datetime.js';
 const CAN_MANAGE = ROLE_GROUPS.REIA_WRITE;                          // record, draw, invoke, advance a demand
 const CAN_RELEASE = [...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER'];     // ask for and decide a release
 const CAN_RUN_ALERTS = [...ROLE_GROUPS.REIA_WRITE, 'MANAGEMENT'];
-const CAN_OVERRIDE = [...ROLE_GROUPS.REIA_WRITE, 'MANAGEMENT'];
+// Management's call, for at most 90 days (decided 17-Oct-2026).
+const CAN_OVERRIDE = ['MANAGEMENT', 'SJVN_ADMIN'];
 const LIVE = ['ACTIVE', 'PARTIALLY_UTILIZED', 'RENEWED'];
 
 const EMPTY_FORM = {
@@ -443,11 +444,11 @@ export default function PaymentSecurity() {
             <form className="cw-form" onSubmit={saveOverride}>
               <strong>Treat the security on {overrideFor.contract_no} as adequate</strong>
               <p style={{ margin: '4px 0 10px', fontSize: 13.5, color: 'var(--text-light)' }}>
-                Scheduling and bidding for this buyer are held while its cover falls short. An override lets them go ahead on your say-so, until the date you give. It is recorded against your name and Management is told.
+                Scheduling and bidding for this buyer are held while its cover falls short. An override lets them go ahead on Management's say-so, for at most 90 days. It is recorded against your name.
               </p>
               <div className="form-grid">
                 <Field label="Reason" required><input required value={overrideForm.reason} onChange={(e) => setOverrideForm({ ...overrideForm, reason: e.target.value })} placeholder="e.g. LC enhancement with the bank, advice awaited" /></Field>
-                <Field label="Valid until (blank = until withdrawn)"><input type="date" value={overrideForm.valid_until} onChange={(e) => setOverrideForm({ ...overrideForm, valid_until: e.target.value })} /></Field>
+                <Field label="Valid until (at most 90 days)" required><input type="date" required value={overrideForm.valid_until} max={new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10)} onChange={(e) => setOverrideForm({ ...overrideForm, valid_until: e.target.value })} /></Field>
               </div>
               <div className="form-actions">
                 <button type="button" className="btn btn-ghost" onClick={() => setOverrideFor(null)}>Cancel</button>

@@ -23,9 +23,10 @@ beforeEach(() => {
   contract = makeContract({ status: 'ACTIVE' });
   setMode('CALENDAR');
 });
-afterEach(() => setMode('WORKING_DAYS'));
+afterEach(() => setMode('CALENDAR'));
 
-const pay = (id, amount, date) => request(app).post(`/api/invoices/${id}/payments`).set(auth(reia))
+// Finance records a receipt (17-Oct-2026), not the desk.
+const pay = (id, amount, date) => request(app).post(`/api/invoices/${id}/payments`).set(auth(tokenFor('FINANCE_USER')))
   .send({ amount, payment_date: date, mode: 'NEFT', reference: 'T' });
 const row = (id) => db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
 const perDay = (amount, pct) => (amount * pct) / 100 / 365;

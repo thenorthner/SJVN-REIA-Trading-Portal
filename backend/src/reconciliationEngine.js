@@ -222,7 +222,16 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
   const rebateTotal = invoices.reduce((s, i) => s + (Number(i.rebate) || 0), 0);
   const lpsBilled = invoices.reduce((s, i) => s + (Number(i.lps) || 0), 0);
   const dueTotal = Math.round((billedTotal - rebateTotal + lpsBilled) * 100) / 100;
-  const finCls = classifyAmount(dueTotal, paidTotal);
+  // A bill not yet due is not an exception for being unpaid (decided
+  // 17-Oct-2026): what is still unpaid on bills whose due date has not come is
+  // left out of the comparison, and said so.
+  const todayIso = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  const notYetDue = invoices.reduce((s, i) => {
+    if (!i.due_date || String(i.due_date).slice(0, 10) < todayIso) return s;
+    const due = (Number(i.total_amount) || 0) - (Number(i.rebate) || 0) + (Number(i.lps) || 0);
+    return s + Math.max(0, due - paymentsSum([i.id]));
+  }, 0);
+  const finCls = classifyAmount(Math.round((dueTotal - notYetDue) * 100) / 100, paidTotal);
   items.push(makeItem({
     item_type: 'FINANCIAL_THREE_WAY',
     label: 'Financial: Billed vs Paid (₹)',
@@ -232,7 +241,7 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
     unit: 'INR',
     ...finCls,
     invoice_id: primaryInv?.id,
-    notes: `Due ₹${dueTotal.toLocaleString('en-IN')}${rebateTotal ? ` (after ₹${Math.round(rebateTotal).toLocaleString('en-IN')} rebate)` : ''}${lpsBilled ? ` incl. ₹${Math.round(lpsBilled).toLocaleString('en-IN')} surcharge` : ''}; payable now (ex-disputed): ₹${payableAgg.toLocaleString('en-IN')}; disputed ₹${disputedTotal.toLocaleString('en-IN')}`,
+    notes: `${notYetDue > 0 ? `₹${Math.round(notYetDue).toLocaleString('en-IN')} not yet due, left out; ` : ''}Due ₹${dueTotal.toLocaleString('en-IN')}${rebateTotal ? ` (after ₹${Math.round(rebateTotal).toLocaleString('en-IN')} rebate)` : ''}${lpsBilled ? ` incl. ₹${Math.round(lpsBilled).toLocaleString('en-IN')} surcharge` : ''}; payable now (ex-disputed): ₹${payableAgg.toLocaleString('en-IN')}; disputed ₹${disputedTotal.toLocaleString('en-IN')}`,
     pattern_flag: checkPatternFlag(contractId, null, 'FINANCIAL_THREE_WAY') && finCls.match_status === 'EXCEPTION',
   }));
 

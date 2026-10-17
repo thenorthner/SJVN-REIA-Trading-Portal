@@ -41,6 +41,9 @@ beforeEach(() => {
 describe('the clock', () => {
   it('says whose move it is and how long they have, and when the time has run out', async () => {
     const d = await raise(bill('A/1'));
+    // Until the desk acknowledges it, that is SJVN's move.
+    expect((await get(seller, `/${d.id}`)).body.sla).toMatchObject({ stage: 'ACKNOWLEDGE', owner: 'SJVN', breached: false });
+    expect((await request(app).post(`/api/disputes/${d.id}/transition`).set(as(reia)).send({ status: 'ACKNOWLEDGED' })).status).toBe(200);
     const fresh = (await get(seller, `/${d.id}`)).body;
     expect(fresh.sla).toMatchObject({ stage: 'RESOLVE', owner: 'SJVN', breached: false });
     expect(fresh.sla.days_left).toBe(15);

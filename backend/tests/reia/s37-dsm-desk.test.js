@@ -198,16 +198,14 @@ describe('The supplementary bill a week becomes', () => {
     const row = await raised();
     db.prepare(`INSERT INTO invoices (id, invoice_no, contract_id, invoice_type, direction, billing_period, energy_mwh, tariff_per_unit, energy_charges, total_amount, status)
       VALUES ('INV-TAKEN', 'DSM-TAKEN/1', ?, 'FINAL', 'SELLER_TO_SJVN', '2025-12', 1, 1, 1, 1, 'DRAFT')`).run(contract.id);
-    await post(`/api/deviation/${row.id}/submit`);
     const r = await post(`/api/deviation/${row.id}/dispatch`, { invoice_no: 'DSM-TAKEN/1' });
     expect(r.status, 'a duplicate bill number came back as a server error').toBe(409);
     expect(r.body.error).toMatch(/already on record/);
-    expect(db.prepare('SELECT status FROM deviation_settlements WHERE id = ?').get(row.id).status).toBe('SUBMITTED');
+    expect(db.prepare('SELECT status FROM deviation_settlements WHERE id = ?').get(row.id).status).toBe('CALCULATED');
   });
 
   it('is never raised from an estimate', async () => {
     const est = (await post('/api/deviation', manual())).body;
-    await post(`/api/deviation/${est.id}/submit`);
     const r = await post(`/api/deviation/${est.id}/dispatch`, {});
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/manual estimate/);

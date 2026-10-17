@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate } from '../util.js';
+import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef } from '../util.js';
 import { getParamNumber } from '../mastersService.js';
 import { scrapeLatestDSM } from '../services/nrpcScraper.js';
 import { settledLakh, settlementRupees, luToMwh } from '../services/nrpcDsa.js';
@@ -150,21 +150,55 @@ function implausibleRate(rate) {
  * Create a SUPPLEMENTARY invoice for a DSM row and link it back.
  * Caller must validate eligibility; runs inside its own transaction.
  */
+/**
+ * What an earlier bill for the week already settled, signed from SJVN's side
+ * (+ recoverable from the pool, − payable to it). A pool bill carries its sign
+ * in its direction; one from before 17-Oct-2026 (DSM-PPA / DSM-PSA) carried it
+ * in its total.
+ */
+export function dsmSigned(inv) {
+  const t = Number(inv?.total_amount) || 0;
+  if (String(inv?.invoice_no || '').startsWith('DSM-POOL')) return inv.direction === 'SELLER_TO_SJVN' ? -t : t;
+  return t;
+}
+
+/**
+ * When the pool expects the week settled: the date NRPC prints on the
+ * statement, else the bill date plus dsm_pool_payment_days. Contract payment
+ * terms (45 days) are the buyer's PSA, not the pool's.
+ */
+function poolDueDate(row, billDate) {
+  const printed = row.dsa_account_id
+    ? db.prepare('SELECT due_date FROM nrpc_dsa_accounts WHERE id = ?').get(row.dsa_account_id)?.due_date
+    : null;
+  if (printed && /^\d{4}-\d{2}-\d{2}/.test(String(printed))) return String(printed).slice(0, 10);
+  const days = getParamNumber('dsm_pool_payment_days', 10);
+  return new Date(Date.parse(`${billDate}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+}
+
+/**
+ * Decided 17-Oct-2026: a DSM bill settles with the NRPC deviation pool, so it
+ * sits in a series of its own (DSM-POOL) and never in the PPA's developer
+ * pipeline. Its amount is always positive: a recoverable week is a receivable
+ * (SJVN → pool, read as SJVN_TO_BUYER), a payable week or a revision that
+ * lowers the figure is a payable (pool → SJVN, read as SELLER_TO_SJVN). No
+ * counterparty on the contract sees it.
+ */
 function createDsmInvoice(row, contract, { invoice_no: overrideNo, dispatch_date, created_by, created_by_id = null, prior = [] }) {
   // A revised statement replaces the week's figure: what is billed is the
   // difference from what earlier bills for the week already asked for.
   const statementAmount = Math.round(Number(row.deviation_amount) || 0);
-  const priorBilled = prior.reduce((t, p) => t + (Number(p.total_amount) || 0), 0);
-  const amount = statementAmount - priorBilled;
-  const direction = directionForContract(contract);
+  const priorBilled = prior.reduce((t, p) => t + dsmSigned(p), 0);
+  const signed = statementAmount - priorBilled;
+  const amount = Math.abs(signed);
+  const direction = signed >= 0 ? 'SJVN_TO_BUYER' : 'SELLER_TO_SJVN';
   const billingFamilyRef = buildBillingFamilyRef(contract.contract_no, row.period_month, direction);
   const invoiceId = newId('INV');
-  const invoice_no = overrideNo
-    || genInvoiceNo(contract.contract_type === 'PPA' ? 'DSM-PPA' : 'DSM-PSA');
+  const invoice_no = overrideNo || genInvoiceNo('DSM-POOL');
   const billDate = dispatch_date || new Date().toISOString().split('T')[0];
-  const due_date = computeDueDate(billDate, contract, getParamNumber('default_payment_terms_days', 30));
+  const due_date = poolDueDate(row, billDate);
 
-  const signLabel = amount >= 0 ? 'recoverable' : 'payable';
+  const signLabel = signed >= 0 ? 'recoverable from the pool' : 'payable to the pool';
   const fromStatement = row.source === 'NRPC_DSA';
   const breakdown = [
     {
@@ -187,17 +221,18 @@ function createDsmInvoice(row, contract, { invoice_no: overrideNo, dispatch_date
     // seller's on SJVN. This one settles with the regional pool, so it says so.
     {
       code: 'FLOW',
-      label: amount >= 0
+      label: signed >= 0
         ? 'Recoverable by SJVN — received from the NRPC deviation pool for this week'
         : 'Payable by SJVN — paid to the NRPC deviation pool for this week',
       value: null,
     },
     ...(prior.length ? [
       { code: 'STMT', label: `Week's figure per this statement (${row.dsa_entity_name || 'revised'})`, value: statementAmount },
-      ...prior.map((p) => ({ code: 'PRIOR', label: `Less: already billed on ${p.invoice_no}`, value: -(Number(p.total_amount) || 0) })),
+      ...prior.map((p) => ({ code: 'PRIOR', label: `Less: already settled on ${p.invoice_no}`, value: -dsmSigned(p) })),
     ] : []),
     { code: 'AMT', label: `${prior.length ? 'Difference to settle' : 'Net DSM amount'} (${signLabel})`, value: amount },
-    { code: 'TOTAL', label: 'Supplementary Bill Total', value: amount },
+    { code: 'DUE', label: `Due to the pool by ${due_date}${row.dsa_account_id ? ' (per the NRPC statement where printed)' : ''}`, value: null },
+    { code: 'TOTAL', label: signed >= 0 ? 'Receivable from NRPC deviation pool' : 'Payable to NRPC deviation pool', value: amount },
   ];
 
   const run = db.transaction(() => {
@@ -238,7 +273,7 @@ function createDsmInvoice(row, contract, { invoice_no: overrideNo, dispatch_date
   });
   run();
 
-  return { invoiceId, invoice_no, dispatch_date: billDate, amount };
+  return { invoiceId, invoice_no, dispatch_date: billDate, amount: signed };
 }
 
 /**
@@ -609,29 +644,8 @@ router.put('/:id', requireRole(...WRITE), (req, res) => {
   res.json(withContract(db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(req.params.id)));
 });
 
-// Submit for dispatch
-router.post('/:id/submit', requireRole(...WRITE), (req, res) => {
-  const row = db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(req.params.id);
-  if (!row) return res.status(404).json({ error: 'Deviation record not found' });
-  // Without this, a cancelled row could be submitted and then dispatched.
-  if (!['DRAFT', 'CALCULATED'].includes(row.status)) {
-    return res.status(400).json({
-      error: `Only DRAFT or CALCULATED rows can be submitted; this one is ${row.status}.`,
-    });
-  }
-  if (row.source === 'NRPC_DSA' && row.dsa_account_id) {
-    const acct = db.prepare('SELECT status, superseded_by FROM nrpc_dsa_accounts WHERE id = ?').get(row.dsa_account_id);
-    if (acct?.status === 'SUPERSEDED') {
-      return res.status(409).json({
-        error: 'The statement behind this row has been superseded. Import the current statement for this week and submit that.',
-        superseded_by: acct.superseded_by,
-      });
-    }
-  }
-  db.prepare(`UPDATE deviation_settlements SET status='SUBMITTED', updated_at=datetime('now') WHERE id=?`).run(req.params.id);
-  logAudit({ req, user: req.user, action: 'SUBMIT', module: 'REIA', entityType: 'deviation_settlement', entityId: req.params.id });
-  res.json(withContract(db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(req.params.id)));
-});
+// No separate submit step (decided 17-Oct-2026): a statement-backed week is
+// raised straight from CALCULATED, and the bill it makes goes through approval.
 
 // Dispatch — creates SUPPLEMENTARY invoice + links invoice_id on DSM
 router.post('/:id/dispatch', requireRole(...WRITE), (req, res) => {
@@ -673,7 +687,7 @@ router.post('/:id/dispatch', requireRole(...WRITE), (req, res) => {
   // already presented stays, and only the difference is billed. Dispatching R1
   // billed its whole figure again, so the week was settled twice.
   const earlier = row.dsa_account_id ? db.prepare(`
-    SELECT d.id AS row_id, d.dsm_no, i.id, i.invoice_no, i.total_amount, i.status
+    SELECT d.id AS row_id, d.dsm_no, i.id, i.invoice_no, i.total_amount, i.direction, i.status
     FROM deviation_settlements d
     JOIN nrpc_dsa_accounts a ON a.id = d.dsa_account_id
     JOIN nrpc_dsa_accounts mine ON mine.id = ?
@@ -683,7 +697,23 @@ router.post('/:id/dispatch', requireRole(...WRITE), (req, res) => {
   `).all(row.dsa_account_id, row.contract_id, row.id, row.week_no) : [];
   const unpresented = earlier.filter((e) => ['DRAFT', 'SUBMITTED', 'PENDING_L2', 'UNDER_APPROVAL', 'REJECTED'].includes(e.status));
   const prior = earlier.filter((e) => !unpresented.includes(e));
-  const amount = Math.round(Number(row.deviation_amount) || 0) - prior.reduce((t, p) => t + (Number(p.total_amount) || 0), 0);
+  const amount = Math.round(Number(row.deviation_amount) || 0) - prior.reduce((t, p) => t + dsmSigned(p), 0);
+  // A week first billed years late is outside the limitation period for a
+  // money claim (decided 17-Oct-2026: 3 years, dsm_bill_age_limit_days). A
+  // revision of a week already billed is still settled whatever its age.
+  if (!earlier.length) {
+    const weekEnd = row.dsa_account_id
+      ? db.prepare('SELECT week_end FROM nrpc_dsa_accounts WHERE id = ?').get(row.dsa_account_id)?.week_end
+      : null;
+    const limit = getParamNumber('dsm_bill_age_limit_days', 1095);
+    const end = weekEnd || (row.period_month ? `${row.period_month}-28` : null);
+    if (end && limit > 0 && (Date.now() - Date.parse(`${String(end).slice(0, 10)}T00:00:00Z`)) / 86400000 > limit) {
+      return res.status(400).json({
+        error: `This week ended on ${String(end).slice(0, 10)}, more than ${Math.round(limit / 365)} years ago, and was never billed. A claim that old is time-barred; it is not raised now.`,
+        week_end: String(end).slice(0, 10),
+      });
+    }
+  }
   if (amount === 0) {
     return res.status(400).json({
       error: prior.length

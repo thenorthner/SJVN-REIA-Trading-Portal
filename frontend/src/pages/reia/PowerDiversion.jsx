@@ -65,7 +65,7 @@ export default function PowerDiversion() {
     setPopup({
       tone: 'warning',
       title: `Recover ${r.diversion_no}`,
-      message: `Set ${fmtCurrency(r.net_gain)} against ${r.buyer_name || 'the buyer'}'s dues on ${r.contract_no}, surcharge first and oldest bill first. Whatever this PSA does not owe is reported back, not claimed. This cannot be undone.`,
+      message: `Set ${fmtCurrency(r.net_gain)} against ${r.buyer_name || 'the buyer'}'s dues on ${r.contract_no}, surcharge first and oldest bill first. Whatever this PSA does not owe is held as the buyer's advance, for Finance to apply to a later bill or refund. This cannot be undone.`,
       confirm: {
         label: 'Recover',
         run: async () => {
@@ -74,8 +74,26 @@ export default function PowerDiversion() {
           setPopup({
             tone: 'success',
             title: 'Recovered',
-            message: `${fmtCurrency(res.applied_amount)} set against ${res.allocations.length} bill${res.allocations.length === 1 ? '' : 's'} on ${r.contract_no}.${res.unapplied ? ` ${fmtCurrency(res.unapplied)} was more than the PSA owed and stays with SJVN.` : ''}`,
+            message: `${fmtCurrency(res.applied_amount)} set against ${res.allocations.length} bill${res.allocations.length === 1 ? '' : 's'} on ${r.contract_no}.${res.held_as_advance ? ` ${fmtCurrency(res.held_as_advance)} was more than the PSA owed and is held as the buyer's advance.` : ''}`,
           });
+        },
+      },
+    });
+  }
+
+  // A sale below costs leaves the buyer owing the deficit (PSA Art. 6.6): it is
+  // drafted as a debit note on the PSA for Finance to approve (17-Oct-2026).
+  function billDeficit(r) {
+    setPopup({
+      tone: 'warning',
+      title: `Bill the deficit on ${r.diversion_no}`,
+      message: `Draft a debit note of ${fmtCurrency(Math.abs(r.net_gain))} on ${r.buyer_name || 'the buyer'}'s latest bill under ${r.contract_no}. It goes to Finance for approval before it is issued.`,
+      confirm: {
+        label: 'Draft debit note',
+        run: async () => {
+          const res = await api.powerDiversion.billDeficit(r.id);
+          load();
+          setPopup({ tone: 'success', title: 'Debit note drafted', message: `${res.note?.note_no || 'The debit note'} for ${fmtCurrency(Math.abs(r.net_gain))} is with Finance for approval.` });
         },
       },
     });
@@ -116,6 +134,7 @@ export default function PowerDiversion() {
     { key: 'actions', header: '', render: (r) => canWrite && r.status === 'RECORDED' && (
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
         {r.net_gain > 0 && <button className="btn btn-xs btn-primary" onClick={() => applyRecovery(r)}>Recover against dues</button>}
+        {r.net_gain < 0 && <button className="btn btn-xs btn-primary" onClick={() => billDeficit(r)}>Bill the deficit</button>}
         <button className="btn btn-xs btn-ghost" onClick={() => doCancel(r)}>Cancel</button>
       </div>
     ) },

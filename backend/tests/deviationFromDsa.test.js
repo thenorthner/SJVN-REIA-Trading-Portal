@@ -165,30 +165,16 @@ describe('a statement-backed row is not editable into an estimate', () => {
   });
 });
 
-describe('submit guards', () => {
-  it('refuses to submit a cancelled row', async () => {
+describe('submit step', () => {
+  // There is no separate submit (decided 17-Oct-2026): a statement-backed week
+  // is raised straight from CALCULATED, and its bill goes through approval.
+  it('is gone', async () => {
     const acct = storeStatement();
     const { body: row } = await promote(writer, {
       contract_id: contract.id, dsa_account_id: acct.account_id, entity_name: 'NATHPA JHAKRI HEP',
     });
-    await request(app).delete(`/api/deviation/${row.id}`).set(auth(writer));
-
     const res = await request(app).post(`/api/deviation/${row.id}/submit`).set(auth(writer));
-    expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/Only DRAFT or CALCULATED/);
-  });
-
-  it('refuses to submit a row whose statement was superseded after it was created', async () => {
-    const acct = storeStatement({ body: 'a', weekCode: '291225-040126(WK-40)' });
-    const { body: row } = await promote(writer, {
-      contract_id: contract.id, dsa_account_id: acct.account_id, entity_name: 'NATHPA JHAKRI HEP',
-    });
-    // NRPC reissues the week after the row was raised.
-    storeStatement({ body: 'b', weekCode: '291225-040126(WK-40)_R1', net: -9.5 });
-
-    const res = await request(app).post(`/api/deviation/${row.id}/submit`).set(auth(writer));
-    expect(res.status).toBe(409);
-    expect(res.body.error).toMatch(/superseded/i);
+    expect(res.status).toBe(404);
   });
 });
 

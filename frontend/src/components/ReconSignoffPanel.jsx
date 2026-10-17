@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../api/client.js';
+import { useAuth } from '../context/AuthContext.jsx';
 import { Badge, Field, Modal, AlertPopup, fmtCurrency } from './ui.jsx';
 import { PreviewModal } from './DocumentManager.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
@@ -197,6 +198,7 @@ export function ReconSignModal({ recon, signoff, mode, signatory, onClose, onSig
  * @param disputesPath where this user's disputes page is, to raise an exception as a dispute on the bill
  */
 export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disputesPath }) {
+  const { user } = useAuth();
   const [d, setD] = useState(null);
   const [error, setError] = useState('');
   const [settle, setSettle] = useState(null);
@@ -273,6 +275,21 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
       <div style={{ marginTop: 8 }}>
         {d.rollforward ? <RollForward rf={d.rollforward} /> : <p className="inline-note">A roll-forward is worked out for contract statements with a month, quarter or financial year as their period.</p>}
       </div>
+      {d.finance_concurrence?.required && (
+        // Above the limit, Finance concurs before the desk signs (17-Oct-2026).
+        <div className="inline-note" style={{ marginTop: 8, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span>
+            {fmtCurrency(d.finance_concurrence.billed)} billed — above the {fmtCurrency(d.finance_concurrence.limit)} limit, so Finance concurs before SJVN signs.{' '}
+            {d.finance_concurrence.at ? <strong>Concurred by {d.finance_concurrence.by} on {fmtDateTime(d.finance_concurrence.at)}.</strong> : <strong>Awaiting Finance.</strong>}
+          </span>
+          {!d.finance_concurrence.at && user?.role === 'FINANCE_USER' && (
+            <button type="button" className="btn btn-primary btn-sm" disabled={!!busy} onClick={async () => {
+              setBusy('concur');
+              try { await api.reconSignoff.sign(reconId, { decision: 'AGREE' }); await load(); onChanged?.(); } catch (e) { setError(errText(e)); } finally { setBusy(''); }
+            }}>Concur for Finance</button>
+          )}
+        </div>
+      )}
 
       {d.exceptions.length > 0 && (
         <>

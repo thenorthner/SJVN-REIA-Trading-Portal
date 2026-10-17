@@ -3630,6 +3630,80 @@ try {
   console.error('Billing QA columns migration failed:', e.message);
 }
 
+/**
+ * Decisions taken on 17-Oct-2026 on the open questions from the REIA QA runs
+ * (docs/DECISIONS_2026-10-17.md). New columns, and master defaults that change:
+ * a default is moved only where it still holds the old default, and only once,
+ * so a value SJVN has set by hand is never overwritten.
+ */
+function migrateDecisions20261017() {
+  const addCol = (table, col, type) => {
+    const cols = db.pragma(`table_info(${table})`).map((c) => c.name);
+    if (cols.length && !cols.includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+  };
+  addCol('contracts', 'cuf_shortfall_comp_pct', 'REAL');
+  addCol('contracts', 'banking_cycle_basis', 'TEXT');
+  addCol('reconciliations', 'finance_ack_at', 'TEXT');
+  addCol('invoices', 'verified_by_id', 'TEXT');
+  addCol('cerc_form_iv', 'filed_outside', 'INTEGER NOT NULL DEFAULT 0');
+  addCol('cerc_licence_compliance', 'fee_late_surcharge_paid', 'REAL');
+  addCol('power_diversions', 'advance_id', 'TEXT');
+  addCol('entities', 'requested_by_user_id', 'TEXT');
+  addCol('power_diversions', 'deficit_note_id', 'TEXT');
+  const ownCol = db.pragma('table_info(entities)').map((c) => c.name);
+  if (ownCol.length && !ownCol.includes('is_sjvn_own')) {
+    db.exec('ALTER TABLE entities ADD COLUMN is_sjvn_own INTEGER NOT NULL DEFAULT 0');
+    // SJVN's own hydro stations, registered as sellers so their bills run here.
+    db.prepare(`UPDATE entities SET is_sjvn_own = 1 WHERE id IN ('SEL-NJHPS', 'SEL-RHPS')`).run();
+  }
+  addCol('reconciliations', 'finance_ack_by', 'TEXT');
+
+  // A CHECK list grown by a value: SQLite cannot alter one in place, so the
+  // table is rebuilt from its own DDL with the list widened, indexes and all.
+  const widenCheck = (table, from, to) => {
+    const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(table)?.sql;
+    if (!ddl || !ddl.includes(from)) return;
+    const indexes = db.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL").all(table).map((r) => r.sql);
+    const newDdl = ddl.replace(from, to).replace(/CREATE TABLE\s+("?)(\w+)\1/i, `CREATE TABLE ${table}__new`);
+    db.pragma('foreign_keys = OFF');
+    try {
+      db.transaction(() => {
+        db.exec(newDdl);
+        db.exec(`INSERT INTO ${table}__new SELECT * FROM ${table}`);
+        db.exec(`DROP TABLE ${table}`);
+        db.exec(`ALTER TABLE ${table}__new RENAME TO ${table}`);
+        for (const sql of indexes) db.exec(sql);
+      })();
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+  };
+  widenCheck('reia_fi_postings', "CHECK (category IN ('SALE','PURCHASE','CREDIT_NOTE'))", "CHECK (category IN ('SALE','PURCHASE','CREDIT_NOTE','POOL'))");
+
+  const MARK = 'decisions_2026_10_17_defaults';
+  const done = db.prepare('SELECT 1 FROM system_parameters WHERE param_key = ?').get(MARK);
+  if (done) return;
+  const flips = [
+    ['invoice_approval_distinct_approvers', '0', '1'],
+    ['due_date_counting_mode', 'WORKING_DAYS', 'CALENDAR_ROLL_FORWARD'],
+    ['lps_day_count_mode', 'WORKING_DAYS', 'CALENDAR'],
+  ];
+  const set = db.prepare('UPDATE system_parameters SET param_value = ? WHERE param_key = ? AND param_value = ?');
+  db.transaction(() => {
+    for (const [key, from, to] of flips) set.run(to, key, from);
+    db.prepare(`
+      INSERT OR IGNORE INTO system_parameters (id, category, param_key, param_value, data_type, unit, description, effective_from, is_active)
+      VALUES (?, 'GENERAL', ?, '1', 'NUMBER', '', 'Marker: the 17-Oct-2026 decision defaults have been applied once.', date('now'), 1)
+    `).run(`SP-${MARK}`, MARK);
+  })();
+}
+
+try {
+  migrateDecisions20261017();
+} catch (e) {
+  console.error('17-Oct-2026 decisions migration failed:', e.message);
+}
+
 try {
   db.prepare(`UPDATE contracts SET tariff_structure_json = NULL WHERE tariff_structure_json = '{}' OR tariff_structure_json = '"{}"' OR TRIM(tariff_structure_json) = ''`).run();
 } catch (e) {

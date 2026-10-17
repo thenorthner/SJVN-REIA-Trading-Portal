@@ -19,6 +19,7 @@ import { computeCercHydroBill } from '../services/cercHydroBilling.js';
 import { cufYearPosition, contractYearBounds } from '../services/cufPenalty.js';
 import { computePeakAvailabilityPenalty } from '../services/peakAvailability.js';
 import { lastCompleteMonth } from '../services/energyRules.js';
+import { recordAdvance } from '../services/advances.js';
 import { notifyCounterparty, computeCoverage } from '../paymentSecurityEngine.js';
 import {
   compareSellerToSystem,
@@ -178,8 +179,9 @@ const UNRESOLVED_VALIDATION = ['PARTIAL', 'MISMATCH'];
 /**
  * Whether a found validation problem is still outstanding on this invoice.
  */
-function unresolvedValidation(inv, user) {
-  if (user && ['IT_SUPER_ADMIN', 'SJVN_ADMIN'].includes(user.role)) return null;
+function unresolvedValidation(inv) {
+  // No role bypass (decided 17-Oct-2026): an admin who disagrees with the
+  // system's figure waives it with a recorded reason, like everyone else.
   if (!inv?.validation_status) return null;
   if (!UNRESOLVED_VALIDATION.includes(inv.validation_status)) return null;
   return `This seller invoice does not agree with the system's own figure (${inv.validation_status}). Correct it and re-validate, or waive the validation with a recorded reason, before approving.`;
@@ -551,9 +553,23 @@ function enrichApprovals(approvals, inv = null) {
   const parent = inv.parent_invoice_id
     ? db.prepare('SELECT invoice_no FROM invoices WHERE id = ?').get(inv.parent_invoice_id) : null;
 
+  // Cash and credit kept apart (decided 17-Oct-2026): a credit note is booked
+  // as a deduction, so a bill settled partly by one read PARTIALLY_PAID with
+  // nothing saying the rest was credit, not money.
+  const creditApplied = payments.filter((p) => p.mode === 'CREDIT_NOTE').reduce((a, p) => a + (Number(p.amount) || 0) + (Number(p.deduction) || 0), 0);
+  const cashReceived = payments.filter((p) => p.mode !== 'CREDIT_NOTE').reduce((a, p) => a + (Number(p.amount) || 0) + (Number(p.deduction) || 0), 0);
+  const settlement = {
+    cash_received: Math.round(cashReceived),
+    credit_applied: Math.round(creditApplied),
+    label: creditApplied > 0
+      ? (inv.status === 'PAID' ? (cashReceived > 0 ? 'Paid (part by credit note)' : 'Settled by credit note') : `${String(inv.status).replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase())} — credit applied ₹${Math.round(creditApplied).toLocaleString('en-IN')}`)
+      : null,
+  };
+
   res.json({
     ...withContract(inv, asOf),
     parent_invoice_no: parent?.invoice_no || null,
+    settlement,
     approvals, approval_history: approvalHistory(inv.id), approval_rules: { distinct_approvers: distinctApprovers() },
     payments, disputes, generator_realization, access_log,
     ...(isProjection(req) ? { projected_as_of: asOf.toISOString().slice(0, 10) } : {}),
@@ -981,13 +997,18 @@ function generateInvoiceFor({ contract_id, period_month, invoice_type, seller_in
     // Deemed generation: energy the seller stood ready to deliver but the buyer
     // or grid could not take. It is paid for at the same rate, on its own line,
     // so it is never mistaken for energy that actually flowed.
+    // On a PSA it passes through at the generator's rate with no trading margin
+    // (decided 17-Oct-2026): SJVN's margin is earned on energy it actually traded.
     const deemedShareMwh = supplies.reduce((t, s) => t + shareOf(s.energy.deemed_generation_mwh, s.source.allocation_percent), 0);
     if (deemedShareMwh > 0) {
+      const deemedRate = isPsa && marginPerMwh > 0
+        ? Math.round((tariff.rate - marginPerMwh / UNITS_PER_MWH) * 1e6) / 1e6
+        : tariff.rate;
       deemedEnergyMwh = Number(deemedShareMwh.toFixed(3));
-      deemedCharges = Math.round(deemedEnergyMwh * UNITS_PER_MWH * tariff.rate);
+      deemedCharges = Math.round(deemedEnergyMwh * UNITS_PER_MWH * deemedRate);
       breakdown.push({
         code: 'DG',
-        label: `Deemed Generation (${deemedEnergyMwh} MWh × ₹${tariff.rate}/unit) — not delivered, payable under PPA`,
+        label: `Deemed Generation (${deemedEnergyMwh} MWh × ₹${deemedRate}/unit${deemedRate !== tariff.rate ? ', pass-through, no trading margin' : ''}) — not delivered, payable under PPA`,
         value: deemedCharges,
       });
     }
@@ -1593,8 +1614,11 @@ function checkInvoiceRow(raw, user, contractCache, seenKeys) {
   // What the seller says the bill comes to. Left as given rather than recomputed:
   // the energy charge is the seller's claim, and the validation against SJVN's own
   // figure is what the desk reads afterwards.
+  // A penalty is SJVN's to assess on the developer, never the developer's to
+  // add to its own bill (decided 17-Oct-2026): it used to add to the total.
+  if (Number(row.penalty) > 0) errors.push('penalty is assessed by SJVN, not entered on the developer\'s bill — leave the column empty');
   row.total_amount = row.energy_charges + row.transmission_charges + row.taxes
-    - row.rebate + row.lps + row.penalty + row.other_adjustments;
+    - row.rebate + row.lps + row.other_adjustments;
   if (row.total_amount <= 0) errors.push('the bill totals zero or less');
 
   return { row, contract, errors };
@@ -1729,7 +1753,12 @@ router.post('/upload', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), 
 router.post('/', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const b = req.body;
   const id = newId('INV');
-  const total = (b.energy_charges || 0) + (b.transmission_charges || 0) + (b.trading_margin || 0) + (b.taxes || 0) - (b.rebate || 0) + (b.lps || 0) + (b.penalty || 0) + (b.other_adjustments || 0);
+  // A penalty is assessed by SJVN and comes off a bill, as on SJVN's own bills
+  // (decided 17-Oct-2026). A developer does not enter one on its own invoice.
+  if (Number(b.penalty) > 0 && SELLER_ROLES.includes(req.user.role)) {
+    return res.status(400).json({ error: 'A penalty is assessed by SJVN, not entered on your invoice. Leave it out; SJVN raises any penalty or damages separately.' });
+  }
+  const total = (b.energy_charges || 0) + (b.transmission_charges || 0) + (b.trading_margin || 0) + (b.taxes || 0) - (b.rebate || 0) + (b.lps || 0) - (b.penalty || 0) + (b.other_adjustments || 0);
   
   // Due date = bill date + the contract's structured payment terms (fallback 30d).
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(b.contract_id);
@@ -1880,7 +1909,7 @@ router.put('/:id/revise', requireRole(...SELLER_ROLES), (req, res) => {
       transmission_charges = @transmission_charges, taxes = @taxes, other_adjustments = @other_adjustments,
       adjustment_remarks = @remarks, total_amount = @total, version = COALESCE(version, 1) + 1,
       -- The checklist described the bill as it was; the revised one is verified afresh.
-      verification_status = NULL, verification_json = NULL, verified_at = NULL, verified_by = NULL,
+      verification_status = NULL, verification_json = NULL, verified_at = NULL, verified_by = NULL, verified_by_id = NULL,
       updated_at = datetime('now')
     WHERE id = @id
   `).run({ ...next, remarks: remarks || null, total, id: inv.id });
@@ -2083,8 +2112,8 @@ router.post('/:id/verification', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, r
   db.prepare('UPDATE invoices SET verification_json = ? WHERE id = ?').run(JSON.stringify(accepted.checklist), inv.id);
   const live = liveVerification({ ...inv, verification_json: JSON.stringify(accepted.checklist) });
   const done = live.verification_status === 'VERIFIED';
-  db.prepare(`UPDATE invoices SET verification_status = ?, verified_at = ${done ? "datetime('now')" : 'NULL'}, verified_by = ?, updated_at = datetime('now') WHERE id = ?`)
-    .run(live.verification_status, done ? req.user.name : null, inv.id);
+  db.prepare(`UPDATE invoices SET verification_status = ?, verified_at = ${done ? "datetime('now')" : 'NULL'}, verified_by = ?, verified_by_id = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(live.verification_status, done ? req.user.name : null, done ? (req.user.id || null) : null, inv.id);
   const overrides = live.technical.filter((t) => t.auto === 'FAILED' && t.status !== 'FAILED').map((t) => ({ key: t.key, status: t.status, note: t.note }));
   logAudit({
     req, user: req.user, action: 'INVOICE_VERIFICATION', module: 'REIA', entityType: 'invoice', entityId: inv.id,
@@ -2164,6 +2193,12 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
 
   const conflict = makerCheckerConflict(inv, req.user);
   if (conflict) return res.status(403).json({ error: conflict });
+  // Who verified the bill does not also approve its first level (decided
+  // 17-Oct-2026): the check and the sanction are two people, as maker and checker are.
+  const verifiedByMe = inv.verified_by_id ? inv.verified_by_id === req.user.id : (inv.verified_by && inv.verified_by === req.user.name);
+  if (Number(req.params.level) === 1 && decision === 'APPROVED' && verifiedByMe) {
+    return res.status(403).json({ error: `You verified ${inv.invoice_no}, so someone else approves its first level.` });
+  }
 
   // A rejection is how an unresolved mismatch gets sent back, so only clearing
   // it is gated.
@@ -2560,14 +2595,19 @@ export function applyInvoicePayment(inv, { amount, payment_date, mode, reference
   let newLps = inv.lps;
   const payDate = payment_date ? new Date(payment_date) : new Date();
 
-  // ── Early-payment rebate (PPA / SELLER_TO_SJVN only), per payment ──
-  // Buyers (DISCOMs) do NOT get early-payment rebate on PSA invoices.
+  // ── Early-payment rebate, per payment ──
+  // A seller's bill takes the PPA's rebate, else the master tiers. A buyer gets
+  // a rebate on a PSA bill only where the PSA itself grants one (decided
+  // 17-Oct-2026: back-to-back PSAs commonly mirror the PPA's prompt-payment
+  // rebate, but SJVN's own master tiers are not a term the buyer signed).
   // Each payment earns rebate on the part of the bill IT settles, at the rate
   // for the day it arrived. Before, the first payment's date fixed the rate for
   // the whole bill, so a token payment inside five days bought 1.5% off all of
   // it however late the rest came.
-  if (inv.direction === 'SELLER_TO_SJVN') {
-    const contract = db.prepare('SELECT rebate_pct, rebate_days, rebate_basis FROM contracts WHERE id = ?').get(inv.contract_id);
+  const rebateTerms = db.prepare('SELECT rebate_pct, rebate_days, rebate_basis FROM contracts WHERE id = ?').get(inv.contract_id);
+  const buyerRebate = inv.direction === 'SJVN_TO_BUYER' && Number(rebateTerms?.rebate_pct) > 0;
+  if (inv.direction === 'SELLER_TO_SJVN' || buyerRebate) {
+    const contract = rebateTerms;
     // Measured from presentation, not from when the row was created. The rebate
     // is for paying promptly once the bill arrives, and a bill held three weeks
     // in draft reached the seller with its five-day window already spent — the
@@ -2575,7 +2615,8 @@ export function applyInvoicePayment(inv, { amount, payment_date, mode, reference
     // recorded presentation until issued_at existed.
     const billDate = billPresentedOn(inv);
     let pct = contractRebatePct(contract, { billDate, dueDate: inv.due_date, payDate });
-    // 2nd: global tiered rebate. 3rd: flat % if paid on/before due date.
+    // 2nd: global tiered rebate. 3rd: flat % if paid on/before due date. Seller bills only.
+    if (pct === null && buyerRebate) pct = 0;
     if (pct === null) {
       pct = tieredRebatePct(Math.max(0, daysBetween(new Date(billDate), payDate)), getParam('early_payment_rebate_tiers', null));
     }
@@ -2702,7 +2743,7 @@ router.post('/waterfall-payment', requireRole(...ROLE_GROUPS.FINANCE, ...ROLE_GR
 // Every user of a buyer company may notify a payment, not only its admin — and
 // the bill has to be one of that company's. Nothing checked the second, so a
 // buyer could record a payment against another company's invoice by its id.
-router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, ...BUYER_ROLES), (req, res) => {
+router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE_CONFIRM, ...BUYER_ROLES), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv || !ownsInvoice(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status === 'CANCELLED') {
@@ -2750,13 +2791,29 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE, ...BUYER_ROLES)
   // plus surcharge earned by then, and the disputed part if it is paid under
   // protest. ₹1 over is rounding.
   const owed = invoiceBalance(inv, new Date(payDate)).balance + (Number(inv.disputed_amount) || 0);
+  let toBill = amt;
+  let excess = 0;
   if (amt + ded > owed + 1) {
-    return res.status(400).json({
-      error: `₹${(amt + ded).toLocaleString('en-IN')} is more than the ₹${owed.toLocaleString('en-IN')} outstanding on ${inv.invoice_no} as of ${payDate}. Record the amount that settles this bill; an excess is a separate advance.`,
-      outstanding: owed,
+    // A receipt from the buyer beyond the bill is held as its advance when
+    // Finance says so (decided 17-Oct-2026), not refused with nowhere to go.
+    const payer = inv.direction === 'SJVN_TO_BUYER'
+      ? db.prepare('SELECT buyer_id FROM contracts WHERE id = ?').get(inv.contract_id)?.buyer_id : null;
+    if (!req.body.excess_to_advance || !payer) {
+      return res.status(400).json({
+        error: `₹${(amt + ded).toLocaleString('en-IN')} is more than the ₹${owed.toLocaleString('en-IN')} outstanding on ${inv.invoice_no} as of ${payDate}. Record the amount that settles this bill${payer ? ', or record it with the excess held as the buyer\'s advance' : ''}.`,
+        outstanding: owed,
+      });
+    }
+    toBill = Math.max(0, Math.round((owed - ded) * 100) / 100);
+    excess = Math.round((amt - toBill) * 100) / 100;
+    recordAdvance({
+      entityId: payer, contractId: inv.contract_id, source: 'EXCESS_PAYMENT', sourceRef: inv.invoice_no,
+      amount: excess, receivedOn: payDate, reference: req.body.reference || null,
+      notes: `Paid beyond what ${inv.invoice_no} had left on ${payDate}`, user: req.user,
     });
   }
-  const updated = applyInvoicePayment(inv, { ...req.body, payment_date: payDate }, req);
+  const updated = applyInvoicePayment(inv, { ...req.body, amount: toBill, payment_date: payDate }, req);
+  if (excess > 0) updated.advance_recorded = excess;
   logAudit({ req, user: req.user, action: 'PAYMENT_RECORDED', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: req.body });
 
   const paid = Number(req.body.amount) || 0;

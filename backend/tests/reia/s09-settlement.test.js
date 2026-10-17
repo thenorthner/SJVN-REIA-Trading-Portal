@@ -39,8 +39,8 @@ describe('S9 Settlement and financial tracking', () => {
 });
 
 describe('S9 Guards on the money paths', () => {
-  let reia2, contract2;
-  beforeEach(() => { reia2 = tokenFor('REIA_USER'); contract2 = makeContract({ status: 'ACTIVE', rebate_pct: 1.5, rebate_days: 5 }); });
+  let reia2, fin2, contract2;
+  beforeEach(() => { reia2 = tokenFor('REIA_USER'); fin2 = tokenFor('FINANCE_USER'); contract2 = makeContract({ status: 'ACTIVE', rebate_pct: 1.5, rebate_days: 5 }); });
 
   it('runs the rebate window from issue, not from when the row was created', async () => {
     // A bill held three weeks in draft reached the seller with its five-day
@@ -51,7 +51,7 @@ describe('S9 Guards on the money paths', () => {
     db.prepare(`UPDATE invoices SET created_at = datetime('now','-23 days'), issued_at = date('now','-2 days'), due_date = date('now','+28 days') WHERE id = ?`).run(inv.id);
 
     const payDate = new Date().toISOString().slice(0, 10);
-    const r = await request(app).post(`/api/invoices/${inv.id}/payments`).set(auth(reia2))
+    const r = await request(app).post(`/api/invoices/${inv.id}/payments`).set(auth(fin2))
       .send({ amount: 100000, payment_date: payDate, mode: 'NEFT', reference: 'R' });
     expect(r.status).toBe(201);
     expect(db.prepare('SELECT rebate FROM invoices WHERE id = ?').get(inv.id).rebate,
@@ -61,7 +61,7 @@ describe('S9 Guards on the money paths', () => {
   it('still closes the rebate window five days after issue', async () => {
     const inv = makeInvoice({ contract_id: contract2.id, direction: 'SELLER_TO_SJVN', status: 'SENT', total_amount: 100000 });
     db.prepare(`UPDATE invoices SET issued_at = datetime('now','-20 days'), due_date = date('now','+10 days') WHERE id = ?`).run(inv.id);
-    await request(app).post(`/api/invoices/${inv.id}/payments`).set(auth(reia2))
+    await request(app).post(`/api/invoices/${inv.id}/payments`).set(auth(fin2))
       .send({ amount: 100000, payment_date: new Date().toISOString().slice(0, 10), mode: 'NEFT', reference: 'R' });
     expect(db.prepare('SELECT rebate FROM invoices WHERE id = ?').get(inv.id).rebate).toBe(0);
   });
@@ -71,7 +71,7 @@ describe('S9 Guards on the money paths', () => {
       // It also charged surcharge on a draft, which the invoice reported as zero
       // because a DRAFT reads as settled — the record disagreed with itself.
       const inv = makeInvoice({ contract_id: contract2.id, status, total_amount: 100000 });
-      const r = await request(app).post(`/api/invoices/${inv.id}/payments`).set(auth(reia2))
+      const r = await request(app).post(`/api/invoices/${inv.id}/payments`).set(auth(fin2))
         .send({ amount: 100000, payment_date: '2026-09-15', mode: 'NEFT', reference: 'R' });
       expect(r.status, `a payment landed on a ${status} bill that was never issued`).toBe(400);
       expect(db.prepare('SELECT COUNT(*) c FROM payments WHERE invoice_id = ?').get(inv.id).c).toBe(0);
@@ -80,7 +80,7 @@ describe('S9 Guards on the money paths', () => {
 
   it('still takes a payment on an issued bill', async () => {
     const inv = makeInvoice({ contract_id: contract2.id, status: 'SENT', total_amount: 100000 });
-    const r = await request(app).post(`/api/invoices/${inv.id}/payments`).set(auth(reia2))
+    const r = await request(app).post(`/api/invoices/${inv.id}/payments`).set(auth(fin2))
       .send({ amount: 100000, payment_date: '2026-09-15', mode: 'NEFT', reference: 'R' });
     expect(r.status, 'the guard blocked a legitimate receipt').toBe(201);
   });

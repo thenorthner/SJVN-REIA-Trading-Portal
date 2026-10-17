@@ -17,6 +17,7 @@ import {
   genInstrumentNo,
   refreshAvailable,
   releasePosition,
+  releaseWhileLive,
   standingStatus,
   notifyCounterparty,
   notifyDesk,
@@ -419,15 +420,23 @@ router.post('/alerts/run', requireRole(...REIA_WRITE, 'MANAGEMENT'), (_req, res)
   res.json({ ...cascade, sent: cascade.sent + holders.sent, holders_reminded: holders.sent });
 });
 
-router.post('/overrides', requireRole(...REIA_WRITE, 'MANAGEMENT', 'SJVN_ADMIN'), (req, res) => {
+// An override is management's call, for a stated time (decided 17-Oct-2026):
+// the desk that wants the bid through is not the one that waives the cover
+// behind it, and an open-ended waiver is a gate switched off.
+const OVERRIDE_MAX_DAYS = 90;
+router.post('/overrides', requireRole('MANAGEMENT', 'SJVN_ADMIN'), (req, res) => {
   const { contract_id, valid_until } = req.body;
   const reason = String(req.body.reason || '').trim();
   if (!contract_id || !reason) return res.status(400).json({ error: 'Choose the contract and say why its security is being treated as adequate' });
+  if (reason.length < 15) return res.status(400).json({ error: 'Give the reason in a sentence (at least 15 characters) — it is what the audit trail shows.' });
   const overridden = db.prepare('SELECT contract_no FROM contracts WHERE id = ?').get(String(contract_id));
   if (!overridden) return res.status(404).json({ error: 'Contract not found' });
-  if (valid_until && (!DAY.test(String(valid_until)) || String(valid_until) < today())) {
+  if (!valid_until) return res.status(400).json({ error: `Give the date the override runs to (at most ${OVERRIDE_MAX_DAYS} days).` });
+  if (!DAY.test(String(valid_until)) || String(valid_until) < today()) {
     return res.status(400).json({ error: 'Valid until must be a date from today onwards' });
   }
+  const latest = new Date(Date.now() + OVERRIDE_MAX_DAYS * 86400000).toISOString().slice(0, 10);
+  if (String(valid_until) > latest) return res.status(400).json({ error: `An override runs for at most ${OVERRIDE_MAX_DAYS} days (to ${latest}). Renew it then if the cover is still short.` });
   const twin = db.prepare(`SELECT 1 FROM security_adequacy_overrides WHERE contract_id = ? AND reason = ? AND COALESCE(valid_until, '') = ? AND (valid_until IS NULL OR valid_until >= date('now'))`)
     .get(String(contract_id), reason, valid_until || '');
   if (twin) return res.status(409).json({ error: `This override is already on record for ${overridden.contract_no}` });
@@ -630,6 +639,16 @@ router.post('/releases/:id/act', requireRole(...REIA_WRITE, 'FINANCE_USER'), (re
       outstanding_amount: position.outstanding_dues,
       open_disputes: position.open_disputes,
     });
+  }
+  if (ps) {
+    const live = releaseWhileLive(ps);
+    if (!live.allowed) {
+      return res.status(400).json({
+        error: `Cannot release ${ps.instrument_no || 'this instrument'}: ${live.contract_no} is still ${live.contract_status.toLowerCase().replace(/_/g, ' ')}, and without it the contract would hold ${rupees(Math.max(0, live.left))} against the ${rupees(live.needed)} it needs. Accept a replacement first, or release it when the contract ends.`,
+        cover_left: live.left,
+        cover_needed: live.needed,
+      });
+    }
   }
   db.transaction(() => {
     db.prepare(`UPDATE security_releases SET status = 'RELEASED', decision_note = ?, acted_by = ?, acted_at = datetime('now') WHERE id = ?`)

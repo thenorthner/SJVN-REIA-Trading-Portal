@@ -53,7 +53,11 @@ describe('S49 Approval waits for a completed verification', () => {
     const done = await verify(inv);
     expect(done.status, JSON.stringify(done.body)).toBe(200);
     expect(done.body.verification_status).toBe('VERIFIED');
-    expect((await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'APPROVED' })).status).toBe(200);
+    // The verifier does not approve level 1 as well (17-Oct-2026); another officer does.
+    const own = await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'APPROVED' });
+    expect(own.status).toBe(403);
+    expect(own.body.error).toMatch(/You verified/);
+    expect((await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'APPROVED' }, signToken(makeUser('REIA_USER', { name: 'Second Officer' })))).status).toBe(200);
   });
 
   it('holds a wrong-tariff bill: the failed check cannot be cleared without a reason, and a failed checklist blocks approval', async () => {

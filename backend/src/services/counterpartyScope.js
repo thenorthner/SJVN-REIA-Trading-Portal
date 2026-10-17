@@ -83,13 +83,17 @@ const LIVE_PRESENTED = PRESENTED_STATUSES.filter((s) => s !== 'CANCELLED');
  * it had been issued first, which issued_at records.
  */
 export function presentedSql(alias = 'i') {
-  return `(${alias}.status IN (${LIVE_PRESENTED.map((s) => `'${s}'`).join(',')})`
-    + ` OR (${alias}.status = 'CANCELLED' AND ${alias}.issued_at IS NOT NULL))`;
+  // A DSM bill settles with the NRPC pool, not with the contract's seller or
+  // buyer, so it is never presented to them (decided 17-Oct-2026).
+  return `((${alias}.status IN (${LIVE_PRESENTED.map((s) => `'${s}'`).join(',')})`
+    + ` OR (${alias}.status = 'CANCELLED' AND ${alias}.issued_at IS NOT NULL))`
+    + ` AND ${alias}.invoice_no NOT LIKE 'DSM-%')`;
 }
 
 /** The same rule for one invoice row. */
 export function isPresented(invoice) {
   if (!invoice) return false;
+  if (String(invoice.invoice_no || '').startsWith('DSM-')) return false;
   if (invoice.status === 'CANCELLED') return !!invoice.issued_at;
   return LIVE_PRESENTED.includes(invoice.status);
 }

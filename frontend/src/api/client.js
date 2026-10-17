@@ -232,6 +232,8 @@ export const api = {
     openLc: (body) => p('/security-desk/lcs', body),
     amendLc: (id, body) => p(`/security-desk/lcs/${id}/amend`, body),
     closeLc: (id, note) => p(`/security-desk/lcs/${id}/close`, { note }),
+    drawLc: (id, body) => p(`/security-desk/lcs/${id}/draws`, body),
+    reinstateLc: (id, body) => p(`/security-desk/lcs/${id}/reinstate`, body),
     register: () => client.get('/security-desk/register.xlsx', { responseType: 'blob' }).then((r) => r.data),
   },
   // A dispute's clock, surcharge, answer to the resolution, group and dossier.
@@ -318,7 +320,15 @@ export const api = {
     create: (body) => p('/power-diversion', body),
     // One server-side step: proceeds set against this PSA's dues, surcharge first.
     recover: (id) => p(`/power-diversion/${id}/recover`, {}),
+    billDeficit: (id) => p(`/power-diversion/${id}/bill-deficit`, {}),
     remove: (id) => del(`/power-diversion/${id}`),
+  },
+  // Money a counterparty paid that no bill could take, held as its advance.
+  advances: {
+    list: (params) => g('/advances', params),
+    get: (id) => g(`/advances/${id}`),
+    apply: (id, body) => p(`/advances/${id}/apply`, body),
+    refund: (id, body) => p(`/advances/${id}/refund`, body),
   },
   notes: {
     list: (params) => g('/notes', params),
@@ -342,7 +352,6 @@ export const api = {
     create: (body) => p('/deviation', body),
     fromDsa: (body) => p('/deviation/from-dsa', body),
     update: (id, body) => put(`/deviation/${id}`, body),
-    submit: (id) => p(`/deviation/${id}/submit`),
     dispatch: (id, body) => p(`/deviation/${id}/dispatch`, body),
     linkInvoice: (id, body) => p(`/deviation/${id}/link-invoice`, body),
     remove: (id) => del(`/deviation/${id}`),
@@ -460,6 +469,7 @@ export const api = {
     update: (id, body) => put(`/form-iv/${id}`, body),
     generate: (id) => p(`/form-iv/${id}/generate`),
     submit: (id, body) => p(`/form-iv/${id}/submit`, body),
+    markFiledOutside: (body) => p('/form-iv/mark-filed-outside', body),
     addLine: (id, body) => p(`/form-iv/${id}/lines`, body),
     updateLine: (lineId, body) => put(`/form-iv/lines/${lineId}`, body),
     deleteLine: (lineId) => del(`/form-iv/lines/${lineId}`),

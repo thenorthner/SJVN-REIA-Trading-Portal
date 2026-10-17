@@ -11,14 +11,16 @@ import { parseSheet } from '../../lib/sheetPaste.js';
 // a maker's as a draft for its own checker, anyone else's as submitted to SJVN —
 // and is validated against SJVN's own figure for that period the same way.
 
+// No penalty column: a penalty is SJVN's to assess on the developer, not the
+// developer's to enter on its own bill (decided 17-Oct-2026).
 export const INVOICE_COLUMNS = [
   'contract_no', 'billing_period', 'invoice_no', 'invoice_type',
   'energy_mwh', 'tariff_per_unit', 'energy_charges', 'transmission_charges',
-  'rebate', 'lps', 'penalty', 'other_adjustments', 'taxes',
+  'rebate', 'lps', 'other_adjustments', 'taxes',
 ];
 const NUMERIC = [
   'energy_mwh', 'tariff_per_unit', 'energy_charges', 'transmission_charges',
-  'rebate', 'lps', 'penalty', 'other_adjustments', 'taxes',
+  'rebate', 'lps', 'other_adjustments', 'taxes',
 ];
 
 function download(filename, blob) {

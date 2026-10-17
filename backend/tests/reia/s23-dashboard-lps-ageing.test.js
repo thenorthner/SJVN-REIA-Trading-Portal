@@ -98,13 +98,12 @@ describe('S23 REIA dashboard — surcharge, split and ageing', () => {
     expect(pos.recoverable).toBe(pos.billed_outstanding + pos.accrued_unbilled);
     expect(pos.annual_pct).toBe(15);
 
-    // 15% a year on 10 lakh, and `lps_day_count_mode` is WORKING_DAYS by
-    // default, so the 100 calendar days are charged as roughly 71 working ones:
-    // about 29,000, not the 41,000 a calendar count would give. The figure the
+    // 15% a year on 10 lakh over 100 calendar days (`lps_day_count_mode` is
+    // CALENDAR by default since 17-Oct-2026): about 41,000. The figure the
     // invoice screen shows for the same bill, which is the point of reusing its
     // helper here.
-    expect(pos.accrued_unbilled).toBeGreaterThan(25000);
-    expect(pos.accrued_unbilled).toBeLessThan(35000);
+    expect(pos.accrued_unbilled).toBeGreaterThan(38000);
+    expect(pos.accrued_unbilled).toBeLessThan(44000);
 
     const r = await dashboard();
     expect(r.body.kpis.lpsRecovered).toBe(4000);

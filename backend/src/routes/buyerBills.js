@@ -20,6 +20,7 @@
 import { Router } from 'express';
 import { ZipArchive } from 'archiver';
 import db from '../db/index.js';
+import { recordAdvance } from '../services/advances.js';
 import { requireAuth, ROLE_GROUPS, BUYER_ROLES, counterpartySide } from '../middleware/auth.js';
 import { newId, pushNotification } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
@@ -34,7 +35,7 @@ router.use(requireAuth);
 
 const INTERNAL_READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE, 'COMPLIANCE_AUDITOR'])];
 import { dayInWords } from '../paymentSecurityConstants.js';
-const canConfirm = (user) => ROLE_GROUPS.FINANCE.includes(user?.role);
+const canConfirm = (user) => ROLE_GROUPS.FINANCE_CONFIRM.includes(user?.role);
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const send = (res, fn) => {
   try {
@@ -292,7 +293,6 @@ export function createIntimation(req, invoiceId, body) {
     if (!proof) throw fail(400, 'The attached advice is not one of this contract\'s documents');
   }
   const { left } = leftOn(inv, new Date(`${date}T00:00:00Z`));
-  const onTheWay = db.prepare(`SELECT COALESCE(SUM(amount + COALESCE(tds_amount, 0) + COALESCE(other_deduction, 0)), 0) s FROM payment_intimations WHERE invoice_id = ? AND status IN ('PENDING_CHECKER','SUBMITTED')`).get(inv.id).s;
   const gross = money(amount + tds + other);
 
   const maker = tierOf(user.role) === 'L1';
@@ -303,7 +303,9 @@ export function createIntimation(req, invoiceId, body) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, inv.id, inv.contract_id, scope.entityId, amount, tds, section, other, note || null, date, mode, reference, proof, text(b.remarks, 500) || null,
     maker ? 'PENDING_CHECKER' : 'SUBMITTED', user.id, maker ? null : user.id, maker ? null : new Date().toISOString().replace('T', ' ').slice(0, 19),
-    gross > left - onTheWay + 1 ? 1 : 0);
+    // Judged against the bill alone (decided 17-Oct-2026): counting other
+    // intimations still in the queue flagged a right one while a wrong one waited.
+    gross > left + 1 ? 1 : 0);
   audit(req, 'PAYMENT_INTIMATED', 'payment_intimation', id, { afterValue: { invoice_no: inv.invoice_no, amount, tds_amount: tds, other_deduction: other, reference, payment_date: date } });
   if (maker) notifyBuyer(scope.entityId, `${user.name} has prepared a payment intimation of ${rupees(gross)} against ${inv.invoice_no}. It needs a checker's approval before it goes to SJVN.`, true);
   else notifyFinance(`${inv.contract_no}: the buyer reports a payment of ${rupees(amount)}${tds > 0 ? ` (plus TDS ${rupees(tds)})` : ''} against ${inv.invoice_no}, UTR ${reference}, dated ${dayInWords(date)}. Confirm it against the bank statement.`);
@@ -457,19 +459,37 @@ router.post('/intimations/:id/confirm', (req, res) => send(res, () => {
   // full, the bill went to PAID and the excess vanished from the outstanding.
   const gross = money((Number(r.amount) || 0) + (Number(r.tds_amount) || 0) + (Number(r.other_deduction) || 0));
   const { left, accrued_lps: lpsToDate } = leftOn(inv, new Date(`${valueDate}T00:00:00Z`));
+  // More than the bill has left: with excess_to_advance, the bill takes what it
+  // has left and the cash beyond it is held as the buyer's advance (decided
+  // 17-Oct-2026). Without it, the intimation is refused as before.
+  const deductions = money((Number(r.tds_amount) || 0) + (Number(r.other_deduction) || 0));
+  let cashToBill = Number(r.amount) || 0;
+  let excess = 0;
   if (gross > left + 1) {
-    throw fail(400, `${rupees(gross)} is more than the ${rupees(left)} left on ${inv.invoice_no} on ${dayInWords(valueDate)}. Return the intimation with the reason, so the buyer can resubmit what applies to this bill (an excess is an advance, not a payment on it).`);
+    if (!req.body?.excess_to_advance) {
+      throw fail(400, `${rupees(gross)} is more than the ${rupees(left)} left on ${inv.invoice_no} on ${dayInWords(valueDate)}. Confirm it with the excess held as the buyer's advance, or return the intimation with the reason.`);
+    }
+    cashToBill = money(Math.max(0, left - deductions));
+    excess = money((Number(r.amount) || 0) - cashToBill);
   }
   // Surcharge first, then the bill (PSA Art. 6.3) — as the desk's waterfall
   // payment does. Confirmed money went to principal, leaving the surcharge
   // unpaid while the bill cleared.
   const lpsPaid = db.prepare('SELECT COALESCE(SUM(lps_component), 0) s FROM payments WHERE invoice_id = ?').get(inv.id).s;
-  const lpsComponent = money(Math.min(Number(r.amount) || 0, Math.max(0, lpsToDate - lpsPaid)));
+  const lpsComponent = money(Math.min(cashToBill, Math.max(0, lpsToDate - lpsPaid)));
 
   const paymentId = db.transaction(() => {
     const before = db.prepare('SELECT COALESCE(MAX(rowid), 0) m FROM payments').get().m;
+    if (excess > 0) {
+      recordAdvance({
+        entityId: r.entity_id, contractId: inv.contract_id, source: 'EXCESS_PAYMENT', sourceRef: inv.invoice_no,
+        amount: excess, receivedOn: valueDate, reference: r.reference,
+        notes: `Paid beyond what ${inv.invoice_no} had left on ${valueDate}`, user: req.user,
+      });
+    }
+    if (!(cashToBill > 0) && !(deductions > 0)) return null;
     applyInvoicePayment(inv, {
-      amount: r.amount, payment_date: valueDate, mode: r.mode, reference: r.reference,
+      amount: cashToBill, payment_date: valueDate, mode: r.mode, reference: r.reference,
       deduction: money((Number(r.tds_amount) || 0) + (Number(r.other_deduction) || 0)),
       lps_component: lpsComponent,
       breakup: { tds_amount: r.tds_amount || null, tds_section: r.tds_section || null, deduction_note: r.deduction_note || null },

@@ -98,9 +98,22 @@ export function licenceCompliance({ asOf = new Date() } = {}) {
     else if (!row.net_worth_as_on || row.net_worth_as_on < staleBefore) netWorthStatus = 'STALE';
     else netWorthStatus = row.net_worth_cr >= minNetWorth ? 'COMPLIANT' : 'SHORTFALL';
 
+    // Late payment surcharge on a licence fee paid after 30 April (decided
+    // 17-Oct-2026): CERC (Payment of Fees) Regulations — 1.25% a month,
+    // cerc_fee_late_surcharge_pct_month, counted per day on what was late.
+    // Worked out to the day it was paid, or to today while it is unpaid.
+    const lateRate = getParamNumber('cerc_fee_late_surcharge_pct_month', 1.25) / 100;
+    const lateDays = row.fee_paid_on
+      ? daysLate
+      : (dueDate < today ? Math.floor((new Date(`${today}T00:00:00Z`) - new Date(`${dueDate}T00:00:00Z`)) / 86400000) : 0);
+    const lateOn = row.fee_paid_on ? Math.min(feeDue, Number(row.fee_amount) || 0) : feeDue;
+    const lateSurcharge = lateDays > 0 ? Math.round(lateOn * lateRate * (lateDays * 12 / 365)) : 0;
+
     years.push({
       fy,
       is_current: y === currentStart,
+      fee_late_surcharge: lateSurcharge,
+      fee_late_surcharge_paid: row.fee_late_surcharge_paid ?? null,
       fee_due_date: dueDate,
       fee_amount_due: feeDue,
       fee_amount: row.fee_amount ?? null,
@@ -179,6 +192,7 @@ export function saveLicenceYear(fy, body, userName, { asOf = new Date() } = {}) 
     certificate_ref: body.certificate_ref ? String(body.certificate_ref).trim() : null,
     certificate_filed_on: optionalDate(body.certificate_filed_on, 'Certificate filing date', today),
     notes: body.notes ? String(body.notes).trim() : null,
+    fee_late_surcharge_paid: optionalAmount(body.fee_late_surcharge_paid, 'Late surcharge paid'),
     updated_by: userName || null,
   };
   // A payment date with nothing to tie it to cannot be checked later.
@@ -194,10 +208,10 @@ export function saveLicenceYear(fy, body, userName, { asOf = new Date() } = {}) 
 
   db.prepare(`
     INSERT INTO cerc_licence_compliance (fy, fee_amount, fee_paid_on, fee_reference, net_worth_cr, net_worth_as_on,
-      certificate_ref, certificate_filed_on, notes, updated_by, updated_at)
+      certificate_ref, certificate_filed_on, notes, fee_late_surcharge_paid, updated_by, updated_at)
     VALUES (@fy, @fee_amount, @fee_paid_on, @fee_reference, @net_worth_cr, @net_worth_as_on,
-      @certificate_ref, @certificate_filed_on, @notes, @updated_by, datetime('now'))
-    ON CONFLICT(fy) DO UPDATE SET fee_amount=excluded.fee_amount, fee_paid_on=excluded.fee_paid_on,
+      @certificate_ref, @certificate_filed_on, @notes, @fee_late_surcharge_paid, @updated_by, datetime('now'))
+    ON CONFLICT(fy) DO UPDATE SET fee_amount=excluded.fee_amount, fee_late_surcharge_paid=excluded.fee_late_surcharge_paid, fee_paid_on=excluded.fee_paid_on,
       fee_reference=excluded.fee_reference, net_worth_cr=excluded.net_worth_cr,
       net_worth_as_on=excluded.net_worth_as_on, certificate_ref=excluded.certificate_ref,
       certificate_filed_on=excluded.certificate_filed_on, notes=excluded.notes,

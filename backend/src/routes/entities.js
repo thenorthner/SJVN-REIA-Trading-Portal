@@ -283,6 +283,18 @@ router.post('/', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) => 
   if (!['SELLER', 'BUYER'].includes(body.entity_type)) {
     return res.status(400).json({ error: 'entity_type must be SELLER or BUYER' });
   }
+  // A seller or buyer login may put forward another company only as its own
+  // group company (an SPV), recorded as an onboarding request under its own
+  // record for the desk to decide (decided 17-Oct-2026). It created a company
+  // no-one was linked to, of either side.
+  if (isCounterparty(req.user)) {
+    const mine = req.user.linked_entity_id ? db.prepare('SELECT id, entity_type, name FROM entities WHERE id = ?').get(req.user.linked_entity_id) : null;
+    if (!mine) return res.status(403).json({ error: 'Your login is not linked to a company, so it cannot put forward another. Ask SJVN to onboard it.' });
+    if (body.entity_type !== mine.entity_type) return res.status(403).json({ error: `${mine.name} is a ${mine.entity_type.toLowerCase()}; it can put forward only its own group companies of the same kind.` });
+    if (body.parent_entity_id && body.parent_entity_id !== mine.id) return res.status(403).json({ error: 'A group company is put forward under your own company.' });
+    body.parent_entity_id = mine.id;
+    body.requested_by_user_id = req.user.id;
+  }
   const own = deskVerticals(req.user);
   const vertical = body.vertical || (own ? own[0] : 'REIA');
   if (!VERTICALS.includes(vertical)) {
@@ -362,17 +374,18 @@ router.post('/', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) => 
         is_blacklisted, capacity_mw, technology, contracted_capacity_mw, psa_tariff, supply_criteria,
         organization_details, regulatory_approvals, bank_details, is_penny_drop_verified, invoice_template_json, status,
         logo_url, corporate_email, corporate_phone, corporate_website, tan_no, signatory_name, signatory_designation,
-        address, bank_name, account_no, ifsc_code, branch_address, verticals
+        address, bank_name, account_no, ifsc_code, branch_address, verticals, requested_by_user_id
       )
       VALUES (
         @id, @parent_entity_id, @entity_type, @category, @name, @pan_no, @gst_no, @cin, @credit_rating,
         0, @capacity_mw, @technology, @contracted_capacity_mw, @psa_tariff, @supply_criteria,
         @organization_details, @regulatory_approvals, @bank_details, 0, @invoice_template_json, 'PENDING',
         @logo_url, @corporate_email, @corporate_phone, @corporate_website, @tan_no, @signatory_name, @signatory_designation,
-        @address, @bank_name, @account_no, @ifsc_code, @branch_address, @verticals
+        @address, @bank_name, @account_no, @ifsc_code, @branch_address, @verticals, @requested_by_user_id
       )
     `).run({
       id,
+      requested_by_user_id: body.requested_by_user_id ?? null,
       verticals: vertical,
       parent_entity_id: body.parent_entity_id ?? null,
       entity_type: body.entity_type,
@@ -806,6 +819,21 @@ router.post('/:id/approve', requireRole(...ENTITY_WRITE), (req, res) => {
     seedRegulatoryChecklist(entity.id, entity.entity_type);
 
     if (directAdmit) {
+      // Direct admission clears the rest of the checklist, but not who the
+      // company is or where its money goes (decided 17-Oct-2026): the
+      // company's registration and its bank proof are verified on their own
+      // documents first.
+      const core = db.prepare(`
+        SELECT approval_code, status FROM entity_regulatory_approvals
+        WHERE entity_id = ? AND approval_code IN ('COMPANY_REGISTRATION', 'BANK_ACCOUNT_PROOF')
+      `).all(entity.id);
+      const unverified = ['COMPANY_REGISTRATION', 'BANK_ACCOUNT_PROOF'].filter((code) => !core.some((c) => c.approval_code === code && c.status === 'VERIFIED'));
+      if (unverified.length) {
+        return res.status(400).json({
+          error: `Direct admission still needs ${unverified.map(getRegulatoryLabel).join(' and ')} verified on the document itself. Verify ${unverified.length === 1 ? 'it' : 'them'} first, then admit.`,
+          blocking_items: unverified.map(getRegulatoryLabel),
+        });
+      }
       db.prepare(`
         UPDATE entity_regulatory_approvals
         SET status = 'VERIFIED', verified_by = ?, verified_at = datetime('now'), notes = COALESCE(notes, 'Admitted & cleared directly by SJVN Admin')

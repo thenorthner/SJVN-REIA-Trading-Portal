@@ -14,7 +14,7 @@ beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
   finance = tokenFor('FINANCE_USER');
-  contract = makeContract({ status: 'ACTIVE', tariff_per_unit: 3.0, payment_terms_days: 30, rebate_pct: 2, rebate_days: 5, lps_annual_pct: 12 });
+  contract = makeContract({ status: 'ACTIVE', tariff_per_unit: 3.0, payment_terms_days: 30, rebate_pct: 2, rebate_days: 5, lps_annual_pct: 12, banking_cycle_basis: 'ANNUAL' });
 });
 
 // Banking is of a locked month's generation, so the banking tests lock April's.
@@ -57,11 +57,21 @@ describe('S5 Billing engine', () => {
     expect(r.status).toBeLessThan(400);
     const after = db.prepare('SELECT rebate FROM invoices WHERE id = ?').get(inv.id);
     expect(after.rebate, 'no rebate applied for an early payment').toBeGreaterThan(0);
-    // A buyer-facing PSA bill deliberately carries no early-payment rebate.
+    // A buyer gets a rebate only where the PSA grants one — never from SJVN's
+    // master tiers (decided 17-Oct-2026).
+    const rebatePct = db.prepare('SELECT rebate_pct FROM contracts WHERE id = ?').get(contract.id).rebate_pct;
+    db.prepare('UPDATE contracts SET rebate_pct = NULL WHERE id = ?').run(contract.id);
     const psa = makeInvoice({ contract_id: contract.id, direction: 'SJVN_TO_BUYER', status: 'SENT', total_amount: 1000000, due_date: '2026-05-31' });
     await request(app).post(`/api/invoices/${psa.id}/payments`).set(auth(finance))
       .send({ amount: 1000000, payment_date: '2026-05-03' });
     expect(db.prepare('SELECT rebate FROM invoices WHERE id = ?').get(psa.id).rebate || 0).toBe(0);
+    db.prepare('UPDATE contracts SET rebate_pct = ?, rebate_days = COALESCE(rebate_days, 5) WHERE id = ?').run(2, contract.id);
+    const granted = makeInvoice({ contract_id: contract.id, direction: 'SJVN_TO_BUYER', status: 'SENT', total_amount: 1000000, due_date: '2026-05-31' });
+    db.prepare("UPDATE invoices SET created_at = '2026-05-01', issued_at = '2026-05-01' WHERE id = ?").run(granted.id);
+    await request(app).post(`/api/invoices/${granted.id}/payments`).set(auth(finance))
+      .send({ amount: 980000, payment_date: '2026-05-03' });
+    expect(db.prepare('SELECT rebate FROM invoices WHERE id = ?').get(granted.id).rebate, 'the PSA grants a rebate').toBeGreaterThan(0);
+    db.prepare('UPDATE contracts SET rebate_pct = ? WHERE id = ?').run(rebatePct, contract.id);
   });
 
   it('applies no rebate once the window has passed', async () => {

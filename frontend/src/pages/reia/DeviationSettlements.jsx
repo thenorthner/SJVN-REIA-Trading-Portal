@@ -275,17 +275,14 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
     setDispatchError('');
     setBusy('dispatch');
     try {
-      // A row still sitting at CALCULATED is submitted on the way through, so
-      // raising the bill is one confirmed action rather than two clicks that
-      // ask nothing between them. This modal is the review step: it shows the
-      // figure and the statement it came from before anything is billed.
+      // Raised straight from CALCULATED: this modal is the review step, showing
+      // the figure and the statement it came from before anything is billed.
       const billed = await api.deviation.dispatch(dispatchRow.id, dispatchForm);
       setDispatchRow(null);
-      setNotice(`Supplementary bill ${billed.invoice_no} raised as a draft from ${billed.dsm_no}. It goes for approval under Billing & Invoicing.`);
+      setNotice(`Pool bill ${billed.invoice_no} raised as a draft from ${billed.dsm_no} — settled with the NRPC deviation pool, due as the statement says. It goes for approval under Billing & Invoicing.`);
       load();
     } catch (err) {
       setDispatchError(errOf(err, 'Failed to raise the supplementary bill.'));
-      // The row may have moved to SUBMITTED on the way; show where it stands.
       load();
     } finally {
       setBusy('');

@@ -195,8 +195,11 @@ describe('E2E: a PSA month from energy data to a settled bill', () => {
     expect(part.status).toBe(201);
     expect(part.body.status).toBe('PARTIALLY_PAID');
 
+    // The PSA grants a prompt-payment rebate, so the first half earned one and
+    // the rest due is less by it.
+    const rebate = db.prepare('SELECT rebate FROM invoices WHERE id = ?').get(inv.id).rebate || 0;
     const rest = await post(`/api/invoices/${inv.id}/payments`, finance,
-      { amount: total - Math.round(total / 2), payment_date: '2026-05-25', mode: 'NEFT', reference: 'UTR-2' });
+      { amount: total - Math.round(total / 2) - rebate, payment_date: '2026-05-25', mode: 'NEFT', reference: 'UTR-2' });
     expect(rest.status).toBe(201);
     expect(rest.body.status).toBe('PAID');
 

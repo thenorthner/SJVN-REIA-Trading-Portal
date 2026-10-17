@@ -247,6 +247,10 @@ CREATE TABLE IF NOT EXISTS entities (
   id TEXT PRIMARY KEY,
   parent_entity_id TEXT REFERENCES entities(id), -- Hierarchy: Parent/Group vs SPV/Project
   entity_type TEXT NOT NULL CHECK (entity_type IN ('SELLER','BUYER')),
+  -- SJVN's own station (Nathpa Jhakri, Rampur): sells here, but is not a
+  -- developer, so developer KYC does not apply (decided 17-Oct-2026).
+  is_sjvn_own INTEGER NOT NULL DEFAULT 0,
+  requested_by_user_id TEXT,  -- the counterparty login that put this company forward, if any
   category TEXT NOT NULL, -- RE Generator / DISCOM / C&I / Other
   name TEXT NOT NULL,
   -- Short trading code used inside invoice numbers (GACL rather than GUJARAT).
@@ -365,6 +369,8 @@ CREATE TABLE IF NOT EXISTS contracts (
   ecr_excess_rate REAL,
   transmission_charge_per_mwh REAL, -- ₹/MWh wheeling/transmission if applicable
   min_cuf_percent REAL,
+  cuf_shortfall_comp_pct REAL,
+  banking_cycle_basis TEXT,  -- MONTHLY | SEASONAL | ANNUAL; null = master banking_cycle_basis
   -- A peak-power or FDRE PSA buys energy when the system needs it, so it states
   -- a peak window and the availability the project must hold inside it. Null on
   -- a contract with no peak obligation, which is most of them.
@@ -638,6 +644,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   verification_json TEXT,
   verified_at TEXT,
   verified_by TEXT,
+  verified_by_id TEXT,
   -- The e-invoice as registered on the GST invoice portal, as the seller gave it,
   -- and how it compares with this bill.
   irn TEXT,
@@ -706,6 +713,8 @@ CREATE TABLE IF NOT EXISTS power_diversions (
   net_gain REAL NOT NULL DEFAULT 0,     -- sale − expenses (+ gain / − deficit)
   status TEXT NOT NULL DEFAULT 'RECORDED' CHECK (status IN ('RECORDED','RECOVERED','CANCELLED')),
   applied_amount REAL NOT NULL DEFAULT 0,
+  advance_id TEXT,        -- surplus beyond the dues, held as the buyer's advance
+  deficit_note_id TEXT,   -- debit note drafted for a sale below costs
   notes TEXT,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -1075,6 +1084,8 @@ CREATE TABLE IF NOT EXISTS reconciliations (
   counterparty_role TEXT,
   sjvn_ack_at TEXT,
   sjvn_ack_by TEXT,
+  finance_ack_at TEXT,
+  finance_ack_by TEXT,
   counterparty_ack_at TEXT,
   counterparty_ack_by TEXT,
   -- Each side's signature as recorded: who, when, from where, and a fingerprint of the figures.
@@ -1923,6 +1934,7 @@ CREATE TABLE IF NOT EXISTS cerc_form_iv (
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN ('DRAFT','PREPARED','SUBMITTED')),
   submission_date TEXT,
   reference_no TEXT,                   -- CERC ack / filing reference
+  filed_outside INTEGER NOT NULL DEFAULT 0,  -- filed with CERC before / outside this platform
   notes TEXT,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -1973,6 +1985,7 @@ CREATE TABLE IF NOT EXISTS cerc_licence_compliance (
   certificate_ref TEXT,
   certificate_filed_on TEXT,
   notes TEXT,
+  fee_late_surcharge_paid REAL,        -- surcharge paid on a fee paid after 30 April
   updated_by TEXT,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -3873,7 +3886,7 @@ CREATE TABLE IF NOT EXISTS reia_fi_postings (
   id TEXT PRIMARY KEY,
   posting_no TEXT UNIQUE NOT NULL,
   period_month TEXT NOT NULL,            -- YYYY-MM
-  category TEXT NOT NULL CHECK (category IN ('SALE','PURCHASE','CREDIT_NOTE')),
+  category TEXT NOT NULL CHECK (category IN ('SALE','PURCHASE','CREDIT_NOTE','POOL')),
 
   docs_count INTEGER NOT NULL DEFAULT 0,
   energy_amount REAL NOT NULL DEFAULT 0,        -- energy, capacity and the like
@@ -4233,4 +4246,41 @@ CREATE TABLE IF NOT EXISTS thermal_station_tariffs (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE (contract_id, financial_year)
+);
+
+-- Advances / unapplied receipts (decided 17-Oct-2026). Money received from a
+-- counterparty that no bill can take — a buyer paying more than the bill has
+-- left, or a diversion surplus beyond what the buyer owes — is held here
+-- against that counterparty and applied to a later bill or refunded, never
+-- refused or left unrecorded.
+CREATE TABLE IF NOT EXISTS unapplied_receipts (
+  id TEXT PRIMARY KEY,
+  receipt_no TEXT UNIQUE NOT NULL,
+  entity_id TEXT NOT NULL REFERENCES entities(id),
+  contract_id TEXT REFERENCES contracts(id),
+  source TEXT NOT NULL CHECK (source IN ('EXCESS_PAYMENT','DIVERSION_SURPLUS','OTHER')),
+  source_ref TEXT,
+  amount REAL NOT NULL CHECK (amount > 0),
+  balance REAL NOT NULL,
+  received_on TEXT NOT NULL,
+  reference TEXT,
+  status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','APPLIED','REFUNDED')),
+  notes TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_unapplied_receipts_entity ON unapplied_receipts (entity_id, status);
+
+CREATE TABLE IF NOT EXISTS unapplied_receipt_events (
+  id TEXT PRIMARY KEY,
+  receipt_id TEXT NOT NULL REFERENCES unapplied_receipts(id),
+  event_type TEXT NOT NULL CHECK (event_type IN ('RECEIVED','APPLIED','REFUNDED')),
+  amount REAL NOT NULL,
+  invoice_id TEXT REFERENCES invoices(id),
+  payment_id TEXT,
+  reference TEXT,
+  note TEXT,
+  actor_name TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

@@ -171,6 +171,13 @@ function checksFor(contract, { approvals, counterparty, sources }, expiryNoticeD
   //    onboarding exists to make, which do not stop mattering once a contract
   //    is signed. An approval counts once verified, as on the Document Desk:
   //    one only submitted is waiting on SJVN, not in order.
+  // SJVN's own stations (Nathpa Jhakri, Rampur) sell through the platform but
+  // are not developers: developer KYC and statutory approvals do not apply to
+  // them (decided 17-Oct-2026).
+  if (counterparty?.is_sjvn_own) {
+    out.push(check('APPROVALS', 'Counterparty standing', 'NOT_APPLICABLE', `${counterparty.name} is SJVN's own station — developer KYC does not apply`));
+    return out;
+  }
   if (counterparty?.is_blacklisted) {
     out.push(check('APPROVALS', 'Counterparty standing', live ? 'BREACH' : 'DUE',
       `${counterparty.name} is blacklisted${counterparty.blacklist_reason ? `: ${counterparty.blacklist_reason}` : ''}`));
@@ -226,7 +233,7 @@ export function contractCompliance({ status = null, expiryNoticeDays = 90 } = {}
   const approvalRows = db.prepare(`
     SELECT entity_id, label, status, is_mandatory, valid_until FROM entity_regulatory_approvals
   `).all();
-  const entities = new Map(db.prepare('SELECT id, name, status, is_blacklisted, blacklist_reason FROM entities').all().map((e) => [e.id, e]));
+  const entities = new Map(db.prepare('SELECT id, name, status, is_blacklisted, blacklist_reason, is_sjvn_own FROM entities').all().map((e) => [e.id, e]));
   const sourceRows = db.prepare(`
     SELECT a.psa_id, p.contract_no, p.cod_date FROM contract_allocations a JOIN contracts p ON p.id = a.ppa_id
     WHERE a.effective_to IS NULL OR a.effective_to >= date('now')

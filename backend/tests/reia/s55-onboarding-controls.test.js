@@ -75,15 +75,29 @@ describe('S55 Whose desk decides', () => {
     expect(h.status).toBe(403);
     expect(h.body.error).toMatch(/REIA stakeholder; your desk acts on Hydro Billing stakeholders only/);
     expect((await approve({ admin_direct_admit: true }, reia)).status).toBe(403);
+    // Not before the company's registration and bank proof are verified on
+    // their own documents (17-Oct-2026).
+    const early = await approve({ admin_direct_admit: true }, tokenFor('SJVN_ADMIN'));
+    expect(early.status).toBe(400);
+    expect(early.body.error).toMatch(/Direct admission still needs/);
+    verifyCore();
     expect((await approve({ admin_direct_admit: true }, tokenFor('SJVN_ADMIN'))).status).toBe(200);
   });
 
   it('does not take a direct admission as a check of the bank account', async () => {
     db.prepare(`UPDATE entities SET is_penny_drop_verified = 0 WHERE id = ?`).run(ent.id);
     await approve({ admin_direct_admit: true }, tokenFor('SJVN_ADMIN'));
+    verifyCore();
+    await approve({ admin_direct_admit: true }, tokenFor('SJVN_ADMIN'));
     expect(db.prepare('SELECT status, is_penny_drop_verified FROM entities WHERE id = ?').get(ent.id)).toMatchObject({ status: 'APPROVED', is_penny_drop_verified: 0 });
   });
 });
+
+// The checklist is seeded by the first approval attempt.
+function verifyCore() {
+  db.prepare(`UPDATE entity_regulatory_approvals SET status = 'VERIFIED', verified_by = 'QA', verified_at = datetime('now')
+    WHERE entity_id = ? AND approval_code IN ('COMPANY_REGISTRATION', 'BANK_ACCOUNT_PROOF')`).run(ent.id);
+}
 
 describe('S55 A new bank account goes live on proof of it', () => {
   const stage = () => request(app).put(`/api/entities/${ent.id}`).set(auth(seller)).send({ account_no: '99990000111122', ifsc_code: 'HDFC0000001', bank_name: 'QA Other Bank' });

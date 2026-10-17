@@ -33,13 +33,16 @@ export function resolveMinCufPercent(contract) {
 }
 
 export function computeActualCufPercent({ energyMwh, capacityMw, periodMonth, cufPercent }) {
-  if (cufPercent != null && Number.isFinite(Number(cufPercent))) {
-    return Number(cufPercent);
-  }
+  // Worked out from the energy wherever it can be (decided 17-Oct-2026): the
+  // meter's rounded CUF (5.38 for 5.376) moved money by thousands. The reported
+  // figure is used only where there is no energy or capacity to work from.
   const hours = 24 * daysInMonth(periodMonth);
   const denom = (Number(capacityMw) || 0) * hours;
-  if (!(denom > 0)) return null;
-  return (Number(energyMwh) || 0) / denom * 100;
+  if (denom > 0 && energyMwh != null && Number.isFinite(Number(energyMwh))) {
+    return (Number(energyMwh) || 0) / denom * 100;
+  }
+  if (cufPercent != null && Number.isFinite(Number(cufPercent))) return Number(cufPercent);
+  return null;
 }
 
 /**
@@ -114,7 +117,8 @@ export function computeCufPenalty({
   const fixedRate = getParamNumber('cuf_penalty_per_mwh', 0);
   const tariff = Number(tariffPerUnit ?? contract?.tariff_per_unit) || 0;
   const ratePerMwh = fixedRate > 0 ? fixedRate : tariff * 1000;
-  const factor = getParamNumber('cuf_penalty_factor', 1);
+  const ownPct = Number(contract?.cuf_shortfall_comp_pct);
+  const factor = ownPct > 0 ? ownPct / 100 : getParamNumber('cuf_penalty_factor', 1);
   const penalty = Math.round(shortfallMwh * ratePerMwh * (factor > 0 ? factor : 1));
 
   const rateNote = fixedRate > 0
@@ -177,9 +181,13 @@ export function contractYearBounds(contract, periodMonth) {
 
 // The month's standing figure, as billing takes it: locked, final before
 // provisional. A PSA has none of its own: its share of each source PPA's.
+// Deemed generation — energy the plant stood ready to make but the grid could
+// not take (curtailment, backing down, grid unavailability, as certified) —
+// counts toward CUF as generated (decided 17-Oct-2026), as SECI-model PPAs
+// provide: the developer is not penalised for what the grid refused.
 function pickMonthEnergy(contractId, period) {
   return db.prepare(`
-    SELECT energy_mwh, status FROM energy_data
+    SELECT energy_mwh + COALESCE(deemed_generation_mwh, 0) AS energy_mwh, status FROM energy_data
     WHERE contract_id = ? AND period_month = ? AND status NOT IN ('DRAFT', 'REJECTED')
     ORDER BY (status = 'LOCKED') DESC, (data_type = 'FINAL') DESC, created_at DESC LIMIT 1
   `).get(contractId, period);
@@ -245,7 +253,10 @@ export function cufYearPosition(contract, periodMonth, { upTo = periodMonth, cap
     const fixedRate = getParamNumber('cuf_penalty_per_mwh', 0);
     const tariff = Number(tariffPerUnit ?? contract.tariff_per_unit) || 0;
     ratePerMwh = fixedRate > 0 ? fixedRate : tariff * 1000;
-    const factor = getParamNumber('cuf_penalty_factor', 1);
+    // The PPA's own compensation rate (e.g. 50% of tariff in SECI hybrid
+    // RfS, 25% in some state PPAs) wins over the master factor.
+    const ownPct = Number(contract.cuf_shortfall_comp_pct);
+    const factor = ownPct > 0 ? ownPct / 100 : getParamNumber('cuf_penalty_factor', 1);
     penalty = Math.round(shortfallMwh * ratePerMwh * (factor > 0 ? factor : 1));
   }
   const pct = (v) => (v == null ? 'n/a' : `${v.toFixed(2)}%`);

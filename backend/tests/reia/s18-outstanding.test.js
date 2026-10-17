@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 
 const pay = (invId, amount, date = '2026-05-01') =>
-  request(app).post(`/api/invoices/${invId}/payments`).set(auth(reia))
+  request(app).post(`/api/invoices/${invId}/payments`).set(auth(tokenFor('FINANCE_USER')))
     .send({ amount, payment_date: date, mode: 'NEFT', reference: 'T' });
 
 describe('S18 Outstanding is what is still owed, not what was billed', () => {

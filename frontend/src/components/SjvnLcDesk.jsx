@@ -82,10 +82,34 @@ function LcDetail({ id, canManage, onChanged, onPreview }) {
     e.preventDefault();
     setError('');
     try {
-      const body = { amount: f.amount, validity_end: f.validity_end, utilized_amount: f.utilized_amount, note: f.note, ...sfmsBody({ sfms_message_type: 'MT707', ...f }) };
+      const body = { amount: f.amount, validity_end: f.validity_end, note: f.note, ...sfmsBody({ sfms_message_type: 'MT707', ...f }) };
       if (file) body.document_version_id = await attachSecurityFile(lc.contract_id, file, { type: 'LETTER_OF_CREDIT', title: `SJVN LC ${lc.lc_no} — amendment` });
       setLc(await api.securityDesk.amendLc(lc.id, body));
       setMode(null); setF({}); setFile(null);
+      onChanged();
+    } catch (err) {
+      setError(errText(err));
+    }
+  }
+  // A draw by the seller, and a revolving LC's reinstatement, are events with
+  // a date and a bank reference — not a figure typed over (17-Oct-2026).
+  async function draw(e) {
+    e.preventDefault();
+    setError('');
+    try {
+      setLc(await api.securityDesk.drawLc(lc.id, { amount: f.amount, draw_date: f.draw_date, bank_reference: f.bank_reference, invoice_no: f.invoice_no, note: f.note }));
+      setMode(null); setF({});
+      onChanged();
+    } catch (err) {
+      setError(errText(err));
+    }
+  }
+  async function reinstate(e) {
+    e.preventDefault();
+    setError('');
+    try {
+      setLc(await api.securityDesk.reinstateLc(lc.id, { amount: f.amount, reinstated_on: f.reinstated_on, note: f.note }));
+      setMode(null); setF({});
       onChanged();
     } catch (err) {
       setError(errText(err));
@@ -126,7 +150,9 @@ function LcDetail({ id, canManage, onChanged, onPreview }) {
       </div>
       <div className="cell-actions" style={{ marginTop: 12 }}>
         {lc.document && <button type="button" className="btn btn-secondary btn-sm" onClick={() => onPreview(lc.document)}>View LC</button>}
-        {canManage && lc.status === 'ACTIVE' && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setMode('amend'); setF({ amount: lc.amount, validity_end: lc.validity_end || '', utilized_amount: lc.utilized_amount, sfms_message_type: 'MT707' }); }}>Amend / renew</button>}
+        {canManage && lc.status === 'ACTIVE' && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setMode('amend'); setF({ amount: lc.amount, validity_end: lc.validity_end || '', sfms_message_type: 'MT707' }); }}>Amend / renew</button>}
+        {canManage && lc.status === 'ACTIVE' && lc.available_amount > 0 && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setMode('draw'); setF({ draw_date: new Date().toISOString().slice(0, 10) }); }}>Record a draw</button>}
+        {canManage && lc.status === 'ACTIVE' && lc.is_revolving && lc.utilized_amount > 0 && <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setMode('reinstate'); setF({ amount: lc.utilized_amount, reinstated_on: new Date().toISOString().slice(0, 10) }); }}>Record reinstatement</button>}
         {canManage && lc.status === 'ACTIVE' && <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setMode('close'); setF({}); }}>Close</button>}
       </div>
       {mode === 'amend' && (
@@ -134,12 +160,33 @@ function LcDetail({ id, canManage, onChanged, onPreview }) {
           <div className="form-grid">
             <Field label="Amount (₹)"><input type="number" min="1" step="0.01" value={f.amount ?? ''} onChange={(e) => set({ amount: e.target.value })} /></Field>
             <Field label="Valid until"><input type="date" value={f.validity_end || ''} onChange={(e) => set({ validity_end: e.target.value })} /></Field>
-            <Field label="Drawn so far (₹)"><input type="number" min="0" step="0.01" value={f.utilized_amount ?? ''} onChange={(e) => set({ utilized_amount: e.target.value })} /></Field>
             <Field label="Amended LC / bank letter"><input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*" onChange={(e) => setFile(e.target.files[0] || null)} aria-label="Amended LC" /></Field>
           </div>
           <SfmsFields form={f} set={set} defaultType="MT707" optional />
           <Field label="Note"><textarea value={f.note || ''} onChange={(e) => set({ note: e.target.value })} /></Field>
           <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={() => setMode(null)}>Cancel</button><button type="submit" className="btn btn-primary">Save amendment</button></div>
+        </form>
+      )}
+      {mode === 'draw' && (
+        <form className="cw-form" onSubmit={draw}>
+          <div className="form-grid">
+            <Field label="Amount drawn (₹)" required><input type="number" required min="1" step="0.01" max={lc.available_amount} value={f.amount ?? ''} onChange={(e) => set({ amount: e.target.value })} /></Field>
+            <Field label="Date of draw" required><input type="date" required value={f.draw_date || ''} onChange={(e) => set({ draw_date: e.target.value })} /></Field>
+            <Field label="Bank reference" required><input required value={f.bank_reference || ''} onChange={(e) => set({ bank_reference: e.target.value })} /></Field>
+            <Field label="Against bill (optional)"><input value={f.invoice_no || ''} onChange={(e) => set({ invoice_no: e.target.value })} placeholder="e.g. SELLER-INV/2026/000005" /></Field>
+          </div>
+          <Field label="Note"><textarea value={f.note || ''} onChange={(e) => set({ note: e.target.value })} /></Field>
+          <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={() => setMode(null)}>Cancel</button><button type="submit" className="btn btn-primary">Record draw</button></div>
+        </form>
+      )}
+      {mode === 'reinstate' && (
+        <form className="cw-form" onSubmit={reinstate}>
+          <div className="form-grid">
+            <Field label="Amount reinstated (₹)" required><input type="number" required min="1" step="0.01" max={lc.utilized_amount} value={f.amount ?? ''} onChange={(e) => set({ amount: e.target.value })} /></Field>
+            <Field label="Reinstated on" required><input type="date" required value={f.reinstated_on || ''} onChange={(e) => set({ reinstated_on: e.target.value })} /></Field>
+          </div>
+          <Field label="Note"><textarea value={f.note || ''} onChange={(e) => set({ note: e.target.value })} /></Field>
+          <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={() => setMode(null)}>Cancel</button><button type="submit" className="btn btn-primary">Record reinstatement</button></div>
         </form>
       )}
       {mode === 'close' && (
@@ -162,6 +209,10 @@ function LcDetail({ id, canManage, onChanged, onPreview }) {
                       ev.details.validity_end?.from !== undefined && `validity ${ev.details.validity_end.from ? fmtDate(ev.details.validity_end.from) : '—'} → ${fmtDate(ev.details.validity_end.to)}`,
                       typeof ev.details.validity_end === 'string' && `valid until ${fmtDate(ev.details.validity_end)}`,
                       ev.details.utilized_amount && `drawn ${fmtCurrency(ev.details.utilized_amount.from)} → ${fmtCurrency(ev.details.utilized_amount.to)}`,
+                      ev.details.draw_date && `on ${fmtDate(ev.details.draw_date)}`,
+                      ev.details.bank_reference && `ref ${ev.details.bank_reference}`,
+                      ev.details.invoice_no && `against ${ev.details.invoice_no}`,
+                      ev.details.reinstated_on && `on ${fmtDate(ev.details.reinstated_on)}`,
                       ev.details.note].filter(Boolean).join(' · ')}
                   </div>
                 )}

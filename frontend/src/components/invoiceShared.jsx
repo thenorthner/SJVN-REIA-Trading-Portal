@@ -204,7 +204,7 @@ export function InvoiceFinancialStrip({ invoice }) {
         </span>
         <span className="detail-value" style={{ color: 'var(--danger)', fontSize: 16 }}>-{fmtCurrency(invoice.disputed_amount || 0)}</span>
       </div>
-      {isSellerDir && (
+      {(isSellerDir || Number(invoice.rebate) > 0) && (
         <div className="detail-item">
           <span className="detail-label">
             Early Pay Rebate
@@ -228,8 +228,13 @@ export function InvoiceFinancialStrip({ invoice }) {
         <span className="detail-label">
           Settled So Far
           <div style={{ fontSize: 13, color: 'var(--text-light)', fontWeight: 'normal', marginTop: 3, lineHeight: 1.4 }}>
-            Payments, tax and other deductions, and credit notes recorded on this bill
+            {invoice.settlement && invoice.settlement.credit_applied > 0
+              ? `Cash ${fmtCurrency(invoice.settlement.cash_received)} · credit notes ${fmtCurrency(invoice.settlement.credit_applied)}`
+              : 'Payments, tax and other deductions, and credit notes recorded on this bill'}
           </div>
+          {invoice.settlement?.label && (
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 3 }}>{invoice.settlement.label}</div>
+          )}
         </span>
         <span className="detail-value" style={{ color: 'var(--success)', fontSize: 16 }}>-{fmtCurrency(settled)}</span>
       </div>

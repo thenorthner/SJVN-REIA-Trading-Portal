@@ -800,8 +800,13 @@ router.post('/lcs/:id/amend', (req, res) => send(res, () => {
   const b = req.body || {};
   const amount = b.amount != null && b.amount !== '' ? money(b.amount, 'Amount') : lc.amount;
   const validityEnd = dayOrNull(b.validity_end, 'Valid until') || lc.validity_end;
-  const utilized = b.utilized_amount != null && b.utilized_amount !== '' ? Number(b.utilized_amount) : lc.utilized_amount;
-  if (!(utilized >= 0) || utilized > amount) throw fail(400, 'The amount drawn must be between zero and the value of the letter of credit');
+  // A draw is an event with a date and a bank reference, not a figure typed
+  // over (decided 17-Oct-2026): record it with "Record a draw".
+  if (b.utilized_amount != null && b.utilized_amount !== '' && Number(b.utilized_amount) !== Number(lc.utilized_amount)) {
+    throw fail(400, 'The amount drawn is not amended by hand — record each draw by the seller (and each reinstatement) on its own.');
+  }
+  const utilized = lc.utilized_amount;
+  if (utilized > amount) throw fail(400, `${rupees(utilized)} has already been drawn — the letter of credit cannot be amended below that`);
   const sfms = sfmsFrom(b);
   const doc = docOf(contract.id, b.document_version_id) || lc.document_version_id;
   const changes = {};
@@ -822,6 +827,44 @@ router.post('/lcs/:id/amend', (req, res) => send(res, () => {
   if (changes.amount || changes.validity_end) {
     notifySide(contract, 'SELLER', `${lc.lc_no}: SJVN has amended the letter of credit in your favour — now ${rupees(amount)}, valid until ${validityEnd}.`);
   }
+  return { ...lcView(db.prepare('SELECT l.*, c.contract_no FROM sjvn_lcs l JOIN contracts c ON c.id = l.contract_id WHERE l.id = ?').get(lc.id), { withEvents: true }), required_amount: lcRequired(contract), open_on_contract: lcOpenOn(contract.id) };
+}));
+
+// POST /lcs/:id/draws — the seller has drawn on SJVN's letter of credit.
+router.post('/lcs/:id/draws', (req, res) => send(res, () => {
+  if (!canManageLc(req.user)) throw fail(403, 'Only the REIA desk or Finance records a draw');
+  const { lc, contract } = lcFor(req.user, req.params.id);
+  if (lc.status !== 'ACTIVE') throw fail(400, 'This letter of credit is closed');
+  const b = req.body || {};
+  const amount = money(b.amount, 'Amount drawn');
+  const drawDate = dayOrNull(b.draw_date, 'Draw date');
+  if (!drawDate) throw fail(400, 'The date of the draw is needed');
+  const reference = text(b.bank_reference, 120);
+  if (!reference) throw fail(400, 'The bank\'s reference for the draw is needed');
+  const available = Math.max(0, (lc.amount || 0) - (lc.utilized_amount || 0));
+  if (amount > available + 0.005) throw fail(400, `Only ${rupees(available)} is available on ${lc.lc_no}`);
+  const invoiceNo = text(b.invoice_no, 80) || null;
+  db.prepare(`UPDATE sjvn_lcs SET utilized_amount = utilized_amount + ?, updated_at = datetime('now') WHERE id = ?`).run(amount, lc.id);
+  lcEvent(lc.id, req.user, 'DRAWN', { amount, draw_date: drawDate, bank_reference: reference, invoice_no: invoiceNo, note: text(b.note, 500) || undefined });
+  audit(req, 'SJVN_LC_DRAWN', 'sjvn_lcs', lc.id, { afterValue: { amount, draw_date: drawDate, bank_reference: reference } });
+  pushNotification({ role: 'FINANCE_USER', type: 'SECURITY', message: `${contract.contract_no}: the seller drew ${rupees(amount)} on SJVN's letter of credit ${lc.lc_no} on ${drawDate}${invoiceNo ? ` against ${invoiceNo}` : ''}.${lc.is_revolving ? ' It is revolving — record the reinstatement when the bank restores it.' : ''}` });
+  return { ...lcView(db.prepare('SELECT l.*, c.contract_no FROM sjvn_lcs l JOIN contracts c ON c.id = l.contract_id WHERE l.id = ?').get(lc.id), { withEvents: true }), required_amount: lcRequired(contract), open_on_contract: lcOpenOn(contract.id) };
+}));
+
+// POST /lcs/:id/reinstate — a revolving letter of credit restored after a draw.
+router.post('/lcs/:id/reinstate', (req, res) => send(res, () => {
+  if (!canManageLc(req.user)) throw fail(403, 'Only the REIA desk or Finance records a reinstatement');
+  const { lc, contract } = lcFor(req.user, req.params.id);
+  if (lc.status !== 'ACTIVE') throw fail(400, 'This letter of credit is closed');
+  if (!lc.is_revolving) throw fail(400, `${lc.lc_no} is not revolving — amend its value instead`);
+  const b = req.body || {};
+  const amount = b.amount != null && b.amount !== '' ? money(b.amount, 'Amount reinstated') : lc.utilized_amount;
+  if (!(lc.utilized_amount > 0)) throw fail(400, 'Nothing has been drawn on this letter of credit');
+  if (amount > lc.utilized_amount + 0.005) throw fail(400, `Only ${rupees(lc.utilized_amount)} has been drawn`);
+  const on = dayOrNull(b.reinstated_on, 'Reinstated on') || new Date().toISOString().slice(0, 10);
+  db.prepare(`UPDATE sjvn_lcs SET utilized_amount = MAX(0, utilized_amount - ?), updated_at = datetime('now') WHERE id = ?`).run(amount, lc.id);
+  lcEvent(lc.id, req.user, 'REINSTATED', { amount, reinstated_on: on, note: text(b.note, 500) || undefined });
+  audit(req, 'SJVN_LC_REINSTATED', 'sjvn_lcs', lc.id, { afterValue: { amount, reinstated_on: on } });
   return { ...lcView(db.prepare('SELECT l.*, c.contract_no FROM sjvn_lcs l JOIN contracts c ON c.id = l.contract_id WHERE l.id = ?').get(lc.id), { withEvents: true }), required_amount: lcRequired(contract), open_on_contract: lcOpenOn(contract.id) };
 }));
 

@@ -179,7 +179,12 @@ export function trailingMonthlyBilledAvg(contractId, months = 3) {
 }
 
 export function computeRequiredAmount(contractId) {
-  const reqs = db.prepare('SELECT * FROM security_requirements WHERE contract_id = ?').all(contractId);
+  // What the paying side must lodge (decided 17-Oct-2026): on a PSA the
+  // buyer's letter of credit and funds, on a PPA the seller's guarantees. A
+  // guarantee row copied onto a PSA was added to what the buyer had to cover.
+  const side = db.prepare('SELECT contract_type FROM contracts WHERE id = ?').get(contractId)?.contract_type === 'PPA' ? 'SELLER' : 'BUYER';
+  const reqs = db.prepare('SELECT * FROM security_requirements WHERE contract_id = ?').all(contractId)
+    .filter((r) => INSTRUMENTS_BY_SIDE[side].includes(r.mechanism_type));
   const avg = trailingMonthlyBilledAvg(contractId);
   let required = 0;
   for (const r of reqs) {
@@ -238,6 +243,37 @@ export function projectedNextBill(contractId) {
  * nobody had presented, or because the stamp was a week old. One answer,
  * worked out at the moment it is asked.
  */
+/**
+ * Whether an instrument may come back while its contract is still running
+ * (decided 17-Oct-2026). Security exists for the life of the contract, so a
+ * live contract keeps it unless:
+ *  - it is a seller's performance guarantee and the plant is fully
+ *    commissioned (SECI-model PPAs return the PBG after COD), or
+ *  - what stays on the contract still meets its requirement and exposure
+ *    without this instrument (a replacement has been accepted).
+ */
+const LIVE_CONTRACT = ['SIGNED', 'PENDING_REGULATORY_APPROVAL', 'ACTIVE', 'AMENDED', 'NEARING_EXPIRY'];
+export function releaseWhileLive(ps) {
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(ps.contract_id);
+  if (!contract || !LIVE_CONTRACT.includes(contract.status)) return { allowed: true, reason: 'contract ended' };
+  if (ps.mechanism_type === 'BANK_GUARANTEE' && contract.contract_type === 'PPA'
+      && contract.cod_date && Number(contract.commissioned_capacity_mw) >= Number(contract.capacity_mw)) {
+    return { allowed: true, reason: 'plant fully commissioned' };
+  }
+  const cov = computeCoverage(ps.contract_id);
+  const own = isLiveToday(ps) ? refreshAvailable(ps) : 0;
+  const counts = INSTRUMENTS_BY_SIDE[contract.contract_type === 'PPA' ? 'SELLER' : 'BUYER'].includes(ps.mechanism_type);
+  const left = cov.available_security - (counts ? own : 0);
+  if (left >= cov.benchmark && cov.benchmark > 0) return { allowed: true, reason: 'replacement cover in place' };
+  return {
+    allowed: false,
+    left: Math.round(left),
+    needed: cov.benchmark,
+    contract_no: contract.contract_no,
+    contract_status: contract.status,
+  };
+}
+
 export function releasePosition(contractId) {
   const outstanding = Math.round(outstandingDues(contractId) || 0);
   const openDisputes = db.prepare(`
@@ -284,7 +320,7 @@ export function isLiveToday(row, asOf = istToday()) {
  */
 export function securityBreakdown(contractId) {
   // Only what answers for this contract's paying side: a buyer's letter of
-  // credit and pooled funds on a PSA, a seller's guarantee and pooled funds on a
+  // credit and contract funds on a PSA, a seller's guarantee and contract funds on a
   // PPA. A PSA counted bank guarantees as payment cover that the waterfall would
   // never draw for a buyer's default.
   const c = db.prepare('SELECT contract_type FROM contracts WHERE id = ?').get(contractId);
@@ -326,7 +362,11 @@ export function computeCoverage(contractId) {
   const projected = projectedNextBill(contractId);
   const exposure = outstanding + projected;
   const required = computeRequiredAmount(contractId);
-  const ratio = exposure > 0 ? available / exposure : (available > 0 ? 99 : 0);
+  // Measured against the larger of what the contract requires (e.g. LC for
+  // 1.1 months' billing) and what is actually at risk (decided 17-Oct-2026):
+  // one month's cover read "adequate" against a 1.1-month requirement.
+  const benchmark = Math.max(exposure, required || 0);
+  const ratio = benchmark > 0 ? available / benchmark : (available > 0 ? 99 : 0);
   const breakdown = securityBreakdown(contractId);
   return {
     contract_id: contractId,
@@ -340,8 +380,9 @@ export function computeCoverage(contractId) {
     projected_next_bill: Math.round(projected),
     exposure: Math.round(exposure),
     required_amount: required,
+    benchmark: Math.round(benchmark),
     coverage_ratio: Number(ratio.toFixed(3)),
-    adequate: ratio >= 1 || (exposure === 0 && available >= required),
+    adequate: ratio >= 1,
     shortfall: Math.max(0, Math.round(Math.max(exposure, required) - available)),
   };
 }

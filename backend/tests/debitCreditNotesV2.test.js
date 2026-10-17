@@ -25,11 +25,12 @@ beforeEach(() => {
   contract = makeContract({ status: 'ACTIVE' });
   setMode('CALENDAR');
 });
-afterEach(() => setMode('WORKING_DAYS'));
+afterEach(() => setMode('CALENDAR'));
 
 const post = (url, body, who = maker) => request(app).post(url).set(auth(who)).send(body);
 const get = (url, who = maker) => request(app).get(url).set(auth(who));
-const pay = (id, amount, date) => post(`/api/invoices/${id}/payments`, { amount, payment_date: date, mode: 'NEFT', reference: 'T' });
+// Finance records a receipt (17-Oct-2026), not the desk.
+const pay = (id, amount, date) => post(`/api/invoices/${id}/payments`, { amount, payment_date: date, mode: 'NEFT', reference: 'T' }, checker);
 const inv = (id) => db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
 const cashOn = (id) => db.prepare('SELECT COALESCE(SUM(amount),0) s FROM payments WHERE invoice_id = ?').get(id).s;
 const bill = (o = {}) => makeInvoice({ contract_id: contract.id, direction: 'SJVN_TO_BUYER', status: 'SENT', total_amount: 100000, due_date: '2026-06-30', ...o });

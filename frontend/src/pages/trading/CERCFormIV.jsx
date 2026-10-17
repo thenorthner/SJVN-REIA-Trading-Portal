@@ -46,6 +46,7 @@ export default function CERCFormIV() {
   const [detail, setDetail] = useState(null);
   const [detailError, setDetailError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [outside, setOutside] = useState(null); // { reference_no, submission_date, note }
 
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -341,7 +342,7 @@ export default function CERCFormIV() {
             {detail.status === 'SUBMITTED' && (
               <div className="audit-alert" style={{ marginBottom: 12 }}>
                 Filed with CERC on {detail.submission_date} under reference <strong>{detail.reference_no}</strong>
-                {detail.submitted_by ? ` by ${detail.submitted_by}` : ''}. The return is locked.
+                {detail.submitted_by ? ` by ${detail.submitted_by}` : ''}{detail.filed_outside ? ' (filed outside the platform)' : ''}. The return is locked.
               </div>
             )}
 
@@ -367,6 +368,24 @@ export default function CERCFormIV() {
                 </button>
               )}
             </div>
+
+            {/* A return filed with CERC before the platform held it (17-Oct-2026):
+                recorded on CERC's acknowledgement, with no lines rebuilt behind it. */}
+            {editable && !outside && (
+              <button type="button" className="btn btn-ghost btn-sm" style={{ marginBottom: 12 }} onClick={() => setOutside({ reference_no: detail.reference_no || '', submission_date: '', note: '' })}>
+                Already filed outside the platform?
+              </button>
+            )}
+            {editable && outside && (
+              <form className="cw-form" style={{ marginBottom: 12 }} onSubmit={(e) => { e.preventDefault(); runOnDetail(async () => { const r = await api.formIv.markFiledOutside({ id: detail.id, ...outside }); setOutside(null); load(); return r; }, 'Could not record the filing.'); }}>
+                <div className="form-grid">
+                  <Field label="CERC acknowledgement / reference" required><input required value={outside.reference_no} onChange={(e) => setOutside({ ...outside, reference_no: e.target.value })} /></Field>
+                  <Field label="Filed on" required><input required type="date" max={new Date().toISOString().slice(0, 10)} value={outside.submission_date} onChange={(e) => setOutside({ ...outside, submission_date: e.target.value })} /></Field>
+                </div>
+                <Field label="Note"><input value={outside.note} onChange={(e) => setOutside({ ...outside, note: e.target.value })} placeholder="e.g. filed by post before the platform went live" /></Field>
+                <div className="form-actions"><button type="button" className="btn btn-ghost" onClick={() => setOutside(null)}>Cancel</button><button type="submit" className="btn btn-primary" disabled={busy}>Record as filed</button></div>
+              </form>
+            )}
 
             {editable && !detail.reference_no && (
               <Field label="CERC Filing Reference No.">

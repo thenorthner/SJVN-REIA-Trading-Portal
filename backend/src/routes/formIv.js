@@ -237,6 +237,47 @@ router.post('/:id/submit', requireRole(...WRITE), (req, res) => {
   res.json({ ...withDerived(updated), lines, blockers: submissionBlockers(updated, lines) });
 });
 
+/**
+ * A return filed with CERC outside this platform — the history from before it
+ * went live (decided 17-Oct-2026). The calendar should say what was really
+ * filed, so the period is recorded as submitted on CERC's acknowledgement
+ * number and date, marked as filed outside, with no lines rebuilt behind it.
+ * Takes either an existing period's id, or { period_type, period } for one the
+ * platform has never held.
+ */
+router.post('/mark-filed-outside', requireRole(...WRITE), (req, res) => {
+  const b = req.body || {};
+  const reference = String(b.reference_no || '').trim();
+  const filedOn = String(b.submission_date || '').trim();
+  if (reference.length < 3) return res.status(400).json({ error: 'Enter CERC\'s acknowledgement or filing reference.' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(filedOn) || filedOn > today()) return res.status(400).json({ error: 'Enter the date it was filed (not in the future).' });
+  let form = b.id ? db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(String(b.id)) : null;
+  if (!form) {
+    const period_type = b.period_type === 'ANNUAL' ? 'ANNUAL' : 'MONTHLY';
+    let window;
+    try { window = resolvePeriod(period_type, b.period); } catch (e) { return res.status(400).json({ error: e.message }); }
+    form = db.prepare('SELECT * FROM cerc_form_iv WHERE period_type = ? AND period = ?').get(period_type, window.period);
+    if (!form) {
+      const id = newId('FIV');
+      const seq = (db.prepare('SELECT COUNT(*) c FROM cerc_form_iv').get().c || 0) + 1;
+      db.prepare(`
+        INSERT INTO cerc_form_iv (id, form_no, period_type, period, due_date, status, created_by)
+        VALUES (?, ?, ?, ?, ?, 'DRAFT', ?)
+      `).run(id, `FORM-IV/${window.period}/${String(seq).padStart(3, '0')}`, period_type, window.period, dueDateFor(window.to, period_type), req.user.name);
+      form = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(id);
+    }
+  }
+  if (form.status === 'SUBMITTED') return res.status(409).json({ error: `${form.period} is already recorded as filed (${form.reference_no || 'no reference'}).` });
+  const note = String(b.note || '').trim().slice(0, 500);
+  db.prepare(`
+    UPDATE cerc_form_iv SET status = 'SUBMITTED', submission_date = ?, reference_no = ?, submitted_by = ?, filed_outside = 1,
+      notes = COALESCE(notes || ' · ', '') || ?, updated_at = datetime('now') WHERE id = ?
+  `).run(filedOn, reference, req.user.name, `Filed outside the platform${note ? ` — ${note}` : ''}`, form.id);
+  logAudit({ req, user: req.user, action: 'FORM_IV_FILED_OUTSIDE', module: 'TRADING', entityType: 'cerc_form_iv', entityId: form.id, details: { period: form.period, reference_no: reference, submission_date: filedOn } });
+  const updated = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(form.id);
+  res.json({ ...withDerived(updated), lines: getLines(form.id) });
+});
+
 router.post('/:id/lines', requireRole(...WRITE), (req, res) => {
   const form = db.prepare('SELECT * FROM cerc_form_iv WHERE id = ?').get(req.params.id);
   if (!form) return res.status(404).json({ error: 'Form-IV record not found' });

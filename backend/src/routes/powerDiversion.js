@@ -5,6 +5,8 @@ import { newId, logAudit, billableCapacityMw } from '../util.js';
 import { daysInMonth } from '../services/cercHydroBilling.js';
 import { applyInvoicePayment, buyerOutstanding } from './invoices.js';
 import { notifyCounterparty } from '../paymentSecurityEngine.js';
+import { recordAdvance } from '../services/advances.js';
+import { draftNote } from '../services/noteDrafts.js';
 
 // Power diversion (PSA Art. 6.6): when a buyer defaults on payment or does not
 // requisition its power, SJVN sells that power elsewhere and sets the proceeds
@@ -134,9 +136,10 @@ router.post('/:id/recover', requireRole(...WRITE), (req, res) => {
   const row = db.prepare('SELECT * FROM power_diversions WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Diversion not found' });
   if (row.status !== 'RECORDED') return res.status(400).json({ error: `${row.diversion_no} is ${row.status.toLowerCase()}; it can be recovered once.` });
-  if (!(row.net_gain > 0)) return res.status(400).json({ error: `${row.diversion_no} made no net gain (${rupees(row.net_gain)}), so there is nothing to set against the dues.` });
+  if (!(row.net_gain > 0)) return res.status(400).json({ error: `${row.diversion_no} made no net gain (${rupees(row.net_gain)}), so there is nothing to set against the dues.${row.net_gain < 0 ? ' Bill the deficit to the buyer instead.' : ''}` });
+  // Whatever the dues cannot take is the buyer's money, held as its advance
+  // (decided 17-Oct-2026) — it stayed with SJVN unrecorded.
   const items = buyerOutstanding(row.buyer_id, row.contract_id);
-  if (!items.length) return res.status(400).json({ error: `Nothing is outstanding on this PSA to set ${rupees(row.net_gain)} against.` });
 
   const payDate = istToday();
   let remaining = row.net_gain;
@@ -156,12 +159,55 @@ router.post('/:id/recover', requireRole(...WRITE), (req, res) => {
       allocations.push({ invoice_no: it.inv.invoice_no, to_lps: lpsPart, to_principal: principalPart, allocated: a, status: updated.status });
     }
     const applied = Math.round(row.net_gain - remaining);
-    db.prepare("UPDATE power_diversions SET status = 'RECOVERED', applied_amount = ?, updated_at = datetime('now') WHERE id = ? AND status = 'RECORDED'")
-      .run(applied, row.id);
+    let advanceId = null;
+    if (remaining >= 1) {
+      advanceId = recordAdvance({
+        entityId: row.buyer_id, contractId: row.contract_id, source: 'DIVERSION_SURPLUS', sourceRef: row.diversion_no,
+        amount: Math.round(remaining * 100) / 100, receivedOn: payDate, reference: row.diversion_no,
+        notes: `Net gain on ${row.diversion_no} beyond what the buyer owed on the PSA`, user: req.user,
+      }).id;
+    }
+    db.prepare("UPDATE power_diversions SET status = 'RECOVERED', applied_amount = ?, advance_id = ?, updated_at = datetime('now') WHERE id = ? AND status = 'RECORDED'")
+      .run(applied, advanceId, row.id);
   })();
-  const unapplied = Math.round(remaining);
+  const unapplied = 0;
+  const heldAsAdvance = Math.round(remaining);
   logAudit({ req, user: req.user, action: 'RECOVER', module: 'REIA', entityType: 'power_diversion', entityId: row.id, details: { net_gain: row.net_gain, unapplied, allocations } });
-  res.json({ ...withNames(db.prepare('SELECT * FROM power_diversions WHERE id = ?').get(row.id)), allocations, unapplied });
+  res.json({ ...withNames(db.prepare('SELECT * FROM power_diversions WHERE id = ?').get(row.id)), allocations, unapplied, held_as_advance: heldAsAdvance });
+});
+
+/**
+ * A diversion that sold below its costs leaves the buyer owing the deficit
+ * (PSA Art. 6.6). It was shown as "buyer owes" and nothing billed it; it is
+ * now drafted as a debit note on the PSA's latest presented bill (decided
+ * 17-Oct-2026), for Finance to approve.
+ */
+router.post('/:id/bill-deficit', requireRole(...WRITE), (req, res) => {
+  const row = db.prepare('SELECT * FROM power_diversions WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Diversion not found' });
+  if (row.status !== 'RECORDED') return res.status(400).json({ error: `${row.diversion_no} is ${row.status.toLowerCase()}.` });
+  if (!(row.net_gain < 0)) return res.status(400).json({ error: `${row.diversion_no} made no deficit — recover its gain against the dues instead.` });
+  const bill = db.prepare(`
+    SELECT * FROM invoices WHERE contract_id = ? AND direction = 'SJVN_TO_BUYER'
+      AND status IN ('APPROVED','SENT','PARTIALLY_PAID','PAID','DISPUTED') AND invoice_no NOT LIKE 'DSM-%'
+    ORDER BY billing_period DESC, created_at DESC LIMIT 1
+  `).get(row.contract_id);
+  if (!bill) return res.status(400).json({ error: 'There is no presented bill on this PSA to raise the debit note against.' });
+  let note;
+  try {
+    db.transaction(() => {
+      note = draftNote({
+        noteType: 'DEBIT', invoice: bill, amount: Math.abs(row.net_gain), user: req.user,
+        reason: `Power diversion ${row.diversion_no} (${row.period_month}) — sale below costs, deficit recoverable from the buyer under PSA Art. 6.6`,
+      });
+      db.prepare("UPDATE power_diversions SET status = 'RECOVERED', applied_amount = ?, deficit_note_id = ?, updated_at = datetime('now') WHERE id = ? AND status = 'RECORDED'")
+        .run(Math.round(row.net_gain), note.id, row.id);
+    })();
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong' });
+  }
+  logAudit({ req, user: req.user, action: 'DIVERSION_DEFICIT_BILLED', module: 'REIA', entityType: 'power_diversion', entityId: row.id, details: { note_id: note.id, amount: Math.abs(row.net_gain), against: bill.invoice_no } });
+  res.json({ ...withNames(db.prepare('SELECT * FROM power_diversions WHERE id = ?').get(row.id)), note });
 });
 
 router.delete('/:id', requireRole(...WRITE), (req, res) => {

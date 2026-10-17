@@ -240,6 +240,7 @@ router.post('/:id/respond', (req, res) => send(res, () => {
         resolution_response_note = ?, escalation_forum = ?, contested_amount = ?, escalated_at = COALESCE(escalated_at, datetime('now')), updated_at = datetime('now')
       WHERE id = ?
     `).run(req.user.name, note, forum, money(amount), d.id);
+    setInvoiceOpenDispute(d.invoice_id);
     recordEvent(d.id, req.user, 'RESOLUTION_CONTESTED', d.status, d.status, { forum, contested_amount: money(amount), note });
     audit(req, 'DISPUTE_RESOLUTION_CONTESTED', d.id, { afterValue: { forum, contested_amount: money(amount) }, reason: note });
     for (const role of [...new Set([...ROLE_GROUPS.REIA_WRITE, 'MANAGEMENT'])]) {

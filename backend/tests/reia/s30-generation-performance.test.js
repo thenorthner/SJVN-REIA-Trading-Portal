@@ -74,11 +74,13 @@ describe('S30 Generation performance', () => {
     });
   });
 
-  it('takes the CUF the meter data states over one it would compute', async () => {
+  it('works CUF out from the energy, not from the rounded figure the meter data states', async () => {
+    // Decided 17-Oct-2026: a rounded reported CUF moved the penalty by thousands.
     energy(solar.id, '2026-08', 14880, { cuf_percent: 23.5 });
     const { body } = await report();
-    expect(body.months[0].actual_cuf_percent).toBe(23.5);
-    expect(body.months[0].meets_cuf).toBe(true);
+    const cap = Number(solar.commissioned_capacity_mw || solar.capacity_mw);
+    expect(body.months[0].actual_cuf_percent).toBe(Math.round(14880 / (cap * 744) * 10000) / 100);
+    expect(body.months[0].actual_cuf_percent).not.toBe(23.5);
   });
 
   it('counts a final figure once, not beside the provisional it replaced', async () => {

@@ -6,6 +6,8 @@ import { syncRequirementsFromContract, createInstrumentsFromRequirements } from 
 import { allocationsInForce } from '../services/allocations.js';
 import { contractVisibleTo, contractForCounterparty, changedTermsForCounterparty } from '../services/counterpartyScope.js';
 import { settlementPosition, settlementActions } from '../services/contractSettlement.js';
+
+const RE_PROJECT_TYPES = new Set(['Solar', 'Wind', 'Hybrid', 'FDRE']);
 import {
   contractFieldErrors, normalizeProjectType, normalizeContractNo, changedTerms, cleanTerms, AMENDABLE_FIELDS, TERMINATION_GROUNDS,
 } from '../services/contractRules.js';
@@ -36,6 +38,8 @@ function hydroBillingFields(b) {
     napaf_percent: num(b.napaf_percent),
     transmission_charge_per_mwh: num(b.transmission_charge_per_mwh),
     min_cuf_percent: num(b.min_cuf_percent),
+    cuf_shortfall_comp_pct: num(b.cuf_shortfall_comp_pct),
+    banking_cycle_basis: b.banking_cycle_basis ? String(b.banking_cycle_basis).toUpperCase() : null,
     // A peak-power or FDRE PSA's peak obligation. Null on a contract that has
     // none, which is what leaves it uncharged.
     peak_window_start: b.peak_window_start || null,
@@ -264,12 +268,12 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
       INSERT INTO contracts (id, contract_no, contract_type, seller_id, buyer_id, project_type, capacity_mw, commissioned_capacity_mw, cod_date,
         tariff_type, tariff_per_unit, tariff_structure_json, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type, pbg_expiry,
         rebate_rule, lps_rule, payment_security_type, payment_terms_days, rebate_pct, rebate_days, rebate_basis, lps_annual_pct, lps_grace_days, trading_margin_per_mwh,
-        normative_aux, free_energy_home_state, capacity_charges_total, annual_afc, annual_design_energy_mwh, napaf_percent, transmission_charge_per_mwh, min_cuf_percent,
+        normative_aux, free_energy_home_state, capacity_charges_total, annual_afc, annual_design_energy_mwh, napaf_percent, transmission_charge_per_mwh, min_cuf_percent, cuf_shortfall_comp_pct, banking_cycle_basis,
         peak_window_start, peak_window_end, min_peak_availability_percent, peak_penalty_per_mwh, status)
       VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
         @tariff_type, @tariff_per_unit, @tariff_structure_json, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type, @pbg_expiry,
         @rebate_rule, @lps_rule, @payment_security_type, @payment_terms_days, @rebate_pct, @rebate_days, @rebate_basis, @lps_annual_pct, @lps_grace_days, @trading_margin_per_mwh,
-        @normative_aux, @free_energy_home_state, @capacity_charges_total, @annual_afc, @annual_design_energy_mwh, @napaf_percent, @transmission_charge_per_mwh, @min_cuf_percent,
+        @normative_aux, @free_energy_home_state, @capacity_charges_total, @annual_afc, @annual_design_energy_mwh, @napaf_percent, @transmission_charge_per_mwh, @min_cuf_percent, @cuf_shortfall_comp_pct, @banking_cycle_basis,
         @peak_window_start, @peak_window_end, @min_peak_availability_percent, @peak_penalty_per_mwh, @status)
     `).run({
       id,
@@ -372,6 +376,27 @@ router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     });
   }
   
+  // Decided 17-Oct-2026. A contract goes live on its start date, not before:
+  // until then it is SIGNED, so nothing is billed, scheduled or secured on it
+  // early. And an RE PPA goes live only with its own minimum CUF, since the
+  // year-end true-up is priced on it and a master default is nobody's term.
+  // An amendment going live is not a first activation, so neither applies to it.
+  if (status === 'ACTIVE' && !contract.parent_contract_id && ['DRAFT', 'UNDER_NEGOTIATION', 'SIGNED', 'PENDING_REGULATORY_APPROVAL'].includes(contract.status)) {
+    const today = db.prepare(`SELECT date('now') d`).get().d;
+    if (contract.tenure_start && String(contract.tenure_start) > today) {
+      return res.status(400).json({
+        error: `${contract.contract_no} starts on ${contract.tenure_start}. It stays ${contract.status} until then and can be made ACTIVE from that date.`,
+        starts_on: contract.tenure_start,
+      });
+    }
+    if (contract.contract_type === 'PPA' && RE_PROJECT_TYPES.has(normalizeProjectType(contract.project_type)) && contract.min_cuf_percent == null) {
+      return res.status(400).json({
+        error: `${contract.contract_no} has no minimum CUF. Enter the CUF the PPA guarantees (Edit Draft or amendment) before making it ACTIVE.`,
+        missing_field: 'min_cuf_percent',
+      });
+    }
+  }
+
   // A contract is "signed" because there is a signed agreement, and that
   // agreement has to be on file before the record may say so. One could be
   // created, signed and made live with no document behind it at all — a
@@ -585,14 +610,14 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
         tariff_type, tariff_per_unit, tariff_structure_json, tenure_start, tenure_end, billing_cycle, payment_terms, emd_amount, pbg_amount, pbg_type,
         pbg_expiry, rebate_rule, lps_rule, payment_security_type, payment_terms_days, rebate_pct, rebate_days, rebate_basis, lps_annual_pct, lps_grace_days,
         trading_margin_per_mwh, normative_aux, free_energy_home_state, capacity_charges_total, annual_afc, annual_design_energy_mwh, napaf_percent,
-        transmission_charge_per_mwh, min_cuf_percent,
+        transmission_charge_per_mwh, min_cuf_percent, cuf_shortfall_comp_pct, banking_cycle_basis,
         peak_window_start, peak_window_end, min_peak_availability_percent, peak_penalty_per_mwh,
         version, parent_contract_id, status, remarks, amendment_effective_from)
       VALUES (@id, @contract_no, @contract_type, @seller_id, @buyer_id, @project_type, @capacity_mw, @commissioned_capacity_mw, @cod_date,
         @tariff_type, @tariff_per_unit, @tariff_structure_json, @tenure_start, @tenure_end, @billing_cycle, @payment_terms, @emd_amount, @pbg_amount, @pbg_type,
         @pbg_expiry, @rebate_rule, @lps_rule, @payment_security_type, @payment_terms_days, @rebate_pct, @rebate_days, @rebate_basis, @lps_annual_pct, @lps_grace_days,
         @trading_margin_per_mwh, @normative_aux, @free_energy_home_state, @capacity_charges_total, @annual_afc, @annual_design_energy_mwh, @napaf_percent,
-        @transmission_charge_per_mwh, @min_cuf_percent,
+        @transmission_charge_per_mwh, @min_cuf_percent, @cuf_shortfall_comp_pct, @banking_cycle_basis,
         @peak_window_start, @peak_window_end, @min_peak_availability_percent, @peak_penalty_per_mwh,
         @version, @parent_contract_id, 'PENDING_REGULATORY_APPROVAL', @remarks, @amendment_effective_from)
     `).run({

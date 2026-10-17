@@ -130,6 +130,10 @@ export const ROLE_GROUPS = {
   THERMAL_ALL: ['SJVN_ADMIN', 'THERMAL_ADMIN', 'THERMAL_USER', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'MANAGEMENT'],
   THERMAL_WRITE: ['SJVN_ADMIN', 'THERMAL_ADMIN', 'THERMAL_USER', 'IT_SUPER_ADMIN'],
   FINANCE: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'REIA_USER'],
+  // Who may say money has arrived in SJVN's bank, or apply or refund an
+  // advance: Finance alone (decided 17-Oct-2026). The desk that raises and
+  // chases a bill is not the one that confirms it was paid.
+  FINANCE_CONFIRM: ['FINANCE_USER'],
   TRADING_ALL: ['SJVN_ADMIN', 'TRADING_USER', 'FINANCE_USER', 'MANAGEMENT'],
   TRADING_WRITE: ['SJVN_ADMIN', 'TRADING_USER'],
   // Who may act as the checker on a bid. Separate from TRADING_WRITE so the

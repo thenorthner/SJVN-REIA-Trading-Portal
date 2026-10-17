@@ -450,10 +450,14 @@ export default function Disputes() {
 
             {CAN_WRITE.includes(user?.role) && OPEN_STATUSES.includes(detail.status) && (
               <div className="form-actions" style={{ flexWrap: 'wrap' }}>
-                {detail.status === 'ACKNOWLEDGED' && (
+                {/* Acknowledging is the desk's act, so the 2-day SLA runs on a person (17-Oct-2026). */}
+                {detail.status === 'RAISED' && (
+                  <button type="button" className="btn btn-primary" onClick={() => handleTransition('ACKNOWLEDGED')}>Acknowledge</button>
+                )}
+                {['RAISED', 'ACKNOWLEDGED'].includes(detail.status) && (
                   <button type="button" className="btn btn-secondary" onClick={() => handleTransition('UNDER_REVIEW')}>Start Review</button>
                 )}
-                {['ACKNOWLEDGED', 'UNDER_REVIEW', 'ESCALATED'].includes(detail.status) && (
+                {['RAISED', 'ACKNOWLEDGED', 'UNDER_REVIEW', 'ESCALATED'].includes(detail.status) && (
                   // What is wanted, in the officer's own words — a blank request used
                   // to go out as a stock line in their name.
                   <button type="button" className="btn btn-ghost" disabled={infoNote.trim().length < 10} title={infoNote.trim().length < 10 ? 'Write what information is needed first' : undefined} onClick={() => handleTransition('INFO_REQUESTED', infoNote.trim())}>Request Info</button>
@@ -466,7 +470,7 @@ export default function Disputes() {
               </div>
             )}
 
-            {CAN_WRITE.includes(user?.role) && ['UNDER_REVIEW', 'ESCALATED', 'ACKNOWLEDGED', 'INFO_REQUESTED'].includes(detail.status) && (
+            {CAN_WRITE.includes(user?.role) && ['RAISED', 'UNDER_REVIEW', 'ESCALATED', 'ACKNOWLEDGED', 'INFO_REQUESTED'].includes(detail.status) && (
               <>
                 <div className="section-title" style={{ marginTop: 18 }}>Resolve</div>
                 <form onSubmit={handleResolve}>

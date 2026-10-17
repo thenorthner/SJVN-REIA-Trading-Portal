@@ -99,6 +99,9 @@ export function contractFieldErrors(c) {
     const v = num(c[field]);
     if (v != null && (!Number.isFinite(v) || v < 0 || v > 100)) add(`${label} must be between 0% and 100%.`);
   }
+  if (c.banking_cycle_basis && !['MONTHLY', 'SEASONAL', 'ANNUAL'].includes(c.banking_cycle_basis)) add('Banking cycle must be Monthly, Seasonal or Annual.');
+  const comp = num(c.cuf_shortfall_comp_pct);
+  if (comp != null && (!Number.isFinite(comp) || comp <= 0 || comp > 200)) add('CUF shortfall compensation must be between 0% and 200% of the PPA tariff.');
   if (num(c.min_peak_availability_percent) != null) {
     if (!c.peak_window_start || !c.peak_window_end) add('A peak availability obligation needs its peak window (from and to).');
   }
@@ -118,7 +121,7 @@ export const AMENDABLE_FIELDS = [
   'payment_terms_days', 'rebate_pct', 'rebate_days', 'rebate_basis', 'lps_annual_pct', 'lps_grace_days', 'payment_security_type',
   'emd_amount', 'pbg_amount', 'pbg_type', 'pbg_expiry', 'trading_margin_per_mwh',
   'normative_aux', 'free_energy_home_state', 'capacity_charges_total', 'annual_afc', 'annual_design_energy_mwh', 'napaf_percent',
-  'transmission_charge_per_mwh', 'min_cuf_percent', 'peak_window_start', 'peak_window_end', 'min_peak_availability_percent', 'peak_penalty_per_mwh',
+  'transmission_charge_per_mwh', 'min_cuf_percent', 'cuf_shortfall_comp_pct', 'banking_cycle_basis', 'peak_window_start', 'peak_window_end', 'min_peak_availability_percent', 'peak_penalty_per_mwh',
 ];
 
 /** A form's blank means "none"; commissioned capacity has no "none", it is 0. */

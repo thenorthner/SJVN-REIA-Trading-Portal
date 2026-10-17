@@ -72,7 +72,11 @@ describe('S46 A revised statement for a billed week', () => {
     const r2 = await raise('A2');
     expect(r2.status, 'R2 had nowhere to go').toBe(201);
     const d2 = (await dispatch(r2.body.id)).body;
-    expect(bill(d2.invoice_no).total_amount).toBe(-50000);
+    // R1 was ₹11 lakh recoverable from the pool; R2 lowers it to ₹10.5 lakh, so
+    // SJVN gives ₹50,000 back — a positive payable, never a negative bill.
+    expect(bill(d1.invoice_no)).toMatchObject({ total_amount: 1100000, direction: 'SJVN_TO_BUYER' });
+    expect(bill(d2.invoice_no)).toMatchObject({ total_amount: 50000, direction: 'SELLER_TO_SJVN' });
+    expect(d2.invoice_no).toMatch(/^DSM-POOL/);
     expect((await raise('A2')).status, 'the same statement was raised twice').toBe(409);
   });
 });

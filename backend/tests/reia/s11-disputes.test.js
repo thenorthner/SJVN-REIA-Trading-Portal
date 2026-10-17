@@ -31,11 +31,13 @@ describe('S11 Dispute management', () => {
   it('walks the dispute lifecycle', async () => {
     const r = await raise();
     const id = r.body.id || latestDisputeId();
-    // Raising a dispute records it as acknowledged; review is the next step.
-    expect(db.prepare('SELECT status FROM disputes WHERE id = ?').get(id).status).toBe('ACKNOWLEDGED');
+    // Raised, not acknowledged: acknowledging is the desk's act (17-Oct-2026),
+    // and taking it into review acknowledges it in that officer's name.
+    expect(db.prepare('SELECT status, acknowledged_at FROM disputes WHERE id = ?').get(id)).toMatchObject({ status: 'RAISED', acknowledged_at: null });
     const rev = await request(app).post(`/api/disputes/${id}/transition`).set(auth(reia)).send({ status: 'UNDER_REVIEW' });
     expect(rev.status).toBeLessThan(400);
     expect(db.prepare('SELECT status FROM disputes WHERE id = ?').get(id).status).toBe('UNDER_REVIEW');
+    expect(db.prepare('SELECT acknowledged_by FROM disputes WHERE id = ?').get(id).acknowledged_by).toBeTruthy();
   });
 
   it('blocks an illegal jump straight from raised to closed', async () => {
