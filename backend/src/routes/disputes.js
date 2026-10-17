@@ -28,6 +28,7 @@ import { getParamNumber } from '../mastersService.js';
 import { invoicePresentedTo, billPresentedOn, authoredBy, isPresented } from '../services/counterpartyScope.js';
 import { invoiceBalance } from '../services/invoiceLps.js';
 import { asOfFrom } from '../services/clock.js';
+import { raiseRootCauseTask } from '../services/deskTasks.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Overridable so a test run or the browser suite files its evidence beside its
@@ -1016,6 +1017,9 @@ router.post('/:id/resolve', requireRole(...REIA_WRITE), (req, res) => {
     entityId: dispute.id,
     details: { outcome, accepted, credit, note_id: note?.id || null, note_type: note?.note_type || null },
   });
+
+  // D4: an accepted dispute's cause goes back to the desk that owns it.
+  try { raiseRootCauseTask(dispute, invoice, { outcome, accepted, user: req.user }); } catch (err) { console.error('[DISPUTE] root-cause task', err.message); }
 
   // The other side of the desk is no party to this bill and is told nothing.
   tellRaiser(dispute, 'DISPUTE_RESOLVED', `Dispute ${dispute.dispute_no} on invoice ${invoice.invoice_no} resolved: ${outcome.replaceAll('_', ' ').toLowerCase()}. Accept it, or escalate, under My Disputes.`);

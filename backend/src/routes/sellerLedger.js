@@ -242,6 +242,11 @@ function statementOf(user, query) {
   };
 }
 
+/** A party's account as SJVN's books show it, for a stretch of dates (R5 reads it). */
+export function accountFor(entityId, { from = null, to = null } = {}) {
+  return statementOf({ role: 'SJVN_ADMIN' }, { entity_id: entityId, from, to });
+}
+
 const TYPE_LABEL = { INVOICE: 'Invoice', DEBIT_NOTE: 'Debit note', CREDIT_NOTE: 'Credit note', PAYMENT: 'Payment', TDS: 'TDS', DEDUCTION: 'Deduction', REBATE: 'Rebate', LPS: 'LPS', ADVANCE: 'Advance', ADVANCE_REFUND: 'Refund' };
 const closingText = (s) => (s.party_side === 'BUYER' ? 'Closing balance — payable to SJVN' : 'Closing balance — receivable from SJVN');
 const partyWord = (s) => (s.party_side === 'BUYER' ? 'Buyer' : 'Seller');

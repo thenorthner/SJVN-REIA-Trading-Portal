@@ -6,6 +6,7 @@ import { PageHeader, Card, Badge, StatCard, Tabs, Tab, AlertPopup, fmtNumber } f
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
 import { fmtDate } from '../../datetime.js';
+import DeskTasksPanel from '../../components/DeskTasksPanel.jsx';
 
 // Where each contract stands against its own timeline and obligations.
 //
@@ -75,7 +76,20 @@ export default function ContractCompliance() {
       <PageHeader
         title="Contract Compliance"
         subtitle="Tenure, commissioning, capacity, payment security and statutory approvals — per contract"
-        actions={<Link className="btn btn-outline" to="/reia/contracts">Open contracts</Link>}
+        actions={(
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="btn btn-outline" onClick={async () => {
+              try {
+                const blob = await api.reports.contractComplianceXlsx();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = `compliance-register-${new Date().toISOString().slice(0, 10)}.xlsx`;
+                a.click(); URL.revokeObjectURL(url);
+              } catch { setError('Could not prepare the compliance register.'); }
+            }}>Export register (Excel)</button>
+            <Link className="btn btn-outline" to="/reia/contracts">Open contracts</Link>
+          </div>
+        )}
       />
 
       <Tabs style={{ marginBottom: 18 }}>
@@ -88,6 +102,7 @@ export default function ContractCompliance() {
       {view === 'main' && (
       <>
       <AlertPopup open={!!error} title="Could not show the register" message={error} onClose={() => setError('')} />
+      <DeskTasksPanel desk="CONTRACT_COMPLIANCE" canWrite={['SJVN_ADMIN', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role)} />
 
       {loading && !data ? (
         <Card><div className="audit-placeholder">Loading…</div></Card>

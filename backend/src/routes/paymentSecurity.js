@@ -27,6 +27,10 @@ import { applyInvoicePayment } from './invoices.js';
 import { securityBoard, requirementVsHeld, reinstatementTracker, releaseChecklist, alertLateReinstatements } from '../services/securityBoard.js';
 import { ACTIVE_STATUSES, WATERFALL_DEFAULTS } from '../paymentSecurityConstants.js';
 import { takeAmendmentOnRecord, remindExpiringSecurity } from './securityDesk.js';
+import { claimFields, responseDate, claimTracker } from '../services/invocationClaims.js';
+import { deskUpload, letterProblem, deskFilePath, discardUpload } from '../services/deskFiles.js';
+
+const letterUpload = deskUpload('bank-letters');
 
 export {
   computeCoverage,
@@ -297,6 +301,31 @@ router.get('/requirements/:contractId', (req, res) => {
   if (!c) return res.status(404).json({ error: 'Contract not found' });
   if (!canReadContract(req.user, c)) return res.status(403).json({ error: 'Not authorized' });
   res.json(db.prepare('SELECT * FROM security_requirements WHERE contract_id = ?').all(req.params.contractId));
+});
+
+// S2: claims lodged with banks — the answer window, late banks, and letters.
+router.get('/invocations/claim-tracker', requireRole(...REIA_ALL), (req, res) => {
+  res.json(claimTracker());
+});
+
+// The bank's settlement or refusal letter, filed once it has answered.
+router.post('/invocations/:id/letter', requireRole(...REIA_WRITE), letterUpload.single('file'), (req, res) => {
+  const inv = db.prepare('SELECT * FROM security_invocations WHERE id = ?').get(req.params.id);
+  const refuse = (status, error) => { discardUpload(req.file); return res.status(status).json({ error }); };
+  if (!inv) return refuse(404, 'Not found');
+  if (!['FUNDS_RECEIVED', 'REJECTED'].includes(inv.status)) return refuse(400, `${inv.invocation_no} is at "${words(inv.status)}" — the bank's letter is filed once it has paid or refused.`);
+  const problem = letterProblem(req.file);
+  if (problem) return res.status(400).json({ error: problem });
+  db.prepare(`UPDATE security_invocations SET outcome_letter_file = ?, outcome_letter_name = ?, updated_at = datetime('now') WHERE id = ?`)
+    .run(req.file.filename, req.file.originalname, inv.id);
+  recordSecurityEvent({ instrumentId: inv.payment_security_id, contractId: inv.contract_id, user: req.user, eventType: 'BANK_LETTER_FILED', details: { invocation_no: inv.invocation_no, file: req.file.originalname, outcome: inv.status } });
+  res.status(201).json(db.prepare('SELECT * FROM security_invocations WHERE id = ?').get(inv.id));
+});
+router.get('/invocations/:id/letter', requireRole(...REIA_ALL), (req, res) => {
+  const inv = db.prepare('SELECT * FROM security_invocations WHERE id = ?').get(req.params.id);
+  const file = inv?.outcome_letter_file && deskFilePath('bank-letters', inv.outcome_letter_file);
+  if (!file) return res.status(404).json({ error: 'No bank letter is filed for this invocation' });
+  res.download(file, inv.outcome_letter_name || inv.outcome_letter_file);
 });
 
 router.get('/invocations', requireRole(...REIA_ALL), (req, res) => {
@@ -576,8 +605,23 @@ router.post('/invocations/:id/transition', requireRole(...REIA_WRITE), (req, res
     return res.status(400).json({ error: `${inv.invocation_no} is at "${words(inv.status)}" — it cannot move to "${words(status)}".` });
   }
 
+  // S2: lodging the claim starts the bank's answer window; the bank's answer
+  // closes it.
+  let claim = null;
+  let answered = null;
+  try {
+    if (status === 'CLAIMED') claim = claimFields(req.body);
+    if (inv.status === 'CLAIMED' && ['FUNDS_RECEIVED', 'REJECTED'].includes(status)) answered = responseDate(inv, req.body);
+  } catch (err) {
+    return res.status(err.status || 400).json({ error: err.message });
+  }
   db.prepare(`UPDATE security_invocations SET status = ?, notes = COALESCE(?, notes), updated_at = datetime('now') WHERE id = ?`)
     .run(status, notes ?? null, inv.id);
+  if (claim) {
+    db.prepare('UPDATE security_invocations SET claim_submitted_on = ?, claim_reference = ?, bank_response_due = ? WHERE id = ?')
+      .run(claim.claim_submitted_on, claim.claim_reference, claim.bank_response_due, inv.id);
+  }
+  if (answered) db.prepare('UPDATE security_invocations SET bank_responded_on = ? WHERE id = ?').run(answered, inv.id);
 
   let letterSide = 'BUYER';
   try { letterSide = JSON.parse(inv.demand_letter_json || '{}').side || letterSide; } catch { /* an older notice names no side */ }

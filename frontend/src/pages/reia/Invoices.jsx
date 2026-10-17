@@ -54,7 +54,7 @@ const SUPP_FORM = {
   contract_id: '', billing_period: '', amount: '', taxes: '', transmission_charges: '',
   reason_code: 'REVISED_REA', reason: '', parent_invoice_id: '',
 };
-const PAY_FORM = { amount: '', payment_date: '', mode: 'NEFT', reference: '', deduction: '' };
+const PAY_FORM = { amount: '', payment_date: '', mode: 'NEFT', reference: '', deduction: '', tds_amount: '', tds_section: '' };
 
 export default function Invoices() {
   const { user } = useAuth();
@@ -481,8 +481,13 @@ export default function Invoices() {
 
   async function handlePayment(e) {
     e.preventDefault();
+    // L4: TDS is part of the deduction and carries its section, for the 16A.
+    const tds = Number(payForm.tds_amount) || 0;
+    if (tds > 0 && !payForm.tds_section) { setPayError('Choose the section the tax was withheld under (194Q or 194C).'); return; }
+    if (tds > (Number(payForm.deduction) || 0)) { setPayError('TDS is part of the deduction — the deduction must be at least the TDS.'); return; }
     const ok = await onInvoice('pay', () => api.invoices.recordPayment(selected.id, {
       ...payForm, amount: Number(payForm.amount), deduction: payForm.deduction ? Number(payForm.deduction) : 0,
+      tds_amount: tds || undefined, tds_section: tds > 0 ? payForm.tds_section : undefined,
     }), setPayError, 'The payment could not be recorded.');
     if (ok) setPayForm(PAY_FORM);
   }
@@ -1416,6 +1421,16 @@ export default function Invoices() {
                     </Field>
                     <Field label="Deduction (₹)">
                       <input type="number" min="0" step="0.01" value={payForm.deduction} onChange={(e) => setPayForm({ ...payForm, deduction: e.target.value })} />
+                    </Field>
+                    <Field label="of which TDS (₹)">
+                      <input type="number" min="0" step="0.01" value={payForm.tds_amount} onChange={(e) => setPayForm({ ...payForm, tds_amount: e.target.value })} />
+                    </Field>
+                    <Field label="TDS section">
+                      <select value={payForm.tds_section} onChange={(e) => setPayForm({ ...payForm, tds_section: e.target.value })}>
+                        <option value="">—</option>
+                        <option value="194Q">194Q — purchase of goods (electricity)</option>
+                        <option value="194C">194C — transmission / works</option>
+                      </select>
                     </Field>
                   </div>
                   <p className="inline-note">Late payment surcharge is worked out from the payment date against the due date. A PSA bill carries no early-payment rebate.</p>

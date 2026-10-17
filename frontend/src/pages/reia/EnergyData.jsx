@@ -10,6 +10,7 @@ import ReaAutomationPipeline from '../../components/ReaAutomationPipeline.jsx';
 import EnergyAccountUpload from '../../components/EnergyAccountUpload.jsx';
 import EnergyRecordDetail, { ResponseBadge } from '../../components/EnergyRecordDetail.jsx';
 import { fmtDateTime } from '../../datetime.js';
+import DeskTasksPanel from '../../components/DeskTasksPanel.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
 
 // The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_ADMIN.
@@ -421,6 +422,7 @@ export default function EnergyData() {
 
       {view === 'main' && (
       <>
+      <DeskTasksPanel desk="ENERGY_DATA" canWrite={CAN_WRITE.includes(user?.role)} />
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
       {accountResult && (
         <div className="alert alert-success" role="status">

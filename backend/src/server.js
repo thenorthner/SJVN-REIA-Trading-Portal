@@ -23,10 +23,14 @@ import teamRoutes from './routes/team.js';
 import counterpartyHomeRoutes from './routes/counterpartyHome.js';
 import buyerBillsRoutes from './routes/buyerBills.js';
 import advancesRoutes from './routes/advances.js';
+import deskTasksRoutes from './routes/deskTasks.js';
+import tdsReconRoutes from './routes/tdsRecon.js';
+import balanceConfirmationRoutes from './routes/balanceConfirmations.js';
 import sjvnDeskRoutes from './routes/sjvnDesk.js';
 import staffRoutes from './routes/staff.js';
 import securityDeskRoutes, { remindExpiringSecurity } from './routes/securityDesk.js';
 import { alertLateReinstatements } from './services/securityBoard.js';
+import { alertLateBankClaims } from './services/invocationClaims.js';
 import { runClearanceExpiry } from './services/clearanceExpiry.js';
 import invoicesRoutes from './routes/invoices.js';
 import billingTrailRoutes from './routes/billingTrail.js';
@@ -223,6 +227,9 @@ app.use('/api/team', teamRoutes);
 app.use('/api/home', counterpartyHomeRoutes);
 app.use('/api/buyer-bills', buyerBillsRoutes);
 app.use('/api/advances', advancesRoutes);
+app.use('/api/desk-tasks', deskTasksRoutes);
+app.use('/api/tds-recon', tdsReconRoutes);
+app.use('/api/balance-confirmations', balanceConfirmationRoutes);
 app.use('/api/sjvn-desk', sjvnDeskRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/invoices', requireAuth, invoicesRoutes);
@@ -470,6 +477,9 @@ const server = app.listen(PORT, HOST, () => {
       // Revolving letters of credit still not restored after a draw.
       const late = alertLateReinstatements();
       if (late.sent > 0) console.log(`[SECURITY] Flagged ${late.sent} late LC reinstatement(s)`);
+      // S2: claims a bank has not answered within its window.
+      const lateClaims = alertLateBankClaims();
+      if (lateClaims.sent > 0) console.log(`[SECURITY] Flagged ${lateClaims.sent} late bank claim(s)`);
     } catch (err) {
       console.error('[SECURITY] alert cascade failed', err.message);
     }

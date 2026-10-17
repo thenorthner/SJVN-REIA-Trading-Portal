@@ -253,6 +253,38 @@ export const api = {
     register: () => client.get('/security-desk/register.xlsx', { responseType: 'blob' }).then((r) => r.data),
   },
   // A dispute's clock, surcharge, answer to the resolution, group and dossier.
+  // R5: year-end balance confirmations.
+  balanceConfirmations: {
+    list: (fy) => g('/balance-confirmations', fy ? { fy } : {}),
+    issue: (body) => p('/balance-confirmations', body),
+    letterPdf: (id) => client.get(`/balance-confirmations/${id}/letter.pdf`, { responseType: 'blob' }).then((r) => r.data),
+    respond: (id, { status, confirmed_balance, auditor_name, remarks, file }) => {
+      const fd = new FormData();
+      fd.append('status', status);
+      if (confirmed_balance !== '' && confirmed_balance != null) fd.append('confirmed_balance', confirmed_balance);
+      if (auditor_name) fd.append('auditor_name', auditor_name);
+      if (remarks) fd.append('remarks', remarks);
+      if (file) fd.append('file', file);
+      return client.post(`/balance-confirmations/${id}/response`, fd).then((r) => r.data);
+    },
+    uploadCertificate: (id, file) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return client.post(`/balance-confirmations/${id}/certificate`, fd).then((r) => r.data);
+    },
+    certificate: (id) => client.get(`/balance-confirmations/${id}/certificate`, { responseType: 'blob' }).then((r) => r.data),
+  },
+  // L4: TDS withheld against Form 16A, quarter by quarter.
+  tdsRecon: {
+    list: (fy) => g('/tds-recon', fy ? { fy } : {}),
+    mark: (body) => p('/tds-recon/mark', body),
+    exportXlsx: (fy) => client.get('/tds-recon/export.xlsx', { params: fy ? { fy } : {}, responseType: 'blob' }).then((r) => r.data),
+  },
+  // D4: root-cause tasks from resolved disputes.
+  deskTasks: {
+    list: (params) => g('/desk-tasks', params),
+    close: (id, body) => p(`/desk-tasks/${id}/close`, body),
+  },
   disputeExtras: {
     meta: () => g('/dispute-extras/meta'),
     overview: () => g('/dispute-extras/overview'),
@@ -557,6 +589,7 @@ export const api = {
     paymentMonitoring: (side = 'RECEIVABLE') => g('/reports/payment-monitoring', { side }),
     // Energy against what each contract's capacity could make.
     generationPerformance: (params) => g('/reports/generation-performance', params),
+    developerScorecard: (params) => g('/reports/developer-scorecard', params),
     cufTracker: (params) => g('/reports/cuf-tracker', params),
     // Tenure, commissioning, security and approvals, per contract.
     contractCompliance: (params) => g('/reports/contract-compliance', params),
@@ -593,6 +626,8 @@ export const api = {
     },
     // Annual licence fee and net worth, year by year.
     cercLicence: () => g('/reports/cerc-compliance/licence'),
+    complianceCalendar: (days = 90) => g('/reports/compliance-calendar', { days }),
+    contractComplianceXlsx: () => client.get('/reports/contract-compliance.xlsx', { responseType: 'blob' }).then((r) => r.data),
     saveCercLicence: (fy, body) => put(`/reports/cerc-compliance/licence/${fy}`, body),
     billingSummary: (params) => g('/reports/billing-summary', params),
     billingSummaryPdf: async (params = {}) => {
@@ -799,7 +834,15 @@ export const api = {
     renew: (id, body) => p(`/payment-security/${id}/renew`, body),
     invoke: (id, amount) => p(`/payment-security/${id}/invoke`, { amount }),
     startInvocation: (body) => p('/payment-security/invocations', body),
-    transitionInvocation: (id, status, notes) => p(`/payment-security/invocations/${id}/transition`, { status, notes }),
+    transitionInvocation: (id, status, notes, extra = {}) => p(`/payment-security/invocations/${id}/transition`, { status, notes, ...extra }),
+    // S2: claims on the bank — the answer window and the bank's letter.
+    claimTracker: () => g('/payment-security/invocations/claim-tracker'),
+    uploadBankLetter: (id, file) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      return client.post(`/payment-security/invocations/${id}/letter`, fd).then((r) => r.data);
+    },
+    bankLetter: (id) => client.get(`/payment-security/invocations/${id}/letter`, { responseType: 'blob' }).then((r) => r.data),
     releaseRequest: (id, reason) => p(`/payment-security/${id}/release-request`, { reason }),
     actRelease: (id, decision, note) => p(`/payment-security/releases/${id}/act`, { decision, note }),
     invocationPdf: (id) => client.get(`/payment-security/invocations/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data),

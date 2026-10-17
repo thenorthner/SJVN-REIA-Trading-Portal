@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import XLSX from 'xlsx';
 import { paymentMonitoring } from '../services/paymentMonitoring.js';
 import { generationPerformance, rangeProblem } from '../services/generationPerformance.js';
 import { cufTracker } from '../services/cufTracker.js';
@@ -7,6 +8,8 @@ import { verificationQueue } from '../services/verificationQueue.js';
 import { cercCompliance, calendarRangeProblem } from '../services/cercCompliance.js';
 import { buildAnnexures, annexuresWorkbook } from '../services/cercAnnexures.js';
 import { licenceCompliance, saveLicenceYear } from '../services/cercLicence.js';
+import { complianceCalendar } from '../services/complianceCalendar.js';
+import { developerScorecard } from '../services/developerScorecard.js';
 import { pooledForecastAccuracy } from '../services/marketForecast.js';
 import { observedDays, latestObservedDate, summariseDays, summariseBy, MARKET_EXCHANGES, MARKET_PRODUCTS } from '../services/marketPrices.js';
 import { receivablesOutstanding, payablesOutstanding, overdueCount } from '../services/outstanding.js';
@@ -185,6 +188,15 @@ router.get('/verification-queue', requireRole(...REPORT_READ), (req, res) => {
  */
 // The trading desk prepares and files Form-IV, so it reads the calendar too;
 // it was refused here while the annexures and licence beside it let it in.
+// CC1/CERC1/SM4: one 90-day timeline of what falls due across the registers.
+router.get('/compliance-calendar', requireRole(...TRADING_REPORT_READ), (req, res) => {
+  const days = Math.min(365, Math.max(7, Number(req.query.days) || 90));
+  try { res.json(complianceCalendar({ days })); } catch (err) {
+    console.error('Compliance calendar error:', err);
+    res.status(500).json({ error: 'Could not build the compliance calendar' });
+  }
+});
+
 router.get('/cerc-compliance', requireRole(...TRADING_REPORT_READ), (req, res) => {
   const bad = calendarRangeProblem(req.query.from || null, req.query.to || null);
   if (bad) return res.status(400).json({ error: bad });
@@ -256,6 +268,38 @@ router.put('/cerc-compliance/licence/:fy', requireRole(...LICENCE_WRITE), (req, 
  * commissioning, commissioned capacity, the security it requires, and the
  * counterparty's statutory approvals.
  */
+// CC5: the compliance register as a workbook — every live contract with each
+// checklist item's state, and the checks one per line for filtering.
+router.get('/contract-compliance.xlsx', requireRole(...REPORT_READ), (req, res) => {
+  try {
+    const reg = contractCompliance({ expiryNoticeDays: 90 });
+    const rows = reg.contracts.filter((c) => req.query.all === '1' || c.state !== 'NOT_LIVE');
+    const codes = [];
+    for (const c of rows) for (const k of c.checks) if (!codes.some((x) => x.code === k.code)) codes.push({ code: k.code, label: k.label });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['Compliance register', `as on ${new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10)}`], [],
+      ['Contract', 'Type', 'Project', 'Counterparty', 'Status', 'Tenure from', 'Tenure to', 'Days to expiry', 'Capacity (MW)', 'Commissioned (MW)',
+        'Overall', 'Breaches', 'Action due', 'On hold', 'Would be held', ...codes.map((k) => k.label)],
+      ...rows.map((c) => [c.contract_no, c.contract_type, c.project_type || '', c.counterparty || '', c.status, c.tenure_start || '', c.tenure_end || '',
+        c.days_to_expiry ?? '', c.capacity_mw ?? '', c.commissioned_capacity_mw ?? '', c.state, c.breach_count, c.due_count,
+        c.hold?.on_hold ? 'Yes' : 'No', c.hold?.flagged ? 'Yes' : 'No',
+        ...codes.map((k) => c.checks.find((x) => x.code === k.code)?.state || '')]),
+    ]), 'Register');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['Contract', 'Counterparty', 'Check', 'State', 'Detail', 'Due in (days)'],
+      ...rows.flatMap((c) => c.checks.map((k) => [c.contract_no, c.counterparty || '', k.label, k.state, k.detail || '', k.due_in_days ?? ''])),
+    ]), 'Checklist');
+    logAudit({ req, user: req.user, action: 'COMPLIANCE_REGISTER_EXPORTED', module: 'REIA', entityType: 'report', entityId: 'contract-compliance', details: { contracts: rows.length } });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="compliance-register.xlsx"`);
+    res.send(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
+  } catch (err) {
+    console.error('Compliance register export error:', err);
+    res.status(500).json({ error: 'Could not build the compliance register' });
+  }
+});
+
 router.get('/contract-compliance', requireRole(...REPORT_READ), (req, res) => {
   // An unusable window used to be replaced by 90 without a word, so a desk that
   // typed 0 or -5 read a 90-day count as theirs.
@@ -292,6 +336,17 @@ router.get('/cuf-tracker', requireRole(...REPORT_READ), (req, res) => {
  * What each project generated against what its contract expects: CUF actual and
  * required, the shortfall, and the availability the meter data reported.
  */
+// G5: per plant and per developer — generation against target, disputes,
+// payment cycle and compliance.
+router.get('/developer-scorecard', requireRole(...REPORT_READ), (req, res) => {
+  const bad = rangeProblem(req.query.from || null, req.query.to || null);
+  if (bad) return res.status(400).json({ error: bad });
+  try { res.json(developerScorecard({ from: req.query.from || null, to: req.query.to || null })); } catch (err) {
+    console.error('Developer scorecard error:', err);
+    res.status(500).json({ error: 'Could not build the scorecard' });
+  }
+});
+
 router.get('/generation-performance', requireRole(...REPORT_READ), (req, res) => {
   // A malformed or reversed range used to come back as an empty page, which
   // reads as "nothing was generated".

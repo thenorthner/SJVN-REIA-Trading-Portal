@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
+import ComplianceCalendarPanel from '../../components/ComplianceCalendarPanel.jsx';
 import { PageHeader, Card, Badge, StatCard, Tabs, Tab, Modal, Field, AlertPopup, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import ModuleGuide from '../../components/ModuleGuide.jsx';
 import { getGuide } from '../../content/guides/index.js';
@@ -435,7 +436,7 @@ function LicenceTracker({ canWrite }) {
 export default function CercCompliance() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
-  const [view, setView] = useState(searchParams.get('view') === 'licence' ? 'licence' : 'calendar');
+  const [view, setView] = useState(['licence', 'next90'].includes(searchParams.get('view')) ? searchParams.get('view') : 'calendar');
   // The Form-IV screen belongs to the trading module, so the shortcut into it
   // is only offered to roles that screen will actually let in.
   const canOpenForm = ROLE_GROUPS.TRADING_ALL.includes(user?.role);
@@ -476,6 +477,7 @@ export default function CercCompliance() {
       />
 
       <Tabs style={{ marginBottom: 18 }}>
+        <Tab active={view === 'next90'} onClick={() => setView('next90')}>Next 90 days</Tab>
         <Tab active={view === 'calendar'} onClick={() => setView('calendar')}>Calendar</Tab>
         <Tab active={view === 'licence'} onClick={() => setView('licence')}>Licence fee &amp; net worth</Tab>
         <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
@@ -484,6 +486,7 @@ export default function CercCompliance() {
       {view === 'licence' && <LicenceTracker canWrite={canWriteLicence} />}
 
       {view === 'fyi' && <ModuleGuide guide={getGuide('cerc')} />}
+      {view === 'next90' && <ComplianceCalendarPanel />}
 
       {view === 'calendar' && (
       <>

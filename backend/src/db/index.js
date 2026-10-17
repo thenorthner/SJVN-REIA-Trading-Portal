@@ -3654,6 +3654,7 @@ function migrateDecisions20261017() {
   for (const col of ['forum_case_no', 'forum_filed_on', 'next_hearing']) addCol('disputes', col, 'TEXT');
   addCol('disputes', 'expected_exposure', 'REAL');
   addCol('energy_data', 'curtailment_ref', 'TEXT');
+  for (const col of ['claim_submitted_on', 'claim_reference', 'bank_response_due', 'bank_responded_on', 'bank_late_alerted_at', 'outcome_letter_file', 'outcome_letter_name']) addCol('security_invocations', col, 'TEXT');
   addCol('contracts', 'on_hold', 'INTEGER NOT NULL DEFAULT 0');
   addCol('contracts', 'verification_window_days', 'INTEGER');
   for (const col of ['hold_reason', 'hold_set_by', 'hold_set_at']) addCol('contracts', col, 'TEXT');

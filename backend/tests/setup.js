@@ -11,6 +11,7 @@ process.env.SJVN_DB_PATH = path.join(dir, `platform-${process.env.VITEST_WORKER_
 // Files a test uploads land beside its database, not in backend/uploads.
 process.env.SJVN_REC_DOC_DIR = path.join(dir, 'rec-lots');
 process.env.SJVN_DISPUTE_DOC_DIR = path.join(dir, 'dispute-evidence');
+process.env.SJVN_DESK_DOC_DIR = path.join(dir, 'desk-docs');
 // NRPC statement PDFs a test ingests land beside its database too, not in
 // backend/dsa_statements — a suite run left seventeen stub files there.
 process.env.SJVN_DSA_DIR = path.join(dir, 'dsa-statements');

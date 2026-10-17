@@ -883,6 +883,15 @@ CREATE TABLE IF NOT EXISTS security_invocations (
   demand_letter_json TEXT,
   waterfall_used TEXT,
   notes TEXT,
+  -- S2: the claim lodged with the bank, the window it has to answer in, and
+  -- its answer (the refusal or settlement letter).
+  claim_submitted_on TEXT,
+  claim_reference TEXT,
+  bank_response_due TEXT,
+  bank_responded_on TEXT,
+  bank_late_alerted_at TEXT,
+  outcome_letter_file TEXT,
+  outcome_letter_name TEXT,
   created_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -4350,4 +4359,69 @@ CREATE TABLE IF NOT EXISTS dispute_hearings (
   next_date TEXT,
   recorded_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- D4: work a resolved dispute leaves for another desk — an energy figure to
+-- correct, a tariff to review — so the cause is fixed and not only the bill.
+CREATE TABLE IF NOT EXISTS desk_tasks (
+  id TEXT PRIMARY KEY,
+  task_no TEXT UNIQUE NOT NULL,
+  desk TEXT NOT NULL CHECK (desk IN ('ENERGY_DATA','CONTRACT_COMPLIANCE')),
+  task_type TEXT NOT NULL,
+  source_kind TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  contract_id TEXT,
+  invoice_id TEXT,
+  period_month TEXT,
+  title TEXT NOT NULL,
+  detail TEXT,
+  status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','DONE','DROPPED')),
+  closed_by TEXT,
+  closed_at TEXT,
+  close_note TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (source_kind, source_id, task_type)
+);
+CREATE INDEX IF NOT EXISTS idx_desk_tasks_open ON desk_tasks(desk, status);
+
+-- L4: Finance's reconciliation of a quarter's TDS against its Form 16A.
+CREATE TABLE IF NOT EXISTS tds_reconciliations (
+  id TEXT PRIMARY KEY,
+  entity_id TEXT NOT NULL,
+  party_side TEXT NOT NULL CHECK (party_side IN ('SELLER','BUYER')),
+  financial_year TEXT NOT NULL,
+  quarter TEXT NOT NULL CHECK (quarter IN ('Q1','Q2','Q3','Q4')),
+  status TEXT NOT NULL CHECK (status IN ('RECONCILED','MISMATCH')),
+  note TEXT,
+  marked_by TEXT,
+  marked_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (entity_id, party_side, financial_year, quarter)
+);
+
+-- R5: the year-end balance confirmation sent to a counterparty, its answer and
+-- the auditor's certificate.
+CREATE TABLE IF NOT EXISTS balance_confirmations (
+  id TEXT PRIMARY KEY,
+  confirmation_no TEXT UNIQUE NOT NULL,
+  entity_id TEXT NOT NULL,
+  party_side TEXT NOT NULL CHECK (party_side IN ('SELLER','BUYER')),
+  financial_year TEXT NOT NULL,
+  period_from TEXT NOT NULL,
+  period_to TEXT NOT NULL,
+  opening_balance REAL NOT NULL DEFAULT 0,
+  billed REAL NOT NULL DEFAULT 0,
+  settled REAL NOT NULL DEFAULT 0,
+  closing_balance REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'ISSUED' CHECK (status IN ('ISSUED','CONFIRMED','DISPUTED')),
+  confirmed_balance REAL,
+  difference REAL,
+  auditor_name TEXT,
+  certificate_file TEXT,
+  certificate_name TEXT,
+  remarks TEXT,
+  issued_by TEXT,
+  issued_at TEXT NOT NULL DEFAULT (datetime('now')),
+  responded_by TEXT,
+  responded_at TEXT,
+  UNIQUE (entity_id, party_side, financial_year)
 );

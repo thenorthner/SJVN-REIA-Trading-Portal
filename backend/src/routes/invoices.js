@@ -3047,6 +3047,16 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE_CONFIRM, ...BUYE
   const ded = Number(req.body.deduction) || 0;
   if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'A positive payment amount is required.' });
   if (ded < 0) return res.status(400).json({ error: 'A deduction cannot be negative.' });
+  // L4: the tax the buyer withheld, by section, recorded with the receipt so
+  // its Form 16A can be reconciled. TDS is part of the deduction, not on top.
+  const tdsAmt = Math.round((Number(req.body.tds_amount) || 0) * 100) / 100;
+  const tdsSection = String(req.body.tds_section || '').toUpperCase() || null;
+  if (tdsAmt < 0) return res.status(400).json({ error: 'TDS cannot be negative.' });
+  if (tdsAmt > 0 && !['194Q', '194C'].includes(tdsSection)) return res.status(400).json({ error: 'Say which section the tax was withheld under — 194Q (purchase of goods, incl. electricity) or 194C (works contract / transmission).' });
+  if (tdsAmt > ded + 0.005) return res.status(400).json({ error: `TDS of ₹${tdsAmt.toLocaleString('en-IN')} is part of the deduction; the deduction recorded is ₹${ded.toLocaleString('en-IN')}.` });
+  const breakup = tdsAmt > 0 || req.body.deduction_note
+    ? { tds_amount: tdsAmt || null, tds_section: tdsAmt > 0 ? tdsSection : null, deduction_note: req.body.deduction_note ? String(req.body.deduction_note).slice(0, 300) : null }
+    : null;
   const todayIst = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().split('T')[0];
   const payDate = req.body.payment_date || todayIst;
   const asDate = /^\d{4}-\d{2}-\d{2}$/.test(payDate) ? new Date(`${payDate}T00:00:00Z`) : null;
@@ -3082,7 +3092,7 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE_CONFIRM, ...BUYE
       notes: `Paid beyond what ${inv.invoice_no} had left on ${payDate}`, user: req.user,
     });
   }
-  const updated = applyInvoicePayment(inv, { ...req.body, amount: toBill, payment_date: payDate }, req);
+  const updated = applyInvoicePayment(inv, { ...req.body, amount: toBill, payment_date: payDate, breakup }, req);
   if (excess > 0) updated.advance_recorded = excess;
   logAudit({ req, user: req.user, action: 'PAYMENT_RECORDED', module: 'REIA', entityType: 'invoice', entityId: inv.id, details: req.body });
 

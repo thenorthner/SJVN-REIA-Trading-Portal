@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ReconSignoffPanel from '../../components/ReconSignoffPanel.jsx';
+import BalanceConfirmationsPanel from '../../components/BalanceConfirmationsPanel.jsx';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, Tabs, Tab, AlertPopup, fmtCurrency, fmtNumber, StatementViewer } from '../../components/ui.jsx';
@@ -365,10 +366,12 @@ export default function Reconciliation() {
 
       <Tabs style={{ marginBottom: 18 }}>
         <Tab active={view === 'main'} onClick={() => setView('main')}>Statements</Tab>
+        <Tab active={view === 'balance'} onClick={() => setView('balance')}>Balance confirmation</Tab>
         <Tab active={view === 'fyi'} onClick={() => setView('fyi')}>FYI</Tab>
       </Tabs>
 
       {view === 'fyi' && <ModuleGuide guide={getGuide('reconciliation')} />}
+      {view === 'balance' && <BalanceConfirmationsPanel canWrite={[...CAN_WRITE, 'FINANCE_USER'].includes(user?.role)} />}
 
       {view === 'main' && (
       <>

@@ -41,6 +41,8 @@ export const typeLabel = (r) => {
 const lapsed = (r) => !!r.validity_end && String(r.validity_end).slice(0, 10) < new Date().toISOString().slice(0, 10);
 const parse = (json) => { try { return typeof json === 'string' ? JSON.parse(json) : (json || null); } catch { return null; } };
 
+const todayIso = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+
 function saveBlob(blob, name) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -98,6 +100,9 @@ export default function PaymentSecurity() {
   const [invokeConfirm, setInvokeConfirm] = useState(false);
   const [invocationError, setInvocationError] = useState('');
   const [letter, setLetter] = useState(null);
+  // S2: the claim lodged with the bank and the bank's answer.
+  const [claimAsk, setClaimAsk] = useState(null);
+  const [claims, setClaims] = useState(null);
   const [releaseError, setReleaseError] = useState('');
   const [refusing, setRefusing] = useState(null);
   const [refuseNote, setRefuseNote] = useState('');
@@ -116,8 +121,9 @@ export default function PaymentSecurity() {
       api.paymentSecurity.releases().catch(() => []),
       api.paymentSecurity.overrides().catch(() => []),
       api.paymentSecurity.invocations().catch(() => []),
+      api.paymentSecurity.claimTracker ? api.paymentSecurity.claimTracker().then(setClaims).catch(() => null) : null,
       api.securityDesk.overview().catch(() => null),
-    ]).then(([list, s, rel, ov, inv, dk]) => {
+    ]).then(([list, s, rel, ov, inv, , dk]) => {
       setDesk(dk);
       setRows(list);
       setStats(s);
@@ -259,12 +265,12 @@ export default function PaymentSecurity() {
     }
   }
 
-  async function transitionInv(row, status) {
+  async function transitionInv(row, status, extra = {}) {
     if (lock.current) return;
     setInvocationError('');
     setBusy(true);
     try {
-      await api.paymentSecurity.transitionInvocation(row.id, status);
+      await api.paymentSecurity.transitionInvocation(row.id, status, undefined, extra);
       say(`${row.invocation_no} moved to ${status.replaceAll('_', ' ').toLowerCase()}.`);
       await load();
       if (detail) await refreshDetail();
@@ -555,7 +561,31 @@ export default function PaymentSecurity() {
       )}
 
       {invocations.length > 0 && (
-        <Card title="Invocation tracker" className="mt-3">
+        <Card title={`Invocation tracker${claims?.totals?.awaiting_bank ? ` — ${claims.totals.awaiting_bank} claim(s) with banks (${fmtCurrency(claims.totals.amount_awaiting)})${claims.totals.late ? `, ${claims.totals.late} late` : ''}` : ''}`} className="mt-3">
+          <Modal open={!!claimAsk} onClose={() => setClaimAsk(null)} title={claimAsk ? (claimAsk.status === 'CLAIMED' ? `Lodge the claim — ${claimAsk.row.invocation_no}` : `Bank's answer — ${claimAsk.row.invocation_no}`) : ''} width={480}>
+            {claimAsk && (
+              <form noValidate onSubmit={async (e) => {
+                e.preventDefault();
+                const { row, status, ...extra } = claimAsk;
+                setClaimAsk(null);
+                await transitionInv(row, status, extra);
+              }}>
+                {claimAsk.status === 'CLAIMED' ? (
+                  <>
+                    <p style={{ fontSize: 13, marginTop: 0 }}>The bank has {claims?.response_days ?? 7} days from the claim to honour or refuse it; after that the claim is flagged as late.</p>
+                    <Field label="Claim submitted to the bank on" required><input type="date" max={todayIso()} value={claimAsk.claim_submitted_on} onChange={(e) => setClaimAsk({ ...claimAsk, claim_submitted_on: e.target.value })} /></Field>
+                    <Field label="Bank / claim reference"><input value={claimAsk.claim_reference} onChange={(e) => setClaimAsk({ ...claimAsk, claim_reference: e.target.value })} /></Field>
+                  </>
+                ) : (
+                  <Field label={claimAsk.status === 'REJECTED' ? 'Bank refused on' : 'Bank paid on'} required><input type="date" max={todayIso()} value={claimAsk.bank_responded_on} onChange={(e) => setClaimAsk({ ...claimAsk, bank_responded_on: e.target.value })} /></Field>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button type="button" className="btn btn-outline" onClick={() => setClaimAsk(null)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary">Save</button>
+                </div>
+              </form>
+            )}
+          </Modal>
           <Table
             columns={[
               { key: 'invocation_no', header: 'No.' },
@@ -569,10 +599,39 @@ export default function PaymentSecurity() {
                 render: (r) => (canManage && r.status !== 'FUNDS_RECEIVED' && r.status !== 'REJECTED' ? (
                   <div className="cell-actions" onClick={(e) => e.stopPropagation()}>
                     {r.status === 'ELIGIBLE' && <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => transitionInv(r, 'NOTICE_ISSUED')}>Notice</button>}
-                    {r.status === 'NOTICE_ISSUED' && <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => transitionInv(r, 'CLAIMED')}>Claimed</button>}
-                    {r.status === 'CLAIMED' && <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => transitionInv(r, 'FUNDS_RECEIVED')}>Funds in</button>}
+                    {r.status === 'NOTICE_ISSUED' && <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setClaimAsk({ row: r, status: 'CLAIMED', claim_submitted_on: todayIso(), claim_reference: '' })}>Claimed</button>}
+                    {r.status === 'CLAIMED' && <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => setClaimAsk({ row: r, status: 'FUNDS_RECEIVED', bank_responded_on: todayIso() })}>Funds in</button>}
+                    {r.status === 'CLAIMED' && <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={() => setClaimAsk({ row: r, status: 'REJECTED', bank_responded_on: todayIso() })}>Bank refused</button>}
                   </div>
                 ) : null),
+              },
+              {
+                key: 'bank',
+                header: 'Bank claim',
+                render: (r) => (r.claim_submitted_on ? (
+                  <div style={{ fontSize: 12.5 }} onClick={(e) => e.stopPropagation()}>
+                    Lodged {fmtDate(r.claim_submitted_on)}{r.claim_reference ? ` · ${r.claim_reference}` : ''}
+                    <div>
+                      {r.status === 'CLAIMED'
+                        ? (todayIso() > r.bank_response_due
+                          ? <Badge status="OVERDUE" label={`Bank late — due ${fmtDate(r.bank_response_due)}`} />
+                          : <span>Answer due {fmtDate(r.bank_response_due)}</span>)
+                        : r.bank_responded_on ? <span>Answered {fmtDate(r.bank_responded_on)}{r.bank_responded_on > r.bank_response_due ? ' (late)' : ''}</span> : null}
+                    </div>
+                    {['FUNDS_RECEIVED', 'REJECTED'].includes(r.status) && (r.outcome_letter_file
+                      ? <button type="button" className="btn btn-ghost btn-sm" onClick={async () => { try { saveBlob(await api.paymentSecurity.bankLetter(r.id), r.outcome_letter_name || 'bank-letter'); } catch (err) { setInvocationError(errText(err)); } }}>Bank letter</button>
+                      : canManage && (
+                        <label className="btn btn-outline btn-sm" style={{ cursor: 'pointer' }}>
+                          Attach bank letter
+                          <input type="file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" style={{ display: 'none' }} onChange={async (e) => {
+                            const f = e.target.files?.[0]; e.target.value = '';
+                            if (!f) return;
+                            try { await api.paymentSecurity.uploadBankLetter(r.id, f); say(`Bank letter filed on ${r.invocation_no}.`); await load(); } catch (err) { setInvocationError(errText(err)); }
+                          }} />
+                        </label>
+                      ))}
+                  </div>
+                ) : '—'),
               },
               {
                 key: 'letter',
