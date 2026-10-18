@@ -2377,7 +2377,7 @@ function computeArrear(contract, fromMonth, toMonth) {
     `).get(contract.id, m);
     if (pending) { skipped.push({ month: m, reason: `already on draft arrear bill ${pending.bill_no} — issue or cancel it first` }); continue; }
 
-    const { basis, byName } = billedForMonth(contract.id, m);
+    const { basis, byName, arrearSplit = {} } = billedForMonth(contract.id, m);
     if (!basis) { skipped.push({ month: m, reason: 'no issued bill for this month' }); continue; }
     const basisLines = db.prepare('SELECT * FROM hydro_bill_lines WHERE bill_id = ? ORDER BY sr_no').all(basis.id);
 
@@ -2422,8 +2422,10 @@ function computeArrear(contract, fromMonth, toMonth) {
         pct_rea: l.pct_rea, pct_excl_free: l.pct_excl_free, pct_proportionate: l.pct_proportionate, pct_incl_free: l.pct_incl_free,
         previously_billed: before,
         revised,
-        capacity_differential: round2(Number(l.capacity_charge) - Number(b?.capacity_charge || 0)),
-        energy_differential: round2(Number(l.energy_charge_total) - Number(b?.energy_charge_total || 0)),
+        // Against the bill and any arrear already issued on it: a second arrear
+        // counted the first one's capacity and energy again (Hydro QA run 3).
+        capacity_differential: round2(Number(l.capacity_charge) - Number(b?.capacity_charge || 0) - (arrearSplit[l.beneficiary_name]?.capacity || 0)),
+        energy_differential: round2(Number(l.energy_charge_total) - Number(b?.energy_charge_total || 0) - (arrearSplit[l.beneficiary_name]?.energy || 0)),
         differential: round2(revised - before),
       };
     });
@@ -2540,7 +2542,10 @@ router.post('/arrears', requireRole(...WRITE), (req, res) => {
       for (const m of a.months) {
         insMonth.run(newId('HAM'), id, m.month, m.basis_bill_id, m.basis_bill_no, m.previously_billed,
           m.revised_amount, m.differential, m.capacity_differential, m.energy_differential,
-          JSON.stringify(m.lines.map((l) => ({ beneficiary_name: l.beneficiary_name, differential: l.differential }))));
+          JSON.stringify(m.lines.map((l) => ({
+            beneficiary_name: l.beneficiary_name, differential: l.differential,
+            capacity_differential: l.capacity_differential, energy_differential: l.energy_differential,
+          }))));
       }
     })();
 
@@ -2592,6 +2597,12 @@ router.post('/:id/recall', requireRole(...WRITE), (req, res) => {
     if (!bill) return res.status(404).json({ error: 'Bill not found' });
     if (bill.status !== 'DRAFT' || !['IN_APPROVAL', 'REJECTED'].includes(bill.approval_status)) {
       return res.status(400).json({ error: `${bill.bill_no} is not with an approver — there is nothing to recall` });
+    }
+    // Recall is the maker's: anyone else on the desk with a view on the bill
+    // rejects it in the chain, where the decision is on record as theirs.
+    const isMaker = bill.created_by ? bill.created_by === req.user?.id : bill.prepared_by === (req.user?.name || req.user?.email);
+    if (!isMaker && !['SJVN_ADMIN', 'IT_SUPER_ADMIN'].includes(req.user?.role)) {
+      return res.status(403).json({ error: `Only whoever raised ${bill.bill_no} (${bill.prepared_by || 'the maker'}) can recall it — an approver rejects it instead` });
     }
     const reason = String(req.body?.reason || '').trim();
     if (reason.length < 5) return res.status(400).json({ error: 'Say why the bill is being recalled' });

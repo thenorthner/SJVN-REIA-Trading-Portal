@@ -136,6 +136,9 @@ export function billedForMonth(contractId, month, { exceptBillId = null } = {}) 
     ORDER BY issued_at DESC, created_at DESC LIMIT 1
   `).get(contractId, month, exceptBillId || '', ...ENERGY_KINDS);
   const byName = {};
+  // What arrears already added, split as capacity and energy, per beneficiary:
+  // a later arrear is the difference against these as well as the bill.
+  const arrearSplit = {};
   if (basis) {
     for (const l of db.prepare('SELECT * FROM hydro_bill_lines WHERE bill_id = ?').all(basis.id)) {
       byName[l.beneficiary_name] = money((byName[l.beneficiary_name] || 0) + lineAmount(l));
@@ -154,9 +157,13 @@ export function billedForMonth(contractId, month, { exceptBillId = null } = {}) 
   for (const r of arrears) {
     for (const l of JSON.parse(r.lines_json || '[]')) {
       byName[l.beneficiary_name] = money((byName[l.beneficiary_name] || 0) + Number(l.differential || 0));
+      const cur = arrearSplit[l.beneficiary_name] || { capacity: 0, energy: 0 };
+      cur.capacity = money(cur.capacity + Number(l.capacity_differential || 0));
+      cur.energy = money(cur.energy + Number(l.energy_differential || 0));
+      arrearSplit[l.beneficiary_name] = cur;
     }
   }
-  return { basis, byName };
+  return { basis, byName, arrearSplit };
 }
 
 /**

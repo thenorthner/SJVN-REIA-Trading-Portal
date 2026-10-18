@@ -315,6 +315,19 @@ export function createSupplementaryBill({
     throw Object.assign(new Error('Say what the supplementary bill is for (at least 10 characters) — it is printed on the bill'), { status: 400 });
   }
 
+  // A supplementary bill sits on top of a month already billed: not a month
+  // still to come, nor one with no issued bill (Hydro QA run 3).
+  const thisMonth = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 7);
+  if (billingMonth > thisMonth) {
+    throw Object.assign(new Error(`${billingMonth} is still to come — a supplementary bill is raised on a month already billed`), { status: 400 });
+  }
+  const billed = db.prepare(`
+    SELECT bill_no FROM hydro_station_bills WHERE contract_id = ? AND billing_month = ? AND status = 'ISSUED'
+      AND bill_kind IN ('PROVISIONAL', 'FINAL', 'REVISION') LIMIT 1
+  `).get(contract.id, billingMonth);
+  if (!billed) {
+    throw Object.assign(new Error(`${contract.contract_no} has no issued bill for ${billingMonth} — raise the month's bill first; a supplementary bill adds to it`), { status: 400 });
+  }
   const allocations = getAllocations(contract.id, billingMonth, Number(contract.free_energy_home_state) || 0);
   if (!allocations.length) {
     throw Object.assign(new Error('No beneficiary allocation is in force for this station and month'), { status: 400 });
@@ -322,7 +335,8 @@ export function createSupplementaryBill({
   let rows;
   let shares;
   if (beneficiaryName) {
-    const one = allocations.find((a) => a.beneficiary_name === beneficiaryName);
+    const key = String(beneficiaryName).trim().toUpperCase();
+    const one = allocations.find((a) => String(a.beneficiary_name).trim().toUpperCase() === key);
     if (!one) throw Object.assign(new Error(`${beneficiaryName} is not a beneficiary of this station in ${billingMonth}`), { status: 400 });
     rows = [one];
     shares = [total];
