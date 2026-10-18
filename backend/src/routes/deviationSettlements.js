@@ -417,6 +417,7 @@ router.post('/raise-from-statement', requireRole(...WRITE), async (req, res) => 
   const { dsa_account_id: accountId, contract_id: contractId } = req.body || {};
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
+  { const no = outsideDesk(req.user, contract); if (no) return res.status(403).json({ error: `${contract.contract_no}: ${no}.` }); }
   const st = stationOf(contract);
   if (!st) return res.status(400).json({ error: `${contract.contract_no} is not one of SJVN's stations on the NRPC statement.` });
   let row = db.prepare(`SELECT * FROM deviation_settlements WHERE contract_id = ? AND dsa_account_id = ? AND status <> 'CANCELLED'`).get(contractId, accountId);
@@ -703,6 +704,10 @@ router.post('/', requireRole(...WRITE), (req, res) => {
 router.put('/:id', requireRole(...WRITE), (req, res) => {
   const row = db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Deviation record not found' });
+  // Each desk works its own stations' weeks on every step, not only when one
+  // is raised: the Hydro and Thermal desks could edit, bill and delete a
+  // solar plant's week (Hydro QA run 11).
+  { const no = outsideDesk(req.user, db.prepare('SELECT * FROM contracts WHERE id = ?').get(row.contract_id)); if (no) return res.status(403).json({ error: no }); }
   if (row.status === 'DISPATCHED') return res.status(400).json({ error: 'Dispatched deviation bills cannot be edited' });
   // Editing used to set the status back to CALCULATED whatever it was, which
   // quietly revived a deleted week.
@@ -762,6 +767,10 @@ router.put('/:id', requireRole(...WRITE), (req, res) => {
 const dispatchHandler = (req, res) => {
   const row = db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Deviation record not found' });
+  // Each desk works its own stations' weeks on every step, not only when one
+  // is raised: the Hydro and Thermal desks could edit, bill and delete a
+  // solar plant's week (Hydro QA run 11).
+  { const no = outsideDesk(req.user, db.prepare('SELECT * FROM contracts WHERE id = ?').get(row.contract_id)); if (no) return res.status(403).json({ error: no }); }
   if (row.status === 'CANCELLED') return res.status(400).json({ error: 'Cancelled deviation cannot be dispatched' });
   if (row.status === 'DISPATCHED' && row.invoice_id) {
     return res.status(400).json({ error: 'Already dispatched with a linked invoice', invoice_id: row.invoice_id, invoice_no: row.invoice_no });
@@ -884,6 +893,10 @@ router.post('/:id/dispatch', requireRole(...WRITE), dispatchHandler);
 router.post('/:id/link-invoice', requireRole(...WRITE), (req, res) => {
   const row = db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Deviation record not found' });
+  // Each desk works its own stations' weeks on every step, not only when one
+  // is raised: the Hydro and Thermal desks could edit, bill and delete a
+  // solar plant's week (Hydro QA run 11).
+  { const no = outsideDesk(req.user, db.prepare('SELECT * FROM contracts WHERE id = ?').get(row.contract_id)); if (no) return res.status(403).json({ error: no }); }
   if (row.invoice_id) {
     return res.status(400).json({ error: 'DSM already linked to an invoice', invoice_id: row.invoice_id, invoice_no: row.invoice_no });
   }
@@ -925,6 +938,10 @@ router.post('/:id/link-invoice', requireRole(...WRITE), (req, res) => {
 router.delete('/:id', requireRole(...WRITE), (req, res) => {
   const row = db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Deviation record not found' });
+  // Each desk works its own stations' weeks on every step, not only when one
+  // is raised: the Hydro and Thermal desks could edit, bill and delete a
+  // solar plant's week (Hydro QA run 11).
+  { const no = outsideDesk(req.user, db.prepare('SELECT * FROM contracts WHERE id = ?').get(row.contract_id)); if (no) return res.status(403).json({ error: no }); }
   if (row.status === 'DISPATCHED') return res.status(400).json({ error: 'Dispatched deviation bills cannot be deleted' });
   if (row.status === 'CANCELLED') return res.status(400).json({ error: 'This week is already deleted' });
   db.prepare(`UPDATE deviation_settlements SET status='CANCELLED', updated_at=datetime('now') WHERE id=?`).run(req.params.id);
