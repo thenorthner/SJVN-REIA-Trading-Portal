@@ -465,6 +465,10 @@ router.put('/:id', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) =
   // company, change the contacts its invoices are mailed to, or stage a change
   // to its bank account.
   if (!existing || !entityVisibleTo(req.user, existing.id)) return res.status(404).json({ error: 'Entity not found' });
+  // A desk edits its own vertical's stakeholders: the Hydro desk renamed a REIA
+  // developer (Hydro QA run 15).
+  const outsideEdit = outsideDesk(req.user, existing);
+  if (outsideEdit) return res.status(403).json({ error: outsideEdit });
 
   const fields = [
     'category', 'name', 'pan_no', 'gst_no', 'cin', 'credit_rating', 'capacity_mw', 'technology',
@@ -944,7 +948,14 @@ router.post('/:id/approve', requireRole(...ENTITY_WRITE), (req, res) => {
   res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id)));
 });
 
-router.post('/:id/logo', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), upload.single('logo'), (req, res) => {
+// The desk check runs before the file is saved, so a refused logo leaves nothing behind.
+const ownDeskOnly = (req, res, next) => {
+  const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
+  const outside = entity && outsideDesk(req.user, entity);
+  if (outside) return res.status(403).json({ error: outside });
+  return next();
+};
+router.post('/:id/logo', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), ownDeskOnly, upload.single('logo'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No logo file provided' });
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity || !entityVisibleTo(req.user, entity.id)) return res.status(404).json({ error: 'Entity not found' });

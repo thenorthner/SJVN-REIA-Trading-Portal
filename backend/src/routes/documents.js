@@ -63,6 +63,51 @@ const INTAKE_ROLES = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDR
 const canVerify = (user) => INTAKE_ROLES.includes(user?.role);
 const ADMIN_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
 
+// Each desk takes in and reviews its own vertical's papers. The Hydro desk
+// rejected a REIA developer's PAN and the Thermal desk verified a hydro
+// station's (Hydro QA run 15). Administrators across SJVN act on all.
+const VERTICAL_LABELS = { REIA: 'REIA', HYDRO: 'Hydro Billing', THERMAL: 'Thermal Billing' };
+function deskVerticals(user) {
+  const role = user?.role;
+  if (['THERMAL_ADMIN', 'THERMAL_USER'].includes(role)) return ['THERMAL'];
+  if (['COMMERCIAL_ADMIN', 'COMMERCIAL', 'COMMERCIAL_USER'].includes(role)) return ['HYDRO'];
+  if (['REIA_ADMIN', 'REIA_USER'].includes(role)) return ['REIA'];
+  return null;
+}
+/** The verticals a document's owner sits in: its company's, else its contract's. */
+function ownerVerticals({ entity_id: entityId, contract_id: contractId }) {
+  if (entityId) {
+    const e = db.prepare('SELECT verticals FROM entities WHERE id = ?').get(entityId);
+    if (e) return String(e.verticals || 'REIA').split(',').map((v) => v.trim()).filter(Boolean);
+  }
+  if (contractId) {
+    const c = db.prepare('SELECT project_type FROM contracts WHERE id = ?').get(contractId);
+    if (c) return [c.project_type === 'Thermal' ? 'THERMAL' : ['Hydro', 'PSP'].includes(c.project_type) ? 'HYDRO' : 'REIA'];
+  }
+  return [];
+}
+/** Why this desk may not act on this document's owner, or null. */
+function outsideDesk(user, owner) {
+  const own = deskVerticals(user);
+  if (!own) return null;
+  const theirs = ownerVerticals(owner);
+  if (!theirs.length || theirs.some((v) => own.includes(v))) return null;
+  return `This is a ${theirs.map((v) => VERTICAL_LABELS[v] || v).join(' / ')} stakeholder's paper; your desk acts on ${own.map((v) => VERTICAL_LABELS[v]).join(', ')} stakeholders only.`;
+}
+/** The vertical a desk's lists are narrowed to: its own, whatever it asks for. */
+function listVertical(user, asked) {
+  const want = asked ? String(asked).replace(/[^A-Z_]/g, '') : '';
+  const own = deskVerticals(user);
+  if (!own) return { vf: want };
+  if (want && !own.includes(want)) return { none: true };
+  return { vf: want || own[0] };
+}
+const isDay = (v) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v))) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+};
+
 /** The entity ids an outside login stands for. A trading client's login may
  *  point at the client row or at the entity behind it; both are honoured. */
 function ownEntityIds(user) {
@@ -251,7 +296,9 @@ router.get('/reject-reasons', requireAuth, (_req, res) => {
 // ?vertical=HYDRO|THERMAL narrows to entities in that vertical.
 router.get('/queue', requireAuth, (req, res) => {
   if (!canVerify(req.user)) return res.status(403).json({ error: 'The verification queue is for the billing desk' });
-  const verticalFilter = req.query.vertical ? ` AND e.verticals LIKE '%${req.query.vertical.replace(/[^A-Z_]/g, '')}%'` : '';
+  const scope = listVertical(req.user, req.query.vertical);
+  if (scope.none) return res.json([]);
+  const verticalFilter = scope.vf ? ` AND e.verticals LIKE '%${scope.vf}%'` : '';
   const rows = db.prepare(`${LATEST} AND d.category = 'VERIFY' AND v.verification_status = 'PENDING'${verticalFilter} ORDER BY v.created_at ASC`).all()
     .map(decorate)
     .map((r) => ({ ...r, waiting_days: Math.max(0, -daysUntil(String(r.uploaded_at).slice(0, 10))) }));
@@ -262,7 +309,9 @@ router.get('/queue', requireAuth, (req, res) => {
 // ?vertical=HYDRO|THERMAL narrows to entities in that vertical.
 router.get('/kyc-report', requireAuth, (req, res) => {
   if (isExternal(req.user)) return res.status(403).json({ error: 'Access denied' });
-  const vf = req.query.vertical ? req.query.vertical.replace(/[^A-Z_]/g, '') : '';
+  const scope = listVertical(req.user, req.query.vertical);
+  if (scope.none) return res.json([]);
+  const vf = scope.vf;
   const verticalFilter = vf ? ` AND e.verticals LIKE '%${vf}%'` : '';
   const docs = db.prepare(`${LATEST} AND d.entity_id IS NOT NULL AND d.category = 'VERIFY'${verticalFilter}`).all().map(decorate);
   const by = new Map();
@@ -368,8 +417,10 @@ router.post('/requests', requireAuth, (req, res) => {
   const { entity_id, document_type, note, due_date } = req.body;
   const entity = entity_id && db.prepare('SELECT id, name FROM entities WHERE id = ?').get(entity_id);
   if (!entity) return res.status(400).json({ error: 'Choose the company to ask' });
+  const outsideAsk = outsideDesk(req.user, { entity_id: entity.id });
+  if (outsideAsk) return res.status(403).json({ error: outsideAsk });
   if (!document_type) return res.status(400).json({ error: 'Say which document is needed' });
-  if (due_date && !/^\d{4}-\d{2}-\d{2}$/.test(due_date)) return res.status(400).json({ error: 'due_date must be YYYY-MM-DD' });
+  if (due_date && !isDay(due_date)) return res.status(400).json({ error: 'due_date must be a real date, YYYY-MM-DD' });
   const id = `DRQ-${uuidv4().slice(0, 12)}`;
   db.prepare(`
     INSERT INTO document_requests (id, entity_id, document_type, note, due_date, requested_by)
@@ -387,6 +438,8 @@ router.post('/requests/:id/cancel', requireAuth, (req, res) => {
   if (!canVerify(req.user)) return res.status(403).json({ error: 'Only the REIA desk can withdraw a request' });
   const r = db.prepare(`SELECT * FROM document_requests WHERE id = ?`).get(req.params.id);
   if (!r) return res.status(404).json({ error: 'Request not found' });
+  const outsideCancel = outsideDesk(req.user, { entity_id: r.entity_id });
+  if (outsideCancel) return res.status(403).json({ error: outsideCancel });
   if (r.status !== 'OPEN') return res.status(400).json({ error: 'Only an open request can be withdrawn' });
   db.prepare(`UPDATE document_requests SET status = 'CANCELLED', closed_at = datetime('now') WHERE id = ?`).run(r.id);
   audit(req, 'DOCUMENT_REQUEST_CANCELLED', r.id);
@@ -413,7 +466,14 @@ router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
   if (!existing && (!document_type || !title || !['VERIFY', 'RECORD'].includes(category))) {
     return refuse(400, 'document_type, title and category are required');
   }
-  if (expiry_date && !/^\d{4}-\d{2}-\d{2}$/.test(expiry_date)) return refuse(400, 'expiry_date must be YYYY-MM-DD');
+  if (expiry_date && !isDay(expiry_date)) return refuse(400, 'expiry_date must be a real date, YYYY-MM-DD');
+  // A company or contract that does not exist came back as a raw foreign-key 500.
+  if (!existing && entity_id && !db.prepare('SELECT 1 FROM entities WHERE id = ?').get(entity_id)) return refuse(400, 'That company is not on record');
+  if (!existing && contract_id && !db.prepare('SELECT 1 FROM contracts WHERE id = ?').get(contract_id)) return refuse(400, 'That contract is not on record');
+  if (!external) {
+    const outsideUp = outsideDesk(req.user, owner);
+    if (outsideUp) return refuse(403, outsideUp);
+  }
 
   // Physical document submission policy:
   // Counterparties submit physical documents directly to SJVN REIA office.
@@ -538,11 +598,13 @@ router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
 function reviewable(req, res, action = 'review') {
   if (!canVerify(req.user)) { res.status(403).json({ error: 'Only the REIA desk can review documents' }); return null; }
   const v = db.prepare(`
-    SELECT v.*, d.title, d.document_type, d.category, d.entity_id,
+    SELECT v.*, d.title, d.document_type, d.category, d.entity_id, d.contract_id,
            (SELECT MAX(version_number) FROM document_versions WHERE document_id = d.id) AS latest
     FROM document_versions v JOIN documents d ON d.id = v.document_id WHERE v.id = ?
   `).get(req.params.versionId);
   if (!v) { res.status(404).json({ error: 'Document version not found' }); return null; }
+  const outsideReview = outsideDesk(req.user, { entity_id: v.entity_id, contract_id: v.contract_id });
+  if (outsideReview) { res.status(403).json({ error: outsideReview }); return null; }
   if (v.category !== 'VERIFY') { res.status(400).json({ error: 'This document is kept for the record and is not verified' }); return null; }
   if (v.version_number !== v.latest) { res.status(400).json({ error: 'A newer version has been uploaded. Review that one.' }); return null; }
   if (v.created_by && v.created_by === req.user.id) {
