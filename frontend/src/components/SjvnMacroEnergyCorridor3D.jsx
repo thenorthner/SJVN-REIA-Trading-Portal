@@ -7,64 +7,21 @@ import { fmtNumber, fmtCurrency } from './ui.jsx';
  * Operating Fleet Units (Nathpa Jhakri, Rampur, Luhri-I, Buxar) ➔ Generation (MW & MU) ➔ Two-Part Monthly Billing ➔ Realized Collections vs Overdue Dues (>45 days)
  */
 
-const FLEET_STATIONS = [
-  {
-    id: 'NJHPS',
-    name: 'Nathpa Jhakri HPS',
-    vertical: 'HYDRO',
-    location: 'Shimla / Kinnaur, HP (Sutlej River)',
-    capacity_mw: 1500,
-    status: 'OPERATIONAL',
-    realtime_mw: 1480,
-    monthly_gen_mu: 324.6,
-    monthly_billing_cr: 154.8,
-    realized_cr: 142.5,
-    overdue_dues_cr: 12.3,
-    collection_eff_pct: 92.1,
-  },
-  {
-    id: 'RAMPUR',
-    name: 'Rampur HPS',
-    vertical: 'HYDRO',
-    location: 'Shimla / Kullu, HP (Cascade from NJHPS)',
-    capacity_mw: 412,
-    status: 'OPERATIONAL',
-    realtime_mw: 410,
-    monthly_gen_mu: 89.4,
-    monthly_billing_cr: 56.2,
-    realized_cr: 51.8,
-    overdue_dues_cr: 4.4,
-    collection_eff_pct: 92.2,
-  },
-  {
-    id: 'LUHRI-1',
-    name: 'Luhri Stage-I HEP',
-    vertical: 'HYDRO',
-    location: 'Shimla / Kullu, HP (Run-of-River)',
-    capacity_mw: 210,
-    status: 'COMMISSIONING',
-    realtime_mw: 45, // Testing / wet commissioning
-    monthly_gen_mu: 12.0,
-    monthly_billing_cr: 8.5,
-    realized_cr: 8.5,
-    overdue_dues_cr: 0.0,
-    collection_eff_pct: 100.0,
-  },
-  {
-    id: 'BUXAR-TPP',
-    name: 'Buxar Thermal Power Project',
-    vertical: 'THERMAL',
-    location: 'Chausa, Buxar, Bihar (Supercritical 2 × 660 MW)',
-    capacity_mw: 1320,
-    status: 'OPERATIONAL',
-    realtime_mw: 1260,
-    monthly_gen_mu: 685.0,
-    monthly_billing_cr: 248.9,
-    realized_cr: 210.0,
-    overdue_dues_cr: 38.9,
-    collection_eff_pct: 84.4,
-  },
-];
+// The fleet as the dashboard reports it: the stations on record, each with its
+// latest billed month. The strip used to be a typed-in fleet (Luhri, Buxar)
+// with invented figures (Hydro QA run 16).
+const fleetFrom = (stations) => (stations || []).map((s) => ({
+  id: s.id,
+  name: s.station_name,
+  vertical: s.project_type === 'Thermal' ? 'THERMAL' : 'HYDRO',
+  capacity_mw: Number(s.capacity_mw) || 0,
+  status: s.status,
+  latest_month: s.latest_month,
+  monthly_gen_mu: Number(s.latest_scheduled_mu) || 0,
+  monthly_billing_cr: Number(s.latest_billed_cr) || 0,
+  realized_cr: Number(s.latest_collected_cr) || 0,
+  overdue_dues_cr: Number(s.overdue_cr) || 0,
+}));
 
 export default function SjvnMacroEnergyCorridor3D({
   data = null,
@@ -75,20 +32,21 @@ export default function SjvnMacroEnergyCorridor3D({
   const [activeStage, setActiveStage] = useState(null);
   const [selectedStation, setSelectedStation] = useState(null);
 
+  const fleet = fleetFrom(stations);
   const filteredStations = filterVertical === 'ALL'
-    ? FLEET_STATIONS
-    : FLEET_STATIONS.filter((s) => s.vertical === filterVertical);
+    ? fleet
+    : fleet.filter((s) => s.vertical === filterVertical);
+  const mwOf = (v) => fleet.filter((s) => !v || s.vertical === v).reduce((sum, s) => sum + s.capacity_mw, 0);
+  const muOf = (v) => filteredStations.filter((s) => s.vertical === v).reduce((sum, s) => sum + s.monthly_gen_mu, 0);
 
   // Fleet Totals
   const totalCapacityMw = filteredStations.reduce((sum, s) => sum + s.capacity_mw, 0);
-  const totalRealtimeMw = filteredStations.reduce((sum, s) => sum + s.realtime_mw, 0);
   const totalGenMu = filteredStations.reduce((sum, s) => sum + s.monthly_gen_mu, 0);
   const totalBillingCr = filteredStations.reduce((sum, s) => sum + s.monthly_billing_cr, 0);
   const totalRealizedCr = filteredStations.reduce((sum, s) => sum + s.realized_cr, 0);
   const totalOverdueCr = filteredStations.reduce((sum, s) => sum + s.overdue_dues_cr, 0);
 
-  const avgCollectionEff = totalBillingCr > 0 ? (totalRealizedCr / totalBillingCr) * 100 : 100;
-  const capacityFactor = totalCapacityMw > 0 ? (totalRealtimeMw / totalCapacityMw) * 100 : 0;
+  const avgCollectionEff = totalBillingCr > 0 ? (totalRealizedCr / totalBillingCr) * 100 : null;
 
   return (
     <div style={{
@@ -159,7 +117,7 @@ export default function SjvnMacroEnergyCorridor3D({
               </span>
             </div>
             <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
-              Nathpa Jhakri (1500 MW) + Rampur (412 MW) + Luhri-I (210 MW) + Buxar (1320 MW) ➔ Grid Injection ➔ Revenue Realization
+              {fleet.map((s) => `${s.name} (${s.capacity_mw} MW)`).join(' + ') || 'No stations on record'} ➔ Grid Injection ➔ Revenue Realization
             </div>
           </div>
         </div>
@@ -167,10 +125,10 @@ export default function SjvnMacroEnergyCorridor3D({
         {/* Fleet Filter Tabs */}
         <div style={{ display: 'flex', gap: 6 }}>
           {[
-            { id: 'ALL', label: 'All Fleet (3,442 MW)' },
-            { id: 'HYDRO', label: 'Hydro Fleet (2,122 MW)' },
-            { id: 'THERMAL', label: 'Thermal Buxar (1,320 MW)' },
-          ].map((tab) => (
+            { id: 'ALL', label: `All Fleet (${fmtNumber(mwOf(), 0)} MW)` },
+            { id: 'HYDRO', label: `Hydro Fleet (${fmtNumber(mwOf('HYDRO'), 0)} MW)` },
+            { id: 'THERMAL', label: `Thermal Fleet (${fmtNumber(mwOf('THERMAL'), 0)} MW)` },
+          ].filter((tab) => tab.id === 'ALL' || mwOf(tab.id) > 0).map((tab) => (
             <button
               key={tab.id}
               type="button"
@@ -221,16 +179,16 @@ export default function SjvnMacroEnergyCorridor3D({
           </div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Live Installed Capacity</div>
           <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>
-            Plant Factor: {capacityFactor.toFixed(1)}%
+            Average PAFM: {kpis?.avgPafmPct != null ? `${kpis.avgPafmPct}%` : '—'}
           </div>
 
           <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
-            <div style={{ fontSize: 12, color: '#94a3b8' }}>Real-Time Dispatch</div>
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>Installed Capacity</div>
             <div style={{ fontSize: 20, fontWeight: 700, color: '#38bdf8', fontVariantNumeric: 'tabular-nums' }}>
-              {fmtNumber(totalRealtimeMw, 0)} <span style={{ fontSize: 13, fontWeight: 500 }}>MW</span>
+              {fmtNumber(totalCapacityMw, 0)} <span style={{ fontSize: 13, fontWeight: 500 }}>MW</span>
             </div>
             <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
-              Fleet Total: {fmtNumber(totalCapacityMw, 0)} MW
+              {filteredStations.length} station{filteredStations.length === 1 ? '' : 's'} on record
             </div>
           </div>
         </div>
@@ -266,7 +224,7 @@ export default function SjvnMacroEnergyCorridor3D({
               {fmtNumber(totalGenMu, 1)} <span style={{ fontSize: 13, fontWeight: 500 }}>MU</span>
             </div>
             <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
-              Hydro: 426 MU | Thermal: 685 MU
+              Latest billed month · Hydro: {fmtNumber(muOf('HYDRO'), 1)} MU{mwOf('THERMAL') > 0 ? ` | Thermal: ${fmtNumber(muOf('THERMAL'), 1)} MU` : ''}
             </div>
           </div>
         </div>
@@ -302,7 +260,7 @@ export default function SjvnMacroEnergyCorridor3D({
               ₹{fmtNumber(totalBillingCr, 1)} <span style={{ fontSize: 13, fontWeight: 500 }}>Cr</span>
             </div>
             <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
-              Committed to 14 State DISCOMs
+              Latest billed month · {kpis?.beneficiariesCount ?? 0} beneficiaries
             </div>
           </div>
         </div>
@@ -333,7 +291,7 @@ export default function SjvnMacroEnergyCorridor3D({
               padding: '1px 6px',
               borderRadius: 4,
             }}>
-              {avgCollectionEff.toFixed(1)}% RECOVERY
+              {avgCollectionEff != null ? `${avgCollectionEff.toFixed(1)}% RECOVERY` : 'NOT BILLED'}
             </span>
           </div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Collections & Aging</div>
@@ -347,7 +305,7 @@ export default function SjvnMacroEnergyCorridor3D({
               <span style={{ fontWeight: 700, color: '#4ade80' }}>₹{fmtNumber(totalRealizedCr, 1)} Cr</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
-              <span style={{ color: '#94a3b8' }}>Overdue Dues (&gt;45d):</span>
+              <span style={{ color: '#94a3b8' }}>Overdue (past due date):</span>
               <span style={{ fontWeight: 700, color: totalOverdueCr > 0 ? '#f87171' : '#4ade80' }}>
                 ₹{fmtNumber(totalOverdueCr, 1)} Cr
               </span>
@@ -395,9 +353,9 @@ export default function SjvnMacroEnergyCorridor3D({
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
-                <span>Billed: ₹{st.monthly_billing_cr} Cr</span>
+                <span>{st.latest_month ? `Billed ${st.latest_month}: ₹${fmtNumber(st.monthly_billing_cr, 1)} Cr` : 'Not billed yet'}</span>
                 <span style={{ color: st.overdue_dues_cr > 0 ? '#f87171' : '#4ade80' }}>
-                  {st.overdue_dues_cr > 0 ? `Overdue: ₹${st.overdue_dues_cr} Cr` : 'Cleared'}
+                  {st.overdue_dues_cr > 0 ? `Overdue: ₹${fmtNumber(st.overdue_dues_cr, 1)} Cr` : 'Nothing overdue'}
                 </span>
               </div>
             </div>

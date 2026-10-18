@@ -31,6 +31,7 @@ import { getParam } from '../mastersService.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { isThermal, buildThermalBill, rebuildThermalBill, thermalReadiness } from '../services/thermalStationBill.js';
 import { stationScope, deskVertical, verticalOfContract } from '../services/stationScope.js';
+import { buildDashboard } from '../services/hydroDashboard.js';
 import { listNotes, raiseNote, approveNote, rejectNote, NOTE_REASONS } from '../services/hydroNotes.js';
 import {
   generateHydroStationBillPdf, generateHydroBeneficiaryBillsPdf, hydroBeneficiaryBillPdfBuffer, monthLabel,
@@ -370,159 +371,13 @@ router.get('/stations', requireRole(...READ), (req, res) => {
 // GET /hydro-billing/dashboard — executive overview, charts, and station KPIs
 router.get('/dashboard', requireRole(...READ), (req, res) => {
   try {
-    const stationRows = db.prepare(`
-      SELECT c.*, e.name AS seller_name
-      FROM contracts c
-      LEFT JOIN entities e ON c.seller_id = e.id
-      WHERE c.contract_type = 'PPA' AND (c.project_type IN ('Hydro','PSP','Thermal') OR c.project_type LIKE '%Hydro%')
-      ORDER BY c.contract_no
-    `).all();
-
-    const stations = stationRows.map((c) => ({
-      id: c.id,
-      contract_no: c.contract_no,
-      station_name: c.seller_name || c.contract_no,
-      project_type: c.project_type || 'Hydro',
-      capacity_mw: c.capacity_mw,
-      annual_afc: c.annual_afc,
-      annual_design_energy_mwh: c.annual_design_energy_mwh,
-      napaf_percent: c.napaf_percent || 87,
-      pafm_achieved: c.id === 'CON-NJHPS-001' ? 95.8 : 96.5,
-      status: 'OPERATIONAL',
-      monthly_afc: Math.round((c.annual_afc || 0) / 12),
-      ...readiness(c),
-    }));
-
-    // Represent Thermal portfolio (Buxar STPP 1,320 MW Supercritical - SJVN Thermal Pvt Ltd)
-    stations.push({
-      id: 'CON-STPP-BUXAR',
-      contract_no: 'PPA/SJVN/BUXAR/001',
-      station_name: 'SJVN Thermal Pvt Ltd (STPP Buxar)',
-      project_type: 'Thermal',
-      capacity_mw: 1320,
-      annual_afc: 24500000000,
-      annual_design_energy_mwh: 8670000,
-      napaf_percent: 85,
-      pafm_achieved: 88.2,
-      status: 'COMMISSIONING',
-      monthly_afc: Math.round(24500000000 / 12),
-      ready: true,
-      missing: [],
-    });
-
-    const dbBills = db.prepare(`
-      SELECT b.*, c.contract_no
-      FROM hydro_station_bills b
-      JOIN contracts c ON c.id = b.contract_id
-      ORDER BY b.billing_month DESC, b.created_at DESC
-    `).all();
-
-    const monthlyBillingTrend = [
-      { billing_period: 'Apr 2026', month_key: '2026-04', capacity_charges: 187.18, energy_charges: 114.22, total_billed: 301.40, collected_amount: 295.37, njhps_billed: 198.2, rhps_billed: 103.2 },
-      { billing_period: 'May 2026', month_key: '2026-05', capacity_charges: 187.18, energy_charges: 132.85, total_billed: 320.03, collected_amount: 312.60, njhps_billed: 210.5, rhps_billed: 109.53 },
-      { billing_period: 'Jun 2026', month_key: '2026-06', capacity_charges: 187.18, energy_charges: 156.40, total_billed: 343.58, collected_amount: 338.42, njhps_billed: 226.1, rhps_billed: 117.48 },
-      { billing_period: 'Jul 2026', month_key: '2026-07', capacity_charges: 187.18, energy_charges: 172.90, total_billed: 360.08, collected_amount: 351.10, njhps_billed: 236.8, rhps_billed: 123.28 },
-      { billing_period: 'Aug 2026', month_key: '2026-08', capacity_charges: 187.18, energy_charges: 168.15, total_billed: 355.33, collected_amount: 342.90, njhps_billed: 233.7, rhps_billed: 121.63 },
-      { billing_period: 'Sep 2026', month_key: '2026-09', capacity_charges: 187.18, energy_charges: 142.30, total_billed: 329.48, collected_amount: 316.30, njhps_billed: 216.5, rhps_billed: 112.98 },
-      { billing_period: 'Oct 2026', month_key: '2026-10', capacity_charges: 187.18, energy_charges: 125.60, total_billed: 312.78, collected_amount: 298.50, njhps_billed: 205.8, rhps_billed: 106.98 },
-    ];
-
-    const pafmTrend = [
-      { period: 'Apr 2026', njhps: 94.2, rhps: 95.1, buxar: 86.4, target: 87.0 },
-      { period: 'May 2026', njhps: 96.8, rhps: 97.4, buxar: 87.5, target: 87.0 },
-      { period: 'Jun 2026', njhps: 98.4, rhps: 98.9, buxar: 88.0, target: 87.0 },
-      { period: 'Jul 2026', njhps: 99.1, rhps: 99.4, buxar: 88.5, target: 87.0 },
-      { period: 'Aug 2026', njhps: 97.5, rhps: 98.0, buxar: 87.8, target: 87.0 },
-      { period: 'Sep 2026', njhps: 93.8, rhps: 94.6, buxar: 88.2, target: 87.0 },
-      { period: 'Oct 2026', njhps: 91.5, rhps: 92.4, buxar: 88.0, target: 87.0 },
-    ];
-
-    const energyScheduledTrend = [
-      { period: 'Apr 2026', design_energy: 551.0, scheduled_energy: 582.4, free_power: 69.8 },
-      { period: 'May 2026', design_energy: 612.0, scheduled_energy: 668.5, free_power: 80.2 },
-      { period: 'Jun 2026', design_energy: 690.0, scheduled_energy: 784.2, free_power: 94.1 },
-      { period: 'Jul 2026', design_energy: 780.0, scheduled_energy: 875.8, free_power: 105.1 },
-      { period: 'Aug 2026', design_energy: 740.0, scheduled_energy: 842.1, free_power: 101.0 },
-      { period: 'Sep 2026', design_energy: 620.0, scheduled_energy: 695.4, free_power: 83.4 },
-      { period: 'Oct 2026', design_energy: 480.0, scheduled_energy: 532.0, free_power: 63.8 },
-    ];
-
-    const beneficiaryBreakup = [
-      { name: 'HPSEBL / GoHP', state: 'Himachal Pradesh', share_pct: 35.5, mw_share: 678.7, billed_cr: 824.6, collected_cr: 808.2, status: 'Current', color: '#10b981' },
-      { name: 'UPPCL (Uttar Pradesh)', state: 'Uttar Pradesh', share_pct: 14.5, mw_share: 277.2, billed_cr: 337.0, collected_cr: 326.9, status: 'Current', color: '#3b82f6' },
-      { name: 'PSPCL (Punjab)', state: 'Punjab', share_pct: 10.4, mw_share: 198.8, billed_cr: 241.7, collected_cr: 236.8, status: 'Current', color: '#8b5cf6' },
-      { name: 'Rajasthan Discoms', state: 'Rajasthan', share_pct: 10.4, mw_share: 198.8, billed_cr: 241.7, collected_cr: 232.0, status: 'Overdue', color: '#f59e0b' },
-      { name: 'Delhi Discoms (BRPL/BYPL/TPDDL)', state: 'Delhi', share_pct: 10.1, mw_share: 193.1, billed_cr: 234.8, collected_cr: 232.4, status: 'Current', color: '#06b6d4' },
-      { name: 'J & K PDD', state: 'Jammu & Kashmir', share_pct: 7.4, mw_share: 141.5, billed_cr: 172.0, collected_cr: 161.7, status: 'Overdue', color: '#ec4899' },
-      { name: 'Haryana (UHBVN/DHBVN)', state: 'Haryana', share_pct: 5.7, mw_share: 109.0, billed_cr: 132.5, collected_cr: 131.2, status: 'Current', color: '#14b8a6' },
-      { name: 'Uttarakhand (UPCL)', state: 'Uttarakhand', share_pct: 3.5, mw_share: 66.9, billed_cr: 81.3, collected_cr: 79.7, status: 'Current', color: '#6366f1' },
-      { name: 'Chandigarh Electricity Dept', state: 'Chandigarh', share_pct: 1.5, mw_share: 28.7, billed_cr: 34.8, collected_cr: 34.8, status: 'Settled', color: '#84cc16' },
-      { name: 'MPPMCL', state: 'Madhya Pradesh', share_pct: 0.2, mw_share: 3.8, billed_cr: 4.6, collected_cr: 4.6, status: 'Settled', color: '#a855f7' },
-    ];
-
-    const pipeline = {
-      draft: dbBills.filter((b) => b.status === 'DRAFT').length || 1,
-      in_approval: dbBills.filter((b) => b.approval_status === 'IN_APPROVAL').length || 1,
-      approved: dbBills.filter((b) => b.approval_status === 'APPROVED' || b.status === 'APPROVED').length || 4,
-      issued: dbBills.filter((b) => b.status === 'ISSUED').length || 6,
-      dispatched: dbBills.filter((b) => b.status === 'DISPATCHED' || b.dispatched_at).length || 5,
-    };
-
-    const recentBills = dbBills.length > 0
-      ? dbBills.slice(0, 6).map((b) => ({
-          id: b.id,
-          bill_no: b.bill_no,
-          station_name: b.station_name,
-          billing_month: b.billing_month,
-          bill_kind: b.bill_kind,
-          status: b.status,
-          approval_status: b.approval_status,
-          capacity_charge: b.c5_total_capacity_charge,
-          energy_charge: b.ee1_energy_charge + (b.ee2_excess_energy_charge || 0),
-          total_charges: b.total_charges,
-          created_at: b.created_at,
-        }))
-      : [
-          { id: 'HSB-01', bill_no: 'HB/2026/000008', station_name: 'SJVN Nathpa Jhakri HEP', billing_month: '2026-09', bill_kind: 'PROVISIONAL', status: 'ISSUED', capacity_charge: 620668453, energy_charge: 154238910, total_charges: 774907363 },
-          { id: 'HSB-02', bill_no: 'HB/2026/000007', station_name: 'SJVN Rampur HEP', billing_month: '2026-09', bill_kind: 'PROVISIONAL', status: 'ISSUED', capacity_charge: 333189210, energy_charge: 83241020, total_charges: 416430230 },
-        ];
-
-    const totalCapacityMw = 1912 + 1320;
-    const operationalHydroMw = 1912;
-    const annualAfcCr = (14615741000 + 7846038000) / 1e7;
-    const cumulativeBilledCr = monthlyBillingTrend.reduce((s, m) => s + m.total_billed, 0);
-    const cumulativeCollectedCr = monthlyBillingTrend.reduce((s, m) => s + m.collected_amount, 0);
-    const realizationPct = Math.round((cumulativeCollectedCr / cumulativeBilledCr) * 1000) / 10;
-    const avgPafmPct = 96.4;
-    const cumulativeEnergyMu = energyScheduledTrend.reduce((s, m) => s + m.scheduled_energy, 0);
-
-    res.json({
-      kpis: {
-        totalCapacityMw,
-        operationalHydroMw,
-        thermalCommissioningMw: 1320,
-        annualAfcCr: Math.round(annualAfcCr * 100) / 100,
-        cumulativeBilledCr: Math.round(cumulativeBilledCr * 100) / 100,
-        cumulativeCollectedCr: Math.round(cumulativeCollectedCr * 100) / 100,
-        realizationPct,
-        avgPafmPct,
-        cumulativeEnergyMu: Math.round(cumulativeEnergyMu * 10) / 10,
-        activeStationsCount: stationRows.length,
-        beneficiariesCount: 15,
-        pendingApprovalsCount: pipeline.in_approval,
-      },
-      stations,
-      monthlyBillingTrend,
-      pafmTrend,
-      energyScheduledTrend,
-      beneficiaryBreakup,
-      pipeline,
-      recentBills,
-    });
+    // Every figure from the bills and the ledger; a desk sees its own stations (Hydro QA run 16).
+    res.json(buildDashboard({ desk: deskVertical(req.user), readiness }));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Allocation master

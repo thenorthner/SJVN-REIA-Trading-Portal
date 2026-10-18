@@ -140,7 +140,7 @@ export default function HydroThermalDashboard() {
             tagline: 'Station-wise',
             hint: 'Raise & manage station bills',
             path: '/hydro-thermal/hydro-billing',
-            badge: `${stations?.length || 2} Stations`,
+            badge: `${stations?.length ?? 0} Stations`,
             badgeColor: '#2563eb',
             badgeBg: '#eff6ff',
             icon: Droplets,
@@ -152,7 +152,7 @@ export default function HydroThermalDashboard() {
             tagline: 'Beneficiary Ledger',
             hint: 'View beneficiary accounts & clearing',
             path: '/hydro-thermal/hydro-ledger',
-            badge: `${beneficiaryBreakup?.length || 15} Utilities`,
+            badge: `${kpis?.beneficiariesCount ?? 0} Utilities`,
             badgeColor: '#059669',
             badgeBg: '#ecfdf5',
             icon: Users,
@@ -292,10 +292,10 @@ export default function HydroThermalDashboard() {
             Total Capacity
           </div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#1e3a8a', marginTop: 4 }}>
-            {fmtNumber(kpis?.totalCapacityMw || 3232, 0)} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-500)' }}>MW</span>
+            {fmtNumber(kpis?.totalCapacityMw ?? 0, 0)} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-500)' }}>MW</span>
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
-            1,912 MW Hydro · 1,320 MW Thermal
+            {fmtNumber(kpis?.operationalHydroMw ?? 0, 0)} MW Hydro{kpis?.thermalCommissioningMw ? ` · ${fmtNumber(kpis.thermalCommissioningMw, 0)} MW Thermal` : ''}
           </div>
         </div>
 
@@ -310,7 +310,7 @@ export default function HydroThermalDashboard() {
             Annual Fixed Charges
           </div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#0f766e', marginTop: 4 }}>
-            ₹{fmtNumber(kpis?.annualAfcCr || 2246.18, 1)} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-500)' }}>Cr</span>
+            ₹{fmtNumber(kpis?.annualAfcCr ?? 0, 1)} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-500)' }}>Cr</span>
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
             CERC Approved Fixed Tariff
@@ -328,7 +328,7 @@ export default function HydroThermalDashboard() {
             Billed (FY 2026-27)
           </div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#2563eb', marginTop: 4 }}>
-            ₹{fmtNumber(kpis?.cumulativeBilledCr || 2322.68, 1)} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-500)' }}>Cr</span>
+            ₹{fmtNumber(kpis?.cumulativeBilledCr ?? 0, 1)} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-500)' }}>Cr</span>
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
             Cumulative Capacity + Energy
@@ -346,10 +346,10 @@ export default function HydroThermalDashboard() {
             Realized Collections
           </div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#059669', marginTop: 4 }}>
-            {kpis?.realizationPct || 97.1}%
+            {kpis?.realizationPct != null ? `${kpis.realizationPct}%` : '—'}
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
-            ₹{fmtNumber(kpis?.cumulativeCollectedCr || 2255.19, 1)} Cr Received
+            ₹{fmtNumber(kpis?.cumulativeCollectedCr ?? 0, 1)} Cr Received
           </div>
         </div>
 
@@ -364,10 +364,10 @@ export default function HydroThermalDashboard() {
             Average Availability
           </div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#16a34a', marginTop: 4 }}>
-            {kpis?.avgPafmPct || 96.4}%
+            {kpis?.avgPafmPct != null ? `${kpis.avgPafmPct}%` : '—'}
           </div>
           <div style={{ fontSize: 13.5, color: '#16a34a', marginTop: 4, fontWeight: 600 }}>
-            +9.4% above 87% NAPAF Target
+            NAPAF target: {(stations || []).map((st) => `${String(st.contract_no || '').split('/')[2] || st.station_name} ${st.napaf_percent ?? '—'}%`).join(' · ') || '—'}
           </div>
         </div>
 
@@ -382,7 +382,7 @@ export default function HydroThermalDashboard() {
             Scheduled Generation
           </div>
           <div style={{ fontSize: 24, fontWeight: 800, color: '#9333ea', marginTop: 4 }}>
-            {fmtNumber(kpis?.cumulativeEnergyMu || 4980.4, 1)} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-500)' }}>MU</span>
+            {fmtNumber(kpis?.cumulativeEnergyMu ?? 0, 1)} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-500)' }}>MU</span>
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
             Ex-bus Energy to Northern Grid
@@ -413,9 +413,7 @@ export default function HydroThermalDashboard() {
             <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-500)', marginRight: 4 }}>Filter:</span>
             {[
               { id: 'ALL', label: 'All Stations' },
-              { id: 'CON-NJHPS-001', label: 'NJHPS (1,500 MW)' },
-              { id: 'CON-RHPS-001', label: 'Rampur (412 MW)' },
-              { id: 'CON-STPP-BUXAR', label: 'Buxar Thermal (1,320 MW)' },
+              ...(stations || []).map((st) => ({ id: st.id, label: `${st.station_name} (${fmtNumber(st.capacity_mw, 0)} MW)` })),
             ].map((f) => (
               <button
                 key={f.id}
@@ -521,7 +519,7 @@ export default function HydroThermalDashboard() {
                     <div>
                       <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Current PAFM</div>
                       <div style={{ fontSize: 14, fontWeight: 700, color: '#16a34a' }}>
-                        {st.pafm_achieved}% (🟢 Normal)
+                        {st.pafm_achieved == null ? 'Not billed yet' : `${st.pafm_achieved}% (${st.pafm_month}) ${st.pafm_below_napaf ? '🔴 Below NAPAF' : '🟢 Normal'}`}
                       </div>
                     </div>
                   </div>
@@ -665,7 +663,6 @@ export default function HydroThermalDashboard() {
                 <ReferenceLine y={87.0} label={{ value: 'NAPAF Norm (87%)', fill: '#ef4444', fontSize: 13 }} stroke="#ef4444" strokeDasharray="4 4" strokeWidth={1.5} />
                 <Line type="monotone" dataKey="njhps" name="NJHPS (1,500 MW)" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 3.5 }} />
                 <Line type="monotone" dataKey="rhps" name="Rampur (412 MW)" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3.5 }} />
-                <Line type="monotone" dataKey="buxar" name="Buxar Thermal" stroke="#f59e0b" strokeWidth={2} strokeDasharray="3 3" dot={{ r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -815,11 +812,11 @@ export default function HydroThermalDashboard() {
             gap: 12,
           }}>
             {[
-              { label: 'Draft Bills', count: pipeline?.draft || 1, color: '#64748b' },
-              { label: 'In Approval', count: pipeline?.in_approval || 1, color: '#f59e0b' },
-              { label: 'Approved', count: pipeline?.approved || 4, color: '#3b82f6' },
-              { label: 'Issued', count: pipeline?.issued || 6, color: '#10b981' },
-              { label: 'Dispatched to Beneficiaries', count: pipeline?.dispatched || 5, color: '#059669' },
+              { label: 'Draft Bills', count: pipeline?.draft ?? 0, color: '#64748b' },
+              { label: 'In Approval', count: pipeline?.in_approval ?? 0, color: '#f59e0b' },
+              { label: 'Approved', count: pipeline?.approved ?? 0, color: '#3b82f6' },
+              { label: 'Issued', count: pipeline?.issued ?? 0, color: '#10b981' },
+              { label: 'Dispatched to Beneficiaries', count: pipeline?.dispatched ?? 0, color: '#059669' },
             ].map((st, i, arr) => (
               <React.Fragment key={i}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
