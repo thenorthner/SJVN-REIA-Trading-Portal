@@ -165,6 +165,15 @@ export function moveDispute(id, { to, remarks, accepted_amount }, user) {
   if (['RESOLVED_ACCEPTED', 'RESOLVED_REJECTED', 'INFO_REQUESTED', 'ESCALATED'].includes(to) && why.length < 5) {
     throw fail(400, 'Record the remarks for this step — they go to the beneficiary.');
   }
+  // An accepted dispute is closed once its credit has reached the account: a
+  // dispute was closed with its credit note still a draft, or rejected, so the
+  // beneficiary was told "accepted" and never credited (Hydro QA run 7).
+  if (to === 'CLOSED' && d.status === 'RESOLVED_ACCEPTED' && d.credit_note_id) {
+    const n = db.prepare('SELECT note_no, status FROM hydro_notes WHERE id = ?').get(d.credit_note_id);
+    if (n && n.status !== 'APPROVED') {
+      throw fail(400, `Credit note ${n.note_no} for this dispute is ${n.status.toLowerCase()} — the dispute is closed once the note is approved and the credit is on the account.`);
+    }
+  }
   let accepted = null;
   let noteId = null;
   if (to === 'RESOLVED_ACCEPTED') {

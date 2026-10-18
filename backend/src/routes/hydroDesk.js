@@ -51,33 +51,7 @@ router.get('/disputes/shares', requireRole(...READ), handle((req) =>
   disputableShares(need(req.query, 'contract_id'), need(req.query, 'beneficiary'))));
 router.get('/disputes', requireRole(...READ), handle((req) =>
   listDisputes({ contractId: req.query.contract_id, status: req.query.status, beneficiaryName: req.query.beneficiary })));
-router.get('/disputes/:id', requireRole(...READ), handle((req) => getDispute(req.params.id)));
-router.post('/disputes', requireRole(...WRITE), handle((req) => {
-  const d = raiseDispute(req.body || {}, req.user);
-  audit(req, 'HYDRO_DISPUTE_RAISED', 'hydro_disputes', d.id, { afterValue: { dispute_no: d.dispute_no, amount: d.disputed_amount } });
-  pushNotification({ role: verticalOfContract(d.contract_id) === 'THERMAL' ? 'THERMAL_ADMIN' : 'COMMERCIAL_ADMIN', type: 'HYDRO_DISPUTE', message: `Dispute ${d.dispute_no}: ${d.beneficiary_name} disputes ₹${d.disputed_amount.toLocaleString('en-IN')} on ${d.bill_no}.` });
-  return d;
-}));
-router.post('/disputes/:id/move', requireRole(...WRITE), handle((req) => {
-  const d = moveDispute(req.params.id, req.body || {}, req.user);
-  audit(req, `HYDRO_DISPUTE_${d.status}`, 'hydro_disputes', d.id, { reason: req.body?.remarks });
-  return d;
-}));
-
-router.get('/disputes/:id/comments', requireRole(...READ), handle((req) => {
-  return db.prepare('SELECT * FROM hydro_dispute_comments WHERE dispute_id = ? ORDER BY created_at ASC').all(req.params.id);
-}));
-router.post('/disputes/:id/comments', requireRole(...WRITE), handle((req) => {
-  const { body: text, is_internal } = req.body || {};
-  if (!text?.trim()) throw Object.assign(new Error('Comment body is required'), { status: 400 });
-  const id = crypto.randomUUID();
-  db.prepare('INSERT INTO hydro_dispute_comments (id, dispute_id, body, is_internal, author_id, author_name) VALUES (?,?,?,?,?,?)').run(
-    id, req.params.id, text.trim(), is_internal ? 1 : 0, req.user.id, req.user.name || req.user.email,
-  );
-  audit(req, 'HYDRO_DISPUTE_COMMENT', 'hydro_disputes', req.params.id, { reason: text.trim().slice(0, 120) });
-  return db.prepare('SELECT * FROM hydro_dispute_comments WHERE id = ?').get(id);
-}));
-
+// Declared before /disputes/:id, which otherwise answers it as a dispute id (Hydro QA run 7).
 router.get('/disputes/stats', requireRole(...READ), handle((req) => {
   const contractId = req.query.contract_id;
   const where = contractId ? 'WHERE contract_id = ?' : '';
@@ -102,6 +76,34 @@ router.get('/disputes/stats', requireRole(...READ), handle((req) => {
     by_reason: Object.entries(open.reduce((m, d) => { m[d.reason_code] = (m[d.reason_code] || 0) + 1; return m; }, {})).map(([code, count]) => ({ code, count })),
   };
 }));
+router.get('/disputes/:id', requireRole(...READ), handle((req) => getDispute(req.params.id)));
+router.post('/disputes', requireRole(...WRITE), handle((req) => {
+  const d = raiseDispute(req.body || {}, req.user);
+  audit(req, 'HYDRO_DISPUTE_RAISED', 'hydro_disputes', d.id, { afterValue: { dispute_no: d.dispute_no, amount: d.disputed_amount } });
+  pushNotification({ role: verticalOfContract(d.contract_id) === 'THERMAL' ? 'THERMAL_ADMIN' : 'COMMERCIAL_ADMIN', type: 'HYDRO_DISPUTE', message: `Dispute ${d.dispute_no}: ${d.beneficiary_name} disputes ₹${d.disputed_amount.toLocaleString('en-IN')} on ${d.bill_no}.` });
+  return d;
+}));
+router.post('/disputes/:id/move', requireRole(...WRITE), handle((req) => {
+  const d = moveDispute(req.params.id, req.body || {}, req.user);
+  audit(req, `HYDRO_DISPUTE_${d.status}`, 'hydro_disputes', d.id, { reason: req.body?.remarks });
+  return d;
+}));
+
+router.get('/disputes/:id/comments', requireRole(...READ), handle((req) => {
+  return db.prepare('SELECT * FROM hydro_dispute_comments WHERE dispute_id = ? ORDER BY created_at ASC').all(req.params.id);
+}));
+router.post('/disputes/:id/comments', requireRole(...WRITE), handle((req) => {
+  const { body: text, is_internal } = req.body || {};
+  if (!db.prepare('SELECT 1 FROM hydro_disputes WHERE id = ?').get(req.params.id)) throw Object.assign(new Error('Dispute not found'), { status: 404 });
+  if (!text?.trim()) throw Object.assign(new Error('Comment body is required'), { status: 400 });
+  const id = crypto.randomUUID();
+  db.prepare('INSERT INTO hydro_dispute_comments (id, dispute_id, body, is_internal, author_id, author_name) VALUES (?,?,?,?,?,?)').run(
+    id, req.params.id, text.trim(), is_internal ? 1 : 0, req.user.id, req.user.name || req.user.email,
+  );
+  audit(req, 'HYDRO_DISPUTE_COMMENT', 'hydro_disputes', req.params.id, { reason: text.trim().slice(0, 120) });
+  return db.prepare('SELECT * FROM hydro_dispute_comments WHERE id = ?').get(id);
+}));
+
 
 // ── Payment security ────────────────────────────────────────────────────────
 router.get('/security', requireRole(...READ), handle((req) => {

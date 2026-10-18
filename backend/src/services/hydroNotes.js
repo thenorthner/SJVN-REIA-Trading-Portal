@@ -197,5 +197,15 @@ export function rejectNote(id, user, reason) {
       updated_at = datetime('now')
     WHERE id = ?
   `).run(own ? 'CANCELLED' : 'REJECTED', why, user?.id || null, user?.name || null, note.id);
+  // A credit note raised by accepting a dispute: without it the acceptance
+  // credits nothing, so the dispute goes back to review rather than standing
+  // as accepted (Hydro QA run 7).
+  const dispute = db.prepare(`SELECT * FROM hydro_disputes WHERE credit_note_id = ? AND status = 'RESOLVED_ACCEPTED'`).get(note.id);
+  if (dispute) {
+    db.prepare(`UPDATE hydro_disputes SET status = 'UNDER_REVIEW', accepted_amount = NULL, credit_note_id = NULL, resolution = NULL,
+      resolved_by = NULL, resolved_at = NULL, updated_at = datetime('now') WHERE id = ?`).run(dispute.id);
+    db.prepare(`INSERT INTO hydro_dispute_events (id, dispute_id, from_status, to_status, remarks, actor) VALUES (?, ?, 'RESOLVED_ACCEPTED', 'UNDER_REVIEW', ?, ?)`)
+      .run(newId('HDE'), dispute.id, `Credit note ${note.note_no} ${own ? 'withdrawn' : 'rejected'}: ${why}`, user?.name || null);
+  }
   return db.prepare('SELECT * FROM hydro_notes WHERE id = ?').get(note.id);
 }
