@@ -34,7 +34,7 @@ export const NOTE_REASONS = {
 };
 
 const money = (v) => Math.round((Number(v) || 0) * 100) / 100;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
 /** "HDN/2026-27/0001" or "HCN/2026-27/0001": the series restarts each financial year. */
@@ -91,14 +91,20 @@ export function raiseNote(body, user) {
   }
   // A credit note larger than what the named bill still owes would be a refund
   // dressed up as a correction.
+  // Drafts already raised against the same document count too: two notes each
+  // within the balance, together beyond it, left the excess as an advance
+  // (Hydro QA run 5).
   if (type === 'CREDIT' && against) {
     const open = outstandingOf(against.id);
-    if (amount > open + 0.005) {
-      throw fail(400, `${against.doc_no} has only ₹${open.toLocaleString('en-IN')} outstanding; a credit note against it cannot be for more.`);
+    const drafted = money(db.prepare(`SELECT COALESCE(SUM(amount), 0) s FROM hydro_notes WHERE against_doc_id = ? AND note_type = 'CREDIT' AND status = 'DRAFT'`).get(against.id).s);
+    if (amount + drafted > open + 0.005) {
+      throw fail(400, `${against.doc_no} has only ₹${open.toLocaleString('en-IN')} outstanding${drafted > 0 ? `, of which ₹${drafted.toLocaleString('en-IN')} is already on draft credit notes` : ''}; a credit note against it cannot be for more.`);
     }
   }
 
-  const noteDate = body.note_date && /^\d{4}-\d{2}-\d{2}$/.test(body.note_date) ? body.note_date : today();
+  if (body.note_date && !/^\d{4}-\d{2}-\d{2}$/.test(body.note_date)) throw fail(400, 'note_date must be a date (YYYY-MM-DD)');
+  const noteDate = body.note_date || today();
+  if (noteDate > today()) throw fail(400, `A note cannot be dated ${noteDate}, after today`);
   const id = newId('HNT');
   const noteNo = nextNoteNo(type, noteDate);
   db.prepare(`
@@ -118,6 +124,16 @@ export function approveNote(id, user) {
   const conflict = makerCheckerConflict({ created_by: note.created_by, prepared_by: note.created_by_name }, user);
   if (conflict) throw fail(403, 'Segregation of duties: whoever raised this note cannot approve it. It needs a different approver.');
 
+  // A credit note names the bill it corrects. If that bill has been paid,
+  // reversed or credited since, posting the note would leave its amount as an
+  // advance — a refund the note never said it was.
+  if (note.note_type === 'CREDIT' && note.against_doc_id) {
+    const doc = db.prepare('SELECT doc_no, status FROM hydro_ledger_docs WHERE id = ?').get(note.against_doc_id);
+    const open = doc && doc.status === 'OPEN' ? outstandingOf(note.against_doc_id) : 0;
+    if (note.amount > open + 0.005) {
+      throw fail(400, `${doc?.doc_no || 'The bill'} now has only ₹${open.toLocaleString('en-IN')} outstanding, less than this ₹${Number(note.amount).toLocaleString('en-IN')} credit note — reject it and raise one for what is still owed, or one not tied to the bill if a credit balance is intended.`);
+    }
+  }
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(note.contract_id);
   const on = today();
   let ledgerDoc;
