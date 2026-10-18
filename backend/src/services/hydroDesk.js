@@ -583,6 +583,19 @@ export function recordTds(body, user) {
   }
   const has = db.prepare('SELECT 1 FROM hydro_ledger_docs WHERE contract_id = ? AND beneficiary_name = ? LIMIT 1').get(body.contract_id, body.beneficiary_name);
   if (!has) throw fail(400, `${body.beneficiary_name} has no account on this station.`);
+  // Tax is deducted from a payment against bills, so it cannot be more than
+  // the beneficiary owes: ₹50 Cr of "TDS" on a ₹2.9 Cr bill sat as a ₹47 Cr
+  // advance (Hydro QA run 10).
+  const owed = money(openDebits(body.contract_id, body.beneficiary_name).reduce((a, d) => a + d.outstanding, 0));
+  if (amount > owed + 0.005) {
+    throw fail(400, `${body.beneficiary_name} owes ₹${owed.toLocaleString('en-IN')} on this station; TDS deducted from its payments cannot be more than that.`);
+  }
+  // The same deduction entered twice took the credit twice.
+  const twin = db.prepare(`
+    SELECT ledger_doc_id FROM hydro_tds_entries WHERE contract_id = ? AND beneficiary_name = ? AND section = ? AND deduction_date = ?
+      AND ABS(tds_amount - ?) < 0.005 AND COALESCE(reference, '') = COALESCE(?, '') AND status <> 'REVERSED'
+  `).get(body.contract_id, body.beneficiary_name, body.section, on, amount, body.reference || null);
+  if (twin) throw fail(409, `This deduction (₹${amount.toLocaleString('en-IN')} u/s ${body.section} on ${on}${body.reference ? `, ${body.reference}` : ''}) is already recorded for ${body.beneficiary_name}.`);
 
   const { financial_year, quarter } = fyQuarter(on);
   const id = newId('HTD');
@@ -616,6 +629,12 @@ export function updateTdsCertificate(id, body) {
       .run(a, status, body.remarks || null, id);
   } else {
     if (!String(body.certificate_no || '').trim()) throw fail(400, 'Enter the Form 16A certificate number.');
+    if (body.certificate_date) {
+      const cd = String(body.certificate_date);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(cd) || Number.isNaN(Date.parse(`${cd}T00:00:00Z`))) throw fail(400, 'certificate_date must be a date (YYYY-MM-DD)');
+      if (cd > today()) throw fail(400, 'A Form 16A cannot be dated after today.');
+      if (cd < t.deduction_date) throw fail(400, `A Form 16A for tax deducted on ${t.deduction_date} cannot be dated before it.`);
+    }
     db.prepare(`
       UPDATE hydro_tds_entries SET certificate_no = ?, certificate_date = ?,
         status = CASE WHEN status = 'PENDING_CERTIFICATE' THEN 'CERTIFICATE_RECEIVED' ELSE status END,

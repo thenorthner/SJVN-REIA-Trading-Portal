@@ -499,6 +499,12 @@ export function reversePayment(paymentDocId, { reason, onDate = null, createdBy 
       .run(reversal.doc_no, reason, paymentDocId);
     db.prepare(`UPDATE hydro_ledger_docs SET status = 'REVERSED', reversed_by_doc_no = ? WHERE id = ?`)
       .run(pmt.doc_no, reversal.id);
+    // A TDS credit undone on the ledger is undone in the TDS register too: it
+    // stayed there as deducted and awaiting a certificate (Hydro QA run 10).
+    if (pmt.mode === 'TDS') {
+      db.prepare(`UPDATE hydro_tds_entries SET status = 'REVERSED', remarks = COALESCE(remarks || ' · ', '') || ?, updated_at = datetime('now') WHERE ledger_doc_id = ?`)
+        .run(`Reversed: ${reason}`, paymentDocId);
+    }
   })();
 
   return { reversed: pmt.doc_no, reversal_doc_no: reversal.doc_no };
