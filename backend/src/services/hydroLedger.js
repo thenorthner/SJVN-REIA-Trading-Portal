@@ -830,7 +830,13 @@ export function beneficiariesWithAccounts(contractId) {
  * far past its due date it is today; one not yet due is "current".
  */
 export function receivablesAgeing(contractId, { asOf = new Date() } = {}) {
-  const today = new Date(asOf);
+  // Whole days on India's calendar: the time of day in UTC left a bill a day
+  // late reading as current in the early hours (Hydro QA run 6).
+  const given = new Date(asOf);
+  if (Number.isNaN(given.getTime())) throw Object.assign(new Error('as_of must be a date (YYYY-MM-DD)'), { status: 400 });
+  const istDay = typeof asOf === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(asOf)
+    ? asOf : new Date(given.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  const today = new Date(`${istDay}T00:00:00Z`);
   const bucketOf = (due) => {
     if (!due) return 'current';
     const days = Math.floor((today - new Date(due)) / 86400000);
@@ -854,11 +860,13 @@ export function receivablesAgeing(contractId, { asOf = new Date() } = {}) {
     const lastPayment = db.prepare(`
       SELECT doc_date, amount FROM hydro_ledger_docs
       WHERE contract_id = ? AND beneficiary_name = ? AND doc_type = 'PMT' AND status = 'OPEN'
-        AND COALESCE(mode, '') NOT IN ('REBATE', 'CREDIT_NOTE')
+        -- Money the beneficiary sent: not a rebate, a credit note, or the tax it
+        -- deducted (TDS was shown as the last payment).
+        AND COALESCE(mode, '') NOT IN ('REBATE', 'CREDIT_NOTE', 'TDS')
       ORDER BY doc_date DESC, created_at DESC LIMIT 1
     `).get(contractId, name);
     let lpsAccrued = 0;
-    try { lpsAccrued = money(accruedLpsFor(contractId, name, { asOf }).total_chargeable || 0); } catch { lpsAccrued = 0; }
+    try { lpsAccrued = money(accruedLpsFor(contractId, name, { asOf: today }).total_chargeable || 0); } catch { lpsAccrued = 0; }
     const outstanding = money(Object.values(b).reduce((x, y) => x + y, 0));
     const overdue = money(outstanding - b.current);
     const advance = money(openCredits(contractId, name).reduce((x, c) => x + c.unapplied, 0));

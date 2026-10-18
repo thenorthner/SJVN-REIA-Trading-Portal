@@ -1883,7 +1883,11 @@ function stationContract(id) {
 // GET /hydro-billing/receivables?contract_id= — beneficiary-wise outstanding, aged.
 router.get('/receivables', requireRole(...READ), (req, res) => {
   if (!req.query.contract_id) return res.status(400).json({ error: 'contract_id is required' });
-  res.json(receivablesAgeing(req.query.contract_id, { asOf: req.query.as_of ? new Date(req.query.as_of) : new Date() }));
+  try {
+    res.json(receivablesAgeing(req.query.contract_id, { asOf: req.query.as_of ? String(req.query.as_of) : new Date() }));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Could not build the ageing' });
+  }
 });
 
 // ── Debit / credit notes on a beneficiary's account ─────────────────────────
