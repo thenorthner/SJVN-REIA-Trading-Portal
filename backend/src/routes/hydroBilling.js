@@ -29,7 +29,7 @@ function monthFromFileName(name) {
 }
 import { getParam } from '../mastersService.js';
 import { secureLogAudit as writeAudit } from '../auditEngine.js';
-import { isThermal, buildThermalBill, rebuildThermalBill, thermalReadiness } from '../services/thermalStationBill.js';
+import { isThermal, buildThermalBill, rebuildThermalBill, thermalReadiness, thermalTariffFor } from '../services/thermalStationBill.js';
 import { stationScope, deskVertical, verticalOfContract, contractOfRecord } from '../services/stationScope.js';
 import { buildDashboard } from '../services/hydroDashboard.js';
 import { listNotes, raiseNote, approveNote, rejectNote, NOTE_REASONS } from '../services/hydroNotes.js';
@@ -40,7 +40,7 @@ import { sendMail, formatHydroBillEmail } from '../services/mailService.js';
 import {
   addCharge, unclaimedCharges, claimAdditionalCharges, claimTcs, computeTcs,
   listTcsClaims, CHARGE_TYPES, CHARGE_TYPE_LABELS,
-  createSupplementaryBill, SUPPLEMENTARY_REASONS, emptyBillBlocks, INSERT_BILL, freeBillNo,
+  createSupplementaryBill, supplementaryReasonsFor, emptyBillBlocks, INSERT_BILL, freeBillNo,
 } from '../services/hydroClaims.js';
 import {
   bookableBills, preparePosting, postToFinance, reversePosting, getPosting,
@@ -2294,7 +2294,14 @@ function computeArrear(contract, fromMonth, toMonth) {
     };
     let rebuilt;
     if (isThermal(contract)) {
-      rebuilt = rebuildThermalBill(contract, basis, m);
+      // A month that cannot be worked again is left out and said so; it failed
+      // the whole arrear (Thermal QA run 3).
+      try {
+        rebuilt = rebuildThermalBill(contract, basis, m);
+      } catch (err) {
+        skipped.push({ month: m, reason: `${basis.bill_no} cannot be worked again on the tariff now on file: ${err.message}` });
+        continue;
+      }
     } else try {
       // The beneficiary energy the month was billed on, where the bill held it;
       // otherwise the allocation split it was derived from.
@@ -2389,7 +2396,8 @@ router.post('/arrears', requireRole(...WRITE), (req, res) => {
     const id = newId('HSB');
     const billNo = freeBillNo('HAR');
     const stationName = db.prepare('SELECT name FROM entities WHERE id = ?').get(contract.seller_id)?.name || contract.contract_no;
-    const tariff = contractForMonth(contract, a.to_month);
+    // A thermal station's AFC is on its own tariff; the hydro lookup showed 0 (Thermal QA run 3).
+    const tariff = isThermal(contract) ? (thermalTariffFor(contract.id, a.to_month) || contract) : contractForMonth(contract, a.to_month);
     const insertLine = db.prepare(`
       INSERT INTO hydro_bill_lines (
         id, bill_id, sr_no, beneficiary_name, beneficiary_id, parent_state,
@@ -2454,8 +2462,9 @@ router.post('/arrears', requireRole(...WRITE), (req, res) => {
 });
 
 // GET /hydro-billing/supplementary/reasons
-router.get('/supplementary/reasons', requireRole(...READ), (_req, res) => {
-  res.json(Object.entries(SUPPLEMENTARY_REASONS).map(([value, label]) => ({ value, label })));
+router.get('/supplementary/reasons', requireRole(...READ), (req, res) => {
+  const vertical = req.query.contract_id ? verticalOfContract(req.query.contract_id) : req.query.vertical;
+  res.json(Object.entries(supplementaryReasonsFor(vertical === 'THERMAL' ? 'THERMAL' : 'HYDRO')).map(([value, label]) => ({ value, label })));
 });
 
 // POST /hydro-billing/supplementary — a one-off bill on top of a month, as a DRAFT.

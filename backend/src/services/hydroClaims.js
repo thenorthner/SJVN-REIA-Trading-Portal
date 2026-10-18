@@ -281,10 +281,23 @@ export const SUPPLEMENTARY_REASONS = {
   CHANGE_IN_LAW: 'Change in Law',
   TAXES_DUTIES: 'Taxes, duties, cess (e.g. water cess)',
   BETA_INCENTIVE: 'Beta incentive certified after the bill',
+  PART_LOAD_COMPENSATION: 'Compensation for part-load operation and start-ups (IEGC)',
+  FUEL_COST_ADJUSTMENT: 'Fuel cost adjustment on final coal bills / grade slippage',
   TARIFF_ORDER_ITEM: 'Item allowed by a CERC tariff order',
   OMITTED_ITEM: 'Item omitted from the monthly bill',
   OTHER: 'Other',
 };
+
+// β is a hydro station's incentive; part-load compensation and the fuel cost
+// adjustment are a coal station's. Each desk is offered its own (Thermal QA run 3).
+const HYDRO_ONLY = ['BETA_INCENTIVE'];
+const THERMAL_ONLY = ['PART_LOAD_COMPENSATION', 'FUEL_COST_ADJUSTMENT'];
+
+/** The reasons a station of this vertical may bill a supplementary for. */
+export function supplementaryReasonsFor(vertical) {
+  const leave = vertical === 'THERMAL' ? HYDRO_ONLY : THERMAL_ONLY;
+  return Object.fromEntries(Object.entries(SUPPLEMENTARY_REASONS).filter(([k]) => !leave.includes(k)));
+}
 
 /**
  * A one-off amount billed on top of a month: something the monthly bill could
@@ -307,8 +320,9 @@ export function createSupplementaryBill({
   if (!(total > 0)) {
     throw Object.assign(new Error('A supplementary bill is for an amount greater than zero — to give money back, raise a credit note'), { status: 400 });
   }
-  if (!SUPPLEMENTARY_REASONS[reason]) {
-    throw Object.assign(new Error(`reason must be one of ${Object.keys(SUPPLEMENTARY_REASONS).join(', ')}`), { status: 400 });
+  const allowed = supplementaryReasonsFor(contract?.project_type === 'Thermal' ? 'THERMAL' : 'HYDRO');
+  if (!allowed[reason]) {
+    throw Object.assign(new Error(`reason must be one of ${Object.keys(allowed).join(', ')} for this station`), { status: 400 });
   }
   const what = String(particulars || '').trim();
   if (what.length < 10) {

@@ -48,7 +48,7 @@ export default function HydroAdjustmentBills({ vertical = 'HYDRO' }) {
     api.hydroBilling.stations({ vertical })
       .then((list) => { setStations(list || []); if (list?.length) setStationId((cur) => cur || list[0].id); })
       .catch((e) => fail('Stations could not be loaded', e));
-    api.hydroBilling.supplementaryReasons().then(setReasons).catch(() => setReasons([]));
+    api.hydroBilling.supplementaryReasons({ vertical }).then(setReasons).catch(() => setReasons([]));
   }, []);
 
   const loadBills = useCallback(() => {
