@@ -1300,6 +1300,19 @@ try {
   console.error('Hydro TCS index migration failed:', e.message);
 }
 
+// A posted month takes a further FI posting for bills issued after it, so only
+// a waiting (PREPARED) posting is one per month now (Hydro QA run 14).
+try {
+  const idx = db.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_hydro_fi_posting_period'").get();
+  if (idx && !idx.sql.includes("= 'PREPARED'")) {
+    db.exec('DROP INDEX idx_hydro_fi_posting_period');
+    db.exec(`CREATE UNIQUE INDEX idx_hydro_fi_posting_period
+      ON hydro_fi_postings (contract_id, period_month, bill_category) WHERE status = 'PREPARED'`);
+  }
+} catch (e) {
+  console.error('Hydro FI posting index migration failed:', e.message);
+}
+
 // A thermal bill keeps the month's fuel inputs and the norms it was computed
 // on, so it can be reprinted, revised or put on an arrear without guessing.
 try {

@@ -102,7 +102,9 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
     e.preventDefault();
     const r = await run(
       () => api.hydroBilling.fiReverse(reversing.id, reason),
-      (res) => `${res.reversed} reversed by ${res.reversal_posting_no}. ${res.note}`,
+      (res) => (res.withdrawn
+        ? `${res.reversed} withdrawn — it had not been posted. ${res.note}`
+        : `${res.reversed} reversed by ${res.reversal_posting_no}. ${res.note}`),
     );
     if (r) { setReversing(null); setReason(''); }
   }
@@ -267,9 +269,9 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
             Booking {fmtCurrency(posting?.total_amount)} across {posting?.bills_count} bill(s). Record
             the voucher number Finance returns, so the entry can be found from either side.
           </p>
-          <Field label="Finance document number" htmlFor="hf-vch">
+          <Field label="Finance document number *" htmlFor="hf-vch">
             <input
-              id="hf-vch" value={voucher} onChange={(e) => setVoucher(e.target.value)}
+              id="hf-vch" required value={voucher} onChange={(e) => setVoucher(e.target.value)}
               placeholder="e.g. VCH-2026-90412"
             />
           </Field>

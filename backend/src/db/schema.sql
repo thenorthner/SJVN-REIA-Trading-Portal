@@ -3884,11 +3884,11 @@ CREATE TABLE IF NOT EXISTS hydro_fi_postings (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- One live posting per station, month and category. A reversed posting is
--- excluded so the month can be rebuilt and posted again after a correction.
+-- One posting waiting (PREPARED) per station, month and category. A posted
+-- month can take a later posting for bills issued after it.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_hydro_fi_posting_period
   ON hydro_fi_postings (contract_id, period_month, bill_category)
-  WHERE status <> 'REVERSED';
+  WHERE status = 'PREPARED';
 
 -- Which bills a posting booked, frozen at the amounts it booked them at, so a
 -- later revision to a bill cannot silently restate what Finance already has.

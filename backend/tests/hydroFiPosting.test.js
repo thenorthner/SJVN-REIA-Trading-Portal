@@ -123,13 +123,13 @@ describe('preparing and posting', () => {
   it('will not post the same month twice', async () => {
     await issuedBill();
     const prepared = await prepare();
-    await post(`/api/hydro-billing/fi/${prepared.body.id}/post`, reia, {});
+    await post(`/api/hydro-billing/fi/${prepared.body.id}/post`, reia, { fi_document_no: `VCH-${Math.random()}` });
 
     const again = await prepare();
     expect(again.status).toBe(409);
     expect(again.body.error).toMatch(/already posted/);
 
-    const rePost = await post(`/api/hydro-billing/fi/${prepared.body.id}/post`, reia, {});
+    const rePost = await post(`/api/hydro-billing/fi/${prepared.body.id}/post`, reia, { fi_document_no: `VCH-${Math.random()}` });
     expect(rePost.status).toBe(409);
     expect(rePost.body.error).toMatch(/already posted/);
   });
@@ -207,7 +207,7 @@ describe('reversing a posting', () => {
   it('freezes what it booked, so a later revision cannot restate Finance\'s copy', async () => {
     const bill = await issuedBill();
     const prepared = await prepare();
-    await post(`/api/hydro-billing/fi/${prepared.body.id}/post`, reia, {});
+    await post(`/api/hydro-billing/fi/${prepared.body.id}/post`, reia, { fi_document_no: `VCH-${Math.random()}` });
 
     const bookedAt = prepared.body.lines[0].total_amount;
 
@@ -228,7 +228,7 @@ describe('reversing a posting', () => {
   it('does not re-book a bill that is already on a live posting', async () => {
     await issuedBill();
     const prepared = await prepare();
-    await post(`/api/hydro-billing/fi/${prepared.body.id}/post`, reia, {});
+    await post(`/api/hydro-billing/fi/${prepared.body.id}/post`, reia, { fi_document_no: `VCH-${Math.random()}` });
 
     const bookable = await get(
       `/api/hydro-billing/fi/bookable?contract_id=${contract.id}&period_month=2026-06`, viewer,

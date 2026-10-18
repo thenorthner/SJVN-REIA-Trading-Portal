@@ -2197,6 +2197,7 @@ router.post('/fi/prepare', requireRole(...WRITE), (req, res) => {
   try {
     const month = normalizeMonth(req.body.period_month);
     if (!month) return res.status(400).json({ error: 'period_month must be YYYY-MM or a month name with year' });
+    allocationContract(req.body.contract_id);
     const contract = stationContract(req.body.contract_id);
 
     const posting = preparePosting({
@@ -3094,6 +3095,16 @@ router.post('/:id/cancel', requireRole(...WRITE), (req, res) => {
     // A bill that has been paid against cannot simply be withdrawn — the
     // payment has to be released from it first, and saying which payments are
     // in the way is what makes that instruction actionable.
+    // A bill handed to Finance is in its books; cancelling it here alone would
+    // leave Finance holding a sale that no longer exists (Hydro QA run 14).
+    const booked = db.prepare(`
+      SELECT p.posting_no, p.status FROM hydro_fi_posting_lines l
+      JOIN hydro_fi_postings p ON p.id = l.posting_id
+      WHERE l.bill_id = ? AND p.status <> 'REVERSED'
+    `).get(before.id);
+    if (booked) {
+      return res.status(409).json({ error: `${before.bill_no} is on FI posting ${booked.posting_no} (${booked.status.toLowerCase()}). Reverse that posting first.` });
+    }
     const blockers = billReversalBlockers(before.id);
     if (blockers.length) {
       return res.status(409).json({

@@ -23,13 +23,15 @@ export const CATEGORIES = ['HYDRO', 'ADDITIONAL', 'TCS'];
 
 /** Which bill kinds fall under each category Finance books to. */
 const KINDS_BY_CATEGORY = {
-  HYDRO: ['PROVISIONAL', 'FINAL', 'REVISION'],
+  // Arrear, supplementary and PTC bills are energy sale too; they were left out
+  // and never reached Finance (Hydro QA run 14).
+  HYDRO: ['PROVISIONAL', 'FINAL', 'REVISION', 'ARREAR', 'SUPPLEMENTARY', 'PTC'],
   ADDITIONAL: ['ADDITIONAL'],
   TCS: ['TCS'],
 };
 
 export const CATEGORY_LABELS = {
-  HYDRO: 'Hydro energy sale (provisional, final and revision bills)',
+  HYDRO: 'Energy sale (monthly, final, revision, arrear, supplementary and PTC bills)',
   ADDITIONAL: 'Additional charges claimed',
   TCS: 'Tax collected at source',
 };
@@ -47,6 +49,34 @@ function postingNo(plantCode, periodMonth, category) {
  * collected rather than revenue, so each is kept on its own line instead of
  * being rolled into the sale figure.
  */
+const RESTATES = ['FINAL', 'REVISION'];
+const ENERGY_KINDS = ['PROVISIONAL', 'FINAL', 'REVISION'];
+
+/** The energy bill a final or revision bill restated: the one issued for the month just before it. */
+function restatedBill(bill) {
+  if (bill.revises_bill_id) {
+    const r = db.prepare('SELECT * FROM hydro_station_bills WHERE id = ?').get(bill.revises_bill_id);
+    if (r) return r;
+  }
+  return db.prepare(`
+    SELECT * FROM hydro_station_bills
+    WHERE contract_id = ? AND billing_month = ? AND id <> ? AND issued_at IS NOT NULL
+      AND (? IS NULL OR issued_at <= ?)
+      AND bill_kind IN (${ENERGY_KINDS.map(() => '?').join(',')})
+    ORDER BY issued_at DESC, created_at DESC LIMIT 1
+  `).get(bill.contract_id, bill.billing_month, bill.id, bill.issued_at ?? null, bill.issued_at ?? null, ...ENERGY_KINDS);
+}
+
+/** What the ledger charged for a bill: its bills less the credits it gave. Null if it posted nothing. */
+function ledgerNet(billId) {
+  const r = db.prepare(`
+    SELECT COUNT(*) n,
+      COALESCE(SUM(CASE WHEN doc_type = 'PB' THEN amount WHEN mode = 'CREDIT_NOTE' THEN -amount ELSE 0 END), 0) net
+    FROM hydro_ledger_docs WHERE bill_id = ? AND status <> 'REVERSED'
+  `).get(billId);
+  return r.n ? money(r.net) : null;
+}
+
 function splitBill(bill) {
   const kind = bill.bill_kind;
   if (kind === 'TCS') {
@@ -54,6 +84,20 @@ function splitBill(bill) {
   }
   const sale = money(bill.total_charges);
   const nrldc = money(bill.nrldc_total_fee);
+  if (RESTATES.includes(kind)) {
+    // A final or revision bill restates the whole month; the ledger charged only
+    // the difference, so Finance books only the difference. Booking it in full
+    // booked the month twice (Hydro QA run 14). The difference can be a credit.
+    // The ledger's figure is what was charged; the bill restated only splits
+    // out the NRLDC fee's share of the difference.
+    const before = restatedBill(bill);
+    const net = ledgerNet(bill.id);
+    if (before || net !== null) {
+      const nrldcDiff = before ? money(nrldc - money(before.nrldc_total_fee)) : nrldc;
+      const total = net ?? money(sale + nrldc - money(before.total_charges) - money(before.nrldc_total_fee));
+      return { sale: money(total - nrldcDiff), nrldc: nrldcDiff, tcs: 0, total };
+    }
+  }
   return { sale, nrldc, tcs: 0, total: money(sale + nrldc) };
 }
 
@@ -95,18 +139,31 @@ export function preparePosting({
     throw Object.assign(new Error(`bill_category must be one of ${CATEGORIES.join(', ')}`), { status: 400 });
   }
 
+  // One posting waiting at a time. A posted month can still take a posting for
+  // bills issued after it (a supplementary, an arrear), which used to need the
+  // whole month reversed (Hydro QA run 14).
   const open = db.prepare(`
     SELECT posting_no, status FROM hydro_fi_postings
-    WHERE contract_id = ? AND period_month = ? AND bill_category = ? AND status <> 'REVERSED'
+    WHERE contract_id = ? AND period_month = ? AND bill_category = ? AND status = 'PREPARED'
   `).get(contract.id, periodMonth, category);
   if (open) {
     throw Object.assign(
-      new Error(`${periodMonth} is already ${open.status === 'POSTED' ? 'posted' : 'prepared'} for ${category} — ${open.posting_no}`),
+      new Error(`${periodMonth} is already prepared for ${category} — ${open.posting_no}; post or reverse it first`),
       { status: 409 },
     );
   }
 
   const bills = bookableBills(contract.id, periodMonth, category);
+  const posted = db.prepare(`
+    SELECT posting_no FROM hydro_fi_postings
+    WHERE contract_id = ? AND period_month = ? AND bill_category = ? AND status = 'POSTED'
+  `).get(contract.id, periodMonth, category);
+  if (!bills.length && posted) {
+    throw Object.assign(
+      new Error(`${periodMonth} is already posted for ${category} — ${posted.posting_no}; no bill issued since is waiting to be booked`),
+      { status: 409 },
+    );
+  }
   if (!bills.length) {
     throw Object.assign(
       new Error(`No issued ${category} bills for ${contract.contract_no} in ${periodMonth} are waiting to be booked`),
@@ -156,6 +213,28 @@ export function postToFinance(postingId, { fiDocumentNo = null, postedBy = null 
   if (p.status === 'REVERSED') {
     throw Object.assign(new Error(`${p.posting_no} has been reversed — prepare the month again`), { status: 400 });
   }
+  // The voucher is the only link from our record to Finance's; without it, or
+  // with one already used, nothing ties the two together (Hydro QA run 14).
+  const voucher = String(fiDocumentNo ?? '').trim();
+  if (!voucher) {
+    throw Object.assign(new Error('Enter the voucher (FI document) number Finance booked this under'), { status: 400 });
+  }
+  const used = db.prepare(`
+    SELECT posting_no FROM hydro_fi_postings
+    WHERE status = 'POSTED' AND id <> ? AND UPPER(fi_document_no) = UPPER(?)
+  `).get(postingId, voucher);
+  if (used) {
+    throw Object.assign(new Error(`Voucher ${voucher} is already on ${used.posting_no}`), { status: 409 });
+  }
+  // A bill cancelled since the month was prepared is no longer a sale.
+  const gone = db.prepare(`
+    SELECT b.bill_no FROM hydro_fi_posting_lines l JOIN hydro_station_bills b ON b.id = l.bill_id
+    WHERE l.posting_id = ? AND b.status <> 'ISSUED'
+  `).all(postingId).map((r) => r.bill_no);
+  if (gone.length) {
+    throw Object.assign(new Error(`${gone.join(', ')} ${gone.length > 1 ? 'are' : 'is'} no longer issued — reverse ${p.posting_no} and prepare the month again`), { status: 409 });
+  }
+  fiDocumentNo = voucher;
 
   db.prepare(`
     UPDATE hydro_fi_postings
@@ -179,6 +258,17 @@ export function reversePosting(postingId, { reason, reversedBy = null }) {
   if (!p) throw Object.assign(new Error('Posting not found'), { status: 404 });
   if (p.status === 'REVERSED') {
     throw Object.assign(new Error(`${p.posting_no} is already reversed`), { status: 400 });
+  }
+  // A prepared posting never reached Finance, so there is nothing to counter:
+  // it is withdrawn, not answered with a negative entry Finance never had.
+  if (p.status === 'PREPARED') {
+    db.prepare(`
+      UPDATE hydro_fi_postings
+      SET status = 'REVERSED', reversed_at = datetime('now'), reversed_by = ?,
+          reversal_reason = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(reversedBy, `Withdrawn before posting: ${reason}`, postingId);
+    return { reversed: p.posting_no, reversal_posting_no: null, reversal_id: null, withdrawn: true };
   }
 
   const id = newId('HFP');
