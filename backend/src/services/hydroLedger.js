@@ -57,6 +57,8 @@ export const RESERVED_MODES = ['REBATE', 'CREDIT_NOTE', 'DEBIT_NOTE', 'TDS', 'LC
  * The type is in the number because the Account Display is read by type first —
  * "which PB is this PMT against" — and a bare serial would make that a lookup.
  */
+const istToday = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+
 export function genDocNo(docType, periodMonth) {
   const stamp = String(periodMonth || new Date().toISOString().slice(0, 7)).replace('-', '');
   for (let i = 0; i < 12; i += 1) {
@@ -416,6 +418,25 @@ export function recordPayment({
   }
   if (!contractId || !beneficiaryName) throw new Error('contractId and beneficiaryName are required');
   if (!paymentDate) throw new Error('paymentDate is required');
+  // Hydro QA run 4: a payment dated 2099 was taken, money for a name no
+  // station bills sat as a phantom advance, and one UTR was posted twice.
+  const day = String(paymentDate).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`))) throw new Error('paymentDate must be a date (YYYY-MM-DD)');
+  if (day > istToday()) throw new Error(`The payment date ${day} is after today — record money once it has arrived`);
+  const known = db.prepare(`
+    SELECT 1 FROM hydro_beneficiary_allocations WHERE contract_id = ? AND UPPER(TRIM(beneficiary_name)) = UPPER(TRIM(?))
+    UNION SELECT 1 FROM hydro_bill_lines l JOIN hydro_station_bills b ON b.id = l.bill_id
+      WHERE b.contract_id = ? AND UPPER(TRIM(l.beneficiary_name)) = UPPER(TRIM(?))
+  `).get(contractId, beneficiaryName, contractId, beneficiaryName);
+  if (!known) throw new Error(`${beneficiaryName} is not a beneficiary of this station`);
+  const ref = String(reference || '').trim();
+  if (ref) {
+    const dup = db.prepare(`
+      SELECT doc_no FROM hydro_ledger_docs WHERE contract_id = ? AND beneficiary_name = ? AND doc_type = 'PMT'
+        AND COALESCE(mode, '') <> 'REBATE' AND status <> 'REVERSED' AND UPPER(TRIM(reference)) = UPPER(?)
+    `).get(contractId, beneficiaryName, ref);
+    if (dup) throw Object.assign(new Error(`${ref} is already on ${beneficiaryName}'s account as ${dup.doc_no} — the same payment cannot be recorded twice`), { status: 409 });
+  }
 
   const doc = insertDoc({
     doc_no: genDocNo('PMT', paymentDate.slice(0, 7)),

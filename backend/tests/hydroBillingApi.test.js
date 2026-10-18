@@ -745,7 +745,8 @@ describe('the beneficiary ledger once a bill is issued', () => {
     expect(peek.body.total_chargeable).toBeGreaterThan(0);
 
     const posted = await post('/api/hydro-billing/ledger/lps', reia, {
-      contract_id: contract.id, beneficiary: 'GoHP', as_of: '2026-10-31',
+      // Charged up to a day already past: the route refuses to charge days ahead.
+      contract_id: contract.id, beneficiary: 'GoHP', as_of: '2026-10-15',
     });
     expect(posted.body.posted).toBe(1);
 

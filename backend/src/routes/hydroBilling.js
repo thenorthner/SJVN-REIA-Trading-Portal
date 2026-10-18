@@ -1813,6 +1813,17 @@ router.post('/ledger/lps', requireRole(...WRITE), (req, res) => {
     if (!contract_id || !beneficiary) {
       return res.status(400).json({ error: 'contract_id and beneficiary are required' });
     }
+    // Surcharge is charged for days that have passed: an as_of ahead posted
+    // 15 months of LPS that had not accrued (Hydro QA run 4). The accrual view
+    // (GET) may still look ahead.
+    const asOfDay = as_of ? String(as_of).slice(0, 10) : null;
+    if (asOfDay && (!/^\d{4}-\d{2}-\d{2}$/.test(asOfDay) || Number.isNaN(Date.parse(`${asOfDay}T00:00:00Z`)))) {
+      return res.status(400).json({ error: 'as_of must be a date (YYYY-MM-DD)' });
+    }
+    const todayIst = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+    if (asOfDay && asOfDay > todayIst) {
+      return res.status(400).json({ error: `LPS is charged up to today at the latest, not ${asOfDay} — use the accrual view to look ahead` });
+    }
     const result = postLps(contract_id, beneficiary, {
       asOf: as_of ? new Date(as_of) : new Date(),
       createdBy: req.user?.id || null,

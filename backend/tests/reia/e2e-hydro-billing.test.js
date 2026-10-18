@@ -307,7 +307,7 @@ describe('E2E: the beneficiary ledger, from bill to cleared', () => {
       .toBeGreaterThan(0);
 
     const posted = await post('/api/hydro-billing/ledger/lps', reia,
-      { contract_id: contract.id, beneficiary: 'HARYANA', as_of: '2027-01-31' });
+      { contract_id: contract.id, beneficiary: 'HARYANA', as_of: '2026-10-15' });
     expect(posted.status, JSON.stringify(posted.body)).toBe(200);
     expect(posted.body.posted).toBeGreaterThan(0);
 
@@ -319,7 +319,7 @@ describe('E2E: the beneficiary ledger, from bill to cleared', () => {
 
     // Running the same date again must not surcharge the same days twice.
     const again = await post('/api/hydro-billing/ledger/lps', reia,
-      { contract_id: contract.id, beneficiary: 'HARYANA', as_of: '2027-01-31' });
+      { contract_id: contract.id, beneficiary: 'HARYANA', as_of: '2026-10-15' });
     expect(again.status).toBe(200);
     expect(again.body.posted, 'the same overdue days were surcharged twice').toBe(0);
     expect(db.prepare(`
@@ -651,18 +651,18 @@ describe('E2E: telling people what happened', () => {
   it('reports a surcharge when it is charged, once per document', async () => {
     await issuedBill();
     const r = await post('/api/hydro-billing/ledger/lps', reia,
-      { contract_id: contract.id, beneficiary: 'HARYANA', as_of: '2027-01-31' });
+      { contract_id: contract.id, beneficiary: 'HARYANA', as_of: '2026-10-15' });
     expect(r.body.posted).toBeGreaterThan(0);
     await settle();
 
     const raised = notices('HYDRO_LPS_RAISED');
     expect(raised).toHaveLength(r.body.posted);
     expect(raised[0].message).toMatch(
-      /^SJVN: Late payment surcharge of Rs [\d,]+ charged on hydro bill .+ as on 2027-01-31\.$/);
+      /^SJVN: Late payment surcharge of Rs [\d,]+ charged on hydro bill .+ as on 2026-10-15\.$/);
 
     // A second run surcharges nothing, so it must also say nothing.
     await post('/api/hydro-billing/ledger/lps', reia,
-      { contract_id: contract.id, beneficiary: 'HARYANA', as_of: '2027-01-31' });
+      { contract_id: contract.id, beneficiary: 'HARYANA', as_of: '2026-10-15' });
     await settle();
     expect(notices('HYDRO_LPS_RAISED'),
       'the second sweep re-announced a surcharge it did not charge').toHaveLength(r.body.posted);
