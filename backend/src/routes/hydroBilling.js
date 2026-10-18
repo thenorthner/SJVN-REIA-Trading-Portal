@@ -134,6 +134,87 @@ function getContract(id) {
   return c;
 }
 
+// ── Allocation sheet checks (Hydro QA run 1, 18-Oct-2026) ───────────────────
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const fail400 = (message) => Object.assign(new Error(message), { status: 400 });
+const dayBefore = (d) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
+
+/** A station contract (hydro, PSP or thermal) — nothing else is split on an allocation sheet. */
+function allocationContract(id) {
+  const c = getContract(id);
+  if (!verticalOfContract(c.id)) throw fail400(`${c.contract_no} is not a hydro or thermal station — allocation sheets are for station contracts only`);
+  return c;
+}
+
+/** A beneficiary link must point to a stakeholder registered in the station's own vertical. */
+function checkBeneficiaryLink(contractId, beneficiaryId) {
+  if (!beneficiaryId) return;
+  const e = db.prepare('SELECT id, name, verticals FROM entities WHERE id = ?').get(String(beneficiaryId));
+  if (!e) throw fail400('The linked beneficiary is not a registered stakeholder');
+  const v = verticalOfContract(contractId);
+  const theirs = String(e.verticals || 'REIA').split(',').map((x) => x.trim());
+  if (!theirs.includes(v)) throw fail400(`${e.name} is not registered as a ${v === 'THERMAL' ? 'thermal' : 'hydro'} beneficiary — register it under that vertical first`);
+}
+
+/**
+ * The sheet in force on a date must still make sense after any change to one
+ * of its rows: each beneficiary once, one home state, no more than 100%, and
+ * derivable. Run inside the change's transaction, so a bad edit is undone.
+ */
+function assertSheetSound(contract, asOf) {
+  const rows = db.prepare(`
+    SELECT * FROM hydro_beneficiary_allocations
+    WHERE contract_id = ? AND is_active = 1 AND effective_from <= ? AND (effective_to IS NULL OR effective_to >= ?)
+  `).all(contract.id, asOf, asOf);
+  const seen = new Set();
+  for (const r of rows) {
+    const k = String(r.beneficiary_name).trim().toUpperCase();
+    if (seen.has(k)) throw fail400(`${r.beneficiary_name} would appear twice in the sheet in force on ${asOf} — a beneficiary holds one share of the station`);
+    seen.add(k);
+    if (!(Number(r.pct_rea) >= 0)) throw fail400(`${r.beneficiary_name}'s share must be a percentage of 0 or more`);
+  }
+  const homes = rows.filter((r) => r.is_home_state);
+  if (homes.length > 1) throw fail400(`Only one beneficiary carries the free energy to the home state; ${homes.map((r) => r.beneficiary_name).join(' and ')} would both be marked on ${asOf}`);
+  deriveAllocationColumns(rows, Number(contract.free_energy_home_state) || 0);
+  // A sheet part-way through a correction may not close on 100% yet; it is
+  // saved, and the bill refuses it until it does — said now, not at bill time.
+  const total = Math.round(rows.reduce((a, r) => a + Number(r.pct_rea || 0), 0) * 1e6) / 1e6;
+  return { sheet_total: total, warning: Math.abs(total - 100) <= 0.01 ? null : `The sheet in force on ${asOf} now totals ${total}%, not 100% — no bill can be raised on it until it does` };
+}
+
+function cleanAllocationFields(body, before = {}) {
+  const out = {};
+  if ('pct_rea' in body) {
+    const v = Number(body.pct_rea);
+    if (body.pct_rea === '' || body.pct_rea == null || !Number.isFinite(v) || v < 0 || v > 100) throw fail400('The REA share must be a percentage between 0 and 100');
+    out.pct_rea = v;
+  }
+  if ('pct_incl_free' in body) {
+    if (body.pct_incl_free === '' || body.pct_incl_free == null) out.pct_incl_free = null;
+    else {
+      const v = Number(body.pct_incl_free);
+      if (!Number.isFinite(v) || v < 0 || v > 100) throw fail400('The share including free power must be a percentage between 0 and 100');
+      out.pct_incl_free = v;
+    }
+  }
+  for (const f of ['effective_from', 'effective_to']) {
+    if (!(f in body)) continue;
+    const v = body[f] === '' || body[f] == null ? null : String(body[f]);
+    if (f === 'effective_from' && !v) throw fail400('effective_from is required');
+    if (v && !DATE_RE.test(v)) throw fail400(`${f} must be a date (YYYY-MM-DD)`);
+    out[f] = v;
+  }
+  const from = out.effective_from ?? before.effective_from;
+  const to = 'effective_to' in out ? out.effective_to : before.effective_to;
+  if (from && to && to < from) throw fail400(`The sheet cannot end (${to}) before it starts (${from})`);
+  if ('beneficiary_name' in body) {
+    const n = String(body.beneficiary_name || '').trim();
+    if (!n) throw fail400('The beneficiary needs a name');
+    out.beneficiary_name = n;
+  }
+  return out;
+}
+
 /**
  * Assemble the inputs for a month and compute the bill, without saving it.
  *
@@ -477,32 +558,36 @@ router.post('/allocations', requireRole(...WRITE), (req, res) => {
     if (!contract_id || !beneficiary_name) {
       return res.status(400).json({ error: 'contract_id and beneficiary_name are required' });
     }
-    if (!(Number(pct_rea) >= 0)) return res.status(400).json({ error: 'pct_rea must be a percentage' });
-    if (!effective_from) return res.status(400).json({ error: 'effective_from is required' });
-    getContract(contract_id);
+    const contract = allocationContract(contract_id);
+    const f = cleanAllocationFields({ beneficiary_name, pct_rea, pct_incl_free, effective_from, effective_to: effective_to ?? null });
+    if (!('pct_rea' in f)) throw fail400('The REA share must be a percentage between 0 and 100');
+    checkBeneficiaryLink(contract.id, beneficiary_id);
 
     const id = newId('HBA');
+    const sheet = db.transaction(() => {
     db.prepare(`
       INSERT INTO hydro_beneficiary_allocations
         (id, contract_id, beneficiary_name, beneficiary_id, parent_state, sr_no,
          pct_incl_free, pct_rea, is_home_state, effective_from, effective_to, source_note, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      id, contract_id, beneficiary_name, beneficiary_id || null, parent_state || null,
+      id, contract_id, f.beneficiary_name, beneficiary_id || null, parent_state || null,
       sr_no == null ? null : Number(sr_no),
-      pct_incl_free == null || pct_incl_free === '' ? null : Number(pct_incl_free),
-      Number(pct_rea), is_home_state ? 1 : 0, effective_from, effective_to || null,
+      f.pct_incl_free ?? null,
+      f.pct_rea, is_home_state ? 1 : 0, f.effective_from, f.effective_to || null,
       source_note || null, req.user?.id || null,
     );
+    return assertSheetSound(contract, f.effective_from);
+    })();
 
     secureLogAudit(req, {
       action: 'HYDRO_ALLOCATION_CREATED',
-      module: 'REIA',
+      module: verticalOfContract(contract.id),
       entityType: 'hydro_beneficiary_allocations',
       entityId: id,
       afterValue: { contract_id, beneficiary_name, pct_rea: Number(pct_rea), effective_from },
     });
-    res.json(db.prepare('SELECT * FROM hydro_beneficiary_allocations WHERE id = ?').get(id));
+    res.json({ ...db.prepare('SELECT * FROM hydro_beneficiary_allocations WHERE id = ?').get(id), ...sheet });
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
   }
@@ -527,7 +612,12 @@ router.post('/allocations/bulk', requireRole(...WRITE), (req, res) => {
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ error: 'rows must be a non-empty list of beneficiaries' });
     }
-    const contract = getContract(contract_id);
+    if (!DATE_RE.test(String(effective_from))) return res.status(400).json({ error: 'effective_from must be a date (YYYY-MM-DD)' });
+    if (effective_to && (!DATE_RE.test(String(effective_to)) || effective_to < effective_from)) {
+      return res.status(400).json({ error: 'effective_to must be a date on or after effective_from' });
+    }
+    const contract = allocationContract(contract_id);
+    for (const r of rows) checkBeneficiaryLink(contract.id, r.beneficiary_id);
 
     const seen = new Set();
     const clean = rows.map((r, i) => {
@@ -578,14 +668,25 @@ router.post('/allocations/bulk', requireRole(...WRITE), (req, res) => {
          pct_incl_free, pct_rea, is_home_state, effective_from, effective_to, source_note, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
+    // A new sheet takes over from its date: the sheet before it closes the day
+    // before, and it runs until the next sheet on file starts. Leaving the old
+    // one open put both in force, and a station was split on 200%.
+    const next = db.prepare(`
+      SELECT MIN(effective_from) d FROM hydro_beneficiary_allocations WHERE contract_id = ? AND is_active = 1 AND effective_from > ?
+    `).get(contract_id, effective_from).d;
+    const until = effective_to || (next ? dayBefore(next) : null);
     const replaced = db.transaction(() => {
       const gone = db.prepare(`
         DELETE FROM hydro_beneficiary_allocations WHERE contract_id = ? AND effective_from = ?
       `).run(contract_id, effective_from).changes;
+      db.prepare(`
+        UPDATE hydro_beneficiary_allocations SET effective_to = ?, updated_at = datetime('now')
+        WHERE contract_id = ? AND effective_from < ? AND (effective_to IS NULL OR effective_to >= ?)
+      `).run(dayBefore(effective_from), contract_id, effective_from, effective_from);
       for (const r of clean) {
         insert.run(
           newId('HBA'), contract_id, r.beneficiary_name, r.beneficiary_id, r.parent_state, r.sr_no,
-          r.pct_incl_free, r.pct_rea, r.is_home_state, effective_from, effective_to || null,
+          r.pct_incl_free, r.pct_rea, r.is_home_state, effective_from, until,
           source_note || null, req.user?.id || null,
         );
       }
@@ -594,7 +695,7 @@ router.post('/allocations/bulk', requireRole(...WRITE), (req, res) => {
 
     secureLogAudit(req, {
       action: 'HYDRO_ALLOCATION_SHEET_REPLACED',
-      module: 'REIA',
+      module: verticalOfContract(contract.id),
       entityType: 'hydro_beneficiary_allocations',
       entityId: contract_id,
       beforeValue: { rows_replaced: replaced },
@@ -607,6 +708,7 @@ router.post('/allocations/bulk', requireRole(...WRITE), (req, res) => {
     res.json({
       contract_id,
       effective_from,
+      effective_to: until,
       rows_replaced: replaced,
       rows: derived,
       total_pct_rea: totalRea,
@@ -627,6 +729,9 @@ router.patch('/allocations/:id', requireRole(...WRITE), (req, res) => {
     const before = db.prepare('SELECT * FROM hydro_beneficiary_allocations WHERE id = ?').get(req.params.id);
     if (!before) return res.status(404).json({ error: 'Allocation not found' });
 
+    const contract = allocationContract(before.contract_id);
+    const clean = cleanAllocationFields(req.body, before);
+    if ('beneficiary_id' in req.body) checkBeneficiaryLink(contract.id, req.body.beneficiary_id);
     const editable = ['beneficiary_name', 'beneficiary_id', 'parent_state', 'sr_no',
       'pct_incl_free', 'pct_rea', 'is_home_state', 'effective_from', 'effective_to',
       'source_note', 'is_active'];
@@ -634,22 +739,28 @@ router.patch('/allocations/:id', requireRole(...WRITE), (req, res) => {
     const params = [];
     for (const f of editable) {
       if (!(f in req.body)) continue;
-      let v = req.body[f];
-      if (['sr_no', 'pct_incl_free', 'pct_rea'].includes(f)) v = v === '' || v == null ? null : Number(v);
+      let v = f in clean ? clean[f] : req.body[f];
+      if (f === 'sr_no') v = v === '' || v == null ? null : Number(v);
+      if (f === 'beneficiary_id') v = v || null;
       if (['is_home_state', 'is_active'].includes(f)) v = v ? 1 : 0;
       sets.push(`${f} = ?`);
       params.push(v);
     }
     if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
 
-    const after = db.prepare(`
-      UPDATE hydro_beneficiary_allocations SET ${sets.join(', ')}, updated_at = datetime('now')
-      WHERE id = ? RETURNING *
-    `).get(...params, req.params.id);
+    const after = db.transaction(() => {
+      const row = db.prepare(`
+        UPDATE hydro_beneficiary_allocations SET ${sets.join(', ')}, updated_at = datetime('now')
+        WHERE id = ? RETURNING *
+      `).get(...params, req.params.id);
+      // The sheet the row now sits in, and the one it left, must both still hold.
+      if (before.effective_from !== row.effective_from) assertSheetSound(contract, before.effective_from);
+      return { ...row, ...assertSheetSound(contract, row.effective_from) };
+    })();
 
     secureLogAudit(req, {
       action: 'HYDRO_ALLOCATION_UPDATED',
-      module: 'REIA',
+      module: verticalOfContract(contract.id),
       entityType: 'hydro_beneficiary_allocations',
       entityId: req.params.id,
       beforeValue: { pct_rea: before.pct_rea, is_home_state: before.is_home_state, is_active: before.is_active },
@@ -657,7 +768,7 @@ router.patch('/allocations/:id', requireRole(...WRITE), (req, res) => {
     });
     res.json(after);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message });
   }
 });
 
@@ -819,7 +930,7 @@ function saveBill(contract, month, kind, body, req) {
 
   secureLogAudit(req, {
     action: 'HYDRO_STATION_BILL_CREATED',
-    module: 'REIA',
+    module: 'HYDRO',
     entityType: 'hydro_station_bills',
     entityId: id,
     afterValue: {
@@ -1055,7 +1166,7 @@ async function runFromRea(body, actor, onProgress) {
 
   secureLogAudit(actor, {
     action: 'HYDRO_BILLS_FROM_REA',
-    module: 'REIA',
+    module: 'HYDRO',
     entityType: 'hydro_station_bills',
     entityId: `${rpc}:${from}..${to}`,
     afterValue: {
@@ -1493,7 +1604,7 @@ router.post('/:id/send-for-approval', requireRole(...WRITE), (req, res) => {
 
     secureLogAudit(req, {
       action: 'HYDRO_BILL_SENT_FOR_APPROVAL',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_station_bills',
       entityId: bill.id,
       afterValue: { bill_no: bill.bill_no, ...result },
@@ -1525,7 +1636,7 @@ router.post('/:id/approve', requireRole(...READ), (req, res) => {
 
     secureLogAudit(req, {
       action: `HYDRO_BILL_APPROVAL_${result.outcome}`,
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_station_bills',
       entityId: bill.id,
       afterValue: { bill_no: bill.bill_no, ...result },
@@ -1600,7 +1711,7 @@ router.post('/ledger/payment', requireRole(...WRITE), (req, res) => {
 
     secureLogAudit(req, {
       action: 'HYDRO_LEDGER_PAYMENT_RECORDED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_ledger_docs',
       entityId: result.doc.id,
       afterValue: {
@@ -1631,7 +1742,7 @@ router.post('/ledger/:docId/reverse-payment', requireRole(...WRITE), (req, res) 
     });
     secureLogAudit(req, {
       action: 'HYDRO_LEDGER_PAYMENT_REVERSED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_ledger_docs',
       entityId: req.params.docId,
       afterValue: result,
@@ -1650,7 +1761,7 @@ router.post('/ledger/:docId/reset-clearing', requireRole(...WRITE), (req, res) =
     const result = resetClearing(req.params.docId, { createdBy: req.user?.id || null });
     secureLogAudit(req, {
       action: 'HYDRO_LEDGER_CLEARING_RESET',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_ledger_docs',
       entityId: req.params.docId,
       afterValue: result,
@@ -1671,7 +1782,7 @@ router.post('/ledger/:docId/account-maintenance', requireRole(...WRITE), (req, r
     });
     secureLogAudit(req, {
       action: 'HYDRO_LEDGER_ACCOUNT_MAINTENANCE',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_ledger_docs',
       entityId: req.params.docId,
       afterValue: result,
@@ -1719,7 +1830,7 @@ router.post('/ledger/lps', requireRole(...WRITE), (req, res) => {
 
     secureLogAudit(req, {
       action: 'HYDRO_LEDGER_LPS_POSTED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_ledger_docs',
       entityId: contract_id,
       afterValue: {
@@ -1777,7 +1888,7 @@ router.post('/notes', requireRole(...WRITE), (req, res) => {
   try {
     const note = raiseNote(req.body || {}, req.user);
     secureLogAudit(req, {
-      action: 'HYDRO_NOTE_RAISED', module: 'REIA', entityType: 'hydro_notes', entityId: note.id,
+      action: 'HYDRO_NOTE_RAISED', module: 'HYDRO', entityType: 'hydro_notes', entityId: note.id,
       afterValue: { note_no: note.note_no, type: note.note_type, beneficiary: note.beneficiary_name, amount: note.amount, reason: note.reason },
     });
     pushNotification({
@@ -1794,7 +1905,7 @@ router.post('/notes/:id/approve', requireRole(...WRITE), (req, res) => {
   try {
     const out = approveNote(req.params.id, req.user);
     secureLogAudit(req, {
-      action: 'HYDRO_NOTE_APPROVED', module: 'REIA', entityType: 'hydro_notes', entityId: out.note.id,
+      action: 'HYDRO_NOTE_APPROVED', module: 'HYDRO', entityType: 'hydro_notes', entityId: out.note.id,
       afterValue: { note_no: out.note.note_no, ledger_doc: out.ledger_doc.doc_no, amount: out.note.amount },
     });
     res.json(out);
@@ -1808,7 +1919,7 @@ router.post('/notes/:id/reject', requireRole(...WRITE), (req, res) => {
     const note = rejectNote(req.params.id, req.user, req.body?.reason);
     secureLogAudit(req, {
       action: note.status === 'CANCELLED' ? 'HYDRO_NOTE_WITHDRAWN' : 'HYDRO_NOTE_REJECTED',
-      module: 'REIA', entityType: 'hydro_notes', entityId: note.id, reason: note.rejection_reason,
+      module: 'HYDRO', entityType: 'hydro_notes', entityId: note.id, reason: note.rejection_reason,
     });
     res.json(note);
   } catch (err) {
@@ -1856,7 +1967,7 @@ router.post('/charges', requireRole(...WRITE), (req, res) => {
     });
     secureLogAudit(req, {
       action: 'HYDRO_ADDITIONAL_CHARGE_ADDED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_additional_charges',
       entityId: row.id,
       afterValue: { charge_type, period_month: row.period_month, amount: row.amount },
@@ -1886,7 +1997,7 @@ router.post('/charges/claim', requireRole(...WRITE), (req, res) => {
 
     secureLogAudit(req, {
       action: 'HYDRO_ADDITIONAL_CHARGES_CLAIMED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_station_bills',
       entityId: result.id,
       afterValue: result,
@@ -1943,7 +2054,7 @@ router.post('/tcs', requireRole(...WRITE), (req, res) => {
 
     secureLogAudit(req, {
       action: 'HYDRO_TCS_CLAIMED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_station_bills',
       entityId: result.id,
       afterValue: result,
@@ -2001,7 +2112,7 @@ router.post('/ptc', requireRole(...WRITE), (req, res) => {
 
     secureLogAudit(req, {
       action: 'HYDRO_PTC_BILL_RAISED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_station_bills',
       entityId: result.id,
       afterValue: result,
@@ -2081,7 +2192,7 @@ router.post('/fi/prepare', requireRole(...WRITE), (req, res) => {
 
     secureLogAudit(req, {
       action: 'HYDRO_FI_POSTING_PREPARED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_fi_postings',
       entityId: posting.id,
       afterValue: {
@@ -2105,7 +2216,7 @@ router.post('/fi/:postingId/post', requireRole(...WRITE), (req, res) => {
     });
     secureLogAudit(req, {
       action: 'HYDRO_FI_POSTING_POSTED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_fi_postings',
       entityId: posting.id,
       afterValue: {
@@ -2128,7 +2239,7 @@ router.post('/fi/:postingId/reverse', requireRole(...WRITE), (req, res) => {
     });
     secureLogAudit(req, {
       action: 'HYDRO_FI_POSTING_REVERSED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_fi_postings',
       entityId: req.params.postingId,
       afterValue: result,
@@ -2211,7 +2322,7 @@ router.post('/tariffs', requireRole(...WRITE), (req, res) => {
       .get(contract.id, financial_year);
     secureLogAudit(req, {
       action: 'HYDRO_STATION_TARIFF_SET',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_station_tariffs',
       entityId: after.id,
       beforeValue: before ? { annual_afc: before.annual_afc, ecr_excess_rate: before.ecr_excess_rate } : { annual_afc: contract.annual_afc, ecr_excess_rate: contract.ecr_excess_rate, from: 'contract' },
@@ -2434,7 +2545,7 @@ router.post('/arrears', requireRole(...WRITE), (req, res) => {
     })();
 
     secureLogAudit(req, {
-      action: 'HYDRO_ARREAR_BILL_CREATED', module: 'REIA', entityType: 'hydro_station_bills', entityId: id,
+      action: 'HYDRO_ARREAR_BILL_CREATED', module: 'HYDRO', entityType: 'hydro_station_bills', entityId: id,
       afterValue: { bill_no: billNo, from: a.from_month, to: a.to_month, total: a.total_differential, reason },
     });
     res.json({ id, bill_no: billNo, bill_kind: 'ARREAR', ...a });
@@ -2465,7 +2576,7 @@ router.post('/supplementary', requireRole(...WRITE), (req, res) => {
       createdBy: req.user?.id || null,
     });
     secureLogAudit(req, {
-      action: 'HYDRO_SUPPLEMENTARY_BILL_CREATED', module: 'REIA', entityType: 'hydro_station_bills', entityId: r.id,
+      action: 'HYDRO_SUPPLEMENTARY_BILL_CREATED', module: 'HYDRO', entityType: 'hydro_station_bills', entityId: r.id,
       afterValue: r,
     });
     res.json(r);
@@ -2490,7 +2601,7 @@ router.post('/:id/recall', requireRole(...WRITE), (req, res) => {
         .run(`Recalled by the maker (${req.user?.name || 'unknown'}): ${reason}`, bill.id);
       db.prepare(`UPDATE hydro_station_bills SET approval_status = 'NOT_SENT', updated_at = datetime('now') WHERE id = ?`).run(bill.id);
     })();
-    secureLogAudit(req, { action: 'HYDRO_BILL_RECALLED', module: 'REIA', entityType: 'hydro_station_bills', entityId: bill.id, reason });
+    secureLogAudit(req, { action: 'HYDRO_BILL_RECALLED', module: 'HYDRO', entityType: 'hydro_station_bills', entityId: bill.id, reason });
     res.json({ bill_no: bill.bill_no, approval_status: 'NOT_SENT' });
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
@@ -2559,7 +2670,7 @@ router.post('/:id/issue', requireRole(...WRITE), (req, res) => {
 
     secureLogAudit(req, {
       action: 'HYDRO_STATION_BILL_ISSUED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_station_bills',
       entityId: req.params.id,
       beforeValue: { status: before.status },
@@ -2616,7 +2727,7 @@ router.post('/:id/release', requireRole(...WRITE), (req, res) => {
 
     secureLogAudit(req, {
       action: 'HYDRO_BILL_RELEASED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_station_bills',
       entityId: bill.id,
       afterValue: { bill_no: bill.bill_no, released_by: after.released_by },
@@ -2811,7 +2922,17 @@ router.post('/:id/send', requireRole(...WRITE), async (req, res) => {
       const to = typed.length ? typed : onRecord.emails;
       if (!to.length) { results.push({ ...row, status: 'NO_EMAIL', reason: 'no email address on record' }); continue; }
       if (typed.length && onRecord.source !== 'ENTITY') {
+        const was = onRecord.emails.map((e) => e.toLowerCase()).sort().join(', ');
+        const now = typed.map((e) => e.toLowerCase()).sort().join(', ');
         remember.run(beneficiaryKey(line.beneficiary_name), line.beneficiary_name, typed.join(', '), sentBy);
+        // Where a beneficiary's bills go is changed here, so the change is on record.
+        if (was !== now) {
+          secureLogAudit(req, {
+            action: 'HYDRO_BILL_ADDRESS_CHANGED', module: verticalOfContract(bill.contract_id) || 'HYDRO',
+            entityType: 'hydro_beneficiary_contacts', entityId: beneficiaryKey(line.beneficiary_name),
+            beforeValue: { email: was || null }, afterValue: { email: now, bill_no: bill.bill_no },
+          });
+        }
       }
       let mail;
       try {
@@ -2839,7 +2960,7 @@ router.post('/:id/send', requireRole(...WRITE), async (req, res) => {
     const count = (s) => results.filter((r) => r.status === s).length;
     secureLogAudit(req, {
       action: 'HYDRO_STATION_BILL_SENT',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_station_bills',
       entityId: bill.id,
       afterValue: {
@@ -2904,7 +3025,7 @@ router.post('/:id/dispatch', requireRole(...WRITE), (req, res) => {
 
     secureLogAudit(req, {
       action: bill.dispatched_at ? 'HYDRO_BILL_DISPATCH_UPDATED' : 'HYDRO_BILL_DISPATCHED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_station_bills',
       entityId: bill.id,
       beforeValue: bill.dispatched_at
@@ -2962,7 +3083,7 @@ router.post('/:id/cancel', requireRole(...WRITE), (req, res) => {
 
     secureLogAudit(req, {
       action: 'HYDRO_STATION_BILL_CANCELLED',
-      module: 'REIA',
+      module: 'HYDRO',
       entityType: 'hydro_station_bills',
       entityId: req.params.id,
       beforeValue: { status: before.status, total_charges: before.total_charges },

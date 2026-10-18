@@ -56,6 +56,8 @@ export const ACTION_META = {
 export const MODULE_LABELS = {
   AUTH: 'Authentication',
   REIA: 'REIA Billing & Settlement',
+  HYDRO: 'Hydro Billing',
+  THERMAL: 'Thermal Billing',
   TRADING: 'Power Trading',
   MIS: 'MIS & Reports',
   SYSTEM: 'System',
