@@ -64,6 +64,16 @@ export function createPtcBill({
   if (!fromDate || !toDate) {
     throw Object.assign(new Error('from_date and to_date are required'), { status: 400 });
   }
+  // Real dates, and a trade billed in the month it ends: dates of "abc", and a
+  // 2025 trade billed as 2026-07, were taken (Hydro QA run 13).
+  const isDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d)) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`))
+    && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === String(d);
+  for (const [k, v] of [['from_date', fromDate], ['to_date', toDate], ...(dueDate ? [['due_date', dueDate]] : [])]) {
+    if (!isDay(v)) throw Object.assign(new Error(`${k} must be a date (YYYY-MM-DD)`), { status: 400 });
+  }
+  if (String(toDate).slice(0, 7) !== billingMonth) {
+    throw Object.assign(new Error(`A trade ending on ${toDate} is billed in ${String(toDate).slice(0, 7)}, not ${billingMonth}`), { status: 400 });
+  }
   if (toDate < fromDate) {
     throw Object.assign(
       new Error(`The trade cannot end on ${toDate}, before it began on ${fromDate}`),
@@ -78,6 +88,15 @@ export function createPtcBill({
   }
 
   const calc = consolidate({ grossSale, tradingExpense });
+  // A trade with the same counterparty over days already billed would be sold twice.
+  const overlap = db.prepare(`
+    SELECT b.bill_no, p.from_date, p.to_date FROM hydro_ptc_bills p JOIN hydro_station_bills b ON b.id = p.bill_id
+    WHERE p.contract_id = ? AND UPPER(TRIM(p.exchange_beneficiary)) = UPPER(TRIM(?)) AND b.status <> 'CANCELLED'
+      AND p.from_date <= ? AND p.to_date >= ?
+  `).get(contract.id, exchangeBeneficiary, toDate, fromDate);
+  if (overlap) {
+    throw Object.assign(new Error(`${overlap.bill_no} already bills ${exchangeBeneficiary} for ${overlap.from_date} to ${overlap.to_date}, which overlaps this trade`), { status: 409 });
+  }
   const energy = kwh(energyKwh);
   if (energy < 0) throw Object.assign(new Error('energy cannot be negative'), { status: 400 });
 

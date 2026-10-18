@@ -142,7 +142,7 @@ const dayBefore = (d) => { const x = new Date(`${d}T00:00:00Z`); x.setUTCDate(x.
 /** A station contract (hydro, PSP or thermal) — nothing else is split on an allocation sheet. */
 function allocationContract(id) {
   const c = getContract(id);
-  if (!verticalOfContract(c.id)) throw fail400(`${c.contract_no} is not a hydro or thermal station — allocation sheets are for station contracts only`);
+  if (!verticalOfContract(c.id)) throw fail400(`${c.contract_no} is not a hydro or thermal station — this is for station contracts only`);
   return c;
 }
 
@@ -2109,6 +2109,7 @@ router.post('/ptc', requireRole(...WRITE), (req, res) => {
   try {
     const month = normalizeMonth(req.body.billing_month);
     if (!month) return res.status(400).json({ error: 'billing_month must be YYYY-MM or a month name with year' });
+    allocationContract(req.body.contract_id);
     const contract = stationContract(req.body.contract_id);
 
     const result = createPtcBill({

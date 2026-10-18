@@ -3522,10 +3522,11 @@ CREATE TABLE IF NOT EXISTS hydro_station_bills (
 -- One live bill per station, month and kind. A REVISION is excluded from the
 -- constraint because a month can be revised more than once (β, then a revised
 -- REA); a CANCELLED bill is excluded so a mistake can be re-billed. TCS is
--- claimed per beneficiary, so a month has several.
+-- claimed per beneficiary and PTC sales go in several trades, so a month has
+-- several of each.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_hydro_bill_station_month
   ON hydro_station_bills (contract_id, billing_month, bill_kind)
-  WHERE bill_kind NOT IN ('REVISION','ARREAR','SUPPLEMENTARY','TCS') AND status <> 'CANCELLED';
+  WHERE bill_kind NOT IN ('REVISION','ARREAR','SUPPLEMENTARY','TCS','PTC') AND status <> 'CANCELLED';
 
 -- The beneficiary-wise breakup: pages 2 to 4 of the printed bill, one row per
 -- beneficiary. The percentages are frozen here as they were applied, so a later

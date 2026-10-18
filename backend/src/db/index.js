@@ -1268,7 +1268,7 @@ function migrateHydroArrearKinds() {
     db.exec('DROP INDEX IF EXISTS idx_hydro_bill_station_month');
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_hydro_bill_station_month
       ON hydro_station_bills (contract_id, billing_month, bill_kind)
-      WHERE bill_kind NOT IN ('REVISION','ARREAR','SUPPLEMENTARY','TCS') AND status <> 'CANCELLED'`);
+      WHERE bill_kind NOT IN ('REVISION','ARREAR','SUPPLEMENTARY','TCS','PTC') AND status <> 'CANCELLED'`);
   } finally {
     db.exec('PRAGMA legacy_alter_table=OFF');
     db.exec('PRAGMA foreign_keys=ON');
@@ -1282,17 +1282,17 @@ try {
 }
 
 /**
- * TCS is claimed per beneficiary, so a station has several TCS bills in a
- * month; the one-live-bill-per-month index refused the second beneficiary's
- * claim with a raw constraint error (Hydro QA run 12).
+ * TCS is claimed per beneficiary, and a station sells through PTC in several
+ * trades, so a month has several bills of each; the one-live-bill-per-month
+ * index refused the second with a raw constraint error (Hydro QA runs 12, 13).
  */
 function migrateHydroTcsIndex() {
   const idx = db.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_hydro_bill_station_month'").get();
-  if (!idx || idx.sql.includes("'TCS'")) return;
+  if (!idx || idx.sql.includes("'PTC'")) return;
   db.exec('DROP INDEX IF EXISTS idx_hydro_bill_station_month');
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_hydro_bill_station_month
     ON hydro_station_bills (contract_id, billing_month, bill_kind)
-    WHERE bill_kind NOT IN ('REVISION','ARREAR','SUPPLEMENTARY','TCS') AND status <> 'CANCELLED'`);
+    WHERE bill_kind NOT IN ('REVISION','ARREAR','SUPPLEMENTARY','TCS','PTC') AND status <> 'CANCELLED'`);
 }
 try {
   migrateHydroTcsIndex();
