@@ -28,9 +28,9 @@ function monthFromFileName(name) {
   return `20${m[2]}-${m[1]}`;
 }
 import { getParam } from '../mastersService.js';
-import { secureLogAudit } from '../auditEngine.js';
+import { secureLogAudit as writeAudit } from '../auditEngine.js';
 import { isThermal, buildThermalBill, rebuildThermalBill, thermalReadiness } from '../services/thermalStationBill.js';
-import { stationScope, deskVertical, verticalOfContract } from '../services/stationScope.js';
+import { stationScope, deskVertical, verticalOfContract, contractOfRecord } from '../services/stationScope.js';
 import { buildDashboard } from '../services/hydroDashboard.js';
 import { listNotes, raiseNote, approveNote, rejectNote, NOTE_REASONS } from '../services/hydroNotes.js';
 import {
@@ -78,6 +78,16 @@ router.use(requireAuth);
 const READ = [...new Set([...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.THERMAL_ALL, 'FINANCE_USER', 'COMPLIANCE_AUDITOR'])];
 const WRITE = [...new Set([...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
 stationScope(router);
+
+// A thermal station's bills, approvals and ledger run on these routes too, and
+// were all filed under the Hydro module (Thermal QA run 2): file each by its
+// station's vertical.
+const secureLogAudit = (req, entry) => {
+  if (entry?.module !== 'HYDRO') return writeAudit(req, entry);
+  let v = null;
+  try { v = verticalOfContract(contractOfRecord(entry.entityId) || entry.entityId); } catch { /* filed as given */ }
+  return writeAudit(req, v === 'THERMAL' ? { ...entry, module: 'THERMAL' } : entry);
+};
 
 // Lay out the NJHPS allocation master on first load, the way the DSM slabs are
 // seeded. It is idempotent and leaves a corrected percentage alone.
@@ -808,6 +818,10 @@ router.post('/', requireRole(...WRITE), (req, res) => {
     const month = normalizeMonth(req.body.billing_month);
     if (!month) return res.status(400).json({ error: 'billing_month must be YYYY-MM (e.g. 2026-06) or a month name with year' });
     const contract = getContract(req.body.contract_id);
+
+    // A month is billed on its energy account, which exists once the month is over.
+    const thisMonth = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 7);
+    if (month >= thisMonth) return res.status(400).json({ error: `${month} is not over yet — a month is billed once its energy account is out` });
 
     const kind = req.body.bill_kind || 'PROVISIONAL';
     if (!['PROVISIONAL', 'REVISION', 'FINAL'].includes(kind)) {

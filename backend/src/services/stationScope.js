@@ -36,7 +36,7 @@ const OWNERS = [
   'hydro_beneficiary_allocations', 'hydro_fi_postings',
 ];
 
-function contractOfRecord(id) {
+export function contractOfRecord(id) {
   for (const t of OWNERS) {
     try {
       const r = db.prepare(`SELECT contract_id FROM ${t} WHERE id = ?`).get(id);

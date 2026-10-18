@@ -73,8 +73,21 @@ export function buildThermalBill(contract, month, body, { tariffOverride = null 
 
   const scheduled = num(body.ex_bus_scheduled_kwh);
   if (!(scheduled >= 0)) throw fail('Ex-bus scheduled energy (kWh) for the month is required');
+  // What the plant could have sent out running flat out all month; a figure
+  // above it is a typing error, and it was billed (Thermal QA run 2).
+  const ceiling = Number(contract.capacity_mw) > 0 ? Number(contract.capacity_mw) * 1000 * 24 * daysInMonth(month) : null;
+  if (ceiling != null && scheduled > ceiling) {
+    throw fail(`Ex-bus scheduled energy ${scheduled} kWh is more than ${contract.capacity_mw} MW could generate in ${month} (${ceiling} kWh)`);
+  }
   const pafm = num(body.pafm_percent);
-  if (!(pafm >= 0 && pafm <= 110)) throw fail('PAFM (%) for the month is required, between 0 and 110');
+  // A coal unit cannot be available more than all of the time; 110% is a hydro limit.
+  if (!(pafm >= 0 && pafm <= 100)) throw fail('PAFM (%) for the month is required, between 0 and 100');
+  const range = (v, label, min, max) => {
+    if (v != null && !(v >= min && v <= max)) throw fail(`${label} ${v} is outside ${min}–${max}; check the figure`);
+  };
+  range(num(body.gcv_kcal_per_kg), 'GCV of coal as received (kCal/kg)', 2000, 7500);
+  range(num(body.coal_rs_per_tonne), 'Landed price of coal (₹/tonne)', 500, 25000);
+  range(num(body.oil_rs_per_kl), 'Landed price of secondary oil (₹/kL)', 0, 250000);
 
   const fuel = {
     gcv_kcal_per_kg: num(body.gcv_kcal_per_kg),
