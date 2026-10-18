@@ -2674,8 +2674,11 @@ router.post('/:id/issue', requireRole(...WRITE), (req, res) => {
     }
 
     const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(before.contract_id);
-    const issueDate = new Date().toISOString().slice(0, 10);
+    const issueDate = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
     const dueDate = req.body.due_date || before.due_date || dueDateFor(contract, issueDate);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dueDate)) || Number.isNaN(Date.parse(`${dueDate}T00:00:00Z`))) {
+      return res.status(400).json({ error: 'due_date must be a date (YYYY-MM-DD)' });
+    }
 
     const after = db.prepare(`
       UPDATE hydro_station_bills

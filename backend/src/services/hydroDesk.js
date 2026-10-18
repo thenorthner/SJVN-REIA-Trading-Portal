@@ -12,11 +12,12 @@ import { newId, nextSeriesNo } from '../util.js';
 import { getParamNumber } from '../mastersService.js';
 import {
   accountDisplay, outstandingOf, postSpecialCredit, ledgerStatement, openDebits,
+  isStationBeneficiary,
 } from './hydroLedger.js';
 import { raiseNote } from './hydroNotes.js';
 
 const money = (v) => Math.round((Number(v) || 0) * 100) / 100;
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const addDays = (iso, n) => {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -287,6 +288,9 @@ export function addInstrument(body, user) {
   }
   const iso = /^\d{4}-\d{2}-\d{2}$/;
   if (!iso.test(body.valid_from || '') || !iso.test(body.valid_to || '')) throw fail(400, 'valid_from and valid_to must be dates (YYYY-MM-DD)');
+  // Security stands behind a beneficiary the station bills (an LC was taken for
+  // a name on no sheet and no bill — Hydro QA run 8).
+  if (!isStationBeneficiary(body.contract_id, body.beneficiary_name)) throw fail(400, `${body.beneficiary_name} is not a beneficiary of this station`);
   if (body.valid_to <= body.valid_from) throw fail(400, 'The instrument must be valid to a date after it is valid from.');
   if (db.prepare('SELECT 1 FROM hydro_security_instruments WHERE contract_id = ? AND instrument_no = ?').get(body.contract_id, body.instrument_no.trim())) {
     throw fail(409, `${body.instrument_no} is already recorded on this station.`);
@@ -309,6 +313,10 @@ export function amendInstrument(id, { amount, valid_to, remarks }, user) {
   if (!i) throw fail(404, 'Instrument not found');
   if (i.status !== 'ACTIVE') throw fail(400, `${i.instrument_no} is ${i.status} and cannot be amended.`);
   const newAmount = amount != null && amount !== '' ? money(amount) : i.amount;
+  if (!Number.isFinite(newAmount)) throw fail(400, 'The amount must be a number.');
+  if (valid_to && (!/^\d{4}-\d{2}-\d{2}$/.test(String(valid_to)) || Number.isNaN(Date.parse(`${valid_to}T00:00:00Z`)))) {
+    throw fail(400, 'valid_to must be a date (YYYY-MM-DD)');
+  }
   const newTo = valid_to || i.valid_to;
   if (!(newAmount > i.invoked_amount)) throw fail(400, 'The amount cannot fall to or below what has already been invoked.');
   if (newTo <= i.valid_from) throw fail(400, 'valid_to must be after valid_from.');
@@ -337,7 +345,12 @@ export function invokeInstrument(id, { amount, invoked_on, remarks }, user) {
   }
   const why = String(remarks || '').trim();
   if (why.length < 5) throw fail(400, 'Record why the instrument is invoked.');
+  // The bank pays on a day the instrument was in force, and not one still to
+  // come (invocations dated 2099 and before the LC was issued were posted).
   const on = invoked_on || today();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(on)) || Number.isNaN(Date.parse(`${on}T00:00:00Z`))) throw fail(400, 'invoked_on must be a date (YYYY-MM-DD)');
+  if (on > today()) throw fail(400, `${on} is after today — record an invocation once the bank has paid`);
+  if (on < i.valid_from || on > i.valid_to) throw fail(400, `${i.instrument_no} was in force from ${i.valid_from} to ${i.valid_to}; it cannot have been invoked on ${on}`);
   let posted;
   db.transaction(() => {
     posted = postSpecialCredit({
@@ -361,6 +374,16 @@ export function releaseInstrument(id, { remarks }, user) {
   if (i.status !== 'ACTIVE') throw fail(400, `${i.instrument_no} is already ${i.status}.`);
   const why = String(remarks || '').trim();
   if (why.length < 5) throw fail(400, 'Record why the instrument is being released.');
+  // Live security is not handed back while the beneficiary is in arrears: it
+  // is what SJVN would invoke for those dues (released with ₹9.8 Cr overdue).
+  // An instrument past its validity is only being closed off, and may be.
+  if (i.valid_to >= today()) {
+    const overdue = money(openDebits(i.contract_id, i.beneficiary_name)
+      .filter((d) => d.due_date && d.due_date < today()).reduce((a, d) => a + d.outstanding, 0));
+    if (overdue > 0.005) {
+      throw fail(400, `${i.beneficiary_name} has ₹${overdue.toLocaleString('en-IN')} overdue — a live ${i.instrument_type} is not released while dues are overdue; invoke it or wait until they are paid.`);
+    }
+  }
   db.prepare(`UPDATE hydro_security_instruments SET status = 'RELEASED', updated_at = datetime('now') WHERE id = ?`).run(id);
   db.prepare('INSERT INTO hydro_security_events (id, instrument_id, event, remarks, actor) VALUES (?, ?, ?, ?, ?)')
     .run(newId('HSE'), id, 'RELEASED', why, user?.name || null);

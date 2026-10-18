@@ -407,6 +407,15 @@ function withdrawRebatesOf(pmt, reason) {
  * do pay ahead, and SAP shows the excess as an advance — but the excess is
  * reported so it is never mistaken for a cleared bill.
  */
+/** Whether a name is one the station bills: on its allocation sheet or one of its bills. */
+export function isStationBeneficiary(contractId, beneficiaryName) {
+  return !!db.prepare(`
+    SELECT 1 FROM hydro_beneficiary_allocations WHERE contract_id = ? AND UPPER(TRIM(beneficiary_name)) = UPPER(TRIM(?))
+    UNION SELECT 1 FROM hydro_bill_lines l JOIN hydro_station_bills b ON b.id = l.bill_id
+      WHERE b.contract_id = ? AND UPPER(TRIM(l.beneficiary_name)) = UPPER(TRIM(?))
+  `).get(contractId, beneficiaryName, contractId, beneficiaryName);
+}
+
 export function recordPayment({
   contractId, beneficiaryName, beneficiaryId = null, amount, paymentDate,
   mode = null, reference = null, info = null, createdBy = null, rebate = true,
@@ -423,12 +432,7 @@ export function recordPayment({
   const day = String(paymentDate).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`))) throw new Error('paymentDate must be a date (YYYY-MM-DD)');
   if (day > istToday()) throw new Error(`The payment date ${day} is after today — record money once it has arrived`);
-  const known = db.prepare(`
-    SELECT 1 FROM hydro_beneficiary_allocations WHERE contract_id = ? AND UPPER(TRIM(beneficiary_name)) = UPPER(TRIM(?))
-    UNION SELECT 1 FROM hydro_bill_lines l JOIN hydro_station_bills b ON b.id = l.bill_id
-      WHERE b.contract_id = ? AND UPPER(TRIM(l.beneficiary_name)) = UPPER(TRIM(?))
-  `).get(contractId, beneficiaryName, contractId, beneficiaryName);
-  if (!known) throw new Error(`${beneficiaryName} is not a beneficiary of this station`);
+  if (!isStationBeneficiary(contractId, beneficiaryName)) throw new Error(`${beneficiaryName} is not a beneficiary of this station`);
   const ref = String(reference || '').trim();
   if (ref) {
     const dup = db.prepare(`
