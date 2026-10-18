@@ -1351,6 +1351,17 @@ try {
   console.error('Hydro FI notes migration failed:', e.message);
 }
 
+// CERC bills coal on its GCV as received less a storage-loss norm (85 kCal/kg);
+// the tariff carries that norm so an order can change it (Thermal QA run 1).
+try {
+  const cols = db.prepare('PRAGMA table_info(thermal_station_tariffs)').all().map((c) => c.name);
+  if (cols.length && !cols.includes('gcv_storage_loss_kcal')) {
+    db.exec('ALTER TABLE thermal_station_tariffs ADD COLUMN gcv_storage_loss_kcal REAL NOT NULL DEFAULT 85');
+  }
+} catch (e) {
+  console.error('Thermal tariff storage-loss migration failed:', e.message);
+}
+
 // A thermal bill keeps the month's fuel inputs and the norms it was computed
 // on, so it can be reprinted, revised or put on an arrear without guessing.
 try {

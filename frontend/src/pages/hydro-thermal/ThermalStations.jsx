@@ -13,7 +13,7 @@ import ThermalUrsMarketDiversion3D from '../../components/ThermalUrsMarketDivers
 
 const emptyTariff = () => ({
   financial_year: '', annual_afc: '', napaf_percent: '85', gross_heat_rate: '', aux_pct: '',
-  sfc_ml_per_kwh: '0.5', cv_secondary_kcal_per_ml: '10', order_ref: '',
+  sfc_ml_per_kwh: '0.5', cv_secondary_kcal_per_ml: '10', gcv_storage_loss_kcal: '85', order_ref: '',
 });
 
 export default function ThermalStations() {
@@ -61,10 +61,10 @@ export default function ThermalStations() {
   async function saveTariff(e) {
     e.preventDefault();
     try {
-      await api.thermal.setTariff({ ...tariff, contract_id: stationId });
+      const saved = await api.thermal.setTariff({ ...tariff, contract_id: stationId });
       api.thermal.tariffs(stationId).then(setTariffs);
       loadStations();
-      setPopup({ tone: 'success', title: `Tariff for ${tariff.financial_year} saved`, message: 'Bills of that year are computed on it. If bills are already out, raise the arrear from Arrear & Supplementary Bills.' });
+      setPopup({ tone: saved?.note ? 'warning' : 'success', title: `Tariff for ${tariff.financial_year} saved`, message: saved?.note || 'Bills of that year are computed on it.' });
     } catch (err) { fail('The tariff was not saved', err); }
   }
 
@@ -107,6 +107,7 @@ export default function ThermalStations() {
               { key: 'gross_heat_rate', header: 'GHR kCal/kWh' },
               { key: 'aux_pct', header: 'Aux %' },
               { key: 'sfc_ml_per_kwh', header: 'SFC ml/kWh' },
+              { key: 'gcv_storage_loss_kcal', header: 'GCV storage loss kCal/kg' },
               { key: 'order_ref', header: 'Order', render: (t) => t.order_ref || '—' },
             ]}
             rows={tariffs}
@@ -122,6 +123,7 @@ export default function ThermalStations() {
                 <Field label="Normative aux consumption (%)" required><input required type="number" step="0.01" value={tariff.aux_pct} onChange={(e) => setTariff({ ...tariff, aux_pct: e.target.value })} /></Field>
                 <Field label="Secondary fuel oil (ml/kWh)"><input type="number" step="0.01" value={tariff.sfc_ml_per_kwh} onChange={(e) => setTariff({ ...tariff, sfc_ml_per_kwh: e.target.value })} /></Field>
                 <Field label="CV of secondary fuel (kCal/ml)"><input type="number" step="0.1" value={tariff.cv_secondary_kcal_per_ml} onChange={(e) => setTariff({ ...tariff, cv_secondary_kcal_per_ml: e.target.value })} /></Field>
+                <Field label="GCV storage loss (kCal/kg) — CVPF is GCV as received less this"><input type="number" step="1" value={tariff.gcv_storage_loss_kcal} onChange={(e) => setTariff({ ...tariff, gcv_storage_loss_kcal: e.target.value })} /></Field>
                 <Field label="CERC order reference"><input value={tariff.order_ref} onChange={(e) => setTariff({ ...tariff, order_ref: e.target.value })} /></Field>
               </div>
               <button type="submit" className="btn btn-primary">Save year's tariff</button>
@@ -135,12 +137,12 @@ export default function ThermalStations() {
           <ThermalCoalToBusbarECR3D station={station} tariff={tariffs[0]} fuel={fuel} />
           <Card title="What a month's fuel makes the energy charge rate" style={{ marginBottom: 16 }}>
             <div className="form-grid">
-              <Field label="GCV of coal (kCal/kg)"><input type="number" value={fuel.gcv_kcal_per_kg} onChange={(e) => setFuel({ ...fuel, gcv_kcal_per_kg: e.target.value })} /></Field>
+              <Field label="GCV of coal as received (kCal/kg)"><input type="number" value={fuel.gcv_kcal_per_kg} onChange={(e) => setFuel({ ...fuel, gcv_kcal_per_kg: e.target.value })} /></Field>
               <Field label="Landed price of coal (₹/tonne)"><input type="number" value={fuel.coal_rs_per_tonne} onChange={(e) => setFuel({ ...fuel, coal_rs_per_tonne: e.target.value })} /></Field>
               <Field label="Landed price of secondary oil (₹/kL)"><input type="number" value={fuel.oil_rs_per_kl} onChange={(e) => setFuel({ ...fuel, oil_rs_per_kl: e.target.value })} /></Field>
             </div>
             <button type="button" className="btn btn-secondary" onClick={previewEcr}>Work out ECR ({tariffs[0].financial_year} norms)</button>
-            {ecr && <p style={{ marginTop: 10 }}>ECR = <strong>₹{ecr.ecr}/kWh</strong> — [(GHR − SFC × CVSF) × LPPF / CVPF + SFC × LPSFi] × 100 / (100 − AUX)</p>}
+            {ecr && <p style={{ marginTop: 10 }}>ECR = <strong>₹{ecr.ecr}/kWh</strong> — [(GHR − SFC × CVSF) × LPPF / CVPF + SFC × LPSFi] × 100 / (100 − AUX), with CVPF = {ecr.cvpf_kcal_per_kg} kCal/kg (GCV as received less {ecr.gcv_storage_loss_kcal})</p>}
             <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>
               Then raise the month's bill under <Link to="/thermal/billing">Monthly Bills &amp; Approval</Link>.
             </p>

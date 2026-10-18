@@ -4275,6 +4275,7 @@ CREATE TABLE IF NOT EXISTS thermal_station_tariffs (
   aux_pct REAL NOT NULL,                     -- normative auxiliary energy consumption, %
   sfc_ml_per_kwh REAL NOT NULL DEFAULT 0,    -- normative secondary fuel oil consumption
   cv_secondary_kcal_per_ml REAL NOT NULL DEFAULT 10, -- calorific value of secondary fuel
+  gcv_storage_loss_kcal REAL NOT NULL DEFAULT 85,   -- CVPF = GCV as received less this (CERC)
   order_ref TEXT,
   updated_by TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),

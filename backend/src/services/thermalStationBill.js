@@ -8,7 +8,9 @@
  *   AFC   annual fixed charges (₹)            NAPAF normative availability (%)
  *   GHR   gross station heat rate (kCal/kWh)   AUX   normative auxiliary consumption (%)
  *   SFC   secondary fuel oil (ml/kWh)          CVSF  its calorific value (kCal/ml)
- *   CVPF  GCV of the coal (kCal/kg)            LPPF  landed price of coal (₹/kg)
+ *   CVPF  GCV of the coal as received, less the storage loss norm (85 kCal/kg
+ *         under the CERC Tariff Regulations), kCal/kg
+ *   LPPF  landed price of coal (₹/kg)
  *   LPSFi landed price of secondary oil (₹/ml)
  *
  * AFC, NAPAF and the norms are the financial year's (thermal_station_tariffs);
@@ -49,6 +51,8 @@ export function thermalReadiness(contract, periodMonth = null) {
 
 /** The energy charge rate, ₹/kWh, from the norms and the month's fuel. */
 export function computeEcr({ ghr, auxPct, sfc = 0, cvsf = 10, gcvKcalPerKg, coalRsPerTonne, oilRsPerKl = 0 }) {
+  // A missing heat rate came back as a NaN rate, shown as nothing (Thermal QA run 1).
+  if (!(ghr >= 1500 && ghr <= 4000)) throw fail('Gross station heat rate (kCal/kWh) is needed for the energy charge rate, between 1,500 and 4,000');
   if (!(gcvKcalPerKg > 0)) throw fail('GCV of coal (kCal/kg) is needed for the energy charge rate');
   if (!(coalRsPerTonne > 0)) throw fail('Landed price of coal (₹/tonne) is needed for the energy charge rate');
   if (!(auxPct >= 0 && auxPct < 100)) throw fail('Auxiliary consumption must be between 0 and 100%');
@@ -77,9 +81,14 @@ export function buildThermalBill(contract, month, body, { tariffOverride = null 
     coal_rs_per_tonne: num(body.coal_rs_per_tonne),
     oil_rs_per_kl: num(body.oil_rs_per_kl) ?? 0,
   };
+  // CVPF is the GCV as received less the storage loss norm; billing the
+  // received GCV whole understated the rate (Thermal QA run 1).
+  const storageLoss = t.gcv_storage_loss_kcal ?? 85;
+  fuel.gcv_storage_loss_kcal = storageLoss;
+  fuel.cvpf_kcal_per_kg = fuel.gcv_kcal_per_kg > 0 ? fuel.gcv_kcal_per_kg - storageLoss : null;
   const ecr = computeEcr({
     ghr: t.gross_heat_rate, auxPct: t.aux_pct, sfc: t.sfc_ml_per_kwh, cvsf: t.cv_secondary_kcal_per_ml,
-    gcvKcalPerKg: fuel.gcv_kcal_per_kg, coalRsPerTonne: fuel.coal_rs_per_tonne, oilRsPerKl: fuel.oil_rs_per_kl,
+    gcvKcalPerKg: fuel.cvpf_kcal_per_kg, coalRsPerTonne: fuel.coal_rs_per_tonne, oilRsPerKl: fuel.oil_rs_per_kl,
   });
 
   const ndm = daysInMonth(month);
@@ -142,7 +151,7 @@ export function buildThermalBill(contract, month, body, { tariffOverride = null 
     tariff: {
       financial_year: t.financial_year, annual_afc: t.annual_afc, napaf_percent: t.napaf_percent,
       gross_heat_rate: t.gross_heat_rate, aux_pct: t.aux_pct, sfc_ml_per_kwh: t.sfc_ml_per_kwh,
-      cv_secondary_kcal_per_ml: t.cv_secondary_kcal_per_ml, order_ref: t.order_ref || null,
+      cv_secondary_kcal_per_ml: t.cv_secondary_kcal_per_ml, gcv_storage_loss_kcal: storageLoss, order_ref: t.order_ref || null,
     },
     fuel,
     pafm_percent: pafm,

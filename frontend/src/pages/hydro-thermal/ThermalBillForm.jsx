@@ -28,7 +28,7 @@ export function ThermalBillSummary({ bill, lines }) {
       </div>
       <table className="detail-table" style={{ marginBottom: 12 }}><tbody>
         <tr><td>Tariff ({t.tariff?.financial_year})</td><td>AFC {fmtCurrency(t.tariff?.annual_afc)} · NAPAF {t.tariff?.napaf_percent}% · GHR {t.tariff?.gross_heat_rate} kCal/kWh · AUX {t.tariff?.aux_pct}% · SFC {t.tariff?.sfc_ml_per_kwh} ml/kWh</td></tr>
-        <tr><td>Fuel for the month</td><td>GCV {t.fuel?.gcv_kcal_per_kg} kCal/kg · coal {fmtCurrency(t.fuel?.coal_rs_per_tonne)}/t · oil {fmtCurrency(t.fuel?.oil_rs_per_kl)}/kL</td></tr>
+        <tr><td>Fuel for the month</td><td>GCV as received {t.fuel?.gcv_kcal_per_kg} kCal/kg{t.fuel?.cvpf_kcal_per_kg != null ? ` (CVPF ${t.fuel.cvpf_kcal_per_kg} after ${t.fuel.gcv_storage_loss_kcal} storage loss)` : ''} · coal {fmtCurrency(t.fuel?.coal_rs_per_tonne)}/t · oil {fmtCurrency(t.fuel?.oil_rs_per_kl)}/kL</td></tr>
         <tr><td>Energy charge rate</td><td><strong>₹{bill.a12_ecr}/kWh</strong></td></tr>
         <tr><td>Capacity charge</td><td>{t.capacity_formula}</td></tr>
         {t.not_modelled && <tr><td>Note</td><td style={{ fontSize: 13.5 }}>{t.not_modelled}</td></tr>}
@@ -116,7 +116,7 @@ export function ThermalBillForm({ station, stationId, canWrite, onSaved }) {
           </Field>
           <Field label="Ex-bus scheduled energy (kWh)" required><input type="number" min="0" value={form.ex_bus_scheduled_kwh} onChange={set('ex_bus_scheduled_kwh')} /></Field>
           <Field label="PAFM achieved (%)" required><input type="number" step="0.01" min="0" max="110" value={form.pafm_percent} onChange={set('pafm_percent')} /></Field>
-          <Field label="GCV of coal (kCal/kg)" required><input type="number" min="0" value={form.gcv_kcal_per_kg} onChange={set('gcv_kcal_per_kg')} /></Field>
+          <Field label="GCV of coal as received (kCal/kg)" required><input type="number" min="0" value={form.gcv_kcal_per_kg} onChange={set('gcv_kcal_per_kg')} /></Field>
           <Field label="Landed price of coal (₹/tonne)" required><input type="number" min="0" value={form.coal_rs_per_tonne} onChange={set('coal_rs_per_tonne')} /></Field>
           <Field label="Landed price of secondary oil (₹/kL)"><input type="number" min="0" value={form.oil_rs_per_kl} onChange={set('oil_rs_per_kl')} /></Field>
           <Field label="RLDC fees for the month (₹)"><input type="number" min="0" value={form.nrldc_total_fee} onChange={set('nrldc_total_fee')} /></Field>
