@@ -12,6 +12,8 @@
  */
 import db from '../db/index.js';
 import { newId } from '../util.js';
+import { ROLE_GROUPS } from '../middleware/auth.js';
+import { verticalOfContract } from './stationScope.js';
 
 export const SEGREGATION_REFUSAL =
   'Segregation of duties: whoever raised this bill cannot approve it. It needs a different approver.';
@@ -31,8 +33,8 @@ export const ACTIONS = ['APPROVE', 'REJECT', 'FORWARD'];
  */
 export function makerCheckerConflict(bill, user) {
   if (!bill || !user) return null;
-  // Super admins and SJVN admins have administrative override authority across all levels
-  if (['IT_SUPER_ADMIN', 'SJVN_ADMIN'].includes(user.role)) return null;
+  // No role is exempt: an administrator who raised a bill and approved it
+  // alone was one person moving money end to end (Hydro QA run 2).
   if (bill.created_by && user.id) {
     return bill.created_by === user.id ? SEGREGATION_REFUSAL : null;
   }
@@ -63,11 +65,29 @@ function nextLevel(billId) {
   return row.m + 1;
 }
 
-function resolveApprover(userId) {
+/**
+ * An approver must be one who can sign for the station's desk: a hydro bill on
+ * the hydro desk, a thermal bill on the thermal desk (SJVN administrators sign
+ * for both). Any active user used to do, and a bill was routed to a REIA
+ * officer with a buyer named to sign it last.
+ */
+function resolveApprover(userId, bill = null) {
   const u = db.prepare('SELECT id, name, email, role, is_active FROM users WHERE id = ?').get(userId);
   if (!u) throw Object.assign(new Error(`No user with id ${userId}`), { status: 400 });
   if (!u.is_active) throw Object.assign(new Error(`${u.name} is not an active user`), { status: 400 });
+  const v = bill ? verticalOfContract(bill.contract_id) : null;
+  const allowed = v === 'THERMAL' ? ROLE_GROUPS.THERMAL_WRITE : ROLE_GROUPS.HYDRO_THERMAL_WRITE;
+  if (!allowed.includes(u.role)) {
+    throw Object.assign(new Error(`${u.name} cannot approve a ${v === 'THERMAL' ? 'thermal' : 'hydro'} bill — choose an approver on that desk`), { status: 400 });
+  }
   return u;
+}
+
+/** Everyone who has already taken a step on this bill's chain. */
+function actedOn(billId) {
+  return new Set(db.prepare(`
+    SELECT approver_user_id FROM hydro_bill_approvals WHERE bill_id = ? AND status IN ('APPROVED', 'FORWARDED') AND approver_user_id IS NOT NULL
+  `).all(billId).map((r) => r.approver_user_id));
 }
 
 /**
@@ -91,10 +111,10 @@ export function sendForApproval(bill, { nextApproverId, finalApproverId, comment
     throw Object.assign(new Error('Both a next approver and a final approver are required'), { status: 400 });
   }
 
-  const next = resolveApprover(nextApproverId);
-  const final = resolveApprover(finalApproverId);
+  const next = resolveApprover(nextApproverId, bill);
+  const final = resolveApprover(finalApproverId, bill);
 
-  const conflict = makerCheckerConflict(bill, next);
+  const conflict = makerCheckerConflict(bill, next) || makerCheckerConflict(bill, final);
   if (conflict) throw Object.assign(new Error(conflict), { status: 400 });
 
   const isFinal = next.id === final.id;
@@ -167,8 +187,11 @@ export function actOnApproval(bill, { action, comments, nextApproverId, markFina
   if (finishing) {
     db.transaction(() => {
       close.run('APPROVED', comments, step.id);
-      db.prepare(`UPDATE hydro_station_bills SET approval_status = 'APPROVED', updated_at = datetime('now') WHERE id = ?`)
-        .run(bill.id);
+      // The bill goes out over whoever actually signed it last. An approver who
+      // ticks "final" ends the chain themselves, and the bill used to keep the
+      // name chosen at the start — someone who never signed it.
+      db.prepare(`UPDATE hydro_station_bills SET approval_status = 'APPROVED', final_approver_id = ?, final_approver_name = ?, updated_at = datetime('now') WHERE id = ?`)
+        .run(step.approver_user_id || bill.final_approver_id, step.approver_name || bill.final_approver_name, bill.id);
     })();
     return { outcome: 'APPROVED', by: step.approver_name };
   }
@@ -180,9 +203,15 @@ export function actOnApproval(bill, { action, comments, nextApproverId, markFina
       { status: 400 },
     );
   }
-  const next = resolveApprover(nextApproverId);
+  const next = resolveApprover(nextApproverId, bill);
   const nextConflict = makerCheckerConflict(bill, next);
   if (nextConflict) throw Object.assign(new Error(nextConflict), { status: 400 });
+  // Each person signs a bill once: the next step goes to someone who has not
+  // already approved or passed it on (an approver used to name themselves and
+  // approve twice).
+  if (next.id === user?.id || actedOn(bill.id).has(next.id)) {
+    throw Object.assign(new Error(`${next.name} has already taken a step on ${bill.bill_no} — each approver signs a bill once`), { status: 400 });
+  }
 
   const newStepId = newId('HBA');
   db.transaction(() => {
