@@ -1971,7 +1971,8 @@ router.get('/charges', requireRole(...READ), (req, res) => {
 router.post('/charges', requireRole(...WRITE), (req, res) => {
   try {
     const { contract_id, charge_type, period_month, amount, remarks } = req.body;
-    getContract(contract_id);
+    // A station's running cost, claimed on its beneficiaries (one was taken on a REIA PPA).
+    allocationContract(contract_id);
     const row = addCharge({
       contractId: contract_id,
       chargeType: charge_type,
@@ -3100,6 +3101,11 @@ router.post('/:id/cancel', requireRole(...WRITE), (req, res) => {
       });
     }
     reverseBillDocs(before.id, { reason, createdBy: req.user?.id || null });
+    // A claim bill cancelled gives its charges back to be claimed again; they
+    // stayed marked as claimed on a dead bill and could never be billed (Hydro QA run 12).
+    if (before.bill_kind === 'ADDITIONAL') {
+      db.prepare(`UPDATE hydro_additional_charges SET claimed_bill_id = NULL, claimed_at = NULL, updated_at = datetime('now') WHERE claimed_bill_id = ?`).run(before.id);
+    }
 
     const after = db.prepare(`
       UPDATE hydro_station_bills

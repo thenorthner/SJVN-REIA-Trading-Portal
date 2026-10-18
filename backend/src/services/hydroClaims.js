@@ -440,6 +440,22 @@ export function claimTcs({
   }
 
   const calc = computeTcs({ amountReceived, tcsApplicableAmount, tcsRatePct });
+  // The payment the tax is collected on: a real day, not ahead, and claimed once.
+  const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  if (paymentDate != null && paymentDate !== '') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(paymentDate)) || Number.isNaN(Date.parse(`${paymentDate}T00:00:00Z`))) {
+      throw Object.assign(new Error('payment_date must be a date (YYYY-MM-DD)'), { status: 400 });
+    }
+    if (paymentDate > today) throw Object.assign(new Error(`The payment date ${paymentDate} is after today`), { status: 400 });
+  }
+  const twin = db.prepare(`
+    SELECT b.bill_no FROM hydro_tcs_claims t JOIN hydro_station_bills b ON b.id = t.bill_id
+    WHERE t.contract_id = ? AND t.beneficiary_name = ? AND COALESCE(t.payment_date, '') = COALESCE(?, '')
+      AND ABS(t.amount_received - ?) < 0.005 AND b.status <> 'CANCELLED'
+  `).get(contract.id, beneficiaryName, paymentDate || null, calc.amount_received);
+  if (twin) {
+    throw Object.assign(new Error(`TCS on this payment (₹${calc.amount_received.toLocaleString('en-IN')} from ${beneficiaryName}${paymentDate ? ` on ${paymentDate}` : ''}) is already claimed on ${twin.bill_no}`), { status: 409 });
+  }
 
   const id = newId('HSB');
   const billNo = freeBillNo('HTCS');

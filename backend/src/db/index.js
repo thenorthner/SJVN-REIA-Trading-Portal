@@ -1268,7 +1268,7 @@ function migrateHydroArrearKinds() {
     db.exec('DROP INDEX IF EXISTS idx_hydro_bill_station_month');
     db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_hydro_bill_station_month
       ON hydro_station_bills (contract_id, billing_month, bill_kind)
-      WHERE bill_kind NOT IN ('REVISION','ARREAR','SUPPLEMENTARY') AND status <> 'CANCELLED'`);
+      WHERE bill_kind NOT IN ('REVISION','ARREAR','SUPPLEMENTARY','TCS') AND status <> 'CANCELLED'`);
   } finally {
     db.exec('PRAGMA legacy_alter_table=OFF');
     db.exec('PRAGMA foreign_keys=ON');
@@ -1279,6 +1279,25 @@ try {
   migrateHydroArrearKinds();
 } catch (e) {
   console.error('Hydro arrear-kind migration failed:', e.message);
+}
+
+/**
+ * TCS is claimed per beneficiary, so a station has several TCS bills in a
+ * month; the one-live-bill-per-month index refused the second beneficiary's
+ * claim with a raw constraint error (Hydro QA run 12).
+ */
+function migrateHydroTcsIndex() {
+  const idx = db.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND name='idx_hydro_bill_station_month'").get();
+  if (!idx || idx.sql.includes("'TCS'")) return;
+  db.exec('DROP INDEX IF EXISTS idx_hydro_bill_station_month');
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_hydro_bill_station_month
+    ON hydro_station_bills (contract_id, billing_month, bill_kind)
+    WHERE bill_kind NOT IN ('REVISION','ARREAR','SUPPLEMENTARY','TCS') AND status <> 'CANCELLED'`);
+}
+try {
+  migrateHydroTcsIndex();
+} catch (e) {
+  console.error('Hydro TCS index migration failed:', e.message);
 }
 
 // A thermal bill keeps the month's fuel inputs and the norms it was computed
