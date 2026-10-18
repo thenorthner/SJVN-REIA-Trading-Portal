@@ -79,13 +79,15 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
   }
 
   const totals = bookable?.totals;
+  // NOTES books the approved debit and credit notes rather than bills.
+  const isNotes = category === 'NOTES';
 
   async function doPrepare() {
     await run(
       () => api.hydroBilling.fiPrepare({
         contract_id: stationId, period_month: month, bill_category: category,
       }),
-      (r) => `${r.posting_no} prepared — ${r.bills_count} bill(s), ${fmtCurrency(r.total_amount)}. Check it, then post it to Finance.`,
+      (r) => `${r.posting_no} prepared — ${r.bills_count} ${r.bill_category === 'NOTES' ? 'note' : 'bill'}(s), ${fmtCurrency(r.total_amount)}. Check it, then post it to Finance.`,
     );
   }
 
@@ -198,8 +200,16 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
         {bookable && (
           <>
             <div className="stat-grid">
-              <StatCard label="Bills waiting" value={totals.bills_count} hint="issued, not yet booked" />
-              <StatCard label="Sale" value={fmtCurrency(totals.sale_amount)} hint="capacity + energy billed" />
+              <StatCard
+                label={isNotes ? 'Notes waiting' : 'Bills waiting'}
+                value={totals.bills_count}
+                hint={isNotes ? 'approved, not yet booked' : 'issued, not yet booked'}
+              />
+              <StatCard
+                label="Sale"
+                value={fmtCurrency(totals.sale_amount)}
+                hint={isNotes ? 'debit notes add, credit notes take off' : 'capacity + energy billed'}
+              />
               <StatCard
                 label="NRLDC"
                 value={fmtCurrency(totals.nrldc_amount)}
@@ -210,7 +220,7 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
 
             <Table
               columns={[
-                { key: 'bill_no', header: 'Bill no.' },
+                { key: 'bill_no', header: isNotes ? 'Note no.' : 'Bill no.' },
                 { key: 'bill_kind', header: 'Kind', render: (r) => <Badge label={r.bill_kind} /> },
                 { key: 'sale_amount', header: 'Sale', render: (r) => fmtCurrency(r.sale_amount) },
                 { key: 'nrldc_amount', header: 'NRLDC', render: (r) => fmtCurrency(r.nrldc_amount) },
@@ -218,7 +228,9 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
                 { key: 'total_amount', header: 'Total', render: (r) => fmtCurrency(r.total_amount) },
               ]}
               rows={bookable.bills}
-              emptyMessage="Nothing waiting — either the month has no issued bills of this kind, or they are already booked."
+              emptyMessage={isNotes
+                ? 'Nothing waiting — either the month has no approved debit or credit notes, or they are already booked.'
+                : 'Nothing waiting — either the month has no issued bills of this kind, or they are already booked.'}
             />
 
             {canWrite && bookable.bills.length > 0 && (
@@ -266,7 +278,7 @@ export default function HydroFinance({ vertical = 'HYDRO' }) {
       <Modal open={!!posting} onClose={() => setPosting(null)} title={`Post ${posting?.posting_no || ''} to Finance`}>
         <form onSubmit={doPost}>
           <p style={{ marginTop: 0, color: 'var(--text-light)', fontSize: 13 }}>
-            Booking {fmtCurrency(posting?.total_amount)} across {posting?.bills_count} bill(s). Record
+            Booking {fmtCurrency(posting?.total_amount)} across {posting?.bills_count} {posting?.bill_category === 'NOTES' ? 'note' : 'bill'}(s). Record
             the voucher number Finance returns, so the entry can be found from either side.
           </p>
           <Field label="Finance document number *" htmlFor="hf-vch">

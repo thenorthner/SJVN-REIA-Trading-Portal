@@ -19,7 +19,7 @@ import { newId } from '../util.js';
 
 const money = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
-export const CATEGORIES = ['HYDRO', 'ADDITIONAL', 'TCS'];
+export const CATEGORIES = ['HYDRO', 'ADDITIONAL', 'TCS', 'NOTES'];
 
 /** Which bill kinds fall under each category Finance books to. */
 const KINDS_BY_CATEGORY = {
@@ -34,6 +34,7 @@ export const CATEGORY_LABELS = {
   HYDRO: 'Energy sale (monthly, final, revision, arrear, supplementary and PTC bills)',
   ADDITIONAL: 'Additional charges claimed',
   TCS: 'Tax collected at source',
+  NOTES: 'Debit and credit notes (approved)',
 };
 
 function postingNo(plantCode, periodMonth, category) {
@@ -109,6 +110,7 @@ function splitBill(bill) {
  * month being booked twice.
  */
 export function bookableBills(contractId, periodMonth, category) {
+  if (category === 'NOTES') return bookableNotes(contractId, periodMonth);
   const kinds = KINDS_BY_CATEGORY[category];
   if (!kinds) throw Object.assign(new Error(`bill_category must be one of ${CATEGORIES.join(', ')}`), { status: 400 });
   const placeholders = kinds.map(() => '?').join(',');
@@ -126,6 +128,43 @@ export function bookableBills(contractId, periodMonth, category) {
   `).all(contractId, periodMonth, ...kinds);
 
   return rows.map((b) => ({ ...b, ...splitBill(b) }));
+}
+
+/**
+ * The approved debit and credit notes of a month that Finance has not booked.
+ *
+ * A note restates the sale, so it books against the sale figure: a credit note
+ * as a negative sale and a debit note as a positive one. Leaving them out kept
+ * Finance's sale overstated by every credit note (Hydro QA run 14). The month a
+ * note falls in is its note date, the date it carries as a document. Drafts,
+ * rejected and withdrawn notes moved nothing and are not booked.
+ */
+export function bookableNotes(contractId, periodMonth) {
+  return db.prepare(`
+    SELECT n.* FROM hydro_notes n
+    WHERE n.contract_id = ? AND substr(n.note_date, 1, 7) = ? AND n.status = 'APPROVED'
+      AND NOT EXISTS (
+        SELECT 1 FROM hydro_fi_posting_lines l
+        JOIN hydro_fi_postings p ON p.id = l.posting_id
+        WHERE l.note_id = n.id AND p.status <> 'REVERSED'
+      )
+    ORDER BY n.note_date, n.created_at
+  `).all(contractId, periodMonth).map((n) => {
+    const sale = money(n.note_type === 'CREDIT' ? -n.amount : n.amount);
+    return {
+      ...n, note_id: n.id, bill_no: n.note_no, bill_kind: `${n.note_type}_NOTE`,
+      sale, nrldc: 0, tcs: 0, total: sale,
+    };
+  });
+}
+
+/** The live posting a note is on, if any. */
+export function notePosting(noteId) {
+  return db.prepare(`
+    SELECT p.posting_no, p.status FROM hydro_fi_posting_lines l
+    JOIN hydro_fi_postings p ON p.id = l.posting_id
+    WHERE l.note_id = ? AND p.status <> 'REVERSED'
+  `).get(noteId) || null;
 }
 
 /** Gather the month into a posting Finance can check before it is booked. */
@@ -160,13 +199,15 @@ export function preparePosting({
   `).get(contract.id, periodMonth, category);
   if (!bills.length && posted) {
     throw Object.assign(
-      new Error(`${periodMonth} is already posted for ${category} — ${posted.posting_no}; no bill issued since is waiting to be booked`),
+      new Error(`${periodMonth} is already posted for ${category} — ${posted.posting_no}; no ${category === 'NOTES' ? 'note approved' : 'bill issued'} since is waiting to be booked`),
       { status: 409 },
     );
   }
   if (!bills.length) {
     throw Object.assign(
-      new Error(`No issued ${category} bills for ${contract.contract_no} in ${periodMonth} are waiting to be booked`),
+      new Error(category === 'NOTES'
+        ? `No approved debit or credit notes for ${contract.contract_no} in ${periodMonth} are waiting to be booked`
+        : `No issued ${category} bills for ${contract.contract_no} in ${periodMonth} are waiting to be booked`),
       { status: 400 },
     );
   }
@@ -192,11 +233,14 @@ export function preparePosting({
 
     const line = db.prepare(`
       INSERT INTO hydro_fi_posting_lines
-        (id, posting_id, bill_id, bill_no, bill_kind, sale_amount, nrldc_amount, tcs_amount, total_amount)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, posting_id, bill_id, note_id, bill_no, bill_kind, sale_amount, nrldc_amount, tcs_amount, total_amount)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const b of bills) {
-      line.run(newId('HFL'), id, b.id, b.bill_no, b.bill_kind, b.sale, b.nrldc, b.tcs, b.total);
+      line.run(
+        newId('HFL'), id, b.note_id ? null : b.id, b.note_id || null,
+        b.bill_no, b.bill_kind, b.sale, b.nrldc, b.tcs, b.total,
+      );
     }
   })();
 
@@ -230,7 +274,10 @@ export function postToFinance(postingId, { fiDocumentNo = null, postedBy = null 
   const gone = db.prepare(`
     SELECT b.bill_no FROM hydro_fi_posting_lines l JOIN hydro_station_bills b ON b.id = l.bill_id
     WHERE l.posting_id = ? AND b.status <> 'ISSUED'
-  `).all(postingId).map((r) => r.bill_no);
+    UNION ALL
+    SELECT n.note_no FROM hydro_fi_posting_lines l JOIN hydro_notes n ON n.id = l.note_id
+    WHERE l.posting_id = ? AND n.status <> 'APPROVED'
+  `).all(postingId, postingId).map((r) => r.bill_no);
   if (gone.length) {
     throw Object.assign(new Error(`${gone.join(', ')} ${gone.length > 1 ? 'are' : 'is'} no longer issued — reverse ${p.posting_no} and prepare the month again`), { status: 409 });
   }
@@ -250,7 +297,8 @@ export function postToFinance(postingId, { fiDocumentNo = null, postedBy = null 
  *
  * The posting is marked rather than deleted and a reversing posting is written
  * beside it, so the handover still shows that the month went to Finance once
- * and came back. Reversing frees its bills, so the month can be prepared again.
+ * and came back. Reversing frees its bills and notes, so the month can be
+ * prepared again.
  */
 export function reversePosting(postingId, { reason, reversedBy = null }) {
   if (!reason) throw Object.assign(new Error('A reversal must say why'), { status: 400 });

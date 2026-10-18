@@ -43,7 +43,7 @@ import {
 } from '../services/hydroClaims.js';
 import {
   bookableBills, preparePosting, postToFinance, reversePosting, getPosting,
-  listPostings, CATEGORIES, CATEGORY_LABELS,
+  listPostings, notePosting, CATEGORIES, CATEGORY_LABELS,
 } from '../services/hydroFiPosting.js';
 import { consolidate, createPtcBill, listPtcBills } from '../services/hydroPtc.js';
 import { resolveBetaRow } from '../services/betaFactor.js';
@@ -1931,6 +1931,13 @@ router.post('/notes/:id/approve', requireRole(...WRITE), (req, res) => {
 
 router.post('/notes/:id/reject', requireRole(...WRITE), (req, res) => {
   try {
+    // A note handed to Finance is in its books; withdrawing it here alone would
+    // leave Finance holding a correction that no longer exists.
+    const booked = notePosting(req.params.id);
+    if (booked) {
+      const n = db.prepare('SELECT note_no FROM hydro_notes WHERE id = ?').get(req.params.id);
+      return res.status(409).json({ error: `${n.note_no} is on FI posting ${booked.posting_no} (${booked.status.toLowerCase()}). Reverse that posting first.` });
+    }
     const note = rejectNote(req.params.id, req.user, req.body?.reason);
     secureLogAudit(req, {
       action: note.status === 'CANCELLED' ? 'HYDRO_NOTE_WITHDRAWN' : 'HYDRO_NOTE_REJECTED',

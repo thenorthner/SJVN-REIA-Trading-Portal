@@ -3857,9 +3857,10 @@ CREATE TABLE IF NOT EXISTS hydro_fi_postings (
   plant_code TEXT,                       -- NJHPS=001, RHPS=002
   period_month TEXT NOT NULL,            -- YYYY-MM
   -- What is being booked. HYDRO is the monthly energy bill; the others are the
-  -- claims, kept apart because Finance books them to different heads.
+  -- claims, kept apart because Finance books them to different heads. NOTES is
+  -- the approved debit and credit notes, which restate the sale.
   bill_category TEXT NOT NULL DEFAULT 'HYDRO'
-    CHECK (bill_category IN ('HYDRO','ADDITIONAL','TCS')),
+    CHECK (bill_category IN ('HYDRO','ADDITIONAL','TCS','NOTES')),
 
   bills_count INTEGER NOT NULL DEFAULT 0,
   sale_amount REAL NOT NULL DEFAULT 0,       -- capacity + energy billed
@@ -3892,17 +3893,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_hydro_fi_posting_period
 
 -- Which bills a posting booked, frozen at the amounts it booked them at, so a
 -- later revision to a bill cannot silently restate what Finance already has.
+-- A line is a bill or, on a NOTES posting, a debit or credit note.
 CREATE TABLE IF NOT EXISTS hydro_fi_posting_lines (
   id TEXT PRIMARY KEY,
   posting_id TEXT NOT NULL REFERENCES hydro_fi_postings(id) ON DELETE CASCADE,
-  bill_id TEXT NOT NULL REFERENCES hydro_station_bills(id),
-  bill_no TEXT NOT NULL,
-  bill_kind TEXT NOT NULL,
+  bill_id TEXT REFERENCES hydro_station_bills(id),
+  note_id TEXT REFERENCES hydro_notes(id),
+  bill_no TEXT NOT NULL,                 -- the bill's or the note's number
+  bill_kind TEXT NOT NULL,               -- bill kind, or DEBIT_NOTE / CREDIT_NOTE
   sale_amount REAL NOT NULL DEFAULT 0,
   nrldc_amount REAL NOT NULL DEFAULT 0,
   tcs_amount REAL NOT NULL DEFAULT 0,
   total_amount REAL NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  CHECK ((bill_id IS NULL) <> (note_id IS NULL))
 );
 CREATE INDEX IF NOT EXISTS idx_hydro_fi_lines_posting
   ON hydro_fi_posting_lines (posting_id);

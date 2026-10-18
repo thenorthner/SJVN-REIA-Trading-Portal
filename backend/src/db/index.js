@@ -1313,6 +1313,44 @@ try {
   console.error('Hydro FI posting index migration failed:', e.message);
 }
 
+/**
+ * Approved debit and credit notes are handed to Finance under a NOTES category;
+ * they never were, so Finance's sale stood overstated by every credit note
+ * (Hydro QA run 14). The category CHECK grows by a value and a line can point
+ * at a note instead of a bill, so both tables are rebuilt from schema.sql. Their
+ * indexes go with the renamed copies and are put back by hand.
+ */
+function migrateHydroFiNotes() {
+  const t = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='hydro_fi_postings'").get();
+  if (!t) return;
+  const lineCols = db.prepare('PRAGMA table_info(hydro_fi_posting_lines)').all().map((c) => c.name);
+  const needPostings = !t.sql.includes("'NOTES'");
+  const needLines = lineCols.length && !lineCols.includes('note_id');
+  if (!needPostings && !needLines) return;
+
+  db.exec('PRAGMA foreign_keys=OFF');
+  db.exec('PRAGMA legacy_alter_table=ON'); // keep RENAME from touching other tables' FKs
+  try {
+    db.transaction(() => {
+      if (needPostings) rebuildTableFromSchema('hydro_fi_postings');
+      if (needLines) rebuildTableFromSchema('hydro_fi_posting_lines');
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_hydro_fi_posting_period
+        ON hydro_fi_postings (contract_id, period_month, bill_category) WHERE status = 'PREPARED'`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_hydro_fi_lines_posting
+        ON hydro_fi_posting_lines (posting_id)`);
+    })();
+  } finally {
+    db.exec('PRAGMA legacy_alter_table=OFF');
+    db.exec('PRAGMA foreign_keys=ON');
+  }
+}
+
+try {
+  migrateHydroFiNotes();
+} catch (e) {
+  console.error('Hydro FI notes migration failed:', e.message);
+}
+
 // A thermal bill keeps the month's fuel inputs and the norms it was computed
 // on, so it can be reprinted, revised or put on an arrear without guessing.
 try {
