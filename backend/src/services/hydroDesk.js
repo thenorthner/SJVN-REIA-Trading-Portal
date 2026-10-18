@@ -435,6 +435,13 @@ export function createReconciliation(body, user) {
     WHERE contract_id = ? AND beneficiary_name = ? AND period_from = ? AND period_to = ? AND status <> 'SIGNED_OFF'
   `).get(body.contract_id, body.beneficiary_name, body.period_from, body.period_to);
   if (clash) throw fail(409, `${clash.statement_no} already covers this period and is still open.`);
+  // A period signed off with the beneficiary is settled: a second statement
+  // for it would be a second, different "agreed" balance (Hydro QA run 9).
+  const signed = db.prepare(`
+    SELECT statement_no FROM hydro_reconciliations
+    WHERE contract_id = ? AND beneficiary_name = ? AND period_from = ? AND period_to = ? AND status = 'SIGNED_OFF'
+  `).get(body.contract_id, body.beneficiary_name, body.period_from, body.period_to);
+  if (signed) throw fail(409, `${signed.statement_no} already signed off this period with ${body.beneficiary_name}.`);
 
   const st = ledgerStatement(body.contract_id, body.beneficiary_name, body.period_from, body.period_to);
   const year = new Date().getFullYear();
@@ -449,9 +456,52 @@ export function createReconciliation(body, user) {
   return getReconciliation(id);
 }
 
+/**
+ * The statement's figures are frozen when it is drawn up. If the account has
+ * moved for the period since — a payment or note dated inside it, recorded
+ * later — the statement is out of date: a correct balance read as a
+ * difference, and an out-of-date one was confirmed (Hydro QA run 9).
+ */
+function staleness(r) {
+  const now = ledgerStatement(r.contract_id, r.beneficiary_name, r.period_from, r.period_to);
+  return Math.abs(money(now.closing_balance) - money(r.closing_balance)) > 0.005 ? now : null;
+}
+
+/** Draw an open statement up again from the account as it now stands. */
+export function refreshReconciliation(id, user) {
+  const r = db.prepare('SELECT * FROM hydro_reconciliations WHERE id = ?').get(id);
+  if (!r) throw fail(404, 'Reconciliation not found');
+  if (['CONFIRMED', 'SIGNED_OFF'].includes(r.status)) throw fail(400, `${r.statement_no} is ${r.status} — its figures are agreed and are not redrawn.`);
+  const st = ledgerStatement(r.contract_id, r.beneficiary_name, r.period_from, r.period_to);
+  db.prepare(`
+    UPDATE hydro_reconciliations SET status = 'DRAFT', opening_balance = ?, closing_balance = ?, summary_json = ?,
+      beneficiary_balance = NULL, difference = NULL, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(st.opening_balance, st.closing_balance, JSON.stringify(st), id);
+  return getReconciliation(id);
+}
+
 export function moveReconciliation(id, { to, beneficiary_balance, remarks }, user) {
   const r = db.prepare('SELECT * FROM hydro_reconciliations WHERE id = ?').get(id);
   if (!r) throw fail(404, 'Reconciliation not found');
+  // Sending (or sending again after a dispute) draws the statement up afresh,
+  // so what goes out is the account as it stands. A balance is agreed only on
+  // the statement the beneficiary was sent: if the account has moved since,
+  // record the reply as disputed and send the statement again.
+  if (to === 'SENT') {
+    const now = staleness(r);
+    if (now) {
+      db.prepare(`UPDATE hydro_reconciliations SET opening_balance = ?, closing_balance = ?, summary_json = ?, updated_at = datetime('now') WHERE id = ?`)
+        .run(now.opening_balance, now.closing_balance, JSON.stringify(now), r.id);
+      Object.assign(r, { opening_balance: now.opening_balance, closing_balance: now.closing_balance });
+    }
+  }
+  if (['CONFIRMED', 'SIGNED_OFF'].includes(to)) {
+    const now = staleness(r);
+    if (now) {
+      throw fail(409, `${r.statement_no} was sent with a closing balance of ₹${money(r.closing_balance).toLocaleString('en-IN')}, but the account for the period now closes at ₹${money(now.closing_balance).toLocaleString('en-IN')} — record the reply as disputed and send the statement again.`);
+    }
+  }
   const allowed = RECON_TRANSITIONS[r.status] || [];
   if (!allowed.includes(to)) throw fail(400, `A statement that is ${r.status} can move to ${allowed.join(', ') || 'nothing further'}, not ${to}.`);
   let theirs = r.beneficiary_balance;

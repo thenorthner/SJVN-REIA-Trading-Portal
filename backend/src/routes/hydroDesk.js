@@ -12,7 +12,7 @@ import { stationScope, verticalOfContract } from '../services/stationScope.js';
 import {
   DISPUTE_REASONS, listDisputes, getDispute, disputableShares, raiseDispute, moveDispute,
   listInstruments, securityPosition, addInstrument, amendInstrument, invokeInstrument, releaseInstrument, instrumentEvents,
-  listReconciliations, getReconciliation, createReconciliation, moveReconciliation,
+  listReconciliations, getReconciliation, createReconciliation, moveReconciliation, refreshReconciliation,
   TDS_SECTIONS, listTds, recordTds, updateTdsCertificate,
 } from '../services/hydroDesk.js';
 import {
@@ -138,6 +138,11 @@ router.get('/reconciliations/:id', requireRole(...READ), handle((req) => getReco
 router.post('/reconciliations', requireRole(...WRITE), handle((req) => {
   const r = createReconciliation(req.body || {}, req.user);
   audit(req, 'HYDRO_RECON_CREATED', 'hydro_reconciliations', r.id, { afterValue: { statement_no: r.statement_no, closing: r.closing_balance } });
+  return r;
+}));
+router.post('/reconciliations/:id/refresh', requireRole(...WRITE), handle((req) => {
+  const r = refreshReconciliation(req.params.id, req.user);
+  audit(req, 'HYDRO_RECON_REFRESHED', 'hydro_reconciliations', r.id, { afterValue: { closing: r.closing_balance } });
   return r;
 }));
 router.post('/reconciliations/:id/move', requireRole(...WRITE), handle((req) => {
