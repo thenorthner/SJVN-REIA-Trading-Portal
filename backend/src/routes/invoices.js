@@ -4,6 +4,7 @@ import { createIntimation } from './buyerBills.js';
 import { resolveTariff } from '../services/tariffStructure.js';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES, BUYER_ROLES, counterpartySide } from '../middleware/auth.js';
+import { deskVertical, verticalOfContract } from '../services/stationScope.js';
 import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct, billableCapacityMw, invalidDecision } from '../util.js';
 import { payableNow, lpsBaseAmount, tieredRebatePct, daysBetween } from '../disputesConstants.js';
 import { invoiceLpsAsOf, lpsTermsFor, invoiceBalance } from '../services/invoiceLps.js';
@@ -171,6 +172,18 @@ const DEFAULT_LEVEL_ROLES = {
   3: ['SJVN_ADMIN', 'MANAGEMENT'],
 };
 export function approvalRolesFor(level, inv = null) {
+  const roles = baseApprovalRoles(level, inv);
+  // On a station's invoice the station desk stands where the REIA desk does
+  // (Thermal QA run 5): its officer and admin sign the level REIA's would.
+  const desk = inv?.contract_id ? verticalOfContract(inv.contract_id) : null;
+  if (!desk) return roles;
+  const equivalents = desk === 'THERMAL'
+    ? { REIA_USER: ['THERMAL_USER'], REIA_ADMIN: ['THERMAL_ADMIN'] }
+    : { REIA_USER: ['COMMERCIAL', 'COMMERCIAL_USER'], REIA_ADMIN: ['COMMERCIAL_ADMIN'] };
+  return [...new Set([...roles, ...roles.flatMap((r) => equivalents[r] || [])])];
+}
+
+function baseApprovalRoles(level, inv = null) {
   // A band in invoice_approval_levels may name its own roles per level (B3):
   // { above, levels, roles: { "1": [...], "2": [...], "3": [...] } } — a
   // ₹10 crore bill can need REIA Admin at level 1 where a ₹2 lakh one takes
@@ -186,7 +199,7 @@ export function approvalRolesFor(level, inv = null) {
   const k = keys.filter((n) => n <= level).pop() ?? keys[0];
   return map[k];
 }
-const ROLE_LABEL = { REIA_USER: 'REIA Ops', REIA_ADMIN: 'REIA Admin', SJVN_ADMIN: 'SJVN Admin', FINANCE_USER: 'Finance', MANAGEMENT: 'Management', COMMERCIAL_ADMIN: 'Commercial Admin' };
+const ROLE_LABEL = { REIA_USER: 'REIA Ops', REIA_ADMIN: 'REIA Admin', SJVN_ADMIN: 'SJVN Admin', FINANCE_USER: 'Finance', MANAGEMENT: 'Management', COMMERCIAL_ADMIN: 'Commercial Admin', THERMAL_USER: 'Thermal Desk', THERMAL_ADMIN: 'Thermal Admin' };
 const rolesText = (roles) => roles.map((r) => ROLE_LABEL[r] || r.replace(/_/g, ' ')).join(' / ');
 
 /** Whether each approval level of a bill has to be decided by a different person. */
@@ -304,6 +317,18 @@ function approvalHistory(invoiceId) {
 function ownsInvoice(user, inv) {
   const contract = db.prepare('SELECT seller_id, buyer_id FROM contracts WHERE id = ?').get(inv.contract_id);
   return contractVisibleTo(user, contract);
+}
+
+// A station desk submits and approves its own stations' invoices: a thermal
+// station's DSM pool bill could be moved on only by the REIA desk, and the
+// Thermal desk never saw it (Thermal QA run 5). It acts on no other invoice.
+const STATION_DESK_WRITE = [...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE];
+function stationDeskRefusal(user, inv) {
+  const desk = deskVertical(user);
+  if (!desk) return null;
+  return verticalOfContract(inv.contract_id) === desk
+    ? null
+    : `This invoice is not on one of your desk's ${desk === 'THERMAL' ? 'thermal' : 'hydro'} stations.`;
 }
 
 // E/F. Billing & Invoicing + Seller Invoice Management - list
@@ -2398,9 +2423,11 @@ router.post('/:id/verification', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, r
 // G. Invoice Approval Workflow
 // Sending a seller's bill to SJVN is for the company admin and its checkers;
 // the maker's draft reaches SJVN through them (submit-l2, then approve-l2).
-router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'SELLER_L2', 'SELLER_L3'), (req, res) => {
+router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, ...STATION_DESK_WRITE, 'SELLER', 'SELLER_L2', 'SELLER_L3'), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv || !ownsInvoice(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
+  const notDesk = stationDeskRefusal(req.user, inv);
+  if (notDesk) return res.status(403).json({ error: notDesk });
   if (inv.status === 'CANCELLED') {
     return res.status(400).json({ error: 'Cannot submit a cancelled invoice for approval' });
   }
@@ -2436,9 +2463,11 @@ router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, '
   res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
 });
 
-router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER', 'MANAGEMENT'), (req, res) => {
+router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, ...STATION_DESK_WRITE, 'FINANCE_USER', 'MANAGEMENT'), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  const notDesk = stationDeskRefusal(req.user, inv);
+  if (notDesk) return res.status(403).json({ error: notDesk });
   if (inv.status === 'CANCELLED') {
     return res.status(400).json({ error: 'Cannot act on approvals for a cancelled invoice' });
   }
