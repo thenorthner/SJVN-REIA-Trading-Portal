@@ -375,18 +375,19 @@ router.post('/', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) => 
         is_blacklisted, capacity_mw, technology, contracted_capacity_mw, psa_tariff, supply_criteria,
         organization_details, regulatory_approvals, bank_details, is_penny_drop_verified, invoice_template_json, status,
         logo_url, corporate_email, corporate_phone, corporate_website, tan_no, signatory_name, signatory_designation,
-        address, bank_name, account_no, ifsc_code, branch_address, verticals, requested_by_user_id
+        address, bank_name, account_no, ifsc_code, branch_address, verticals, requested_by_user_id, onboarded_by_user_id
       )
       VALUES (
         @id, @parent_entity_id, @entity_type, @category, @name, @pan_no, @gst_no, @cin, @credit_rating,
         0, @capacity_mw, @technology, @contracted_capacity_mw, @psa_tariff, @supply_criteria,
         @organization_details, @regulatory_approvals, @bank_details, 0, @invoice_template_json, 'PENDING',
         @logo_url, @corporate_email, @corporate_phone, @corporate_website, @tan_no, @signatory_name, @signatory_designation,
-        @address, @bank_name, @account_no, @ifsc_code, @branch_address, @verticals, @requested_by_user_id
+        @address, @bank_name, @account_no, @ifsc_code, @branch_address, @verticals, @requested_by_user_id, @onboarded_by_user_id
       )
     `).run({
       id,
       requested_by_user_id: body.requested_by_user_id ?? null,
+      onboarded_by_user_id: req.user.id ?? null,
       verticals: vertical,
       parent_entity_id: body.parent_entity_id ?? null,
       entity_type: body.entity_type,
@@ -876,6 +877,15 @@ router.post('/:id/approve', requireRole(...ENTITY_WRITE), (req, res) => {
   }
 
   if (decision === 'APPROVED') {
+    // Four-eyes: the officer who onboarded a company does not approve it, nor
+    // admit it directly — administrators included, as with bills and notes.
+    // Rejecting stays open to them.
+    if (entity.onboarded_by_user_id && entity.onboarded_by_user_id === req.user.id) {
+      return res.status(403).json({
+        error: `You onboarded ${entity.name}, so another officer must approve it.`,
+        code: 'MAKER_CANNOT_APPROVE',
+      });
+    }
     if (entity.is_blacklisted) {
       return res.status(400).json({
         error: `Cannot approve: ${entity.name} is blacklisted${entity.blacklist_reason ? ` (${entity.blacklist_reason})` : ''}. Clear the blacklist first.`,

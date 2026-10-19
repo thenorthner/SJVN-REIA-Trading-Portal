@@ -4,11 +4,13 @@ import { app } from '../../src/server.js';
 import db from '../../src/db/index.js';
 import { tokenFor, auth, makeEntity, columnsOf, resetReia } from '../helpers/reia.js';
 
-let reia, seller;
+let reia, checker, seller;
 let seq = 1000;
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
+  // A second officer of the same desk: the one who onboards a company does not approve it.
+  checker = tokenFor('REIA_USER');
   // Onboarding now requires what a counterparty of this kind actually has to
   // bring: PAN and GST on both sides, plus generation capacity for a seller.
   // Unique per test, because resetReia does not clear entities and a repeated
@@ -53,7 +55,7 @@ describe('S1 Stakeholder onboarding', () => {
 
   it('refuses approval while mandatory regulatory items are outstanding', async () => {
     const c = await request(app).post('/api/entities').set(auth(reia)).send({ ...seller, name: 'Approve Me' });
-    const a = await request(app).post(`/api/entities/${c.body.id}/approve`).set(auth(reia)).send({ decision: 'APPROVED' });
+    const a = await request(app).post(`/api/entities/${c.body.id}/approve`).set(auth(checker)).send({ decision: 'APPROVED' });
     expect(a.status).toBe(400);
     expect(a.body.error).toMatch(/regulatory|penny/i);
     expect(db.prepare('SELECT status FROM entities WHERE id = ?').get(c.body.id).status).toBe('PENDING');
@@ -65,7 +67,7 @@ describe('S1 Stakeholder onboarding', () => {
     // Clear the two gates the route enforces.
     db.prepare(`UPDATE entity_regulatory_approvals SET status = 'VERIFIED' WHERE entity_id = ?`).run(id);
     db.prepare('UPDATE entities SET is_penny_drop_verified = 1 WHERE id = ?').run(id);
-    const a = await request(app).post(`/api/entities/${id}/approve`).set(auth(reia)).send({ decision: 'APPROVED' });
+    const a = await request(app).post(`/api/entities/${id}/approve`).set(auth(checker)).send({ decision: 'APPROVED' });
     expect(a.status).toBe(200);
     expect(db.prepare('SELECT status FROM entities WHERE id = ?').get(id).status).toBe('APPROVED');
   });
@@ -81,7 +83,7 @@ describe('S1 Stakeholder onboarding', () => {
 
   it('records an audit trail for the onboarding decision', async () => {
     const c = await request(app).post('/api/entities').set(auth(reia)).send({ ...seller, name: 'Audited Co' });
-    await request(app).post(`/api/entities/${c.body.id}/approve`).set(auth(reia)).send({ decision: 'APPROVED' });
+    await request(app).post(`/api/entities/${c.body.id}/approve`).set(auth(checker)).send({ decision: 'APPROVED' });
     const logs = db.prepare('SELECT * FROM audit_logs WHERE entity_id = ?').all(c.body.id);
     expect(logs.length).toBeGreaterThan(0);
   });

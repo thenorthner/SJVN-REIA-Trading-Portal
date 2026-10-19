@@ -3850,6 +3850,29 @@ try {
   console.error('17-Oct-2026 decisions migration failed:', e.message);
 }
 
+// Four-eyes on onboarding (thermal QA run 18, 19-Oct-2026): the officer who
+// onboarded a company may not approve it. Older records take the officer from
+// their creation audit row where one exists, and stay unknown otherwise.
+function migrateEntityOnboardedBy() {
+  const cols = db.pragma('table_info(entities)').map((c) => c.name);
+  if (cols.includes('onboarded_by_user_id')) return;
+  db.exec('ALTER TABLE entities ADD COLUMN onboarded_by_user_id TEXT');
+  db.prepare(`
+    UPDATE entities SET onboarded_by_user_id = (
+      SELECT a.user_id FROM audit_logs a
+      WHERE a.entity_id = entities.id AND LOWER(a.entity_type) = 'entity'
+        AND a.action IN ('ENTITY_CREATED', 'CREATE') AND a.user_id IS NOT NULL
+      ORDER BY a.created_at ASC LIMIT 1
+    )
+  `).run();
+}
+
+try {
+  migrateEntityOnboardedBy();
+} catch (e) {
+  console.error('Entity onboarded-by migration failed:', e.message);
+}
+
 try {
   db.prepare(`UPDATE contracts SET tariff_structure_json = NULL WHERE tariff_structure_json = '{}' OR tariff_structure_json = '"{}"' OR TRIM(tariff_structure_json) = ''`).run();
 } catch (e) {

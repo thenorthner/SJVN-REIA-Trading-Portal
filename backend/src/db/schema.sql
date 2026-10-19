@@ -251,6 +251,7 @@ CREATE TABLE IF NOT EXISTS entities (
   -- developer, so developer KYC does not apply (decided 17-Oct-2026).
   is_sjvn_own INTEGER NOT NULL DEFAULT 0,
   requested_by_user_id TEXT,  -- the counterparty login that put this company forward, if any
+  onboarded_by_user_id TEXT,  -- the login that onboarded it; may not approve it (four-eyes)
   category TEXT NOT NULL, -- RE Generator / DISCOM / C&I / Other
   name TEXT NOT NULL,
   -- Short trading code used inside invoice numbers (GACL rather than GUJARAT).
