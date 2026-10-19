@@ -863,6 +863,10 @@ export function receivablesAgeing(contractId, { asOf = new Date() } = {}) {
   if (Number.isNaN(given.getTime())) throw Object.assign(new Error('as_of must be a date (YYYY-MM-DD)'), { status: 400 });
   const istDay = typeof asOf === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(asOf)
     ? asOf : new Date(given.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  // 30 February rolled over to 2 March and was aged as that day (Thermal QA run 8).
+  if (new Date(`${istDay}T00:00:00Z`).toISOString().slice(0, 10) !== istDay) {
+    throw Object.assign(new Error(`as_of ${istDay} is not a real date`), { status: 400 });
+  }
   const today = new Date(`${istDay}T00:00:00Z`);
   const bucketOf = (due) => {
     if (!due) return 'current';
