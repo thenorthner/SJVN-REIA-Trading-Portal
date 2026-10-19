@@ -41,8 +41,19 @@ export const DISPUTE_REASONS = {
   REBATE_ERROR: 'Rebate not allowed / computed wrongly',
   LPS_ERROR: 'Late payment surcharge disputed',
   DUPLICATE_BILLING: 'Billed twice',
+  FUEL_GCV_PRICE: 'Coal GCV / landed fuel price disputed',
   OTHER: 'Other',
 };
+
+// β and free power are a hydro station's; the coal GCV and price a thermal
+// one's. A coal station was disputed for free power (Thermal QA run 11).
+const HYDRO_ONLY_REASONS = ['BETA_INCENTIVE', 'FREE_POWER'];
+const THERMAL_ONLY_REASONS = ['FUEL_GCV_PRICE'];
+export function disputeReasonsFor(vertical) {
+  const leave = vertical === 'THERMAL' ? HYDRO_ONLY_REASONS : THERMAL_ONLY_REASONS;
+  return Object.fromEntries(Object.entries(DISPUTE_REASONS).filter(([k]) => !leave.includes(k)));
+}
+const stationTypes = (vertical) => (vertical === 'THERMAL' ? "'Thermal'" : "'Hydro','PSP'");
 
 /** Days the desk has to acknowledge and to resolve, from the day the dispute arrived. */
 const SLA_ACK_DAYS = 2;
@@ -81,7 +92,7 @@ function decorateDispute(d) {
   };
 }
 
-export function listDisputes({ contractId = null, status = null, beneficiaryName = null } = {}) {
+export function listDisputes({ contractId = null, status = null, beneficiaryName = null, vertical = null } = {}) {
   let sql = `
     SELECT d.*, b.bill_no, b.billing_month, b.bill_kind, n.note_no AS credit_note_no, n.status AS credit_note_status
     FROM hydro_disputes d
@@ -91,6 +102,8 @@ export function listDisputes({ contractId = null, status = null, beneficiaryName
   const params = [];
   if (contractId) { sql += ' AND d.contract_id = ?'; params.push(contractId); }
   if (beneficiaryName) { sql += ' AND d.beneficiary_name = ?'; params.push(beneficiaryName); }
+  // A desk lists its own stations' disputes (Thermal QA run 11).
+  if (vertical) sql += ` AND d.contract_id IN (SELECT id FROM contracts WHERE project_type IN (${stationTypes(vertical)}))`;
   if (status === 'OPEN') sql += ` AND d.status IN (${OPEN.map(() => '?').join(',')})`;
   else if (status) { sql += ' AND d.status = ?'; params.push(status); }
   if (status === 'OPEN') params.push(...OPEN);
@@ -123,6 +136,9 @@ export function raiseDispute(body, user) {
     WHERE d.id = ? AND d.doc_type = 'PB' AND d.status = 'OPEN'
   `).get(body.ledger_doc_id);
   if (!doc) throw fail(400, 'Choose the beneficiary\'s share of an issued bill — a dispute is raised against a bill that has been issued to it.');
+  const isThermalStation = db.prepare(`SELECT project_type FROM contracts WHERE id = ?`).get(doc.contract_id)?.project_type === 'Thermal';
+  const reasons = disputeReasonsFor(isThermalStation ? 'THERMAL' : 'HYDRO');
+  if (!reasons[body.reason_code]) throw fail(400, `reason_code must be one of: ${Object.keys(reasons).join(', ')} for this station`);
   const amount = money(body.disputed_amount);
   if (!(amount > 0)) throw fail(400, 'The disputed amount must be greater than zero.');
   if (amount > doc.amount + 0.005) throw fail(400, `The share billed on ${doc.doc_no} is ₹${doc.amount.toLocaleString('en-IN')}; more than that cannot be disputed.`);

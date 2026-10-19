@@ -8,9 +8,9 @@ import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { pushNotification } from '../util.js';
-import { stationScope, verticalOfContract } from '../services/stationScope.js';
+import { stationScope, verticalOfContract, deskVertical, contractOfRecord } from '../services/stationScope.js';
 import {
-  DISPUTE_REASONS, listDisputes, getDispute, disputableShares, raiseDispute, moveDispute,
+  disputeReasonsFor, listDisputes, getDispute, disputableShares, raiseDispute, moveDispute,
   listInstruments, securityPosition, addInstrument, amendInstrument, invokeInstrument, releaseInstrument, instrumentEvents,
   listReconciliations, getReconciliation, createReconciliation, moveReconciliation, refreshReconciliation,
   TDS_SECTIONS, listTds, recordTds, updateTdsCertificate,
@@ -36,8 +36,12 @@ const handle = (fn) => (req, res) => {
     res.status(err.status || 400).json({ error: err.message });
   }
 };
+// Filed under the station's own desk: every hydro and thermal desk action went
+// to the REIA module (Thermal QA run 11).
 const audit = (req, action, entityType, entityId, extra = {}) => {
-  try { secureLogAudit(req, { action, module: 'REIA', entityType, entityId, ...extra }); } catch { /* audit must not fail the action */ }
+  let module = 'HYDRO';
+  try { if (verticalOfContract(contractOfRecord(entityId) || entityId) === 'THERMAL') module = 'THERMAL'; } catch { /* filed as hydro */ }
+  try { secureLogAudit(req, { action, module, entityType, entityId, ...extra }); } catch { /* audit must not fail the action */ }
 };
 const need = (q, k) => {
   if (!q[k]) throw Object.assign(new Error(`${k} is required`), { status: 400 });
@@ -45,17 +49,23 @@ const need = (q, k) => {
 };
 
 // ── Disputes ────────────────────────────────────────────────────────────────
-router.get('/disputes/reasons', requireRole(...READ), handle(() =>
-  Object.entries(DISPUTE_REASONS).map(([value, label]) => ({ value, label }))));
+router.get('/disputes/reasons', requireRole(...READ), handle((req) => {
+  const v = req.query.contract_id ? verticalOfContract(req.query.contract_id) : (deskVertical(req.user) || req.query.vertical);
+  return Object.entries(disputeReasonsFor(v === 'THERMAL' ? 'THERMAL' : 'HYDRO')).map(([value, label]) => ({ value, label }));
+}));
 router.get('/disputes/shares', requireRole(...READ), handle((req) =>
   disputableShares(need(req.query, 'contract_id'), need(req.query, 'beneficiary'))));
 router.get('/disputes', requireRole(...READ), handle((req) =>
-  listDisputes({ contractId: req.query.contract_id, status: req.query.status, beneficiaryName: req.query.beneficiary })));
+  listDisputes({ contractId: req.query.contract_id, status: req.query.status, beneficiaryName: req.query.beneficiary, vertical: deskVertical(req.user) })));
 // Declared before /disputes/:id, which otherwise answers it as a dispute id (Hydro QA run 7).
 router.get('/disputes/stats', requireRole(...READ), handle((req) => {
   const contractId = req.query.contract_id;
-  const where = contractId ? 'WHERE contract_id = ?' : '';
-  const params = contractId ? [contractId] : [];
+  const desk = deskVertical(req.user);
+  const clauses = [];
+  const params = [];
+  if (contractId) { clauses.push('contract_id = ?'); params.push(contractId); }
+  if (desk) clauses.push(`contract_id IN (SELECT id FROM contracts WHERE project_type IN (${desk === 'THERMAL' ? "'Thermal'" : "'Hydro','PSP'"}))`);
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   const all = db.prepare(`SELECT * FROM hydro_disputes ${where}`).all(...params);
   const open = all.filter((d) => !['RESOLVED_ACCEPTED', 'RESOLVED_REJECTED', 'CLOSED'].includes(d.status));
   const today = new Date().toISOString().slice(0, 10);
