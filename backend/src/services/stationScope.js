@@ -33,7 +33,7 @@ export function verticalOfContract(contractId) {
 const OWNERS = [
   'hydro_station_bills', 'hydro_ledger_docs', 'hydro_notes', 'hydro_disputes',
   'hydro_security_instruments', 'hydro_reconciliations', 'hydro_tds_entries',
-  'hydro_beneficiary_allocations', 'hydro_fi_postings',
+  'hydro_beneficiary_allocations', 'hydro_fi_postings', 'station_beneficiary_ppas', 'station_regulatory_items', 'station_power_regulations',
   'hydro_additional_charges',
 ];
 

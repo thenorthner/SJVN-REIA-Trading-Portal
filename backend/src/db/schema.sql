@@ -4433,3 +4433,99 @@ CREATE TABLE IF NOT EXISTS balance_confirmations (
   responded_at TEXT,
   UNIQUE (entity_id, party_side, financial_year)
 );
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Station desks: beneficiary PPAs and the regulatory desk (parity with REIA,
+-- 18-Oct-2026).
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- The power purchase agreement each beneficiary holds with a station. The
+-- monthly share comes from the REA (hydro_beneficiary_allocations); this is the
+-- agreement behind it — its reference, term and the payment security it asks
+-- for — so the desk can see who is billed without a PPA on file, and which
+-- PPAs are running out.
+CREATE TABLE IF NOT EXISTS station_beneficiary_ppas (
+  id TEXT PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  beneficiary_name TEXT NOT NULL,
+  beneficiary_id TEXT REFERENCES entities(id),
+  ppa_ref TEXT NOT NULL,
+  signed_on TEXT,
+  valid_from TEXT NOT NULL,
+  valid_to TEXT,                         -- NULL: for the life of the station
+  contracted_share_pct REAL,             -- share in the PPA / MoP allocation, if stated
+  -- Payment security the PPA requires, as months of average billing (CERC and
+  -- the LPS Rules ask for LC of at least one month's billing).
+  lc_months_required REAL,
+  tariff_basis TEXT,                     -- e.g. "CERC tariff order, as revised"
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','EXPIRED','TERMINATED')),
+  remarks TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (contract_id, beneficiary_name, ppa_ref)
+);
+CREATE INDEX IF NOT EXISTS idx_station_ppas_contract ON station_beneficiary_ppas (contract_id, beneficiary_name);
+
+-- The regulatory desk: tariff petitions, true-ups and reviews before CERC, the
+-- fees that go with them, and any other dated filing. contract_id is NULL for
+-- an item that covers the whole desk (a fee paid once for all stations).
+CREATE TABLE IF NOT EXISTS station_regulatory_items (
+  id TEXT PRIMARY KEY,
+  vertical TEXT NOT NULL CHECK (vertical IN ('HYDRO','THERMAL')),
+  contract_id TEXT REFERENCES contracts(id),
+  item_type TEXT NOT NULL CHECK (item_type IN
+    ('TARIFF_PETITION','TRUE_UP','REVIEW_PETITION','APPEAL','CERC_FEE','FILING','OTHER')),
+  title TEXT NOT NULL,
+  petition_no TEXT,
+  control_period TEXT,                   -- e.g. 2024-29
+  due_date TEXT,
+  filed_on TEXT,
+  next_hearing TEXT,
+  order_date TEXT,
+  order_ref TEXT,
+  amount REAL,                           -- fee, or the AFC claimed / allowed
+  status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN
+    ('OPEN','FILED','UNDER_HEARING','ORDER_RESERVED','ORDER_ISSUED','PAID','CLOSED')),
+  -- An order that changes the tariff has to reach the bills: the desk marks it
+  -- implemented once the tariff is updated and any arrear bill raised.
+  tariff_impact INTEGER NOT NULL DEFAULT 0,
+  implemented_on TEXT,
+  remarks TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_station_reg_items ON station_regulatory_items (vertical, status, due_date);
+
+-- Regulation of power supply to a beneficiary in default: notice, regulation,
+-- restoration. What was actually withheld each month is on the bill lines
+-- (deducted_scheduled_energy_kwh); this is the case behind it, so the desk can
+-- show when notice was served, from when supply was regulated and why it was
+-- restored.
+CREATE TABLE IF NOT EXISTS station_power_regulations (
+  id TEXT PRIMARY KEY,
+  case_no TEXT UNIQUE NOT NULL,
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  beneficiary_name TEXT NOT NULL,
+  beneficiary_id TEXT REFERENCES entities(id),
+  status TEXT NOT NULL DEFAULT 'NOTICE_ISSUED'
+    CHECK (status IN ('NOTICE_ISSUED','REGULATING','RESTORED','WITHDRAWN')),
+  -- The default that started it, as it stood when notice went out.
+  ground TEXT NOT NULL CHECK (ground IN ('OVERDUE','SECURITY_NOT_MAINTAINED','BOTH')),
+  outstanding_at_notice REAL NOT NULL DEFAULT 0,
+  overdue_days_at_notice INTEGER NOT NULL DEFAULT 0,
+  notice_ref TEXT NOT NULL,
+  notice_date TEXT NOT NULL,
+  earliest_regulation_date TEXT NOT NULL,
+  regulate_from TEXT,
+  regulation_pct REAL,                   -- share of the beneficiary's entitlement withheld
+  rldc_intimation_ref TEXT,
+  restored_on TEXT,
+  close_reason TEXT,
+  remarks TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_station_reg_power ON station_power_regulations (contract_id, beneficiary_name, status);

@@ -72,8 +72,11 @@ export function buildDashboard({ desk = null, readiness = () => ({}) } = {}) {
   const basisOf = (cid, m) => basis.find((b) => b.contract_id === cid && b.billing_month === m);
 
   const tariff = db.prepare('SELECT annual_afc, napaf_percent FROM hydro_station_tariffs WHERE contract_id = ? AND financial_year = ?');
+  // A thermal station's AFC and NAPAF are on its own tariff table; the
+  // contract carries neither, which read as a zero AFC.
+  const thermalTariff = db.prepare('SELECT annual_afc, napaf_percent, gross_heat_rate, aux_pct FROM thermal_station_tariffs WHERE contract_id = ? AND financial_year = ?');
   const stations = contracts.map((c) => {
-    const t = tariff.get(c.id, financialYear);
+    const t = c.project_type === 'Thermal' ? thermalTariff.get(c.id, financialYear) : tariff.get(c.id, financialYear);
     const latest = basis.filter((b) => b.contract_id === c.id).sort((a, b) => b.billing_month.localeCompare(a.billing_month))[0];
     const napaf = Number(t?.napaf_percent || c.napaf_percent) || null;
     const pafm = latest ? round(latest.c1_pafm_pct) : null;
@@ -92,6 +95,12 @@ export function buildDashboard({ desk = null, readiness = () => ({}) } = {}) {
       pafm_below_napaf: pafm != null && napaf != null ? pafm < napaf : null,
       status: 'OPERATIONAL',
       monthly_afc: Math.round((Number(t?.annual_afc) || c.annual_afc || 0) / 12),
+      free_energy_home_state: c.free_energy_home_state ?? null,
+      // The state that takes the free energy, off the allocation's home-state row.
+      home_state: db.prepare(`
+        SELECT COALESCE(parent_state, beneficiary_name) AS s FROM hydro_beneficiary_allocations
+        WHERE contract_id = ? AND is_home_state = 1 AND is_active = 1 ORDER BY effective_from DESC LIMIT 1
+      `).get(c.id)?.s || null,
       code: stationCode(c),
       ...readiness(c),
     };
@@ -169,9 +178,43 @@ export function buildDashboard({ desk = null, readiness = () => ({}) } = {}) {
     };
   });
 
+  // Thermal months: plant load factor, energy charge rate and the fuel it was
+  // worked on, weighted by energy across the stations billed that month.
+  const thermalStations = stations.filter((s) => s.project_type === 'Thermal');
+  const thermalTrend = thermalStations.length ? months.map((m) => {
+    let exBus = 0; let gross = 0; let capHours = 0; let energyCharge = 0; let gcvW = 0; let coalW = 0; let fuelKwh = 0;
+    for (const s of thermalStations) {
+      const b = basisOf(s.id, m);
+      if (!b) continue;
+      let inp = {};
+      try { inp = JSON.parse(b.thermal_inputs_json || '{}'); } catch { inp = {}; }
+      const aux = Number(inp.tariff?.aux_pct ?? b.a3_aux_pct) || 0;
+      const e1 = Number(b.e1_ex_bus_scheduled_kwh) || 0;
+      exBus += e1;
+      gross += aux < 100 ? e1 / (1 - aux / 100) : 0;
+      capHours += (Number(s.capacity_mw) || 0) * 1000 * 24 * (Number(b.a8_days_in_month) || 0);
+      energyCharge += (Number(b.ee1_energy_charge) || 0) + (Number(b.ee2_excess_energy_charge) || 0);
+      if (inp.fuel?.gcv_kcal_per_kg) {
+        gcvW += inp.fuel.gcv_kcal_per_kg * e1; coalW += (inp.fuel.coal_rs_per_tonne || 0) * e1; fuelKwh += e1;
+      }
+    }
+    return {
+      period: monthLabel(m),
+      month_key: m,
+      billed: exBus > 0,
+      plf: capHours > 0 && exBus > 0 ? round((gross / capHours) * 100) : null,
+      ecr: exBus > 0 ? round(energyCharge / exBus, 4) : null,
+      gcv: fuelKwh > 0 ? round(gcvW / fuelKwh, 0) : null,
+      coal_rs_per_tonne: fuelKwh > 0 ? round(coalW / fuelKwh, 0) : null,
+      scheduled_mu: round(exBus / 1e6, 1),
+      gross_kwh: gross,
+      capacity_kwh: capHours,
+    };
+  }) : [];
+
   // Beneficiaries: their share of the stations' capacity, and their account.
   const allocations = db.prepare(`
-    SELECT contract_id, beneficiary_name, parent_state, pct_incl_free FROM hydro_beneficiary_allocations
+    SELECT contract_id, beneficiary_name, parent_state, pct_incl_free, pct_rea FROM hydro_beneficiary_allocations
     WHERE contract_id IN ${inIds} AND is_active = 1
       AND (effective_from IS NULL OR effective_from <= ?) AND (effective_to IS NULL OR effective_to >= ?)
   `).all(...ids, today, today);
@@ -185,7 +228,8 @@ export function buildDashboard({ desk = null, readiness = () => ({}) } = {}) {
   const byName = new Map();
   for (const a of allocations) {
     const cur = byName.get(a.beneficiary_name) || { name: a.beneficiary_name, state: a.parent_state || '', mw: 0 };
-    cur.mw += ((Number(a.pct_incl_free) || 0) / 100) * capacityOf[a.contract_id];
+    // A thermal allocation has no free-power column; its REA share is the whole share.
+    cur.mw += ((Number(a.pct_incl_free ?? a.pct_rea) || 0) / 100) * capacityOf[a.contract_id];
     byName.set(a.beneficiary_name, cur);
   }
   const ranked = [...byName.values()].map((b) => {
@@ -258,6 +302,20 @@ export function buildDashboard({ desk = null, readiness = () => ({}) } = {}) {
       cumulativeCollectedCr: collectedCr,
       realizationPct: billedCr > 0 ? round((collectedCr / billedCr) * 100, 1) : null,
       avgPafmPct: pafms.length ? round(pafms.reduce((a, v) => a + v, 0) / pafms.length, 1) : null,
+      // The year's PLF is the year's energy over the year's capacity-hours, not
+      // an average of monthly PLFs; it read 83.0 where Generation Performance
+      // read 83.02 (Thermal QA run 10).
+      plfYtdPct: (() => {
+        const billed = thermalTrend.filter((m) => m.plf != null);
+        const cap = billed.reduce((a, m) => a + m.capacity_kwh, 0);
+        return cap > 0 ? round((billed.reduce((a, m) => a + m.gross_kwh, 0) / cap) * 100) : null;
+      })(),
+      avgEcr: (() => {
+        const billed = thermalTrend.filter((m) => m.ecr != null);
+        const e = billed.reduce((a, m) => a + m.scheduled_mu, 0);
+        return e > 0 ? round(billed.reduce((a, m) => a + m.ecr * m.scheduled_mu, 0) / e, 4) : null;
+      })(),
+      overdueCr: round(stations.reduce((a, s) => a + (s.overdue_cr || 0), 0)),
       cumulativeEnergyMu: round(energyScheduledTrend.reduce((a, m) => a + m.scheduled_energy, 0), 1),
       activeStationsCount: stations.length,
       beneficiariesCount: byName.size,
@@ -267,6 +325,7 @@ export function buildDashboard({ desk = null, readiness = () => ({}) } = {}) {
     monthlyBillingTrend,
     pafmTrend,
     energyScheduledTrend,
+    thermalTrend,
     beneficiaryBreakup,
     pipeline,
     recentBills,

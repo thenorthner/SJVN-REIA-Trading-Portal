@@ -32,6 +32,7 @@ import { secureLogAudit as writeAudit } from '../auditEngine.js';
 import { isThermal, buildThermalBill, rebuildThermalBill, thermalReadiness, thermalTariffFor } from '../services/thermalStationBill.js';
 import { stationScope, deskVertical, verticalOfContract, contractOfRecord } from '../services/stationScope.js';
 import { buildDashboard } from '../services/hydroDashboard.js';
+import { deskStatus } from '../services/stationRegisters.js';
 import { listNotes, raiseNote, approveNote, rejectNote, NOTE_REASONS } from '../services/hydroNotes.js';
 import {
   generateHydroStationBillPdf, generateHydroBeneficiaryBillsPdf, hydroBeneficiaryBillPdfBuffer, monthLabel,
@@ -371,6 +372,10 @@ router.get('/stations', requireRole(...READ), (req, res) => {
     normative_aux: c.normative_aux,
     free_energy_home_state: c.free_energy_home_state,
     napaf_percent: c.napaf_percent,
+    ecr_excess_rate: c.ecr_excess_rate,
+    payment_terms_days: c.payment_terms_days,
+    rebate_pct: c.rebate_pct,
+    lps_annual_pct: c.lps_annual_pct,
     status: c.status,
     tenure_start: c.tenure_start,
     tenure_end: c.tenure_end,
@@ -382,7 +387,13 @@ router.get('/stations', requireRole(...READ), (req, res) => {
 router.get('/dashboard', requireRole(...READ), (req, res) => {
   try {
     // Every figure from the bills and the ledger; a desk sees its own stations (Hydro QA run 16).
-    res.json(buildDashboard({ desk: deskVertical(req.user), readiness }));
+    // A desk officer sees their own stations; anyone else may ask for one desk.
+    const desk = deskVertical(req.user) || (['HYDRO', 'THERMAL'].includes(req.query.vertical) ? req.query.vertical : null);
+    const ready = (c) => (isThermal(c) ? thermalReadiness(c) : readiness(c));
+    const out = buildDashboard({ desk, readiness: ready });
+    // The desk's open work, so the dashboard says what needs doing today.
+    if (desk) out.desk = deskStatus(desk, req.user);
+    res.json(out);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

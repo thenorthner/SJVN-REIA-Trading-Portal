@@ -51,6 +51,15 @@ const HydroReconciliation = lazy(() => import('./pages/hydro-thermal/desk/HydroR
 const HydroTds = lazy(() => import('./pages/hydro-thermal/desk/HydroTds.jsx'));
 const ThermalStations = lazy(() => import('./pages/hydro-thermal/ThermalStations.jsx'));
 
+const StationMonthClose = lazy(() => import('./pages/hydro-thermal/desk/StationMonthClose.jsx'));
+const StationApprovals = lazy(() => import('./pages/hydro-thermal/desk/StationApprovals.jsx'));
+const StationAdvances = lazy(() => import('./pages/hydro-thermal/desk/StationAdvances.jsx'));
+const StationPerformance = lazy(() => import('./pages/hydro-thermal/desk/StationPerformance.jsx'));
+const StationPpaRegister = lazy(() => import('./pages/hydro-thermal/desk/StationPpaRegister.jsx'));
+const StationRegulatory = lazy(() => import('./pages/hydro-thermal/desk/StationRegulatory.jsx'));
+const StationReaRegister = lazy(() => import('./pages/hydro-thermal/desk/StationReaRegister.jsx'));
+const HydroStations = lazy(() => import('./pages/hydro-thermal/HydroStations.jsx'));
+const StationPowerRegulation = lazy(() => import('./pages/hydro-thermal/desk/StationPowerRegulation.jsx'));
 const TradingDashboard = lazy(() => import('./pages/trading/TradingDashboard.jsx'));
 const TradingClients = lazy(() => import('./pages/trading/TradingClients.jsx'));
 const TradingClientProfile = lazy(() => import('./pages/trading/TradingClientProfile.jsx'));
@@ -308,6 +317,15 @@ export default function App() {
         <Route path="hydro-thermal/receivables" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroReceivables /></ProtectedRoute>} />
         <Route path="hydro-thermal/dsm" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><DeviationSettlements key="HYDRO" vertical="HYDRO" /></ProtectedRoute>} />
         {/* Thermal billing: the same station-billing screens, on the thermal stations. */}
+        <Route path="hydro-thermal/month-close" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationMonthClose key="H" vertical="HYDRO" /></ProtectedRoute>} />
+        <Route path="hydro-thermal/approvals" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationApprovals key="H" vertical="HYDRO" /></ProtectedRoute>} />
+        <Route path="hydro-thermal/advances" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationAdvances key="H" vertical="HYDRO" /></ProtectedRoute>} />
+        <Route path="hydro-thermal/generation-performance" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationPerformance key="H" vertical="HYDRO" /></ProtectedRoute>} />
+        <Route path="hydro-thermal/stations" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroStations /></ProtectedRoute>} />
+        <Route path="hydro-thermal/ppas" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationPpaRegister key="H" vertical="HYDRO" /></ProtectedRoute>} />
+        <Route path="hydro-thermal/regulatory" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationRegulatory key="H" vertical="HYDRO" /></ProtectedRoute>} />
+        <Route path="hydro-thermal/rea-register" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationReaRegister key="H" vertical="HYDRO" /></ProtectedRoute>} />
+        <Route path="hydro-thermal/power-regulation" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationPowerRegulation key="H" vertical="HYDRO" /></ProtectedRoute>} />
         <Route path="thermal/stations" element={<ProtectedRoute roles={THERMAL_ROLES}><ThermalStations /></ProtectedRoute>} />
         <Route path="thermal/billing" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroBilling key="T" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="thermal/arrear-supplementary" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroAdjustmentBills key="T" vertical="THERMAL" /></ProtectedRoute>} />
@@ -322,6 +340,14 @@ export default function App() {
         <Route path="thermal/finance" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroFinance key="T" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="thermal/dsm" element={<ProtectedRoute roles={THERMAL_ROLES}><DeviationSettlements key="THERMAL" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="reia/reports" element={<ProtectedRoute roles={REIA_ROLES}><Reports /></ProtectedRoute>} />
+        <Route path="thermal/month-close" element={<ProtectedRoute roles={THERMAL_ROLES}><StationMonthClose key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/approvals" element={<ProtectedRoute roles={THERMAL_ROLES}><StationApprovals key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/advances" element={<ProtectedRoute roles={THERMAL_ROLES}><StationAdvances key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/generation-performance" element={<ProtectedRoute roles={THERMAL_ROLES}><StationPerformance key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/ppas" element={<ProtectedRoute roles={THERMAL_ROLES}><StationPpaRegister key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/regulatory" element={<ProtectedRoute roles={THERMAL_ROLES}><StationRegulatory key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/rea-register" element={<ProtectedRoute roles={THERMAL_ROLES}><StationReaRegister key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/power-regulation" element={<ProtectedRoute roles={THERMAL_ROLES}><StationPowerRegulation key="T" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="reia/payment-monitoring" element={<ProtectedRoute roles={REIA_ROLES}><PaymentMonitoring /></ProtectedRoute>} />
         <Route path="reia/generation-performance" element={<ProtectedRoute roles={REIA_ROLES}><GenerationPerformance /></ProtectedRoute>} />
         <Route path="reia/contract-compliance" element={<ProtectedRoute roles={REIA_ROLES}><ContractCompliance /></ProtectedRoute>} />

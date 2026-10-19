@@ -9,6 +9,11 @@ import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { pushNotification } from '../util.js';
 import { stationScope, verticalOfContract, deskVertical, contractOfRecord } from '../services/stationScope.js';
+import { monthCloseBoard, approvalsQueue, advancesRegister, generationPerformance } from '../services/stationDesk.js';
+import {
+  ppaRegister, addPpa, updatePpa, regulatoryRegister, addRegulatoryItem, updateRegulatoryItem, reaRegister,
+  regulationRegister, issueRegulationNotice, moveRegulationCase, regulatedInMonth,
+} from '../services/stationRegisters.js';
 import {
   disputeReasonsFor, listDisputes, getDispute, disputableShares, raiseDispute, moveDispute,
   listInstruments, securityPosition, addInstrument, amendInstrument, invokeInstrument, releaseInstrument, instrumentEvents,
@@ -47,6 +52,63 @@ const need = (q, k) => {
   if (!q[k]) throw Object.assign(new Error(`${k} is required`), { status: 400 });
   return q[k];
 };
+
+// ── Desk-wide views ─────────────────────────────────────────────────────────
+// A desk officer always sees their own vertical; anyone else picks one.
+const vert = (req) => deskVertical(req.user) || (req.query.vertical === 'THERMAL' ? 'THERMAL' : 'HYDRO');
+router.get('/month-close', requireRole(...READ), handle((req) => monthCloseBoard(vert(req), req.query.period)));
+router.get('/approvals', requireRole(...READ), handle((req) => approvalsQueue(vert(req), req.user)));
+router.get('/advances', requireRole(...READ), handle((req) => advancesRegister(vert(req))));
+router.get('/generation-performance', requireRole(...READ), handle((req) => generationPerformance(vert(req), req.query.fy)));
+router.get('/rea-register', requireRole(...READ), handle((req) => reaRegister(vert(req), req.query.fy)));
+
+// Beneficiary PPAs beside the share each is billed on.
+router.get('/ppas', requireRole(...READ), handle((req) => ppaRegister(vert(req))));
+router.post('/ppas', requireRole(...WRITE), handle((req, res) => {
+  const ppa = addPpa(vert(req), req.body || {}, req.user);
+  audit(req, 'STATION_PPA_ADDED', 'station_beneficiary_ppas', ppa.id, { afterValue: ppa });
+  res.status(201).json(ppa);
+}));
+router.patch('/ppas/:id', requireRole(...WRITE), handle((req) => {
+  const ppa = updatePpa(vert(req), req.params.id, req.body || {});
+  audit(req, req.body?.status === 'TERMINATED' ? 'STATION_PPA_TERMINATED' : 'STATION_PPA_UPDATED', 'station_beneficiary_ppas', ppa.id, { afterValue: ppa });
+  return ppa;
+}));
+
+// Regulation of power supply to a beneficiary in default.
+router.get('/power-regulation', requireRole(...READ), handle((req) => regulationRegister(vert(req))));
+router.get('/power-regulation/month', requireRole(...READ), handle((req) => {
+  const month = need(req.query, 'month');
+  if (!/^\d{4}-\d{2}$/.test(month)) throw Object.assign(new Error('month must be YYYY-MM'), { status: 400 });
+  return regulatedInMonth(need(req.query, 'contract_id'), month);
+}));
+router.post('/power-regulation', requireRole(...WRITE), handle((req, res) => {
+  const c = issueRegulationNotice(vert(req), req.body || {}, req.user);
+  audit(req, 'POWER_REGULATION_NOTICE', 'station_power_regulations', c.id, { afterValue: c });
+  pushNotification({
+    role: verticalOfContract(c.contract_id) === 'THERMAL' ? 'THERMAL_ADMIN' : 'COMMERCIAL_ADMIN', type: 'POWER_REGULATION',
+    message: `Regulation notice ${c.notice_ref} served on ${c.beneficiary_name}; supply may be regulated from ${c.earliest_regulation_date}.`,
+  });
+  res.status(201).json(c);
+}));
+router.post('/power-regulation/:id/move', requireRole(...WRITE), handle((req) => {
+  const c = moveRegulationCase(vert(req), req.params.id, req.body || {});
+  audit(req, `POWER_REGULATION_${req.body?.action}`, 'station_power_regulations', c.id, { afterValue: c, reason: req.body?.reason });
+  return c;
+}));
+
+// The regulatory desk: petitions, true-ups, fees and orders.
+router.get('/regulatory', requireRole(...READ), handle((req) => regulatoryRegister(vert(req))));
+router.post('/regulatory', requireRole(...WRITE), handle((req, res) => {
+  const item = addRegulatoryItem(vert(req), req.body || {}, req.user);
+  audit(req, 'STATION_REGULATORY_ADDED', 'station_regulatory_items', item.id, { afterValue: item });
+  res.status(201).json(item);
+}));
+router.patch('/regulatory/:id', requireRole(...WRITE), handle((req) => {
+  const item = updateRegulatoryItem(vert(req), req.params.id, req.body || {});
+  audit(req, 'STATION_REGULATORY_UPDATED', 'station_regulatory_items', item.id, { afterValue: item });
+  return item;
+}));
 
 // ── Disputes ────────────────────────────────────────────────────────────────
 router.get('/disputes/reasons', requireRole(...READ), handle((req) => {
