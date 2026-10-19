@@ -633,9 +633,14 @@ export function accruedLpsFor(contractId, beneficiaryName, { asOf = new Date() }
     asOf,
   };
 
+  // A debit note that bills surcharge is not itself surcharged: LPS is simple
+  // interest on the amount in default, and it accrued on its own LPS debit
+  // note (Thermal QA run 7).
   const bills = db.prepare(`
-    SELECT * FROM hydro_ledger_docs
+    SELECT * FROM hydro_ledger_docs d
     WHERE contract_id = ? AND beneficiary_name = ? AND doc_type = 'PB' AND status = 'OPEN' AND due_date IS NOT NULL
+      AND NOT (COALESCE(d.mode, '') = 'DEBIT_NOTE'
+        AND EXISTS (SELECT 1 FROM hydro_notes n WHERE n.ledger_doc_id = d.id AND n.reason = 'LPS'))
     ORDER BY due_date, doc_date, created_at
   `).all(contractId, beneficiaryName);
   const lines = [];

@@ -48,7 +48,7 @@ function nextNoteNo(type, onDate) {
   return `${prefix}${String(n).padStart(4, '0')}`;
 }
 
-export function listNotes({ contractId = null, beneficiaryName = null, status = null } = {}) {
+export function listNotes({ contractId = null, beneficiaryName = null, status = null, vertical = null } = {}) {
   let sql = `
     SELECT n.*, d.doc_no AS against_doc_no, l.doc_no AS ledger_doc_no
     FROM hydro_notes n
@@ -59,6 +59,10 @@ export function listNotes({ contractId = null, beneficiaryName = null, status = 
   if (contractId) { sql += ' AND n.contract_id = ?'; params.push(contractId); }
   if (beneficiaryName) { sql += ' AND n.beneficiary_name = ?'; params.push(beneficiaryName); }
   if (status) { sql += ' AND n.status = ?'; params.push(status); }
+  // A desk lists its own stations' notes; the Hydro desk read the Thermal desk's (Thermal QA run 7).
+  if (vertical) {
+    sql += ` AND n.contract_id IN (SELECT id FROM contracts WHERE project_type IN (${vertical === 'THERMAL' ? "'Thermal'" : "'Hydro','PSP'"}))`;
+  }
   sql += ' ORDER BY n.created_at DESC';
   return db.prepare(sql).all(...params).map((n) => ({ ...n, reason_label: NOTE_REASONS[n.reason] || n.reason }));
 }

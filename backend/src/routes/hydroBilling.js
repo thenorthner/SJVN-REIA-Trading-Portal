@@ -1763,7 +1763,7 @@ router.get('/receivables', requireRole(...READ), (req, res) => {
 // Raised as drafts, approved by a different officer, then posted to the ledger.
 router.get('/notes', requireRole(...READ), (req, res) => {
   res.json({
-    notes: listNotes({ contractId: req.query.contract_id, beneficiaryName: req.query.beneficiary, status: req.query.status }),
+    notes: listNotes({ contractId: req.query.contract_id, beneficiaryName: req.query.beneficiary, status: req.query.status, vertical: deskVertical(req.user) }),
     reasons: Object.entries(NOTE_REASONS).map(([value, label]) => ({ value, label })),
   });
 });
