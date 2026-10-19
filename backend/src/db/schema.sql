@@ -3799,7 +3799,7 @@ CREATE TABLE IF NOT EXISTS hydro_additional_charges (
   -- AUX_CONSUMPTION  auxiliary consumption beyond the normative allowance
   -- FERV             foreign exchange rate variation on foreign-currency loans
   -- OTHER            anything the tariff order allows that is none of the above
-  charge_type TEXT NOT NULL CHECK (charge_type IN ('AUX_CONSUMPTION','FERV','OTHER')),
+  charge_type TEXT NOT NULL CHECK (charge_type IN ('AUX_CONSUMPTION','WATER_CHARGES','SECURITY_EXPENSES','CAPITAL_SPARES','FERV','OTHER')),
   -- The month the charge arises for, which is not necessarily the month it is
   -- claimed in: a FERV entry for April may only be claimable in August.
   period_month TEXT NOT NULL,             -- YYYY-MM

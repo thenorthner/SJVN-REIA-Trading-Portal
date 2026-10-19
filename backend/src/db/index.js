@@ -3360,6 +3360,29 @@ try {
   console.error('deviation_settlements RPC statement migration failed:', e.message);
 }
 
+// Water charges, security expenses and capital spares are claimed outside the
+// AFC (CERC Tariff Regulations); the charge list held only the hydro items
+// (Thermal QA run 16).
+function migrateAdditionalChargeTypes() {
+  const t = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'hydro_additional_charges'").get();
+  if (!t || t.sql.includes("'WATER_CHARGES'") || !t.sql.includes("'AUX_CONSUMPTION','FERV','OTHER'")) return;
+  const cols = db.prepare('PRAGMA table_info(hydro_additional_charges)').all().map((c) => c.name);
+  const indexes = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'hydro_additional_charges' AND sql IS NOT NULL").all().map((r) => r.sql);
+  db.exec(`
+    CREATE TABLE hydro_additional_charges_new (${t.sql.slice(t.sql.indexOf('(') + 1, t.sql.lastIndexOf(')'))
+      .replace("'AUX_CONSUMPTION','FERV','OTHER'", "'AUX_CONSUMPTION','WATER_CHARGES','SECURITY_EXPENSES','CAPITAL_SPARES','FERV','OTHER'")});
+    INSERT INTO hydro_additional_charges_new (${cols.join(', ')}) SELECT ${cols.join(', ')} FROM hydro_additional_charges;
+    DROP TABLE hydro_additional_charges;
+    ALTER TABLE hydro_additional_charges_new RENAME TO hydro_additional_charges;
+  `);
+  for (const sql of indexes) db.exec(sql.replace(/^CREATE (UNIQUE )?INDEX /i, (m) => `${m}IF NOT EXISTS `));
+}
+try {
+  migrateAdditionalChargeTypes();
+} catch (e) {
+  console.error('Additional charge types migration failed:', e.message);
+}
+
 /**
  * Mail, second pass: a formatted body beside the plain one, and blind copies.
  * BCC is a new value of a CHECKed column, so mail_boxes is rebuilt in place.

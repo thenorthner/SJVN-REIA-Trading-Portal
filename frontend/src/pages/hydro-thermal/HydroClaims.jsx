@@ -195,7 +195,7 @@ export default function HydroClaims({ vertical = 'HYDRO' }) {
             title="Charges waiting to be claimed"
             actions={canWrite && (
               <span style={{ display: 'flex', gap: 8 }}>
-                <button type="button" className="btn" onClick={() => setChargeForm({ ...EMPTY_CHARGE })}>
+                <button type="button" className="btn" onClick={() => setChargeForm({ ...EMPTY_CHARGE, charge_type: charges?.charge_types?.[0]?.value || EMPTY_CHARGE.charge_type })}>
                   Record a charge
                 </button>
                 <button

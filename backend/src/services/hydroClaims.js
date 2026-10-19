@@ -26,13 +26,26 @@ import { getAllocations, apportion, financialYearOf } from './hydroStationBill.j
 
 const money = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
-export const CHARGE_TYPES = ['AUX_CONSUMPTION', 'FERV', 'OTHER'];
+export const CHARGE_TYPES = ['AUX_CONSUMPTION', 'WATER_CHARGES', 'SECURITY_EXPENSES', 'CAPITAL_SPARES', 'FERV', 'OTHER'];
 
 export const CHARGE_TYPE_LABELS = {
   AUX_CONSUMPTION: 'Auxiliary consumption beyond the normative allowance',
+  WATER_CHARGES: 'Water charges (allowed outside the AFC)',
+  SECURITY_EXPENSES: 'Security expenses (allowed outside the AFC)',
+  CAPITAL_SPARES: 'Capital spares consumed (allowed outside the AFC)',
   FERV: 'Foreign exchange rate variation',
   OTHER: 'Other charges permitted by the tariff order',
 };
+
+// The CERC Tariff Regulations let a coal station claim water charges, security
+// expenses and capital spares outside its AFC; its auxiliary consumption is in
+// the ECR norm, not a charge. A coal station had only the hydro list
+// (Thermal QA run 16).
+export function chargeTypesFor(vertical) {
+  return vertical === 'THERMAL'
+    ? CHARGE_TYPES.filter((t) => t !== 'AUX_CONSUMPTION')
+    : CHARGE_TYPES.filter((t) => t !== 'WATER_CHARGES');
+}
 
 /** A bill number that is free, so the UNIQUE index cannot bite on insert. */
 export function freeBillNo(prefix) {
@@ -130,11 +143,18 @@ const INSERT_LINE = `
 export function addCharge({
   contractId, chargeType, periodMonth, amount, remarks = null, createdBy = null,
 }) {
-  if (!CHARGE_TYPES.includes(chargeType)) {
-    throw Object.assign(new Error(`charge_type must be one of ${CHARGE_TYPES.join(', ')}`), { status: 400 });
+  const thermal = db.prepare('SELECT project_type FROM contracts WHERE id = ?').get(contractId)?.project_type === 'Thermal';
+  const allowed = chargeTypesFor(thermal ? 'THERMAL' : 'HYDRO');
+  if (!allowed.includes(chargeType)) {
+    throw Object.assign(new Error(`charge_type must be one of ${allowed.join(', ')} for this station`), { status: 400 });
   }
-  if (!/^\d{4}-\d{2}$/.test(String(periodMonth || ''))) {
+  // A real month, and one that has begun: 2026-13 and next March were taken.
+  const thisMonth = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 7);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(periodMonth || ''))) {
     throw Object.assign(new Error('period_month must be YYYY-MM'), { status: 400 });
+  }
+  if (periodMonth > thisMonth) {
+    throw Object.assign(new Error(`${periodMonth} has not begun — a charge is recorded for the month it arose in`), { status: 400 });
   }
   const amt = money(amount);
   // A negative entry is how a credit is issued — an over-charge in an earlier

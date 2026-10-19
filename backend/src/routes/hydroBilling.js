@@ -39,7 +39,7 @@ import {
 import { sendMail, formatHydroBillEmail } from '../services/mailService.js';
 import {
   addCharge, unclaimedCharges, claimAdditionalCharges, claimTcs, computeTcs,
-  listTcsClaims, CHARGE_TYPES, CHARGE_TYPE_LABELS,
+  listTcsClaims, CHARGE_TYPES, chargeTypesFor, CHARGE_TYPE_LABELS,
   createSupplementaryBill, supplementaryReasonsFor, emptyBillBlocks, INSERT_BILL, freeBillNo,
 } from '../services/hydroClaims.js';
 import {
@@ -1833,7 +1833,7 @@ router.get('/charges', requireRole(...READ), (req, res) => {
         `).all(contract_id)
       : [];
     res.json({
-      charge_types: CHARGE_TYPES.map((t) => ({ value: t, label: CHARGE_TYPE_LABELS[t] })),
+      charge_types: chargeTypesFor(verticalOfContract(contract_id)).map((t) => ({ value: t, label: CHARGE_TYPE_LABELS[t] })),
       unclaimed,
       unclaimed_total: Math.round(unclaimed.reduce((a, r) => a + Number(r.amount), 0) * 100) / 100,
       claimed,
