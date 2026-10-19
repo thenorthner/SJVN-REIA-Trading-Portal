@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef } from '../util.js';
+import { newId, logAudit as writeLog, pushNotification, genInvoiceNo, buildBillingFamilyRef } from '../util.js';
 import { getParamNumber } from '../mastersService.js';
 import { scrapeLatestDSM } from '../services/nrpcScraper.js';
 import { settledLakh, settlementRupees, luToMwh } from '../services/nrpcDsa.js';
@@ -26,6 +26,25 @@ const VERTICAL_TYPES = {
  * settled the SJVN hydro stations' DSA weeks since the module was built and
  * keeps doing so; administrators are not tied to one desk.
  */
+/**
+ * The published settlement a row carries: NRPC's statement imported, or another
+ * RPC's entered by hand from its printed statement. A thermal station in the
+ * Eastern Region is settled by ERPC, which the NRPC import never holds, so its
+ * weeks could not be billed at all (Thermal QA run 15).
+ */
+const STATEMENT_SOURCES = ['NRPC_DSA', 'RPC_STATEMENT'];
+
+// A week is filed under its station's desk: every DSM step went to REIA,
+// hydro and thermal stations' too (Thermal QA run 15).
+const logAudit = (entry) => {
+  const t = db.prepare(`SELECT c.project_type FROM deviation_settlements d JOIN contracts c ON c.id = d.contract_id WHERE d.id = ?`).get(entry.entityId)?.project_type;
+  const module = t === 'Thermal' ? 'THERMAL' : ['Hydro', 'PSP'].includes(t) ? 'HYDRO' : entry.module;
+  return writeLog({ ...entry, module });
+};
+const isStatement = (row) => STATEMENT_SOURCES.includes(row?.source);
+/** The regional pool a station's deviation settles with. */
+const poolOf = (contract) => (contract?.project_type === 'Thermal' ? 'ERPC' : 'NRPC');
+
 function outsideDesk(user, contract) {
   const role = user?.role;
   const type = contract?.project_type || '';
@@ -63,7 +82,7 @@ function withContract(row) {
     project_type: c?.project_type,
     invoice_status,
     // An estimate is worth labelling wherever the row is shown.
-    is_estimate: row.source !== 'NRPC_DSA',
+    is_estimate: !isStatement(row),
     dsa_statement: dsa,
     // A statement that has since been revised: the figure on this row is no
     // longer the operative one.
@@ -199,7 +218,8 @@ function createDsmInvoice(row, contract, { invoice_no: overrideNo, dispatch_date
   const due_date = poolDueDate(row, billDate);
 
   const signLabel = signed >= 0 ? 'recoverable from the pool' : 'payable to the pool';
-  const fromStatement = row.source === 'NRPC_DSA';
+  const fromStatement = isStatement(row);
+  const pool = poolOf(contract);
   const breakdown = [
     {
       code: 'DSM',
@@ -215,15 +235,15 @@ function createDsmInvoice(row, contract, { invoice_no: overrideNo, dispatch_date
     // block against frequency and publishes no rate, so quoting one would
     // suggest the total was derived from it.
     fromStatement
-      ? { code: 'SRC', label: `Per NRPC Deviation Settlement Account · ${row.dsa_entity_name}`, value: null }
+      ? { code: 'SRC', label: `Per ${pool} Deviation Settlement Account · ${row.dsa_entity_name}`, value: null }
       : { code: 'RATE', label: 'DSM rate (₹/MWh) — estimate', value: Number(row.deviation_rate) || 0 },
     // A deviation bill sits in the PPA's series, where every other bill is the
     // seller's on SJVN. This one settles with the regional pool, so it says so.
     {
       code: 'FLOW',
       label: signed >= 0
-        ? 'Recoverable by SJVN — received from the NRPC deviation pool for this week'
-        : 'Payable by SJVN — paid to the NRPC deviation pool for this week',
+        ? `Recoverable by SJVN — received from the ${pool} deviation pool for this week`
+        : `Payable by SJVN — paid to the ${pool} deviation pool for this week`,
       value: null,
     },
     ...(prior.length ? [
@@ -232,7 +252,7 @@ function createDsmInvoice(row, contract, { invoice_no: overrideNo, dispatch_date
     ] : []),
     { code: 'AMT', label: `${prior.length ? 'Difference to settle' : 'Net DSM amount'} (${signLabel})`, value: amount },
     { code: 'DUE', label: `Due to the pool by ${due_date}${row.dsa_account_id ? ' (per the NRPC statement where printed)' : ''}`, value: null },
-    { code: 'TOTAL', label: signed >= 0 ? 'Receivable from NRPC deviation pool' : 'Payable to NRPC deviation pool', value: amount },
+    { code: 'TOTAL', label: signed >= 0 ? `Receivable from ${pool} deviation pool` : `Payable to ${pool} deviation pool`, value: amount },
   ];
 
   const run = db.transaction(() => {
@@ -383,7 +403,10 @@ router.get('/statement-sync', requireRole(...READ), (req, res) => {
   const accounts = db.prepare(`
     SELECT * FROM nrpc_dsa_accounts WHERE status <> 'SUPERSEDED' ORDER BY financial_year DESC, week_no DESC LIMIT ?
   `).all(limit);
+  // A desk sees its own stations' weeks: the Thermal desk was shown the hydro
+  // stations' NRPC statements (Thermal QA run 15).
   const contracts = db.prepare(`SELECT * FROM contracts WHERE status IN ('ACTIVE','NEARING_EXPIRY','AMENDED','RENEWED','EXPIRED')`).all()
+    .filter((c) => !outsideDesk(req.user, c))
     .map((c) => ({ c, st: stationOf(c) })).filter((x) => x.st);
   const rows = [];
   for (const a of accounts) {
@@ -661,10 +684,28 @@ router.post('/', requireRole(...WRITE), (req, res) => {
     .get(b.contract_id, b.period_month, weekNo, entry_type);
   if (dup) return res.status(409).json({ error: `A ${entry_type} entry for week ${b.week_no} already exists this period. Edit it or use REVISED.` });
 
-  const badRate = implausibleRate(b.deviation_rate);
+  // A week of a station NRPC does not settle, entered from its own RPC's
+  // printed statement: the figure is the statement's, not an estimate.
+  const statementRef = String(b.statement_ref || '').trim();
+  let fromStatement = null;
+  if (statementRef) {
+    if (stationOf(contract)) {
+      return res.status(400).json({ error: `${contract.contract_no} is settled on the NRPC statement — import that week instead of entering it.` });
+    }
+    if (statementRef.length < 8) return res.status(400).json({ error: `Quote the ${poolOf(contract)} statement: week, revision and issue date (at least 8 characters).` });
+    const figure = Number(b.statement_amount);
+    if (!Number.isFinite(figure) || Math.round(figure) === 0) {
+      return res.status(400).json({ error: 'statement_amount is the week\'s net figure as the statement prints it, in ₹ (+ receivable by SJVN, − payable)' });
+    }
+    fromStatement = { ref: statementRef, amount: Math.round(figure) };
+  }
+
+  const badRate = fromStatement ? null : implausibleRate(b.deviation_rate);
   if (badRate) return res.status(400).json(badRate);
 
-  const { deviation_mwh, deviation_amount } = computeNet(b.scheduled_mwh, b.actual_mwh, b.deviation_rate);
+  const net = computeNet(b.scheduled_mwh, b.actual_mwh, b.deviation_rate);
+  const deviation_mwh = net.deviation_mwh;
+  const deviation_amount = fromStatement ? fromStatement.amount : net.deviation_amount;
   const id = newId('DSM');
   // A cancelled row keeps its place on record; the replacement needs its own number.
   let manualNo = `DSM/${contract.contract_no?.replace(/[^A-Za-z0-9]+/g, '-')}/${b.period_month}/W${b.week_no}${entry_type === 'REVISED' ? '-R' : ''}`;
@@ -674,10 +715,10 @@ router.post('/', requireRole(...WRITE), (req, res) => {
   db.prepare(`
     INSERT INTO deviation_settlements (id, dsm_no, contract_id, plant_code, plant_name, period_month,
       week_no, week_date, entry_type, scheduled_mwh, actual_mwh, deviation_mwh, deviation_rate,
-      deviation_amount, status, notes, created_by)
+      deviation_amount, status, notes, created_by, source, dsa_entity_name)
     VALUES (@id, @dsm_no, @contract_id, @plant_code, @plant_name, @period_month,
       @week_no, @week_date, @entry_type, @scheduled_mwh, @actual_mwh, @deviation_mwh, @deviation_rate,
-      @deviation_amount, 'CALCULATED', @notes, @created_by)
+      @deviation_amount, 'CALCULATED', @notes, @created_by, @source, @dsa_entity_name)
   `).run({
     id,
     dsm_no: manualNo,
@@ -691,10 +732,12 @@ router.post('/', requireRole(...WRITE), (req, res) => {
     scheduled_mwh: Number(b.scheduled_mwh) || 0,
     actual_mwh: Number(b.actual_mwh) || 0,
     deviation_mwh,
-    deviation_rate: Number(b.deviation_rate) || 0,
+    deviation_rate: fromStatement ? null : (Number(b.deviation_rate) || 0),
     deviation_amount,
     notes: b.notes || null,
     created_by: req.user.name,
+    source: fromStatement ? 'RPC_STATEMENT' : 'MANUAL',
+    dsa_entity_name: fromStatement ? fromStatement.ref : null,
   });
   logAudit({ req, user: req.user, action: 'CREATE', module: 'REIA', entityType: 'deviation_settlement', entityId: id, details: { ...b, deviation_mwh, deviation_amount } });
   res.status(201).json(withContract(db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(id)));
@@ -717,12 +760,12 @@ router.put('/:id', requireRole(...WRITE), (req, res) => {
   // energy or the rate would recompute it from a formula that does not
   // reproduce the settlement, quietly replacing a published number with an
   // estimate. Notes and plant labels are still editable below.
-  if (row.source === 'NRPC_DSA') {
-    const figureEdits = ['scheduled_mwh', 'actual_mwh', 'deviation_rate'].filter((k) => b[k] !== undefined);
+  if (isStatement(row)) {
+    const figureEdits = ['scheduled_mwh', 'actual_mwh', 'deviation_rate', 'statement_amount'].filter((k) => b[k] !== undefined);
     if (figureEdits.length) {
       return res.status(400).json({
-        error: `This row carries the figures NRPC published for ${row.dsa_entity_name}; `
-          + `${figureEdits.join(', ')} cannot be edited. Import the revised statement instead.`,
+        error: `This row carries the figures the RPC published (${row.dsa_entity_name}); `
+          + `${figureEdits.join(', ')} cannot be edited. Enter the revised statement as a REVISED week instead.`,
       });
     }
   }
@@ -730,7 +773,7 @@ router.put('/:id', requireRole(...WRITE), (req, res) => {
     const badRate = implausibleRate(b.deviation_rate);
     if (badRate) return res.status(400).json(badRate);
   }
-  if (row.source !== 'NRPC_DSA') {
+  if (!isStatement(row)) {
     const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(row.contract_id);
     const ceiling = weeklyCeilingMwh(contract);
     for (const k of ['scheduled_mwh', 'actual_mwh']) {
@@ -741,7 +784,7 @@ router.put('/:id', requireRole(...WRITE), (req, res) => {
       }
     }
   }
-  const { deviation_mwh, deviation_amount } = row.source === 'NRPC_DSA'
+  const { deviation_mwh, deviation_amount } = isStatement(row)
     ? { deviation_mwh: row.deviation_mwh, deviation_amount: row.deviation_amount }
     : computeNet(b.scheduled_mwh ?? row.scheduled_mwh, b.actual_mwh ?? row.actual_mwh, b.deviation_rate ?? row.deviation_rate);
   db.prepare(`
@@ -752,7 +795,7 @@ router.put('/:id', requireRole(...WRITE), (req, res) => {
     b.plant_code ?? row.plant_code, b.plant_name ?? row.plant_name, b.week_date ?? row.week_date,
     Number(b.scheduled_mwh ?? row.scheduled_mwh) || 0, Number(b.actual_mwh ?? row.actual_mwh) || 0,
     deviation_mwh,
-    row.source === 'NRPC_DSA' ? null : (Number(b.deviation_rate ?? row.deviation_rate) || 0),
+    isStatement(row) ? null : (Number(b.deviation_rate ?? row.deviation_rate) || 0),
     deviation_amount,
     b.notes ?? row.notes, req.params.id,
   );
@@ -790,11 +833,11 @@ const dispatchHandler = (req, res) => {
   // even its direction. Estimates exist so finance can book a provision while
   // the statement is still a week and a half away; invoicing a beneficiary off
   // one is a different thing entirely.
-  if (row.source !== 'NRPC_DSA') {
+  if (!isStatement(row)) {
     return res.status(400).json({
       error: 'This row is a manual estimate, not the published settlement, so it cannot be '
-        + 'billed. Import the NRPC Deviation Settlement Account for this week and raise the '
-        + 'bill from that.',
+        + 'billed. Import the NRPC Deviation Settlement Account for this week, or enter the '
+        + 'RPC\'s statement figure and reference for a station NRPC does not settle, and bill that.',
       source: row.source,
     });
   }
@@ -806,7 +849,12 @@ const dispatchHandler = (req, res) => {
   // nobody has been given yet is withdrawn and this one stands in its place; one
   // already presented stays, and only the difference is billed. Dispatching R1
   // billed its whole figure again, so the week was settled twice.
-  const earlier = row.dsa_account_id ? db.prepare(`
+  const earlier = row.source === 'RPC_STATEMENT' ? db.prepare(`
+    SELECT d.id AS row_id, d.dsm_no, i.id, i.invoice_no, i.total_amount, i.direction, i.status
+    FROM deviation_settlements d JOIN invoices i ON i.id = d.invoice_id
+    WHERE d.contract_id = ? AND d.id <> ? AND d.status = 'DISPATCHED' AND d.source = 'RPC_STATEMENT'
+      AND d.period_month = ? AND d.week_no = ? AND i.status <> 'CANCELLED'
+  `).all(row.contract_id, row.id, row.period_month, row.week_no) : row.dsa_account_id ? db.prepare(`
     SELECT d.id AS row_id, d.dsm_no, i.id, i.invoice_no, i.total_amount, i.direction, i.status
     FROM deviation_settlements d
     JOIN nrpc_dsa_accounts a ON a.id = d.dsa_account_id

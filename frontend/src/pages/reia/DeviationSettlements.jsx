@@ -11,6 +11,7 @@ import { getGuide } from '../../content/guides/index.js';
 const EMPTY = {
   contract_id: '', plant_code: '', plant_name: '', period_month: '', week_no: '', week_date: '',
   entry_type: 'PRIMARY', scheduled_mwh: '', actual_mwh: '', deviation_rate: '', notes: '',
+  statement_ref: '', statement_amount: '',
 };
 
 const RAISE_EMPTY = { contract_id: '', dsa_account_id: '', entity_name: '', notes: '' };
@@ -161,9 +162,14 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
     setBusy('save');
     try {
       // An official row keeps NRPC's figures; only its labels and notes are sent.
-      const body = editingOfficial
+      let body = editingOfficial
         ? { plant_code: form.plant_code, plant_name: form.plant_name, week_date: form.week_date, notes: form.notes }
         : form;
+      // Only a week entered from the RPC's printed statement sends its figure.
+      if (!editingOfficial && !String(form.statement_ref || '').trim()) {
+        const { statement_ref: _ref, statement_amount: _amt, ...rest } = body;
+        body = rest;
+      }
       if (editId) await api.deviation.update(editId, body);
       else await api.deviation.create(body);
       setShow(false); load();
@@ -698,7 +704,15 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
             <Field label="Target (Scheduled MWh)"><input required type="number" step="0.001" min="0" disabled={editingOfficial} value={form.scheduled_mwh} onChange={(e) => setForm({ ...form, scheduled_mwh: e.target.value })} /></Field>
             <Field label="Delivered (Actual MWh)"><input required type="number" step="0.001" min="0" disabled={editingOfficial} value={form.actual_mwh} onChange={(e) => setForm({ ...form, actual_mwh: e.target.value })} /></Field>
           </div>
-          {!editingOfficial && (
+          {/* A thermal station is settled by ERPC, which the NRPC import does not
+              hold: its week is entered from ERPC's printed statement and billed on it. */}
+          {vertical === 'THERMAL' && !editId && (
+            <div className="form-grid">
+              <Field label="ERPC statement reference (week, revision, issue date)"><input value={form.statement_ref} placeholder="ERPC DSA WK-25 2026-27 R0, issued 07-Oct-2026" onChange={(e) => setForm({ ...form, statement_ref: e.target.value })} /></Field>
+              <Field label="Net amount per statement (₹, + receivable · − payable)"><input type="number" step="1" value={form.statement_amount} required={!!form.statement_ref} onChange={(e) => setForm({ ...form, statement_amount: e.target.value })} /></Field>
+            </div>
+          )}
+          {!editingOfficial && !form.statement_ref && (
             <Field label="Deviation Rate (₹/MWh)"><input required type="number" step="0.01" value={form.deviation_rate} placeholder="DSM rate per NRPC" onChange={(e) => setForm({ ...form, deviation_rate: e.target.value })} /></Field>
           )}
 

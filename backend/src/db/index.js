@@ -3332,6 +3332,35 @@ try {
 }
 
 /**
+ * A week of a station another RPC settles, entered from that RPC's printed
+ * statement (RPC_STATEMENT). A thermal station in the Eastern Region is on
+ * ERPC's account, which the NRPC import never holds, so its weeks could only
+ * be estimates and never billed (Thermal QA run 15).
+ */
+function migrateDeviationRpcStatement() {
+  const t = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'deviation_settlements'").get();
+  if (!t || t.sql.includes("'RPC_STATEMENT'") || !t.sql.includes("'NRPC_DSA'")) return;
+  const cols = db.prepare('PRAGMA table_info(deviation_settlements)').all().map((c) => c.name);
+  const indexes = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'deviation_settlements' AND sql IS NOT NULL").all().map((r) => r.sql);
+  db.exec(`
+    CREATE TABLE deviation_settlements_new (${t.sql.slice(t.sql.indexOf('(') + 1, t.sql.lastIndexOf(')'))
+      .replace("CHECK (source IN ('MANUAL','NRPC_DSA'))", "CHECK (source IN ('MANUAL','NRPC_DSA','RPC_STATEMENT'))")});
+    INSERT INTO deviation_settlements_new (${cols.join(', ')}) SELECT ${cols.join(', ')} FROM deviation_settlements;
+    DROP TABLE deviation_settlements;
+    ALTER TABLE deviation_settlements_new RENAME TO deviation_settlements;
+  `);
+  for (const sql of indexes) db.exec(sql.replace(/^CREATE (UNIQUE )?INDEX /i, (m) => `${m}IF NOT EXISTS `));
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_deviation_rpc_week ON deviation_settlements(contract_id, period_month, week_no, entry_type)
+    WHERE source = 'RPC_STATEMENT' AND status <> 'CANCELLED'`);
+  console.log('[MIGRATE] deviation_settlements: RPC_STATEMENT source for weeks settled outside NRPC');
+}
+try {
+  migrateDeviationRpcStatement();
+} catch (e) {
+  console.error('deviation_settlements RPC statement migration failed:', e.message);
+}
+
+/**
  * Mail, second pass: a formatted body beside the plain one, and blind copies.
  * BCC is a new value of a CHECKed column, so mail_boxes is rebuilt in place.
  */
