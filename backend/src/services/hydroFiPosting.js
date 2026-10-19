@@ -37,10 +37,23 @@ export const CATEGORY_LABELS = {
   NOTES: 'Debit and credit notes (approved)',
 };
 
-function postingNo(plantCode, periodMonth, category) {
+/**
+ * A thermal station's energy sale went to Finance as FI/HYD/HYDRO/…, read as
+ * hydro sale (Thermal QA run 17): the number and the label say the station's
+ * own vertical. The stored category stays the energy-sale one.
+ */
+const isThermalContract = (contractId) => db.prepare('SELECT project_type FROM contracts WHERE id = ?').get(contractId)?.project_type === 'Thermal';
+export function categoryLabel(category, thermal = false) {
+  if (category === 'HYDRO' && thermal) return 'Thermal energy sale (monthly, revision, arrear, supplementary bills)';
+  return CATEGORY_LABELS[category];
+}
+
+function postingNo(contract, periodMonth, category) {
   const stamp = String(periodMonth).replace('-', '');
   const rand = Math.floor(1000 + Math.random() * 9000);
-  return `FI/${plantCode || 'HYD'}/${category}/${stamp}/${rand}`;
+  const thermal = contract.project_type === 'Thermal';
+  const plant = contract.plant_code || (thermal ? 'THM' : 'HYD');
+  return `FI/${plant}/${category === 'HYDRO' && thermal ? 'THERMAL' : category}/${stamp}/${rand}`;
 }
 
 /**
@@ -217,7 +230,7 @@ export function preparePosting({
   const tcs = money(bills.reduce((a, b) => a + b.tcs, 0));
 
   const id = newId('HFP');
-  const no = postingNo(contract.plant_code, periodMonth, category);
+  const no = postingNo(contract, periodMonth, category);
 
   db.transaction(() => {
     db.prepare(`
@@ -356,7 +369,7 @@ export function getPosting(id) {
   const lines = db.prepare(
     'SELECT * FROM hydro_fi_posting_lines WHERE posting_id = ? ORDER BY created_at',
   ).all(id);
-  return { ...p, category_label: CATEGORY_LABELS[p.bill_category], lines };
+  return { ...p, category_label: categoryLabel(p.bill_category, isThermalContract(p.contract_id)), lines };
 }
 
 /** Postings for a station, newest month first. */
@@ -368,5 +381,5 @@ export function listPostings(contractId, { periodMonth = null, status = null } =
       AND (? IS NULL OR status = ?)
     ORDER BY period_month DESC, created_at DESC
   `).all(contractId, periodMonth, periodMonth, status, status)
-    .map((p) => ({ ...p, category_label: CATEGORY_LABELS[p.bill_category] }));
+    .map((p) => ({ ...p, category_label: categoryLabel(p.bill_category, isThermalContract(p.contract_id)) }));
 }

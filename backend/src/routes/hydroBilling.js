@@ -44,7 +44,7 @@ import {
 } from '../services/hydroClaims.js';
 import {
   bookableBills, preparePosting, postToFinance, reversePosting, getPosting,
-  listPostings, notePosting, CATEGORIES, CATEGORY_LABELS,
+  listPostings, notePosting, CATEGORIES, CATEGORY_LABELS, categoryLabel,
 } from '../services/hydroFiPosting.js';
 import { consolidate, createPtcBill, listPtcBills } from '../services/hydroPtc.js';
 import { resolveBetaRow } from '../services/betaFactor.js';
@@ -2025,7 +2025,7 @@ router.get('/fi', requireRole(...READ), (req, res) => {
   const { contract_id, period_month, status } = req.query;
   if (!contract_id) return res.status(400).json({ error: 'contract_id is required' });
   res.json({
-    categories: CATEGORIES.map((c) => ({ value: c, label: CATEGORY_LABELS[c] })),
+    categories: CATEGORIES.map((c) => ({ value: c, label: categoryLabel(c, verticalOfContract(contract_id) === 'THERMAL') })),
     postings: listPostings(contract_id, {
       periodMonth: normalizeMonth(period_month) || null,
       status: status || null,
