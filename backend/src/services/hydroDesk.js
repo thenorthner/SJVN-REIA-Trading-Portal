@@ -450,7 +450,13 @@ export function getReconciliation(id) {
 export function createReconciliation(body, user) {
   const iso = /^\d{4}-\d{2}-\d{2}$/;
   if (!body.contract_id || !body.beneficiary_name) throw fail(400, 'contract_id and beneficiary_name are required');
-  if (!iso.test(body.period_from || '') || !iso.test(body.period_to || '')) throw fail(400, 'period_from and period_to must be dates');
+  // A real day: a statement "to 2026-02-30" was drawn up (Thermal QA run 13).
+  const realDay = (v) => {
+    if (!iso.test(String(v || ''))) return false;
+    const d = new Date(`${v}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+  };
+  if (!realDay(body.period_from) || !realDay(body.period_to)) throw fail(400, 'period_from and period_to must be real dates (YYYY-MM-DD)');
   if (body.period_to < body.period_from) throw fail(400, 'period_to is before period_from');
   if (body.period_to > today()) throw fail(400, 'A balance can only be confirmed up to today.');
   const has = db.prepare('SELECT 1 FROM hydro_ledger_docs WHERE contract_id = ? AND beneficiary_name = ? LIMIT 1').get(body.contract_id, body.beneficiary_name);
