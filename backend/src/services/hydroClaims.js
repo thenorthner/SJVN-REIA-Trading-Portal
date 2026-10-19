@@ -19,6 +19,7 @@
  * already built around it — approval, release, print, despatch, ledger posting
  * and payment — rather than growing a parallel one that would drift from it.
  */
+import { isRealDay } from './realDay.js';
 import db from '../db/index.js';
 import { newId, genInvoiceNo } from '../util.js';
 import { getAllocations, apportion, financialYearOf } from './hydroStationBill.js';
@@ -457,7 +458,7 @@ export function claimTcs({
   // The payment the tax is collected on: a real day, not ahead, and claimed once.
   const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
   if (paymentDate != null && paymentDate !== '') {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(paymentDate)) || Number.isNaN(Date.parse(`${paymentDate}T00:00:00Z`))) {
+    if (!isRealDay(paymentDate)) {
       throw Object.assign(new Error('payment_date must be a date (YYYY-MM-DD)'), { status: 400 });
     }
     if (paymentDate > today) throw Object.assign(new Error(`The payment date ${paymentDate} is after today`), { status: 400 });

@@ -17,6 +17,7 @@
  * An approved note is corrected by raising the opposite note, not by deleting
  * it — the account keeps both, which is what an auditor expects to find.
  */
+import { isRealDay } from './realDay.js';
 import db from '../db/index.js';
 import { newId } from '../util.js';
 import { insertDoc, genDocNo, applyCredit, dueDateFor, outstandingOf } from './hydroLedger.js';
@@ -106,7 +107,7 @@ export function raiseNote(body, user) {
     }
   }
 
-  if (body.note_date && !/^\d{4}-\d{2}-\d{2}$/.test(body.note_date)) throw fail(400, 'note_date must be a date (YYYY-MM-DD)');
+  if (body.note_date && !isRealDay(body.note_date)) throw fail(400, 'note_date must be a date (YYYY-MM-DD) that exists');
   const noteDate = body.note_date || today();
   if (noteDate > today()) throw fail(400, `A note cannot be dated ${noteDate}, after today`);
   const id = newId('HNT');

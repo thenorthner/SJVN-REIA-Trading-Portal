@@ -13,6 +13,7 @@
  * so a trading bill is a hydro_station_bills row of kind PTC with one line for
  * the counterparty, and only the trade's own figures live in hydro_ptc_bills.
  */
+import { isRealDay } from './realDay.js';
 import db from '../db/index.js';
 import { newId, genInvoiceNo } from '../util.js';
 import { financialYearOf } from './hydroStationBill.js';
@@ -66,7 +67,7 @@ export function createPtcBill({
   }
   // Real dates, and a trade billed in the month it ends: dates of "abc", and a
   // 2025 trade billed as 2026-07, were taken (Hydro QA run 13).
-  const isDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d)) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`))
+  const isDay = (d) => isRealDay(d)
     && new Date(`${d}T00:00:00Z`).toISOString().slice(0, 10) === String(d);
   for (const [k, v] of [['from_date', fromDate], ['to_date', toDate], ...(dueDate ? [['due_date', dueDate]] : [])]) {
     if (!isDay(v)) throw Object.assign(new Error(`${k} must be a date (YYYY-MM-DD)`), { status: 400 });

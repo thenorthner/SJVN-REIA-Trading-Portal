@@ -7,6 +7,7 @@
  * (hydroLedger.js), so a dispute accepted, an LC invoked or TDS recorded is on
  * the Account Display the moment it is done — there is no second set of books.
  */
+import { isRealDay } from './realDay.js';
 import db from '../db/index.js';
 import { newId, nextSeriesNo } from '../util.js';
 import { getParamNumber } from '../mastersService.js';
@@ -149,7 +150,8 @@ export function raiseDispute(body, user) {
   if (already + amount > doc.amount + 0.005) {
     throw fail(400, `₹${already.toLocaleString('en-IN')} of ${doc.doc_no} is already under open dispute; together they would exceed the share billed.`);
   }
-  const receivedOn = /^\d{4}-\d{2}-\d{2}$/.test(String(body.received_on || '')) ? body.received_on : today();
+  if (body.received_on && !isRealDay(body.received_on)) throw fail(400, 'received_on must be a date (YYYY-MM-DD) that exists');
+  const receivedOn = body.received_on || today();
   if (receivedOn > today()) throw fail(400, 'The date the dispute was received cannot be in the future.');
 
   const year = new Date().getFullYear();
@@ -305,14 +307,8 @@ export function addInstrument(body, user) {
   for (const k of ['contract_id', 'beneficiary_name', 'instrument_no', 'issuing_bank']) {
     if (!String(body[k] || '').trim()) throw fail(400, `${k.replace(/_/g, ' ')} is required`);
   }
-  const iso = /^\d{4}-\d{2}-\d{2}$/;
   // A real day, not just the shape of one: an LC "valid from 2026-13-01" was recorded (Thermal QA run 12).
-  const realDay = (v) => {
-    if (!iso.test(String(v || ''))) return false;
-    const d = new Date(`${v}T00:00:00Z`);
-    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
-  };
-  if (!realDay(body.valid_from) || !realDay(body.valid_to)) throw fail(400, 'valid_from and valid_to must be real dates (YYYY-MM-DD)');
+  if (!isRealDay(body.valid_from) || !isRealDay(body.valid_to)) throw fail(400, 'valid_from and valid_to must be real dates (YYYY-MM-DD)');
   // Security stands behind a beneficiary the station bills (an LC was taken for
   // a name on no sheet and no bill — Hydro QA run 8).
   if (!isStationBeneficiary(body.contract_id, body.beneficiary_name)) throw fail(400, `${body.beneficiary_name} is not a beneficiary of this station`);
@@ -339,7 +335,7 @@ export function amendInstrument(id, { amount, valid_to, remarks }, user) {
   if (i.status !== 'ACTIVE') throw fail(400, `${i.instrument_no} is ${i.status} and cannot be amended.`);
   const newAmount = amount != null && amount !== '' ? money(amount) : i.amount;
   if (!Number.isFinite(newAmount)) throw fail(400, 'The amount must be a number.');
-  if (valid_to && (!/^\d{4}-\d{2}-\d{2}$/.test(String(valid_to)) || Number.isNaN(Date.parse(`${valid_to}T00:00:00Z`)))) {
+  if (valid_to && !isRealDay(valid_to)) {
     throw fail(400, 'valid_to must be a date (YYYY-MM-DD)');
   }
   const newTo = valid_to || i.valid_to;
@@ -373,7 +369,7 @@ export function invokeInstrument(id, { amount, invoked_on, remarks }, user) {
   // The bank pays on a day the instrument was in force, and not one still to
   // come (invocations dated 2099 and before the LC was issued were posted).
   const on = invoked_on || today();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(on)) || Number.isNaN(Date.parse(`${on}T00:00:00Z`))) throw fail(400, 'invoked_on must be a date (YYYY-MM-DD)');
+  if (!isRealDay(on)) throw fail(400, 'invoked_on must be a date (YYYY-MM-DD) that exists');
   if (on > today()) throw fail(400, `${on} is after today — record an invocation once the bank has paid`);
   if (on < i.valid_from || on > i.valid_to) throw fail(400, `${i.instrument_no} was in force from ${i.valid_from} to ${i.valid_to}; it cannot have been invoked on ${on}`);
   let posted;
@@ -448,15 +444,9 @@ export function getReconciliation(id) {
 
 /** Draw up a balance confirmation statement for a beneficiary and a period. */
 export function createReconciliation(body, user) {
-  const iso = /^\d{4}-\d{2}-\d{2}$/;
   if (!body.contract_id || !body.beneficiary_name) throw fail(400, 'contract_id and beneficiary_name are required');
   // A real day: a statement "to 2026-02-30" was drawn up (Thermal QA run 13).
-  const realDay = (v) => {
-    if (!iso.test(String(v || ''))) return false;
-    const d = new Date(`${v}T00:00:00Z`);
-    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
-  };
-  if (!realDay(body.period_from) || !realDay(body.period_to)) throw fail(400, 'period_from and period_to must be real dates (YYYY-MM-DD)');
+  if (!isRealDay(body.period_from) || !isRealDay(body.period_to)) throw fail(400, 'period_from and period_to must be real dates (YYYY-MM-DD)');
   if (body.period_to < body.period_from) throw fail(400, 'period_to is before period_from');
   if (body.period_to > today()) throw fail(400, 'A balance can only be confirmed up to today.');
   const has = db.prepare('SELECT 1 FROM hydro_ledger_docs WHERE contract_id = ? AND beneficiary_name = ? LIMIT 1').get(body.contract_id, body.beneficiary_name);
@@ -606,8 +596,8 @@ export function recordTds(body, user) {
   if (!(amount > 0)) throw fail(400, 'The TDS amount must be greater than zero.');
   if (!TDS_SECTIONS.includes(body.section)) throw fail(400, `section must be one of ${TDS_SECTIONS.join(', ')}`);
   if (!body.contract_id || !body.beneficiary_name) throw fail(400, 'contract_id and beneficiary_name are required');
-  const on = /^\d{4}-\d{2}-\d{2}$/.test(String(body.deduction_date || '')) ? body.deduction_date : null;
-  if (!on) throw fail(400, 'deduction_date is required (YYYY-MM-DD)');
+  const on = isRealDay(body.deduction_date) ? body.deduction_date : null;
+  if (!on) throw fail(400, 'deduction_date is required (YYYY-MM-DD), a date that exists');
   if (on > today()) throw fail(400, 'The deduction date cannot be in the future.');
   if (body.deductor_tan && !/^[A-Z]{4}[0-9]{5}[A-Z]$/.test(String(body.deductor_tan).toUpperCase())) {
     throw fail(400, 'The deductor TAN must be 4 letters, 5 digits and a letter (e.g. DELA12345B).');
@@ -662,7 +652,7 @@ export function updateTdsCertificate(id, body) {
     if (!String(body.certificate_no || '').trim()) throw fail(400, 'Enter the Form 16A certificate number.');
     if (body.certificate_date) {
       const cd = String(body.certificate_date);
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(cd) || Number.isNaN(Date.parse(`${cd}T00:00:00Z`))) throw fail(400, 'certificate_date must be a date (YYYY-MM-DD)');
+      if (!isRealDay(cd)) throw fail(400, 'certificate_date must be a date (YYYY-MM-DD) that exists');
       if (cd > today()) throw fail(400, 'A Form 16A cannot be dated after today.');
       if (cd < t.deduction_date) throw fail(400, `A Form 16A for tax deducted on ${t.deduction_date} cannot be dated before it.`);
     }

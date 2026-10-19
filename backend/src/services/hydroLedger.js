@@ -26,6 +26,7 @@
  * Amounts are always stored positive. The document type says which side of the
  * account it falls on, so no call site has to remember a sign convention.
  */
+import { isRealDay } from './realDay.js';
 import db from '../db/index.js';
 import { newId } from '../util.js';
 import { getParamNumber, getParam } from '../mastersService.js';
@@ -442,7 +443,7 @@ export function recordPayment({
   // Hydro QA run 4: a payment dated 2099 was taken, money for a name no
   // station bills sat as a phantom advance, and one UTR was posted twice.
   const day = String(paymentDate).slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`))) throw new Error('paymentDate must be a date (YYYY-MM-DD)');
+  if (!isRealDay(day)) throw new Error('paymentDate must be a date (YYYY-MM-DD) that exists');
   if (day > istToday()) throw new Error(`The payment date ${day} is after today — record money once it has arrived`);
   if (!isStationBeneficiary(contractId, beneficiaryName)) throw new Error(`${beneficiaryName} is not a beneficiary of this station`);
   const ref = String(reference || '').trim();
