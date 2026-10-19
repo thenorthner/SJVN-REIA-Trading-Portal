@@ -235,12 +235,15 @@ export const coverPct = () => getParamNumber('hydro_lc_cover_pct', 105);
 
 function averageMonthlyBilling(contractId, beneficiaryName) {
   // The last twelve months of bills on the account, debit notes and surcharge excluded.
+  // Months are the months billed, not the dates the bills went out: August's
+  // and September's bills both issued in October counted as one month, and the
+  // LC asked for came out twice the average (Thermal QA run 12).
   const since = addDays(today(), -365);
   const r = db.prepare(`
-    SELECT COALESCE(SUM(amount), 0) total, COUNT(DISTINCT substr(doc_date, 1, 7)) months
-    FROM hydro_ledger_docs
-    WHERE contract_id = ? AND beneficiary_name = ? AND doc_type = 'PB' AND status = 'OPEN'
-      AND COALESCE(mode, '') <> 'DEBIT_NOTE' AND doc_date >= ?
+    SELECT COALESCE(SUM(d.amount), 0) total, COUNT(DISTINCT COALESCE(b.billing_month, substr(d.doc_date, 1, 7))) months
+    FROM hydro_ledger_docs d LEFT JOIN hydro_station_bills b ON b.id = d.bill_id
+    WHERE d.contract_id = ? AND d.beneficiary_name = ? AND d.doc_type = 'PB' AND d.status = 'OPEN'
+      AND COALESCE(d.mode, '') <> 'DEBIT_NOTE' AND d.doc_date >= ?
   `).get(contractId, beneficiaryName, since);
   return r.months ? money(r.total / r.months) : 0;
 }
@@ -303,7 +306,13 @@ export function addInstrument(body, user) {
     if (!String(body[k] || '').trim()) throw fail(400, `${k.replace(/_/g, ' ')} is required`);
   }
   const iso = /^\d{4}-\d{2}-\d{2}$/;
-  if (!iso.test(body.valid_from || '') || !iso.test(body.valid_to || '')) throw fail(400, 'valid_from and valid_to must be dates (YYYY-MM-DD)');
+  // A real day, not just the shape of one: an LC "valid from 2026-13-01" was recorded (Thermal QA run 12).
+  const realDay = (v) => {
+    if (!iso.test(String(v || ''))) return false;
+    const d = new Date(`${v}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+  };
+  if (!realDay(body.valid_from) || !realDay(body.valid_to)) throw fail(400, 'valid_from and valid_to must be real dates (YYYY-MM-DD)');
   // Security stands behind a beneficiary the station bills (an LC was taken for
   // a name on no sheet and no bill — Hydro QA run 8).
   if (!isStationBeneficiary(body.contract_id, body.beneficiary_name)) throw fail(400, `${body.beneficiary_name} is not a beneficiary of this station`);
