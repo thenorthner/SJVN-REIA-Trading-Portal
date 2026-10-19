@@ -119,7 +119,9 @@ export default function ThermalUrsMarketDiversion3D({
               </span>
             </div>
             <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>
-              {station?.station_name ? `${station.station_name} — ` : ''}Surrendered Discom Capacity (URS) ➔ Power Exchange (IEX RTM) Dispatch ➔ 50:50 Shared Benefit Gain
+              {/* Example figures, not the station's account: under the station's
+                  name they read as its own coal and URS (Thermal QA run 19). */}
+              <span style={{ fontWeight: 700, color: '#fbbf24' }}>Illustration — example figures, not {station?.station_name || 'this station'}'s account.</span>{' '}Surrendered Discom Capacity (URS) ➔ Power Exchange (IEX RTM) Dispatch ➔ 50:50 Shared Benefit Gain
             </div>
           </div>
         </div>

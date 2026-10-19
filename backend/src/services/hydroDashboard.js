@@ -231,7 +231,7 @@ export function buildDashboard({ desk = null, readiness = () => ({}) } = {}) {
   };
 
   const recentBills = db.prepare(`
-    SELECT * FROM hydro_station_bills WHERE contract_id IN ${inIds}
+    SELECT * FROM hydro_station_bills WHERE contract_id IN ${inIds} AND status <> 'CANCELLED'
     ORDER BY billing_month DESC, created_at DESC LIMIT 6
   `).all(...ids).map((b) => ({
     id: b.id, bill_no: b.bill_no, station_name: b.station_name, billing_month: b.billing_month,
