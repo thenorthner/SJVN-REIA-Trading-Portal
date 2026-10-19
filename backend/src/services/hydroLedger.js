@@ -284,11 +284,23 @@ export function openCredits(contractId, beneficiaryName) {
  * rebate terms uses those instead. It is on the station's charges only — the
  * NRLDC fee billed alongside is a pass-through and earns none.
  */
+/** CERC Tariff Regulations: 1.5% within 5 days of the bill, 1% within 30. */
+const CERC_REBATE_TIERS = [{ within_days: 5, pct: 1.5 }, { within_days: 30, pct: 1 }];
+
 export function rebateRateFor(pb, payDate, contract = null) {
-  const c = contract || db.prepare('SELECT rebate_pct, rebate_days, rebate_basis FROM contracts WHERE id = ?').get(pb.contract_id);
-  let pct = contractRebatePct(c, { billDate: pb.doc_date, dueDate: pb.due_date, payDate: new Date(payDate) });
+  const c = contract || db.prepare('SELECT rebate_pct, rebate_days, rebate_basis, project_type FROM contracts WHERE id = ?').get(pb.contract_id);
+  const own = contractRebatePct(c, { billDate: pb.doc_date, dueDate: pb.due_date, payDate: new Date(payDate) });
+  const tiered = () => tieredRebatePct(Math.max(0, daysBetween(new Date(pb.doc_date), new Date(payDate))), getParam('early_payment_rebate_tiers', null));
+  let pct = own;
   if (pct === null) {
-    pct = tieredRebatePct(Math.max(0, daysBetween(new Date(pb.doc_date), new Date(payDate))), getParam('early_payment_rebate_tiers', null));
+    pct = tiered();
+  } else if (['Hydro', 'PSP', 'Thermal'].includes(c?.project_type)) {
+    // A station's tariff is CERC's, so the CERC tiers are the floor: a station
+    // set up with the 1.5%/5-day term gave nothing on day 20, where the
+    // regulations allow 1% within 30 days (Thermal QA run 6).
+    const days = Math.max(0, daysBetween(new Date(pb.doc_date), new Date(payDate)));
+    const cerc = tieredRebatePct(days, getParam('early_payment_rebate_tiers', null) || CERC_REBATE_TIERS);
+    pct = Math.max(pct, cerc || 0);
   }
   if (!(pct > 0)) return { pct: 0, rate: 0 };
   const line = pb.bill_line_id
@@ -323,7 +335,7 @@ export function applyCredit(creditDocId, { onDate, createdBy = null, targetDebit
     VALUES (?, ?, ?, ?, ?, ?)
   `);
   const on = onDate || credit.doc_date;
-  const contract = db.prepare('SELECT rebate_pct, rebate_days, rebate_basis FROM contracts WHERE id = ?').get(credit.contract_id);
+  const contract = db.prepare('SELECT rebate_pct, rebate_days, rebate_basis, project_type FROM contracts WHERE id = ?').get(credit.contract_id);
 
   db.transaction(() => {
     for (const debit of debits) {
