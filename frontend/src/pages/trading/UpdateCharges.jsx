@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { api } from '../../api/client.js';
 import { Card, Field } from '../../components/ui.jsx';
 
@@ -158,13 +159,13 @@ export default function UpdateCharges() {
     textAlign: 'center',
     border: '1px solid #2a4a75',
   };
-  const td = { padding: '4px', border: '1px solid #e2e8f0', fontSize: 13.5 };
+  const td = { padding: '4px', border: '1px solid var(--slate-200)', fontSize: 13.5 };
   const inputStyle = { width: '100%', padding: '4px 6px', fontSize: 13.5, boxSizing: 'border-box' };
 
   function MetaLabel({ label, value }) {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 8, padding: '4px 0', fontSize: 13 }}>
-        <span style={{ color: '#475569', fontWeight: 600 }}>{label}</span>
+        <span style={{ color: 'var(--slate-600)', fontWeight: 600 }}>{label}</span>
         <span>{value || '—'}</span>
       </div>
     );
@@ -206,12 +207,12 @@ export default function UpdateCharges() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 10 }}>
             <div className="form-section-header" style={{ margin: 0, flex: 1 }}>Application Charges</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" className="btn btn-sm" style={{ background: '#16a34a', color: '#fff', border: 'none' }} onClick={() => loadCharges('NOAR')} disabled={busy}>
+              <WriteOnly><button type="button" className="btn btn-sm" style={{ background: '#16a34a', color: '#fff', border: 'none' }} onClick={() => loadCharges('NOAR')} disabled={busy}>
                 Load Charges from NOAR
-              </button>
-              <button type="button" className="btn btn-sm" style={{ background: '#16a34a', color: '#fff', border: 'none' }} onClick={() => loadCharges('DEFAULT')} disabled={busy}>
+              </button></WriteOnly>
+              <WriteOnly><button type="button" className="btn btn-sm" style={{ background: '#16a34a', color: '#fff', border: 'none' }} onClick={() => loadCharges('DEFAULT')} disabled={busy}>
                 Load Charges
-              </button>
+              </button></WriteOnly>
             </div>
           </div>
 
@@ -248,7 +249,7 @@ export default function UpdateCharges() {
                     <td style={td}><input type="number" step="any" style={inputStyle} value={row.trader} onChange={(e) => updateCharge(idx, 'trader', e.target.value)} /></td>
                   </tr>
                 ))}
-                <tr style={{ background: '#f8fafc', fontWeight: 700 }}>
+                <tr style={{ background: 'var(--slate-50)', fontWeight: 700 }}>
                   <td style={td}>Total</td>
                   <td style={td} colSpan={2} />
                   <td style={td}>{totals.seller.toFixed(2)}</td>
@@ -261,11 +262,11 @@ export default function UpdateCharges() {
             </table>
           </div>
 
-          {error && <div style={{ marginTop: 12, color: '#991b1b', background: '#fee2e2', padding: 10, borderRadius: 4, fontSize: 13 }}>{error}</div>}
-          {message && <div style={{ marginTop: 12, color: '#166534', background: '#dcfce7', padding: 10, borderRadius: 4, fontSize: 13 }}>{message}</div>}
+          {error && <div style={{ marginTop: 12, color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>{error}</div>}
+          {message && <div style={{ marginTop: 12, color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>{message}</div>}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
-            <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save Charges'}</button>
+            <WriteOnly><button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save Charges'}</button></WriteOnly>
           </div>
         </form>
       </Card>

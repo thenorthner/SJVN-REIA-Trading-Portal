@@ -209,7 +209,7 @@ describe('Drawing on an instrument', () => {
     expect(r.body.error).not.toMatch(/\/renew/);
     // A buyer reinstating its own letter of credit is at least reported to the desk.
     expect((await post(`/api/payment-security/${ps.id}/replenish`, { amount: 400000 }, signToken(buyer))).status).toBe(200);
-    expect(db.prepare(`SELECT message FROM notifications WHERE role = 'REIA_USER'`).all().map((n) => n.message).join(' ')).toMatch(/reinstated/);
+    expect(db.prepare(`SELECT message FROM notifications WHERE role = 'REIA_MAKER'`).all().map((n) => n.message).join(' ')).toMatch(/reinstated/);
   });
 });
 

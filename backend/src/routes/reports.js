@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { contractVerticalSql, contractIdInVerticalSql } from '../services/verticals.js';
 import XLSX from 'xlsx';
 import { paymentMonitoring } from '../services/paymentMonitoring.js';
 import { generationPerformance, rangeProblem } from '../services/generationPerformance.js';
@@ -43,7 +44,7 @@ const LICENCE_WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.TRA
 
 /** Shared month-wise billing aggregation used by JSON + PDF endpoints. */
 export function buildBillingSummary({ from, to } = {}) {
-  const where = [`status != 'CANCELLED'`];
+  const where = [`status != 'CANCELLED'`, contractIdInVerticalSql('REIA', 'contract_id')];
   const params = [];
   if (from) { where.push('billing_period >= ?'); params.push(from); }
   if (to) { where.push('billing_period <= ?'); params.push(to); }
@@ -65,7 +66,7 @@ export function buildBillingSummary({ from, to } = {}) {
     GROUP BY billing_period
   `).all(...params);
 
-  const payWhere = [`i.status != 'CANCELLED'`];
+  const payWhere = [`i.status != 'CANCELLED'`, contractIdInVerticalSql('REIA', 'i.contract_id')];
   const payParams = [];
   if (from) { payWhere.push('i.billing_period >= ?'); payParams.push(from); }
   if (to) { payWhere.push('i.billing_period <= ?'); payParams.push(to); }
@@ -415,7 +416,7 @@ router.get('/billing-summary/pdf', requireRole(...REPORT_READ), (req, res) => {
  * Energy Data & Validation — one row per contract × period (prov + final joined).
  */
 export function buildEnergySummary({ from, to, contract_id } = {}) {
-  const where = ['1=1'];
+  const where = [contractVerticalSql('REIA', 'c')];
   const params = [];
   if (from) { where.push('ed.period_month >= ?'); params.push(from); }
   if (to) { where.push('ed.period_month <= ?'); params.push(to); }
@@ -579,7 +580,7 @@ router.get('/energy-summary/pdf', requireRole(...REPORT_READ), (req, res) => {
 
 /** Disputes raised within from/to months (YYYY-MM on created_at). */
 export function buildDisputeSummary({ from, to, status } = {}) {
-  const where = ['1=1'];
+  const where = [contractVerticalSql('REIA', 'c')];
   const params = [];
   if (from) { where.push(`substr(d.created_at, 1, 7) >= ?`); params.push(from); }
   if (to) { where.push(`substr(d.created_at, 1, 7) <= ?`); params.push(to); }
@@ -688,7 +689,7 @@ router.get('/dispute-summary/pdf', requireRole(...REPORT_READ), (req, res) => {
 
 /** Reconciliations filtered by period (YYYY-MM). */
 export function buildReconSummary({ from, to, status } = {}) {
-  const where = ['1=1'];
+  const where = [`(r.contract_id IS NULL OR ${contractVerticalSql('REIA', 'c')})`];
   const params = [];
   if (from) { where.push('r.period >= ?'); params.push(from); }
   if (to) { where.push('r.period <= ?'); params.push(to); }
@@ -787,7 +788,7 @@ router.get('/recon-summary/pdf', requireRole(...REPORT_READ), (req, res) => {
 
 /** Contract portfolio register (+ optional filters). */
 export function buildContractSummary({ contract_type, status, project_type, q } = {}) {
-  const where = ['1=1'];
+  const where = [contractVerticalSql('REIA', 'c')];
   const params = [];
   if (contract_type) { where.push('c.contract_type = ?'); params.push(contract_type); }
   if (status) { where.push('c.status = ?'); params.push(status); }
@@ -900,33 +901,35 @@ router.get('/contract-summary/pdf', requireRole(...REPORT_READ), (req, res) => {
 
 /** Live REIA dashboard snapshot (same metrics as /api/dashboard/reia). */
 export function buildReiaDashboardSummary() {
-  const activeContracts = db.prepare(`SELECT COUNT(*) c FROM contracts WHERE status = 'ACTIVE'`).get().c;
-  const contractedCapacity = db.prepare(`SELECT COALESCE(SUM(capacity_mw),0) s FROM contracts WHERE status = 'ACTIVE'`).get().s;
-  const energySupplied = db.prepare(`SELECT COALESCE(SUM(energy_mwh),0) s FROM energy_data`).get().s;
-  const billedEnergy = db.prepare(`SELECT COALESCE(SUM(energy_mwh),0) s FROM invoices`).get().s;
-  const pendingApprovals = db.prepare(`SELECT COUNT(*) c FROM invoices WHERE status = 'UNDER_APPROVAL'`).get().c;
-  const pendingDisputes = db.prepare(`SELECT COUNT(*) c FROM disputes WHERE status IN (${OPEN_STATUSES.map(() => '?').join(',')})`).get(...OPEN_STATUSES).c;
-  const reconciliationExceptions = db.prepare(`SELECT COUNT(*) c FROM reconciliations WHERE status IN ('NEEDS_REVIEW','DISPUTED','REOPENED')`).get().c;
-  const totalInvoices = db.prepare(`SELECT COUNT(*) c, COALESCE(SUM(total_amount),0) s FROM invoices`).get();
-  const receivables = receivablesOutstanding();
-  const payables = payablesOutstanding();
+  const VC = contractVerticalSql('REIA', 'c');
+  const VI = contractIdInVerticalSql('REIA', 'i.contract_id');
+  const activeContracts = db.prepare(`SELECT COUNT(*) c FROM contracts c WHERE c.status = 'ACTIVE' AND ${VC}`).get().c;
+  const contractedCapacity = db.prepare(`SELECT COALESCE(SUM(c.capacity_mw),0) s FROM contracts c WHERE c.status = 'ACTIVE' AND ${VC}`).get().s;
+  const energySupplied = db.prepare(`SELECT COALESCE(SUM(e.energy_mwh),0) s FROM energy_data e WHERE ${contractIdInVerticalSql('REIA', 'e.contract_id')}`).get().s;
+  const billedEnergy = db.prepare(`SELECT COALESCE(SUM(i.energy_mwh),0) s FROM invoices i WHERE ${VI}`).get().s;
+  const pendingApprovals = db.prepare(`SELECT COUNT(*) c FROM invoices i WHERE i.status = 'UNDER_APPROVAL' AND ${VI}`).get().c;
+  const pendingDisputes = db.prepare(`SELECT COUNT(*) c FROM disputes d WHERE d.status IN (${OPEN_STATUSES.map(() => '?').join(',')}) AND d.invoice_id IN (SELECT i.id FROM invoices i WHERE ${VI})`).get(...OPEN_STATUSES).c;
+  const reconciliationExceptions = db.prepare(`SELECT COUNT(*) c FROM reconciliations r WHERE r.status IN ('NEEDS_REVIEW','DISPUTED','REOPENED') AND (r.contract_id IS NULL OR ${contractIdInVerticalSql('REIA', 'r.contract_id')})`).get().c;
+  const totalInvoices = db.prepare(`SELECT COUNT(*) c, COALESCE(SUM(i.total_amount),0) s FROM invoices i WHERE ${VI}`).get();
+  const receivables = receivablesOutstanding('REIA');
+  const payables = payablesOutstanding('REIA');
   const paymentsReceived = db.prepare(`
     SELECT COALESCE(SUM(p.amount),0) s FROM payments p
-    JOIN invoices i ON i.id = p.invoice_id WHERE i.direction = 'SJVN_TO_BUYER'
+    JOIN invoices i ON i.id = p.invoice_id WHERE i.direction = 'SJVN_TO_BUYER' AND ${VI}
   `).get().s;
   const paymentsDisbursed = db.prepare(`
     SELECT COALESCE(SUM(p.amount),0) s FROM payments p
-    JOIN invoices i ON i.id = p.invoice_id WHERE i.direction = 'SELLER_TO_SJVN'
+    JOIN invoices i ON i.id = p.invoice_id WHERE i.direction = 'SELLER_TO_SJVN' AND ${VI}
   `).get().s;
-  const overdue = overdueCount();
-  const byStatus = db.prepare(`SELECT status, COUNT(*) c FROM invoices GROUP BY status`).all();
+  const overdue = overdueCount('REIA');
+  const byStatus = db.prepare(`SELECT i.status, COUNT(*) c FROM invoices i WHERE ${VI} GROUP BY i.status`).all();
   const byProjectType = db.prepare(`
     SELECT c.project_type, COUNT(*) contracts, COALESCE(SUM(c.capacity_mw),0) capacity
-    FROM contracts c WHERE c.status = 'ACTIVE' GROUP BY c.project_type
+    FROM contracts c WHERE c.status = 'ACTIVE' AND ${VC} GROUP BY c.project_type
   `).all();
   const monthlyBilling = db.prepare(`
     SELECT billing_period, COALESCE(SUM(total_amount),0) total, COALESCE(SUM(energy_mwh),0) energy
-    FROM invoices GROUP BY billing_period ORDER BY billing_period
+    FROM invoices i WHERE ${VI} GROUP BY billing_period ORDER BY billing_period
   `).all();
   const expiringSecurities = db.prepare(`
     SELECT COUNT(*) c FROM payment_security

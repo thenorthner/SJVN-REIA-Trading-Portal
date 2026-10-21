@@ -109,7 +109,7 @@ export default function VerificationChecklist({ invoiceId, totalAmount, canWrite
       <div className="section-title" style={{ marginTop: 8 }}>Technical Verification</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {data.technical.map((t) => (
-          <div key={t.key} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px solid var(--border, #eee)' }}>
+          <div key={t.key} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px solid var(--border, var(--border))' }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>
                 {t.label}
@@ -152,7 +152,7 @@ export default function VerificationChecklist({ invoiceId, totalAmount, canWrite
               </td>
             </tr>
           ))}
-          <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border, #ddd)' }}>
+          <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border, var(--border))' }}>
             <td>Net by the build-up</td>
             <td className="text-right mono">{fmtCurrency(data.commercial.net_invoice || 0)}</td>
           </tr>

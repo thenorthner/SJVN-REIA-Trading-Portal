@@ -171,7 +171,7 @@ describe('S19 The stakeholder sweep actually runs', () => {
     runStakeholderAlerts();
     const n = db.prepare(`SELECT * FROM notifications WHERE type = 'CONTRACT_EXPIRING' AND message LIKE ?`).get(`%${c.contract_no}%`);
     expect(n, 'no renewal alert was delivered').toBeTruthy();
-    expect(n.role).toBe('REIA_USER');
+    expect(n.role).toBe('REIA_MAKER');
   });
 
   it('carries on past a contract it cannot process', () => {

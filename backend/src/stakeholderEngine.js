@@ -76,7 +76,7 @@ export function runStakeholderAlerts() {
 
       if (left <= 0) {
         if (notifyDaily({
-          role: 'REIA_USER', type: 'DOCUMENT_EXPIRED',
+          role: 'REIA_MAKER', type: 'DOCUMENT_EXPIRED',
           message: `${what} expired on ${doc.expiry_date} and is no longer valid.`,
         })) counts.documents += 1;
         return;
@@ -85,7 +85,7 @@ export function runStakeholderAlerts() {
       // as it closes and notifyDaily treats each band as its own alert.
       const band = DOC_BANDS.filter((b) => left <= b).pop();
       if (notifyDaily({
-        role: 'REIA_USER', type: 'DOCUMENT_EXPIRING',
+        role: 'REIA_MAKER', type: 'DOCUMENT_EXPIRING',
         message: `${what} expires on ${doc.expiry_date} — ${left} day(s) left (${band}-day notice). Renew it.`,
       })) counts.documents += 1;
     });
@@ -97,7 +97,7 @@ export function runStakeholderAlerts() {
       const left = days(doc.validity_end);
       if (left > 60 || left <= 0) return;
       notifyDaily({
-        role: 'REIA_USER', type: 'DOCUMENT_EXPIRING',
+        role: 'REIA_MAKER', type: 'DOCUMENT_EXPIRING',
         message: `Document ${doc.doc_type} for entity ${doc.entity_id} expires in ${left} day(s) on ${doc.validity_end}.`,
       });
       db.prepare('UPDATE entity_documents SET alert_sent = 1 WHERE id = ?').run(doc.id);
@@ -113,7 +113,7 @@ export function runStakeholderAlerts() {
       if (left <= 90 && left > 0 && c.status === 'ACTIVE') {
         db.prepare("UPDATE contracts SET status = 'NEARING_EXPIRY', updated_at = datetime('now') WHERE id = ?").run(c.id);
         notifyDaily({
-          role: 'REIA_USER', type: 'CONTRACT_EXPIRING',
+          role: 'REIA_MAKER', type: 'CONTRACT_EXPIRING',
           message: `Contract ${c.contract_no} expires in ${left} day(s) on ${c.tenure_end}. Initiate renewal.`,
         });
         logAudit({
@@ -132,7 +132,7 @@ export function runStakeholderAlerts() {
       if (left <= 0 && ['ACTIVE', 'NEARING_EXPIRY'].includes(c.status)) {
         db.prepare("UPDATE contracts SET status = 'EXPIRED', updated_at = datetime('now') WHERE id = ?").run(c.id);
         notifyDaily({
-          role: 'REIA_USER', type: 'CONTRACT_EXPIRED',
+          role: 'REIA_MAKER', type: 'CONTRACT_EXPIRED',
           message: `Contract ${c.contract_no} ended on ${c.tenure_end} and is now expired.`,
         });
         logAudit({

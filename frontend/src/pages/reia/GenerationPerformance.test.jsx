@@ -18,7 +18,7 @@ vi.mock('../../api/client.js', () => {
   return { api, default: api };
 });
 
-vi.mock('../../context/AuthContext.jsx', () => ({ useAuth: () => ({ user: { role: 'REIA_USER' } }) }));
+vi.mock('../../context/AuthContext.jsx', () => ({ useAuth: () => ({ user: { role: 'REIA_MAKER' } }) }));
 
 const { MemoryRouter } = await import('react-router-dom');
 const GenerationPerformance = (await import('./GenerationPerformance.jsx')).default;

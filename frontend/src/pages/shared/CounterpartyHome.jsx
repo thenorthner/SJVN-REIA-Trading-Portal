@@ -115,7 +115,7 @@ export default function CounterpartyHome() {
           <Card title={d.todo.length ? `Waiting on you (${d.todo.length})` : 'Waiting on you'}
             actions={(d.alerts.critical + d.alerts.warning) > 0 && <button type="button" className="btn-link" onClick={() => navigate('/notification-board')}>Notification board · {d.alerts.critical} critical, {d.alerts.warning} warnings →</button>}>
             {d.todo.length === 0 && <div className="ps-alert green" style={{ marginBottom: 0 }}>Nothing is waiting on you. Bills, energy data, documents and guarantees are all in order.</div>}
-            {red > 0 && <p style={{ margin: '0 0 10px', fontSize: 13, color: '#b91c1c' }}>{red} of these {red === 1 ? 'is' : 'are'} overdue or about to lapse.</p>}
+            {red > 0 && <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--on-red)' }}>{red} of these {red === 1 ? 'is' : 'are'} overdue or about to lapse.</p>}
             {d.todo.map((t) => (
               <button key={t.key} type="button" className={`ch-todo ${t.level}`} onClick={() => t.link && navigate(t.link)}>
                 <div><strong>{t.title}</strong><span>{t.detail}</span></div>
@@ -221,7 +221,7 @@ export default function CounterpartyHome() {
                   <td>₹{Number(c.tariff_per_unit).toFixed(2)}/kWh</td>
                   <td>{fmtCurrency(c.billed)}<div style={{ fontSize: 13, color: 'var(--text-light)' }}>{c.invoices} bill{c.invoices === 1 ? '' : 's'}</div></td>
                   <td>{fmtCurrency(c.received)}</td>
-                  <td>{fmtCurrency(c.outstanding)}{c.overdue > 0 && <div style={{ fontSize: 13, color: '#b91c1c' }}>{fmtCurrency(c.overdue)} overdue</div>}</td>
+                  <td>{fmtCurrency(c.outstanding)}{c.overdue > 0 && <div style={{ fontSize: 13, color: 'var(--on-red)' }}>{fmtCurrency(c.overdue)} overdue</div>}</td>
                   <td>{c.last_energy_month ? <>{fmtNumber(c.last_energy_mwh, 1)} MWh<div style={{ fontSize: 13, color: 'var(--text-light)' }}>{monthLabel(c.last_energy_month)}{c.last_cuf != null ? ` · CUF ${Number(c.last_cuf).toFixed(1)}%` : ''}</div></> : '—'}</td>
                   <td>{c.security_count ? <>{c.security_count} live<div style={{ fontSize: 13, color: 'var(--text-light)' }}>next expiry {fmtDate(c.security_next_expiry)}</div></> : <span style={{ color: 'var(--text-light)' }}>None</span>}</td>
                   <td><Badge status={c.status} /></td>

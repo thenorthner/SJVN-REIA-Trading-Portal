@@ -1,4 +1,5 @@
 import db from '../db/index.js';
+import { contractIdInVerticalSql } from './verticals.js';
 import { getParamNumber } from '../mastersService.js';
 import { liveVerification, OPEN_FOR_VERIFICATION, DECIDED } from './invoiceVerification.js';
 import { raisedBySellerSql } from './counterpartyScope.js';
@@ -39,7 +40,7 @@ function slaFor(invoice, state) {
 }
 
 export function verificationQueue({ status = null, contractId = null, includeClosed = false } = {}) {
-  const where = [raisedBySellerSql('i')];
+  const where = [raisedBySellerSql('i'), contractIdInVerticalSql('REIA', 'i.contract_id')];
   const params = [];
   if (!includeClosed) {
     where.push(`i.status IN (${OPEN_FOR_VERIFICATION.map(() => '?').join(',')})`);

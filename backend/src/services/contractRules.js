@@ -148,3 +148,21 @@ export function changedTerms(original, body) {
   }
   return changed;
 }
+
+/**
+ * What the REIA desk will not take. Two-part (capacity + energy) tariffs and
+ * hydro / pumped-storage plants are CERC cost-plus generation, billed on the
+ * Hydro desk; a REIA contract is a Section 63 flat, escalating or slab tariff.
+ * Only applied to REIA contracts, so existing hydro records stay editable.
+ */
+export function reiaOnlyErrors(c) {
+  const errors = [];
+  const pt = String(c.project_type || '').toLowerCase();
+  const hydro = pt === 'hydro' || pt === 'psp' || pt.includes('hydro');
+  if (hydro) errors.push('Hydro and pumped-storage contracts are billed on the Hydro desk, not REIA.');
+  if (pt === 'thermal') errors.push('Thermal contracts are billed on the Thermal desk, not REIA.');
+  if (!hydro && String(c.tariff_type || '').toUpperCase() === 'TWO_PART') {
+    errors.push('A two-part tariff does not apply to REIA contracts — choose Flat, Escalating or Time of Day / Slab.');
+  }
+  return errors;
+}

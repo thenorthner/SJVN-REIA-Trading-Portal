@@ -2,7 +2,7 @@ import { Router } from 'express';
 import db from '../db/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { buildBillingFamilyRef, directionForContract } from '../util.js';
-import { contractVisibleTo, raisedBySeller } from '../services/counterpartyScope.js';
+import { contractVisibleTo, raisedBySeller, isCounterparty } from '../services/counterpartyScope.js';
 import { resolveBetaRow, computeBetaFromAnnualAfc, billedIncentiveTotal } from '../services/betaFactor.js';
 import { resolveAnnualAfc } from '../services/cercHydroBilling.js';
 import { sourcesForPsa } from '../services/allocations.js';
@@ -163,7 +163,7 @@ function buildTrail({ bfr, contract, period, direction, focus = null }) {
   let allocationPercent = 100;
 
   const invoicesOf = (contractId) => db.prepare(`
-    SELECT id, invoice_no, invoice_type, total_amount, energy_mwh, status, due_date, validation_status
+    SELECT id, invoice_no, invoice_type, total_amount, energy_mwh, status, due_date, validation_status, lps, rebate
     FROM invoices WHERE contract_id = ? AND billing_period = ? AND status != 'CANCELLED'
     ORDER BY created_at ASC
   `).all(contractId, period);
@@ -312,6 +312,71 @@ function buildTrail({ bfr, contract, period, direction, focus = null }) {
   };
 }
 
+
+/**
+ * What each side of the chain may read of it.
+ *
+ * SJVN buys from the developer (PPA) and sells to the DISCOM (PSA) back to
+ * back, and both agreements name the other end: the PSA schedules the source
+ * project and the tariff is adopted by the State Commission with the PPA's
+ * terms in front of it, so a DISCOM may see who generates its power, at what
+ * tariff and SJVN's fixed trading margin. A developer is told which procurer
+ * its power goes to and how much, but not the procurer's tariff, bills or
+ * payments — those are the DISCOM's. Neither reads the other's invoices, and
+ * the cut is made here, not in the screen.
+ */
+function scopeTrail(user, contract, trail) {
+  if (!isCounterparty(user)) return { ...trail, viewer: 'SJVN' };
+  const lt = trail.linked_topology || {};
+  if (contract.contract_type === 'PPA') {
+    return {
+      ...trail,
+      viewer: 'SELLER',
+      linked_topology: {
+        ...lt,
+        psa: lt.psa ? { id: null, buyer_name: lt.psa.buyer_name, invoices: [] } : null,
+        hub: lt.hub ? {
+          name: lt.hub.name, allocation_percent: lt.hub.allocation_percent, energy_mwh: lt.hub.energy_mwh,
+          allocated_mwh: lt.hub.allocated_mwh, validation_status: lt.hub.validation_status,
+        } : lt.hub,
+      },
+    };
+  }
+  return {
+    ...trail,
+    viewer: 'BUYER',
+    linked_topology: {
+      ...lt,
+      ppa: lt.ppa ? { ...lt.ppa, invoices: [] } : null,
+      sources: (lt.sources || []).map((src) => ({ ...src, invoices: [] })),
+    },
+  };
+}
+
+/** GET /api/billing-trail/periods?contract_id= — the months there is something to show for. */
+router.get('/periods', (req, res) => {
+  const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.query.contract_id);
+  if (!contract || !contractVisibleTo(req.user, contract)) return res.status(404).json({ error: 'Contract not found' });
+  const ids = [contract.id, ...(contract.contract_type === 'PSA'
+    ? db.prepare('SELECT ppa_id FROM contract_allocations WHERE psa_id = ?').all(contract.id).map((r) => r.ppa_id)
+    : [])];
+  const q = ids.map(() => '?').join(',');
+  const months = db.prepare(`
+    SELECT period FROM (
+      SELECT billing_period AS period FROM invoices WHERE contract_id = ? AND status != 'CANCELLED'
+      UNION SELECT period_month FROM energy_data WHERE contract_id IN (${q})
+    ) WHERE period IS NOT NULL ORDER BY period DESC
+  `).all(contract.id, ...ids).map((r) => r.period);
+  res.json({ periods: months });
+});
+
+function isSjvnOwnStation(contract) {
+  if (!contract) return false;
+  if (String(contract.project_type || '').toLowerCase() === 'hydro') return true;
+  const own = db.prepare('SELECT 1 FROM entities WHERE id IN (?, ?) AND is_sjvn_own = 1').get(contract.seller_id || '', contract.buyer_id || '');
+  return !!own;
+}
+
 /**
  * GET /api/billing-trail
  * Resolve by: bfr | invoice_id | energy_id | contract_id+period_month[+direction]
@@ -378,10 +443,19 @@ router.get('/', (req, res) => {
     if (!contract || !period || !direction) {
       return res.status(400).json({ error: 'Could not resolve billing family' });
     }
+    // The clearing-hub trail is the REIA back-to-back chain (developer PPA →
+    // SJVN → DISCOM PSA, Section 63). SJVN's own hydro stations are Section 62
+    // cost-plus generation billed to their beneficiaries on the Hydro desk —
+    // there is no developer, no trading margin and no PSA to chain.
+    if (isSjvnOwnStation(contract)) {
+      return res.status(422).json({
+        error: `${contract.contract_no} is SJVN's own hydro station (CERC cost-plus tariff). It is not an REIA trading chain, so there is no clearing hub or trading margin — its bills and beneficiary allocation are on the Hydro desk.`,
+      });
+    }
     // A counterparty reads the trail of its own contracts only.
     if (!contractVisibleTo(req.user, contract)) return res.status(404).json({ error: 'Billing family not found' });
 
-    res.json(buildTrail({ bfr, contract, period, direction, focus }));
+    res.json(scopeTrail(req.user, contract, buildTrail({ bfr, contract, period, direction, focus })));
   } catch (err) {
     console.error('Billing trail error:', err);
     res.status(500).json({ error: err.message });

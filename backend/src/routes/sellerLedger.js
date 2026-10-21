@@ -502,7 +502,7 @@ router.post('/tds-certificates', (req, res) => send(res, () => {
   audit(req, existing ? 'TDS_CERTIFICATE_REPLACED' : 'TDS_CERTIFICATE_FILED', id, { afterValue: { entity_id: seller.id, financial_year: fy, quarter, tds_amount: money(amount) } });
   if (partySide === 'BUYER') {
     // The buyer deducted the tax, so the certificate comes from it to SJVN.
-    for (const role of ['FINANCE_USER', 'REIA_USER']) pushNotification({ role, type: 'TDS_CERTIFICATE', message: `${seller.name} has filed its TDS certificate (Form 16A) for ${quarter} of FY ${fy}, for ${inr(amount)}.` });
+    for (const role of ['FINANCE_USER', 'REIA_MAKER']) pushNotification({ role, type: 'TDS_CERTIFICATE', message: `${seller.name} has filed its TDS certificate (Form 16A) for ${quarter} of FY ${fy}, for ${inr(amount)}.` });
   } else {
     for (const u of db.prepare('SELECT id FROM users WHERE linked_entity_id = ? AND is_active = 1').all(seller.id)) {
       pushNotification({ userId: u.id, type: 'TDS_CERTIFICATE', message: `Your TDS certificate (Form 16A) for ${quarter} of FY ${fy} is available under Payments & Ledger.` });

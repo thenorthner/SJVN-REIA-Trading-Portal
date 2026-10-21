@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useCanWrite } from '../../lib/deskAccess.js';
 import { useNavigate } from 'react-router-dom';
 import {
   ResponsiveContainer, ComposedChart, BarChart, Bar, LineChart, Line, AreaChart, Area,
@@ -12,6 +13,7 @@ import {
 import api from '../../api/client.js';
 import { PageHeader, Card, fmtCurrency, fmtNumber, Badge } from '../../components/ui.jsx';
 import SjvnMacroEnergyCorridor3D from '../../components/SjvnMacroEnergyCorridor3D.jsx';
+import HydroEnergyOverview from '../../components/HydroEnergyOverview.jsx';
 
 const CHART_COLORS = [
   '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#06b6d4',
@@ -19,6 +21,8 @@ const CHART_COLORS = [
 ];
 
 export default function HydroThermalDashboard() {
+  // Read-only for the administrators and the auditor (Target #2 Phase B).
+  const canWrite = useCanWrite();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,7 +32,8 @@ export default function HydroThermalDashboard() {
 
   function loadDashboard() {
     setLoading(true);
-    api.hydroBilling.dashboard()
+    // The hydro desk's own stations: thermal has its own dashboard.
+    api.hydroBilling.dashboard({ vertical: 'HYDRO' })
       .then((res) => {
         setData(res);
         setError('');
@@ -62,20 +67,35 @@ export default function HydroThermalDashboard() {
     return (
       <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--slate-500)' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 16 }}>
-          <RefreshCw size={20} className="spinning" /> Loading Hydro & Thermal Billing Dashboard...
+          <RefreshCw size={20} className="spinning" /> Loading Hydro Billing Dashboard...
         </div>
       </div>
     );
   }
 
   const { kpis, stations, monthlyBillingTrend, pafmTrend, energyScheduledTrend, beneficiaryBreakup, pipeline, recentBills } = data || {};
+  // Labels come from the data: the financial year, each station's NAPAF and
+  // free-power share, and the home state that takes it.
+  const fyLabel = data?.financial_year ? `FY ${data.financial_year.slice(0, 4)}-${data.financial_year.slice(7)}` : 'this FY';
+  const napafs = [...new Set((stations || []).map((st) => st.napaf_percent).filter((v) => v != null))].sort((a, b) => a - b);
+  const napafText = napafs.length ? napafs.map((v) => `${v}%`).join(' / ') : 'NAPAF';
+  const fehs = [...new Set((stations || []).map((st) => st.free_energy_home_state).filter((v) => v != null))].sort((a, b) => a - b);
+  const fehsText = fehs.length ? (fehs.length > 1 ? `${fehs[0]}–${fehs[fehs.length - 1]}%` : `${fehs[0]}%`) : '';
+  const homeStates = [...new Set((stations || []).map((st) => st.home_state).filter(Boolean))].join(', ') || 'the home state';
+  const pafmValues = (pafmTrend || []).flatMap((row) => (stations || []).map((st) => row[st.code])).filter((v) => v != null);
+  const pafmDomain = [
+    Math.max(0, Math.floor(Math.min(...pafmValues, ...napafs, 100) / 5) * 5 - 5),
+    Math.ceil(Math.max(...pafmValues, ...napafs, 100) / 5) * 5 + 2,
+  ];
+  const desk = data?.desk || {};
+  const mc = desk.month_close;
 
   return (
     <div style={{ paddingBottom: 40 }}>
       {/* Page Header */}
       <PageHeader
-        title="Hydro & Thermal Billing Dashboard"
-        subtitle="CERC two-part tariff calculations, plant availability factor (PAFM), monthly billing & regional settlement"
+        title="Hydro Billing Dashboard"
+        subtitle={`CERC two-part tariff billing, plant availability (PAFM), billing and regional settlement — ${fyLabel}${data?.as_of ? `, as of ${data.as_of}` : ''}`}
         actions={
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
             <button
@@ -110,10 +130,10 @@ export default function HydroThermalDashboard() {
       {error && (
         <div style={{
           padding: '12px 16px',
-          background: '#fef2f2',
-          border: '1px solid #fecaca',
+          background: 'var(--t-red-50)',
+          border: '1px solid var(--t-red-line)',
           borderRadius: 8,
-          color: '#b91c1c',
+          color: 'var(--on-red)',
           marginBottom: 20,
           display: 'flex',
           alignItems: 'center',
@@ -122,6 +142,41 @@ export default function HydroThermalDashboard() {
           <AlertCircle size={18} />
           <span>{error}</span>
         </div>
+      )}
+
+      {/* What the desk has open today, from the same registers its screens show. */}
+      {data?.desk && (
+        <Card title={mc ? `The desk today — ${mc.period} close: ${mc.clear ? 'nothing holding it' : `${mc.open_items} item(s) holding it`}` : 'The desk today'} style={{ marginBottom: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10 }}>
+            {[
+              ...(mc ? [
+                { to: '/hydro-thermal/month-close', label: `${mc.period}: not billed`, value: mc.not_billed, tone: mc.not_billed ? 'amber' : null },
+                { to: '/hydro-thermal/month-close', label: `${mc.period}: draft / approval`, value: mc.in_progress, tone: mc.in_progress ? 'amber' : null },
+                { to: '/hydro-thermal/month-close', label: `${mc.period}: issued`, value: mc.issued },
+                { to: '/hydro-thermal/month-close', label: `${mc.period}: booked to Finance`, value: mc.booked, tone: 'green' },
+              ] : []),
+              { to: '/hydro-thermal/approvals', label: 'Bills in approval', value: desk.approvals?.bills ?? 0, tone: desk.approvals?.bills ? 'amber' : null },
+              { to: '/hydro-thermal/approvals', label: 'Notes awaiting checker', value: desk.approvals?.notes ?? 0, tone: desk.approvals?.notes ? 'amber' : null },
+              { to: '/hydro-thermal/power-regulation', label: 'In default / regulated', value: `${desk.regulation?.candidates ?? 0} / ${desk.regulation?.regulating ?? 0}`, tone: desk.regulation?.candidates ? 'red' : null },
+              { to: '/hydro-thermal/regulatory', label: 'Regulatory items open', value: desk.regulatory?.open ?? 0, tone: desk.regulatory?.overdue || desk.regulatory?.to_implement ? 'red' : null },
+              { to: '/hydro-thermal/ppas', label: 'Billed without a PPA', value: desk.ppas?.missing ?? 0, tone: desk.ppas?.missing ? 'red' : null },
+              { to: '/hydro-thermal/receivables', label: 'Overdue over 90 days', value: fmtCurrency(desk.ageing?.d90_plus || 0), tone: desk.ageing?.d90_plus ? 'red' : null },
+              { to: '/hydro-thermal/advances', label: 'Advances unapplied', value: fmtCurrency(desk.ageing?.advance || 0) },
+            ].map((p) => (
+              <div
+                key={p.label}
+                role="link"
+                tabIndex={0}
+                onClick={() => navigate(p.to)}
+                onKeyDown={(e) => { if (e.key === 'Enter') navigate(p.to); }}
+                style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer' }}
+              >
+                <div style={{ fontSize: 13, color: 'var(--text-light)' }}>{p.label}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: p.tone ? `var(--${p.tone})` : 'var(--text)' }}>{p.value}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* Flagship SJVN Fleet-Wide Hydro-Thermal Macro Energy Corridor */}
@@ -202,8 +257,8 @@ export default function HydroThermalDashboard() {
               key={idx}
               onClick={() => navigate(item.path)}
               style={{
-                background: '#ffffff',
-                border: '1px solid var(--slate-200, #e2e8f0)',
+                background: 'var(--surface)',
+                border: '1px solid var(--slate-200, var(--slate-200))',
                 borderRadius: 12,
                 padding: '16px 18px',
                 cursor: 'pointer',
@@ -263,7 +318,7 @@ export default function HydroThermalDashboard() {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 paddingTop: 10,
-                borderTop: '1px solid var(--slate-100, #f1f5f9)',
+                borderTop: '1px solid var(--slate-100, var(--slate-100))',
                 marginTop: 8,
               }}>
                 <span style={{ fontSize: 13.5, color: 'var(--slate-400)' }}>{item.hint}</span>
@@ -282,7 +337,7 @@ export default function HydroThermalDashboard() {
         marginBottom: 24,
       }}>
         <div style={{
-          background: '#ffffff',
+          background: 'var(--surface)',
           borderRadius: 12,
           padding: '16px',
           border: '1px solid var(--slate-200)',
@@ -291,7 +346,7 @@ export default function HydroThermalDashboard() {
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
             Total Capacity
           </div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#1e3a8a', marginTop: 4 }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--on-blue)', marginTop: 4 }}>
             {fmtNumber(kpis?.totalCapacityMw ?? 0, 0)} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-500)' }}>MW</span>
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
@@ -300,7 +355,7 @@ export default function HydroThermalDashboard() {
         </div>
 
         <div style={{
-          background: '#ffffff',
+          background: 'var(--surface)',
           borderRadius: 12,
           padding: '16px',
           border: '1px solid var(--slate-200)',
@@ -309,7 +364,7 @@ export default function HydroThermalDashboard() {
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
             Annual Fixed Charges
           </div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#0f766e', marginTop: 4 }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--on-blue)', marginTop: 4 }}>
             ₹{fmtNumber(kpis?.annualAfcCr ?? 0, 1)} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-500)' }}>Cr</span>
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
@@ -318,16 +373,16 @@ export default function HydroThermalDashboard() {
         </div>
 
         <div style={{
-          background: '#ffffff',
+          background: 'var(--surface)',
           borderRadius: 12,
           padding: '16px',
           border: '1px solid var(--slate-200)',
           boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
         }}>
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Billed (FY 2026-27)
+            Billed ({fyLabel})
           </div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#2563eb', marginTop: 4 }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--on-blue)', marginTop: 4 }}>
             ₹{fmtNumber(kpis?.cumulativeBilledCr ?? 0, 1)} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-500)' }}>Cr</span>
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
@@ -336,7 +391,7 @@ export default function HydroThermalDashboard() {
         </div>
 
         <div style={{
-          background: '#ffffff',
+          background: 'var(--surface)',
           borderRadius: 12,
           padding: '16px',
           border: '1px solid var(--slate-200)',
@@ -345,7 +400,7 @@ export default function HydroThermalDashboard() {
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
             Realized Collections
           </div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#059669', marginTop: 4 }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--on-green)', marginTop: 4 }}>
             {kpis?.realizationPct != null ? `${kpis.realizationPct}%` : '—'}
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
@@ -354,7 +409,7 @@ export default function HydroThermalDashboard() {
         </div>
 
         <div style={{
-          background: '#ffffff',
+          background: 'var(--surface)',
           borderRadius: 12,
           padding: '16px',
           border: '1px solid var(--slate-200)',
@@ -363,16 +418,16 @@ export default function HydroThermalDashboard() {
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
             Average Availability
           </div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#16a34a', marginTop: 4 }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--on-green)', marginTop: 4 }}>
             {kpis?.avgPafmPct != null ? `${kpis.avgPafmPct}%` : '—'}
           </div>
-          <div style={{ fontSize: 13.5, color: '#16a34a', marginTop: 4, fontWeight: 600 }}>
+          <div style={{ fontSize: 13.5, color: 'var(--on-green)', marginTop: 4, fontWeight: 600 }}>
             NAPAF target: {(stations || []).map((st) => `${String(st.contract_no || '').split('/')[2] || st.station_name} ${st.napaf_percent ?? '—'}%`).join(' · ') || '—'}
           </div>
         </div>
 
         <div style={{
-          background: '#ffffff',
+          background: 'var(--surface)',
           borderRadius: 12,
           padding: '16px',
           border: '1px solid var(--slate-200)',
@@ -381,7 +436,7 @@ export default function HydroThermalDashboard() {
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
             Scheduled Generation
           </div>
-          <div style={{ fontSize: 24, fontWeight: 800, color: '#9333ea', marginTop: 4 }}>
+          <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--on-blue)', marginTop: 4 }}>
             {fmtNumber(kpis?.cumulativeEnergyMu ?? 0, 1)} <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--slate-500)' }}>MU</span>
           </div>
           <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
@@ -440,7 +495,7 @@ export default function HydroThermalDashboard() {
               <div
                 key={st.id}
                 style={{
-                  background: '#ffffff',
+                  background: 'var(--surface)',
                   borderRadius: 12,
                   border: '1px solid var(--slate-200)',
                   padding: '18px 20px',
@@ -458,8 +513,8 @@ export default function HydroThermalDashboard() {
                         width: 36,
                         height: 36,
                         borderRadius: 8,
-                        background: isHydro ? '#eff6ff' : '#fff7ed',
-                        color: isHydro ? '#2563eb' : '#ea580c',
+                        background: isHydro ? 'var(--t-blue-50)' : 'var(--t-orange-50)',
+                        color: isHydro ? 'var(--on-blue)' : 'var(--on-amber)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -480,9 +535,9 @@ export default function HydroThermalDashboard() {
                       fontWeight: 600,
                       padding: '3px 8px',
                       borderRadius: 999,
-                      background: isOperational ? '#ecfdf5' : '#fffbeb',
-                      color: isOperational ? '#059669' : '#d97706',
-                      border: `1px solid ${isOperational ? '#a7f3d0' : '#fde68a'}`,
+                      background: isOperational ? 'var(--t-green-50)' : 'var(--t-amber-50)',
+                      color: isOperational ? 'var(--on-green)' : 'var(--on-amber)',
+                      border: `1px solid ${isOperational ? 'var(--t-green-100)' : 'var(--t-amber-line)'}`,
                     }}>
                       {st.status}
                     </span>
@@ -494,7 +549,7 @@ export default function HydroThermalDashboard() {
                     gridTemplateColumns: 'repeat(2, 1fr)',
                     gap: 10,
                     padding: '12px',
-                    background: 'var(--slate-50, #f8fafc)',
+                    background: 'var(--slate-50, var(--slate-50))',
                     borderRadius: 8,
                     marginBottom: 14,
                   }}>
@@ -518,7 +573,7 @@ export default function HydroThermalDashboard() {
                     </div>
                     <div>
                       <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>Current PAFM</div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#16a34a' }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--on-green)' }}>
                         {st.pafm_achieved == null ? 'Not billed yet' : `${st.pafm_achieved}% (${st.pafm_month}) ${st.pafm_below_napaf ? '🔴 Below NAPAF' : '🟢 Normal'}`}
                       </div>
                     </div>
@@ -545,7 +600,7 @@ export default function HydroThermalDashboard() {
                       Manage Bills <ChevronRight size={14} />
                     </button>
                   ) : (
-                    <span style={{ fontSize: 13.5, color: '#d97706', fontWeight: 600 }}>
+                    <span style={{ fontSize: 13.5, color: 'var(--on-amber)', fontWeight: 600 }}>
                       Tariff In Progress
                     </span>
                   )}
@@ -556,10 +611,13 @@ export default function HydroThermalDashboard() {
         </div>
       </div>
 
+      {/* REIA-migrated Hydro REA Generation & Plant Availability Analytics */}
+      <HydroEnergyOverview contractId={stationFilter} />
+
       {/* Primary Analytics Charts (Row 1) */}
       <div className="grid-2" style={{ marginBottom: 24 }}>
         {/* Chart 1: Monthly Billing Trend */}
-        <Card title="Monthly Billing & Collection Trend (FY 2026-27)">
+        <Card title={`Monthly Billing & Collection Trend (${fyLabel})`}>
           <div style={{ padding: '6px 0 14px', fontSize: 13.5, color: 'var(--slate-500)' }}>
             Station billing breakup across Capacity Charges, Energy Charges, and Realized Collections in ₹ Crore
           </div>
@@ -648,21 +706,25 @@ export default function HydroThermalDashboard() {
       {/* Secondary Analytics Charts (Row 2) */}
       <div className="grid-2" style={{ marginBottom: 24 }}>
         {/* Chart 3: Plant Availability Factor (PAFM) vs Target */}
-        <Card title="Plant Availability Factor (PAFM) vs CERC 87% Norm">
+        <Card title={`Plant Availability Factor (PAFM) vs NAPAF (${napafText})`}>
           <div style={{ padding: '6px 0 14px', fontSize: 13.5, color: 'var(--slate-500)' }}>
-            Monthly plant availability factor achieved against the 87.0% NAPAF target required for full fixed charge recovery
+            Monthly plant availability achieved against each station's NAPAF — the norm for full capacity charge recovery
           </div>
           <div className="chart-box" style={{ height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={pafmTrend || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--slate-200, #e2e8f0)" />
                 <XAxis dataKey="period" tick={{ fontSize: 13 }} />
-                <YAxis domain={[80, 102]} tick={{ fontSize: 13 }} tickFormatter={(v) => `${v}%`} />
+                <YAxis domain={pafmDomain} tick={{ fontSize: 13 }} tickFormatter={(v) => `${v}%`} />
                 <Tooltip formatter={(val, name) => [`${val}%`, name.toUpperCase()]} />
                 <Legend wrapperStyle={{ paddingTop: 10, fontSize: 13.5 }} />
-                <ReferenceLine y={87.0} label={{ value: 'NAPAF Norm (87%)', fill: '#ef4444', fontSize: 13 }} stroke="#ef4444" strokeDasharray="4 4" strokeWidth={1.5} />
-                <Line type="monotone" dataKey="njhps" name="NJHPS (1,500 MW)" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 3.5 }} />
-                <Line type="monotone" dataKey="rhps" name="Rampur (412 MW)" stroke="#10b981" strokeWidth={2.5} dot={{ r: 3.5 }} />
+                {napafs.map((v) => {
+                  const who = (stations || []).filter((st) => st.napaf_percent === v).map((st) => st.code.toUpperCase()).join(', ');
+                  return <ReferenceLine key={v} y={v} label={{ value: `NAPAF ${v}% (${who})`, fill: '#ef4444', fontSize: 12, position: 'insideTopRight' }} stroke="#ef4444" strokeDasharray="4 4" strokeWidth={1.5} />;
+                })}
+                {(stations || []).map((st, i) => (
+                  <Line key={st.id} type="monotone" dataKey={st.code} name={`${st.station_name} (${fmtNumber(st.capacity_mw || 0, 0)} MW)`} stroke={CHART_COLORS[(i + 1) % CHART_COLORS.length]} strokeWidth={2.5} connectNulls dot={{ r: 3.5 }} />
+                ))}
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -671,7 +733,7 @@ export default function HydroThermalDashboard() {
         {/* Chart 4: Energy Generation & Scheduling Trend */}
         <Card title="Scheduled Generation vs Design Energy (MU)">
           <div style={{ padding: '6px 0 14px', fontSize: 13.5, color: 'var(--slate-500)' }}>
-            Monthly design energy benchmark, actual scheduled energy ex-bus, and free power to Himachal Pradesh
+            Monthly design energy benchmark, actual scheduled energy ex-bus, and free power to {homeStates}
           </div>
           <div className="chart-box" style={{ height: 300 }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -679,11 +741,11 @@ export default function HydroThermalDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--slate-200, #e2e8f0)" />
                 <XAxis dataKey="period" tick={{ fontSize: 13 }} />
                 <YAxis tick={{ fontSize: 13 }} tickFormatter={(v) => `${v} MU`} />
-                <Tooltip formatter={(val, name) => [`${val} MU`, name === 'design_energy' ? 'Design Energy' : name === 'scheduled_energy' ? 'Scheduled Energy' : 'Free Power (FEHS 12%)']} />
+                <Tooltip formatter={(val, name) => [`${val} MU`, name === 'design_energy' ? 'Design Energy' : name === 'scheduled_energy' ? 'Scheduled Energy' : `Free Power (FEHS ${fehsText})`]} />
                 <Legend wrapperStyle={{ paddingTop: 10, fontSize: 13.5 }} />
                 <Bar dataKey="design_energy" name="Design Energy Target" fill="#94a3b8" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="scheduled_energy" name="Actual Scheduled Ex-Bus" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="free_power" name="Free Power to Home State (12%)" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="free_power" name={`Free Power to Home State${fehsText ? ` (${fehsText})` : ''}`} fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -733,7 +795,7 @@ export default function HydroThermalDashboard() {
                     <td className="num" style={{ fontWeight: 600 }}>{b.share_pct}%</td>
                     <td className="num">{b.mw_share} MW</td>
                     <td className="num" style={{ fontWeight: 600 }}>₹{b.billed_cr}</td>
-                    <td className="num" style={{ color: '#059669', fontWeight: 600 }}>₹{b.collected_cr}</td>
+                    <td className="num" style={{ color: 'var(--on-green)', fontWeight: 600 }}>₹{b.collected_cr}</td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <div style={{
@@ -759,9 +821,9 @@ export default function HydroThermalDashboard() {
                         fontWeight: 600,
                         padding: '2px 8px',
                         borderRadius: 999,
-                        background: b.status === 'Settled' ? '#ecfdf5' : b.status === 'Current' ? '#eff6ff' : '#fef2f2',
-                        color: b.status === 'Settled' ? '#047857' : b.status === 'Current' ? '#1d4ed8' : '#b91c1c',
-                        border: `1px solid ${b.status === 'Settled' ? '#a7f3d0' : b.status === 'Current' ? '#bfdbfe' : '#fecaca'}`,
+                        background: b.status === 'Settled' ? 'var(--t-green-50)' : b.status === 'Current' ? 'var(--t-blue-50)' : 'var(--t-red-50)',
+                        color: b.status === 'Settled' ? 'var(--on-green)' : b.status === 'Current' ? 'var(--on-blue)' : 'var(--on-red)',
+                        border: `1px solid ${b.status === 'Settled' ? 'var(--t-green-100)' : b.status === 'Current' ? 'var(--t-blue-line)' : 'var(--t-red-line)'}`,
                       }}>
                         {b.status}
                       </span>
@@ -788,7 +850,7 @@ export default function HydroThermalDashboard() {
       <div style={{ marginTop: 24 }}>
         <Card
           title="Recent Station Billing Cycles & Approval Workflow"
-          actions={
+          actions={canWrite && (
             <button
               type="button"
               className="btn btn-primary btn-sm"
@@ -796,14 +858,14 @@ export default function HydroThermalDashboard() {
             >
               + Raise Station Bill
             </button>
-          }
+          )}
         >
           {/* Status Pipeline Funnel */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: 'var(--slate-50, #f8fafc)',
+            background: 'var(--slate-50, var(--slate-50))',
             border: '1px solid var(--slate-200)',
             borderRadius: 10,
             padding: '12px 18px',
@@ -862,7 +924,7 @@ export default function HydroThermalDashboard() {
                 {(recentBills || []).map((bill) => (
                   <tr key={bill.id}>
                     <td>
-                      <span style={{ fontWeight: 600, fontFamily: 'monospace', color: '#1e3a8a' }}>
+                      <span style={{ fontWeight: 600, fontFamily: 'monospace', color: 'var(--on-blue)' }}>
                         {bill.bill_no}
                       </span>
                     </td>
@@ -873,7 +935,7 @@ export default function HydroThermalDashboard() {
                         fontSize: 13,
                         padding: '2px 6px',
                         borderRadius: 4,
-                        background: '#f1f5f9',
+                        background: 'var(--slate-100)',
                         color: 'var(--slate-700)',
                         fontWeight: 600,
                       }}>

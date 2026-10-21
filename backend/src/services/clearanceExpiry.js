@@ -26,7 +26,7 @@ export function runClearanceExpiry() {
       db.prepare(`UPDATE entity_regulatory_approvals SET status = 'EXPIRED', updated_at = datetime('now') WHERE id = ? AND status = 'VERIFIED'`).run(a.id);
       logAudit({ user: { id: null, name: 'system', role: 'SYSTEM' }, action: 'CLEARANCE_EXPIRED', module: 'REIA', entityType: 'entity', entityId: a.entity_id, details: { approval: a.approval_code, valid_until: a.valid_until } });
       const msg = `${a.entity_name}: ${a.label} lapsed on ${a.valid_until} and is now marked expired. Upload the renewed one.`;
-      for (const role of ['REIA_USER', 'REIA_ADMIN']) pushNotification({ role, type: 'CLEARANCE_EXPIRY', message: msg });
+      for (const role of ['REIA_MAKER', 'REIA_CHECKER']) pushNotification({ role, type: 'CLEARANCE_EXPIRY', message: msg });
       for (const u of db.prepare('SELECT id FROM users WHERE linked_entity_id = ? AND is_active = 1').all(a.entity_id)) pushNotification({ userId: u.id, type: 'CLEARANCE_EXPIRY', message: msg });
       expired += 1;
       continue;
@@ -36,7 +36,7 @@ export function runClearanceExpiry() {
     const key = `CLEARANCE:${a.id}:${a.valid_until}:${step}`;
     if (db.prepare('SELECT 1 FROM clearance_alerts WHERE alert_key = ?').get(key)) continue;
     const msg = `${a.entity_name}: ${a.label} lapses on ${a.valid_until} — ${left} day${left === 1 ? '' : 's'} left. Have it renewed and uploaded.`;
-    for (const role of ['REIA_USER', 'REIA_ADMIN']) pushNotification({ role, type: 'CLEARANCE_EXPIRY', message: msg });
+    for (const role of ['REIA_MAKER', 'REIA_CHECKER']) pushNotification({ role, type: 'CLEARANCE_EXPIRY', message: msg });
     for (const u of db.prepare('SELECT id FROM users WHERE linked_entity_id = ? AND is_active = 1').all(a.entity_id)) pushNotification({ userId: u.id, type: 'CLEARANCE_EXPIRY', message: msg });
     db.prepare('INSERT INTO clearance_alerts (id, approval_id, alert_key, days_left) VALUES (?, ?, ?, ?)').run(newId('CLA'), a.id, key, left);
     reminded += 1;

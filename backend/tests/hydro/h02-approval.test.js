@@ -42,11 +42,15 @@ describe('The approval chain of a hydro bill', () => {
     expect((await send({ next_approver_id: hod.id, final_approver_id: admin2.id })).status).toBe(200);
   });
 
-  it('never lets the maker sign — an SJVN administrator included', async () => {
+  it('never lets the SJVN administrator into the chain (Target #2 Phase B)', async () => {
+    // Before Phase B an administrator could raise a bill and was then refused as
+    // its own approver. Now it neither sends a bill nor can be named to sign one.
     bill = draftBill(sjvnAdmin);
-    const r = await send({ next_approver_id: sjvnAdmin.id, final_approver_id: sjvnAdmin.id }, sjvnAdmin);
-    expect(r.status).toBe(400);
-    expect(r.body.error).toMatch(/Segregation of duties/);
+    expect((await send({ next_approver_id: hod.id, final_approver_id: hod.id }, sjvnAdmin)).status).toBe(403);
+    bill = draftBill(maker);
+    const named = await send({ next_approver_id: sjvnAdmin.id, final_approver_id: sjvnAdmin.id });
+    expect(named.status).toBe(400);
+    expect(named.body.error).toMatch(/cannot approve a hydro bill/);
   });
 
   it('does not name the maker as the final approver', async () => {

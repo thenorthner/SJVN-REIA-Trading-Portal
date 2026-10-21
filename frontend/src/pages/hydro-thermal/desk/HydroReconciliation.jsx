@@ -139,7 +139,7 @@ export default function HydroReconciliation({ vertical = 'HYDRO' }) {
                 { key: 'period', header: 'Period', render: (r) => `${fmtDate(r.period_from)} – ${fmtDate(r.period_to)}` },
                 { key: 'closing_balance', header: 'Our closing balance', render: (r) => fmtCurrency(r.closing_balance) },
                 { key: 'beneficiary_balance', header: 'Their balance', render: (r) => (r.beneficiary_balance != null ? fmtCurrency(r.beneficiary_balance) : '—') },
-                { key: 'difference', header: 'Difference', render: (r) => (r.difference ? <span style={{ color: '#b91c1c' }}>{fmtCurrency(r.difference)}</span> : '—') },
+                { key: 'difference', header: 'Difference', render: (r) => (r.difference ? <span style={{ color: 'var(--red-deep)' }}>{fmtCurrency(r.difference)}</span> : '—') },
                 { key: 'status', header: 'Status', render: (r) => <Badge status={TONE[r.status]} label={r.status.replace('_', ' ')} /> },
                 { key: 'sent_on', header: 'Sent', render: (r) => r.sent_on ? fmtDate(r.sent_on) : '—' },
               ]}
@@ -181,7 +181,7 @@ export default function HydroReconciliation({ vertical = 'HYDRO' }) {
               <tr><td>Less: received · rebate · credit notes · TDS</td><td>{fmtCurrency(m.received)} · {fmtCurrency(m.rebate)} · {fmtCurrency(m.credit_notes)} · {fmtCurrency(m.tds)}</td></tr>
               <tr><td><strong>Closing balance ({fmtDate(selected.period_to)})</strong></td><td><strong>{fmtCurrency(selected.closing_balance)}</strong></td></tr>
               {selected.beneficiary_balance != null && <tr><td>Beneficiary's closing balance</td><td>{fmtCurrency(selected.beneficiary_balance)}</td></tr>}
-              {selected.difference != null && selected.difference !== 0 && <tr><td style={{ color: '#b91c1c' }}>Difference</td><td style={{ color: '#b91c1c', fontWeight: 700 }}>{fmtCurrency(selected.difference)}</td></tr>}
+              {selected.difference != null && selected.difference !== 0 && <tr><td style={{ color: 'var(--red-deep)' }}>Difference</td><td style={{ color: 'var(--red-deep)', fontWeight: 700 }}>{fmtCurrency(selected.difference)}</td></tr>}
               <tr><td>Status</td><td><Badge status={TONE[selected.status]} label={selected.status.replace('_', ' ')} />{selected.sent_on ? ` · sent ${fmtDate(selected.sent_on)}` : ''}{selected.confirmed_on ? ` · confirmed ${fmtDate(selected.confirmed_on)}` : ''}</td></tr>
               {selected.beneficiary_remarks && <tr><td>Beneficiary says</td><td>{selected.beneficiary_remarks}</td></tr>}
             </tbody></table>

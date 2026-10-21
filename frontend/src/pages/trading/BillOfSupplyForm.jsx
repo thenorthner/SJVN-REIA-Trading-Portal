@@ -173,9 +173,9 @@ export default function BillOfSupplyForm() {
           {message && (
             <div style={{
               marginTop: 12, padding: '10px 12px', borderRadius: 6, fontSize: 13,
-              background: message.ok ? '#f0fdf4' : '#fef2f2',
-              border: `1px solid ${message.ok ? '#bbf7d0' : '#fecaca'}`,
-              color: message.ok ? '#166534' : '#991b1b',
+              background: message.ok ? 'var(--t-green-50)' : 'var(--t-red-50)',
+              border: `1px solid ${message.ok ? 'var(--t-green-line)' : 'var(--t-red-line)'}`,
+              color: message.ok ? 'var(--on-green)' : 'var(--on-red)',
             }}>{message.text}</div>
           )}
 
@@ -194,7 +194,7 @@ export default function BillOfSupplyForm() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ background: '#f1f5f9' }}>
+              <tr style={{ background: 'var(--slate-100)' }}>
                 {['Bill No', 'Client', 'Invoice Date', 'Supply Period', 'Qty', 'Rate', 'After Rebate', 'Status', ''].map((h) => (
                   <th key={h} style={{ padding: '8px 10px', textAlign: 'left' }}>{h}</th>
                 ))}
@@ -202,9 +202,9 @@ export default function BillOfSupplyForm() {
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={9} style={{ padding: 16, textAlign: 'center', color: '#64748b' }}>No bills of supply yet.</td></tr>
+                <tr><td colSpan={9} style={{ padding: 16, textAlign: 'center', color: 'var(--slate-500)' }}>No bills of supply yet.</td></tr>
               ) : rows.slice(0, 20).map((r) => (
-                <tr key={r.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                <tr key={r.id} style={{ borderBottom: '1px solid var(--slate-200)' }}>
                   <td style={{ padding: '8px 10px', fontFamily: 'monospace', fontSize: 13.5 }}>{r.bill_no}</td>
                   <td style={{ padding: '8px 10px' }}>{r.client_name}</td>
                   <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{r.invoice_date}</td>

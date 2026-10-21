@@ -53,7 +53,7 @@ export function notifyCounterparty(contractId, side, type, message) {
   } catch { return 0; }
 }
 
-/** The REIA desk — every role that can act on security, not REIA_USER alone. */
+/** The REIA desk — every role that can act on security, not REIA_MAKER alone. */
 export function notifyDesk(type, message, extraRoles = []) {
   try {
     for (const role of new Set([...ROLE_GROUPS.REIA_WRITE, ...extraRoles])) pushNotification({ role, type, message });
@@ -587,9 +587,9 @@ export function runAlertCascade() {
     const d = Math.min(...crossed);
     if (already.get(ps.id, d)) continue;
 
-    let role = 'REIA_USER';
+    let role = 'REIA_MAKER';
     let prefix = 'Reminder';
-    if (d <= 30) { role = 'REIA_USER'; prefix = 'Urgent'; }
+    if (d <= 30) { role = 'REIA_MAKER'; prefix = 'Urgent'; }
     if (d <= 15) { role = 'MANAGEMENT'; prefix = 'Escalation'; }
     if (d <= 7) { role = 'MANAGEMENT'; prefix = 'Final warning'; }
     if (d === 0) { role = 'MANAGEMENT'; prefix = daysLeft < 0 ? 'Expired' : 'Expires today'; }
@@ -630,7 +630,7 @@ export function runAlertCascade() {
       VALUES (?, NULL, ?, 'COVERAGE', NULL, 'MANAGEMENT', ?)
     `).run(newId('PSA'), c.id, message);
     pushNotification({ role: 'MANAGEMENT', type: 'SECURITY_COVERAGE', message });
-    pushNotification({ role: 'REIA_USER', type: 'SECURITY_COVERAGE', message });
+    pushNotification({ role: 'REIA_MAKER', type: 'SECURITY_COVERAGE', message });
     sent += 1;
   }
 

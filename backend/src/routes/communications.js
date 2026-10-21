@@ -4,14 +4,16 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, PLATFORM_ADMINS } from '../middleware/auth.js';
 import { fileURLToPath } from 'url';
 import { sendMail } from '../services/mailService.js';
 import { newId } from '../util.js';
 
 const router = express.Router();
 
-const BROADCAST_WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.TRADING_WRITE])];
+// Notices to counterparties: the desks, and the SJVN / IT administrators, who keep
+// broadcasts under Target #2 Phase B although they left the desks' write groups.
+const BROADCAST_WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.TRADING_WRITE, ...PLATFORM_ADMINS])];
 const BOARD_AUDIENCES = ['ALL', 'INTERNAL', 'SELLERS', 'BUYERS'];
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -53,7 +55,7 @@ function resolveRecipients(targetGroups) {
 
   for (const g of groups) {
     if (g === 'client_sjvn' || g === 'portfolio') {
-      users.filter(u => ['SJVN_ADMIN', 'REIA_USER', 'TRADING_USER', 'FINANCE_USER', 'MANAGEMENT'].includes(u.role)).forEach(u => recipientMap.set(u.email, u));
+      users.filter(u => ['SJVN_ADMIN', 'REIA_MAKER', 'TRADING_USER', 'FINANCE_USER', 'MANAGEMENT'].includes(u.role)).forEach(u => recipientMap.set(u.email, u));
     }
     if (g === 'client_ntpc') {
       entities.filter(e => e.entity_type === 'SELLER' || (e.name && e.name.toLowerCase().includes('ntpc'))).forEach(e => recipientMap.set(e.email, { id: e.id, name: e.name, email: e.email, role: 'SELLER' }));
@@ -67,7 +69,7 @@ function resolveRecipients(targetGroups) {
       users.filter(u => ['TRADING_USER', 'TRADING_CLIENT'].includes(u.role)).forEach(u => recipientMap.set(u.email, u));
     }
     if (g === 'role_plant') {
-      users.filter(u => ['REIA_USER', 'SELLER'].includes(u.role)).forEach(u => recipientMap.set(u.email, u));
+      users.filter(u => ['REIA_MAKER', 'SELLER'].includes(u.role)).forEach(u => recipientMap.set(u.email, u));
     }
     if (g === 'role_billing') {
       users.filter(u => ['FINANCE_USER', 'BUYER'].includes(u.role)).forEach(u => recipientMap.set(u.email, u));

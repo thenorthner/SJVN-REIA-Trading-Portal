@@ -46,7 +46,12 @@ function resolveEnergyBfr(contractId, periodMonth, dataType) {
 }
 
 router.get('/', (req, res) => {
-  const { contract_id, period_month, status } = req.query;
+  const { contract_id, period_month, status, source, data_type } = req.query;
+  let verticalFilter;
+  try { verticalFilter = parseVertical(req.query.vertical); } catch (e) { return res.status(400).json({ error: e.message }); }
+  if (!verticalFilter && req.query.vertical === undefined && !counterpartySide(req.user)) {
+    verticalFilter = 'REIA';
+  }
   // The bill a period went onto, once it has been presented — the one a dispute would be raised against.
   const billed = PRESENTED_STATUSES.filter((s) => s !== 'CANCELLED').map((s) => `'${s}'`).join(',');
   const invoice = (col) => `(SELECT i.${col} FROM invoices i WHERE i.contract_id = ed.contract_id AND i.billing_period = ed.period_month AND i.status IN (${billed}) ORDER BY i.created_at DESC LIMIT 1)`;
@@ -76,9 +81,12 @@ router.get('/', (req, res) => {
     return res.status(403).json({ error: 'Not authorized' });
   }
   
+  if (verticalFilter) sql += ` AND ${contractVerticalSql(verticalFilter, 'c')}`;
   if (contract_id) { sql += ' AND ed.contract_id = ?'; params.push(contract_id); }
   if (period_month) { sql += ' AND ed.period_month = ?'; params.push(period_month); }
   if (status) { sql += ' AND ed.status = ?'; params.push(status); }
+  if (source) { sql += ' AND ed.source = ?'; params.push(source); }
+  if (data_type) { sql += ' AND ed.data_type = ?'; params.push(data_type); }
   sql += ' ORDER BY ed.period_month DESC';
   res.json(db.prepare(sql).all(...params));
 });
@@ -518,7 +526,7 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
       if (hadProv) {
         runFinalDataRecon(row.contract_id, row.period_month, req.user);
         pushNotification({
-          role: 'REIA_USER',
+          role: 'REIA_MAKER',
           type: 'RECONCILIATION',
           message: `Final-data reconciliation triggered for ${row.period_month} after energy lock`,
         });
@@ -536,6 +544,7 @@ router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
 // ──────────────────────────────────────────────
 import { reaScraper } from '../services/reaScraper.js';
 import { RPC_SOURCES } from '../config/rpcSources.js';
+import { contractVerticalSql, parseVertical } from '../services/verticals.js';
 
 // GET /rea-status — Dashboard status per RPC
 router.get('/rea-status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {

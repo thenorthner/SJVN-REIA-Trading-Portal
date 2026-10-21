@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import db from '../db/index.js';
-import { signToken, requireAuth } from '../middleware/auth.js';
-import { logAudit } from '../util.js';
+import { signToken, requireAuth, canonicalRole } from '../middleware/auth.js';
+import { logAudit, pushNotification } from '../util.js';
 
 const router = Router();
 
@@ -10,7 +10,7 @@ const router = Router();
 // Seller/Buyer portals can white-label the shell with their own identity.
 function withBranding(u) {
   const base = {
-    id: u.id, name: u.name, email: u.email, role: u.role,
+    id: u.id, name: u.name, email: u.email, role: canonicalRole(u.role),
     linked_entity_id: u.linked_entity_id || null,
   };
   // Set when an admin issued the password, so the portal makes the holder choose their own.
@@ -81,15 +81,68 @@ router.post('/login', (req, res) => {
 
   clearLoginAttempts(key);
   const token = signToken(user);
-  logAudit({ req: typeof req !== "undefined" ? req : null, user, action: 'LOGIN', module: 'AUTH', entityType: 'user', entityId: user.id });
+  const previous = previousSession(user.id, req.ip);
+  logAudit({ req, user, action: 'LOGIN', module: 'AUTH', entityType: 'user', entityId: user.id });
+  if (previous?.concurrent) {
+    // CERT-In: a second live session from somewhere else is how a shared or
+    // stolen password shows up. The holder is told, and it is on the record.
+    logAudit({ req, user, action: 'CONCURRENT_LOGIN_ALERT', module: 'AUTH', entityType: 'user', entityId: user.id, details: { other_ip: previous.ip, other_since: previous.at } });
+    try {
+      pushNotification({ userId: user.id, type: 'SECURITY', message: `New sign-in from ${req.ip || 'an unknown address'} while a session from ${previous.ip || 'another address'} (since ${previous.at} UTC) was still open. If this was not you, change your password.`, link: '/settings/user-profile#privacy' });
+    } catch { /* the audit row is the record that matters */ }
+  }
   res.json({
     token,
     user: withBranding(user),
+    previous_login: previous,
   });
 });
 
+// Sessions last as long as the token (12 h), so a sign-in within that window
+// with no sign-out after it is taken as still open.
+const SESSION_HOURS = 12;
+function previousSession(userId, ip) {
+  try {
+    const last = db.prepare(`
+      SELECT rowid AS rid, ip_address, created_at FROM audit_logs
+      WHERE user_id = ? AND module = 'AUTH' AND action = 'LOGIN'
+      ORDER BY rowid DESC LIMIT 1
+    `).get(userId);
+    if (!last) return null;
+    const ended = db.prepare(`
+      SELECT 1 FROM audit_logs
+      WHERE user_id = ? AND module = 'AUTH' AND action IN ('LOGOUT','SESSION_TIMEOUT','SESSIONS_REVOKED') AND rowid > ?
+      LIMIT 1
+    `).get(userId, last.rid);
+    const fresh = Date.parse(`${last.created_at.replace(' ', 'T')}Z`) > Date.now() - SESSION_HOURS * 3_600_000;
+    return {
+      at: last.created_at,
+      ip: last.ip_address || null,
+      concurrent: !ended && fresh && !!last.ip_address && !!ip && last.ip_address !== ip,
+    };
+  } catch (err) {
+    console.error('[AUTH] previous-session check failed', err.message);
+    return null;
+  }
+}
+
+// Sign-out is recorded (CERT-In asks for sign-in and sign-out in the logs). The
+// token itself expires on its own; the inactivity sign-out sends its reason.
+router.post('/logout', requireAuth, (req, res) => {
+  const reason = req.body?.reason === 'IDLE_TIMEOUT' ? 'IDLE_TIMEOUT' : 'USER_LOGOUT';
+  logAudit({
+    req, user: req.user,
+    action: reason === 'IDLE_TIMEOUT' ? 'SESSION_TIMEOUT' : 'LOGOUT',
+    module: 'AUTH', entityType: 'user', entityId: req.user.id,
+    reason: reason === 'IDLE_TIMEOUT' ? 'signed out after inactivity' : null,
+  });
+  res.json({ ok: true });
+});
+
 router.get('/me', requireAuth, (req, res) => {
-  res.json({ user: withBranding(req.user) });
+  // While acting for someone (additional charge or break-glass) the role is the
+  // one handed over; the screen also needs to know whose it is and the officer's own.
+  res.json({ user: { ...withBranding(req.user), name: req.user.name, acting: req.user.acting || null, real_role: req.user.real?.role || null } });
 });
 
 router.get('/users', requireAuth, (req, res) => {

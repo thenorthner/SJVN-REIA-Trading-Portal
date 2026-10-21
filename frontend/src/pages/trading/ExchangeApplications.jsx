@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { Card, Modal, Field, Badge } from '../../components/ui.jsx';
@@ -111,7 +112,7 @@ export default function ExchangeApplications() {
   };
 
   const linkAction = {
-    color: '#1d4ed8',
+    color: 'var(--on-blue)',
     background: 'none',
     border: 'none',
     padding: 0,
@@ -142,7 +143,7 @@ export default function ExchangeApplications() {
         </div>
 
         {message && (
-          <div style={{ marginBottom: 12, fontSize: 13, color: '#1e3a8a', background: '#eff6ff', padding: '8px 12px', borderRadius: 4 }}>
+          <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--on-blue)', background: 'var(--t-blue-50)', padding: '8px 12px', borderRadius: 4 }}>
             {message}
           </div>
         )}
@@ -173,15 +174,15 @@ export default function ExchangeApplications() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={12} style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
+                    <td colSpan={12} style={{ padding: 24, textAlign: 'center', color: 'var(--slate-500)' }}>
                       No applications found.
                     </td>
                   </tr>
                 ) : filtered.map((r) => (
-                  <tr key={r.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <tr key={r.id} style={{ borderBottom: '1px solid var(--slate-200)' }}>
                     <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{fmtAppDate(r.application_date)}</td>
                     <td style={{ padding: '10px 12px' }}>
-                      <Link to={`/trading/exchange/bidding-detail?q=${encodeURIComponent(r.portfolio_id)}`} style={{ color: '#1d4ed8', fontWeight: 600 }}>
+                      <Link to={`/trading/exchange/bidding-detail?q=${encodeURIComponent(r.portfolio_id)}`} style={{ color: 'var(--on-blue)', fontWeight: 600 }}>
                         {r.application_id}
                       </Link>
                     </td>
@@ -190,16 +191,16 @@ export default function ExchangeApplications() {
                     <td style={{ padding: '10px 12px' }}>{r.product}</td>
                     <td style={{ padding: '10px 12px' }}>{r.bid_type}</td>
                     <td style={{ padding: '10px 12px' }}>
-                      <button
+                      <WriteOnly><button
                         type="button"
                         className="btn btn-sm"
                         style={{ background: '#1e4b7a', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px' }}
                         onClick={() => { setActionRow(r); setDecision(r.approval_status === 'REJECTED' ? 'REJECTED' : 'APPROVED'); setNotes(r.notes || ''); }}
                       >
                         Action
-                      </button>
+                      </button></WriteOnly>
                       {r.approval_status !== 'PENDING' && (
-                        <div style={{ fontSize: 13, marginTop: 4, color: r.approval_status === 'APPROVED' ? '#166534' : '#991b1b' }}>
+                        <div style={{ fontSize: 13, marginTop: 4, color: r.approval_status === 'APPROVED' ? 'var(--on-green)' : 'var(--on-red)' }}>
                           {r.approval_status}
                         </div>
                       )}
@@ -217,28 +218,28 @@ export default function ExchangeApplications() {
                         </div>
                       ))}
                       {r.contract_label && (
-                        <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>{r.contract_label}</div>
+                        <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 2 }}>{r.contract_label}</div>
                       )}
                     </td>
                     <td style={{ padding: '10px 12px' }}>
-                      <button type="button" style={linkAction} onClick={() => runStep(r, 'px1')}>
+                      <WriteOnly><button type="button" style={linkAction} onClick={() => runStep(r, 'px1')}>
                         Action{r.px1_status === 'DONE' ? ' ✓' : ''}
-                      </button>
+                      </button></WriteOnly>
                     </td>
                     <td style={{ padding: '10px 12px' }}>
-                      <button type="button" style={linkAction} onClick={() => runStep(r, 'px2')}>
+                      <WriteOnly><button type="button" style={linkAction} onClick={() => runStep(r, 'px2')}>
                         Action{r.px2_status === 'DONE' ? ' ✓' : ''}
-                      </button>
+                      </button></WriteOnly>
                     </td>
                     <td style={{ padding: '10px 12px' }}>
-                      <button type="button" style={linkAction} onClick={() => runStep(r, 'exchange_request')}>
+                      <WriteOnly><button type="button" style={linkAction} onClick={() => runStep(r, 'exchange_request')}>
                         Action{r.exchange_request_status === 'DONE' ? ' ✓' : ''}
-                      </button>
+                      </button></WriteOnly>
                     </td>
                     <td style={{ padding: '10px 12px' }}>
-                      <button type="button" style={linkAction} onClick={() => runStep(r, 'exchange_approval')}>
+                      <WriteOnly><button type="button" style={linkAction} onClick={() => runStep(r, 'exchange_approval')}>
                         Action{r.exchange_approval_status === 'DONE' ? ' ✓' : ''}
-                      </button>
+                      </button></WriteOnly>
                     </td>
                   </tr>
                 ))}
@@ -251,7 +252,7 @@ export default function ExchangeApplications() {
       {actionRow && (
         <Modal open onClose={() => setActionRow(null)} title={`Approve / Reject — ${actionRow.application_id}`} width={480}>
           <form onSubmit={submitDecision}>
-            <p style={{ fontSize: 13, color: '#475569', marginTop: 0 }}>
+            <p style={{ fontSize: 13, color: 'var(--slate-600)', marginTop: 0 }}>
               {actionRow.exchange} · {actionRow.product} · {actionRow.bid_type} · {actionRow.portfolio_id}
             </p>
             <Field label="Decision" required>

@@ -11,7 +11,7 @@ function ContributionBars({ rows }) {
       {rows.map(r => (
         <div key={r.bilateral_id} style={{ display: 'grid', gridTemplateColumns: '220px 1fr 120px', gap: 12, alignItems: 'center' }}>
           <span style={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.client}>{r.client}</span>
-          <div style={{ height: 14, background: 'var(--slate-100, #f1f5f9)', borderRadius: 3, overflow: 'hidden' }}>
+          <div style={{ height: 14, background: 'var(--slate-100, var(--slate-100))', borderRadius: 3, overflow: 'hidden' }}>
             <div style={{ width: `${(r.contribution / max) * 100}%`, height: '100%', background: '#2563eb' }} />
           </div>
           <span style={{ fontSize: 13, textAlign: 'right' }}>{fmtCurrency(r.contribution)}</span>
@@ -136,7 +136,7 @@ export default function ContractPnl() {
                 <tr><td>Less: power purchased from seller</td><td style={{ textAlign: 'right' }}>({fmtCurrency(realised.power_purchases.gross)})</td></tr>
                 <tr><td><strong>Energy margin</strong></td><td style={{ textAlign: 'right' }}><strong>{fmtCurrency(realised.energy_margin)}</strong></td></tr>
                 <tr><td>Add: open-access charges recharged</td><td style={{ textAlign: 'right' }}>{fmtCurrency(realised.oa_recovered)}</td></tr>
-                <tr style={{ borderTop: '2px solid var(--border, #e2e8f0)' }}>
+                <tr style={{ borderTop: '2px solid var(--border, var(--slate-200))' }}>
                   <td><strong>Gross profit</strong></td>
                   <td style={{ textAlign: 'right' }}><strong>{fmtCurrency(realised.gross_profit)}</strong></td>
                 </tr>

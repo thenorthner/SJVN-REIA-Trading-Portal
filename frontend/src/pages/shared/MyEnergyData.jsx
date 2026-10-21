@@ -75,7 +75,7 @@ export default function MyEnergyData({ title, subtitle, contractType, contractLa
       key: 'cuf_percent',
       header: 'CUF %',
       render: (r) => (r.cuf_percent != null
-        ? <span style={{ color: r.min_cuf_percent != null && r.cuf_percent < r.min_cuf_percent ? '#b91c1c' : 'inherit', fontWeight: r.min_cuf_percent != null && r.cuf_percent < r.min_cuf_percent ? 700 : 400 }}>{fmtNumber(r.cuf_percent)}%</span>
+        ? <span style={{ color: r.min_cuf_percent != null && r.cuf_percent < r.min_cuf_percent ? 'var(--on-red)' : 'inherit', fontWeight: r.min_cuf_percent != null && r.cuf_percent < r.min_cuf_percent ? 700 : 400 }}>{fmtNumber(r.cuf_percent)}%</span>
         : '-'),
     }] : []),
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },

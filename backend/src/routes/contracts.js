@@ -6,11 +6,12 @@ import { syncRequirementsFromContract, createInstrumentsFromRequirements } from 
 import { allocationsInForce } from '../services/allocations.js';
 import { contractVisibleTo, contractForCounterparty, changedTermsForCounterparty } from '../services/counterpartyScope.js';
 import { settlementPosition, settlementActions } from '../services/contractSettlement.js';
+import { contractVerticalSql, parseVertical, verticalOfContract } from '../services/verticals.js';
 import { holdStatus, setManualHold, overrideHold, requestFromCheck } from '../services/contractHold.js';
 
 const RE_PROJECT_TYPES = new Set(['Solar', 'Wind', 'Hybrid', 'FDRE']);
 import {
-  contractFieldErrors, normalizeProjectType, normalizeContractNo, changedTerms, cleanTerms, AMENDABLE_FIELDS, TERMINATION_GROUNDS,
+  contractFieldErrors, reiaOnlyErrors, normalizeProjectType, normalizeContractNo, changedTerms, cleanTerms, AMENDABLE_FIELDS, TERMINATION_GROUNDS,
 } from '../services/contractRules.js';
 
 const likeEscape = (s) => String(s).replace(/[\\%_]/g, (ch) => `\\${ch}`);
@@ -106,13 +107,15 @@ function fetchContractRelations(contract) {
 // contract in the system and looked like it had worked.
 const CONTRACT_FILTERS = new Set([
   'contract_type', 'status', 'project_type', 'q',
-  'capacity_min', 'capacity_max', 'expiring_within_days', 'seller_id', 'buyer_id',
+  'capacity_min', 'capacity_max', 'expiring_within_days', 'seller_id', 'buyer_id', 'vertical',
 ]);
 
 router.get('/', (req, res) => {
-  const { contract_type, status, project_type, q,
+  const { contract_type, status, project_type, q, vertical,
           capacity_min, capacity_max, expiring_within_days, seller_id, buyer_id } = req.query;
 
+  let verticalFilter;
+  try { verticalFilter = parseVertical(vertical); } catch (e) { return res.status(400).json({ error: e.message }); }
   const unknown = Object.keys(req.query).filter((k) => !CONTRACT_FILTERS.has(k));
   if (unknown.length) {
     return res.status(400).json({
@@ -141,6 +144,7 @@ router.get('/', (req, res) => {
     params.push(req.user.linked_entity_id);
   }
 
+  if (verticalFilter) sql += ` AND ${contractVerticalSql(verticalFilter, 'c')}`;
   if (contract_type) { sql += ' AND c.contract_type = ?'; params.push(contract_type); }
   if (status) { sql += ' AND c.status = ?'; params.push(status); }
   if (project_type) { sql += ' AND lower(c.project_type) = lower(?)'; params.push(normalizeProjectType(project_type)); }
@@ -253,7 +257,7 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
       });
     }
   }
-  const fieldErrors = contractFieldErrors(b);
+  const fieldErrors = [...contractFieldErrors(b), ...reiaOnlyErrors(b)];
   if (b.contract_type === 'PPA' && !b.seller_id) fieldErrors.push('Select the seller this PPA is signed with.');
   if (b.contract_type === 'PSA' && !b.buyer_id) fieldErrors.push('Select the buyer this PSA is signed with.');
   if (fieldErrors.length) return refuseFields(res, fieldErrors, 'The contract was not created');
@@ -548,12 +552,12 @@ router.get('/:id/hold', (req, res) => {
   if (!c || !contractVisibleTo(req.user, c)) return res.status(404).json({ error: 'Contract not found' });
   res.json(holdStatus(c.id));
 });
-router.post('/:id/hold', requireRole(...ROLE_GROUPS.REIA_WRITE, 'MANAGEMENT'), (req, res) => {
+router.post('/:id/hold', requireRole(...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.REIA_APPROVE), (req, res) => {
   try { res.json(setManualHold(req.params.id, { on: !!req.body?.on, reason: req.body?.reason, user: req.user, req })); } catch (e) {
     res.status(e.status || 500).json({ error: e.status ? e.message : 'Something went wrong' });
   }
 });
-router.post('/:id/hold/override', requireRole('MANAGEMENT', 'SJVN_ADMIN'), (req, res) => {
+router.post('/:id/hold/override', requireRole(...ROLE_GROUPS.REIA_APPROVE), (req, res) => {
   try { res.json(overrideHold(req.params.id, { reason: req.body?.reason, validUntil: req.body?.valid_until, user: req.user, req })); } catch (e) {
     res.status(e.status || 500).json({ error: e.status ? e.message : 'Something went wrong' });
   }
@@ -579,7 +583,7 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
     const body = cleanTerms(req.body);
     if ('project_type' in body) body.project_type = normalizeProjectType(body.project_type);
     const merged = { ...original, ...body };
-    const errors = contractFieldErrors(merged);
+    const errors = [...contractFieldErrors(merged), ...(verticalOfContract(original) === 'REIA' ? reiaOnlyErrors(merged) : [])];
     if (errors.length) return refuseFields(res, errors, 'The draft was not saved');
     const changed = changedTerms(original, body);
     if (!Object.keys(changed).length) return res.status(400).json({ error: 'Nothing was changed.' });
@@ -619,7 +623,7 @@ router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => 
   // version lists and "[object Object]" as things that had been amended.
   const terms = cleanTerms(Object.fromEntries(Object.entries(req.body || {}).filter(([k]) => AMENDABLE_FIELDS.includes(k))));
   const updated = { ...original, ...terms };
-  const amendErrors = contractFieldErrors(updated);
+  const amendErrors = [...contractFieldErrors(updated), ...(verticalOfContract(original) === 'REIA' ? reiaOnlyErrors(updated) : [])];
   if (amendErrors.length) return refuseFields(res, amendErrors, 'The amendment was not saved');
 
   const changedFields = changedTerms(original, terms);

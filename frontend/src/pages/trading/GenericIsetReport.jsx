@@ -29,7 +29,7 @@ export default function GenericIsetReport({ kind: kindProp }) {
   }, [kind]);
 
   if (error) {
-    return <div style={{ padding: 20, color: '#b91c1c' }}>{error}</div>;
+    return <div style={{ padding: 20, color: 'var(--red-deep)' }}>{error}</div>;
   }
   if (!meta) {
     return <div className="page-loading" style={{ padding: 20 }}>Loading…</div>;

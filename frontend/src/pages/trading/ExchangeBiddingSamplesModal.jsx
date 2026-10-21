@@ -87,17 +87,17 @@ export default function ExchangeBiddingSamplesModal({ open, onClose }) {
         <tbody>
           {page.length === 0 ? (
             <tr>
-              <td colSpan={3} style={{ padding: 16, textAlign: 'center', color: '#64748b' }}>No matching samples</td>
+              <td colSpan={3} style={{ padding: 16, textAlign: 'center', color: 'var(--slate-500)' }}>No matching samples</td>
             </tr>
           ) : page.map((file, i) => (
-            <tr key={file.name} style={{ borderBottom: '1px solid #e2e8f0' }}>
+            <tr key={file.name} style={{ borderBottom: '1px solid var(--slate-200)' }}>
               <td style={{ padding: '10px 12px' }}>{i + 1}</td>
               <td style={{ padding: '10px 12px' }}>{file.name}</td>
               <td style={{ padding: '10px 12px' }}>
                 <button
                   type="button"
                   onClick={() => downloadFile(file)}
-                  style={{ background: 'none', border: 'none', color: '#1d4ed8', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+                  style={{ background: 'none', border: 'none', color: 'var(--on-blue)', cursor: 'pointer', fontWeight: 600, padding: 0 }}
                 >
                   Download
                 </button>
@@ -107,7 +107,7 @@ export default function ExchangeBiddingSamplesModal({ open, onClose }) {
         </tbody>
       </table>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, fontSize: 13.5, color: '#64748b' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, fontSize: 13.5, color: 'var(--slate-500)' }}>
         <span>
           Showing {page.length === 0 ? 0 : 1} to {page.length} of {filtered.length} entries
         </span>

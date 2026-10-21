@@ -1,13 +1,23 @@
 import axios from 'axios';
 import { ROLE_GROUPS } from '../roles.js';
+import { applyDeclaration } from '../gigw/declaration.js';
 
 const client = axios.create({ baseURL: '/api' });
 
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem('sjvn_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // Acting for an absent officer, or under break-glass (Target #2 Phase D).
+  try {
+    const acting = sessionStorage.getItem('sjvn_acting');
+    if (acting) config.headers['X-Acting-As'] = acting;
+  } catch { /* storage blocked: acting as oneself */ }
   return config;
 });
+
+// Critical submissions (approvals, bids, invoices, payment security …) carry the
+// user's statutory declaration; see gigw/declaration.js.
+client.interceptors.request.use(applyDeclaration);
 
 client.interceptors.response.use(
   (res) => res,
@@ -15,6 +25,12 @@ client.interceptors.response.use(
     // A 401 from the password-change form means the *typed* current password was
     // wrong, not that the session expired — signing the user out there would
     // throw them back to the login screen for a typo.
+    // The charge or break-glass ended mid-session: drop it and reload as oneself.
+    if (err.response?.status === 403 && err.response?.data?.code === 'ACTING_ENDED') {
+      try { sessionStorage.removeItem('sjvn_acting'); } catch { /* ignore */ }
+      window.location.reload();
+      return Promise.reject(err);
+    }
     const isPasswordCheck = err.config?.url?.includes('/auth/change-password');
     if (err.response?.status === 401 && !isPasswordCheck) {
       localStorage.removeItem('sjvn_token');
@@ -28,6 +44,11 @@ client.interceptors.response.use(
 );
 
 const g = (url, params) => client.get(url, { params }).then((r) => r.data);
+// REIA, Hydro and Thermal share the contract, bill and energy tables. A list
+// asked for from a REIA screen is REIA's own book; the Hydro and Thermal desks
+// have their own endpoints and are not cut here.
+const onReiaDesk = () => typeof window !== 'undefined' && /^\/reia(\/|$)/.test(window.location.pathname);
+const deskScoped = (params) => (onReiaDesk() && params?.vertical === undefined ? { ...params, vertical: 'REIA' } : params);
 const p = (url, body) => client.post(url, body).then((r) => r.data);
 const put = (url, body) => client.put(url, body).then((r) => r.data);
 const patch = (url, body) => client.patch(url, body).then((r) => r.data);
@@ -39,16 +60,50 @@ export const api = {
   auth: {
     login: (email, password) => p('/auth/login', { email, password }),
     me: () => g('/auth/me'),
+    logout: (reason) => p('/auth/logout', { reason }),
     changePassword: (current_password, new_password) =>
       p('/auth/change-password', { current_password, new_password }),
   },
+  // Target #2 Phase C: which REIA projects each maker / checker / approver works on.
+  // Target #2 Phase D: additional charge and break-glass.
+  delegations: {
+    mine: () => g('/delegations/mine'),
+    list: () => g('/delegations/'),
+    give: (body) => p('/delegations/', body),
+    withdraw: (id, reason) => p(`/delegations/${id}/revoke`, { reason }),
+    breakGlass: () => g('/delegations/break-glass'),
+    askBreakGlass: (body) => p('/delegations/break-glass', body),
+    approveBreakGlass: (id) => p(`/delegations/break-glass/${id}/approve`),
+    rejectBreakGlass: (id, reason) => p(`/delegations/break-glass/${id}/reject`, { reason }),
+    endBreakGlass: (id) => p(`/delegations/break-glass/${id}/revoke`),
+  },
+  projectScope: {
+    me: () => g('/project-scope/me'),
+    users: () => g('/project-scope/users'),
+    projects: () => g('/project-scope/projects'),
+    coverage: () => g('/project-scope/coverage'),
+    set: (userId, body) => put(`/project-scope/users/${userId}`, body),
+  },
+  // DPDP Act 2023: a user's own data summary, consent records and data-principal
+  // requests (access, correction, erasure, nomination, grievance).
+  privacy: {
+    myData: () => g('/privacy/my-data'),
+    requests: () => g('/privacy/requests'),
+    createRequest: (body) => p('/privacy/requests', body),
+    withdrawConsent: (purpose) => p('/privacy/consents/withdraw', { purpose }),
+    allRequests: (params) => g('/privacy/admin/requests', params),
+    updateRequest: (id, body) => patch(`/privacy/admin/requests/${id}`, body),
+    declarations: (params) => g('/privacy/admin/declarations', params),
+  },
   entities: {
     setOwnStation: (id, body) => p(`/entities/${id}/own-station`, body),
-    list: (params) => g('/entities', params),
+    list: (params) => g('/entities', deskScoped(params)),
     get: (id) => g(`/entities/${id}`),
     create: (body) => p('/entities', body),
     update: (id, body) => put(`/entities/${id}`, body),
     regulatoryCatalog: (entity_type) => g('/entities/regulatory-catalog', { entity_type }),
+    addClearanceType: (body) => p('/entities/regulatory-catalog/custom', body),
+    setClearanceTypeActive: (code, is_active) => patch(`/entities/regulatory-catalog/custom/${code}`, { is_active }),
     updateRegulatoryApproval: (entityId, approvalId, body) =>
       put(`/entities/${entityId}/regulatory-approvals/${approvalId}`, body),
     uploadLogo: (id, file) => {
@@ -149,7 +204,7 @@ export const api = {
     setHold: (id, on, reason) => p(`/contracts/${id}/hold`, { on, reason }),
     overrideHold: (id, body) => p(`/contracts/${id}/hold/override`, body),
     complianceRequest: (id, code) => p(`/contracts/${id}/compliance-request`, { code }),
-    list: (params) => g('/contracts', params),
+    list: (params) => g('/contracts', deskScoped(params)),
     get: (id) => g(`/contracts/${id}`),
     create: (body) => p('/contracts', body),
     amend: (id, body) => p(`/contracts/${id}/amend`, body),
@@ -168,7 +223,7 @@ export const api = {
     bulkTemplate: () => client.get('/contracts/bulk-template', { responseType: 'blob' }).then((r) => r.data),
   },
   energyData: {
-    list: (params) => g('/energy-data', params),
+    list: (params) => g('/energy-data', deskScoped(params)),
     create: (body) => p('/energy-data', body),
     validate: (id) => p(`/energy-data/${id}/validate`),
     lock: (id, body) => p(`/energy-data/${id}/lock`, body),
@@ -196,7 +251,7 @@ export const api = {
     // without raising anything.
     upload: (rows, dryRun = false) => p('/invoices/upload', { rows, dry_run: !!dryRun }),
     uploadTemplate: () => client.get('/invoices/upload-template', { responseType: 'blob' }).then((r) => r.data),
-    list: (params) => g('/invoices', params),
+    list: (params) => g('/invoices', deskScoped(params)),
     get: (id) => g(`/invoices/${id}`),
     downloadPdf: (id) => client.get(`/invoices/${id}/pdf`, { responseType: 'blob' }).then(res => res.data),
     payments: (params) => g('/invoices/payments', params),
@@ -305,6 +360,8 @@ export const api = {
     sign: (id, body) => p(`/recon-signoff/${id}/sign`, body),
     resolveException: (id, body) => p(`/recon-signoff/exceptions/${id}/resolve`, body),
     attachSignedCopy: (id, version_id) => p(`/recon-signoff/${id}/signed-copy`, { version_id }),
+    // A trading client's signature given outside the portal: the desk attaches the PDF the client signed.
+    attachClientSignedCopy: (id, formData) => client.post(`/recon-signoff/${id}/offline-counterparty-sign`, formData).then((r) => r.data),
     statementFile: (id, format) => client.get(`/recon-signoff/${id}/statement.${format}`, { responseType: 'blob' }).then((r) => r.data),
   },
   // A seller's account with SJVN: statement, ageing, payment advice, TDS certificates.
@@ -346,7 +403,7 @@ export const api = {
   },
   // One period's energy as its counterparty sees and answers it.
   energyRecords: {
-    analytics: (params) => g('/energy-records/analytics', params),
+    analytics: (params) => g('/energy-records/analytics', deskScoped(params)),
     get: (id) => g(`/energy-records/${id}`),
     blocks: (id, date) => g(`/energy-records/${id}/blocks`, date ? { date } : undefined),
     blocksXlsx: (id) => client.get(`/energy-records/${id}/blocks.xlsx`, { responseType: 'blob' }).then((r) => r.data),
@@ -401,6 +458,7 @@ export const api = {
   },
   billingTrail: {
     get: (params) => g('/billing-trail', params),
+    periods: (contract_id) => g('/billing-trail/periods', { contract_id }),
   },
   deviation: {
     list: (params) => g('/deviation', params),
@@ -876,6 +934,7 @@ export const api = {
     create: (body) => p('/trading-clients', body),
     update: (id, body) => client.put(`/trading-clients/${id}`, body).then(r => r.data),
     suspend: (id, reason) => p(`/trading-clients/${id}/suspend`, { reason }),
+    adjustPrepayment: (id, amount, reason) => p(`/trading-clients/${id}/prepayment`, { amount, reason }),
     addSignatory: (id, body) => p(`/trading-clients/${id}/signatories`, body),
     removeSignatory: (id, sigId) => client.delete(`/trading-clients/${id}/signatories/${sigId}`).then(r => r.data),
     addExchange: (id, body) => p(`/trading-clients/${id}/exchanges`, body),
@@ -957,7 +1016,11 @@ export const api = {
     list: (params) => g('/bids', params),
     get: (id) => g(`/bids/${id}`),
     create: (body) => p('/bids', body),
-    submit: (id) => p(`/bids/${id}/submit`),
+    submit: (id, body) => p(`/bids/${id}/submit`, body),
+    // Pre-payment + credit limit - held by live buy bids; and the RTM session open now.
+    funds: (clientId) => g(`/bids/funds/${clientId}`),
+    rtmSession: () => g('/bids/rtm-session'),
+    gateClosure: (product) => g('/bids/gate-closure', { product }),
     approve: (id, status, reason) => p(`/bids/${id}/approve`, { status, reason }),
     noBid: (body) => p('/bids/no-bid', body),
     bulk: (rows, dryRun) => p('/bids/bulk', { rows, dry_run: !!dryRun }),
@@ -1195,19 +1258,6 @@ export const api = {
     tds: (params) => g('/hydro-desk/tds', params),
     recordTds: (body) => p('/hydro-desk/tds', body),
     tdsCertificate: (id, body) => p(`/hydro-desk/tds/${id}/certificate`, body),
-  },
-  hydroBilling: {
-    dashboard: (params) => g('/hydro-billing/dashboard', params),
-    stations: (params) => g('/hydro-billing/stations', params),
-    list: (params) => g('/hydro-billing', params),
-    get: (id) => g(`/hydro-billing/${id}`),
-    preview: (body) => p('/hydro-billing/preview', body),
-    create: (body) => p('/hydro-billing', body),
-    fromRea: (body) => p('/hydro-billing/from-rea', body),
-    fromReaJob: (id) => g(`/hydro-billing/from-rea/jobs/${id}`),
-    uploadRea: (formData) => client.post('/hydro-billing/upload-rea', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
-    autoDraft: () => g('/hydro-billing/from-rea/auto'),
-    issue: (id, body) => p(`/hydro-billing/${id}/issue`, body || {}),
     // Desk-wide views: closing a month, the approvals queue, advances, performance.
     monthClose: (params) => g('/hydro-desk/month-close', params),
     approvals: (params) => g('/hydro-desk/approvals', params),
@@ -1224,6 +1274,25 @@ export const api = {
     regulatory: (params) => g('/hydro-desk/regulatory', params),
     addRegulatory: (body, params) => client.post('/hydro-desk/regulatory', body, { params }).then((r) => r.data),
     updateRegulatory: (id, body, params) => client.patch(`/hydro-desk/regulatory/${id}`, body, { params }).then((r) => r.data),
+  },
+  hydroBilling: {
+    dashboard: (params) => g('/hydro-billing/dashboard', params),
+    stations: (params) => g('/hydro-billing/stations', params),
+    list: (params) => g('/hydro-billing', params),
+    get: (id) => g(`/hydro-billing/${id}`),
+    preview: (body) => p('/hydro-billing/preview', body),
+    create: (body) => p('/hydro-billing', body),
+    fromRea: (body) => p('/hydro-billing/from-rea', body),
+    fromReaJob: (id) => g(`/hydro-billing/from-rea/jobs/${id}`),
+    uploadRea: (formData) => client.post('/hydro-billing/upload-rea', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+    autoDraft: () => g('/hydro-billing/from-rea/auto'),
+    reaFetchLog: (params) => g('/hydro-billing/rea-fetch-log', params),
+    reaScan: () => p('/hydro-billing/rea-scan'),
+    reaFetchPdfUrl: (logId) => {
+      const token = localStorage.getItem('sjvn_token') || localStorage.getItem('token');
+      return `/api/hydro-billing/rea-fetch-log/${logId}/pdf${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+    },
+    issue: (id, body) => p(`/hydro-billing/${id}/issue`, body || {}),
     cancel: (id, reason) => p(`/hydro-billing/${id}/cancel`, { reason }),
     allocations: (params) => g('/hydro-billing/allocations', params),
     createAllocation: (body) => p('/hydro-billing/allocations', body),
@@ -1509,6 +1578,9 @@ export const api = {
     obligations: (params) => g('/trading/schedules/obligations', params),
     archive: (params) => g('/trading/archive', params),
     bankTransactions: (params) => g('/trading/bank-transactions', params),
+    // One receipt, or { rows: [...] } for a pasted statement; credits the client's pre-payment.
+    recordReceipts: (body) => p('/trading/bank-transactions', body),
+    applyReceipt: (id, clientId) => p(`/trading/bank-transactions/${id}/apply`, { client_id: clientId }),
   },
   losses: {
     get: () => g('/masters/losses'),

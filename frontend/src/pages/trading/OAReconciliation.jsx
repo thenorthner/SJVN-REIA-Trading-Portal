@@ -20,7 +20,7 @@ function MonthlyCost({ months }) {
         {months.map(m => (
           <div key={m.month} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 130px', gap: 12, alignItems: 'center' }}>
             <span style={{ fontSize: 13 }}>{m.month}</span>
-            <div style={{ display: 'flex', height: 18, borderRadius: 3, overflow: 'hidden', background: 'var(--slate-100, #f1f5f9)' }}>
+            <div style={{ display: 'flex', height: 18, borderRadius: 3, overflow: 'hidden', background: 'var(--slate-100, var(--slate-100))' }}>
               {parts.map(([key, colour, label]) => (
                 m[key] > 0 && (
                   <div key={key} style={{ width: `${(m[key] / max) * 100}%`, background: colour }} title={`${label}: ${fmtCurrency(m[key])}`} />

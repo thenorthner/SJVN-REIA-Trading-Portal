@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
@@ -258,7 +259,7 @@ export default function HydroPtc() {
             {net && (
               <div style={{
                 padding: '10px 12px', marginBottom: 12, borderRadius: 4,
-                background: 'var(--bg-subtle, #f7fafc)', fontVariantNumeric: 'tabular-nums',
+                background: 'var(--bg-subtle, var(--slate-50))', fontVariantNumeric: 'tabular-nums',
               }}>
                 {net.ok ? (
                   <>
@@ -280,9 +281,9 @@ export default function HydroPtc() {
               />
             </Field>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button type="submit" className="btn btn-primary" disabled={busy || !net?.ok}>
+              <WriteOnly><button type="submit" className="btn btn-primary" disabled={busy || !net?.ok}>
                 Raise the bill
-              </button>
+              </button></WriteOnly>
               <button type="button" className="btn" onClick={() => { setForm(null); setNet(null); }}>
                 Cancel
               </button>

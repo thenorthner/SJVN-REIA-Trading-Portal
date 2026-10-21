@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo} from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { PortfolioSelect } from '../../context/PortfolioContext.jsx';
 import * as XLSX from 'xlsx';
 import { api } from '../../api/client.js';
@@ -6,6 +7,8 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
 import BidForecastPanel from '../../components/BidForecastPanel.jsx';
+import RtmSessionBanner from '../../components/RtmSessionBanner.jsx';
+import DayAheadGateBanner from '../../components/DayAheadGateBanner.jsx';
 
 const EMPTY_FORM = {
   client_id: '', exchange: 'IEX', product: 'DAM', bid_date: '', delivery_date: '', gate_closure_time: '',
@@ -135,6 +138,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
   const [form, setForm] = useState(EMPTY_FORM);
   const [blocks, setBlocks] = useState([{ ...EMPTY_BLOCK }]);
   const [error, setError] = useState('');
+  const lastFundsCheck = React.useRef(null);
   const [selectedBid, setSelectedBid] = useState(null);
   const [auditBid, setAuditBid] = useState(null);
 
@@ -169,6 +173,13 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
   const clearanceDaysLeft = clearance?.days_left ?? null;
 
+  // What this client can still bid with, shown against a buy bid before it is saved.
+  const [funds, setFunds] = useState(null);
+  useEffect(() => {
+    if (!form.client_id || !showCreate) { setFunds(null); return; }
+    api.bids.funds(form.client_id).then(setFunds).catch(() => setFunds(null));
+  }, [form.client_id, showCreate]);
+
   /**
    * Pre-submission compliance check (clauses 21-24, 26).
    *
@@ -188,6 +199,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
         blocks: payload.blocks || [],
         forced_outage: outageAcknowledged,
       });
+      lastFundsCheck.current = res.funds || null;
       return (res.violations || []).map((v) => `Compliance Violation (Clause ${v.clause}): ${v.message}`);
     } catch (err) {
       // Never let a failed pre-check pass a bid through silently — the API
@@ -371,6 +383,18 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
         return;
       }
 
+      // Buy bids are paid for in advance. If pre-payment + credit limit cannot
+      // cover this one, the desk can still place it by recording why.
+      const shortfall = lastFundsCheck.current;
+      if (shortfall?.applies && !shortfall.ok) {
+        const why = window.prompt(
+          `Insufficient funds: this bid needs ₹${fmtNumber(shortfall.required, 0)} but only ₹${fmtNumber(shortfall.available, 0)} is available `
+          + `(short by ₹${fmtNumber(shortfall.shortfall, 0)}).\n\nEnter a reason to place it anyway, or Cancel to stop.`,
+        );
+        if (!why || !why.trim()) { setError('Bid not placed: insufficient funds. Add a pre-payment or raise the credit limit.'); return; }
+        payload.funds_override_reason = why.trim();
+      }
+
       const created = await api.bids.create(payload);
       closeCreate();
       setOutageAcknowledged(false); // Reset for next bid
@@ -402,7 +426,15 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
   async function handleSubmitToExchange(id) {
     try {
-      const r = await api.bids.submit(id);
+      let r;
+      try {
+        r = await api.bids.submit(id);
+      } catch (err) {
+        if (err.response?.data?.code !== 'INSUFFICIENT_FUNDS') throw err;
+        const why = window.prompt(`${err.response.data.error}\n\nEnter a reason to send it anyway, or Cancel to stop.`);
+        if (!why || !why.trim()) return;
+        r = await api.bids.submit(id, { funds_override_reason: why.trim() });
+      }
       setSelectedBid(null);
       load();
       // While the exchange API is not live nothing leaves the platform; say so
@@ -464,7 +496,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
             setSelectedBid(r);
           }
         }}>View</button>
-        <button className="btn btn-outline" title="Re-bid using this bid's blocks" onClick={() => handleCloneBid(r)}>Re-bid</button>
+        <WriteOnly><button className="btn btn-outline" title="Re-bid using this bid's blocks" onClick={() => handleCloneBid(r)}>Re-bid</button></WriteOnly>
         {bidView === 'history' && tab.short === 'RTM' && (
           <button className="btn btn-outline" title="View Day Timeline" onClick={() => { setTimelineDate(r.delivery_date); setShowTimelineModal(true); }}></button>
         )}
@@ -531,9 +563,9 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
               <option value="">All Clients (Portfolio)</option>
               {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
-            <button className="btn btn-outline" onClick={openBulk}>
+            <WriteOnly><button className="btn btn-outline" onClick={openBulk}>
               Bulk Upload ({tab.short})
-            </button>
+            </button></WriteOnly>
           </div>
         }
       />
@@ -544,9 +576,9 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
         // it does not stop trading. Only a clearance that has actually lapsed
         // blocks bids, and that refusal is enforced by the API.
         const tone = {
-          EXPIRED:       { bg: '#fef2f2', border: '#fecaca', fg: 'var(--red-strong)', label: 'EXPIRED' },
-          RENEWAL_DUE:   { bg: '#fffbeb', border: '#fde68a', fg: 'var(--amber-strong)', label: 'RENEWAL DUE' },
-          ACTIVE:        { bg: '#f0fdf4', border: '#bbf7d0', fg: 'var(--green-strong)', label: 'ACTIVE' },
+          EXPIRED:       { bg: '#fef2f2', border: 'var(--t-red-line)', fg: 'var(--red-strong)', label: 'EXPIRED' },
+          RENEWAL_DUE:   { bg: '#fffbeb', border: 'var(--t-amber-line)', fg: 'var(--amber-strong)', label: 'RENEWAL DUE' },
+          ACTIVE:        { bg: '#f0fdf4', border: 'var(--t-green-line)', fg: 'var(--green-strong)', label: 'ACTIVE' },
           NOT_ON_RECORD: { bg: 'var(--slate-50)', border: 'var(--slate-200)', fg: 'var(--slate-500)', label: 'NOT ON RECORD' },
         }[clearance.state];
         return (
@@ -591,9 +623,9 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--red-strong)' }}>
                     Lapsed {Math.abs(clearance.days_left)} day(s) ago — new bids refused
                   </span>
-                  <button className="btn btn-sm" style={{ background: 'var(--red-strong)', color: '#fff', fontSize: 13 }}>
+                  <WriteOnly><button className="btn btn-sm" style={{ background: 'var(--red-strong)', color: '#fff', fontSize: 13 }}>
                     Submit Renewal NOW
-                  </button>
+                  </button></WriteOnly>
                 </>
               )}
               {clearance.state === 'NOT_ON_RECORD' && (
@@ -608,22 +640,17 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
       {/* Alert / Countdown Banner */}
       {tab.short === 'RTM' ? (
-        <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '10px 15px', borderRadius: 6, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ color: '#065f46', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#10b981', boxShadow: '0 0 8px #10b981' }}></span>
-            Active Window: RTM Session #29 | Gate Closes In: 08m 42s
-          </div>
-          <div style={{ color: '#065f46', fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <RtmSessionBanner>
+          <div style={{ fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
             Current Time: <LiveClock /> IST
           </div>
+        </RtmSessionBanner>
+      ) : tab.short === 'TAM' ? (
+        <div style={{ background: 'var(--slate-50)', border: '1px solid var(--slate-200)', padding: '10px 15px', borderRadius: 6, marginBottom: 20, color: 'var(--slate-600)' }}>
+          Term-ahead bids have no daily gate; each contract carries its own gate closure time.
         </div>
       ) : (
-        <div style={{ background: '#fff3cd', border: '1px solid #ffe69c', padding: '10px 15px', borderRadius: 6, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ color: '#664d03', fontWeight: 600 }}>
-            <span style={{ marginRight: 8 }}></span>
-            Closing in 2 Hrs 15 Mins for {tab.short} bid (Gate Closure: 12:00 PM)
-          </div>
-        </div>
+        <DayAheadGateBanner product={tab.short} />
       )}
 
       {/* Conditional Filter Bar */}
@@ -693,8 +720,8 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
             { label: 'Clear ratio', value: summary.quantumBid > 0 ? `${Math.round(summary.clearRatio)}%` : '—' },
           ].map((s) => (
             <div key={s.label}>
-              <div style={{ fontSize: 13.5, color: '#64748b' }}>{s.label}</div>
-              <div style={{ fontSize: 20, fontWeight: 600, color: s.tone || '#0f172a' }}>{s.value}</div>
+              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{s.label}</div>
+              <div style={{ fontSize: 20, fontWeight: 600, color: s.tone || 'var(--slate-900)' }}>{s.value}</div>
             </div>
           ))}
         </div>
@@ -742,7 +769,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
       {showBulk && (
         <Modal open={true} onClose={() => setShowBulk(false)} title="Bulk Bid Upload" width={900}>
-          <p style={{ marginBottom: 10, color: '#555' }}>
+          <p style={{ marginBottom: 10, color: 'var(--slate-600)' }}>
             Upload an Excel workbook (.xlsx/.xls) or .csv file, or reuse a previous bid. Rows sharing the same client, exchange, product and dates are grouped into
             one portfolio bid.
           </p>
@@ -781,7 +808,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
           {/* Re-bid: pull a past bid's blocks in, then edit the dates before submitting. */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ fontSize: 13, color: '#555' }} htmlFor="bids-copy-from-previous-bid">Copy from previous bid:</label>
+            <label style={{ fontSize: 13, color: 'var(--slate-600)' }} htmlFor="bids-copy-from-previous-bid">Copy from previous bid:</label>
             <select id="bids-copy-from-previous-bid"
               className="input"
               style={{ maxWidth: 380 }}
@@ -795,10 +822,10 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                 </option>
               ))}
             </select>
-            <button className="btn btn-outline" disabled={!reuseId} onClick={handleReuseBid}>Load rows</button>
+            <WriteOnly><button className="btn btn-outline" disabled={!reuseId} onClick={handleReuseBid}>Load rows</button></WriteOnly>
           </div>
 
-          {bulkFileNote && <div style={{ marginBottom: 10, fontSize: 13, color: '#555' }}>{bulkFileNote}</div>}
+          {bulkFileNote && <div style={{ marginBottom: 10, fontSize: 13, color: 'var(--slate-600)' }}>{bulkFileNote}</div>}
           
           {bulkResult && (
             <div style={{ marginTop: 15 }}>
@@ -827,9 +854,9 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
               )}
               {bulkResult.errors?.length > 0 && (
                 <div style={{ marginTop: 12 }}>
-                  <h4 style={{ marginBottom: 8, color: '#b00' }}>Errors ({bulkResult.errors.length})</h4>
+                  <h4 style={{ marginBottom: 8, color: 'var(--on-red)' }}>Errors ({bulkResult.errors.length})</h4>
                   {bulkResult.errors.map((e, i) => (
-                    <div key={i} style={{ color: '#b00', fontSize: 13 }}>
+                    <div key={i} style={{ color: 'var(--on-red)', fontSize: 13 }}>
                       {e.row ? `Row ${e.row}: ` : ''}{e.errors.join('; ')}
                     </div>
                   ))}
@@ -840,14 +867,14 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
           <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
             <button className="btn btn-outline" onClick={() => setShowBulk(false)}>Close</button>
-            <button className="btn btn-outline" disabled={bulkBusy} onClick={() => runBulk(true)}>Validate (Preview)</button>
-            <button
+            <WriteOnly><button className="btn btn-outline" disabled={bulkBusy} onClick={() => runBulk(true)}>Validate (Preview)</button></WriteOnly>
+            <WriteOnly><button
               className="btn btn-primary"
               disabled={bulkBusy || !bulkResult || bulkResult.errors?.length > 0 || !bulkResult.preview?.length}
               onClick={() => runBulk(false)}
             >
               Create {bulkResult?.preview?.length || ''} Bid(s)
-            </button>
+            </button></WriteOnly>
           </div>
         </Modal>
       )}
@@ -880,7 +907,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                       {clearance.max_ramp_rate_mw_per_min != null && <span>Ramp: <strong>{clearance.max_ramp_rate_mw_per_min} MW/min</strong></span>}
                     </div>
                   </div>
-                  <div style={{ fontSize: 13, background: '#e0f2fe', padding: '4px 8px', borderRadius: 4, color: '#0369a1', fontWeight: 600 }}>
+                  <div style={{ fontSize: 13, background: 'var(--t-blue-50)', padding: '4px 8px', borderRadius: 4, color: 'var(--on-blue)', fontWeight: 600 }}>
                     {clearance.is_generator ? 'Generating Station' : 'Trader / Buyer'}
                   </div>
                 </div>
@@ -922,7 +949,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                 {/* Segment Tag — Read-only */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-600)' }}>Segment:</span>
-                  <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--navy)', background: '#e0f2fe', padding: '2px 10px', borderRadius: 4 }}>{tab.short}</span>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--navy)', background: 'var(--t-blue-50)', padding: '2px 10px', borderRadius: 4 }}>{tab.short}</span>
                 </div>
                 <Field label="Delivery Date" required>
                   <input type="date" className="input" value={form.delivery_date} onChange={e => setForm({...form, delivery_date: e.target.value})} required />
@@ -958,6 +985,12 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                     <option value="">---Select---</option>
                     {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
+                  {funds && (form.type || 'Sell') === 'Buy' && (
+                    <div data-testid="bid-funds-line" style={{ marginTop: 6, fontSize: 12.5, color: funds.available > 0 ? 'var(--slate-600)' : 'var(--red-strong)' }}>
+                      Funds available: <strong>₹{fmtNumber(funds.available, 0)}</strong>
+                      {' '}(pre-payment ₹{fmtNumber(funds.pre_payment_balance, 0)} + credit limit ₹{fmtNumber(funds.credit_limit, 0)} − held by other buy bids ₹{fmtNumber(funds.committed, 0)})
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1035,7 +1068,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
             />
 
             {/* ── Row 2: Excel File Upload Zone with Block Granularity ── */}
-            <div style={{ border: '1px solid var(--slate-200)', borderRadius: 8, padding: 20, marginBottom: 20, background: '#fafbfc' }}>
+            <div style={{ border: '1px solid var(--slate-200)', borderRadius: 8, padding: 20, marginBottom: 20, background: 'var(--t-blue-50)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <div>
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-600)' }}>Select Excel File Bid Type to Upload :</span>
@@ -1065,7 +1098,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                 style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                   border: '2px dashed var(--slate-400)', borderRadius: 8, padding: '30px 20px',
-                  background: '#fff', cursor: 'pointer', transition: 'all 0.2s',
+                  background: 'var(--surface)', cursor: 'pointer', transition: 'all 0.2s',
                   minHeight: 100,
                 }}
                 onMouseOver={e => { e.currentTarget.style.background = '#f0f7ff'; e.currentTarget.style.borderColor = 'var(--navy)'; }}
@@ -1097,7 +1130,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
               </label>
               {bulkFileNote && <div style={{ marginTop: 10, fontSize: 13, color: 'var(--navy)', fontWeight: 500 }}> {bulkFileNote}</div>}
               <div style={{ marginTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
-                <button type="button" className="btn btn-primary" style={{ background: 'var(--navy)' }} disabled={!bulkText} onClick={() => runBulk(true)}>Import File Data</button>
+                <WriteOnly><button type="button" className="btn btn-primary" style={{ background: 'var(--navy)' }} disabled={!bulkText} onClick={() => runBulk(true)}>Import File Data</button></WriteOnly>
               </div>
             </div>
 
@@ -1126,9 +1159,9 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                 )}
                 {bulkResult.errors?.length > 0 && (
                   <div style={{ marginTop: 12 }}>
-                    <h4 style={{ marginBottom: 8, color: '#b00' }}>Errors ({bulkResult.errors.length})</h4>
+                    <h4 style={{ marginBottom: 8, color: 'var(--on-red)' }}>Errors ({bulkResult.errors.length})</h4>
                     {bulkResult.errors.map((e, i) => (
-                      <div key={i} style={{ color: '#b00', fontSize: 13 }}>{e.row ? `Row ${e.row}: ` : ''}{e.errors.join('; ')}</div>
+                      <div key={i} style={{ color: 'var(--on-red)', fontSize: 13 }}>{e.row ? `Row ${e.row}: ` : ''}{e.errors.join('; ')}</div>
                     ))}
                   </div>
                 )}
@@ -1185,7 +1218,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                   </div>
 
                   {/* Net Financial Estimator */}
-                  <div style={{ padding: 12, borderRadius: 8, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                  <div style={{ padding: 12, borderRadius: 8, background: 'var(--t-green-50)', border: '1px solid var(--t-green-line)' }}>
                     <h4 style={{ fontSize: 13, color: 'var(--green-strong)', margin: '0 0 8px 0' }}>Automated Clearing Net Financial Estimator</h4>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: 'var(--slate-600)', marginBottom: 4 }}>
                       <span>Gross Revenue (Estimated):</span>
@@ -1195,7 +1228,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                       <span>Transmission & SLDC Fees:</span>
                       <span>- ₹ {(regionalTxFee + stateTxFee + dailySLDCFee).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--green-strong)', fontWeight: 700, marginTop: 8, paddingTop: 8, borderTop: '1px solid #bbf7d0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: 'var(--green-strong)', fontWeight: 700, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--t-green-line)' }}>
                       <span>Net Realization:</span>
                       <span>₹ {netRevenue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                     </div>
@@ -1273,7 +1306,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
           {/* OCF carry-forward lineage across market segments */}
           {chain?.legs?.length > 1 && (
-            <div style={{ marginTop: 20, padding: 12, background: '#f2f6fb', borderLeft: '4px solid var(--navy)' }}>
+            <div style={{ marginTop: 20, padding: 12, background: 'var(--t-blue-50)', borderLeft: '4px solid var(--navy)' }}>
               <strong>OCF Carry-Forward Chain</strong>
               <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                 {chain.legs.map((l, i) => (
@@ -1282,9 +1315,9 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                     <span
                       style={{
                         padding: '4px 8px', borderRadius: 4, fontSize: 13.5,
-                        background: l.id === selectedBid.id ? 'var(--navy)' : '#fff',
-                        color: l.id === selectedBid.id ? '#fff' : '#333',
-                        border: '1px solid #cbd7e6', cursor: 'pointer',
+                        background: l.id === selectedBid.id ? 'var(--navy)' : 'var(--surface)',
+                        color: l.id === selectedBid.id ? '#fff' : 'var(--slate-700)',
+                        border: '1px solid var(--t-blue-100)', cursor: 'pointer',
                       }}
                       onClick={() => setSelectedBid(l)}
                       title={l.id}
@@ -1314,16 +1347,16 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                   >
                     Record Exchange Result
                   </button>
-                  <button
+                  <WriteOnly><button
                     className="btn btn-secondary"
                     onClick={handleSyncResult}
                     disabled={syncBusy}
                   >
                     {syncBusy ? 'Syncing...' : 'Sync IEX Result'}
-                  </button>
+                  </button></WriteOnly>
                 </div>
               ) : (
-                <form onSubmit={handleRecordResult} style={{ padding: 12, border: '1px solid #ddd' }}>
+                <form onSubmit={handleRecordResult} style={{ padding: 12, border: '1px solid var(--border)' }}>
                   <h4 style={{ marginBottom: 10 }}>Exchange Clearing Result</h4>
                   {(selectedBid.blocks || []).map((b) => (
                     <div key={b.time_block} style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 8 }}>
@@ -1350,7 +1383,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
           )}
 
           {selectedBid.carried_forward_to && (
-            <p style={{ marginTop: 16, color: '#555' }}>
+            <p style={{ marginTop: 16, color: 'var(--slate-600)' }}>
               Uncleared quantum already carried forward as <strong>{selectedBid.carried_forward_to}</strong>.
             </p>
           )}
@@ -1370,7 +1403,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                   Carry Forward {fmtNumber(selectedBid.uncleared_mw)} MW uncleared →
                 </button>
               ) : (
-                <form onSubmit={handleCarryForward} style={{ padding: 12, border: '1px solid #ddd' }}>
+                <form onSubmit={handleCarryForward} style={{ padding: 12, border: '1px solid var(--border)' }}>
                   <h4 style={{ marginBottom: 10 }}>
                     OCF Carry-Forward — {fmtNumber(selectedBid.uncleared_mw)} MW from {selectedBid.product}
                   </h4>
@@ -1431,8 +1464,8 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
               const bid = rows.find(r => r.id === id);
               if (!bid) return null;
               return (
-                <div key={id} style={{ flex: 1, border: '1px solid var(--slate-200)', borderRadius: 8, padding: 15, background: index === 0 ? 'var(--slate-50)' : '#f0fdf4' }}>
-                  <h4 style={{ marginBottom: 10, color: index === 0 ? 'var(--slate-600)' : '#166534' }}>
+                <div key={id} style={{ flex: 1, border: '1px solid var(--slate-200)', borderRadius: 8, padding: 15, background: index === 0 ? 'var(--slate-50)' : 'var(--t-green-50)' }}>
+                  <h4 style={{ marginBottom: 10, color: index === 0 ? 'var(--slate-600)' : 'var(--on-green)' }}>
                     {index === 0 ? 'Base Revision' : 'Target Revision'} ({bid.revision_no || '1'})
                   </h4>
                   <div style={{ fontSize: 13, marginBottom: 15, color: 'var(--slate-500)' }}>
@@ -1493,8 +1526,8 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
 
       {/* Slide-over Audit Trail Viewer for DAM History */}
       {auditBid && (
-        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '600px', background: '#fff', zIndex: 9999, boxShadow: '-5px 0 25px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', animation: 'slideIn 0.3s ease-out forwards' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: 20, background: '#f8f9fa', borderBottom: '1px solid #dee2e6' }}>
+        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: '600px', background: 'var(--surface)', zIndex: 9999, boxShadow: '-5px 0 25px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', animation: 'slideIn 0.3s ease-out forwards' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: 20, background: 'var(--slate-50)', borderBottom: '1px solid var(--slate-100)' }}>
             <div>
               <h3 style={{ margin: 0 }}>Audit Trail Viewer: {auditBid.id}</h3>
               <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 5 }}>Portfolio: {auditBid.client_name} | Delivery: {auditBid.delivery_date}</div>
@@ -1592,7 +1625,7 @@ export default function Bids({ product = 'DAM', externalView = null, onCreateClo
                   { k: 'Zip Code:', v: '171006' },
                   { k: 'Mobile No.1:', v: '8894300943' },
                 ].map((row, i) => (
-                  <tr key={i} style={{ borderBottom: '1px solid var(--slate-200)', background: i % 2 === 0 ? 'var(--slate-50)' : '#ffffff' }}>
+                  <tr key={i} style={{ borderBottom: '1px solid var(--slate-200)', background: i % 2 === 0 ? 'var(--slate-50)' : 'var(--surface)' }}>
                     <td style={{ padding: '8px 12px', fontWeight: 600, color: 'var(--slate-600)', width: '35%', borderRight: '1px solid var(--slate-200)' }}>{row.k}</td>
                     <td style={{ padding: '8px 12px', color: 'var(--slate-800)' }}>{row.v}</td>
                   </tr>

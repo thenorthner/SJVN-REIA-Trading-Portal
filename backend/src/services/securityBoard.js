@@ -168,7 +168,7 @@ export function alertLateReinstatements() {
     const key = `REINSTATEMENT_LATE:${r.drawn_on}`;
     if (db.prepare('SELECT 1 FROM security_alerts WHERE payment_security_id = ? AND alert_type = ?').get(r.id, key)) continue;
     const message = `${r.instrument_no} (${r.contract_no}): ₹${r.drawn.toLocaleString('en-IN')} drawn on ${r.drawn_on} is still not reinstated after ${r.days_since_draw} days (period ${window} days).${r.kind === 'BUYER_LC' ? ' Ask the buyer to have its bank restore the letter of credit.' : ' Have SJVN\'s bank restore it.'}`;
-    for (const role of ['REIA_USER', 'REIA_ADMIN', 'FINANCE_USER']) pushNotification({ role, type: 'SECURITY', message });
+    for (const role of ['REIA_MAKER', 'REIA_CHECKER', 'FINANCE_USER']) pushNotification({ role, type: 'SECURITY', message });
     db.prepare('INSERT INTO security_alerts (id, payment_security_id, alert_type, sent_to, message) VALUES (?, ?, ?, ?, ?)')
       .run(newId('SAL'), r.id, key, 'REIA desk, Finance', message);
     sent += 1;

@@ -115,7 +115,7 @@ export default function GeneratorBilling() {
         <Modal open={true} onClose={() => { setShowGenerate(false); setError(''); }} title="Generate Generator Bill" width={700}>
           <form onSubmit={handleGenerate} style={{ display: 'grid', gap: 15, gridTemplateColumns: '1fr 1fr' }}>
             {error && (
-              <div style={{ gridColumn: '1 / -1', padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, color: 'var(--red-deep)', fontSize: 13 }}>
+              <div style={{ gridColumn: '1 / -1', padding: '8px 12px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 4, color: 'var(--red-deep)', fontSize: 13 }}>
                 {error}
               </div>
             )}
@@ -167,7 +167,7 @@ export default function GeneratorBilling() {
               )}
             </Field>
 
-            <div style={{ gridColumn: '1 / -1', marginTop: 15, display: 'flex', gap: 10, justifyContent: 'flex-end', borderTop: '1px solid #ddd', paddingTop: 15 }}>
+            <div style={{ gridColumn: '1 / -1', marginTop: 15, display: 'flex', gap: 10, justifyContent: 'flex-end', borderTop: '1px solid var(--border)', paddingTop: 15 }}>
               <button type="button" className="btn btn-outline" onClick={() => setShowGenerate(false)}>Cancel</button>
               <button type="submit" className="btn btn-primary">Calculate & Generate Bill</button>
             </div>

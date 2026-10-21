@@ -126,7 +126,14 @@ import { repairAuditChainIfBroken, verifyRecentIntegrity } from './auditEngine.j
 import { db } from './db/index.js';
 import { backupDatabase } from './services/dbBackup.js';
 
-import { assignTraceId, requireAuth, requireRole, ROLE_GROUPS } from './middleware/auth.js';
+import { assignTraceId, requireAuth, requireRole, ROLE_GROUPS, userFromToken } from './middleware/auth.js';
+import { securityHeaders } from './middleware/securityHeaders.js';
+import { statutoryDeclarations } from './services/statutoryDeclaration.js';
+import publicInfoRoutes from './routes/publicInfo.js';
+import privacyRoutes from './routes/privacy.js';
+import projectScopeRoutes from './routes/projectScope.js';
+import delegationsRoutes from './routes/delegations.js';
+import { projectScopeGuard, alertUncoveredProjects } from './services/projectScope.js';
 
 // Read-level access to the trading desk screens. There is no TRADING_READ group
 // — TRADING_ALL is the read tier; TRADING_WRITE is the narrower acting tier.
@@ -159,6 +166,14 @@ try {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+app.disable('x-powered-by');
+// Deployed behind Apache on the same machine (Apache :80 → Node :4000). Trusting
+// the loopback proxy makes req.ip the visitor's address, which the audit log,
+// the declaration register and the concurrent-sign-in check all record — without
+// it every row named 127.0.0.1.
+app.set('trust proxy', 'loopback');
+// GIGW / CERT-In security headers on every response, the static app included.
+app.use(securityHeaders);
 // Under test only: every response names the process that served it. The suite's
 // intermittent failure (a response that does not belong to its request) is
 // suspected to be a response from another test process; this lets the test
@@ -178,6 +193,12 @@ app.use(cors(
 // the routes, and the reply it gets should still name a log line.
 app.use(assignTraceId);
 app.use(express.json({ limit: '10mb' }));
+// Statutory declaration on critical submissions: recorded, and refused when
+// missing while enforcement is on. Ahead of the routers so one rule covers all.
+app.use('/api', statutoryDeclarations(userFromToken));
+// Project-wise authorisation (Target #2 Phase C): a REIA officer on SELECTED
+// projects is refused other projects' records and sees only theirs in lists.
+app.use('/api', projectScopeGuard(userFromToken));
 // `dev` writes ANSI colour codes, which journalctl stores verbatim and every
 // later grep has to step over. Deployed logs get the standard Apache line
 // instead, which log tooling already knows how to read.
@@ -204,6 +225,8 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     service: 'sjvn-energy-platform-backend',
     uptime_seconds: Math.floor(process.uptime()),
+    // For checking the host's NTP sync against the national reference (CERT-In).
+    server_time_utc: new Date().toISOString(),
   });
 });
 
@@ -212,6 +235,14 @@ app.use('/verify', verifyRoutes);
 
 // Auth
 app.use('/api/auth', authRoutes);
+// GIGW public facts (officers, last updated, session policy) and the consent receipt — no sign-in.
+app.use('/api/public', publicInfoRoutes);
+// DPDP Act data-principal rights.
+app.use('/api/privacy', privacyRoutes);
+// Project assignments and coverage (Target #2 Phase C).
+app.use('/api/project-scope', projectScopeRoutes);
+// Additional charge and break-glass (Target #2 Phase D).
+app.use('/api/delegations', delegationsRoutes);
 
 // 3A. REIA Billing, Contract and Settlement Management System
 app.use('/api/entities', requireAuth, entitiesRoutes);
@@ -336,8 +367,11 @@ if (fs.existsSync(path.join(CLIENT_DIR, 'index.html'))) {
   // ("Failed to fetch dynamically imported module").
   app.use(express.static(CLIENT_DIR, {
     setHeaders: (res, filePath) => {
-      if (filePath.endsWith('index.html')) {
+      if (filePath.endsWith('index.html') || filePath.endsWith('sw.js')) {
         res.setHeader('Cache-Control', 'no-store, must-revalidate');
+      } else if (filePath.endsWith('manifest.json')) {
+        res.setHeader('Content-Type', 'application/manifest+json');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
       } else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
       }
@@ -528,6 +562,16 @@ const server = app.listen(PORT, HOST, () => {
   // Banking cycles that have closed with energy unused settle themselves — daily
   // 02:00 IST (20:30 UTC). A cycle ending with unused energy has to settle
   // whether or not anyone remembers to ask for it.
+  // REIA projects with nobody to act at a tier — daily 09:15 IST (03:45 UTC).
+  cron.schedule('45 3 * * *', () => {
+    try {
+      const n = alertUncoveredProjects();
+      if (n) console.log(`[PROJECTS] ${n} REIA project(s) without full maker/checker/approver cover`);
+    } catch (err) {
+      console.error('[PROJECTS] coverage sweep failed', err.message);
+    }
+  });
+
   cron.schedule('30 20 * * *', () => {
     try {
       const r = settleExpiredBanking();

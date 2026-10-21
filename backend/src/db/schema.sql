@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS users (
     'TRADING_CLIENT','TRADING_CLIENT_MAKER','TRADING_CLIENT_CHECKER',
     'COMMERCIAL_ADMIN','COMMERCIAL_USER','COMMERCIAL',
     'THERMAL_ADMIN','THERMAL_USER',
-    'SJVN_ADMIN', 'SELLER', 'BUYER', 'REIA_USER', 'TRADING_USER' -- Legacy roles preserved for existing data
+    -- REIA desk (Target #2): maker drafts, checker scrutinises, approver (HOD) sanctions.
+    'REIA_MAKER','REIA_CHECKER','REIA_APPROVER',
+    'SJVN_ADMIN', 'SELLER', 'BUYER', 'REIA_USER', 'TRADING_USER' -- Legacy roles preserved for existing data (REIA_USER/REIA_ADMIN are read as REIA_MAKER/REIA_CHECKER)
   )),
   linked_entity_id TEXT,
   is_active INTEGER NOT NULL DEFAULT 1,
@@ -175,7 +177,10 @@ CREATE TABLE IF NOT EXISTS bank_transactions (
   transaction_date TEXT NOT NULL DEFAULT (datetime('now')),
   recon_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (recon_status IN ('MATCHED', 'PENDING', 'UNRECONCILED')),
   sap_sync_status TEXT NOT NULL DEFAULT 'PENDING' CHECK (sap_sync_status IN ('SYNCED', 'PENDING', 'FAILED')),
-  sap_voucher_no TEXT
+  sap_voucher_no TEXT,
+  client_id TEXT,   -- trading client the receipt was credited to (NULL while unmatched)
+  applied_at TEXT,  -- when it was credited; set once, so a receipt cannot be credited twice
+  created_by TEXT
 );
 
 
@@ -1322,6 +1327,9 @@ CREATE TABLE IF NOT EXISTS trading_clients (
   pre_payment_balance REAL NOT NULL DEFAULT 0,
   margin_available REAL NOT NULL DEFAULT 0,
   exposure_limit REAL NOT NULL DEFAULT 0,
+  -- Rs a buyer may bid beyond its pre-payment balance (trader's own risk call).
+  credit_limit REAL NOT NULL DEFAULT 0,
+  virtual_account_no TEXT, -- the bank's virtual account for this client; names it on a receipt
   risk_rating TEXT NOT NULL DEFAULT 'MEDIUM' CHECK (risk_rating IN ('LOW','MEDIUM','HIGH')),
   status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','INACTIVE','SUSPENDED')),
   suspension_reason TEXT,
@@ -1399,6 +1407,7 @@ CREATE TABLE IF NOT EXISTS bids (
   carry_forward_from TEXT, -- source bid id this OCF leg was carried forward from
   ocf_leg INTEGER NOT NULL DEFAULT 0, -- 0 = original bid, 1..n = carry-forward legs
   premium_discount REAL NOT NULL DEFAULT 0, -- Rs/unit applied on carry-forward (+premium / -discount)
+  bid_type TEXT CHECK (bid_type IN ('BUY','SELL')), -- NULL on bids placed before the side was stored
   cleared_quantum_mw REAL NOT NULL DEFAULT 0,
   cleared_price REAL,
   status TEXT NOT NULL DEFAULT 'DRAFT' CHECK (status IN (
@@ -4529,3 +4538,120 @@ CREATE TABLE IF NOT EXISTS station_power_regulations (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_station_reg_power ON station_power_regulations (contract_id, beneficiary_name, status);
+
+-- GIGW 3.0 / DPDP Act 2023 / CERT-In ------------------------------------------
+
+-- The statutory affirmation a user accepts before a critical submission (bid,
+-- invoice approval, contract status, payment-security action …): who, when by
+-- the server's clock, from which address, on which request, under which text
+-- version, and what the server then answered. Append-only: nothing updates a
+-- row except stamping the outcome of the request it belongs to.
+CREATE TABLE IF NOT EXISTS statutory_declarations (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  user_name TEXT,
+  user_role TEXT,
+  version TEXT NOT NULL,
+  action_label TEXT,
+  method TEXT NOT NULL,
+  path TEXT NOT NULL,
+  ip_address TEXT,
+  user_agent TEXT,
+  trace_id TEXT,
+  client_accepted_at TEXT,
+  outcome_status INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_stat_decl_user ON statutory_declarations (user_id, created_at);
+
+-- Consent given or withdrawn (cookie / browser storage today). Each change is a
+-- new row, so the history of a person's consent can be shown, not just its
+-- latest state.
+CREATE TABLE IF NOT EXISTS consent_records (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  purpose TEXT NOT NULL,
+  choice TEXT NOT NULL,           -- all | essential | withdrawn
+  version TEXT,
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_consent_user ON consent_records (user_id, created_at);
+
+-- A Data Principal's request under the DPDP Act: access, correction, erasure,
+-- nomination or grievance, worked by the Data Protection Officer.
+CREATE TABLE IF NOT EXISTS data_principal_requests (
+  id TEXT PRIMARY KEY,
+  reference TEXT UNIQUE NOT NULL,
+  user_id TEXT NOT NULL,
+  request_type TEXT NOT NULL CHECK (request_type IN ('ACCESS','CORRECTION','ERASURE','NOMINATION','GRIEVANCE')),
+  details TEXT NOT NULL,
+  nominee_name TEXT,
+  nominee_contact TEXT,
+  status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','ACKNOWLEDGED','IN_PROGRESS','RESOLVED','REJECTED')),
+  response TEXT,
+  handled_by TEXT,
+  due_at TEXT,
+  closed_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_dpr_user ON data_principal_requests (user_id, created_at);
+
+-- Target #2 Phase C: project-wise authorisation on the REIA desk. A REIA maker,
+-- checker or approver works on ALL projects (users.project_scope = 'ALL', the
+-- default) or only on the contracts assigned here ('SELECTED'). Revoking keeps
+-- the row, so who held a project when is on record.
+CREATE TABLE IF NOT EXISTS user_project_assignments (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  contract_id TEXT NOT NULL REFERENCES contracts(id),
+  assigned_by TEXT,
+  assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
+  revoked_by TEXT,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_upa_user ON user_project_assignments (user_id, revoked_at);
+CREATE INDEX IF NOT EXISTS idx_upa_contract ON user_project_assignments (contract_id, revoked_at);
+
+-- Target #2 Phase D: additional charge. While an officer is away, the
+-- administrator records who holds their charge, for dated days: the delegate
+-- may act in the delegator's role on the delegator's projects (or the listed
+-- ones), and everything done shows "by <delegate> for <delegator>".
+CREATE TABLE IF NOT EXISTS role_delegations (
+  id TEXT PRIMARY KEY,
+  delegator_id TEXT NOT NULL REFERENCES users(id),
+  delegate_id TEXT NOT NULL REFERENCES users(id),
+  role TEXT NOT NULL,                 -- the delegator's role when the charge was given
+  contract_ids_json TEXT,             -- NULL = all the delegator's projects
+  valid_from TEXT NOT NULL,           -- IST dates, inclusive
+  valid_to TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  revoked_by TEXT,
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_delegation_delegate ON role_delegations (delegate_id, revoked_at);
+
+-- Target #2 Phase D: break-glass. An officer asks for a role they do not hold,
+-- for a few hours, when no one who holds it can act. Two approvers — at least
+-- one from Management, neither the requester — must agree before it opens; it
+-- closes by itself, and every change made under it is flagged in the audit trail.
+CREATE TABLE IF NOT EXISTS break_glass_grants (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  role TEXT NOT NULL,
+  hours INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'REQUESTED' CHECK (status IN ('REQUESTED','ACTIVE','REJECTED','REVOKED','EXPIRED')),
+  approver1_id TEXT, approver1_name TEXT, approver1_role TEXT, approved1_at TEXT,
+  approver2_id TEXT, approver2_name TEXT, approver2_role TEXT, approved2_at TEXT,
+  rejected_by TEXT, rejected_at TEXT, rejection_reason TEXT,
+  activated_at TEXT,
+  expires_at TEXT,
+  revoked_by TEXT, revoked_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_break_glass_user ON break_glass_grants (user_id, status);

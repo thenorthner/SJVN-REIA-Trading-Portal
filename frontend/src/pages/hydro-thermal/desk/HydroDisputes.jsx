@@ -221,8 +221,8 @@ export default function HydroDisputes({ vertical = 'HYDRO' }) {
                 { key: 'reason', header: 'Reason', render: (r) => r.reason_label },
                 { key: 'disputed_amount', header: 'Disputed', render: (r) => fmtCurrency(r.disputed_amount) },
                 { key: 'status', header: 'Status', render: (r) => <Badge status={STATUS_TONE[r.status]} label={r.status.replaceAll('_', ' ')} /> },
-                { key: 'sla', header: 'SLA', render: (r) => (r.ack_overdue ? <span style={{ color: '#b91c1c' }}>Acknowledge was due {fmtDate(r.ack_due)}</span>
-                  : r.resolve_overdue ? <span style={{ color: '#b91c1c' }}>Resolution was due {fmtDate(r.resolve_due)}</span>
+                { key: 'sla', header: 'SLA', render: (r) => (r.ack_overdue ? <span style={{ color: 'var(--red-deep)' }}>Acknowledge was due {fmtDate(r.ack_due)}</span>
+                  : r.resolve_overdue ? <span style={{ color: 'var(--red-deep)' }}>Resolution was due {fmtDate(r.resolve_due)}</span>
                     : r.is_open ? `Resolve by ${fmtDate(r.resolve_due)}` : '—') },
                 { key: 'raised', header: 'Raised', render: (r) => fmtDate(r.created_at) },
               ]}
@@ -286,8 +286,8 @@ export default function HydroDisputes({ vertical = 'HYDRO' }) {
               <tr><td>Disputed</td><td>{fmtCurrency(selected.disputed_amount)}{selected.accepted_amount != null ? ` · accepted ${fmtCurrency(selected.accepted_amount)}` : ''}</td></tr>
               <tr><td>Received</td><td>{fmtDate(selected.received_on)}{selected.letter_ref ? ` · ${selected.letter_ref}` : ''}</td></tr>
               <tr><td>Status</td><td><Badge status={STATUS_TONE[selected.status]} label={selected.status.replaceAll('_', ' ')} /></td></tr>
-              <tr><td>Acknowledge by</td><td style={{ color: selected.ack_overdue ? '#b91c1c' : undefined, fontWeight: selected.ack_overdue ? 700 : undefined }}>{fmtDate(selected.ack_due)}{selected.ack_overdue ? ' — OVERDUE' : ''}</td></tr>
-              <tr><td>Resolve by</td><td style={{ color: selected.resolve_overdue ? '#b91c1c' : undefined, fontWeight: selected.resolve_overdue ? 700 : undefined }}>{fmtDate(selected.resolve_due)}{selected.resolve_overdue ? ' — OVERDUE' : ''}</td></tr>
+              <tr><td>Acknowledge by</td><td style={{ color: selected.ack_overdue ? 'var(--red-deep)' : undefined, fontWeight: selected.ack_overdue ? 700 : undefined }}>{fmtDate(selected.ack_due)}{selected.ack_overdue ? ' — OVERDUE' : ''}</td></tr>
+              <tr><td>Resolve by</td><td style={{ color: selected.resolve_overdue ? 'var(--red-deep)' : undefined, fontWeight: selected.resolve_overdue ? 700 : undefined }}>{fmtDate(selected.resolve_due)}{selected.resolve_overdue ? ' — OVERDUE' : ''}</td></tr>
               {selected.resolution && <tr><td>Resolution</td><td>{selected.resolution}</td></tr>}
               {selected.credit_note_no && <tr><td>Credit note</td><td><Link to={pathFor(vertical, 'notes')}>{selected.credit_note_no}</Link> ({selected.credit_note_status})</td></tr>}
             </tbody></table>
@@ -306,7 +306,7 @@ export default function HydroDisputes({ vertical = 'HYDRO' }) {
             <h4 style={{ margin: '18px 0 8px' }}>Communication thread</h4>
             {comments.length === 0 && <p style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>No comments yet.</p>}
             {comments.map((c) => (
-              <div key={c.id} style={{ padding: '8px 12px', marginBottom: 6, background: c.is_internal ? 'var(--amber-50, #fffbeb)' : 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8 }}>
+              <div key={c.id} style={{ padding: '8px 12px', marginBottom: 6, background: c.is_internal ? 'var(--amber-50, var(--t-amber-50))' : 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>
                   <span><strong>{c.author_name}</strong></span>
                   <span>{fmtDateTime(c.created_at)}{c.is_internal ? ' · Internal' : ''}</span>

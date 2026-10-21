@@ -126,7 +126,7 @@ export default function IexBidBookReport({ kind }) {
           <div className="page-loading">Loading…</div>
         ) : (
           <>
-            <div style={{ overflow: 'auto', maxHeight: '70vh', border: '1px solid #e2e8f0' }}>
+            <div style={{ overflow: 'auto', maxHeight: '70vh', border: '1px solid var(--slate-200)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
                 <thead>
                   <tr>
@@ -136,12 +136,12 @@ export default function IexBidBookReport({ kind }) {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={columns.length} style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
+                      <td colSpan={columns.length} style={{ padding: 24, textAlign: 'center', color: 'var(--slate-500)' }}>
                         No data available in table
                       </td>
                     </tr>
                   ) : filtered.map((r) => (
-                    <tr key={`${r.order_id || r.id}-${r.sl_no}-${r.from_period_id || ''}`} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                    <tr key={`${r.order_id || r.id}-${r.sl_no}-${r.from_period_id || ''}`} style={{ borderBottom: '1px solid var(--slate-200)' }}>
                       {columns.map((c) => {
                         if (c.key === 'order_id' && r.bid_id) {
                           const manage = r.report_type?.startsWith('RTM') ? '/trading/rtm' : '/trading/dam';
@@ -160,7 +160,7 @@ export default function IexBidBookReport({ kind }) {
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 10, fontSize: 13.5, color: '#64748b' }}>
+            <div style={{ marginTop: 10, fontSize: 13.5, color: 'var(--slate-500)' }}>
               {filtered.length === 0
                 ? 'No data available in table'
                 : `Showing 1 to ${filtered.length} of ${filtered.length} entries`}

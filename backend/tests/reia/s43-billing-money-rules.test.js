@@ -190,7 +190,7 @@ describe('S43 Notifications reach the bill\'s own party', () => {
     const otherBuyer = makeUser('BUYER', { linked_entity_id: makeEntity('BUYER').id });
     const inv = makeInvoice({ contract_id: psa.id, status: 'UNDER_APPROVAL', total_amount: 1000 });
     db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES ('S43-N1', ?, 1, 'PENDING')`).run(inv.id);
-    const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(auth(reia)).send({ decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk' });
+    const r = await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(auth(tokenFor('REIA_CHECKER'))).send({ decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk' });
     expect(r.status).toBe(200);
     const to = (u) => db.prepare(`SELECT COUNT(*) n FROM notifications WHERE type = 'INVOICE_APPROVED' AND user_id = ?`).get(u.id).n;
     expect(to(mine)).toBe(1);

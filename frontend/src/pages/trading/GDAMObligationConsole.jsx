@@ -146,19 +146,19 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
       <Card>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 15, alignItems: 'center' }}>
           <h3 style={{ margin: 0 }}>{product} Obligation</h3>
-          <span style={{ fontSize: 13.5, color: '#555' }}>Cleared bid blocks — exchange PDFs are not stored</span>
+          <span style={{ fontSize: 13.5, color: 'var(--slate-600)' }}>Cleared bid blocks — exchange PDFs are not stored</span>
         </div>
-        {error && <div style={{ padding: 12, color: '#b91c1c', background: '#fef2f2', borderRadius: 4, marginBottom: 12 }}>{error}</div>}
+        {error && <div style={{ padding: 12, color: 'var(--red-deep)', background: 'var(--t-red-50)', borderRadius: 4, marginBottom: 12 }}>{error}</div>}
         {loading ? (
-          <div style={{ padding: 32, textAlign: 'center', color: '#666' }}>Loading obligations…</div>
+          <div style={{ padding: 32, textAlign: 'center', color: 'var(--slate-500)' }}>Loading obligations…</div>
         ) : (
           <Table columns={columns} data={rows} />
         )}
       </Card>
 
       {detail && (
-        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 560, background: '#fff', zIndex: 9999, boxShadow: '-5px 0 25px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: 20, background: '#f8f9fa', borderBottom: '1px solid #dee2e6' }}>
+        <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 560, background: 'var(--surface)', zIndex: 9999, boxShadow: '-5px 0 25px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: 20, background: 'var(--slate-50)', borderBottom: '1px solid var(--slate-100)' }}>
             <div>
               <h3 style={{ margin: 0 }}>{detail.client_name}</h3>
               <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 5 }}>
@@ -169,9 +169,9 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
           </div>
           <div style={{ flex: 1, padding: 16, overflowY: 'auto' }}>
             {detailLoading ? (
-              <div style={{ padding: 24, textAlign: 'center', color: '#666' }}>Loading blocks…</div>
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--slate-500)' }}>Loading blocks…</div>
             ) : !detailBlocks?.length ? (
-              <div style={{ padding: 24, textAlign: 'center', color: '#666' }}>No blocks on this day.</div>
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--slate-500)' }}>No blocks on this day.</div>
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
@@ -185,7 +185,7 @@ export default function GDAMObligationConsole({ product = 'GDAM' }) {
                 </thead>
                 <tbody>
                   {detailBlocks.map((b) => (
-                    <tr key={b.block_no} style={{ borderBottom: '1px solid #eee' }}>
+                    <tr key={b.block_no} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: 8 }}>{b.time_label}</td>
                       <td style={{ padding: 8, textAlign: 'right' }}>{fmtNumber(b.bid_mw, 2)}</td>
                       <td style={{ padding: 8, textAlign: 'right' }}>{fmtNumber(b.cleared_mw, 2)}</td>

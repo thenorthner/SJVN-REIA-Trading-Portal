@@ -401,7 +401,7 @@ function RoutingTreeCanvas({
               </div>
             </div>
 
-            <div style={{ fontSize: 12.5, color: '#64748b' }}>
+            <div style={{ fontSize: 12.5, color: 'var(--slate-500)' }}>
               Project: <strong>{contract?.project_type || 'Solar'}</strong> · {isPpa ? 'COD: ' : 'Tenure: '}<strong>{isPpa ? (contract?.cod_date || 'Not commissioned') : `${contract?.tenure_start || '—'} to ${contract?.tenure_end || '—'}`}</strong>
             </div>
           </div>
@@ -508,7 +508,7 @@ function RoutingTreeCanvas({
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#94a3b8', marginBottom: 3 }}>
                 <span>Avg spread (PSA − PPA)</span>
-                <strong style={{ color: avgSpread != null && avgSpread < 0 ? '#ef4444' : '#38bdf8' }}>{avgSpread == null ? '—' : `${avgSpread < 0 ? '−' : '+'}₹${Math.abs(avgSpread).toFixed(3)} / unit`}</strong>
+                <strong style={{ color: avgSpread != null && avgSpread < 0 ? 'var(--on-red)' : '#38bdf8' }}>{avgSpread == null ? '—' : `${avgSpread < 0 ? '−' : '+'}₹${Math.abs(avgSpread).toFixed(3)} / unit`}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#94a3b8' }}>
                 <span>{isPpa ? 'Carve-Out Branches' : 'Source PPAs'}</span>
@@ -516,7 +516,7 @@ function RoutingTreeCanvas({
               </div>
             </div>
 
-            <div style={{ fontSize: 12.5, color: '#64748b', textAlign: 'center' }}>
+            <div style={{ fontSize: 12.5, color: 'var(--slate-500)', textAlign: 'center' }}>
               Back-to-Back Pass-Through Routing
             </div>
           </div>
@@ -659,7 +659,7 @@ function RoutingTreeCanvas({
                         </div>
                         <div>
                           <span style={{ color: '#94a3b8', fontSize: 12.5 }}>Tariff: </span>
-                          <strong style={{ color: sp != null && sp < 0 ? '#ef4444' : '#10b981' }}>{Number.isFinite(nodeTariff) ? `₹${nodeTariff.toFixed(2)}` : '—'}{sp != null && sp < 0 ? ' · loss' : ''}</strong>
+                          <strong style={{ color: sp != null && sp < 0 ? 'var(--on-red)' : '#10b981' }}>{Number.isFinite(nodeTariff) ? `₹${nodeTariff.toFixed(2)}` : '—'}{sp != null && sp < 0 ? ' · loss' : ''}</strong>
                         </div>
                       </div>
                     );
@@ -670,7 +670,7 @@ function RoutingTreeCanvas({
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     fontSize: 12.5,
-                    color: '#64748b',
+                    color: 'var(--slate-500)',
                     marginTop: 6,
                   }}>
                     <span>Effective: {alloc.effective_from} → {alloc.effective_to || 'Active'}</span>
@@ -709,7 +709,7 @@ function RoutingTreeCanvas({
                   {isPpa ? `Carve-Out Deep Dive: ${alloc.buyer_name || 'Buyer DISCOM'}` : `Source Supply: ${alloc.seller_name || 'Generator IPP'}`} ({alloc.allocation_percent}% Allocation)
                 </strong>
                 {isLoss && (
-                  <span style={{ fontSize: 12, color: '#ef4444', background: 'rgba(239, 68, 68, 0.15)', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
+                  <span style={{ fontSize: 12, color: 'var(--on-red)', background: 'rgba(239, 68, 68, 0.15)', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
                     Negative Spread Alert (PSA &lt; PPA Tariff)
                   </span>
                 )}
@@ -756,15 +756,15 @@ function RoutingTreeCanvas({
                 <div style={{ fontWeight: 700, color: '#38bdf8', fontSize: 15, marginTop: 2 }}>
                   {fmtNumber(allocatedShareMw)} MW
                 </div>
-                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 2 }}>{alloc.allocation_percent}% of {fmtNumber(totalCapacity)} MW {isPpa ? 'PPA Pool' : 'PSA Requirement'}</div>
+                <div style={{ color: 'var(--slate-500)', fontSize: 12.5, marginTop: 2 }}>{alloc.allocation_percent}% of {fmtNumber(totalCapacity)} MW {isPpa ? 'PPA Pool' : 'PSA Requirement'}</div>
               </div>
 
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
                 <div style={{ color: '#94a3b8', fontSize: 13 }}>Off-Take Tariff & Spread</div>
-                <div style={{ fontWeight: 700, color: isLoss ? '#ef4444' : '#10b981', fontSize: 15, marginTop: 2 }}>
+                <div style={{ fontWeight: 700, color: isLoss ? 'var(--on-red)' : '#10b981', fontSize: 15, marginTop: 2 }}>
                   ₹{psaTariff.toFixed(2)} / kWh
                 </div>
-                <div style={{ color: isLoss ? '#f87171' : '#64748b', fontSize: 12.5, marginTop: 2 }}>
+                <div style={{ color: isLoss ? '#f87171' : 'var(--slate-500)', fontSize: 12.5, marginTop: 2 }}>
                   {isLoss ? `Deficit: -₹${Math.abs(marginSpread).toFixed(3)}/unit` : `Base ₹${ppaTariff.toFixed(2)} + Margin ₹${marginSpread.toFixed(3)}`}
                 </div>
               </div>
@@ -772,15 +772,15 @@ function RoutingTreeCanvas({
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
                 <div style={{ color: '#94a3b8', fontSize: 13 }}>{isPpa ? 'PSA Contract Number' : 'Source PPA Number'}</div>
                 <div style={{ fontWeight: 600, color: '#f8fafc', marginTop: 2 }}>{(isPpa ? alloc.psa_no : alloc.ppa_no) || '—'}</div>
-                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 2 }}>Effective: {alloc.effective_from} → {alloc.effective_to || 'Active'}</div>
+                <div style={{ color: 'var(--slate-500)', fontSize: 12.5, marginTop: 2 }}>Effective: {alloc.effective_from} → {alloc.effective_to || 'Active'}</div>
               </div>
 
               <div style={{ background: '#0b1120', padding: 10, borderRadius: 8, border: '1px solid #1e293b' }}>
                 <div style={{ color: '#94a3b8', fontSize: 13 }}>{isLoss ? 'Monthly loss (est.)' : 'Monthly margin (est.)'}</div>
-                <div style={{ fontWeight: 700, color: isLoss ? '#ef4444' : '#f59e0b', fontSize: 15, marginTop: 2 }}>
+                <div style={{ fontWeight: 700, color: isLoss ? 'var(--on-red)' : '#f59e0b', fontSize: 15, marginTop: 2 }}>
                   {isLoss ? '−' : ''}₹{Math.abs(allocatedShareMw * 1000 * marginSpread * 160).toLocaleString('en-IN', { maximumFractionDigits: 0 })} / mo
                 </div>
-                <div style={{ color: '#64748b', fontSize: 12.5, marginTop: 2 }}>{fmtNumber(allocatedShareMw)} MW × 160 h/month (≈22% CUF) × spread</div>
+                <div style={{ color: 'var(--slate-500)', fontSize: 12.5, marginTop: 2 }}>{fmtNumber(allocatedShareMw)} MW × 160 h/month (≈22% CUF) × spread</div>
               </div>
             </div>
           </div>
@@ -808,7 +808,7 @@ function RoutingTreeCanvas({
 function TableMatrixView({ isPpa, allocations, canMap, onRemoveAllocation }) {
   if (!allocations.length) {
     return (
-      <div style={{ padding: 20, textAlign: 'center', color: '#64748b', background: '#fff', borderRadius: '0 0 12px 12px', border: '1px solid var(--slate-200)' }}>
+      <div style={{ padding: 20, textAlign: 'center', color: 'var(--slate-500)', background: 'var(--surface)', borderRadius: '0 0 12px 12px', border: '1px solid var(--slate-200)' }}>
         {isPpa ? 'No PSAs mapped to this PPA yet.' : 'No source PPA is linked to this PSA yet.'}
       </div>
     );
@@ -840,7 +840,7 @@ function TableMatrixView({ isPpa, allocations, canMap, onRemoveAllocation }) {
           type="button"
           onClick={() => onRemoveAllocation(r.id)}
           className="btn btn-outline btn-sm"
-          style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+          style={{ color: 'var(--red-strong)', borderColor: '#fca5a5' }}
         >
           Unlink
         </button>
@@ -849,7 +849,7 @@ function TableMatrixView({ isPpa, allocations, canMap, onRemoveAllocation }) {
   }
 
   return (
-    <div style={{ background: '#fff', border: '1px solid var(--slate-200)', borderRadius: '0 0 12px 12px', padding: 16 }}>
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--slate-200)', borderRadius: '0 0 12px 12px', padding: 16 }}>
       <Table
         columns={baseColumns}
         rows={allocations}

@@ -113,7 +113,7 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
               <div className="detail-item"><span className="detail-label">Exposure</span><span className="detail-value">{fmtCurrency(detail.unreconciled_amount)}</span></div>
             </div>
 
-            <div style={{ marginTop: 14, padding: 14, background: 'var(--surface-hover, #f8fafc)', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <div style={{ marginTop: 14, padding: 14, background: 'var(--surface-hover, var(--slate-50))', borderRadius: 8, border: '1px solid var(--border)' }}>
               <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span>Sign-off by both parties</span>
                 <Badge
@@ -123,8 +123,8 @@ export default function MyReconciliation({ subtitle, contractHeader, partyName, 
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {[['SJVN', detail.sjvn_ack_at, detail.sjvn_ack_by, 'Pending SJVN'], [partyName, detail.counterparty_ack_at, detail.counterparty_ack_by, 'Pending your action']].map(([label, at, by, pending]) => (
-                  <div key={label} style={{ padding: 10, background: at ? '#ecfdf5' : '#fff', border: `1px solid ${at ? '#a7f3d0' : 'var(--border)'}`, borderRadius: 6 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: at ? '#065f46' : 'var(--text-muted)' }}>{label}</div>
+                  <div key={label} style={{ padding: 10, background: at ? 'var(--t-green-50)' : 'var(--surface)', border: `1px solid ${at ? 'var(--t-green-100)' : 'var(--border)'}`, borderRadius: 6 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: at ? 'var(--on-green)' : 'var(--text-muted)' }}>{label}</div>
                     <div style={{ fontSize: 13.5, marginTop: 3 }}>{at ? `${by} · ${fmtDateTime(at)}` : pending}</div>
                   </div>
                 ))}

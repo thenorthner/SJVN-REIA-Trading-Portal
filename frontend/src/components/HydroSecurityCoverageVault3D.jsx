@@ -269,7 +269,7 @@ export default function HydroSecurityCoverageVault3D({
           <div style={{ fontSize: 18, fontWeight: 700, color: '#f8fafc', marginTop: 2 }}>
             {fmtCurrency(totalRequired)}
           </div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Based on {coverPct}% monthly billing</div>
+          <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 2 }}>Based on {coverPct}% monthly billing</div>
         </div>
 
         <div style={{
@@ -295,7 +295,7 @@ export default function HydroSecurityCoverageVault3D({
           <div style={{ fontSize: 18, fontWeight: 700, color: totalShortfall > 0 ? '#f87171' : '#4ade80', marginTop: 2 }}>
             {totalShortfall > 0 ? fmtCurrency(totalShortfall) : 'NIL (Fully Secured)'}
           </div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 2 }}>
             {totalExpiringSoon > 0 ? `${totalExpiringSoon} LC expiring within 30 days` : 'All LCs healthy'}
           </div>
         </div>
@@ -377,7 +377,7 @@ export default function HydroSecurityCoverageVault3D({
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, fontSize: 12 }}>
-                <span style={{ color: '#64748b' }}>{d.lc_no}</span>
+                <span style={{ color: 'var(--slate-500)' }}>{d.lc_no}</span>
                 <span style={{ color: isWarning ? '#f87171' : '#2dd4bf', fontWeight: 600 }}>
                   {isWarning ? 'SHORTFALL' : isExpiring ? 'EXPIRING SOON' : 'VALID & ACTIVE'}
                 </span>

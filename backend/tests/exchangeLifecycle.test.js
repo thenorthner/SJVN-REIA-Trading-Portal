@@ -32,7 +32,7 @@ beforeEach(() => {
   db.prepare(`INSERT INTO trading_clients (id, name, entity_id, client_type, status, exposure_limit)
               VALUES (?, 'New Delhi Municipal Council', ?, 'DISCOM', 'ACTIVE', 100000000)`).run(clientId, entityId);
   trader = tokenFor('TRADING_USER');
-  checker = tokenFor('SJVN_ADMIN');
+  checker = tokenFor('TRADING_ADMIN'); // Target #2 Phase B: the trading desk head checks, not the SJVN Administrator
 });
 
 const contractBody = (over = {}) => ({

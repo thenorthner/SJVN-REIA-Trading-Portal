@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import api from '../api/client.js';
 import { Badge, Field, fmtCurrency, fmtNumber } from './ui.jsx';
 import { DocumentManager, PreviewModal } from './DocumentManager.jsx';
+import { SettlementTrailPanel } from './SettlementTrail.jsx';
 import { fmtDate, fmtDateTime } from '../datetime.js';
 import { paymentTermsText, rebateText, lpsText, paymentSecurityText } from '../lib/contractRules.js';
 
@@ -13,7 +14,7 @@ import { paymentTermsText, rebateText, lpsText, paymentSecurityText } from '../l
 // guarantee here — its LC or corpus is in the Payment Security module.
 
 const TABS = [
-  ['OVERVIEW', 'Overview'], ['DOCUMENTS', 'Documents'], ['MILESTONES', 'Milestones'], ['GUARANTEE', 'Guarantee (PBG)'],
+  ['OVERVIEW', 'Overview'], ['TRAIL', 'Settlement trail'], ['DOCUMENTS', 'Documents'], ['MILESTONES', 'Milestones'], ['GUARANTEE', 'Guarantee (PBG)'],
   ['REQUESTS', 'Requests'], ['NOTICES', 'Notices'], ['HISTORY', 'History'],
 ];
 
@@ -37,14 +38,14 @@ function Countdown({ days }) {
   const late = days < 0;
   const soon = !late && days <= 30;
   return (
-    <span style={{ marginLeft: 8, padding: '1px 8px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: late ? '#fef2f2' : soon ? '#fffbeb' : '#f1f5f9', color: late ? '#b91c1c' : soon ? '#b45309' : '#475569' }}>
+    <span style={{ marginLeft: 8, padding: '1px 8px', borderRadius: 999, fontSize: 13, fontWeight: 700, background: late ? 'var(--t-red-50)' : soon ? 'var(--t-amber-50)' : 'var(--slate-100)', color: late ? 'var(--red-deep)' : soon ? 'var(--amber-strong)' : 'var(--slate-600)' }}>
       {late ? `${plural(-days, 'day')} overdue` : days === 0 ? 'today' : `in ${plural(days, 'day')}`}
     </span>
   );
 }
 
 const Note = ({ children, tone }) => (
-  <p style={{ margin: '0 0 12px', fontSize: 13, lineHeight: 1.5, color: tone === 'red' ? '#b91c1c' : 'var(--slate-600)' }}>{children}</p>
+  <p style={{ margin: '0 0 12px', fontSize: 13, lineHeight: 1.5, color: tone === 'red' ? 'var(--red-deep)' : 'var(--slate-600)' }}>{children}</p>
 );
 
 /** Upload a file against the contract and hand back the version it became. */
@@ -81,7 +82,7 @@ function Overview({ contract, ws, go }) {
           {flags.map((f) => (
             <button
               key={f.text} type="button" onClick={() => go(f.tab)}
-              style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', fontSize: 13, fontWeight: 600, padding: '8px 12px', borderRadius: 8, border: `1px solid ${f.tone === 'red' ? '#fca5a5' : '#fcd34d'}`, background: f.tone === 'red' ? '#fef2f2' : '#fffbeb', color: f.tone === 'red' ? '#b91c1c' : '#b45309' }}
+              style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', fontSize: 13, fontWeight: 600, padding: '8px 12px', borderRadius: 8, border: `1px solid ${f.tone === 'red' ? '#fca5a5' : 'var(--t-amber-100)'}`, background: f.tone === 'red' ? 'var(--t-red-50)' : 'var(--t-amber-50)', color: f.tone === 'red' ? 'var(--red-deep)' : 'var(--amber-strong)' }}
             >
               {f.text} →
             </button>
@@ -112,8 +113,8 @@ function Overview({ contract, ws, go }) {
             {item('Invoices', b.invoices)}
             {item('Billed', fmtCurrency(b.billed))}
             {item('Paid', fmtCurrency(b.paid))}
-            {item('Outstanding', <strong style={{ color: b.outstanding > 0 ? '#b45309' : 'inherit' }}>{fmtCurrency(b.outstanding)}</strong>)}
-            {item('Overdue invoices', <strong style={{ color: b.overdue ? '#b91c1c' : 'inherit' }}>{b.overdue}</strong>)}
+            {item('Outstanding', <strong style={{ color: b.outstanding > 0 ? 'var(--amber-strong)' : 'inherit' }}>{fmtCurrency(b.outstanding)}</strong>)}
+            {item('Overdue invoices', <strong style={{ color: b.overdue ? 'var(--red-deep)' : 'inherit' }}>{b.overdue}</strong>)}
             {item('Open disputes', b.open_disputes)}
           </div>
         </>
@@ -180,7 +181,7 @@ function Milestones({ ws, meta, run, raiseExtension }) {
                     </td>
                     <td>
                       {m.achieved_date ? fmtDate(m.achieved_date) : '—'}
-                      {m.achieved_date && m.delay_days > 0 && <div style={{ fontSize: 13.5, color: '#b91c1c' }}>{plural(m.delay_days, 'day')} late</div>}
+                      {m.achieved_date && m.delay_days > 0 && <div style={{ fontSize: 13.5, color: 'var(--red-deep)' }}>{plural(m.delay_days, 'day')} late</div>}
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -289,7 +290,7 @@ function Guarantee({ ws, run, setError }) {
   return (
     <div>
       {g.state === 'EXPIRED' && <div className="alert alert-error">The performance guarantee on record expired on {fmtDate(g.expiry)} — {plural(-g.days_to_expiry, 'day')} ago. {canRenew ? 'Submit the renewed guarantee below.' : ''}</div>}
-      {g.state === 'EXPIRING' && <div className="alert" style={{ background: '#fffbeb', border: '1px solid #fcd34d', color: '#b45309' }}>The performance guarantee expires on {fmtDate(g.expiry)} — in {plural(g.days_to_expiry, 'day')}. {canRenew ? 'Submit the renewed guarantee before then.' : ''}</div>}
+      {g.state === 'EXPIRING' && <div className="alert" style={{ background: 'var(--t-amber-50)', border: '1px solid var(--t-amber-100)', color: 'var(--amber-strong)' }}>The performance guarantee expires on {fmtDate(g.expiry)} — in {plural(g.days_to_expiry, 'day')}. {canRenew ? 'Submit the renewed guarantee before then.' : ''}</div>}
 
       <div className="detail-grid mb-0">
         <div className="detail-item"><span className="detail-label">PBG Amount</span><span className="detail-value">{g.amount ? fmtCurrency(g.amount) : '—'}</span></div>
@@ -450,7 +451,7 @@ function Requests({ ws, meta, run, setError, draft, clearDraft, onPreview }) {
               {r.attachment_version_id && <button type="button" className="btn-link" onClick={() => onPreview(r.attachment_version_id, r.attachment_name)}>View attachment</button>}
             </div>
             {r.status !== 'PENDING' && r.status !== 'WITHDRAWN' && (
-              <div style={{ marginTop: 8, fontSize: 13, color: r.status === 'APPROVED' ? '#15803d' : '#b91c1c' }}>
+              <div style={{ marginTop: 8, fontSize: 13, color: r.status === 'APPROVED' ? 'var(--on-green-2)' : 'var(--red-deep)' }}>
                 <strong>{r.status === 'APPROVED' ? 'Approved' : 'Refused'}</strong> by {r.decided_by_name || 'SJVN'} on {fmtDateTime(r.decided_at)}
                 {r.approved_date && r.approved_date !== r.requested_date ? ` — granted to ${fmtDate(r.approved_date)}` : ''}
                 {r.decision_note ? ` — ${r.decision_note}` : ''}
@@ -562,7 +563,7 @@ function Notices({ ws, meta, run, setError, onPreview }) {
             <p style={{ margin: '8px 0', fontSize: 13.5, whiteSpace: 'pre-wrap' }}>{n.body}</p>
             <div style={{ fontSize: 13.5, color: 'var(--slate-600)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               {n.event_date && <span>Event: {fmtDate(n.event_date)}</span>}
-              {n.response_due && <span style={{ color: n.response_overdue ? '#b91c1c' : 'inherit' }}>Reply by: {fmtDate(n.response_due)}</span>}
+              {n.response_due && <span style={{ color: n.response_overdue ? 'var(--red-deep)' : 'inherit' }}>Reply by: {fmtDate(n.response_due)}</span>}
               {n.acknowledged_at && <span>Acknowledged {fmtDateTime(n.acknowledged_at)} by {n.acknowledged_by_name}</span>}
               {n.attachment_version_id && <button type="button" className="btn-link" onClick={() => onPreview(n.attachment_version_id, n.attachment_name)}>View attachment</button>}
             </div>
@@ -629,6 +630,47 @@ function History({ contract, ws }) {
  * @param onChanged called after anything here changes, so a list behind can refresh
  * @param startTab  which tab to open on
  */
+// The chain a month's power and money follow: developer (PPA) → SJVN → DISCOM
+// (PSA), with the bills on each leg and their late-payment surcharge and rebate.
+// The server decides what this party may see of the other end; the note says it.
+function TrailTab({ contract, ws }) {
+  const [periods, setPeriods] = useState(null);
+  const [period, setPeriod] = useState('');
+  useEffect(() => {
+    let live = true;
+    api.billingTrail.periods(contract.id)
+      .then((r) => { if (live) { setPeriods(r.periods || []); setPeriod((r.periods || [])[0] || ''); } })
+      .catch(() => { if (live) setPeriods([]); });
+    return () => { live = false; };
+  }, [contract.id]);
+
+  const seller = contract.contract_type === 'PPA';
+  const note = ws.side === 'SJVN'
+    ? 'Both ends of the back-to-back chain, with the bills on each leg.'
+    : seller
+      ? 'Where your power goes and how much, with the bills on your side. The DISCOM\'s tariff, bills and payments, and SJVN\'s margin, are between SJVN and the DISCOM and are not shown here.'
+      : 'Whose power you receive, the PPA tariff and SJVN\'s trading margin that make up your tariff, and your own bills with their late-payment surcharge and rebate. The developer\'s bills and payments are not shown.';
+  return (
+    <div>
+      <Note>{note}</Note>
+      {periods === null && <div style={{ padding: 16 }}>Loading…</div>}
+      {periods && periods.length === 0 && <div style={{ padding: 16, color: 'var(--slate-500)' }}>No month has energy or bills on this contract yet.</div>}
+      {periods && periods.length > 0 && (
+        <>
+          <div style={{ margin: '0 0 12px', maxWidth: 240 }}>
+            <Field label="Month">
+              <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+                {periods.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </Field>
+          </div>
+          {period && <SettlementTrailPanel key={`${contract.id}-${period}`} contractId={contract.id} periodMonth={period} />}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function ContractWorkspace({ contract, onChanged, startTab = 'OVERVIEW' }) {
   const [ws, setWs] = useState(null);
   const [meta, setMeta] = useState({});
@@ -682,6 +724,7 @@ export default function ContractWorkspace({ contract, onChanged, startTab = 'OVE
       {error && <div className="alert alert-error" role="alert">{error}</div>}
 
       {tab === 'OVERVIEW' && <Overview contract={contract} ws={ws} go={setTab} />}
+      {tab === 'TRAIL' && <TrailTab contract={contract} ws={ws} />}
       {tab === 'DOCUMENTS' && (
         <div>
           <Note>The executed agreement, its annexures and everything else filed against this contract. Open one to read it here, or take the lot as a zip.</Note>

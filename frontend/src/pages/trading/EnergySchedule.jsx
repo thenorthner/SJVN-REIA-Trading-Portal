@@ -131,7 +131,7 @@ export default function EnergySchedule({ product = 'DAM' }) {
         }
       />
 
-      <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
+      <Card style={{ marginBottom: 20, background: 'var(--slate-50)' }}>
         <div style={{ display: 'flex', gap: 20, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
             <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedule-trading-date">Delivery Date</label>
@@ -152,7 +152,7 @@ export default function EnergySchedule({ product = 'DAM' }) {
       </Card>
 
       <Card>
-        <div style={{ marginBottom: 16, padding: 15, background: '#e9ecef', borderRadius: 4, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ marginBottom: 16, padding: 15, background: 'var(--slate-100)', borderRadius: 4, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <strong>Client:</strong> {activeClient?.name || 'All clients'}<br />
             <strong>Delivery:</strong> {date}
@@ -160,18 +160,18 @@ export default function EnergySchedule({ product = 'DAM' }) {
           <div style={{ textAlign: 'right' }}>
             <div><strong>Cleared:</strong> {fmtNumber(data?.summary?.cleared_mwh || 0, 3)} MWh</div>
             <div><strong>Value:</strong> ₹{fmtNumber(data?.summary?.cleared_value || 0, 2)}</div>
-            <div style={{ fontSize: 13.5, color: '#555', marginTop: 4 }}>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-700)', marginTop: 4 }}>
               From {data?.summary?.bids || 0} filed bid{(data?.summary?.bids || 0) === 1 ? '' : 's'} — not WBES / JMR
             </div>
           </div>
         </div>
 
-        {error && <div style={{ padding: 12, color: '#b91c1c', background: '#fef2f2', borderRadius: 4, marginBottom: 12 }}>{error}</div>}
+        {error && <div style={{ padding: 12, color: 'var(--on-red)', background: 'var(--t-red-50)', borderRadius: 4, marginBottom: 12 }}>{error}</div>}
 
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Loading schedule…</div>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--slate-500)' }}>Loading schedule…</div>
         ) : !hasVolume ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--slate-500)' }}>
             No {product} bids filed for this delivery date{activeClient ? ` (${activeClient.name})` : ''}.
             {recent.length > 0 && (
               <div style={{ marginTop: 12 }}>

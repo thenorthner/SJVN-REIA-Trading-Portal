@@ -7,7 +7,8 @@ import { signToken } from '../../src/middleware/auth.js';
 import { invalidateParamCache } from '../../src/mastersService.js';
 
 let reia, contract;
-beforeEach(() => { resetReia(); reia = tokenFor('REIA_USER'); contract = makeContract({ status: 'ACTIVE' }); });
+// Level 1 is the REIA checker's (Target #2 Phase B), so the desk token here is a checker's.
+beforeEach(() => { resetReia(); reia = tokenFor('REIA_CHECKER'); contract = makeContract({ status: 'ACTIVE' }); });
 
 describe('S7 Invoice approval and distribution', () => {
   it('will not send an invoice before its approvals are signed off', async () => {
@@ -56,7 +57,8 @@ describe('S7 Invoice approval and distribution', () => {
     db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, 'PENDING')`).run(apId, invId);
 
   it('stops the same user both creating and approving an invoice', async () => {
-    const maker = makeUser('REIA_USER', { name: 'Maker' });
+    // A checker who created the bill: holds the level's role, still may not sign it.
+    const maker = makeUser('REIA_CHECKER', { name: 'Maker' });
     const inv = makeInvoice({
       contract_id: contract.id, status: 'UNDER_APPROVAL',
       created_by: maker.name, created_by_id: maker.id,   // what generate() writes
@@ -70,7 +72,7 @@ describe('S7 Invoice approval and distribution', () => {
 
   it('still lets a different person approve it', async () => {
     const maker = makeUser('REIA_USER', { name: 'Maker Two' });
-    const checker = makeUser('REIA_USER', { name: 'Checker Two' });
+    const checker = makeUser('REIA_CHECKER', { name: 'Checker Two' });
     const inv = makeInvoice({
       contract_id: contract.id, status: 'UNDER_APPROVAL',
       created_by: maker.name, created_by_id: maker.id,
@@ -84,7 +86,7 @@ describe('S7 Invoice approval and distribution', () => {
   it('still stops a maker on a bill raised before created_by_id existed', async () => {
     // Backfill resolves most of these, but a name that matched no user leaves
     // the column null. The bill is still someone's to not approve.
-    const maker = makeUser('REIA_USER', { name: 'Legacy Maker' });
+    const maker = makeUser('REIA_CHECKER', { name: 'Legacy Maker' });
     const inv = makeInvoice({ contract_id: contract.id, status: 'UNDER_APPROVAL', created_by: maker.name });
     db.prepare('UPDATE invoices SET created_by_id = NULL WHERE id = ?').run(inv.id);
     pending(inv.id, 'AP-6');
@@ -251,7 +253,17 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
   // signed level 1 and was handed the button for level 2.
   const SWITCH = 'invoice_approval_distinct_approvers';
   const set = (v) => { db.prepare('UPDATE system_parameters SET param_value = ? WHERE param_key = ?').run(String(v), SWITCH); invalidateParamCache(); };
-  afterEach(() => set(1));
+  // No one role signs two levels of the default chain any more (checker / Finance /
+  // approver), so the cases about one person on two levels use a chain where the
+  // checker's role is also named at level 3.
+  const CHAIN = 'invoice_approval_level_roles';
+  const spanChain = () => {
+    const v = JSON.stringify({ 1: ['REIA_CHECKER'], 2: ['FINANCE_USER'], 3: ['REIA_CHECKER', 'MANAGEMENT'] });
+    db.prepare(`INSERT OR REPLACE INTO system_parameters (id, category, param_key, param_value, data_type, is_active)
+                VALUES ('PRM-S7-CHAIN', 'BILLING', ?, ?, 'JSON', 1)`).run(CHAIN, v);
+    invalidateParamCache();
+  };
+  afterEach(() => { set(1); db.prepare('DELETE FROM system_parameters WHERE param_key = ?').run(CHAIN); invalidateParamCache(); });
 
   const threeLevels = () => {
     const inv = makeInvoice({ contract_id: contract.id, status: 'UNDER_APPROVAL', total_amount: 36494000 });
@@ -265,8 +277,9 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
 
   it('can be switched off, and then one person holding two levels\' role can sign both', async () => {
     set(0);
-    // SJVN Admin may sign level 1 and level 3; Finance signs level 2.
-    const admin = makeUser('SJVN_ADMIN', { name: 'Only Admin' });
+    spanChain();
+    // The checker may sign level 1 and level 3 in this chain; Finance signs level 2.
+    const admin = makeUser('REIA_CHECKER', { name: 'Only Checker' });
     const fin = makeUser('FINANCE_USER', { name: 'Only Finance' });
     const inv = threeLevels();
     expect((await act(inv, 1, admin)).status).toBe(200);
@@ -277,7 +290,8 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
 
   it('stops one person signing two levels once it is on', async () => {
     set(1);
-    const a = makeUser('SJVN_ADMIN', { name: 'Approver A' });
+    spanChain();
+    const a = makeUser('REIA_CHECKER', { name: 'Approver A' });
     const b = makeUser('FINANCE_USER', { name: 'Approver B' });
     const c = makeUser('MANAGEMENT', { name: 'Approver C' });
     const inv = threeLevels();
@@ -296,7 +310,7 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
   });
 
   it('keeps each level to its own role', async () => {
-    const ops = makeUser('REIA_USER', { name: 'Ops' });
+    const ops = makeUser('REIA_CHECKER', { name: 'Ops' });
     const fin = makeUser('FINANCE_USER', { name: 'Fin' });
     const inv = threeLevels();
     expect((await act(inv, 1, fin)).status, 'Finance signed the REIA level').toBe(403);
@@ -309,7 +323,7 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
 
   it('still lets someone who signed an earlier level send the bill back', async () => {
     set(1);
-    const a = makeUser('REIA_USER', { name: 'Approver A2' });
+    const a = makeUser('REIA_CHECKER', { name: 'Approver A2' });
     const inv = threeLevels();
     await act(inv, 1, a);
     expect((await act(inv, 2, a, 'REJECTED')).status).toBe(200);
@@ -318,7 +332,7 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
 
   it('starts a resubmitted bill with nobody having signed', async () => {
     set(1);
-    const a = makeUser('REIA_USER', { name: 'Approver A3' });
+    const a = makeUser('REIA_CHECKER', { name: 'Approver A3' });
     const inv = threeLevels();
     await act(inv, 1, a);
     await act(inv, 2, a, 'REJECTED');

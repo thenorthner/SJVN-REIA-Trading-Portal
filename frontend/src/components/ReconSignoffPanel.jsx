@@ -119,7 +119,7 @@ export function ReconSignModal({ recon, signoff, mode, signatory, onClose, onSig
     <Modal open onClose={() => !busy && onClose()} title={partial ? 'Agree with exceptions' : 'Agree and sign off'} width={640}>
       <form onSubmit={submit}>
         <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
-        <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 8, padding: 12, marginBottom: 14, color: '#065f46', fontSize: 13 }}>
+        <div style={{ background: 'var(--t-green-50)', border: '1px solid var(--t-green-100)', borderRadius: 8, padding: 12, marginBottom: 14, color: 'var(--on-green)', fontSize: 13 }}>
           <div><strong>Statement:</strong> {recon.recon_no} · {recon.period} ({recon.data_basis})</div>
           <div><strong>Contract:</strong> {recon.contract_no}</div>
           <div><strong>Signing:</strong> {signatory}</div>
@@ -150,8 +150,8 @@ export function ReconSignModal({ recon, signoff, mode, signatory, onClose, onSig
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setRows([...rows, { item_id: '', label: '', amount: '', reason: '' }])}>+ Another exception</button>
               <span style={{ fontSize: 13 }}>
-                Not agreed: <strong style={{ color: '#b91c1c' }}>{fmtCurrency(total)}</strong>
-                {billed > 0 && <> · Agreed: <strong style={{ color: '#15803d' }}>{fmtCurrency(Math.max(0, billed - total))}</strong> of {fmtCurrency(billed)} billed</>}
+                Not agreed: <strong style={{ color: 'var(--red-deep)' }}>{fmtCurrency(total)}</strong>
+                {billed > 0 && <> · Agreed: <strong style={{ color: 'var(--on-green-2)' }}>{fmtCurrency(Math.max(0, billed - total))}</strong> of {fmtCurrency(billed)} billed</>}
               </span>
             </div>
           </>
@@ -205,6 +205,7 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
   const [copy, setCopy] = useState(null);
   const [busy, setBusy] = useState('');
   const [preview, setPreview] = useState(null);
+  const [offline, setOffline] = useState({ file: null, signatory_name: '', signatory_designation: '', signed_on: '' });
 
   const load = useCallback(() => api.reconSignoff.get(reconId).then((r) => { setD(r); onLoaded?.(r); }).catch((e) => setError(errText(e))), [reconId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
@@ -215,6 +216,31 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
       saveBlob(await api.reconSignoff.statementFile(reconId, format), `reconciliation-${d.recon_no.replace(/[^A-Za-z0-9]+/g, '-')}.${format}`);
     } catch (e) {
       setError(errText(e));
+    } finally {
+      setBusy('');
+    }
+  }
+
+  // The trading client signed outside the portal: the desk attaches what it signed.
+  async function attachClientCopy(e) {
+    e.preventDefault();
+    const missing = [];
+    if (!offline.file) missing.push('the PDF the client signed');
+    if (offline.signatory_name.trim().length < 3) missing.push("the client's signatory");
+    if (!offline.signed_on) missing.push('the date the client signed');
+    if (missing.length) { setError(`Give ${missing.join(', ')}.`); return; }
+    const form = new FormData();
+    form.append('file', offline.file);
+    form.append('signatory_name', offline.signatory_name.trim());
+    form.append('signatory_designation', offline.signatory_designation.trim());
+    form.append('signed_on', offline.signed_on);
+    setBusy('offline');
+    try {
+      setD(await api.reconSignoff.attachClientSignedCopy(reconId, form));
+      setOffline({ file: null, signatory_name: '', signatory_designation: '', signed_on: '' });
+      onChanged?.();
+    } catch (err) {
+      setError(errText(err));
     } finally {
       setBusy('');
     }
@@ -241,11 +267,17 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
   const both = !!(s.sjvn && s.counterparty);
   const sideKey = d.side === 'SJVN' ? 'sjvn' : 'counterparty';
   const sigLine = (label, x) => (
-    <div style={{ padding: 10, border: `1px solid ${x ? '#a7f3d0' : 'var(--border)'}`, background: x ? '#ecfdf5' : '#fff', borderRadius: 6, fontSize: 13.5 }}>
-      <div style={{ fontWeight: 700, color: x ? '#065f46' : 'var(--text-muted)' }}>{label}</div>
+    <div style={{ padding: 10, border: `1px solid ${x ? 'var(--t-green-100)' : 'var(--border)'}`, background: x ? 'var(--t-green-50)' : 'var(--surface)', borderRadius: 6, fontSize: 13.5 }}>
+      <div style={{ fontWeight: 700, color: x ? 'var(--on-green)' : 'var(--text-muted)' }}>{label}</div>
       {x ? (
         <>
-          <div>{x.by} · {String(x.role).replace(/_/g, ' ')}</div>
+          <div>{x.by}{x.designation ? `, ${x.designation}` : ''} · {String(x.role).replace(/_/g, ' ')}</div>
+          {x.mode === 'OFFLINE_SIGNED_COPY' && (
+            <div>
+              Signed outside the portal on {x.signed_on}; copy attached by {x.attached_by}
+              {d.signed_copies.counterparty?.file_name && ` · ${d.signed_copies.counterparty.file_name}${d.signed_copies.counterparty.signed ? ' (digital signature present)' : ''}`}
+            </div>
+          )}
           <div>{fmtDateTime(x.at)}{x.decision === 'AGREE_WITH_EXCEPTIONS' ? ' · with exceptions' : ''}</div>
           <div style={{ fontFamily: 'monospace', fontSize: 13, color: 'var(--slate-500)' }} title={x.fingerprint}>Fingerprint {x.fingerprint.slice(0, 16)}…</div>
         </>
@@ -255,7 +287,7 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
   const copyLine = (label, c) => c && (
     <div style={{ fontSize: 13.5, marginTop: 4 }}>
       {label}: <button type="button" className="btn-link" onClick={() => setPreview(c)}>{c.file_name}</button>{' '}
-      <span style={{ fontWeight: 600, color: c.signed ? '#15803d' : '#b91c1c' }}>
+      <span style={{ fontWeight: 600, color: c.signed ? 'var(--on-green-2)' : 'var(--red-deep)' }}>
         {c.signed ? `✓ digital signature present${c.signer ? ` — ${c.signer}` : ''}${c.signed_on ? `, ${c.signed_on}` : ''}` : '✗ no digital signature found in the file'}
       </span>
     </div>
@@ -310,7 +342,7 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
               {x.status !== 'OPEN' && <div style={{ fontSize: 13, marginTop: 6 }}><strong>{x.resolved_by}:</strong> {x.resolution_note}</div>}
               {x.status === 'ACCEPTED' && d.can_resolve && (
                 // R4: an accepted exception becomes its note — drafted with the decision, or here.
-                x.note_id ? <div style={{ fontSize: 13, marginTop: 4, color: '#15803d' }}>Note drafted for Finance's approval.</div> : (
+                x.note_id ? <div style={{ fontSize: 13, marginTop: 4, color: 'var(--on-green-2)' }}>Note drafted for Finance's approval.</div> : (
                   <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 6 }} disabled={!!busy} onClick={async () => {
                     setBusy('note');
                     try { await api.notes.fromException({ kind: 'RECON_EXCEPTION', exception_id: x.id }); await load(); onChanged?.(); } catch (e) { setError(errText(e)); } finally { setBusy(''); }
@@ -380,6 +412,32 @@ export default function ReconSignoffPanel({ reconId, onChanged, onLoaded, disput
             </form>
           )}
         </div>
+      )}
+
+      {d.can_attach_client_signed_copy && (
+        <form onSubmit={attachClientCopy} noValidate style={{ marginTop: 14, padding: 12, border: '1px solid var(--border)', borderRadius: 8, display: 'grid', gap: 10, maxWidth: 640 }}>
+          <div className="section-title" style={{ margin: 0 }}>Client signed outside the portal</div>
+          <p className="inline-note" style={{ margin: 0 }}>
+            The trading client signs its own side. If it signed on paper or by e-mail, attach the PDF it signed. It is recorded as the client's signature by the signatory named here, with you as the officer who attached it.
+          </p>
+          <label className="field">
+            <span className="field-label">Signed statement (PDF)<span aria-hidden="true" style={{ color: 'var(--red)' }}> *</span></span>
+            <input type="file" accept=".pdf,application/pdf" onChange={(e) => setOffline({ ...offline, file: e.target.files[0] || null })} />
+          </label>
+          <label className="field">
+            <span className="field-label">Client's signatory<span aria-hidden="true" style={{ color: 'var(--red)' }}> *</span></span>
+            <input value={offline.signatory_name} maxLength={120} onChange={(e) => setOffline({ ...offline, signatory_name: e.target.value })} />
+          </label>
+          <label className="field">
+            <span className="field-label">Designation</span>
+            <input value={offline.signatory_designation} maxLength={120} onChange={(e) => setOffline({ ...offline, signatory_designation: e.target.value })} />
+          </label>
+          <label className="field">
+            <span className="field-label">Signed on<span aria-hidden="true" style={{ color: 'var(--red)' }}> *</span></span>
+            <input type="date" value={offline.signed_on} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setOffline({ ...offline, signed_on: e.target.value })} />
+          </label>
+          <div><button type="submit" className="btn btn-primary btn-sm" disabled={busy === 'offline'}>{busy === 'offline' ? 'Attaching…' : "Attach client's signed copy"}</button></div>
+        </form>
       )}
 
       <PreviewModal open={!!preview} versionId={preview?.version_id} fileName={preview?.file_name} onClose={() => setPreview(null)} />

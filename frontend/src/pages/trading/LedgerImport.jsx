@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Badge, StatCard } from '../../components/ui.jsx';
 
@@ -59,9 +60,9 @@ export default function LedgerImport() {
             <p style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 12 }}>
               Reads the ledger shipped with the deployment. This is the usual path on a fresh server.
             </p>
-            <button className="btn btn-primary" disabled={busy} onClick={() => run(false)}>
+            <WriteOnly><button className="btn btn-primary" disabled={busy} onClick={() => run(false)}>
               {busy ? 'Importing…' : 'Import bundled ledger'}
-            </button>
+            </button></WriteOnly>
           </div>
 
           <div style={{ flex: '1 1 300px' }}>
@@ -83,7 +84,7 @@ export default function LedgerImport() {
         </div>
 
         {error && (
-          <div style={{ marginTop: 16, padding: 12, background: '#fef2f2', color: '#b91c1c', borderRadius: 6, fontSize: 14 }}>
+          <div style={{ marginTop: 16, padding: 12, background: 'var(--t-red-50)', color: 'var(--red-deep)', borderRadius: 6, fontSize: 14 }}>
             {error}
           </div>
         )}

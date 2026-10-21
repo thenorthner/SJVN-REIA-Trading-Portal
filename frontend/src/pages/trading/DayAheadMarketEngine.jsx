@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useCanWrite } from '../../lib/deskAccess.js';
 import Bids from './Bids.jsx';
 import EnergySchedule from './EnergySchedule.jsx';
 import GDAMObligationConsole from './GDAMObligationConsole.jsx';
@@ -8,6 +9,7 @@ import ComplianceStatusBar from '../../components/analytics/ComplianceStatusBar.
 
 export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }) {
   const [activeTab, setActiveTab] = useState('MANAGE'); 
+  const canWrite = useCanWrite();
   // Stages: CREATE, MANAGE, HISTORY, SCHEDULE, OBLIGATION, INVOICE, MCP
 
   const isGreen = marketType === 'GREEN_DAM';
@@ -22,7 +24,7 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
     { id: 'OBLIGATION', label: 'Obligation' },
     { id: 'INVOICE', label: 'Invoice Record' },
     { id: 'MCP', label: 'Market MCP' }
-  ];
+  ].filter((t) => canWrite || t.id !== 'CREATE'); // no bid-entry tab on a read-only view
 
   const renderContent = () => {
     switch (activeTab) {
@@ -63,7 +65,7 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
 
       {/* Title & Regulatory Theme Banner */}
       <div style={{ 
-        background: isGreen ? '#e8f5e9' : '#e3f2fd', 
+        background: isGreen ? 'var(--t-green-50)' : 'var(--t-blue-50)', 
         borderLeft: `4px solid ${themeColor}`, 
         padding: '15px 20px', 
         borderRadius: 4, 
@@ -76,19 +78,19 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
           <h2 style={{ margin: 0, color: themeColor }}>
             {isGreen ? 'Green Day-Ahead Market (GDAM)' : 'Conventional Day-Ahead Market (DAM)'}
           </h2>
-          <p style={{ margin: '5px 0 0 0', color: '#555', fontSize: 13 }}>
+          <p style={{ margin: '5px 0 0 0', color: 'var(--slate-600)', fontSize: 13 }}>
             Unified Workflow Engine: Manage the entire {productLabel} lifecycle from bidding to tax invoices.
           </p>
         </div>
         {isGreen && (
-          <div style={{ background: '#c8e6c9', color: '#2e7d32', padding: '5px 10px', borderRadius: 12, fontSize: 13.5, fontWeight: 'bold' }}>
+          <div style={{ background: 'var(--t-green-100)', color: 'var(--on-green)', padding: '5px 10px', borderRadius: 12, fontSize: 13.5, fontWeight: 'bold' }}>
              RPO Compliance Eligible
           </div>
         )}
       </div>
 
       {/* 7-Stage Workflow Tab Navigation */}
-      <div style={{ display: 'flex', gap: 5, marginBottom: 20, borderBottom: '2px solid #ddd', overflowX: 'auto' }}>
+      <div style={{ display: 'flex', gap: 5, marginBottom: 20, borderBottom: '2px solid var(--border)', overflowX: 'auto' }}>
         {tabs.map(tab => (
           <button 
             key={tab.id}
@@ -98,7 +100,7 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
               background: 'transparent', 
               border: 'none', 
               borderBottom: activeTab === tab.id ? `3px solid ${themeColor}` : '3px solid transparent', 
-              color: activeTab === tab.id ? themeColor : '#666', 
+              color: activeTab === tab.id ? themeColor : 'var(--slate-500)', 
               fontWeight: activeTab === tab.id ? 'bold' : 'normal', 
               cursor: 'pointer', 
               fontSize: 14,
@@ -110,7 +112,7 @@ export default function DayAheadMarketEngine({ marketType = 'CONVENTIONAL_DAM' }
       </div>
 
       {/* Render Active Stage */}
-      <div style={{ background: '#fff' }}>
+      <div style={{ background: 'var(--surface)' }}>
         {renderContent()}
       </div>
 

@@ -1,0 +1,70 @@
+{
+  "name": "SJVN Limited — Integrated Energy Commercial & Trading Platform",
+  "short_name": "SJVN Energy",
+  "description": "SJVN Limited (Ministry of Power, Government of India) Enterprise Energy Commerce, REIA & Trading Platform",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0369a1",
+  "orientation": "any",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["utilities", "business", "productivity", "government"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "REIA Portal",
+      "short_name": "REIA",
+      "description": "Renewable Energy Implementing Agency bidding & PPA desk",
+      "url": "/login?desk=REIA",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Power Trading Hub",
+      "short_name": "Trading",
+      "description": "Day-Ahead & Real-Time power trading operations",
+      "url": "/login?desk=TRADING",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Hydro Commercial",
+      "short_name": "Hydro",
+      "description": "Nathpa Jhakri & Rampur HPS settlement desk",
+      "url": "/login?desk=HYDRO",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Thermal Operations",
+      "short_name": "Thermal",
+      "description": "Buxar Thermal Power Plant commercial desk",
+      "url": "/login?desk=THERMAL",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

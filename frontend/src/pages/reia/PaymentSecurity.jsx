@@ -18,7 +18,8 @@ const CAN_MANAGE = ROLE_GROUPS.REIA_WRITE;                          // record, d
 const CAN_RELEASE = [...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER'];     // ask for and decide a release
 const CAN_RUN_ALERTS = [...ROLE_GROUPS.REIA_WRITE, 'MANAGEMENT'];
 // Management's call, for at most 90 days (decided 17-Oct-2026).
-const CAN_OVERRIDE = ['MANAGEMENT', 'SJVN_ADMIN'];
+// The approver's call (ROLE_GROUPS.REIA_APPROVE on the server).
+const CAN_OVERRIDE = ['MANAGEMENT', 'REIA_APPROVER'];
 const LIVE = ['ACTIVE', 'PARTIALLY_UTILIZED', 'RENEWED'];
 
 const EMPTY_FORM = {
@@ -54,7 +55,7 @@ function saveBlob(blob, name) {
 
 function StatPill({ label, value, sub }) {
   return (
-    <div style={{ padding: '12px 14px', background: 'var(--surface-2, #f6f7f9)', borderRadius: 8, minWidth: 110 }}>
+    <div style={{ padding: '12px 14px', background: 'var(--surface-2, var(--t-blue-50))', borderRadius: 8, minWidth: 110 }}>
       <div style={{ fontSize: 13, textTransform: 'none', letterSpacing: 0.4, opacity: 0.7 }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{value}</div>
       {sub != null && <div style={{ fontSize: 13.5, opacity: 0.65 }}>{sub}</div>}
@@ -381,7 +382,7 @@ export default function PaymentSecurity() {
     {
       key: 'sfms',
       header: 'SFMS',
-      render: (r) => (r.verified_at ? <span style={{ color: '#15803d', fontWeight: 600 }}>Received</span> : <span style={{ color: '#b45309' }}>Pending</span>),
+      render: (r) => (r.verified_at ? <span style={{ color: 'var(--on-green-2)', fontWeight: 600 }}>Received</span> : <span style={{ color: 'var(--amber-strong)' }}>Pending</span>),
     },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
   ];
@@ -664,9 +665,9 @@ export default function PaymentSecurity() {
                   key: 'position',
                   header: 'Position today',
                   render: (r) => (!r.position ? '—' : r.position.clear
-                    ? <span style={{ color: '#15803d', fontWeight: 600 }}>Clear</span>
+                    ? <span style={{ color: 'var(--on-green-2)', fontWeight: 600 }}>Clear</span>
                     : (
-                      <span style={{ color: '#b45309' }}>
+                      <span style={{ color: 'var(--amber-strong)' }}>
                         {[r.position.outstanding_dues > 0 && `${fmtCurrency(r.position.outstanding_dues)} outstanding`,
                           r.position.open_disputes > 0 && `${r.position.open_disputes} open dispute${r.position.open_disputes === 1 ? '' : 's'}`].filter(Boolean).join(' · ')}
                       </span>
@@ -679,7 +680,7 @@ export default function PaymentSecurity() {
                   render: (r) => (r.checklist ? (
                     <div style={{ fontSize: 13 }}>
                       {r.checklist.items.map((i) => (
-                        <div key={i.key} style={{ color: i.ok === false ? '#b91c1c' : i.ok ? '#15803d' : 'var(--text-light)' }}>
+                        <div key={i.key} style={{ color: i.ok === false ? 'var(--red-deep)' : i.ok ? 'var(--on-green-2)' : 'var(--text-light)' }}>
                           {i.ok === false ? '✗' : i.ok ? '✓' : '·'} {i.label}{i.detail ? ` — ${i.detail}` : ''}
                         </div>
                       ))}

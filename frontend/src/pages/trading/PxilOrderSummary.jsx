@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { Link, useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { api } from '../../api/client.js';
@@ -217,9 +218,9 @@ export default function PxilOrderSummary() {
     <div style={{ padding: 20 }}>
       <div className="form-section-header" style={{ marginTop: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span>Pxil Order Details</span>
-        <button type="button" className="btn btn-sm btn-primary" onClick={() => navigate('/trading/pxil/create')}>
+        <WriteOnly><button type="button" className="btn btn-sm btn-primary" onClick={() => navigate('/trading/pxil/create')}>
           + Create Order
-        </button>
+        </button></WriteOnly>
       </div>
 
       <Card>
@@ -242,8 +243,8 @@ export default function PxilOrderSummary() {
           </label>
         </div>
 
-        {error && <div role="alert" style={{ color: '#b91c1c', fontSize: 13, marginBottom: 10 }}>{error}</div>}
-        {message && <div role="status" style={{ color: '#15803d', fontSize: 13, marginBottom: 10 }}>{message}</div>}
+        {error && <div role="alert" style={{ color: 'var(--red-deep)', fontSize: 13, marginBottom: 10 }}>{error}</div>}
+        {message && <div role="status" style={{ color: 'var(--on-green-2)', fontSize: 13, marginBottom: 10 }}>{message}</div>}
 
         {loading ? (
           <div className="page-loading">Loading PXIL orders…</div>
@@ -273,15 +274,15 @@ export default function PxilOrderSummary() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10} style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
+                      <td colSpan={10} style={{ padding: 24, textAlign: 'center', color: 'var(--slate-500)' }}>
                         No PXIL orders yet.{' '}
                         <Link to="/trading/pxil/create">Create one</Link>
                       </td>
                     </tr>
                   ) : filtered.map((r, idx) => (
-                    <tr key={r.id} style={{ borderBottom: '1px solid #e2e8f0', background: idx % 2 ? '#f8fafc' : '#fff' }}>
+                    <tr key={r.id} style={{ borderBottom: '1px solid var(--slate-200)', background: idx % 2 ? 'var(--slate-50)' : 'var(--surface)' }}>
                       <td style={{ padding: '10px 12px' }}>
-                        <span style={{ color: '#1d4ed8', fontWeight: 500 }}>{r.reference_no}</span>
+                        <span style={{ color: 'var(--on-blue)', fontWeight: 500 }}>{r.reference_no}</span>
                       </td>
                       <td style={{ padding: '10px 12px' }}>{r.product_code}</td>
                       <td style={{ padding: '10px 12px', fontSize: 13.5 }}>{r.contract_id || '—'}</td>
@@ -293,21 +294,21 @@ export default function PxilOrderSummary() {
                       <td style={{ padding: '10px 12px' }}>{fmtTime(r.to_time)}</td>
                       <td style={{ padding: '10px 12px' }}>
                         {r.status === 'BID_PLACED' ? (
-                          <div style={{ color: '#15803d', fontSize: 13.5, fontWeight: 600 }}>
+                          <div style={{ color: 'var(--on-green-2)', fontSize: 13.5, fontWeight: 600 }}>
                             Bid Placed
                             {Array.isArray(r.bid_ids) && r.bid_ids.length > 0 && (
-                              <div style={{ fontWeight: 400, color: '#475569' }}>{r.bid_ids.length} bid{r.bid_ids.length > 1 ? 's' : ''} linked</div>
+                              <div style={{ fontWeight: 400, color: 'var(--slate-600)' }}>{r.bid_ids.length} bid{r.bid_ids.length > 1 ? 's' : ''} linked</div>
                             )}
                           </div>
                         ) : (
-                          <button
+                          <WriteOnly><button
                             type="button"
                             className="btn btn-sm btn-primary"
                             disabled={busyId === r.id || r.status !== 'CREATED'}
                             onClick={() => placeBid(r.id)}
                           >
                             {busyId === r.id ? '…' : 'Place Bid'}
-                          </button>
+                          </button></WriteOnly>
                         )}
                       </td>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{fmtCreated(r.created_at)}</td>
@@ -316,7 +317,7 @@ export default function PxilOrderSummary() {
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 12, fontSize: 13.5, color: '#64748b' }}>
+            <div style={{ marginTop: 12, fontSize: 13.5, color: 'var(--slate-500)' }}>
               Showing 1 to {filtered.length} of {filtered.length} entries.
             </div>
           </>

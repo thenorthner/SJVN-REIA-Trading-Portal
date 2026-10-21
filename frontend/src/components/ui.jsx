@@ -1,4 +1,6 @@
 import React from 'react';
+import { useFocusTrap } from '../gigw/focusTrap.js';
+import { useCanWrite } from '../lib/deskAccess.js';
 
 /**
  * What the content column shows while a route's chunk is in flight.
@@ -32,7 +34,10 @@ export function RouteSkeleton() {
   );
 }
 
-export function PageHeader({ title, subtitle, actions, onAdd, addLabel }) {
+export function PageHeader({ title, subtitle, actions, onAdd: add, addLabel }) {
+  // The "+ Add" button creates a record, so it is not offered on a desk screen
+  // the administrators and the auditor see read-only (Target #2 Phase B).
+  const onAdd = useCanWrite() ? add : undefined;
   return (
     <div className="page-header">
       <div>
@@ -149,10 +154,11 @@ export function Table({
               onClick={() => onRowClick?.(row)}
               className={onRowClick ? 'clickable' : ''}
               // A row that responds to a click has to respond to a keyboard too,
-              // or the whole table is unusable without a mouse.
+              // or the whole table is unusable without a mouse. It stays a row
+              // (no role="button"): many rows hold their own buttons, and a
+              // button inside a button is unreachable to a screen reader.
               {...(onRowClick ? {
                 tabIndex: 0,
-                role: 'button',
                 onKeyDown: (e) => {
                   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(row); }
                 },
@@ -179,9 +185,12 @@ export function scrollPageTop(behavior = 'auto') {
 
 let modalSeq = 0;
 
-export function Modal({ open, onClose, title, children, width, height, style, className }) {
+export function Modal({ open, onClose, title, children, width, style, className }) {
   const titleId = React.useMemo(() => `modal-title-${++modalSeq}`, []);
   const panelRef = React.useRef(null);
+  // Tab stays inside the dialog while it is open, and focus returns to the
+  // control that opened it when it closes (WCAG 2.1.2, 2.4.3).
+  useFocusTrap(panelRef, !!open);
   const wasOpenRef = React.useRef(false);
   const onCloseRef = React.useRef(onClose);
   onCloseRef.current = onClose;
@@ -201,23 +210,12 @@ export function Modal({ open, onClose, title, children, width, height, style, cl
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  // Scaled modal: User requested all modals/windows cover 90% area with 10% side boundary (5vw left, 5vw right, 5vh top, 5vh bottom)
+  // Modal sizing: every window opens at 90% of the viewport (5% margin on
+  // each side). Only explicit 'compact'/'small' confirm dialogs stay narrow.
   const isCompact = width === 'compact' || width === 'small';
-  const computedWidth = React.useMemo(() => {
-    if (isCompact) return 'min(580px, 92vw)';
-    if (typeof width === 'string' && (width.endsWith('vw') || width.endsWith('%') || width.includes('calc'))) {
-      return width;
-    }
-    return '90vw';
-  }, [width, isCompact]);
-
-  const computedHeight = React.useMemo(() => {
-    if (isCompact || height === 'auto') return 'auto';
-    if (typeof height === 'string' && (height.endsWith('vh') || height.endsWith('%') || height.includes('calc'))) {
-      return height;
-    }
-    return '90vh';
-  }, [height, isCompact]);
+  const isLarge = !isCompact;
+  const computedWidth = isCompact ? 'min(520px, 94vw)' : '90vw';
+  const computedHeight = isCompact ? 'auto' : '90vh';
 
   if (!open) return null;
 
@@ -226,7 +224,7 @@ export function Modal({ open, onClose, title, children, width, height, style, cl
       className="modal-backdrop"
       onClick={onClose}
       style={{
-        padding: isCompact ? '24px 18px' : '5vh 5vw',
+        padding: isLarge ? '5vh 5vw' : '24px 18px',
         alignItems: 'center',
         justifyContent: 'center',
       }}
@@ -270,6 +268,8 @@ export function Modal({ open, onClose, title, children, width, height, style, cl
  */
 export function AlertPopup({ open, tone = 'error', title, message, items, actions, onClose, okLabel }) {
   const okRef = React.useRef(null);
+  const popRef = React.useRef(null);
+  useFocusTrap(popRef, !!open);
   const onCloseRef = React.useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -297,6 +297,7 @@ export function AlertPopup({ open, tone = 'error', title, message, items, action
   return (
     <div className="alert-popup-backdrop" onClick={onClose}>
       <div
+        ref={popRef}
         className={`alert-popup ${tone}`}
         role="alertdialog"
         aria-modal="true"
@@ -424,8 +425,8 @@ export function StatementViewer({ statement }) {
         <StatCard label="Unreconciled Amt" value={fmtCurrency(m.unreconciled_amount)} tone={m.unreconciled_amount === 0 ? 'green' : 'red'} />
       </div>
 
-      <div style={{ backgroundColor: isHealthy ? '#f0fdf4' : '#fef2f2', padding: 12, borderRadius: 6, marginBottom: 16, fontSize: 13, border: `1px solid ${isHealthy ? '#bbf7d0' : '#fecaca'}` }}>
-        <strong style={{ color: isHealthy ? '#166534' : '#991b1b' }}>{isHealthy ? 'Data is fully reconciled and ready for sign-off.' : 'Exceptions detected. Review required before sign-off.'}</strong>
+      <div style={{ backgroundColor: isHealthy ? 'var(--t-green-50)' : 'var(--t-red-50)', padding: 12, borderRadius: 6, marginBottom: 16, fontSize: 13, border: `1px solid ${isHealthy ? 'var(--t-green-line)' : 'var(--t-red-line)'}` }}>
+        <strong style={{ color: isHealthy ? 'var(--on-green)' : 'var(--on-red)' }}>{isHealthy ? 'Data is fully reconciled and ready for sign-off.' : 'Exceptions detected. Review required before sign-off.'}</strong>
       </div>
 
       {/* The notes explain each figure, so they wrap rather than run on: with
@@ -448,7 +449,7 @@ export function StatementViewer({ statement }) {
           </thead>
           <tbody>
             {statement.items.map((it, idx) => (
-              <tr key={idx} style={{ background: ['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN', 'NOT_CONNECTED'].includes(it.status) ? 'transparent' : '#fff1f2' }}>
+              <tr key={idx} style={{ background: ['EXACT', 'AUTO_MATCHED', 'OVERRIDDEN', 'NOT_CONNECTED'].includes(it.status) ? 'transparent' : 'var(--t-red-50)' }}>
                 <td style={{ fontWeight: 500, fontSize: 13, whiteSpace: 'normal', minWidth: 150 }}>{it.label}</td>
                 <td>{it.status === 'NOT_CONNECTED'
                   ? <span style={{ color: 'var(--text-muted)', fontSize: 13.5, fontWeight: 600 }}>Not checked</span>
@@ -456,7 +457,7 @@ export function StatementViewer({ statement }) {
                     : <Badge status={['EXACT', 'AUTO_MATCHED'].includes(it.status) ? 'AUTO_MATCHED' : it.status === 'CARRIED' ? 'REOPENED' : 'NEEDS_REVIEW'} />}</td>
                 <td>{it.metered != null ? fmtNumber(it.metered, 2) : '-'}</td>
                 <td>{it.billed != null ? (it.type.includes('FINANCIAL') ? fmtCurrency(it.billed) : fmtNumber(it.billed, 2)) : '-'}</td>
-                <td style={{ color: it.variance !== 0 ? '#e53e3e' : '#10b981', fontWeight: it.variance !== 0 ? 600 : 400 }}>
+                <td style={{ color: it.variance !== 0 ? 'var(--on-red)' : '#10b981', fontWeight: it.variance !== 0 ? 600 : 400 }}>
                   {it.variance != null ? fmtNumber(it.variance, 2) : '-'}
                 </td>
                 <td style={{ fontSize: 13.5, color: 'var(--slate-600)', whiteSpace: 'normal', minWidth: 200, lineHeight: 1.4 }}>{it.notes || '—'}</td>
@@ -496,7 +497,7 @@ export function DemandLetterViewer({ letterStr, status = 'NOTICE_ISSUED', invoca
   const issued = letter.issued_at ? new Date(letter.issued_at) : null;
 
   return (
-    <div className="card" style={{ border: '1px solid var(--slate-300)', borderRadius: 8, overflow: 'hidden', margin: '16px 0', background: 'white' }}>
+    <div className="card" style={{ border: '1px solid var(--slate-300)', borderRadius: 8, overflow: 'hidden', margin: '16px 0', background: 'var(--surface)' }}>
       <div style={{ background: 'var(--slate-50)', padding: '16px 20px', borderBottom: '1px solid var(--slate-200)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 13.5, textTransform: 'none', color: 'var(--slate-500)', fontWeight: 600, letterSpacing: 0.5 }}>Demand notice{invocationNo ? ` · ${invocationNo}` : ''}</div>
@@ -562,7 +563,7 @@ export function DemandLetterViewer({ letterStr, status = 'NOTICE_ISSUED', invoca
           </div>
         )}
       </div>
-      <div style={{ padding: '12px 20px', background: '#fffbeb', borderTop: '1px solid #fef3c7', fontSize: 13.5, color: '#92400e' }}>
+      <div style={{ padding: '12px 20px', background: 'var(--t-amber-50)', borderTop: '1px solid var(--t-amber-100)', fontSize: 13.5, color: 'var(--on-amber)' }}>
         <strong>Important:</strong> This is a demand against the counterparty's payment security. The amounts above have been drawn on the instruments named.
       </div>
     </div>

@@ -30,7 +30,7 @@ beforeEach(() => {
 });
 
 describe('the register', () => {
-  it('shows an administrator everyone at SJVN, a desk administrator its own desk, and nobody else anything', async () => {
+  it('shows an administrator everyone at SJVN, and nobody else anything — desk heads included (Target #2 Phase B)', async () => {
     const all = (await get(admin)).body;
     expect(all.members.map((m) => m.name)).toEqual(['Isha IT', 'Anil Admin', 'Rekha REIA-Admin', 'Ravi REIA', 'Farid Finance', 'Tara Trader']);
     expect(all.members.some((m) => m.name === 'Arun Alpha')).toBe(false);
@@ -41,10 +41,9 @@ describe('the register', () => {
     expect(all.members.find((m) => m.id === finance.id).can).toMatchObject({ edit: true, role: true, deactivate: true, reset_password: true });
     expect(all.assignable_roles.map((r) => r.value)).not.toContain('IT_SUPER_ADMIN');
 
-    const desk = (await get(reiaAdmin)).body;
-    expect(desk.members.map((m) => m.name)).toEqual(['Rekha REIA-Admin', 'Ravi REIA']);
-    expect(desk.assignable_roles.map((r) => r.value)).toEqual(['REIA_USER']);
-    for (const u of [reiaUser, finance, seller]) expect((await get(u)).status).toBe(403);
+    // The REIA checker no longer manages the desk's users; the administrator does.
+    for (const u of [reiaAdmin, reiaUser, finance, seller]) expect((await get(u)).status).toBe(403);
+    expect(all.assignable_roles.map((r) => r.value)).toEqual(expect.arrayContaining(['REIA_MAKER', 'REIA_CHECKER', 'REIA_APPROVER']));
   });
 
   it('warns when one administrator is all there is', async () => {
@@ -60,10 +59,12 @@ describe('adding and changing', () => {
     expect((await post(admin, '', { name: 'X Y', email: 'x@sjvn.test', role: 'SELLER' })).body.error).toMatch(/Choose a role/);
     expect((await post(admin, '', { name: 'X Y', email: 'RAVI@sjvn.test', role: 'REIA_USER' })).status).toBe(409);
 
-    const r = await post(reiaAdmin, '', { name: 'Neha New', email: 'neha@sjvn.test', role: 'REIA_USER', designation: 'Sr. Manager (Commercial)' });
+    expect((await post(reiaAdmin, '', { name: 'Neha New', email: 'neha@sjvn.test', role: 'REIA_MAKER' })).status).toBe(403);
+    // The old role name is still understood, and stored as the role it became.
+    const r = await post(admin, '', { name: 'Neha New', email: 'neha@sjvn.test', role: 'REIA_USER', designation: 'Sr. Manager (Commercial)' });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     const made = row(r.body.id);
-    expect(made).toMatchObject({ role: 'REIA_USER', linked_entity_id: null, must_change_password: 1, created_by: reiaAdmin.id });
+    expect(made).toMatchObject({ role: 'REIA_MAKER', linked_entity_id: null, must_change_password: 1, created_by: admin.id });
     expect(bcrypt.compareSync(r.body.temporary_password, made.password_hash)).toBe(true);
     expect((await request(app).post('/api/auth/login').send({ email: 'neha@sjvn.test', password: r.body.temporary_password })).body.user.must_change_password).toBe(true);
 
@@ -75,7 +76,7 @@ describe('adding and changing', () => {
     expect((await patch(admin, reiaUser.id, { role: 'FINANCE_USER' })).status).toBe(200);
     expect(row(reiaUser.id).role).toBe('FINANCE_USER');
     expect((await request(app).get('/api/sjvn-desk').set(auth(token))).status).toBe(401);
-    expect((await get(admin, '/history')).body[0]).toMatchObject({ what: 'Role changed', member_name: 'Ravi REIA', detail: 'REIA Desk → Finance', by: 'Anil Admin' });
+    expect((await get(admin, '/history')).body[0]).toMatchObject({ what: 'Role changed', member_name: 'Ravi REIA', detail: 'REIA Maker → Finance', by: 'Anil Admin' });
     expect((await patch(admin, admin.id, { role: 'MANAGEMENT' })).status).toBe(403);
     expect((await patch(admin, admin.id, { designation: 'GM (IT)' })).status).toBe(200);
   });
@@ -86,7 +87,7 @@ describe('switching off and resetting', () => {
     expect((await post(admin, `/${admin.id}/deactivate`, { reason: 'x' })).body.error).toMatch(/your own account/);
     expect((await post(admin, `/${it1.id}/deactivate`, { reason: 'x' })).status).toBe(403);
     expect((await post(admin, `/${finance.id}/deactivate`, {})).body.error).toMatch(/Say why/);
-    expect((await post(reiaAdmin, `/${finance.id}/deactivate`, { reason: 'x' })).status).toBe(404);
+    expect((await post(reiaAdmin, `/${finance.id}/deactivate`, { reason: 'x' })).status).toBe(403);
 
     const token = signToken(finance);
     expect((await post(admin, `/${finance.id}/deactivate`, { reason: 'Transferred to another station' })).status).toBe(200);
@@ -110,14 +111,15 @@ describe('switching off and resetting', () => {
   });
 
   it('resets a password for whoever manages the user', async () => {
-    expect((await post(reiaAdmin, `/${finance.id}/reset-password`, {})).status).toBe(404);
+    expect((await post(reiaAdmin, `/${finance.id}/reset-password`, {})).status).toBe(403);
+    expect((await post(reiaAdmin, `/${reiaUser.id}/reset-password`, {})).status).toBe(403);
     expect((await post(admin, `/${admin.id}/reset-password`, {})).body.error).toMatch(/profile menu/);
-    const r = await post(reiaAdmin, `/${reiaUser.id}/reset-password`, {});
+    const r = await post(admin, `/${reiaUser.id}/reset-password`, {});
     expect(r.status).toBe(200);
     expect(row(reiaUser.id).must_change_password).toBe(1);
     expect((await request(app).post('/api/auth/login').send({ email: 'ravi@sjvn.test', password: r.body.temporary_password })).status).toBe(200);
     expect(auditFor(reiaUser.id).map((a) => a.action)).toContain('STAFF_PASSWORD_RESET');
     expect((await get(admin, `/${reiaUser.id}/activity`)).body.some((a) => a.what === 'Signed in')).toBe(true);
-    expect((await get(admin, '/export.csv')).text).toMatch(/"Ravi REIA",".*","","","REIA Desk","REIA","Active"/);
+    expect((await get(admin, '/export.csv')).text).toMatch(/"Ravi REIA",".*","","","REIA Maker","REIA","Active"/);
   });
 });

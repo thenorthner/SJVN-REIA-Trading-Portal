@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -268,7 +269,7 @@ export default function ExchangeBiddingLatest() {
             </Field>
           </div>
 
-          <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, padding: 16, marginBottom: 16, background: '#f8fafc' }}>
+          <div style={{ border: '1px solid var(--slate-200)', borderRadius: 6, padding: 16, marginBottom: 16, background: 'var(--slate-50)' }}>
             <div style={{ fontWeight: 700, marginBottom: 12, fontSize: 14 }}>General Information</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
               <Field label="Delivery Date (T+1)">
@@ -301,14 +302,14 @@ export default function ExchangeBiddingLatest() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={(e) => setCsvName(e.target.files?.[0]?.name || '')} />
-              <button type="button" className="btn" style={{ background: '#475569', color: '#fff' }} onClick={handleCsvUpload}>Upload</button>
-              <button type="button" className="btn btn-link" style={{ color: '#1d4ed8', padding: 0 }} onClick={downloadSample}>Download Samples</button>
-              {csvName && <span style={{ fontSize: 13.5, color: '#64748b' }}>{csvName}</span>}
+              <WriteOnly><button type="button" className="btn" style={{ background: '#475569', color: '#fff' }} onClick={handleCsvUpload}>Upload</button></WriteOnly>
+              <button type="button" className="btn btn-link" style={{ color: 'var(--on-blue)', padding: 0 }} onClick={downloadSample}>Download Samples</button>
+              {csvName && <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{csvName}</span>}
             </div>
           </div>
 
           {details.map((detail, dIndex) => (
-            <div key={detail.id} style={{ border: '1px solid #cbd5e1', borderRadius: 6, padding: 16, marginBottom: 14, background: '#fff' }}>
+            <div key={detail.id} style={{ border: '1px solid var(--slate-300)', borderRadius: 6, padding: 16, marginBottom: 14, background: 'var(--surface)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <strong>Bid Detail #{dIndex + 1}</strong>
                 <button type="button" className="btn btn-sm" style={{ background: '#dc2626', color: '#fff', border: 'none' }} onClick={() => removeDetail(dIndex)}>
@@ -352,14 +353,14 @@ export default function ExchangeBiddingLatest() {
               <div style={{ marginTop: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                   <strong style={{ fontSize: 13 }}>PQData:</strong>
-                  <button type="button" className="btn btn-sm btn-primary" onClick={() => addPq(dIndex)}>Add PQData</button>
+                  <WriteOnly><button type="button" className="btn btn-sm btn-primary" onClick={() => addPq(dIndex)}>Add PQData</button></WriteOnly>
                 </div>
                 {detail.pq_data.length === 0 ? (
-                  <div style={{ fontSize: 13.5, color: '#64748b' }}>No PQ rows yet — click Add PQData (rate / quantity).</div>
+                  <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>No PQ rows yet — click Add PQData (rate / quantity).</div>
                 ) : (
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
-                      <tr style={{ background: '#f1f5f9' }}>
+                      <tr style={{ background: 'var(--slate-100)' }}>
                         <th style={{ padding: 6, textAlign: 'left' }}>Rate / Price</th>
                         <th style={{ padding: 6, textAlign: 'left' }}>Quantity (MWh)</th>
                         <th style={{ padding: 6, textAlign: 'left' }}>Bid Reference</th>
@@ -377,7 +378,7 @@ export default function ExchangeBiddingLatest() {
                             <td style={{ padding: 4 }}><input className="input" style={{ padding: 4 }} value={pq.block_id} onChange={(e) => updatePq(dIndex, pIndex, 'block_id', e.target.value)} /></td>
                           )}
                           <td style={{ padding: 4 }}>
-                            <button type="button" className="btn btn-sm" style={{ color: '#dc2626' }} onClick={() => removePq(dIndex, pIndex)}>×</button>
+                            <button type="button" className="btn btn-sm" style={{ color: 'var(--red-strong)' }} onClick={() => removePq(dIndex, pIndex)}>×</button>
                           </td>
                         </tr>
                       ))}
@@ -388,11 +389,11 @@ export default function ExchangeBiddingLatest() {
             </div>
           ))}
 
-          <button type="button" className="btn" style={{ background: '#16a34a', color: '#fff', marginBottom: 16 }} onClick={addDetail}>
+          <WriteOnly><button type="button" className="btn" style={{ background: '#16a34a', color: '#fff', marginBottom: 16 }} onClick={addDetail}>
             Add New Bid Detail
-          </button>
+          </button></WriteOnly>
 
-          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#1e3a8a' }}>
+          <div style={{ background: 'var(--t-blue-50)', border: '1px solid var(--t-blue-line)', borderRadius: 6, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: 'var(--on-blue)' }}>
             <strong>Important Notes:</strong>
             <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
               <li>A bid can only be cancelled after it appears in the Bid Book.</li>
@@ -400,9 +401,9 @@ export default function ExchangeBiddingLatest() {
             </ul>
           </div>
 
-          {error && <div style={{ color: '#991b1b', marginBottom: 12, background: '#fee2e2', padding: 10, borderRadius: 4, fontSize: 13 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--on-red)', marginBottom: 12, background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>{error}</div>}
           {success && (
-            <div style={{ color: '#166534', marginBottom: 12, background: '#dcfce7', padding: 10, borderRadius: 4, fontSize: 13 }}>
+            <div style={{ color: 'var(--on-green)', marginBottom: 12, background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>
               Bid submitted — Transaction ID <strong>{success.transaction_id}</strong>.
               {success.bid_ids?.length > 0 && (
                 <>

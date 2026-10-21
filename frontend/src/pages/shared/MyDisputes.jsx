@@ -185,7 +185,7 @@ export default function MyDisputes({ role, direction }) {
     { key: 'disputed_amount', header: 'Amount', render: (r) => fmtCurrency(r.disputed_amount) },
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
     { key: 'sla', header: 'Clock', render: (r) => <SlaTag sla={r.sla} /> },
-    { key: 'lps', header: 'LPS at stake', render: (r) => (r.lps_estimate.amount > 0 ? <span style={{ color: r.lps_estimate.running ? '#b45309' : 'inherit', fontWeight: 600 }}>{fmtCurrency(r.lps_estimate.amount)}</span> : '—') },
+    { key: 'lps', header: 'LPS at stake', render: (r) => (r.lps_estimate.amount > 0 ? <span style={{ color: r.lps_estimate.running ? 'var(--amber-strong)' : 'inherit', fontWeight: 600 }}>{fmtCurrency(r.lps_estimate.amount)}</span> : '—') },
     { key: 'created_at', header: 'Raised', render: (r) => fmtDate(r.created_at) },
   ];
   const breakdownOf = (inv) => invoiceChargeBreakdown(inv);

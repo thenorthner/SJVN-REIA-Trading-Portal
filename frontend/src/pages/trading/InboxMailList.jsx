@@ -58,7 +58,7 @@ function TreeCheckbox({ node, selected, toggle }) {
         <span>{node.label}</span>
       </div>
       {expanded && node.children && (
-        <div style={{ borderLeft: '1px dashed #ccc', marginLeft: 8 }}>
+        <div style={{ borderLeft: '1px dashed var(--slate-100)', marginLeft: 8 }}>
           {node.children.map(child => (
             <TreeCheckbox key={child.id} node={child} selected={selected} toggle={toggle} />
           ))}
@@ -137,11 +137,11 @@ export default function InboxMailList() {
       <PageHeader title="Broadcast Log" subtitle="Broadcasts sent from Bulk Communications. Personal messages are in Mail." />
 
       {/* Top Action Bar */}
-      <Card style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f5f7f9' }}>
+      <Card style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--slate-50)' }}>
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-primary" onClick={() => navigate('/trading/bulk-communications')}>[ New Broadcast ]</button>
-          <button className="btn" style={{ background: '#fff', border: '1px solid #ccc' }} onClick={() => fetchInbox()}>[ Refresh ]</button>
-          <button className="btn" style={{ background: '#fff', border: '1px solid #ccc' }} onClick={() => navigate('/trading/bulk-communications')}>[ Bulk Communications ]</button>
+          <button className="btn" style={{ background: 'var(--surface)', border: '1px solid var(--slate-100)' }} onClick={() => fetchInbox()}>[ Refresh ]</button>
+          <button className="btn" style={{ background: 'var(--surface)', border: '1px solid var(--slate-100)' }} onClick={() => navigate('/trading/bulk-communications')}>[ Bulk Communications ]</button>
           <button className="btn btn-danger" onClick={handleDelete} disabled={selectedMessages.length === 0}>[ Delete ]</button>
         </div>
         
@@ -157,7 +157,7 @@ export default function InboxMailList() {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
-          <button className="btn" style={{ background: '#fff', border: '1px solid #ccc' }} onClick={() => {}}>[ Search ]</button>
+          <button className="btn" style={{ background: 'var(--surface)', border: '1px solid var(--slate-100)' }} onClick={() => {}}>[ Search ]</button>
         </div>
       </Card>
 
@@ -165,13 +165,13 @@ export default function InboxMailList() {
         
         {/* Left Sidebar: Group Filter */}
         <Card>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, borderBottom: '1px solid #eee', paddingBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>
             <h3 style={{ margin: 0, fontSize: 16 }}>Group Filters</h3>
           </div>
-          <div style={{ fontSize: 13.5, marginBottom: 10, color: '#666' }}>
+          <div style={{ fontSize: 13.5, marginBottom: 10, color: 'var(--slate-500)' }}>
             <span style={{ cursor: 'pointer', color: 'blue' }} onClick={() => { /* expand all */ }}>Open all</span> | <span style={{ cursor: 'pointer', color: 'blue' }} onClick={() => { /* collapse all */ }}>Close all</span>
           </div>
-          <p style={{ fontSize: 13, color: '#555' }}>Groups are shown below:</p>
+          <p style={{ fontSize: 13, color: 'var(--slate-600)' }}>Groups are shown below:</p>
           <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
             {RECIPIENT_GROUPS.map(group => (
               <TreeCheckbox key={group.id} node={group} selected={selectedGroups} toggle={toggleGroup} />
@@ -183,7 +183,7 @@ export default function InboxMailList() {
         <Card>
           <table className="table" style={{ width: '100%' }}>
             <thead>
-              <tr style={{ background: '#e9ecef' }}>
+              <tr style={{ background: 'var(--slate-100)' }}>
                 <th scope="col" style={{ width: 40 }}><input type="checkbox" onChange={e => setSelectedMessages(e.target.checked ? filteredMessages.map(m=>m.id) : [])} checked={filteredMessages.length > 0 && selectedMessages.length === filteredMessages.length} /></th>
                 <th scope="col">Subject</th>
                 <th scope="col">Sender</th>
@@ -194,7 +194,7 @@ export default function InboxMailList() {
             <tbody>
               {filteredMessages.length === 0 ? (
                 <tr>
-                  <td colSpan="5" style={{ textAlign: 'center', padding: 40, color: '#888' }}>
+                  <td colSpan="5" style={{ textAlign: 'center', padding: 40, color: 'var(--slate-500)' }}>
                     Nothing found to display.
                   </td>
                 </tr>
@@ -206,9 +206,9 @@ export default function InboxMailList() {
 
                   return (
                     <React.Fragment key={msg.id}>
-                      <tr style={{ cursor: 'pointer', background: isExpanded ? '#f0f8ff' : '#fff' }}>
+                      <tr style={{ cursor: 'pointer', background: isExpanded ? 'var(--t-blue-50)' : 'var(--surface)' }}>
                         <td><input type="checkbox" checked={selectedMessages.includes(msg.id)} onChange={() => toggleMessageSelection(msg.id)} /></td>
-                        <td onClick={() => setExpandedRow(isExpanded ? null : msg.id)} style={{ fontWeight: 500, color: '#0056b3' }}>
+                        <td onClick={() => setExpandedRow(isExpanded ? null : msg.id)} style={{ fontWeight: 500, color: 'var(--on-blue)' }}>
                           {msg.subject}
                         </td>
                         <td onClick={() => setExpandedRow(isExpanded ? null : msg.id)}>{msg.sender_name || msg.sender_id}</td>
@@ -220,15 +220,15 @@ export default function InboxMailList() {
                       {isExpanded && (
                         <tr>
                           <td colSpan="5" style={{ padding: 0 }}>
-                            <div style={{ padding: '20px 40px', background: '#f8f9fa', borderBottom: '1px solid #ddd' }}>
-                              <div dangerouslySetInnerHTML={{ __html: msg.body_html }} style={{ background: '#fff', padding: 15, borderRadius: 4, border: '1px solid #e0e0e0', minHeight: 100 }} />
+                            <div style={{ padding: '20px 40px', background: 'var(--slate-50)', borderBottom: '1px solid var(--border)' }}>
+                              <div dangerouslySetInnerHTML={{ __html: msg.body_html }} style={{ background: 'var(--surface)', padding: 15, borderRadius: 4, border: '1px solid var(--border)', minHeight: 100 }} />
                               {attachments.length > 0 && (
                                 <div style={{ marginTop: 15 }}>
                                   <strong>Attachments:</strong>
                                   <ul style={{ paddingLeft: 20, marginTop: 5 }}>
                                     {attachments.map((path, idx) => (
                                       <li key={idx}>
-                                        <a href={path} target="_blank" rel="noreferrer" style={{ color: '#0056b3' }}>Download File {idx + 1}</a>
+                                        <a href={path} target="_blank" rel="noreferrer" style={{ color: 'var(--on-blue)' }}>Download File {idx + 1}</a>
                                       </li>
                                     ))}
                                   </ul>

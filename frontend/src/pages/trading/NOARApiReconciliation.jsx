@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtNumber } from '../../components/ui.jsx';
 import { fmtDate } from '../../datetime.js';
@@ -211,9 +212,9 @@ export default function NOARApiReconciliation() {
               Ask for them too (NOAR returns them only on a second call)
             </label>
           </Field>
-          <button type="button" className="btn btn-primary" onClick={runSync} disabled={syncing || !range.from || !range.to}>
+          <WriteOnly><button type="button" className="btn btn-primary" onClick={runSync} disabled={syncing || !range.from || !range.to}>
             {syncing ? 'Pulling…' : 'Pull from NOAR'}
-          </button>
+          </button></WriteOnly>
         </div>
         <p className="muted" style={{ marginTop: 12, fontSize: 13.5 }}>
           Read-only against NOAR. Nothing here changes a transaction&apos;s open-access status —

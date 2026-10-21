@@ -1,16 +1,62 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, PLATFORM_ADMINS } from '../middleware/auth.js';
 import { newId, logAudit } from '../util.js';
 import { getParam, invalidateParamCache, ensureMasterDefaults } from '../mastersService.js';
 
 const router = Router();
 router.use(requireAuth);
 
-const MASTERS_READ = [...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'];
-const MASTERS_WRITE = [...ROLE_GROUPS.REIA_WRITE];
+const MASTERS_READ = [...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.COMMERCIAL_ALL, ...ROLE_GROUPS.THERMAL_ALL, ...ROLE_GROUPS.TRADING_ALL, 'COMPLIANCE_AUDITOR'];
+// Masters are governance (Target #2 Phase B): the SJVN and IT administrators
+// keep them. A desk that bills from the loss or tariff masters does not also
+// edit them; it asks the administrator, and the change is on the audit trail.
+const MASTERS_WRITE = PLATFORM_ADMINS;
 
 ensureMasterDefaults();
+
+/**
+ * Approval-chain parameters must leave every level with someone who can sign
+ * it. A level only the SJVN or IT administrator may sign is a level the desks
+ * cannot clear once the administrators stop transacting (Target #2), and a role
+ * nobody can hold is a level nobody can clear at all. Applies to
+ * invoice_approval_level_roles ({ "1": [...], ... }) and to the per-band
+ * `roles` of invoice_approval_levels ([{ above, levels, roles }]).
+ */
+let holdableRoles = null;
+function rolesUsersCanHold() {
+  if (!holdableRoles) {
+    const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get()?.sql || '';
+    holdableRoles = new Set([...ddl.matchAll(/'([A-Z_0-9]+)'/g)].map((m) => m[1]));
+  }
+  return holdableRoles;
+}
+function levelMapProblem(map, where) {
+  if (!map || typeof map !== 'object' || Array.isArray(map)) return `${where} must be an object of level → roles`;
+  for (const [level, roles] of Object.entries(map)) {
+    if (!Array.isArray(roles) || roles.length === 0) return `${where}: level ${level} names no roles`;
+    const unknown = roles.filter((r) => !rolesUsersCanHold().has(r));
+    if (unknown.length) return `${where}: level ${level} names ${unknown.join(', ')}, which no user can hold`;
+    if (roles.every((r) => PLATFORM_ADMINS.includes(r))) {
+      return `${where}: level ${level} can only be signed by the SJVN / IT administrator — name the desk role that signs it`;
+    }
+  }
+  return null;
+}
+export function approvalParamProblem(key, value) {
+  if (!['invoice_approval_level_roles', 'invoice_approval_levels'].includes(key)) return null;
+  let v = value;
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch { return `${key} must be valid JSON`; } }
+  if (key === 'invoice_approval_level_roles') return levelMapProblem(v, key);
+  if (!Array.isArray(v)) return `${key} must be a list of bands`;
+  for (const band of v) {
+    if (band?.roles !== undefined) {
+      const p = levelMapProblem(band.roles, `${key} (band above ${band.above})`);
+      if (p) return p;
+    }
+  }
+  return null;
+}
 
 router.get('/summary', requireRole(...MASTERS_READ), (req, res) => {
   res.json({
@@ -94,6 +140,8 @@ router.post('/parameters', requireRole(...MASTERS_WRITE), (req, res) => {
     return res.status(400).json({ error: 'category must be REGULATORY, BILLING or GENERAL' });
   }
   const dtype = ['NUMBER', 'TEXT', 'PERCENT', 'JSON'].includes(data_type) ? data_type : 'NUMBER';
+  const chainProblem = approvalParamProblem(param_key, param_value);
+  if (chainProblem) return res.status(400).json({ error: chainProblem });
   const existing = db.prepare('SELECT id FROM system_parameters WHERE param_key = ?').get(param_key);
   if (existing) return res.status(409).json({ error: `Parameter '${param_key}' already exists` });
   const id = newId('PRM');
@@ -124,6 +172,8 @@ router.put('/parameters/:key', requireRole(...MASTERS_WRITE), (req, res) => {
   if (param_value === '' && existing.data_type !== 'TEXT') {
     return res.status(400).json({ error: `param_value cannot be empty for a ${existing.data_type} parameter` });
   }
+  const chainProblem = approvalParamProblem(req.params.key, param_value);
+  if (chainProblem) return res.status(400).json({ error: chainProblem });
   db.prepare(`
     UPDATE system_parameters
     SET param_value = ?, description = COALESCE(?, description), unit = COALESCE(?, unit),
@@ -178,6 +228,14 @@ router.post('/document-types', requireRole(...MASTERS_WRITE), (req, res) => {
   if (!b.module_name || !b.code || !b.label || !b.category) {
     return res.status(400).json({ error: 'module_name, code, label, category required' });
   }
+  const existing = db.prepare('SELECT * FROM document_type_master WHERE module_name = ? AND (code = ? OR label = ?)').get(b.module_name, b.code, b.label);
+  if (existing) {
+    if (!existing.is_active) {
+      db.prepare('UPDATE document_type_master SET is_active = 1, updated_at = datetime(\'now\') WHERE id = ?').run(existing.id);
+      return res.json(db.prepare('SELECT * FROM document_type_master WHERE id = ?').get(existing.id));
+    }
+    return res.json(existing);
+  }
   const id = newId('DTM');
   try {
     db.prepare(`
@@ -220,6 +278,14 @@ router.get('/lookups', requireRole(...MASTERS_READ, ...ROLE_GROUPS.REIA_ALL, ...
 router.post('/lookups', requireRole(...MASTERS_WRITE), (req, res) => {
   const b = req.body;
   if (!b.category || !b.code || !b.label) return res.status(400).json({ error: 'category, code, label required' });
+  const existing = db.prepare('SELECT * FROM lookup_master WHERE category = ? AND (code = ? OR label = ?)').get(b.category, b.code, b.label);
+  if (existing) {
+    if (!existing.is_active) {
+      db.prepare('UPDATE lookup_master SET is_active = 1, updated_at = datetime(\'now\') WHERE id = ?').run(existing.id);
+      return res.json(db.prepare('SELECT * FROM lookup_master WHERE id = ?').get(existing.id));
+    }
+    return res.json(existing);
+  }
   const id = newId('LKP');
   try {
     db.prepare(`

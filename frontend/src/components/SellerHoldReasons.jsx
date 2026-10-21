@@ -19,7 +19,7 @@ export default function SellerHoldReasons({ invoice }) {
   const gap = Number(v.commercial_gap) || 0;
   const done = v.verification_status === 'VERIFIED';
   return (
-    <div style={{ marginTop: 16, border: `1px solid ${done ? '#a7f3d0' : '#fde68a'}`, background: done ? '#ecfdf5' : '#fffbeb', borderRadius: 8, padding: 12 }}>
+    <div style={{ marginTop: 16, border: `1px solid ${done ? 'var(--t-green-100)' : 'var(--t-amber-line)'}`, background: done ? 'var(--t-green-50)' : 'var(--t-amber-50)', borderRadius: 8, padding: 12 }}>
       <div style={{ fontWeight: 700, marginBottom: 6 }}>
         {done ? 'SJVN has verified this bill — it is with the approvers.'
           : !v.started ? 'SJVN has not started verifying this bill yet.'

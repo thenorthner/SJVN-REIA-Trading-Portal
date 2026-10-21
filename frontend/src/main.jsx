@@ -4,17 +4,29 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import { AuthProvider } from './context/AuthContext.jsx';
 import { PortfolioProvider } from './context/PortfolioContext.jsx';
+import { ThemeProvider } from './context/ThemeContext.jsx';
+import { GigwProvider } from './gigw/GigwContext.jsx';
 import './styles.css';
+import './gigw/gigw.css';
+import { installChartA11y } from './gigw/chartA11y.js';
+import { registerServiceWorker } from './pwa.js';
+
+installChartA11y();
+registerServiceWorker();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        {/* Inside AuthProvider: the portfolio list is an authenticated call. */}
-        <PortfolioProvider>
-          <App />
-        </PortfolioProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <ThemeProvider>
+      <GigwProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          {/* Inside AuthProvider: the portfolio list is an authenticated call. */}
+          <PortfolioProvider>
+            <App />
+          </PortfolioProvider>
+        </AuthProvider>
+      </BrowserRouter>
+      </GigwProvider>
+    </ThemeProvider>
   </React.StrictMode>
 );

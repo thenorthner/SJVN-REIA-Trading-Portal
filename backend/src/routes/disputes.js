@@ -516,7 +516,7 @@ router.get('/', (req, res) => {
 // With an as_of in the future this answers "what breaches by then" without
 // escalating anything — a projection must never be able to age a live dispute
 // into escalation just by being asked about.
-router.post('/sla/check', requireRole(...REIA_WRITE, 'MANAGEMENT'), (req, res) => {
+router.post('/sla/check', requireRole(...REIA_WRITE, ...ROLE_GROUPS.REIA_APPROVE), (req, res) => {
   let asOf;
   try { asOf = asOfFrom(req); } catch (err) { return res.status(err.status || 400).json({ error: err.message }); }
 

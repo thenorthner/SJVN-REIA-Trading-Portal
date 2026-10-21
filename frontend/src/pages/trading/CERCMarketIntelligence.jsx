@@ -160,7 +160,7 @@ export default function CERCMarketIntelligence() {
 
       {/* 2. ERROR & EMPTY STATES */}
       {error && (
-        <div style={{ padding: '14px 20px', marginBottom: 20, background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#dc2626', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '14px 20px', marginBottom: 20, background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 8, color: 'var(--on-red)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div><strong>Notice: </strong> {error}</div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="btn btn-outline" onClick={fetchData} style={{ fontSize: 13.5, padding: '4px 10px' }}>Retry</button>
@@ -322,15 +322,15 @@ export default function CERCMarketIntelligence() {
           {dsm ? (
             <div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 15, marginBottom: 20 }}>
-                <div style={{ background: '#f8fafc', padding: 15, borderRadius: 8, border: '1px solid var(--slate-200)' }}>
+                <div style={{ background: 'var(--slate-50)', padding: 15, borderRadius: 8, border: '1px solid var(--slate-200)' }}>
                   <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginBottom: 5 }}>Min Charge</div>
                   <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--slate-800)' }}>{fmtNumber(dsm.minCharge, 2)} <span style={{ fontSize: 13.5, fontWeight: 'normal', color: 'var(--slate-500)' }}>Rs/kWh</span></div>
                 </div>
-                <div style={{ background: '#f8fafc', padding: 15, borderRadius: 8, border: '1px solid var(--slate-200)' }}>
+                <div style={{ background: 'var(--slate-50)', padding: 15, borderRadius: 8, border: '1px solid var(--slate-200)' }}>
                   <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginBottom: 5 }}>Avg Charge</div>
                   <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--slate-800)' }}>{fmtNumber(dsm.avgCharge, 2)} <span style={{ fontSize: 13.5, fontWeight: 'normal', color: 'var(--slate-500)' }}>Rs/kWh</span></div>
                 </div>
-                <div style={{ background: '#f8fafc', padding: 15, borderRadius: 8, border: '1px solid var(--slate-200)' }}>
+                <div style={{ background: 'var(--slate-50)', padding: 15, borderRadius: 8, border: '1px solid var(--slate-200)' }}>
                   <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginBottom: 5 }}>Max Charge</div>
                   <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--slate-800)' }}>{fmtNumber(dsm.maxCharge, 2)} <span style={{ fontSize: 13.5, fontWeight: 'normal', color: 'var(--slate-500)' }}>Rs/kWh</span></div>
                 </div>

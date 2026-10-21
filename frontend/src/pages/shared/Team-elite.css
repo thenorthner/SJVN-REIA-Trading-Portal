@@ -66,7 +66,7 @@
 }
 
 .elite-user-card {
-  background: #ffffff;
+  background: var(--surface);
   border-radius: 16px;
   padding: 1.5rem;
   border: 1px solid var(--slate-200);
@@ -99,26 +99,26 @@
   width: 48px;
   height: 48px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
-  color: #0369a1;
+  background: linear-gradient(135deg, var(--t-blue-50), var(--t-blue-50));
+  color: var(--on-blue);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.25rem;
   font-weight: 700;
-  border: 1px solid #bae6fd;
+  border: 1px solid var(--t-blue-100);
 }
 
 .elite-avatar.admin {
-  background: linear-gradient(135deg, #fff1f2, #ffe4e6);
-  color: #be123c;
-  border-color: #fecdd3;
+  background: linear-gradient(135deg, var(--t-red-50), var(--t-red-50));
+  color: var(--on-red);
+  border-color: var(--t-red-100);
 }
 
 .elite-avatar.checker {
-  background: linear-gradient(135deg, #f5f3ff, #ede9fe);
-  color: #6d28d9;
-  border-color: #ddd6fe;
+  background: linear-gradient(135deg, var(--t-blue-50), var(--t-blue-50));
+  color: var(--on-blue);
+  border-color: var(--t-blue-100);
 }
 
 .elite-user-info h3 {
@@ -204,9 +204,9 @@
 }
 
 .elite-toggle-btn.activate:hover:not(:disabled) {
-  background: #f0fdf4;
-  color: #15803d;
-  border-color: #bbf7d0;
+  background: var(--t-green-50);
+  color: var(--on-green);
+  border-color: var(--t-green-100);
 }
 
 .elite-toggle-btn:disabled {
@@ -329,9 +329,9 @@
 }
 
 .elite-btn-cancel {
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border: 1px solid #cbd5e1;
-  color: #475569;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--t-blue-50) 100%);
+  border: 1px solid var(--t-blue-100);
+  color: var(--slate-700);
   padding: 8px 16px;
   border-radius: 8px;
   font-size: 13px;
@@ -342,8 +342,8 @@
 }
 
 .elite-btn-cancel:hover:not(:disabled) {
-  background: #f1f5f9;
-  color: #1e293b;
+  background: var(--t-blue-50);
+  color: var(--on-blue);
 }
 
 .elite-btn-submit {
@@ -388,9 +388,9 @@
 /* ── Team management: stats, filters, card details and actions ── */
 .elite-team-header .elite-header-actions { display: flex; gap: 0.75rem; align-items: center; }
 .elite-ghost-btn {
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
-  border: 1px solid #cbd5e1;
-  color: #1e293b;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--t-blue-50) 100%);
+  border: 1px solid var(--t-blue-100);
+  color: var(--on-blue);
   padding: 8px 16px;
   border-radius: 8px;
   font-size: 13px;
@@ -405,9 +405,9 @@
   white-space: nowrap;
 }
 .elite-ghost-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: linear-gradient(135deg, var(--t-blue-50) 0%, var(--t-blue-100) 100%);
   border-color: #94a3b8;
-  color: #0f172a;
+  color: var(--on-blue);
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
   transform: translateY(-1px);
 }
@@ -415,35 +415,35 @@
   transform: translateY(1px) scale(0.99);
 }
 .elite-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
-.elite-stat { background: #fff; border: 1px solid var(--slate-200); border-radius: 14px; padding: 1rem 1.25rem; }
+.elite-stat { background: var(--surface); border: 1px solid var(--slate-200); border-radius: 14px; padding: 1rem 1.25rem; }
 .elite-stat span { display: block; font-size: 0.72rem; text-transform: none; letter-spacing: 0.05em; color: var(--slate-500); font-weight: 600; }
 .elite-stat strong { display: block; font-size: 1.6rem; color: var(--slate-900); line-height: 1.3; }
 .elite-stat small { color: var(--slate-500); font-size: 0.8rem; }
 .elite-health { border-radius: 12px; padding: 0.8rem 1rem; margin-bottom: 0.75rem; font-size: 0.9rem; line-height: 1.5; }
-.elite-health.amber { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
-.elite-health.blue { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
-.elite-health.red { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
-.elite-health.green { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.elite-health.amber { background: var(--t-amber-50); border: 1px solid var(--t-amber-100); color: var(--on-amber); }
+.elite-health.blue { background: var(--t-blue-50); border: 1px solid var(--t-blue-100); color: var(--on-blue); }
+.elite-health.red { background: var(--t-red-50); border: 1px solid var(--t-red-100); color: var(--on-red); }
+.elite-health.green { background: var(--t-green-50); border: 1px solid var(--t-green-100); color: var(--on-green); }
 .elite-toolbar { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin: 1rem 0 1.5rem; }
 .elite-search { flex: 1 1 240px; max-width: 340px; padding: 0.6rem 1rem; border: 1px solid var(--slate-200); border-radius: 999px; font-size: 0.9rem; }
 .elite-meta { font-size: 0.82rem; color: var(--slate-500); margin: 0.15rem 0; }
 .elite-meta strong { color: var(--slate-700); font-weight: 600; }
 .elite-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 0.6rem; }
 .elite-flag { padding: 1px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; }
-.elite-flag.amber { background: #fffbeb; color: #b45309; }
-.elite-flag.red { background: #fef2f2; color: #b91c1c; }
-.elite-flag.blue { background: #eff6ff; color: #1d4ed8; }
+.elite-flag.amber { background: var(--t-amber-50); color: var(--on-amber); }
+.elite-flag.red { background: var(--t-red-50); color: var(--on-red); }
+.elite-flag.blue { background: var(--t-blue-50); color: var(--on-blue); }
 .elite-card-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1rem; padding-top: 0.9rem; border-top: 1px solid var(--slate-100); }
 .elite-action {
-  background: #fff; border: 1px solid var(--slate-200); color: var(--slate-700); padding: 0.3rem 0.7rem; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--slate-200); color: var(--slate-700); padding: 0.3rem 0.7rem; border-radius: 8px;
   font-size: 0.78rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
 }
-.elite-action:hover { background: var(--slate-50, #f8fafc); border-color: var(--slate-300); }
-.elite-action.danger { color: #b91c1c; }
-.elite-action.go { color: #15803d; }
+.elite-action:hover { background: var(--slate-50, var(--t-blue-50)); border-color: var(--slate-300); }
+.elite-action.danger { color: var(--on-red); }
+.elite-action.go { color: var(--on-green); }
 .elite-password {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.25rem; letter-spacing: 0.06em; text-align: center;
-  background: var(--slate-50, #f8fafc); border: 1px dashed var(--slate-300); border-radius: 10px; padding: 0.9rem; margin: 0.75rem 0; user-select: all;
+  background: var(--slate-50, var(--t-blue-50)); border: 1px dashed var(--slate-300); border-radius: 10px; padding: 0.9rem; margin: 0.75rem 0; user-select: all;
 }
 .elite-matrix td, .elite-matrix th { text-align: center; }
 .elite-matrix td:first-child, .elite-matrix th:first-child { text-align: left; }

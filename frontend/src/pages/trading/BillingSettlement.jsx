@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
+import { useAuth } from '../../context/AuthContext.jsx';
 import { PortfolioSelect, usePortfolios } from '../../context/PortfolioContext.jsx';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
@@ -243,7 +245,7 @@ export default function BillingSettlement() {
     { key: 'taxable_value', label: 'Taxable Value', render: r => `₹${fmtNumber((r.total_amount || 0) - (r.gst_amount || 0))}` },
     { key: 'gst_amount', label: 'GST Amount', render: r => `₹${fmtNumber(r.gst_amount || 0)}` },
     { key: 'total_amount', label: 'Total Payable/Receivable', render: r => <span style={{fontWeight:'bold'}}>₹{fmtNumber(r.total_amount)}</span> },
-    { key: 'sap_doc', label: 'SAP Doc', render: r => <a href="#" style={{color: '#0056b3'}}>SAP-{r.invoice_no.substring(0,6)}</a> },
+    { key: 'sap_doc', label: 'SAP Doc', render: r => <a href="#" style={{color: 'var(--on-blue)'}}>SAP-{r.invoice_no.substring(0,6)}</a> },
     { key: 'status', label: 'Status', render: r => {
         let type = 'neutral';
         let label = r.status;
@@ -294,10 +296,10 @@ export default function BillingSettlement() {
       label: 'Reason / Reconciled Item',
       render: (r) => (
         <div>
-          <span style={{ fontSize: 13.5, fontWeight: 600, color: '#1e293b' }}>
+          <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-800)' }}>
             {r.reason_code ? r.reason_code.replace(/_/g, ' ') : '—'}
           </span>
-          {r.reason && <div style={{ fontSize: 13, color: '#64748b', maxWidth: 260 }}>{r.reason}</div>}
+          {r.reason && <div style={{ fontSize: 13, color: 'var(--slate-500)', maxWidth: 260 }}>{r.reason}</div>}
         </div>
       ),
     },
@@ -319,14 +321,14 @@ export default function BillingSettlement() {
           style={{
             fontWeight: 800,
             fontSize: 13,
-            color: r.status === 'CANCELLED' ? '#94a3b8' : (r.note_type === 'DEBIT' ? '#dc2626' : '#16a34a'),
+            color: r.status === 'CANCELLED' ? '#94a3b8' : (r.note_type === 'DEBIT' ? 'var(--red-strong)' : 'var(--green-strong)'),
           }}
         >
           {r.note_type === 'DEBIT' ? '+' : '-'}₹{fmtNumber(r.amount)}
         </span>
       ),
     },
-    { key: 'broker_reference', label: 'Broker / Manual Ref', render: (r) => r.broker_reference ? <span style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>{r.broker_reference}</span> : '—' },
+    { key: 'broker_reference', label: 'Broker / Manual Ref', render: (r) => r.broker_reference ? <span style={{ background: 'var(--slate-100)', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>{r.broker_reference}</span> : '—' },
     {
       key: 'status',
       label: 'Status',
@@ -339,7 +341,7 @@ export default function BillingSettlement() {
         return (
           <>
             <Badge type={type}>{r.status}</Badge>
-            <div style={{ fontSize: 12.5, color: '#64748b' }}>
+            <div style={{ fontSize: 12.5, color: 'var(--slate-500)' }}>
               {r.status === 'DRAFT' ? `raised by ${r.created_by || '—'}`
                 : r.approved_by ? `${r.status === 'REJECTED' ? 'rejected' : 'approved'} by ${r.approved_by}` : ''}
               {r.on_ledger ? ' · on ledger' : ''}
@@ -354,7 +356,7 @@ export default function BillingSettlement() {
       render: (r) => (
         <div style={{ display: 'flex', gap: 6 }}>
           {r.status === 'DRAFT' && (isOwnTradingNote(r, user)
-            ? <span style={{ fontSize: 13, color: '#64748b' }}>awaiting another approver</span>
+            ? <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>awaiting another approver</span>
             : (
               <>
                 <button
@@ -406,18 +408,18 @@ export default function BillingSettlement() {
         actions={
           <div style={{ display: 'flex', gap: 10 }}>
             {tab === 'NOTES' ? (
-              <button className="btn btn-primary" onClick={() => setShowCreateNote(true)}>+ Raise Debit / Credit Note</button>
+              <WriteOnly><button className="btn btn-primary" onClick={() => setShowCreateNote(true)}>+ Raise Debit / Credit Note</button></WriteOnly>
             ) : (
               <>
-                <button className="btn btn-outline" onClick={() => setShowNetting(true)}>Apply Netting</button>
-                <button className="btn btn-primary" onClick={() => setShowGenerate(true)}>+ Generate Bill</button>
+                <WriteOnly><button className="btn btn-outline" onClick={() => setShowNetting(true)}>Apply Netting</button></WriteOnly>
+                <WriteOnly><button className="btn btn-primary" onClick={() => setShowGenerate(true)}>+ Generate Bill</button></WriteOnly>
               </>
             )}
           </div>
         }
       />
 
-      <div style={{ marginBottom: 20, borderBottom: '1px solid #ddd', display: 'flex', gap: 20 }}>
+      <div style={{ marginBottom: 20, borderBottom: '1px solid var(--border)', display: 'flex', gap: 20 }}>
         {[
           { id: 'INVOICES', label: 'Invoices & Tax Statements' },
           { id: 'NOTES', label: 'Debit & Credit Notes (Reconciliation)' },
@@ -429,7 +431,7 @@ export default function BillingSettlement() {
             style={{
               padding: '10px 0', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 15,
               borderBottom: tab === t.id ? '2px solid #0052cc' : '2px solid transparent',
-              color: tab === t.id ? '#0052cc' : '#555', fontWeight: tab === t.id ? 'bold' : 'normal'
+              color: tab === t.id ? 'var(--on-blue)' : 'var(--slate-600)', fontWeight: tab === t.id ? 'bold' : 'normal'
             }}
           >
             {t.label}
@@ -440,7 +442,7 @@ export default function BillingSettlement() {
       <Card>
         {tab === 'INVOICES' && (
           <div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 15, alignItems: 'end', marginBottom: 20, background: '#f5f7f9', padding: 15, borderRadius: 6 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 15, alignItems: 'end', marginBottom: 20, background: 'var(--slate-50)', padding: 15, borderRadius: 6 }}>
               <div>
                 <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="billingsettlement-portfolio-id">Portfolio Id:</label>
                 <PortfolioSelect id="billingsettlement-portfolio-id"
@@ -485,37 +487,37 @@ export default function BillingSettlement() {
           <div>
             {noteSummary && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
-                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '12px 16px' }}>
-                  <div style={{ fontSize: 13, color: '#991b1b', fontWeight: 600, textTransform: 'none' }}>Total Debit Notes (+ve)</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: '#dc2626', marginTop: 4 }}>+₹{fmtNumber(noteSummary.total_debit || 0)}</div>
-                  <div style={{ fontSize: 13, color: '#b91c1c', marginTop: 2 }}>Shortfall market purchases / additions</div>
+                <div style={{ background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 8, padding: '12px 16px' }}>
+                  <div style={{ fontSize: 13, color: 'var(--on-red)', fontWeight: 600, textTransform: 'none' }}>Total Debit Notes (+ve)</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--red-strong)', marginTop: 4 }}>+₹{fmtNumber(noteSummary.total_debit || 0)}</div>
+                  <div style={{ fontSize: 13, color: 'var(--red-deep)', marginTop: 2 }}>Shortfall market purchases / additions</div>
                 </div>
 
-                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '12px 16px' }}>
-                  <div style={{ fontSize: 13, color: '#166534', fontWeight: 600, textTransform: 'none' }}>Total Credit Notes (-ve)</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: '#16a34a', marginTop: 4 }}>-₹{fmtNumber(noteSummary.total_credit || 0)}</div>
-                  <div style={{ fontSize: 13, color: '#15803d', marginTop: 2 }}>Rebates / cheaper replacements</div>
+                <div style={{ background: 'var(--t-green-50)', border: '1px solid var(--t-green-line)', borderRadius: 8, padding: '12px 16px' }}>
+                  <div style={{ fontSize: 13, color: 'var(--on-green)', fontWeight: 600, textTransform: 'none' }}>Total Credit Notes (-ve)</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--green-strong)', marginTop: 4 }}>-₹{fmtNumber(noteSummary.total_credit || 0)}</div>
+                  <div style={{ fontSize: 13, color: 'var(--on-green-2)', marginTop: 2 }}>Rebates / cheaper replacements</div>
                 </div>
 
-                <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: '12px 16px' }}>
-                  <div style={{ fontSize: 13, color: '#475569', fontWeight: 600, textTransform: 'none' }}>Net Reconciled Differential</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: noteSummary.net_payable >= 0 ? '#dc2626' : '#16a34a', marginTop: 4 }}>
+                <div style={{ background: 'var(--slate-50)', border: '1px solid var(--slate-300)', borderRadius: 8, padding: '12px 16px' }}>
+                  <div style={{ fontSize: 13, color: 'var(--slate-600)', fontWeight: 600, textTransform: 'none' }}>Net Reconciled Differential</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: noteSummary.net_payable >= 0 ? 'var(--red-strong)' : 'var(--green-strong)', marginTop: 4 }}>
                     {noteSummary.net_payable >= 0 ? '+' : ''}₹{fmtNumber(noteSummary.net_payable || 0)}
                   </div>
-                  <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>Obligation vs Payment Report gap</div>
+                  <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 2 }}>Obligation vs Payment Report gap</div>
                 </div>
 
-                <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: '12px 16px' }}>
-                  <div style={{ fontSize: 13, color: '#475569', fontWeight: 600, textTransform: 'none' }}>Total Active Notes</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', marginTop: 4 }}>{noteSummary.note_count || 0}</div>
-                  <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>PTC & Exchange broker adjustments</div>
+                <div style={{ background: 'var(--slate-50)', border: '1px solid var(--slate-300)', borderRadius: 8, padding: '12px 16px' }}>
+                  <div style={{ fontSize: 13, color: 'var(--slate-600)', fontWeight: 600, textTransform: 'none' }}>Total Active Notes</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--slate-900)', marginTop: 4 }}>{noteSummary.note_count || 0}</div>
+                  <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 2 }}>PTC & Exchange broker adjustments</div>
                 </div>
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, alignItems: 'end', marginBottom: 16, background: '#f8fafc', padding: 14, borderRadius: 6, border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, alignItems: 'end', marginBottom: 16, background: 'var(--slate-50)', padding: 14, borderRadius: 6, border: '1px solid var(--slate-200)' }}>
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Client / Beneficiary:</label>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--slate-600)', marginBottom: 4 }}>Client / Beneficiary:</label>
                 <select
                   className="input"
                   style={{ width: '100%', fontSize: 13.5 }}
@@ -528,7 +530,7 @@ export default function BillingSettlement() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Billing Period (YYYY-MM):</label>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--slate-600)', marginBottom: 4 }}>Billing Period (YYYY-MM):</label>
                 <input
                   type="month"
                   className="input"
@@ -539,7 +541,7 @@ export default function BillingSettlement() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Note Type:</label>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--slate-600)', marginBottom: 4 }}>Note Type:</label>
                 <select
                   className="input"
                   style={{ width: '100%', fontSize: 13.5 }}
@@ -553,7 +555,7 @@ export default function BillingSettlement() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Status:</label>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--slate-600)', marginBottom: 4 }}>Status:</label>
                 <select
                   className="input"
                   style={{ width: '100%', fontSize: 13.5 }}
@@ -568,7 +570,7 @@ export default function BillingSettlement() {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Reason Category:</label>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--slate-600)', marginBottom: 4 }}>Reason Category:</label>
                 <select
                   className="input"
                   style={{ width: '100%', fontSize: 13.5 }}
@@ -597,7 +599,7 @@ export default function BillingSettlement() {
             {selectedClient ? (
               <Table columns={ledgerColumns} data={ledger} />
             ) : (
-              <p style={{ color: '#777' }}>Please select a client to view their ledger.</p>
+              <p style={{ color: 'var(--slate-500)' }}>Please select a client to view their ledger.</p>
             )}
           </div>
         )}
@@ -686,8 +688,8 @@ export default function BillingSettlement() {
       {showCreateNote && (
         <Modal open={true} onClose={() => setShowCreateNote(false)} title="Raise Trading Debit / Credit Note" width={680}>
           <form onSubmit={handleCreateNote}>
-            <div style={{ background: '#f8fafc', padding: 12, borderRadius: 6, marginBottom: 16, border: '1px solid #e2e8f0' }}>
-              <div style={{ fontSize: 13.5, color: '#334155', lineHeight: 1.5 }}>
+            <div style={{ background: 'var(--slate-50)', padding: 12, borderRadius: 6, marginBottom: 16, border: '1px solid var(--slate-200)' }}>
+              <div style={{ fontSize: 13.5, color: 'var(--slate-700)', lineHeight: 1.5 }}>
                 <strong>Settlement Reconciler:</strong> Use this note to reconcile market borrowing differentials (e.g., shortfall replacement energy purchased via PTC / power exchange where broker raised a manual invoice in obligation report that was omitted in weekly payment report). The note is saved as a draft: someone other than you approves it, and only then is it numbered and posted to the client's ledger.
               </div>
             </div>
@@ -839,7 +841,7 @@ export default function BillingSettlement() {
       {cancelNoteObj && (
         <Modal open={true} onClose={() => setCancelNoteObj(null)} title="Cancel Trading Note" width={500}>
           <form onSubmit={handleCancelNote}>
-            <p style={{ fontSize: 13, color: '#334155', marginTop: 0 }}>
+            <p style={{ fontSize: 13, color: 'var(--slate-700)', marginTop: 0 }}>
               Are you sure you want to cancel note <strong>{cancelNoteObj.note_no}</strong> for <strong>₹{fmtNumber(cancelNoteObj.amount)}</strong>?
             </p>
             <Field label="Cancellation Justification" required>

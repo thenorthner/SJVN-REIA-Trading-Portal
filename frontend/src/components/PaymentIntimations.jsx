@@ -146,9 +146,9 @@ export function IntimationRow({ i, side, tier, myId, canConfirm, onChanged, onPr
               {!i.proof && <span className="cw-flag amber" style={{ marginLeft: 6 }}>No bank advice attached</span>}
             </div>
           )}
-          {i.status === 'CONFIRMED' && <div style={{ fontSize: 13.5, color: '#15803d' }}>Confirmed by {i.decided_by_name} on {fmtDate(i.decided_at)}{i.confirmed_date !== i.payment_date ? ` with value date ${fmtDate(i.confirmed_date)}` : ''}{i.decision_note ? ` — ${i.decision_note}` : ''}</div>}
-          {i.status === 'REJECTED' && <div style={{ fontSize: 13.5, color: '#b91c1c' }}>Not confirmed by {i.decided_by_name}: {i.decision_note}</div>}
-          {i.status === 'RETURNED_BY_CHECKER' && <div style={{ fontSize: 13.5, color: '#b45309', fontWeight: 600 }}>Returned to maker by {i.decided_by_name || 'Checker'}{i.decided_at ? ` on ${fmtDate(i.decided_at)}` : ''}: {i.decision_note}</div>}
+          {i.status === 'CONFIRMED' && <div style={{ fontSize: 13.5, color: 'var(--on-green-2)' }}>Confirmed by {i.decided_by_name} on {fmtDate(i.decided_at)}{i.confirmed_date !== i.payment_date ? ` with value date ${fmtDate(i.confirmed_date)}` : ''}{i.decision_note ? ` — ${i.decision_note}` : ''}</div>}
+          {i.status === 'REJECTED' && <div style={{ fontSize: 13.5, color: 'var(--red-deep)' }}>Not confirmed by {i.decided_by_name}: {i.decision_note}</div>}
+          {i.status === 'RETURNED_BY_CHECKER' && <div style={{ fontSize: 13.5, color: 'var(--amber-strong)', fontWeight: 600 }}>Returned to maker by {i.decided_by_name || 'Checker'}{i.decided_at ? ` on ${fmtDate(i.decided_at)}` : ''}: {i.decision_note}</div>}
           {i.status === 'WITHDRAWN' && <div style={{ fontSize: 13.5, color: 'var(--text-light)' }}>Withdrawn by {i.decided_by_name}{i.decision_note ? ` — ${i.decision_note}` : ''}</div>}
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -156,7 +156,7 @@ export function IntimationRow({ i, side, tier, myId, canConfirm, onChanged, onPr
           <div style={{ display: 'flex', gap: 6, marginTop: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             {i.proof && <button type="button" className="btn btn-ghost btn-sm" onClick={() => onPreview(i.proof)}>Bank advice</button>}
             {canApprove && <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => run(() => api.buyerBills.approve(i.id))}>Approve &amp; send to SJVN</button>}
-            {canReturnToMaker && !mode && <button type="button" className="btn btn-ghost btn-sm" style={{ color: '#b45309' }} onClick={() => setMode('return_to_maker')}>Return to maker</button>}
+            {canReturnToMaker && !mode && <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--amber-strong)' }} onClick={() => setMode('return_to_maker')}>Return to maker</button>}
             {canWithdraw && !mode && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMode('withdraw')}>Withdraw</button>}
             {sjvn && canConfirm && i.status === 'SUBMITTED' && !mode && (
               <>
@@ -175,7 +175,7 @@ export function IntimationRow({ i, side, tier, myId, canConfirm, onChanged, onPr
           </Field>
           <div className="form-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setMode(null)}>Cancel</button>
-            <button type="submit" className="btn btn-secondary" style={{ background: '#fef3c7', borderColor: '#f59e0b', color: '#92400e' }} disabled={busy}>
+            <button type="submit" className="btn btn-secondary" style={{ background: 'var(--t-amber-100)', borderColor: '#f59e0b', color: 'var(--on-amber)' }} disabled={busy}>
               {busy ? 'Returning…' : 'Return to Maker with Remarks'}
             </button>
           </div>

@@ -9,7 +9,7 @@ import { PageHeader, Card, Table, Badge, StatCard, AlertPopup, fmtCurrency, fmtN
 // already billed? — and every ready one raised in one go.
 const STATE = { READY: 'Ready', BILLED: 'Billed', WAITING_ENERGY: 'Waiting for energy', BLOCKED: 'Blocked', MONTH_OPEN: 'Month not over' };
 const TONE = { READY: 'primary', BILLED: 'success', WAITING_ENERGY: 'warning', BLOCKED: 'danger', MONTH_OPEN: 'neutral' };
-const yes = (v) => <span style={{ fontWeight: 600, color: v ? '#15803d' : '#b45309' }}>{v ? '✓' : '✗'}</span>;
+const yes = (v) => <span style={{ fontWeight: 600, color: v ? 'var(--on-green-2)' : 'var(--amber-strong)' }}>{v ? '✓' : '✗'}</span>;
 
 export default function BillingReadiness() {
   const { user } = useAuth();
@@ -74,7 +74,7 @@ export default function BillingReadiness() {
     { key: 'counterparty', header: 'Counterparty', render: (r) => r.counterparty || '—' },
     { key: 'energy', header: 'Energy locked', render: (r) => (
       <span>{yes(r.energy.locked)} {r.energy.energy_mwh != null ? `${fmtNumber(r.energy.energy_mwh)} MWh` : ''}
-        {r.energy.detail && r.energy.detail.filter((d) => !d.locked).map((d) => <div key={d.ppa_contract_no} style={{ fontSize: 12.5, color: '#b45309' }}>{d.ppa_contract_no} not locked</div>)}
+        {r.energy.detail && r.energy.detail.filter((d) => !d.locked).map((d) => <div key={d.ppa_contract_no} style={{ fontSize: 12.5, color: 'var(--amber-strong)' }}>{d.ppa_contract_no} not locked</div>)}
       </span>
     ) },
     { key: 'ppa_bill_in', header: 'PPA bill in', render: (r) => (
@@ -118,7 +118,7 @@ export default function BillingReadiness() {
           <Table
             columns={[
               { key: 'contract_no', header: 'Contract', render: (r) => <span>{r.contract_no} <span style={{ color: 'var(--text-light)' }}>({r.contract_type})</span></span> },
-              { key: 'ready', header: 'Month closed', render: (r) => (r.ready ? yes(true) : <span style={{ color: '#b45309', fontSize: 13 }}>✗ {r.missing.join('; ')}</span>) },
+              { key: 'ready', header: 'Month closed', render: (r) => (r.ready ? yes(true) : <span style={{ color: 'var(--amber-strong)', fontSize: 13 }}>✗ {r.missing.join('; ')}</span>) },
               { key: 'statement', header: 'Statement', render: (r) => (r.statement ? <span>{r.statement.recon_no} <Badge status={r.statement.status} /></span> : '—') },
               { key: 'run', header: '', render: (r) => (canWrite && r.ready && !r.statement ? (
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => act(async () => { const x = await api.reconciliation.run({ contract_id: r.contract_id, period: close.period, scope: 'REIA_CONTRACT' }); return { message: `${x.recon_no} raised.` }; }, 'Reconciliation run')}>Run</button>
@@ -148,7 +148,7 @@ export default function BillingReadiness() {
         <Card title={close.posting.clear ? 'Posting checklist — nothing open' : `Posting checklist — ${close.posting.open_items} open item${close.posting.open_items === 1 ? '' : 's'} before Finance books ${close.period}`}>
           {close.posting.items.map((i) => (
             <div key={i.key} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ fontWeight: 600, color: i.clear ? '#15803d' : '#b45309' }}>{i.clear ? '✓' : '✗'} {i.label}{!i.clear ? ` — ${i.count}${i.amount != null ? `, ${fmtCurrency(i.amount)}` : ''}` : ''}</div>
+              <div style={{ fontWeight: 600, color: i.clear ? 'var(--on-green-2)' : 'var(--amber-strong)' }}>{i.clear ? '✓' : '✗'} {i.label}{!i.clear ? ` — ${i.count}${i.amount != null ? `, ${fmtCurrency(i.amount)}` : ''}` : ''}</div>
               {!i.clear && (
                 <div style={{ fontSize: 13, color: 'var(--text-light)' }}>
                   {i.rows.slice(0, 6).map((r) => r.invoice_no || r.contract_no || r.dispute_no || r.receipt_no).filter(Boolean).join(', ')}{i.count > 6 ? ` and ${i.count - 6} more` : ''}{i.hint ? ` · ${i.hint}` : ''}

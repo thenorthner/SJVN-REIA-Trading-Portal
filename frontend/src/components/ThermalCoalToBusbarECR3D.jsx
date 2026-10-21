@@ -223,7 +223,7 @@ export default function ThermalCoalToBusbarECR3D({
             <div style={{ fontSize: 19, fontWeight: 700, color: '#fdba74', fontVariantNumeric: 'tabular-nums' }}>
               ₹{fmtNumber(coalPrice, 0)} <span style={{ fontSize: 13, fontWeight: 500 }}>/ tonne</span>
             </div>
-            <div style={{ fontSize: 12, color: '#78716c', marginTop: 3 }}>
+            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 3 }}>
               Secondary Oil: ₹{fmtNumber(oilPrice, 0)} / kL
             </div>
           </div>
@@ -273,7 +273,7 @@ export default function ThermalCoalToBusbarECR3D({
           onClick={() => setActiveStage(activeStage === 3 ? null : 3)}
           style={{
             background: 'linear-gradient(180deg, rgba(30, 20, 15, 0.8) 0%, rgba(20, 12, 8, 0.95) 100%)',
-            border: `1.5px solid ${activeStage === 3 ? '#4ade80' : 'rgba(74, 222, 128, 0.3)'}`,
+            border: `1.5px solid ${activeStage === 3 ? 'var(--t-green-100)' : 'rgba(74, 222, 128, 0.3)'}`,
             borderRadius: 12,
             padding: '16px 18px',
             position: 'relative',

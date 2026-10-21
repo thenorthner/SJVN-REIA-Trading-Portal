@@ -347,9 +347,13 @@ export default function CERCFormIV() {
           </Field>
           <Field label="Notes"><input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
 
-          <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <input type="checkbox" checked={form.auto_generate} onChange={(e) => setForm({ ...form, auto_generate: e.target.checked })} />
-            <span className="field-label" style={{ margin: 0 }}>Pre-fill transactions from bilateral trade data</span>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={form.auto_generate}
+              onChange={(e) => setForm({ ...form, auto_generate: e.target.checked })}
+            />
+            <span>Pre-fill transactions from bilateral trade data</span>
           </label>
 
           <div className="form-actions">
@@ -522,7 +526,7 @@ export default function CERCFormIV() {
               <input
                 readOnly
                 value={paise((Number(lineForm.sale_rate) || 0) - (Number(lineForm.purchase_rate) || 0))}
-                style={{ background: 'var(--bg-subtle, #f4f5f7)' }}
+                style={{ background: 'var(--bg-subtle, var(--slate-50))' }}
               />
             </Field>
           </div>

@@ -13,7 +13,7 @@ const fyNow = () => { const d = new Date(); const y = d.getMonth() >= 3 ? d.getF
 
 export default function TdsReconPanel() {
   const { user } = useAuth() || {};
-  const canMark = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'FINANCE_USER'].includes(user?.role);
+  const canMark = ['FINANCE_USER'].includes(user?.role);
   const [fy, setFy] = useState(fyNow());
   const [data, setData] = useState(null);
   const [mark, setMark] = useState(null);

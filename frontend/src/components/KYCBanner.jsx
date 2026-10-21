@@ -6,10 +6,10 @@ import { ShieldAlert, Check } from 'lucide-react';
 import api from '../api/client.js';
 
 const bar = (tone) => ({
-  backgroundColor: tone === 'red' ? '#fef2f2' : '#fffbeb',
-  color: tone === 'red' ? '#b91c1c' : '#b45309',
+  backgroundColor: tone === 'red' ? 'var(--t-red-50)' : 'var(--t-amber-50)',
+  color: tone === 'red' ? 'var(--red-deep)' : 'var(--amber-strong)',
   padding: '12px 20px',
-  borderBottom: tone === 'red' ? '1px solid #f87171' : '1px solid #fcd34d',
+  borderBottom: tone === 'red' ? '1px solid #f87171' : '1px solid var(--t-amber-100)',
   display: 'flex',
   alignItems: 'center',
   gap: '12px',
@@ -121,7 +121,7 @@ export default function KYCBanner() {
               style={{
                 fontSize: '12.5px',
                 fontWeight: '600',
-                color: isRejected ? '#b91c1c' : '#b45309',
+                color: isRejected ? 'var(--red-deep)' : 'var(--amber-strong)',
                 textDecoration: 'underline',
                 textUnderlineOffset: '3px',
                 marginRight: '4px',
@@ -143,9 +143,9 @@ export default function KYCBanner() {
                 fontWeight: '700',
                 borderRadius: '6px',
                 cursor: 'pointer',
-                background: isRejected ? '#fee2e2' : '#fef3c7',
-                color: isRejected ? '#991b1b' : '#92400e',
-                border: isRejected ? '1px solid #fca5a5' : '1px solid #fde68a',
+                background: isRejected ? 'var(--t-red-100)' : 'var(--t-amber-100)',
+                color: isRejected ? 'var(--on-red)' : 'var(--on-amber)',
+                border: isRejected ? '1px solid #fca5a5' : '1px solid var(--t-amber-line)',
                 transition: 'all 0.15s ease',
                 whiteSpace: 'nowrap',
               }}
@@ -172,7 +172,7 @@ export default function KYCBanner() {
               style={{
                 fontSize: '12.5px',
                 fontWeight: '600',
-                color: expired.length || sentBack.length ? '#b91c1c' : '#b45309',
+                color: expired.length || sentBack.length ? 'var(--red-deep)' : 'var(--amber-strong)',
                 textDecoration: 'underline',
                 textUnderlineOffset: '3px',
                 marginRight: '4px',
@@ -194,9 +194,9 @@ export default function KYCBanner() {
                 fontWeight: '700',
                 borderRadius: '6px',
                 cursor: 'pointer',
-                background: expired.length || sentBack.length ? '#fee2e2' : '#fef3c7',
-                color: expired.length || sentBack.length ? '#991b1b' : '#92400e',
-                border: expired.length || sentBack.length ? '1px solid #fca5a5' : '1px solid #fde68a',
+                background: expired.length || sentBack.length ? 'var(--t-red-100)' : 'var(--t-amber-100)',
+                color: expired.length || sentBack.length ? 'var(--on-red)' : 'var(--on-amber)',
+                border: expired.length || sentBack.length ? '1px solid #fca5a5' : '1px solid var(--t-amber-line)',
                 transition: 'all 0.15s ease',
                 whiteSpace: 'nowrap',
               }}

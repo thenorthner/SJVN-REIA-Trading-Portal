@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useCanWrite } from '../lib/deskAccess.js';
 import { useNavigate } from 'react-router-dom';
 import {
   Calculator,
@@ -29,6 +30,8 @@ export default function ThermalTariffArchitectureDoc3D({
   compact = false,
 }) {
   const navigate = useNavigate();
+  // Read-only for the administrators and the auditor (Target #2 Phase B).
+  const canWrite = useCanWrite();
   const [activeTab, setActiveTab] = useState('mechanics'); // 'mechanics' | 'lifecycle' | 'simulator'
 
   // Simulator state
@@ -449,6 +452,7 @@ export default function ThermalTariffArchitectureDoc3D({
                 Stations &amp; Tariff Setup
                 <ArrowRight size={13} />
               </button>
+              {canWrite && (
               <button
                 type="button"
                 onClick={() => navigate('/thermal/billing')}
@@ -469,6 +473,7 @@ export default function ThermalTariffArchitectureDoc3D({
                 Raise Monthly Bill
                 <ChevronRight size={13} />
               </button>
+              )}
             </div>
           </div>
         </div>
@@ -744,7 +749,7 @@ export default function ThermalTariffArchitectureDoc3D({
                 onChange={(e) => setSimPafm(Number(e.target.value))}
                 style={{ width: '100%', cursor: 'pointer', accentColor: '#3b82f6' }}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
                 <span>65% (Penalty)</span>
                 <span>85% (Normative)</span>
                 <span>100% (Max Incentive)</span>
@@ -768,7 +773,7 @@ export default function ThermalTariffArchitectureDoc3D({
                 onChange={(e) => setSimCoalCost(Number(e.target.value))}
                 style={{ width: '100%', cursor: 'pointer', accentColor: '#f59e0b' }}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
                 <span>₹2,500/T (Low Cost)</span>
                 <span>₹3,850/T (Base)</span>
                 <span>₹5,500/T (High Imported Blend)</span>
@@ -792,7 +797,7 @@ export default function ThermalTariffArchitectureDoc3D({
                 onChange={(e) => setSimCoalGcv(Number(e.target.value))}
                 style={{ width: '100%', cursor: 'pointer', accentColor: '#0ea5e9' }}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginTop: 4 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--slate-500)', marginTop: 4 }}>
                 <span>2,800 kCal (Low G13)</span>
                 <span>3,450 kCal (G10 CCL)</span>
                 <span>4,800 kCal (Blended)</span>

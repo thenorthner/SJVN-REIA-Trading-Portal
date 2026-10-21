@@ -12,7 +12,7 @@
  */
 import db from '../db/index.js';
 import { newId } from '../util.js';
-import { ROLE_GROUPS } from '../middleware/auth.js';
+import { ROLE_GROUPS, PLATFORM_ADMINS } from '../middleware/auth.js';
 import { verticalOfContract } from './stationScope.js';
 
 export const SEGREGATION_REFUSAL =
@@ -67,8 +67,9 @@ function nextLevel(billId) {
 
 /**
  * An approver must be one who can sign for the station's desk: a hydro bill on
- * the hydro desk, a thermal bill on the thermal desk (SJVN administrators sign
- * for both). Any active user used to do, and a bill was routed to a REIA
+ * the hydro desk, a thermal bill on the thermal desk. (SJVN administrators
+ * signed for both until Target #2 Phase B; they approve no bills now.) Any
+ * active user used to do, and a bill was routed to a REIA
  * officer with a buyer named to sign it last.
  */
 function resolveApprover(userId, bill = null) {
@@ -161,6 +162,11 @@ export function actOnApproval(bill, { action, comments, nextApproverId, markFina
       new Error(`${bill.bill_no} is with ${step.approver_name}, not you`),
       { status: 403 },
     );
+  }
+  // A step routed to an administrator before Phase B is not theirs to decide
+  // now: the maker, or the desk head, recalls the bill and sends it to a desk approver.
+  if (PLATFORM_ADMINS.includes(user?.role)) {
+    throw Object.assign(new Error(`Administrators do not approve bills. Recall ${bill.bill_no} and send it to an approver on the desk.`), { status: 403 });
   }
   const conflict = makerCheckerConflict(bill, user);
   if (conflict) throw Object.assign(new Error(conflict), { status: 400 });

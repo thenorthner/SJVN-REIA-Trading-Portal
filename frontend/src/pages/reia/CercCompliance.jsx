@@ -219,7 +219,7 @@ function PeriodTable({ title, rows, emptyText, canOpenForm }) {
               </tr>
               {expanded === key && (
                 <tr>
-                  <td colSpan={9} style={{ background: 'var(--bg-subtle, #f7f8fa)' }}><AnnexurePanel row={r} /></td>
+                  <td colSpan={9} style={{ background: 'var(--bg-subtle, var(--t-blue-50))' }}><AnnexurePanel row={r} /></td>
                 </tr>
               )}
               </React.Fragment>
@@ -433,7 +433,7 @@ function LicenceTracker({ canWrite }) {
   );
 }
 
-export default function CercCompliance() {
+export default function CercCompliance({ embedded = false }) {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [view, setView] = useState(['licence', 'next90'].includes(searchParams.get('view')) ? searchParams.get('view') : 'calendar');

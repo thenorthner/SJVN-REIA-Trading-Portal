@@ -1,5 +1,5 @@
 import { db } from '../db/index.js';
-import { newId, pushNotification } from '../util.js';
+import { newId, pushNotification, notifyRoles } from '../util.js';
 import _xlsx from 'xlsx';
 const XLSX = _xlsx.default || _xlsx;
 import fs from 'fs';
@@ -737,8 +737,9 @@ function openFetchLog(period) {
 
 function failFetchLog(logId, period, err) {
   db.prepare(`UPDATE cerc_fetch_log SET status = 'FAILED', error_message = ? WHERE id = ?`).run(err.message, logId);
-  pushNotification({
-    role: 'SJVN_ADMIN',
+  // CERC's market monitoring reports feed the trading desk's analytics and
+  // Form-IV; the desk uploads the month by hand when the fetch fails.
+  notifyRoles(['TRADING_USER', 'IT_SUPER_ADMIN'], {
     type: 'CERC_SCRAPER',
     message: `CERC Scraper FAILED for ${period}: ${err.message}.`,
   });

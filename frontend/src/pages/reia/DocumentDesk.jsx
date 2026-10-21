@@ -36,7 +36,7 @@ function Progress({ pct }) {
   if (pct === null || pct === undefined) return <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>No checklist</span>;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 130 }}>
-      <div style={{ flex: 1, height: 8, borderRadius: 999, background: 'var(--slate-100, #f1f5f9)', overflow: 'hidden' }}>
+      <div style={{ flex: 1, height: 8, borderRadius: 999, background: 'var(--slate-100, var(--slate-100))', overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', background: pct === 100 ? '#16a34a' : '#2563eb' }} />
       </div>
       <span style={{ fontSize: 13.5, fontWeight: 600, width: 34, textAlign: 'right' }}>{pct}%</span>
@@ -143,8 +143,8 @@ function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDo
       <form onSubmit={submit}>
         <AlertPopup open={!!error} title="Not uploaded" message={error} onClose={() => setError('')} />
 
-        <div style={{ background: 'var(--slate-50, #f8fafc)', border: '1px solid var(--slate-200, #e2e8f0)', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#0369a1', fontWeight: 600, fontSize: 13.5 }}>
+        <div style={{ background: 'var(--slate-50, var(--slate-50))', border: '1px solid var(--slate-200, var(--slate-200))', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--on-blue)', fontWeight: 600, fontSize: 13.5 }}>
             <span>SJVN Admin direct stakeholder onboarding</span>
           </div>
           <p style={{ margin: '4px 0 0', fontSize: 13.5, color: 'var(--slate-600)' }}>
@@ -207,11 +207,11 @@ function AdminDirectUploadModal({ open, companies, presetEntityId, onClose, onDo
 }
 
 const VERTICAL_LABELS = { REIA: 'REIA', HYDRO: 'Hydro', THERMAL: 'Thermal' };
-const ADMIN_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'THERMAL_ADMIN', 'THERMAL_USER'];
+const ADMIN_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_MAKER', 'REIA_CHECKER', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'THERMAL_ADMIN', 'THERMAL_USER'];
 // Direct admission, and admitting a scanned paper as verified, are administrators' (as on the server).
-const DIRECT_ADMIT_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
+const DIRECT_ADMIT_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
 
-export default function DocumentDesk({ vertical = 'REIA' }) {
+export default function DocumentDesk({ vertical = 'REIA', embedded = false }) {
   const { user } = useAuth();
   const canReview = canReviewDocuments(user?.role);
   const canDirectAdmit = DIRECT_ADMIT_ROLES.includes(user?.role);
@@ -303,21 +303,34 @@ export default function DocumentDesk({ vertical = 'REIA' }) {
 
   return (
     <div>
-      <PageHeader
-        title={vertical === 'REIA' ? 'Documents & KYC Desk' : `Documents & KYC Desk — ${VERTICAL_LABELS[vertical]} Stations`}
-        subtitle="Verification queue, company compliance status, and direct SJVN stakeholder onboarding & admission"
-        actions={
-          canAdminUpload && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setDirectUploadEntityId('')}
-            >
-              + Direct Upload Document
-            </button>
-          )
-        }
-      />
+      {!embedded && (
+        <PageHeader
+          title={vertical === 'REIA' ? 'Documents & KYC Desk' : `Documents & KYC Desk — ${VERTICAL_LABELS[vertical]} Stations`}
+          subtitle="Verification queue, company compliance status, and direct SJVN stakeholder onboarding & admission"
+          actions={
+            canAdminUpload && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setDirectUploadEntityId('')}
+              >
+                + Direct Upload Document
+              </button>
+            )
+          }
+        />
+      )}
+      {embedded && canAdminUpload && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 14 }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => setDirectUploadEntityId('')}
+          >
+            + Direct Upload Document
+          </button>
+        </div>
+      )}
 
       <AlertPopup open={!!error} title="Not done" message={error} onClose={() => setError('')} />
       <AlertPopup
@@ -386,13 +399,13 @@ export default function DocumentDesk({ vertical = 'REIA' }) {
                         {fmtDateTime(d.uploaded_at)}
                         <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{d.uploaded_by_name || '—'}</div>
                       </td>
-                      <td style={{ fontWeight: 600, color: d.waiting_days > 7 ? '#b91c1c' : d.waiting_days > 2 ? '#b45309' : 'inherit' }}>
+                      <td style={{ fontWeight: 600, color: d.waiting_days > 7 ? 'var(--red-deep)' : d.waiting_days > 2 ? 'var(--amber-strong)' : 'inherit' }}>
                         {d.waiting_days === 0 ? 'Today' : `${d.waiting_days} day${d.waiting_days === 1 ? '' : 's'}`}
                       </td>
                       <td><ExpiryTag doc={d} /></td>
                       <td style={{ fontSize: 13.5, fontWeight: 600 }}>
-                        {bad > 0 && <span style={{ color: '#b91c1c' }}>✗ {bad} mismatch{bad === 1 ? '' : 'es'}</span>}
-                        {bad === 0 && good > 0 && <span style={{ color: '#15803d' }}>✓ Matches record</span>}
+                        {bad > 0 && <span style={{ color: 'var(--red-deep)' }}>✗ {bad} mismatch{bad === 1 ? '' : 'es'}</span>}
+                        {bad === 0 && good > 0 && <span style={{ color: 'var(--on-green-2)' }}>✓ Matches record</span>}
                         {bad === 0 && good === 0 && <span style={{ color: 'var(--slate-500)', fontWeight: 400 }}>Not checked</span>}
                       </td>
                       <td>

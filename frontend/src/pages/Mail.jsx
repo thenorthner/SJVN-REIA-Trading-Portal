@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/client.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { PageHeader, Modal, Field } from '../components/ui.jsx';
@@ -377,11 +378,11 @@ function Compose({ draft, onClose, onSent, onOpenDisclaimer }) {
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '6px 12px',
-          background: 'rgba(241, 245, 249, 0.7)',
-          border: '1px solid #e2e8f0',
+          background: 'var(--slate-100)',
+          border: '1px solid var(--slate-200)',
           borderRadius: '6px',
           fontSize: '13px',
-          color: '#64748b',
+          color: 'var(--slate-500)',
           marginBottom: '12px'
         }}>
           <span>Informal operational facility — not a legal/contractual communication mode.</span>
@@ -389,7 +390,7 @@ function Compose({ draft, onClose, onSent, onOpenDisclaimer }) {
             <button
               type="button"
               className="btn-link"
-              style={{ fontSize: '13px', padding: 0, textDecoration: 'underline', color: '#2563eb' }}
+              style={{ fontSize: '13px', padding: 0, textDecoration: 'underline', color: 'var(--on-blue)' }}
               onClick={onOpenDisclaimer}
             >
               Disclaimer
@@ -506,7 +507,7 @@ function SignatureSettings({ value, onClose, onSaved }) {
           />
         </Field>
         <div className="mail-draft-note">Added under every new message, reply and forward. Leave it empty for none.</div>
-        <div className="mail-draft-note" style={{ marginTop: 6, fontSize: '13px', color: '#64748b' }}>
+        <div className="mail-draft-note" style={{ marginTop: 6, fontSize: '13px', color: 'var(--slate-500)' }}>
           Note: Quick Connect is an informal operational facility for day-to-day desk queries, not an official legal communication channel.
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
@@ -522,7 +523,7 @@ function DisclaimerModal({ open, onClose }) {
   if (!open) return null;
   return (
     <Modal open onClose={onClose} title="Quick Connect — Operational & Legal Disclaimer" width={600}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, color: '#334155', fontSize: '13.5px', lineHeight: 1.6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, color: 'var(--slate-700)', fontSize: '13.5px', lineHeight: 1.6 }}>
         <div style={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -531,11 +532,11 @@ function DisclaimerModal({ open, onClose }) {
           background: 'rgba(245, 158, 11, 0.08)',
           border: '1px solid rgba(245, 158, 11, 0.28)',
           borderRadius: 8,
-          color: '#92400e'
+          color: 'var(--on-amber)'
         }}>
-          <AlertTriangle size={20} style={{ color: '#d97706', flexShrink: 0, marginTop: 2 }} />
+          <AlertTriangle size={20} style={{ color: 'var(--on-amber)', flexShrink: 0, marginTop: 2 }} />
           <div>
-            <strong style={{ display: 'block', marginBottom: 2, color: '#b45309', fontSize: '14px' }}>
+            <strong style={{ display: 'block', marginBottom: 2, color: 'var(--amber-strong)', fontSize: '14px' }}>
               Notice on Non-Legal / Non-Contractual Status
             </strong>
             Quick Connect is strictly an informal in-portal operational coordination facility. It does <strong>NOT</strong> constitute an official, statutory, or legal mode of communication under PPA/PSA contracts, CERC regulations, or Indian contract law.
@@ -543,7 +544,7 @@ function DisclaimerModal({ open, onClose }) {
         </div>
 
         <div>
-          <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>
+          <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 600, color: 'var(--slate-900)' }}>
             1. Purpose of Quick Connect
           </h4>
           <p style={{ margin: 0 }}>
@@ -552,7 +553,7 @@ function DisclaimerModal({ open, onClose }) {
         </div>
 
         <div>
-          <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>
+          <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 600, color: 'var(--slate-900)' }}>
             2. Formal &amp; Contractual Notices
           </h4>
           <p style={{ margin: 0 }}>
@@ -561,7 +562,7 @@ function DisclaimerModal({ open, onClose }) {
         </div>
 
         <div>
-          <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>
+          <h4 style={{ margin: '0 0 6px 0', fontSize: '14px', fontWeight: 600, color: 'var(--slate-900)' }}>
             3. Evidentiary Limitation
           </h4>
           <p style={{ margin: 0 }}>
@@ -838,6 +839,17 @@ export default function Mail() {
 
   const startCompose = (d) => { setNotice(''); setCompose(d); };
 
+  // Another screen can open the composer ready-written (navigate('/mail', { state: { compose } })).
+  const routeLocation = useLocation();
+  const routeNavigate = useNavigate();
+  useEffect(() => {
+    const preset = routeLocation.state?.compose;
+    if (!preset) return;
+    startCompose(preset);
+    routeNavigate(routeLocation.pathname, { replace: true, state: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeLocation.state]);
+
   const openDraft = (d) => startCompose({
     id: d.id, title: 'Draft', to: d.to, cc: d.cc, bcc: d.bcc, subject: d.subject,
     bodyHtml: d.body_html || linesToHtml(d.body), replyTo: d.reply_to,
@@ -863,13 +875,13 @@ export default function Mail() {
               fontSize: '13.5px',
               fontWeight: 500,
               borderRadius: '6px',
-              color: '#475569',
-              border: '1px solid #cbd5e1',
-              background: '#ffffff',
+              color: 'var(--slate-600)',
+              border: '1px solid var(--slate-300)',
+              background: 'var(--surface)',
               cursor: 'pointer'
             }}
           >
-            <Scale size={14} style={{ color: '#64748b' }} />
+            <Scale size={14} style={{ color: 'var(--slate-500)' }} />
             <span>Disclaimer</span>
           </button>
         }
@@ -1129,7 +1141,7 @@ export default function Mail() {
                 <button
                   type="button"
                   className="btn-link"
-                  style={{ fontSize: '13px', padding: 0, textDecoration: 'underline', color: '#64748b' }}
+                  style={{ fontSize: '13px', padding: 0, textDecoration: 'underline', color: 'var(--slate-500)' }}
                   onClick={() => setDisclaimerOpen(true)}
                 >
                   Disclaimer

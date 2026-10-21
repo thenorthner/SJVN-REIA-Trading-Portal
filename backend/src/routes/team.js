@@ -27,7 +27,9 @@ import { passwordComplaint, lockoutState, clearLoginAttempts } from './auth.js';
 const router = Router();
 router.use(requireAuth);
 
-const SJVN_ADMINS = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN'];
+// Companies' teams are managed by the platform administrators only (Target #2
+// Phase B); the REIA checker held this before and no longer creates users.
+const SJVN_ADMINS = ['SJVN_ADMIN', 'IT_SUPER_ADMIN'];
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const send = (res, fn) => {
   try {

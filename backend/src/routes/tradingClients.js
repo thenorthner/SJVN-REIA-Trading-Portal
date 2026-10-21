@@ -57,6 +57,10 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   if (b.risk_rating && !RISK_RATINGS.includes(b.risk_rating)) errors.push(`risk_rating must be one of: ${RISK_RATINGS.join(', ')}`);
   const limit = Number(b.exposure_limit ?? 0);
   if (!Number.isFinite(limit) || limit < 0) errors.push('exposure_limit must be a non-negative number');
+  const credit = Number(b.credit_limit ?? 0);
+  if (!Number.isFinite(credit) || credit < 0) errors.push('credit_limit must be a non-negative number');
+  const van = String(b.virtual_account_no || '').trim() || null;
+  if (van && db.prepare('SELECT 1 FROM trading_clients WHERE UPPER(virtual_account_no) = UPPER(?)').get(van)) errors.push('That virtual account number already belongs to another client');
   if (b.entity_id && !db.prepare('SELECT 1 FROM entities WHERE id = ?').get(b.entity_id)) errors.push('entity_id does not exist');
   const duplicate = db.prepare(`
     SELECT id FROM trading_clients
@@ -68,8 +72,8 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
 
   const id = newId('TCL');
   db.prepare(`
-    INSERT INTO trading_clients (id, entity_id, name, client_type, noc_valid_till, ppa_ref, exposure_limit, risk_rating, status, documents)
-    VALUES (@id, @entity_id, @name, @client_type, @noc_valid_till, @ppa_ref, @exposure_limit, @risk_rating, 'ACTIVE', @documents)
+    INSERT INTO trading_clients (id, entity_id, name, client_type, noc_valid_till, ppa_ref, exposure_limit, credit_limit, virtual_account_no, risk_rating, status, documents)
+    VALUES (@id, @entity_id, @name, @client_type, @noc_valid_till, @ppa_ref, @exposure_limit, @credit_limit, @virtual_account_no, @risk_rating, 'ACTIVE', @documents)
   `).run({
     id,
     entity_id: b.entity_id || null,
@@ -78,6 +82,8 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     noc_valid_till: b.noc_valid_till || null,
     ppa_ref: b.ppa_ref || null,
     exposure_limit: limit,
+    credit_limit: credit,
+    virtual_account_no: van,
     risk_rating: b.risk_rating || 'MEDIUM',
     documents: b.documents ? JSON.stringify(b.documents) : null,
   });
@@ -92,6 +98,13 @@ router.put('/:id', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Client not found' });
   
   const merged = { ...existing, ...req.body };
+  const creditLimit = Number(merged.credit_limit ?? 0);
+  if (!Number.isFinite(creditLimit) || creditLimit < 0) return res.status(400).json({ error: 'credit_limit must be a non-negative number' });
+  merged.credit_limit = creditLimit;
+  merged.virtual_account_no = String(merged.virtual_account_no || '').trim() || null;
+  if (merged.virtual_account_no && db.prepare('SELECT 1 FROM trading_clients WHERE UPPER(virtual_account_no) = UPPER(?) AND id != ?').get(merged.virtual_account_no, existing.id)) {
+    return res.status(400).json({ error: 'That virtual account number already belongs to another client' });
+  }
   const duplicate = db.prepare(`
     SELECT id FROM trading_clients
     WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND id != ? AND status = 'ACTIVE'
@@ -100,12 +113,28 @@ router.put('/:id', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
   if (duplicate) return res.status(400).json({ error: 'Another active trading client already uses this name' });
   db.prepare(`
     UPDATE trading_clients SET name=@name, client_type=@client_type, noc_valid_till=@noc_valid_till,
-      ppa_ref=@ppa_ref, exposure_limit=@exposure_limit, risk_rating=@risk_rating, status=@status
+      ppa_ref=@ppa_ref, exposure_limit=@exposure_limit, credit_limit=@credit_limit, virtual_account_no=@virtual_account_no, risk_rating=@risk_rating, status=@status
     WHERE id=@id
   `).run(merged);
   
   secureLogAudit(req, { action: 'UPDATE', module: 'TRADING', entityType: 'trading_client', entityId: existing.id, before: existing, after: merged });
   res.json(withDetails(db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(req.params.id)));
+});
+
+// Pre-payment balance moves: a receipt adds to it, a refund or write-back takes from it.
+// Only this endpoint writes the balance, so every change carries who, how much and why.
+router.post('/:id/prepayment', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
+  const client = db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(req.params.id);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  const amount = Math.round(Number(req.body.amount) * 100) / 100;
+  const reason = String(req.body.reason || '').trim();
+  if (!Number.isFinite(amount) || amount === 0) return res.status(400).json({ error: 'amount must be a non-zero number (negative to take money off)' });
+  if (!reason) return res.status(400).json({ error: 'A reason or receipt reference is required' });
+  const next = Math.round((Number(client.pre_payment_balance) + amount) * 100) / 100;
+  if (next < 0) return res.status(400).json({ error: `Balance would go negative (now ₹${client.pre_payment_balance})` });
+  db.prepare('UPDATE trading_clients SET pre_payment_balance = ? WHERE id = ?').run(next, client.id);
+  secureLogAudit(req, { action: 'PREPAYMENT_ADJUST', module: 'TRADING', entityType: 'trading_client', entityId: client.id, details: { amount, reason, before: client.pre_payment_balance, after: next } });
+  res.json(withDetails(db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(client.id)));
 });
 
 // 5. Suspend / Blacklist workflow

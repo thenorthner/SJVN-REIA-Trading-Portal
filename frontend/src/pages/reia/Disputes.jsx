@@ -11,7 +11,7 @@ import {
 } from '../../disputesMeta.js';
 import { ROLE_GROUPS } from '../../roles.js';
 
-// The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_ADMIN.
+// The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_CHECKER.
 const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
 const CAN_RAISE = ['SELLER', 'BUYER', ...ROLE_GROUPS.REIA_WRITE];
 
@@ -251,7 +251,7 @@ export default function Disputes() {
     { key: 'status', header: 'Status', render: (r) => <Badge status={r.status} /> },
     { key: 'ageing_days', header: 'Age', render: (r) => `${r.ageing_days ?? 0}d` },
     { key: 'sla', header: 'Clock', render: (r) => (clock[r.id] ? <SlaTag sla={clock[r.id].sla} sjvn /> : (r.sla_breached || r.status === 'ESCALATED' ? <Badge status="ESCALATED" /> : 'OK')) },
-    { key: 'lps', header: 'LPS at stake', render: (r) => (clock[r.id]?.lps_estimate?.amount > 0 ? <span style={{ color: clock[r.id].lps_estimate.running ? '#b45309' : 'inherit' }}>{fmtCurrency(clock[r.id].lps_estimate.amount)}</span> : '—') },
+    { key: 'lps', header: 'LPS at stake', render: (r) => (clock[r.id]?.lps_estimate?.amount > 0 ? <span style={{ color: clock[r.id].lps_estimate.running ? 'var(--amber-strong)' : 'inherit' }}>{fmtCurrency(clock[r.id].lps_estimate.amount)}</span> : '—') },
     { key: 'group', header: 'Linked', render: (r) => { const g = clock[r.id]?.group || (r.group_ref ? { ref: r.group_ref, title: r.group_title } : null); return g?.ref ? <span title={g.title || ''} style={{ fontSize: 13.5 }}>{g.ref}</span> : '—'; } },
   ];
 
@@ -576,7 +576,7 @@ export default function Disputes() {
             </div>
 
             <div className="section-title" style={{ marginTop: 18 }}>Communication thread</div>
-            <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid var(--border, #e5e7eb)', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+            <div style={{ maxHeight: 220, overflow: 'auto', border: '1px solid var(--border, var(--border))', borderRadius: 8, padding: 10, marginBottom: 10 }}>
               {(detail.comments || []).map((c) => (
                 <div key={c.id} style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: 13.5, opacity: 0.7 }}>

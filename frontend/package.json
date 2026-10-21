@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test --project=chromium",
     "test:e2e:report": "playwright show-report e2e/.report",
-    "test:audit": "playwright test --project=audit --workers=4 --reporter=line; node e2e/audit/report.mjs"
+    "test:audit": "playwright test --project=audit --workers=4 --reporter=line; node e2e/audit/report.mjs",
+    "audit:gigw": "node e2e/gigw/audit.mjs"
   },
   "dependencies": {
     "axios": "^1.7.7",
@@ -22,9 +23,11 @@
     "react-quill-new": "^3.8.3",
     "react-router-dom": "^6.26.2",
     "recharts": "^2.12.7",
+    "three": "^0.186.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.63.0",
     "@vitejs/plugin-react": "^4.3.1",
     "jsdom": "^29.1.1",

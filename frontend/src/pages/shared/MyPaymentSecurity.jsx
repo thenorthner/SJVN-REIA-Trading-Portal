@@ -130,12 +130,12 @@ function ReleaseBox({ d, onDone }) {
       {d.releases?.map((r) => (
         <div key={r.id} style={{ fontSize: 13, marginTop: 6 }}>
           <Badge status={r.status} /> {r.reason} <span style={{ color: 'var(--text-light)' }}>· {r.requested_by}, {fmtDate(r.created_at)}{r.acted_by ? ` · decided by ${r.acted_by}` : ''}</span>
-          {r.decision_note && <div style={{ fontSize: 13.5, color: r.status === 'REJECTED' ? '#b91c1c' : 'var(--text-light)' }}>SJVN: {r.decision_note}</div>}
+          {r.decision_note && <div style={{ fontSize: 13.5, color: r.status === 'REJECTED' ? 'var(--red-deep)' : 'var(--text-light)' }}>SJVN: {r.decision_note}</div>}
         </div>
       ))}
       {!pending && rc.can_request && (
         <>
-          <p style={{ margin: '6px 0', fontSize: 13, color: rc.clear ? 'var(--text-light)' : '#b45309' }}>
+          <p style={{ margin: '6px 0', fontSize: 13, color: rc.clear ? 'var(--text-light)' : 'var(--amber-strong)' }}>
             {rc.clear
               ? 'Nothing is outstanding on this contract and no dispute is open, so a release can be considered.'
               : `SJVN releases security only when nothing is owed and no dispute is open. Right now: ${[
@@ -334,13 +334,13 @@ export default function MyPaymentSecurity({ role = 'SELLER' }) {
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpenId(r.id); } }}>
                     <td><strong>{r.instrument_no}</strong>{r.bank_reference_no && <div style={{ fontSize: 13, color: 'var(--text-light)' }}>Bank ref {r.bank_reference_no}</div>}</td>
                     <td>{r.contract_no}</td>
-                    <td>{typeOf(r)}{r.is_ebg && <span className="cw-flag" style={{ background: '#eff6ff', color: '#1d4ed8', marginLeft: 6 }}>e-BG</span>}</td>
-                    <td>{fmtCurrency(r.limit_amount)}{r.utilized_amount > 0 && <div style={{ fontSize: 13, color: '#b91c1c' }}>{fmtCurrency(r.utilized_amount)} drawn</div>}</td>
+                    <td>{typeOf(r)}{r.is_ebg && <span className="cw-flag" style={{ background: 'var(--t-blue-50)', color: 'var(--on-blue)', marginLeft: 6 }}>e-BG</span>}</td>
+                    <td>{fmtCurrency(r.limit_amount)}{r.utilized_amount > 0 && <div style={{ fontSize: 13, color: 'var(--red-deep)' }}>{fmtCurrency(r.utilized_amount)} drawn</div>}</td>
                     <td>{r.issuing_bank || '—'}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{r.validity_end ? fmtDate(r.validity_end) : '—'} <ExpiryTag expiry={r.expiry} />{r.pending_amendment && <div style={{ fontSize: 13, color: '#1d4ed8' }}>Extension with SJVN</div>}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{r.validity_end ? fmtDate(r.validity_end) : '—'} <ExpiryTag expiry={r.expiry} />{r.pending_amendment && <div style={{ fontSize: 13, color: 'var(--on-blue)' }}>Extension with SJVN</div>}</td>
                     <td>{r.sfms.confirmed
-                      ? <><span style={{ color: '#15803d', fontWeight: 600 }}>Received</span><div style={{ fontSize: 13, color: 'var(--text-light)' }}>{[r.sfms.message_type, r.sfms.reference, r.sfms.date && fmtDate(r.sfms.date)].filter(Boolean).join(' · ')}</div></>
-                      : <span style={{ color: '#b45309', fontWeight: 600 }}>Pending</span>}</td>
+                      ? <><span style={{ color: 'var(--on-green-2)', fontWeight: 600 }}>Received</span><div style={{ fontSize: 13, color: 'var(--text-light)' }}>{[r.sfms.message_type, r.sfms.reference, r.sfms.date && fmtDate(r.sfms.date)].filter(Boolean).join(' · ')}</div></>
+                      : <span style={{ color: 'var(--amber-strong)', fontWeight: 600 }}>Pending</span>}</td>
                     <td>{r.amendment_count || '—'}</td>
                     <td>{r.document
                       ? <button type="button" className="btn-link" onClick={(e) => { e.stopPropagation(); setPreview(r.document); }}>View {r.is_ebg ? 'e-BG' : 'scan'}</button>
@@ -374,7 +374,7 @@ export default function MyPaymentSecurity({ role = 'SELLER' }) {
                       {seller && c.pbg_shortfall > 0 && <span className="cw-flag red">PBG short by {fmtCurrency(c.pbg_shortfall)}</span>}
                       {seller && c.lc_shortfall > 0 && <span className="cw-flag amber">SJVN LC short by {fmtCurrency(c.lc_shortfall)}</span>}
                       {!seller && c.lc_given_shortfall > 0 && <span className="cw-flag red">LC short by {fmtCurrency(c.lc_given_shortfall)}</span>}
-                      {!(seller && (c.pbg_shortfall > 0 || c.lc_shortfall > 0)) && !(!seller && c.lc_given_shortfall > 0) && <span style={{ color: '#15803d', fontWeight: 600 }}>In order</span>}
+                      {!(seller && (c.pbg_shortfall > 0 || c.lc_shortfall > 0)) && !(!seller && c.lc_given_shortfall > 0) && <span style={{ color: 'var(--on-green-2)', fontWeight: 600 }}>In order</span>}
                     </td>
                   </tr>
                 ))}

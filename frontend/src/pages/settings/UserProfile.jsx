@@ -1,6 +1,7 @@
 import React from 'react';
 import { usePortfolios } from '../../context/PortfolioContext.jsx';
 import { PageHeader, Card, Badge, Field } from '../../components/ui.jsx';
+import PrivacyPanel from '../../gigw/PrivacyPanel.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 
 export default function UserProfile() {
@@ -99,7 +100,7 @@ export default function UserProfile() {
                 <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>No portfolios available.</div>
               )}
               {portfolios.map((pf) => (
-                <div key={pf.id} style={{ padding: 12, border: '1px solid var(--slate-200)', borderRadius: 6, background: '#fff' }}>
+                <div key={pf.id} style={{ padding: 12, border: '1px solid var(--slate-200)', borderRadius: 6, background: 'var(--surface)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                     <span></span>
                     <span style={{ fontWeight: 600, color: 'var(--navy)' }}>{pf.name}</span>
@@ -118,6 +119,7 @@ export default function UserProfile() {
           </Card>
         </div>
       </div>
+      <PrivacyPanel />
     </div>
   );
 }

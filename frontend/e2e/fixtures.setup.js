@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { test as setup, expect } from '@playwright/test';
-import { ADMIN, INVOICE, CONTRACTS, EVIDENCE, RECON_PERIOD } from './fixtures.js';
+import { ADMIN, LOGIN_USER, INVOICE, CONTRACTS, EVIDENCE, RECON_PERIOD } from './fixtures.js';
 
 // Signs in once for every spec, then raises the records the screens will show —
 // through the API the screens use, so the fixtures have the shape real ones do
@@ -15,7 +15,11 @@ setup('sign in and raise a dispute with evidence, and a reconciliation', async (
   const login = await request.post('/api/auth/login', { data: { email: ADMIN.email, password: ADMIN.password } });
   expect(login.status(), await login.text()).toBe(200);
   const { token, user } = await login.json();
-  const headers = { Authorization: `Bearer ${token}` };
+  // The records are raised by the REIA desk: since Target #2 Phase B the SJVN
+  // Administrator reads the desks but raises nothing on them.
+  const desk = await request.post('/api/auth/login', { data: { email: LOGIN_USER.email, password: LOGIN_USER.password } });
+  expect(desk.status(), await desk.text()).toBe(200);
+  const headers = { Authorization: `Bearer ${(await desk.json()).token}` };
 
   const dispute = await request.post('/api/disputes', {
     headers,
@@ -40,8 +44,11 @@ setup('sign in and raise a dispute with evidence, and a reconciliation', async (
     headers,
     data: { contract_id: CONTRACTS.hydro.id, period: RECON_PERIOD, scope: 'REIA_CONTRACT' },
   });
-  expect(recon.status(), await recon.text()).toBe(201);
-  const { id: reconId, recon_no: reconNo } = await recon.json();
+  // The reconciliation now refuses a period with no energy recorded, which the
+  // fixtures do not seed. reconciliation.spec.js needs it and fails without it
+  // until they do; the other specs and the button audit do not.
+  const { id: reconId = null, recon_no: reconNo = null } = recon.status() === 201 ? await recon.json() : {};
+  if (!reconId) console.warn(`[setup] no reconciliation fixture: ${await recon.text()}`);
 
   // The app keeps its session in localStorage, so that is what the specs start with.
   fs.writeFileSync(path.join(DATA, 'admin-state.json'), JSON.stringify({

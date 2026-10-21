@@ -33,13 +33,14 @@ import { fmtDate, fmtDateTime } from '../../datetime.js';
 import { ROLE_GROUPS } from '../../roles.js';
 
 // The server's own lists (middleware/auth.js). These were shorter copies that
-// left out REIA_ADMIN and IT_SUPER_ADMIN, so those two were allowed by the API
+// left out REIA_CHECKER and IT_SUPER_ADMIN, so those two were allowed by the API
 // and never offered the buttons — a REIA admin could not approve a bill on screen.
 const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
 const CAN_APPROVE = [...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER', 'MANAGEMENT'];
 // Recording a buyer's payment is Finance's group; releasing to a generator is
 // open to the REIA desk as well.
-const CAN_RECORD_PAYMENT = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'REIA_USER'];
+// Mirrors ROLE_GROUPS.FINANCE on the server; the administrators record no payments (Target #2 Phase B).
+const CAN_RECORD_PAYMENT = ['FINANCE_USER', 'REIA_MAKER'];
 const CAN_RELEASE = [...new Set([...CAN_RECORD_PAYMENT, ...ROLE_GROUPS.REIA_WRITE])];
 // The total can be changed until the bill goes for approval; after that the
 // figure is what somebody is signing, or has signed.
@@ -514,7 +515,7 @@ export default function Invoices() {
     { key: 'invoice_type', header: 'Type', render: (r) => (
       r.invoice_type === 'PROVISIONAL' ? (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13, padding: '2px 6px', background: '#fef08a', color: '#854d0e', borderRadius: 4, fontWeight: 600 }}>PROVISIONAL</span>
+          <span style={{ fontSize: 13, padding: '2px 6px', background: 'var(--t-amber-100)', color: 'var(--on-amber)', borderRadius: 4, fontWeight: 600 }}>PROVISIONAL</span>
           {CAN_WRITE.includes(user?.role) && !['CANCELLED'].includes(r.status) && (
             <button 
               className="btn btn-xs btn-outline" 
@@ -630,7 +631,7 @@ export default function Invoices() {
             border: 'none',
             background: 'transparent',
             borderBottom: activeTab === 'TRAIL' ? '3px solid #0284c7' : '3px solid transparent',
-            color: activeTab === 'TRAIL' ? '#0284c7' : 'var(--text-muted)',
+            color: activeTab === 'TRAIL' ? 'var(--on-blue)' : 'var(--text-muted)',
             fontWeight: activeTab === 'TRAIL' ? 700 : 500,
             fontSize: 14.5,
             cursor: 'pointer',
@@ -864,7 +865,7 @@ export default function Invoices() {
             </select>
           </Field>
           {wfOutstanding && (
-            <div className="callout" style={{ margin: '6px 0 10px', padding: '10px 12px', background: 'var(--navy-soft, #eaf0f9)', borderRadius: 8, fontSize: 13 }}>
+            <div className="callout" style={{ margin: '6px 0 10px', padding: '10px 12px', background: 'var(--navy-soft, var(--t-blue-50))', borderRadius: 8, fontSize: 13 }}>
               Outstanding: <strong>{fmtCurrency(wfOutstanding.total_due)}</strong>
               {'  ·  '}LPS <strong>{fmtCurrency(wfOutstanding.total_lps)}</strong>
               {'  ·  '}Principal <strong>{fmtCurrency(wfOutstanding.total_principal)}</strong>
@@ -1094,7 +1095,7 @@ export default function Invoices() {
             )}
 
             {selected.direction === 'SJVN_TO_BUYER' && PRESENTED.includes(selected.status) && (
-              <p className="inline-note" style={{ marginTop: 12, color: selected.buyer_ack_at ? '#15803d' : undefined }}>
+              <p className="inline-note" style={{ marginTop: 12, color: selected.buyer_ack_at ? 'var(--on-green-2)' : undefined }}>
                 {selected.buyer_ack_at ? `✓ The buyer acknowledged receipt of this bill — ${selected.buyer_ack_by}, ${fmtDateTime(selected.buyer_ack_at)}.` : 'The buyer has not yet acknowledged receipt of this bill on the portal.'}
               </p>
             )}
@@ -1147,7 +1148,7 @@ export default function Invoices() {
                         <button
                           type="button"
                           className="btn btn-sm btn-secondary"
-                          style={{ background: '#fff', color: '#b91c1c', border: '1px solid #b91c1c', fontWeight: 600 }}
+                          style={{ background: 'var(--surface)', color: 'var(--red-deep)', border: '1px solid #b91c1c', fontWeight: 600 }}
                           onClick={() => { setWaiveReason(''); setWaiveError(''); setShowWaive(true); }}
                         >
                           Waive Validation Now →
@@ -1195,14 +1196,14 @@ export default function Invoices() {
                         )}
 
                         {(canApprove || canReject) && (raisedByMe ? (
-                          <div className="t-meta" style={{ marginTop: 8, fontSize: 14, color: '#b45309', background: 'rgba(245, 158, 11, 0.08)', padding: '10px 14px', borderRadius: 8, border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+                          <div className="t-meta" style={{ marginTop: 8, fontSize: 14, color: 'var(--amber-strong)', background: 'rgba(245, 158, 11, 0.08)', padding: '10px 14px', borderRadius: 8, border: '1px solid rgba(245, 158, 11, 0.25)' }}>
                             You raised this bill as Maker ({selected.created_by || 'You'}). Designated Approver for Level {a.level}: <strong>{designatedNames}</strong> [Post: <strong>{postName}</strong>].
                           </div>
                         ) : (
                           <div style={{ marginTop: 10 }}>
                             <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 8 }}>
                               Signed by: <strong style={{ color: 'var(--text)' }}>{a.approver_roles_label || postName}</strong>{designatedNames ? ` — ${designatedNames}` : ''}
-                              {!myLevel && <div style={{ color: '#b45309', marginTop: 4 }}>This level is not yours to approve; you can still send the bill back.</div>}
+                              {!myLevel && <div style={{ color: 'var(--amber-strong)', marginTop: 4 }}>This level is not yours to approve; you can still send the bill back.</div>}
                             </div>
                             <input
                               placeholder={canApprove ? 'Comments (optional for approve, needed to reject)' : 'Why it is being sent back'}
@@ -1212,7 +1213,7 @@ export default function Invoices() {
                               style={{ marginBottom: 10, width: '100%', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 14px', fontSize: 15 }}
                             />
                             {canReject && approvalsOpen && mySignedLevel != null && (
-                              <div className="t-meta" style={{ marginBottom: 8, fontSize: 14, color: '#b45309' }}>
+                              <div className="t-meta" style={{ marginBottom: 8, fontSize: 14, color: 'var(--amber-strong)' }}>
                                 You approved Level {mySignedLevel}. Level {a.level} must be approved by <strong>{designatedNames}</strong> [Post: <strong>{postName}</strong>]. You can still send the bill back.
                               </div>
                             )}
@@ -1345,7 +1346,7 @@ export default function Invoices() {
               <>
                 <div className="section-title" style={{ marginTop: 18 }}>Release Payment to Generator (Pay-when-paid)</div>
                 {selected.generator_realization && (
-                  <div className="callout" style={{ margin: '6px 0 10px', padding: '10px 12px', background: 'var(--navy-soft, #eaf0f9)', borderRadius: 8, fontSize: 13 }}>
+                  <div className="callout" style={{ margin: '6px 0 10px', padding: '10px 12px', background: 'var(--navy-soft, var(--t-blue-50))', borderRadius: 8, fontSize: 13 }}>
                     DISCOM realized: <strong>{fmtCurrency(selected.generator_realization.realized)}</strong>
                     {'  ·  '}Already released from realization: <strong>{fmtCurrency(selected.generator_realization.released_from_realization)}</strong>
                     {'  ·  '}Available: <strong style={{ color: 'var(--green)' }}>{fmtCurrency(selected.generator_realization.available)}</strong>

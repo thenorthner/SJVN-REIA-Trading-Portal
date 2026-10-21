@@ -166,7 +166,7 @@ export default function ExchangeBiddingDetailReport() {
           <div className="page-loading">Loading report…</div>
         ) : (
           <>
-            <div style={{ overflow: 'auto', maxHeight: '70vh', border: '1px solid #e2e8f0' }}>
+            <div style={{ overflow: 'auto', maxHeight: '70vh', border: '1px solid var(--slate-200)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
                 <thead>
                   <tr>
@@ -176,13 +176,13 @@ export default function ExchangeBiddingDetailReport() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={COLUMNS.length} style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
+                      <td colSpan={COLUMNS.length} style={{ padding: 24, textAlign: 'center', color: 'var(--slate-500)' }}>
                         No bid details yet. Submit from{' '}
                         <Link to="/trading/exchange/bidding-latest">Exchange Bidding (Latest)</Link>.
                       </td>
                     </tr>
                   ) : filtered.map((r) => (
-                    <tr key={`${r.transaction_id}-${r.sl_no}-${r.from_period_id}-${r.bid_reference}`} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                    <tr key={`${r.transaction_id}-${r.sl_no}-${r.from_period_id}-${r.bid_reference}`} style={{ borderBottom: '1px solid var(--slate-200)' }}>
                       {COLUMNS.map((c) => {
                         let v = r[c.key];
                         if (c.key === 'delivery_date') v = fmtDelivery(v);
@@ -201,7 +201,7 @@ export default function ExchangeBiddingDetailReport() {
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 10, fontSize: 13.5, color: '#64748b' }}>
+            <div style={{ marginTop: 10, fontSize: 13.5, color: 'var(--slate-500)' }}>
               Showing {filtered.length === 0 ? 0 : 1} to {filtered.length} of {filtered.length} entries
             </div>
           </>

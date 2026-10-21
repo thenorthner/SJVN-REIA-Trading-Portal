@@ -35,7 +35,7 @@ export function DsmStatementSync({ canWrite, onChanged }) {
           { key: 'station', header: 'Station', render: (r) => <>{r.entity_name}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{r.contract_no}</div></> },
           { key: 'statement_amount', header: 'Statement', render: (r) => (r.statement_amount == null ? '—' : <span>{fmtCurrency(Math.abs(r.statement_amount))} {r.statement_amount >= 0 ? 'receivable' : 'payable'}</span>) },
           { key: 'billed', header: 'Billed so far', render: (r) => <>{fmtCurrency(Math.abs(r.billed_so_far))}<div style={{ fontSize: 12.5 }}>{r.bills.map((b) => b.invoice_no).join(', ')}</div></> },
-          { key: 'delta', header: 'Delta', render: (r) => (r.delta ? <strong style={{ color: '#b45309' }}>{fmtCurrency(Math.abs(r.delta))} {r.delta > 0 ? 'more from the pool' : 'back to the pool'}</strong> : '—') },
+          { key: 'delta', header: 'Delta', render: (r) => (r.delta ? <strong style={{ color: 'var(--amber-strong)' }}>{fmtCurrency(Math.abs(r.delta))} {r.delta > 0 ? 'more from the pool' : 'back to the pool'}</strong> : '—') },
           { key: 'state', header: '', render: (r) => (
             <div>
               <Badge type={STATE[r.state]?.[0]}>{STATE[r.state]?.[1] || r.state}</Badge>
@@ -64,7 +64,7 @@ export function DsmPoolTracker() {
           { key: 'amount', header: 'Amount', render: (r) => fmtCurrency(r.amount) },
           { key: 'due', header: 'NRPC due', render: (r) => (r.due_date ? fmtDate(r.due_date) : '—') },
           { key: 'paid', header: 'Paid / UTR', render: (r) => <>{fmtCurrency(r.paid)}<div style={{ fontSize: 12.5 }}>{r.utrs.join(', ') || '—'}</div></> },
-          { key: 'late', header: 'Late', render: (r) => (r.days_late ? <span style={{ color: '#b91c1c' }}>{r.days_late} days</span> : '—') },
+          { key: 'late', header: 'Late', render: (r) => (r.days_late ? <span style={{ color: 'var(--red-deep)' }}>{r.days_late} days</span> : '—') },
           { key: 'interest', header: 'Interest', render: (r) => (r.late_interest ? fmtCurrency(r.late_interest) : '—') },
         ]}
         rows={t.rows}

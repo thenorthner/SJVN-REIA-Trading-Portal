@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtNumber } from '../../components/ui.jsx';
 
@@ -151,7 +152,7 @@ export default function DsmSlabMaster() {
       <PageHeader
         title="Deviation (DSM) Charge Slabs"
         subtitle="Frequency-linked deviation rates. A band prices a block only once its notified rate is entered and verified."
-        actions={<button className="btn btn-primary" onClick={() => setShowNew(true)}>+ New slab</button>}
+        actions={<WriteOnly><button className="btn btn-primary" onClick={() => setShowNew(true)}>+ New slab</button></WriteOnly>}
       />
 
       {readiness && (

@@ -275,7 +275,7 @@
 }
 .mail-action-btn:hover {
   background: var(--mail-bg);
-  border-color: #cbd5e1;
+  border-color: var(--slate-300);
 }
 .mail-action-btn.delete:hover {
   background: var(--red-bg);
@@ -443,7 +443,7 @@
 }
 .mail-nav-settings { margin-top: auto; }
 .mail-draft-tag {
-  color: #b45309;
+  color: var(--amber-strong);
   font-weight: 600;
   margin-right: 4px;
 }
@@ -530,7 +530,7 @@
   cursor: pointer;
 }
 .mail-bulk button:hover { border-color: var(--primary); }
-.mail-bulk button.danger:hover { border-color: #dc2626; color: #dc2626; }
+.mail-bulk button.danger:hover { border-color: #dc2626; color: var(--red-strong); }
 .mail-more {
   display: block;
   width: calc(100% - 32px);
@@ -558,7 +558,7 @@
 .mail-receipts summary:hover { color: var(--mail-accent); }
 .mail-receipts ul { list-style: none; margin: 6px 0 0; padding: 0; }
 .mail-receipts li { display: flex; justify-content: space-between; gap: 24px; padding: 2px 0; }
-.mail-receipts li.opened span:last-child { color: #15803d; }
+.mail-receipts li.opened span:last-child { color: var(--on-green-2); }
 
 /* ── Attachment preview ────────────────────────────────────────────────────── */
 .mail-preview { background: var(--mail-bg); border: 1px solid var(--mail-border); border-radius: 8px; text-align: center; overflow: auto; max-height: 70vh; }
@@ -573,7 +573,7 @@
   align-items: center;
   gap: 4px;
   padding: 6px 10px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--slate-100);
   border-top: none;
   border-radius: 0 0 8px 8px;
   font-size: 12px;

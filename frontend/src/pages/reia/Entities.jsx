@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
+import DocumentDesk from './DocumentDesk.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, AlertPopup, fmtNumber } from '../../components/ui.jsx';
 import { DocumentManager, PreviewModal, UploadModal } from '../../components/DocumentManager.jsx';
 import { fmtDate } from '../../datetime.js';
@@ -18,9 +20,9 @@ import {
 const CAN_WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
 const CAN_APPROVE = CAN_WRITE;
 const CAN_VERIFY = CAN_WRITE;
-const CAN_DIRECT_ADMIT = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
+const CAN_DIRECT_ADMIT = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
 // Barring a counterparty is an administrator's decision.
-const CAN_BLACKLIST = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
+const CAN_BLACKLIST = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
 
 const emptyForm = (vertical) => ({
   // A station's stakeholders are the beneficiaries it bills; REIA onboards both sides.
@@ -52,8 +54,22 @@ function KField({ id, label, required, error, hint, children }) {
   );
 }
 
-export default function Entities({ vertical = 'REIA' }) {
+export default function Entities({ vertical = 'REIA', initialTab = null }) {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(() => (tabParam === 'kyc' || initialTab === 'kyc' ? 'KYC' : 'DIRECTORY'));
+
+  useEffect(() => {
+    if (tabParam === 'kyc' || initialTab === 'kyc') setActiveTab('KYC');
+    else if (tabParam === 'directory' || tabParam === 'stakeholders') setActiveTab('DIRECTORY');
+  }, [tabParam, initialTab]);
+
+  const handleTabChange = (key) => {
+    setActiveTab(key);
+    setSearchParams(key === 'KYC' ? { tab: 'kyc' } : {}, { replace: true });
+  };
+
   const [rows, setRows] = useState([]);
   const [parents, setParents] = useState([]);
   const [filters, setFilters] = useState({ entity_type: '', status: '' });
@@ -81,7 +97,6 @@ export default function Entities({ vertical = 'REIA' }) {
   const [editApproval, setEditApproval] = useState(null);
   const [approvalForm, setApprovalForm] = useState({});
   const [blacklistForm, setBlacklistForm] = useState(null); // { blacklisted, reason }
-  const [ownReason, setOwnReason] = useState('');
   const [editModal, setEditModal] = useState(null);
   const [editFormData, setEditFormData] = useState({});
   const [editSubmitting, setEditSubmitting] = useState(false);
@@ -89,6 +104,76 @@ export default function Entities({ vertical = 'REIA' }) {
   const [entityDocs, setEntityDocs] = useState([]);
   const [docPreview, setDocPreview] = useState(null);   // { versionId, fileName }
   const [uploadFor, setUploadFor] = useState(null);      // { code, label }
+  // The checklist as the server holds it: the built-in clearances plus any an
+  // administrator has added. The static list is only the fallback.
+  const [catalogs, setCatalogs] = useState({});
+  const [customTypes, setCustomTypes] = useState([]);
+  const [typesModal, setTypesModal] = useState(null);    // null | { label, applies_to, is_mandatory, help }
+  const catalogFor = (t) => catalogs[t] || catalogForEntityType(t);
+  const loadCatalogs = () => Promise.all(['SELLER', 'BUYER'].map((t) => api.entities.regulatoryCatalog(t)))
+    .then(([seller, buyer]) => {
+      setCatalogs({ SELLER: seller.items, BUYER: buyer.items });
+      setCustomTypes(seller.custom || []);
+    })
+    .catch(() => {});
+  useEffect(() => { loadCatalogs(); }, []);
+
+  const [categories, setCategories] = useState(CATEGORY_OPTIONS);
+  const [technologies, setTechnologies] = useState(TECHNOLOGY_OPTIONS);
+  const [quickAddLookup, setQuickAddLookup] = useState(null); // { field, label, category, value, isEdit }
+  const [quickAddSaving, setQuickAddSaving] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      api.masters.lookups({ category: 'ENTITY_CATEGORY' }).catch(() => []),
+      api.masters.lookups({ category: 'TECHNOLOGY' }).catch(() => []),
+    ]).then(([catRows, techRows]) => {
+      if (Array.isArray(catRows) && catRows.length > 0) {
+        const catLabels = catRows.map((r) => r.label || r.code);
+        setCategories((prev) => ({
+          SELLER: Array.from(new Set([...prev.SELLER, ...catLabels])),
+          BUYER: Array.from(new Set([...prev.BUYER, ...catLabels])),
+        }));
+      }
+      if (Array.isArray(techRows) && techRows.length > 0) {
+        const techLabels = techRows.map((r) => r.label || r.code);
+        setTechnologies((prev) => Array.from(new Set([...prev, ...techLabels])));
+      }
+    });
+  }, []);
+
+  async function handleCreateLookup(lookupCategory, labelVal, targetField, isEditMode = false) {
+    const clean = String(labelVal || '').trim();
+    if (!clean) return;
+    setQuickAddSaving(true);
+    try {
+      const code = clean.toUpperCase().replace(/[^A-Z0-9]+/g, '_').slice(0, 30);
+      await api.masters.createLookup({
+        category: lookupCategory,
+        code,
+        label: clean,
+        sort_order: 10,
+      });
+      if (lookupCategory === 'ENTITY_CATEGORY') {
+        setCategories((prev) => ({
+          SELLER: Array.from(new Set([...prev.SELLER, clean])),
+          BUYER: Array.from(new Set([...prev.BUYER, clean])),
+        }));
+      } else if (lookupCategory === 'TECHNOLOGY') {
+        setTechnologies((prev) => Array.from(new Set([...prev, clean])));
+      }
+      if (isEditMode) {
+        setEditFormData((prev) => ({ ...prev, [targetField]: clean }));
+      } else {
+        setForm((prev) => ({ ...prev, [targetField]: clean }));
+      }
+      setQuickAddLookup(null);
+    } catch (err) {
+      alert(err.response?.data?.error || err.message || 'Failed to save lookup');
+    } finally {
+      setQuickAddSaving(false);
+    }
+  }
 
   const notify = (tone, title, message, items = null) => setPopup({ tone, title, message, items });
   const fail = (title, err, fallback) => {
@@ -287,16 +372,49 @@ export default function Entities({ vertical = 'REIA' }) {
     </KField>
   );
 
-  const kSelect = (field, label, options, { required, placeholder = 'Select…' } = {}) => (
-    <KField id={`sk-${field}`} label={label} required={required} error={fieldErrors[field]}>
-      <select id={`sk-${field}`} value={form[field] ?? ''} onChange={(e) => setField(field, e.target.value)}>
-        <option value="">{placeholder}</option>
-        {/* A value already on record that is not in today's list is still shown. */}
-        {form[field] && !options.includes(form[field]) && <option value={form[field]}>{form[field]}</option>}
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
-      </select>
-    </KField>
-  );
+  const kSelect = (field, label, options, { required, placeholder = 'Select…' } = {}) => {
+    const isCustomizable = ['category', 'technology'].includes(field);
+    const lookupCat = field === 'category' ? 'ENTITY_CATEGORY' : 'TECHNOLOGY';
+    return (
+      <KField
+        id={`sk-${field}`}
+        label={
+          <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+            <span>{label}</span>
+            {isCustomizable && (
+              <button
+                type="button"
+                className="btn btn-xs btn-outline"
+                style={{ padding: '1px 8px', fontSize: 11, fontWeight: 600 }}
+                onClick={() => setQuickAddLookup({ field, label, category: lookupCat, value: '', isEdit: false })}
+              >
+                + Add New
+              </button>
+            )}
+          </span>
+        }
+        required={required}
+        error={fieldErrors[field]}
+      >
+        <select
+          id={`sk-${field}`}
+          value={form[field] ?? ''}
+          onChange={(e) => {
+            if (e.target.value === '__NEW__') {
+              setQuickAddLookup({ field, label, category: lookupCat, value: '', isEdit: false });
+            } else {
+              setField(field, e.target.value);
+            }
+          }}
+        >
+          <option value="">{placeholder}</option>
+          {form[field] && !options.includes(form[field]) && <option value={form[field]}>{form[field]}</option>}
+          {options.map((o) => <option key={o} value={o}>{o}</option>)}
+          {isCustomizable && <option value="__NEW__">+ Add New {label}...</option>}
+        </select>
+      </KField>
+    );
+  };
 
   const setContact = (key, value) => {
     setForm((prev) => ({ ...prev, contacts: [{ ...prev.contacts[0], [key]: value }] }));
@@ -327,7 +445,7 @@ export default function Entities({ vertical = 'REIA' }) {
     const errors = validateStakeholderForm(form);
     for (const [code, notes] of Object.entries(form.regulatory_na || {})) {
       if (String(notes || '').trim().length < 10) {
-        const item = catalogForEntityType(form.entity_type).find((c) => c.code === code);
+        const item = catalogFor(form.entity_type).find((c) => c.code === code);
         errors.push({ field: `na-${code}`, label: item?.label || code, message: 'Say why this approval is not applicable (at least 10 characters).' });
       }
     }
@@ -524,7 +642,7 @@ export default function Entities({ vertical = 'REIA' }) {
     { key: 'name', header: 'Name', render: (r) => (
       <div>
         <div style={{fontWeight: 600}}>{r.name}</div>
-        {r.parent_name && <div style={{fontSize: 13, color: '#666'}}>Parent: {r.parent_name}</div>}
+        {r.parent_name && <div style={{fontSize: 13, color: 'var(--slate-500)'}}>Parent: {r.parent_name}</div>}
       </div>
     )},
     { key: 'entity_type', header: 'Type', render: (r) => <Badge status={r.entity_type} /> },
@@ -565,51 +683,87 @@ export default function Entities({ vertical = 'REIA' }) {
   return (
     <div>
       <PageHeader
-        title={vertical === 'REIA' ? 'Stakeholder Onboarding' : `Stakeholder Onboarding — ${VERTICAL_LABELS[vertical]}`}
+        title={vertical === 'REIA' ? 'Stakeholders & KYC Desk' : `Stakeholders & KYC Desk — ${VERTICAL_LABELS[vertical]}`}
         subtitle={vertical === 'REIA'
-          ? 'Manage RE Generators, DISCOMs, SPVs, KYC and Regulatory Approvals'
+          ? 'Manage RE Generators, DISCOMs, SPVs, Verification Queue, KYC & Compliance Status'
           : `Beneficiaries and generating companies billed under ${VERTICAL_LABELS[vertical]} — KYC, bank and regulatory approvals`}
-        actions={CAN_WRITE.includes(user?.role) && <button className="btn btn-primary" onClick={openCreate}>+ Onboard Stakeholder</button>}
+        actions={activeTab === 'DIRECTORY' && CAN_WRITE.includes(user?.role) && (
+          <>
+            {CAN_BLACKLIST.includes(user?.role) && (
+              <button className="btn btn-outline" style={{ marginRight: 8 }} onClick={() => setTypesModal({ label: '', applies_to: 'BOTH', is_mandatory: '0', help: '' })}>
+                Compliance documents
+              </button>
+            )}
+            <button className="btn btn-primary" onClick={openCreate}>+ Onboard Stakeholder</button>
+          </>
+        )}
       />
 
-      {expiring.length > 0 && (
-        <Card title={`Clearances lapsing within 60 days or lapsed — ${expiring.length}`}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13.5 }}>
-            {expiring.slice(0, 12).map((a) => (
-              <div key={a.id}>
-                <Badge status={a.days_left < 0 || a.status === 'EXPIRED' ? 'REJECTED' : a.days_left <= 7 ? 'PENDING' : 'DRAFT'}
-                  label={a.days_left < 0 || a.status === 'EXPIRED' ? 'Expired' : `${a.days_left} day(s)`} />
-                {' '}<strong>{a.entity_name}</strong> — {getRegulatoryItemLabel(a.approval_code) || a.label || a.approval_code}, valid until {fmtDate(a.valid_until)}
-              </div>
-            ))}
-            {expiring.length > 12 && <div style={{ color: 'var(--slate-500)' }}>…and {expiring.length - 12} more</div>}
-          </div>
-        </Card>
-      )}
-
-      <div className="filters-bar">
-        <select value={filters.entity_type} onChange={(e) => setFilters({ ...filters, entity_type: e.target.value })}>
-          <option value="">All types</option>
-          <option value="SELLER">Seller</option>
-          <option value="BUYER">Buyer</option>
-        </select>
-        <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-          <option value="">All statuses</option>
-          <option value="PENDING">Pending</option>
-          <option value="APPROVED">Approved</option>
-          <option value="REJECTED">Rejected</option>
-        </select>
+      <div className="nb-tabs" role="tablist" style={{ marginBottom: 16 }}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'DIRECTORY'}
+          className={`nb-tab ${activeTab === 'DIRECTORY' ? 'active' : ''}`}
+          onClick={() => handleTabChange('DIRECTORY')}
+        >
+          Stakeholder Directory
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'KYC'}
+          className={`nb-tab ${activeTab === 'KYC' ? 'active' : ''}`}
+          onClick={() => handleTabChange('KYC')}
+        >
+          Documents & KYC Desk
+        </button>
       </div>
 
-      <Card>
-        <Table columns={columns} rows={loading ? [] : rows} onRowClick={openDetail} emptyMessage={loading ? 'Loading...' : 'No stakeholders found.'} />
-      </Card>
+      {activeTab === 'KYC' ? (
+        <DocumentDesk vertical={vertical} embedded={true} />
+      ) : (
+        <>
+          {expiring.length > 0 && (
+            <Card title={`Clearances lapsing within 60 days or lapsed — ${expiring.length}`}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13.5 }}>
+                {expiring.slice(0, 12).map((a) => (
+                  <div key={a.id}>
+                    <Badge status={a.days_left < 0 || a.status === 'EXPIRED' ? 'REJECTED' : a.days_left <= 7 ? 'PENDING' : 'DRAFT'}
+                      label={a.days_left < 0 || a.status === 'EXPIRED' ? 'Expired' : `${a.days_left} day(s)`} />
+                    {' '}<strong>{a.entity_name}</strong> — {getRegulatoryItemLabel(a.approval_code) || a.label || a.approval_code}, valid until {fmtDate(a.valid_until)}
+                  </div>
+                ))}
+                {expiring.length > 12 && <div style={{ color: 'var(--slate-500)' }}>…and {expiring.length - 12} more</div>}
+              </div>
+            </Card>
+          )}
+
+          <div className="filters-bar">
+            <select value={filters.entity_type} onChange={(e) => setFilters({ ...filters, entity_type: e.target.value })}>
+              <option value="">All types</option>
+              <option value="SELLER">Seller</option>
+              <option value="BUYER">Buyer</option>
+            </select>
+            <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
+              <option value="">All statuses</option>
+              <option value="PENDING">Pending</option>
+              <option value="APPROVED">Approved</option>
+              <option value="REJECTED">Rejected</option>
+            </select>
+          </div>
+
+          <Card>
+            <Table columns={columns} rows={loading ? [] : rows} onRowClick={openDetail} emptyMessage={loading ? 'Loading...' : 'No stakeholders found.'} />
+          </Card>
+        </>
+      )}
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title={`Onboard New Stakeholder — ${VERTICAL_LABELS[vertical]}`} width={900}>
         {/* noValidate: the checks below run in one pass and report in a popup,
             instead of the browser stopping at the first empty box. */}
         <form onSubmit={handleCreate} noValidate>
-          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+          <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 12px 0' }}>1. Entity Hierarchy & Type</h4>
             <div className="form-grid">
               <Field label="Parent Group (Optional)">
@@ -629,11 +783,11 @@ export default function Entities({ vertical = 'REIA' }) {
                 </select>
               </Field>
               {kInput('name', 'Name', { required: true, placeholder: 'Registered name of the company' })}
-              {kSelect('category', 'Category', CATEGORY_OPTIONS[form.entity_type] || [], { required: true, placeholder: 'Select category…' })}
+              {kSelect('category', 'Category', categories[form.entity_type] || [], { required: true, placeholder: 'Select category…' })}
             </div>
           </div>
 
-          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+          <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 12px 0' }}>2. Corporate & KYC</h4>
             <div className="form-grid">
               {kInput('pan_no', 'PAN No', { required: true, placeholder: 'ABCDE1234F' })}
@@ -666,12 +820,12 @@ export default function Entities({ vertical = 'REIA' }) {
             </div>
           </div>
 
-          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+          <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 12px 0' }}>3. Technical & Banking</h4>
             <div className="form-grid">
               {form.entity_type === 'SELLER' && (
                 <>
-                  {kSelect('technology', 'Technology', TECHNOLOGY_OPTIONS, { placeholder: 'Select technology…' })}
+                  {kSelect('technology', 'Technology', technologies, { placeholder: 'Select technology…' })}
                   {kInput('capacity_mw', 'Capacity (MW)', { required: true, type: 'number', step: '0.01', min: '0' })}
                 </>
               )}
@@ -689,15 +843,22 @@ export default function Entities({ vertical = 'REIA' }) {
             </div>
           </div>
 
-          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
-            <h4 style={{ margin: '0 0 8px 0' }}>4. Regulatory Approvals Checklist</h4>
+          <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+              <h4 style={{ margin: '0 0 8px 0' }}>4. Regulatory Approvals Checklist</h4>
+              {CAN_BLACKLIST.includes(user?.role) && (
+                <button type="button" className="btn btn-xs btn-outline" onClick={() => setTypesModal({ label: '', applies_to: form.entity_type, is_mandatory: '0', help: '' })}>
+                  + Add a compliance document
+                </button>
+              )}
+            </div>
             <p style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 0 }}>
               Specific clearances required for {form.entity_type === 'SELLER' ? 'sellers' : 'buyers'}.
               After create, upload supporting docs and mark each item Submitted / Verified.
               Mark <strong>N/A</strong> only where genuinely not applicable (with a note).
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {catalogForEntityType(form.entity_type).map((item) => {
+              {catalogFor(form.entity_type).map((item) => {
                 const na = Object.prototype.hasOwnProperty.call(form.regulatory_na, item.code);
                 return (
                   <div
@@ -706,7 +867,7 @@ export default function Entities({ vertical = 'REIA' }) {
                       border: '1px solid var(--slate-200)',
                       borderRadius: 8,
                       padding: '10px 12px',
-                      background: na ? 'var(--slate-50)' : '#fff',
+                      background: na ? 'var(--slate-50)' : 'var(--surface)',
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
@@ -749,7 +910,7 @@ export default function Entities({ vertical = 'REIA' }) {
             </div>
           </div>
 
-          <div style={{ padding: '12px 16px', background: '#eef2ff', borderRadius: 6, color: '#4f46e5', fontSize: 13, marginBottom: 20 }}>
+          <div style={{ padding: '12px 16px', background: 'var(--t-blue-50)', borderRadius: 6, color: 'var(--on-blue)', fontSize: 13, marginBottom: 20 }}>
             <strong>Next:</strong> After save, upload KYC / licence PDFs under Documents, then each checklist item is marked Verified. Approval is blocked until all mandatory items are Verified (or properly N/A). The bank account is verified against the cancelled cheque and becomes payable on approval.
           </div>
 
@@ -819,43 +980,18 @@ export default function Entities({ vertical = 'REIA' }) {
                       )}
                     </td>
                   </tr>
-                  {selected.entity_type === 'SELLER' && (
-                    <tr>
-                      <td>SJVN own station</td>
-                      <td>
-                        {selected.is_sjvn_own ? <Badge status="ACTIVE" label="SJVN's own — developer KYC does not apply" /> : <span>No — a developer</span>}
-                        {['SJVN_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role) && (
-                          <form style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }} onSubmit={async (e) => {
-                            e.preventDefault();
-                            try {
-                              const updated = await api.entities.setOwnStation(selected.id, { is_sjvn_own: !selected.is_sjvn_own, reason: ownReason });
-                              setSelected({ ...selected, ...updated });
-                              setOwnReason('');
-                              load();
-                              notify('success', 'Saved', updated.is_sjvn_own ? `${updated.name} is marked as SJVN's own station.` : `${updated.name} is treated as a developer again.`);
-                            } catch (err) {
-                              fail('Not changed', err, 'Could not change the own-station flag');
-                            }
-                          }}>
-                            <input value={ownReason} onChange={(e) => setOwnReason(e.target.value)} placeholder="Why (at least 10 characters)" style={{ minWidth: 220 }} aria-label="Reason for own-station change" />
-                            <button type="submit" className="btn btn-sm btn-outline" disabled={ownReason.trim().length < 10}>{selected.is_sjvn_own ? 'Treat as a developer' : "Mark as SJVN's own station"}</button>
-                          </form>
-                        )}
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
             <div style={{ flex: 1, minWidth: 300 }}>
-              <h4 style={{ margin: '0 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Bank & Technical</h4>
+              <h4 style={{ margin: '0 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Bank & Technical</h4>
               <table className="detail-table">
                 <tbody>
                   <tr>
                     <td>Bank Details</td>
                     <td>
                       <div>{selected.account_no || '-'}, {selected.bank_name || '-'}</div>
-                      <div style={{fontSize: 13, color: '#666'}}>IFSC: {selected.ifsc_code || '-'} | Branch: {selected.branch_address || '-'}</div>
+                      <div style={{fontSize: 13, color: 'var(--slate-500)'}}>IFSC: {selected.ifsc_code || '-'} | Branch: {selected.branch_address || '-'}</div>
                       <div style={{ marginTop: 6 }}>
                         {selected.is_penny_drop_verified
                           ? <Badge status="ACTIVE" label="Bank verified" />
@@ -916,7 +1052,7 @@ export default function Entities({ vertical = 'REIA' }) {
             </div>
           </div>
           
-          <h4 style={{ margin: '20px 0 8px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Regulatory Approvals</h4>
+          <h4 style={{ margin: '20px 0 8px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Regulatory Approvals</h4>
           <p style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 0 }}>
             Track each clearance with status, reference no., issuer and validity. Upload proof under Documents below (same doc types).
           </p>
@@ -928,7 +1064,7 @@ export default function Entities({ vertical = 'REIA' }) {
                   border: '1px solid var(--slate-200)',
                   borderRadius: 8,
                   padding: '10px 12px',
-                  background: '#fff',
+                  background: 'var(--surface)',
                   display: 'flex',
                   justifyContent: 'space-between',
                   gap: 12,
@@ -958,12 +1094,12 @@ export default function Entities({ vertical = 'REIA' }) {
                     const proof = docForCode(item.approval_code);
                     const vs = proof?.verification_status;
                     // SJVN Admin and REIA users can directly upload and verify proofs; stakeholders can also upload from portal.
-                    const canUpload = ['SJVN_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role) || !['FINANCE_USER', 'TRADING_USER'].includes(user?.role);
+                    const canUpload = ['SJVN_ADMIN', 'REIA_MAKER', 'REIA_CHECKER', 'IT_SUPER_ADMIN'].includes(user?.role) || !['FINANCE_USER', 'TRADING_USER'].includes(user?.role);
                     return (
                       <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         {proof ? (
                           <>
-                            <span style={{ fontSize: 13.5, fontWeight: 600, color: vs === 'VERIFIED' ? '#15803d' : vs === 'REJECTED' ? '#b91c1c' : '#b45309' }}>
+                            <span style={{ fontSize: 13.5, fontWeight: 600, color: vs === 'VERIFIED' ? 'var(--on-green-2)' : vs === 'REJECTED' ? 'var(--red-deep)' : 'var(--amber-strong)' }}>
                                {vs === 'VERIFIED' ? 'Proof verified' : vs === 'REJECTED' ? 'Proof rejected' : 'Proof uploaded — pending review'}
                             </span>
                             <button type="button" className="link-btn" style={{ fontSize: 13.5 }} onClick={() => setDocPreview({ versionId: proof.latest_version_id, fileName: proof.file_name })}>
@@ -991,10 +1127,10 @@ export default function Entities({ vertical = 'REIA' }) {
             ))}
           </div>
 
-          <h4 style={{ margin: '20px 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Contacts</h4>
+          <h4 style={{ margin: '20px 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Contacts</h4>
           {selected.contacts?.length > 0 ? (
             <Table columns={[{key:'type', header:'Role', render: r=>r.contact_type}, {key:'name', header:'Name'}, {key:'email', header:'Email'}, {key:'phone', header:'Phone'}]} rows={selected.contacts} />
-          ) : <div style={{ fontSize: 13, color: '#666' }}>No contacts found.</div>}
+          ) : <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>No contacts found.</div>}
 
           {selected.entity_type === 'SELLER' && CAN_WRITE.includes(user?.role) && (
             <div style={{ marginTop: 24, padding: 16, background: 'var(--slate-50)', border: '1px dashed var(--slate-300)', borderRadius: 8 }}>
@@ -1075,8 +1211,8 @@ export default function Entities({ vertical = 'REIA' }) {
               {!selected.regulatory_summary?.ready_for_approval && (
                 <div
                   style={{
-                    background: '#fffbeb',
-                    border: '1px solid #fde68a',
+                    background: 'var(--t-amber-50)',
+                    border: '1px solid var(--t-amber-line)',
                     borderRadius: 8,
                     padding: '12px 14px',
                     marginBottom: 14,
@@ -1085,7 +1221,7 @@ export default function Entities({ vertical = 'REIA' }) {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 16 }}>⚠️</span>
-                      <strong style={{ fontSize: 13, color: '#92400e' }}>
+                      <strong style={{ fontSize: 13, color: 'var(--on-amber)' }}>
                         Mandatory Regulatory Clearances Pending
                       </strong>
                     </div>
@@ -1094,18 +1230,18 @@ export default function Entities({ vertical = 'REIA' }) {
                         style={{
                           fontSize: 13,
                           fontWeight: 600,
-                          color: '#b45309',
-                          background: '#fef3c7',
+                          color: 'var(--amber-strong)',
+                          background: 'var(--t-amber-100)',
                           padding: '2px 8px',
                           borderRadius: 12,
-                          border: '1px solid #fcd34d',
+                          border: '1px solid var(--t-amber-100)',
                         }}
                       >
                         {selected.regulatory_summary.blocking.length} pending
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 13.5, color: '#78350f', lineHeight: 1.45 }}>
+                  <div style={{ fontSize: 13.5, color: 'var(--on-amber)', lineHeight: 1.45 }}>
                     Standard approval will remain on hold until mandatory regulatory clearances are verified or marked N/A in the checklist above.
                   </div>
                   {selected.regulatory_summary?.blocking?.length > 0 && (
@@ -1114,14 +1250,14 @@ export default function Entities({ vertical = 'REIA' }) {
                         margin: '10px 0 2px 0',
                         paddingLeft: 22,
                         listStyleType: 'disc',
-                        color: '#92400e',
+                        color: 'var(--on-amber)',
                         fontSize: 13,
                         lineHeight: 1.6,
                       }}
                     >
                       {selected.regulatory_summary.blocking.map((code) => (
                         <li key={code}>
-                          <span style={{ color: '#78350f', fontWeight: 500 }}>{getRegulatoryItemLabel(code)}</span>
+                          <span style={{ color: 'var(--on-amber)', fontWeight: 500 }}>{getRegulatoryItemLabel(code)}</span>
                         </li>
                       ))}
                     </ul>
@@ -1129,7 +1265,7 @@ export default function Entities({ vertical = 'REIA' }) {
                 </div>
               )}
               {!!selected.is_blacklisted && (
-                <div style={{ fontSize: 13, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '8px 10px', marginBottom: 10 }}>
+                <div style={{ fontSize: 13, color: 'var(--red-deep)', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 6, padding: '8px 10px', marginBottom: 10 }}>
                   This stakeholder is blacklisted and cannot be approved until the blacklist is cleared.
                 </div>
               )}
@@ -1160,6 +1296,91 @@ export default function Entities({ vertical = 'REIA' }) {
           )}
         </Modal>
       )}
+
+
+      <Modal open={!!typesModal} onClose={() => setTypesModal(null)} title="Compliance documents" width={720}>
+        {typesModal && (
+          <div>
+            <p style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 0 }}>
+              The eight standard clearances are fixed. Add any other document SJVN wants on file. It joins every
+              stakeholder's checklist and the Document Desk's upload list straight away.
+            </p>
+            <form
+              noValidate
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const name = typesModal.label.trim();
+                if (name.length < 3) {
+                  setPopup({ tone: 'warning', title: 'Name the document', message: 'Give the document a name of at least 3 characters, for example "Fire NOC" or "Forest Clearance".' });
+                  return;
+                }
+                try {
+                  const r = await api.entities.addClearanceType({ ...typesModal, is_mandatory: typesModal.is_mandatory === '1' });
+                  await loadCatalogs();
+                  setTypesModal({ label: '', applies_to: typesModal.applies_to, is_mandatory: '0', help: '' });
+                  notify('success', 'Compliance document added', `"${r.label}" is now on the checklist of ${r.added_to_stakeholders} stakeholder(s) and in the Document Desk's upload list.`);
+                } catch (err) {
+                  fail('Could not add the document', err, 'The compliance document could not be added.');
+                }
+              }}
+            >
+              <div className="form-grid">
+                <Field label="Document name" required>
+                  <input value={typesModal.label} placeholder="e.g. Fire Safety NOC" onChange={(e) => setTypesModal({ ...typesModal, label: e.target.value })} />
+                </Field>
+                <Field label="Applies to">
+                  <select value={typesModal.applies_to} onChange={(e) => setTypesModal({ ...typesModal, applies_to: e.target.value })}>
+                    <option value="BOTH">Sellers and buyers</option>
+                    <option value="SELLER">Sellers only</option>
+                    <option value="BUYER">Buyers only</option>
+                  </select>
+                </Field>
+                <Field label="Required for approval?">
+                  <select value={typesModal.is_mandatory} onChange={(e) => setTypesModal({ ...typesModal, is_mandatory: e.target.value })}>
+                    <option value="0">Optional — recorded, does not hold approval</option>
+                    <option value="1">Mandatory — approval waits until verified</option>
+                  </select>
+                </Field>
+                <Field label="Note for the team (optional)">
+                  <input value={typesModal.help} placeholder="Why SJVN wants it" onChange={(e) => setTypesModal({ ...typesModal, help: e.target.value })} />
+                </Field>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+                <button type="submit" className="btn btn-primary">Add to checklist</button>
+              </div>
+            </form>
+            <h4 style={{ margin: '20px 0 8px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Added so far</h4>
+            {customTypes.length === 0 ? (
+              <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>Nothing added yet.</div>
+            ) : (
+              <table className="table" style={{ width: '100%' }}>
+                <thead><tr><th>Document</th><th>Applies to</th><th>Required</th><th>Status</th><th /></tr></thead>
+                <tbody>
+                  {customTypes.map((t) => (
+                    <tr key={t.code}>
+                      <td>{t.label}</td>
+                      <td>{t.applies_to === 'BOTH' ? 'Sellers and buyers' : t.applies_to === 'SELLER' ? 'Sellers' : 'Buyers'}</td>
+                      <td>{t.is_mandatory ? 'Mandatory' : 'Optional'}</td>
+                      <td><Badge status={t.is_active ? 'ACTIVE' : 'DRAFT'} label={t.is_active ? 'In use' : 'Retired'} /></td>
+                      <td>
+                        <button type="button" className="btn btn-xs btn-outline" onClick={async () => {
+                          try {
+                            await api.entities.setClearanceTypeActive(t.code, !t.is_active);
+                            await loadCatalogs();
+                          } catch (err) { fail('Could not change it', err, 'The change could not be saved.'); }
+                        }}>{t.is_active ? 'Retire' : 'Bring back'}</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <p style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 0 }}>
+              Retiring keeps whatever is already filed against it. It only drops off stakeholders who have not started it, and off new ones.
+            </p>
+          </div>
+        )}
+      </Modal>
 
       <Modal open={!!callback} onClose={() => setCallback(null)} title="Bank change call-back" width={520}>
         {callback && (
@@ -1247,16 +1468,16 @@ export default function Entities({ vertical = 'REIA' }) {
                 gap: 12,
                 padding: '14px 16px',
                 borderRadius: 10,
-                background: 'linear-gradient(135deg, #fff5f5 0%, #fef2f2 100%)',
-                border: '1px solid #fecaca',
+                background: 'linear-gradient(135deg, var(--t-red-50) 0%, var(--t-red-50) 100%)',
+                border: '1px solid var(--t-red-line)',
                 marginBottom: 16,
               }}>
                 <div style={{
                   width: 38,
                   height: 38,
                   borderRadius: '50%',
-                  background: '#fee2e2',
-                  color: '#dc2626',
+                  background: 'var(--t-red-100)',
+                  color: 'var(--red-strong)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1270,10 +1491,10 @@ export default function Entities({ vertical = 'REIA' }) {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Regulatory Debarment Action</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, background: '#fecaca', color: '#991b1b', padding: '1px 6px', borderRadius: 4 }}>RESTRICTED</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-red)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Regulatory Debarment Action</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, background: 'var(--t-red-line)', color: 'var(--on-red)', padding: '1px 6px', borderRadius: 4 }}>RESTRICTED</span>
                   </div>
-                  <div style={{ fontSize: 13, color: '#7f1d1d', lineHeight: 1.45 }}>
+                  <div style={{ fontSize: 13, color: 'var(--on-red)', lineHeight: 1.45 }}>
                     Blacklisting prevents this stakeholder from receiving approvals or participating in new power contracts across SJVN platforms.
                   </div>
                 </div>
@@ -1285,16 +1506,16 @@ export default function Entities({ vertical = 'REIA' }) {
                 gap: 12,
                 padding: '14px 16px',
                 borderRadius: 10,
-                background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
-                border: '1px solid #bbf7d0',
+                background: 'linear-gradient(135deg, var(--t-green-50) 0%, var(--t-green-50) 100%)',
+                border: '1px solid var(--t-green-line)',
                 marginBottom: 16,
               }}>
                 <div style={{
                   width: 38,
                   height: 38,
                   borderRadius: '50%',
-                  background: '#dcfce7',
-                  color: '#16a34a',
+                  background: 'var(--t-green-100)',
+                  color: 'var(--green-strong)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -1308,10 +1529,10 @@ export default function Entities({ vertical = 'REIA' }) {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Restore Stakeholder</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, background: '#bbf7d0', color: '#166534', padding: '1px 6px', borderRadius: 4 }}>RE-ADMISSION</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--on-green)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Restore Stakeholder</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, background: 'var(--t-green-line)', color: 'var(--on-green)', padding: '1px 6px', borderRadius: 4 }}>RE-ADMISSION</span>
                   </div>
-                  <div style={{ fontSize: 13, color: '#14532d', lineHeight: 1.45 }}>
+                  <div style={{ fontSize: 13, color: 'var(--on-green)', lineHeight: 1.45 }}>
                     Clearing the debarment will restore normal standing, permitting fresh regulatory approvals and PPA/PSA allocations.
                   </div>
                 </div>
@@ -1320,8 +1541,8 @@ export default function Entities({ vertical = 'REIA' }) {
 
             {/* Entity Target Snapshot */}
             <div style={{
-              background: '#f8fafc',
-              border: '1px solid #e2e8f0',
+              background: 'var(--slate-50)',
+              border: '1px solid var(--slate-200)',
               borderRadius: 8,
               padding: '10px 14px',
               marginBottom: 14,
@@ -1332,13 +1553,13 @@ export default function Entities({ vertical = 'REIA' }) {
               gap: 8,
             }}>
               <div>
-                <span style={{ fontSize: 11.5, fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>Target Stakeholder</span>
-                <div style={{ fontSize: 14.5, fontWeight: 700, color: '#0f172a' }}>{selected?.name}</div>
+                <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--slate-500)', textTransform: 'uppercase' }}>Target Stakeholder</span>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--slate-900)' }}>{selected?.name}</div>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 {selected?.entity_type && <Badge status={selected.entity_type} />}
                 {selected?.pan_no && (
-                  <span style={{ fontSize: 12, background: '#fff', border: '1px solid #cbd5e1', padding: '2px 8px', borderRadius: 6, color: '#334155', fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 12, background: 'var(--surface)', border: '1px solid var(--slate-300)', padding: '2px 8px', borderRadius: 6, color: 'var(--slate-700)', fontFamily: 'monospace' }}>
                     PAN: {selected.pan_no}
                   </span>
                 )}
@@ -1347,15 +1568,15 @@ export default function Entities({ vertical = 'REIA' }) {
 
             {/* Regulatory Guidance Box */}
             <div style={{
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
+              background: 'var(--surface)',
+              border: '1px solid var(--slate-200)',
               borderRadius: 8,
               padding: '10px 14px',
               marginBottom: 16,
               fontSize: 12.5,
-              color: '#475569',
+              color: 'var(--slate-600)',
             }}>
-              <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: 5 }}>Legal & Operational Notes:</div>
+              <div style={{ fontWeight: 600, color: 'var(--slate-800)', marginBottom: 5 }}>Legal & Operational Notes:</div>
               <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
                 <li><strong>New Allocations Barred:</strong> Cannot be approved or awarded new PPA / PSA contracts.</li>
                 <li><strong>Existing Contracts Protected:</strong> Contracts already running, and payment dues owed, remain active.</li>
@@ -1372,7 +1593,7 @@ export default function Entities({ vertical = 'REIA' }) {
                   width: '100%',
                   padding: '10px 12px',
                   borderRadius: 8,
-                  border: '1.5px solid #cbd5e1',
+                  border: '1.5px solid var(--slate-300)',
                   fontSize: 13.5,
                   lineHeight: 1.5,
                   boxSizing: 'border-box',
@@ -1381,15 +1602,15 @@ export default function Entities({ vertical = 'REIA' }) {
                 onChange={(e) => setBlacklistForm({ ...blacklistForm, reason: e.target.value })}
                 placeholder={blacklistForm.blacklisted ? 'e.g. Debarred by MNRE Office Memorandum No. 283/54/2026 dated 14-Oct-2026' : 'e.g. Debarment revoked as per MNRE compliance order dated …'}
               />
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 12, color: '#64748b' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 12, color: 'var(--slate-500)' }}>
                 <span>Recorded in the immutable compliance audit ledger</span>
-                <span style={{ color: (blacklistForm.reason?.trim().length || 0) < 10 ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
+                <span style={{ color: (blacklistForm.reason?.trim().length || 0) < 10 ? 'var(--red-strong)' : 'var(--green-strong)', fontWeight: 600 }}>
                   {blacklistForm.reason?.trim().length || 0} / 10 min chars
                 </span>
               </div>
             </Field>
 
-            <div className="form-actions" style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <div className="form-actions" style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--slate-200)', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button type="button" className="btn btn-secondary" onClick={() => setBlacklistForm(null)}>
                 Cancel
               </button>
@@ -1443,7 +1664,7 @@ export default function Entities({ vertical = 'REIA' }) {
       {editModal && (
         <Modal open={true} onClose={() => setEditModal(null)} title={`Edit Stakeholder — ${editModal.name}`} width={900}>
           <form onSubmit={handleUpdate} noValidate>
-            <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+            <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
               <h4 style={{ margin: '0 0 12px 0' }}>1. Entity Hierarchy & Type</h4>
               <div className="form-grid">
                 <Field label="Parent Group (Optional)">
@@ -1458,16 +1679,41 @@ export default function Entities({ vertical = 'REIA' }) {
                 <Field label="Name" required>
                   <input value={editFormData.name} onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })} required />
                 </Field>
-                <Field label="Category" required>
-                  <select value={editFormData.category} onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}>
+                <Field
+                  label={
+                    <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                      <span>Category</span>
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-outline"
+                        style={{ padding: '1px 8px', fontSize: 11, fontWeight: 600 }}
+                        onClick={() => setQuickAddLookup({ field: 'category', label: 'Category', category: 'ENTITY_CATEGORY', value: '', isEdit: true })}
+                      >
+                        + Add New
+                      </button>
+                    </span>
+                  }
+                  required
+                >
+                  <select
+                    value={editFormData.category}
+                    onChange={(e) => {
+                      if (e.target.value === '__NEW__') {
+                        setQuickAddLookup({ field: 'category', label: 'Category', category: 'ENTITY_CATEGORY', value: '', isEdit: true });
+                      } else {
+                        setEditFormData({ ...editFormData, category: e.target.value });
+                      }
+                    }}
+                  >
                     <option value="">Select category…</option>
-                    {(CATEGORY_OPTIONS[editFormData.entity_type] || []).map(c => <option key={c} value={c}>{c}</option>)}
+                    {(categories[editFormData.entity_type] || []).map(c => <option key={c} value={c}>{c}</option>)}
+                    <option value="__NEW__">+ Add New Category...</option>
                   </select>
                 </Field>
               </div>
             </div>
 
-            <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+            <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
               <h4 style={{ margin: '0 0 12px 0' }}>2. Corporate & KYC</h4>
               <div className="form-grid">
                 <Field label="PAN No">
@@ -1509,15 +1755,39 @@ export default function Entities({ vertical = 'REIA' }) {
               </div>
             </div>
 
-            <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+            <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
               <h4 style={{ margin: '0 0 12px 0' }}>3. Technical & Banking</h4>
               <div className="form-grid">
                 {editFormData.entity_type === 'SELLER' && (
                   <>
-                    <Field label="Technology">
-                      <select value={editFormData.technology} onChange={(e) => setEditFormData({ ...editFormData, technology: e.target.value })}>
+                    <Field
+                      label={
+                        <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                          <span>Technology</span>
+                          <button
+                            type="button"
+                            className="btn btn-xs btn-outline"
+                            style={{ padding: '1px 8px', fontSize: 11, fontWeight: 600 }}
+                            onClick={() => setQuickAddLookup({ field: 'technology', label: 'Technology', category: 'TECHNOLOGY', value: '', isEdit: true })}
+                          >
+                            + Add New
+                          </button>
+                        </span>
+                      }
+                    >
+                      <select
+                        value={editFormData.technology}
+                        onChange={(e) => {
+                          if (e.target.value === '__NEW__') {
+                            setQuickAddLookup({ field: 'technology', label: 'Technology', category: 'TECHNOLOGY', value: '', isEdit: true });
+                          } else {
+                            setEditFormData({ ...editFormData, technology: e.target.value });
+                          }
+                        }}
+                      >
                         <option value="">Select technology…</option>
-                        {TECHNOLOGY_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                        {technologies.map(t => <option key={t} value={t}>{t}</option>)}
+                        <option value="__NEW__">+ Add New Technology...</option>
                       </select>
                     </Field>
                     <Field label="Capacity (MW)">
@@ -1560,6 +1830,31 @@ export default function Entities({ vertical = 'REIA' }) {
               <button type="button" className="btn btn-outline" onClick={() => setEditModal(null)}>Cancel</button>
               <button type="submit" className="btn btn-primary" disabled={editSubmitting}>
                 {editSubmitting ? 'Saving Changes…' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {quickAddLookup && (
+        <Modal open={true} onClose={() => setQuickAddLookup(null)} title={`Add New ${quickAddLookup.label}`}>
+          <form onSubmit={(e) => { e.preventDefault(); handleCreateLookup(quickAddLookup.category, quickAddLookup.value, quickAddLookup.field, quickAddLookup.isEdit); }}>
+            <Field label={`${quickAddLookup.label} Name`}>
+              <input
+                required
+                autoFocus
+                placeholder={`e.g. New ${quickAddLookup.label}`}
+                value={quickAddLookup.value || ''}
+                onChange={(e) => setQuickAddLookup({ ...quickAddLookup, value: e.target.value })}
+              />
+            </Field>
+            <p className="inline-note" style={{ marginTop: 4 }}>
+              This will be saved to Master Data (<code>{quickAddLookup.category}</code>) and immediately available for selection.
+            </p>
+            <div className="form-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setQuickAddLookup(null)}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={quickAddSaving || !quickAddLookup?.value?.trim()}>
+                {quickAddSaving ? 'Saving...' : 'Save & Select'}
               </button>
             </div>
           </form>

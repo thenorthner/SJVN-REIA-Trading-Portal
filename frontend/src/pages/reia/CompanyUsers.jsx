@@ -176,8 +176,8 @@ export default function CompanyUsers() {
       {/* Selected Company Bar (Active context) */}
       {selectedCompany && !isSwitching ? (
         <div style={{
-          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
-          border: '1px solid var(--slate-200, #e2e8f0)',
+          background: 'linear-gradient(135deg, var(--surface) 0%, var(--slate-50) 100%)',
+          border: '1px solid var(--slate-200, var(--slate-200))',
           borderRadius: 12,
           padding: '14px 20px',
           marginBottom: 20,
@@ -198,7 +198,7 @@ export default function CompanyUsers() {
                   height: 44,
                   borderRadius: 10,
                   objectFit: 'contain',
-                  background: '#fff',
+                  background: 'var(--surface)',
                   border: '1px solid var(--slate-200)',
                   boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
                   flexShrink: 0,
@@ -237,9 +237,9 @@ export default function CompanyUsers() {
                   fontWeight: 600,
                   padding: '2px 8px',
                   borderRadius: 999,
-                  background: selectedCompany.entity_type === 'SELLER' ? '#ecfdf5' : '#eff6ff',
-                  color: selectedCompany.entity_type === 'SELLER' ? '#047857' : '#1d4ed8',
-                  border: `1px solid ${selectedCompany.entity_type === 'SELLER' ? '#a7f3d0' : '#bfdbfe'}`,
+                  background: selectedCompany.entity_type === 'SELLER' ? 'var(--t-green-50)' : 'var(--t-blue-50)',
+                  color: selectedCompany.entity_type === 'SELLER' ? 'var(--on-green)' : 'var(--on-blue)',
+                  border: `1px solid ${selectedCompany.entity_type === 'SELLER' ? 'var(--t-green-100)' : 'var(--t-blue-line)'}`,
                 }}>
                   {selectedCompany.entity_type === 'SELLER' ? 'Seller' : 'Buyer'}
                 </span>
@@ -316,8 +316,8 @@ export default function CompanyUsers() {
             position: 'relative',
             display: 'flex',
             alignItems: 'center',
-            background: '#ffffff',
-            border: isOpen ? '1.5px solid #2563eb' : '1.5px solid var(--slate-300, #cbd5e1)',
+            background: 'var(--surface)',
+            border: isOpen ? '1.5px solid #2563eb' : '1.5px solid var(--slate-300, var(--slate-300))',
             borderRadius: 10,
             padding: '10px 14px',
             boxShadow: isOpen ? '0 0 0 3px rgba(37,99,235,0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
@@ -377,9 +377,9 @@ export default function CompanyUsers() {
               left: 0,
               right: 0,
               zIndex: 99,
-              background: '#ffffff',
+              background: 'var(--surface)',
               borderRadius: 12,
-              border: '1px solid var(--slate-200, #e2e8f0)',
+              border: '1px solid var(--slate-200, var(--slate-200))',
               boxShadow: '0 12px 32px rgba(15,23,42,0.15), 0 4px 12px rgba(15,23,42,0.08)',
               maxHeight: 380,
               overflowY: 'auto',
@@ -389,8 +389,8 @@ export default function CompanyUsers() {
                 fontSize: 13,
                 fontWeight: 600,
                 color: 'var(--slate-400)',
-                background: 'var(--slate-50, #f8fafc)',
-                borderBottom: '1px solid var(--slate-100, #f1f5f9)',
+                background: 'var(--slate-50, var(--slate-50))',
+                borderBottom: '1px solid var(--slate-100, var(--slate-100))',
                 display: 'flex',
                 justifyContent: 'space-between',
               }}>
@@ -422,9 +422,9 @@ export default function CompanyUsers() {
                           justifyContent: 'space-between',
                           padding: '10px 16px',
                           cursor: 'pointer',
-                          background: isFocused ? '#f0f7ff' : isSelected ? '#f8fafc' : 'transparent',
+                          background: isFocused ? 'var(--t-blue-50)' : isSelected ? 'var(--slate-50)' : 'transparent',
                           transition: 'background 0.15s ease',
-                          borderBottom: '1px solid var(--slate-50, #f8fafc)',
+                          borderBottom: '1px solid var(--slate-50, var(--slate-50))',
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -437,7 +437,7 @@ export default function CompanyUsers() {
                                 height: 32,
                                 borderRadius: 8,
                                 objectFit: 'contain',
-                                background: '#fff',
+                                background: 'var(--surface)',
                                 border: '1px solid var(--slate-200)',
                                 flexShrink: 0,
                               }}
@@ -481,9 +481,9 @@ export default function CompanyUsers() {
                               fontWeight: 600,
                               padding: '1px 6px',
                               borderRadius: 4,
-                              background: '#eff6ff',
-                              color: '#1d4ed8',
-                              border: '1px solid #bfdbfe',
+                              background: 'var(--t-blue-50)',
+                              color: 'var(--on-blue)',
+                              border: '1px solid var(--t-blue-line)',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 3,
@@ -496,8 +496,8 @@ export default function CompanyUsers() {
                             fontWeight: 600,
                             padding: '2px 8px',
                             borderRadius: 999,
-                            background: c.entity_type === 'SELLER' ? '#ecfdf5' : '#eff6ff',
-                            color: c.entity_type === 'SELLER' ? '#047857' : '#1d4ed8',
+                            background: c.entity_type === 'SELLER' ? 'var(--t-green-50)' : 'var(--t-blue-50)',
+                            color: c.entity_type === 'SELLER' ? 'var(--on-green)' : 'var(--on-blue)',
                           }}>
                             {c.entity_type === 'SELLER' ? 'Seller' : 'Buyer'}
                           </span>
@@ -541,9 +541,9 @@ export default function CompanyUsers() {
                       fontWeight: 600,
                       padding: '2px 8px',
                       borderRadius: 999,
-                      background: '#eff6ff',
-                      color: '#1d4ed8',
-                      border: '1px solid #bfdbfe',
+                      background: 'var(--t-blue-50)',
+                      color: 'var(--on-blue)',
+                      border: '1px solid var(--t-blue-line)',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 4,
@@ -590,11 +590,11 @@ export default function CompanyUsers() {
                     key={c.id}
                     onClick={() => handleSelect(c)}
                     style={{
-                      border: isRecent ? '1.5px solid #93c5fd' : '1px solid var(--slate-200, #e2e8f0)',
+                      border: isRecent ? '1.5px solid #93c5fd' : '1px solid var(--slate-200, var(--slate-200))',
                       borderRadius: 10,
                       padding: '12px 14px',
                       cursor: 'pointer',
-                      background: isRecent ? 'linear-gradient(135deg, #ffffff 0%, #f8faff 100%)' : '#fff',
+                      background: isRecent ? 'linear-gradient(135deg, var(--surface) 0%, var(--surface) 100%)' : 'var(--surface)',
                       transition: 'all 0.2s ease',
                       display: 'flex',
                       alignItems: 'center',
@@ -622,7 +622,7 @@ export default function CompanyUsers() {
                             height: 32,
                             borderRadius: 8,
                             objectFit: 'contain',
-                            background: '#fff',
+                            background: 'var(--surface)',
                             border: '1px solid var(--slate-200)',
                             flexShrink: 0,
                           }}
@@ -675,9 +675,9 @@ export default function CompanyUsers() {
                               alignItems: 'center',
                               gap: 3,
                               fontSize: 12.5,
-                              color: '#1d4ed8',
+                              color: 'var(--on-blue)',
                               fontWeight: 600,
-                              background: '#eff6ff',
+                              background: 'var(--t-blue-50)',
                               padding: '1px 5px',
                               borderRadius: 4,
                             }}>

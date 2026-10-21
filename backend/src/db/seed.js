@@ -331,7 +331,10 @@ try {
   console.warn('REC desk seed skipped:', e.message);
 }
 
-const already = db.prepare('SELECT COUNT(*) c FROM users').get().c;
+// Seeded means this seed's own administrator exists. Counting any user read the
+// demo desk logins the server creates at start-up (Commercial, Thermal) as a
+// seeded database, and the demo admin and contracts were never made.
+const already = db.prepare("SELECT COUNT(*) c FROM users WHERE email = 'admin@sjvn.in'").get().c;
 if (already > 0) {
   console.log('Database already seeded. Skipping the rest. (delete platform.db to reseed)');
   process.exit(0);
@@ -346,10 +349,11 @@ const insertUser = db.prepare(`
 
 const users = [
   { name: 'Admin User', email: 'admin@sjvn.in', role: 'SJVN_ADMIN' },
-  { name: 'Rahul (REIA Ops)', email: 'reia@sjvn.in', role: 'REIA_USER' },
+  { name: 'Rahul (REIA Maker)', email: 'reia@sjvn.in', role: 'REIA_MAKER' },
   // A second REIA signatory, so a bill that needs three approvals has three
   // people to give them besides whoever raised it.
-  { name: 'Meera (REIA Admin)', email: 'reia.admin@sjvn.in', role: 'REIA_ADMIN' },
+  { name: 'Meera (REIA Checker)', email: 'reia.admin@sjvn.in', role: 'REIA_CHECKER' },
+  { name: 'Vikram (REIA HOD, Approver)', email: 'reia.approver@sjvn.in', role: 'REIA_APPROVER' },
   { name: 'Shreya (Trading Ops)', email: 'trading@sjvn.in', role: 'TRADING_USER' },
   { name: 'Vikas (Finance)', email: 'finance@sjvn.in', role: 'FINANCE_USER' },
   { name: 'Divyankur (Management)', email: 'management@sjvn.in', role: 'MANAGEMENT' },
@@ -364,6 +368,9 @@ const users = [
 
 const userIds = {};
 for (const u of users) {
+  // A demo login the server already created at start-up is used as it is.
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(u.email);
+  if (existing) { userIds[u.email] = existing.id; continue; }
   const id = newId('USR');
   userIds[u.email] = id;
   insertUser.run({ id, name: u.name, email: u.email, password_hash: hash, role: u.role, linked_entity_id: null });

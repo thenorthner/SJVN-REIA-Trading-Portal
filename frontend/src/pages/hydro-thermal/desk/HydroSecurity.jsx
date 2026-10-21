@@ -166,7 +166,7 @@ export default function HydroSecurity({ vertical = 'HYDRO' }) {
                 { key: 'average_monthly_billing', header: 'Avg monthly billing', render: (r) => fmtCurrency(r.average_monthly_billing) },
                 { key: 'required', header: 'Required', render: (r) => fmtCurrency(r.required) },
                 { key: 'live_cover', header: 'Live cover', render: (r) => fmtCurrency(r.live_cover) },
-                { key: 'shortfall', header: 'Shortfall', render: (r) => (r.shortfall > 0 ? <span style={{ color: '#b91c1c', fontWeight: 600 }}>{fmtCurrency(r.shortfall)}</span> : '—') },
+                { key: 'shortfall', header: 'Shortfall', render: (r) => (r.shortfall > 0 ? <span style={{ color: 'var(--red-deep)', fontWeight: 600 }}>{fmtCurrency(r.shortfall)}</span> : '—') },
                 { key: 'outstanding', header: 'Outstanding now', render: (r) => fmtCurrency(r.outstanding) },
                 { key: 'status', header: 'Status', render: (r) => <Badge status={COVER_TONE[r.status]} label={r.status.replace('_', ' ')} /> },
               ]}
@@ -182,7 +182,7 @@ export default function HydroSecurity({ vertical = 'HYDRO' }) {
                 { key: 'beneficiary_name', header: 'Beneficiary' },
                 { key: 'amount', header: 'Amount', render: (i) => fmtCurrency(i.amount) },
                 { key: 'available', header: 'Available', render: (i) => fmtCurrency(i.available) },
-                { key: 'valid', header: 'Valid', render: (i) => <span style={{ color: i.expiring_soon ? '#b91c1c' : undefined }}>{fmtDate(i.valid_from)} – {fmtDate(i.valid_to)}{i.expiring_soon ? ` (${i.days_to_expiry} days left)` : ''}</span> },
+                { key: 'valid', header: 'Valid', render: (i) => <span style={{ color: i.expiring_soon ? 'var(--red-deep)' : undefined }}>{fmtDate(i.valid_from)} – {fmtDate(i.valid_to)}{i.expiring_soon ? ` (${i.days_to_expiry} days left)` : ''}</span> },
                 { key: 'status', header: 'Status', render: (i) => <Badge status={i.effective_status === 'ACTIVE' ? 'ACTIVE' : i.effective_status === 'EXPIRED' ? 'REJECTED' : 'DRAFT'} label={i.effective_status} /> },
                 { key: 'actions', header: '', render: (i) => (canWrite && i.status === 'ACTIVE' ? (
                   <span style={{ display: 'flex', gap: 6 }}>

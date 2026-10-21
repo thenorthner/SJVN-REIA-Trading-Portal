@@ -11,6 +11,7 @@
  * It reports; it does not stop Finance posting what is ready.
  */
 import db from '../db/index.js';
+import { contractIdInVerticalSql } from './verticals.js';
 import { readinessBoard } from './billingReadiness.js';
 import { reconReadiness } from '../reconciliationEngine.js';
 import { OPEN_STATUSES as OPEN_DISPUTES } from '../disputesConstants.js';
@@ -22,7 +23,7 @@ export function postingChecklist(period) {
   const ph = (a) => a.map(() => '?').join(',');
   const inApproval = db.prepare(`
     SELECT i.id, i.invoice_no, i.status, i.total_amount, c.contract_no FROM invoices i JOIN contracts c ON c.id = i.contract_id
-    WHERE i.billing_period = ? AND i.status IN (${ph(IN_APPROVAL)}) ORDER BY i.created_at
+    WHERE i.billing_period = ? AND ${contractIdInVerticalSql('REIA', 'i.contract_id')} AND i.status IN (${ph(IN_APPROVAL)}) ORDER BY i.created_at
   `).all(period, ...IN_APPROVAL);
   const unlocked = db.prepare(`
     SELECT e.id, e.status, e.energy_mwh, c.contract_no FROM energy_data e JOIN contracts c ON c.id = e.contract_id
@@ -35,16 +36,16 @@ export function postingChecklist(period) {
   const unbilled = board.rows.filter((r) => r.state === 'READY').map((r) => ({ contract_no: r.contract_no, energy_mwh: r.energy.energy_mwh ?? null }));
   const unverified = db.prepare(`
     SELECT i.id, i.invoice_no, i.status, i.total_amount, c.contract_no, i.verification_status FROM invoices i JOIN contracts c ON c.id = i.contract_id
-    WHERE i.billing_period = ? AND i.direction = 'SELLER_TO_SJVN' AND TRIM(COALESCE(i.invoice_breakdown_json, '')) = ''
+    WHERE i.billing_period = ? AND ${contractIdInVerticalSql('REIA', 'i.contract_id')} AND i.direction = 'SELLER_TO_SJVN' AND TRIM(COALESCE(i.invoice_breakdown_json, '')) = ''
       AND i.status IN ('SUBMITTED', 'UNDER_APPROVAL') AND COALESCE(i.verification_status, '') <> 'VERIFIED'
   `).all(period);
   const draftNotes = db.prepare(`
     SELECT n.id, n.note_type, n.amount, n.reason, i.invoice_no FROM debit_credit_notes n JOIN invoices i ON i.id = n.invoice_id
-    WHERE COALESCE(n.period_month, i.billing_period) = ? AND n.status = 'DRAFT'
+    WHERE COALESCE(n.period_month, i.billing_period) = ? AND n.status = 'DRAFT' AND ${contractIdInVerticalSql('REIA', 'i.contract_id')}
   `).all(period);
   const disputes = db.prepare(`
     SELECT d.id, d.dispute_no, d.status, d.disputed_amount, i.invoice_no FROM disputes d JOIN invoices i ON i.id = d.invoice_id
-    WHERE i.billing_period = ? AND d.status IN (${ph(OPEN_DISPUTES)})
+    WHERE i.billing_period = ? AND ${contractIdInVerticalSql('REIA', 'i.contract_id')} AND d.status IN (${ph(OPEN_DISPUTES)})
   `).all(period, ...OPEN_DISPUTES);
   const advances = db.prepare(`
     SELECT r.id, r.receipt_no, r.balance, e.name AS counterparty FROM unapplied_receipts r LEFT JOIN entities e ON e.id = r.entity_id

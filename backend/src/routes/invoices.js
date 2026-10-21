@@ -1,9 +1,10 @@
 import { Router } from 'express';
+import { contractIdInVerticalSql, parseVertical } from '../services/verticals.js';
 import { complianceBlock } from './invoiceCompliance.js';
 import { createIntimation } from './buyerBills.js';
 import { resolveTariff } from '../services/tariffStructure.js';
 import db from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES, BUYER_ROLES, counterpartySide } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, SELLER_ROLES, BUYER_ROLES, counterpartySide, canonicalRole } from '../middleware/auth.js';
 import { deskVertical, verticalOfContract } from '../services/stationScope.js';
 import { newId, logAudit, pushNotification, genInvoiceNo, buildBillingFamilyRef, directionForContract, computeDueDate, resolvePaymentTermsDays, contractRebatePct, billableCapacityMw, invalidDecision } from '../util.js';
 import { payableNow, lpsBaseAmount, tieredRebatePct, daysBetween } from '../disputesConstants.js';
@@ -166,20 +167,26 @@ function approvalLevelsFor(inv) {
  * invoice_approval_level_roles master ({ "1": [...], "2": [...], "3": [...] });
  * a level above the last one mapped takes the last one's roles.
  */
-const DEFAULT_LEVEL_ROLES = {
-  1: ['REIA_USER', 'REIA_ADMIN', 'SJVN_ADMIN'],
+// Target #2 Phase B: the checker scrutinises (1), Finance concurs (2), the
+// REIA HOD or management sanctions (3). The SJVN Administrator signs no level.
+export const DEFAULT_LEVEL_ROLES = {
+  1: ['REIA_CHECKER'],
   2: ['FINANCE_USER'],
-  3: ['SJVN_ADMIN', 'MANAGEMENT'],
+  3: ['REIA_APPROVER', 'MANAGEMENT'],
 };
 export function approvalRolesFor(level, inv = null) {
-  const roles = baseApprovalRoles(level, inv);
+  // A chain saved before the REIA roles were renamed still names REIA_USER /
+  // REIA_ADMIN; read those as the roles they became.
+  const roles = [...new Set(baseApprovalRoles(level, inv).map(canonicalRole))];
   // On a station's invoice the station desk stands where the REIA desk does
   // (Thermal QA run 5): its officer and admin sign the level REIA's would.
   const desk = inv?.contract_id ? verticalOfContract(inv.contract_id) : null;
   if (!desk) return roles;
+  // The station desks have no maker/checker split yet, so both their officer
+  // and their admin keep the level-1 signature they had before Phase B.
   const equivalents = desk === 'THERMAL'
-    ? { REIA_USER: ['THERMAL_USER'], REIA_ADMIN: ['THERMAL_ADMIN'] }
-    : { REIA_USER: ['COMMERCIAL', 'COMMERCIAL_USER'], REIA_ADMIN: ['COMMERCIAL_ADMIN'] };
+    ? { REIA_MAKER: ['THERMAL_USER'], REIA_CHECKER: ['THERMAL_ADMIN', 'THERMAL_USER'] }
+    : { REIA_MAKER: ['COMMERCIAL', 'COMMERCIAL_USER'], REIA_CHECKER: ['COMMERCIAL_ADMIN', 'COMMERCIAL', 'COMMERCIAL_USER'] };
   return [...new Set([...roles, ...roles.flatMap((r) => equivalents[r] || [])])];
 }
 
@@ -199,7 +206,7 @@ function baseApprovalRoles(level, inv = null) {
   const k = keys.filter((n) => n <= level).pop() ?? keys[0];
   return map[k];
 }
-const ROLE_LABEL = { REIA_USER: 'REIA Ops', REIA_ADMIN: 'REIA Admin', SJVN_ADMIN: 'SJVN Admin', FINANCE_USER: 'Finance', MANAGEMENT: 'Management', COMMERCIAL_ADMIN: 'Commercial Admin', THERMAL_USER: 'Thermal Desk', THERMAL_ADMIN: 'Thermal Admin' };
+const ROLE_LABEL = { REIA_MAKER: 'REIA Maker', REIA_CHECKER: 'REIA Checker', REIA_APPROVER: 'REIA Approver (HOD)', SJVN_ADMIN: 'SJVN Admin', FINANCE_USER: 'Finance', MANAGEMENT: 'Management', COMMERCIAL_ADMIN: 'Commercial Admin', COMMERCIAL: 'Commercial Officer', THERMAL_USER: 'Thermal Desk', THERMAL_ADMIN: 'Thermal Admin' };
 const rolesText = (roles) => roles.map((r) => ROLE_LABEL[r] || r.replace(/_/g, ' ')).join(' / ');
 
 /** Whether each approval level of a bill has to be decided by a different person. */
@@ -334,6 +341,8 @@ function stationDeskRefusal(user, inv) {
 // E/F. Billing & Invoicing + Seller Invoice Management - list
 router.get('/', (req, res) => {
   const { status, contract_id, direction, billing_period } = req.query;
+  let verticalFilter;
+  try { verticalFilter = parseVertical(req.query.vertical); } catch (e) { return res.status(400).json({ error: e.message }); }
   let sql, params = [];
   
   // Counterparties see only bills that have actually been issued to them, on
@@ -365,6 +374,7 @@ router.get('/', (req, res) => {
     sql = 'SELECT i.* FROM invoices i WHERE 1=1';
   }
   
+  if (verticalFilter) sql += ` AND ${contractIdInVerticalSql(verticalFilter, 'i.contract_id')}`;
   if (status) { sql += ' AND i.status = ?'; params.push(status); }
   if (contract_id) { sql += ' AND i.contract_id = ?'; params.push(contract_id); }
   if (direction) { sql += ' AND i.direction = ?'; params.push(direction); }
@@ -1605,7 +1615,7 @@ router.post('/arrear', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   });
   db.prepare('INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES (?, ?, 1, ?)').run(newId('APR'), id, 'PENDING');
   logAudit({ req, user: req.user, action: 'GENERATE_ARREAR', module: 'REIA', entityType: 'invoice', entityId: id, details: { contract_id, arrear_period, amount: amt, taxes: taxAmt, reason } });
-  pushNotification({ role: 'REIA_USER', type: 'ARREAR_RAISED', message: `Arrear bill raised for ${contract.contract_no} (${arrear_period}): ₹${total.toLocaleString('en-IN')}` });
+  pushNotification({ role: 'REIA_MAKER', type: 'ARREAR_RAISED', message: `Arrear bill raised for ${contract.contract_no} (${arrear_period}): ₹${total.toLocaleString('en-IN')}` });
   res.status(201).json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(id));
 });
 
@@ -1740,7 +1750,7 @@ router.post('/supplementary', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res)
     details: { contract_id, billing_period, amount: amt, taxes: taxAmt, reason_code: code, reason },
   });
   pushNotification({
-    role: 'REIA_USER',
+    role: 'REIA_MAKER',
     type: 'SUPPLEMENTARY_RAISED',
     message: `Supplementary bill for ${contract.contract_no} (${billing_period}): ₹${total.toLocaleString('en-IN')} — ${reasonLabel}`,
   });
@@ -1956,7 +1966,7 @@ router.post('/upload', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), 
   // SJVN hears about bills, not about a maker's drafts.
   if (initialStatus === 'SUBMITTED' && results.successful > 0) {
     pushNotification({
-      role: 'REIA_USER',
+      role: 'REIA_MAKER',
       type: 'INVOICE_SUBMITTED',
       message: `${results.successful} seller invoice(s) submitted from a template upload`,
     });
@@ -2078,7 +2088,7 @@ router.post('/', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), (req, 
   const isDraft = initialStatus === 'DRAFT';
   logAudit({ req: typeof req !== "undefined" ? req : null, user: req.user, action: isDraft ? 'CREATE' : 'SUBMIT', module: 'REIA', entityType: 'invoice', entityId: id, details: { ...b, validation_status: created.validation_status } });
   // SJVN hears of a maker's draft only when the company's checker sends it on.
-  if (!isDraft) pushNotification({ role: 'REIA_USER', type: 'INVOICE_SUBMITTED', message: `Seller invoice ${created.invoice_no} submitted for review` });
+  if (!isDraft) pushNotification({ role: 'REIA_MAKER', type: 'INVOICE_SUBMITTED', message: `Seller invoice ${created.invoice_no} submitted for review` });
   res.status(201).json(created);
 });
 
@@ -2207,7 +2217,7 @@ router.post('/:id/cancel', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
     reason,
   });
   pushNotification({
-    role: 'REIA_USER',
+    role: 'REIA_MAKER',
     type: 'INVOICE_CANCELLED',
     message: `Invoice ${inv.invoice_no} cancelled by ${req.user.name || 'REIA'}: ${reason}`,
   });
@@ -2272,7 +2282,7 @@ router.post('/:id/validation/waive', requireRole(...ROLE_GROUPS.REIA_WRITE), (re
     details: { prior_status: inv.validation_status },
   });
   pushNotification({
-    role: 'REIA_USER',
+    role: 'REIA_MAKER',
     type: 'INVOICE_VALIDATION_WAIVED',
     message: `Validation waived for ${inv.invoice_no}: ${reason}`,
   });
@@ -2463,7 +2473,7 @@ router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, .
   res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
 });
 
-router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, ...STATION_DESK_WRITE, 'FINANCE_USER', 'MANAGEMENT'), (req, res) => {
+router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, ...STATION_DESK_WRITE, 'FINANCE_USER', ...ROLE_GROUPS.REIA_APPROVE), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   const notDesk = stationDeskRefusal(req.user, inv);
@@ -2636,7 +2646,7 @@ router.post('/:id/approve-l2', requireRole('SELLER', 'SELLER_L2', 'SELLER_L3', '
     details: comments ? { comments } : undefined,
   });
   const invoiceNo = db.prepare('SELECT invoice_no FROM invoices WHERE id = ?').get(inv.id)?.invoice_no || inv.id;
-  pushNotification({ role: 'REIA_USER', type: 'INVOICE_SUBMITTED', message: `Seller invoice ${invoiceNo} submitted for review` });
+  pushNotification({ role: 'REIA_MAKER', type: 'INVOICE_SUBMITTED', message: `Seller invoice ${invoiceNo} submitted for review` });
   res.json({ success: true });
 });
 

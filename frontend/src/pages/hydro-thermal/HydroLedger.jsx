@@ -238,8 +238,8 @@ export default function HydroLedger({ vertical = 'HYDRO' }) {
           <div style={{
             marginTop: 16,
             padding: '16px 20px',
-            background: 'var(--slate-50, #f8fafc)',
-            border: '1px solid var(--border, #e2e8f0)',
+            background: 'var(--slate-50, var(--slate-50))',
+            border: '1px solid var(--border, var(--slate-200))',
             borderRadius: 8,
             display: 'flex',
             alignItems: 'center',

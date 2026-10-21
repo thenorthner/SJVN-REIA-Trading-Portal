@@ -207,7 +207,7 @@ export default function HydroWaterToWirePipeline3D({
             <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', letterSpacing: '0.04em' }}>
               STAGE 1: HYDROLOGY
             </span>
-            <span style={{ fontSize: 12, color: '#64748b' }}>{stationDisplayName.split(' ')[0]} {stationDisplayName.split(' ')[1] || 'Intake'}</span>
+            <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>{stationDisplayName.split(' ')[0]} {stationDisplayName.split(' ')[1] || 'Intake'}</span>
           </div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
             Dam Inflow & Head
@@ -221,7 +221,7 @@ export default function HydroWaterToWirePipeline3D({
             <div style={{ fontSize: 20, fontWeight: 700, color: '#38bdf8', fontVariantNumeric: 'tabular-nums' }}>
               {fmtNumber(grossMwh, 1)} <span style={{ fontSize: 13, fontWeight: 500 }}>MWh</span>
             </div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 3 }}>
               Annual DE: {fmtNumber(annualDesignEnergy / 1000, 0)} MU
             </div>
           </div>
@@ -245,7 +245,7 @@ export default function HydroWaterToWirePipeline3D({
             <span style={{ fontSize: 12, fontWeight: 700, color: '#c084fc', letterSpacing: '0.04em' }}>
               STAGE 2: AUX & FREE POWER
             </span>
-            <span style={{ fontSize: 12, color: '#64748b' }}>HP Home State</span>
+            <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>HP Home State</span>
           </div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
             Normative Deductions
@@ -334,7 +334,7 @@ export default function HydroWaterToWirePipeline3D({
             <span style={{ fontSize: 12, fontWeight: 700, color: '#fbbf24', letterSpacing: '0.04em' }}>
               STAGE 4: COMMITTED BILL
             </span>
-            <span style={{ fontSize: 12, color: '#64748b' }}>NRPC Certified</span>
+            <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>NRPC Certified</span>
           </div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>
             Net Month Invoice

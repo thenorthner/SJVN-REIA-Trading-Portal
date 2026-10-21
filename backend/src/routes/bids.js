@@ -8,7 +8,9 @@ import { getParam } from '../mastersService.js';
 import { placeOrder, getTradeResult, syncMarketRates, getIexConfig } from '../services/iexService.js';
 import { checkBidCompliance, getClearance, clearancesNeedingAttention } from '../services/standingClearance.js';
 import { refreshExchangeContractStatus } from '../services/exchangeSettlement.js';
-import { insertBid, logBidEvent, rollUp, utilizedExposure } from '../services/bidWrite.js';
+import { insertBid, logBidEvent, rollUp, utilizedExposure, normaliseBidType } from '../services/bidWrite.js';
+import { checkBidFunds, fundsPosition, fundsMessage } from '../services/bidFunds.js';
+import { rtmSessionAt, dayAheadGateAt } from '../services/rtmSession.js';
 export { utilizedExposure };
 
 const router = Router();
@@ -132,7 +134,38 @@ router.post('/compliance-check', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req
     type: b.type, blocks: Array.isArray(b.blocks) ? b.blocks : [], bidOn: b.bid_on,
     forcedOutage: !!b.forced_outage, excludeBidId: b.exclude_bid_id || null,
   });
-  res.json({ ok: result.violations.length === 0, ...result });
+  // The funds position rides along so the screen can warn before the bid is saved.
+  const funds = checkBidFunds({
+    client, type: b.type,
+    requiredRs: rollUp(Array.isArray(b.blocks) ? b.blocks : [], b.product).exposure,
+    excludeBidId: b.exclude_bid_id || '',
+  });
+  res.json({ ok: result.violations.length === 0 && funds.ok, ...result, funds });
+});
+
+// What a client can still bid with: pre-payment + credit limit - held by live buy bids.
+router.get('/funds/:clientId', requireRole(...ROLE_GROUPS.TRADING_ALL), (req, res) => {
+  const client = db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(req.params.clientId);
+  if (!client) return res.status(404).json({ error: 'Client not found' });
+  res.json(fundsPosition(client));
+});
+
+// Next day-ahead gate for DAM / HP-DAM / GDAM / GTAM, from the server clock and the
+// gate time set in Masters. Term-ahead (TAM) has no daily gate, so it has none to give.
+router.get('/gate-closure', (req, res) => {
+  const product = String(req.query.product || 'DAM').toUpperCase();
+  const key = { DAM: 'dam_gate_closure_time', HPDAM: 'dam_gate_closure_time', GDAM: 'gdam_gate_closure_time', GTAM: 'gdam_gate_closure_time' }[product];
+  if (!key) return res.status(404).json({ error: `${product} has no daily bidding gate` });
+  res.json({ product, ...dayAheadGateAt(new Date(), getParam(key, '12:00')) });
+});
+
+// RTM session now open for bids, from the server clock.
+router.get('/rtm-session', (_req, res) => {
+  const num = (k, d) => { const n = Number(getParam(k, d)); return Number.isFinite(n) && n > 0 ? n : d; };
+  res.json(rtmSessionAt(new Date(), {
+    gateMinutes: num('rtm_gate_closure_minutes', 60),
+    slotMinutes: num('rtm_session_minutes', 30),
+  }));
 });
 
 router.get('/iex/status', (_req, res) => {
@@ -332,6 +365,14 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     });
   }
 
+  // Buy bids are paid for in advance: stop one that the client's pre-payment and
+  // credit limit cannot cover, unless someone takes the risk on in writing.
+  const funds = checkBidFunds({ client, type: b.type, requiredRs: totalExposure });
+  const fundsOverride = String(b.funds_override_reason || '').trim();
+  if (!funds.ok && !fundsOverride) {
+    return res.status(400).json({ error: fundsMessage(client, funds), code: 'INSUFFICIENT_FUNDS', funds });
+  }
+
   // SLDC standing clearance (clauses 21-24, 26). Enforced here as well as in the
   // bidding screen — these are the terms the clearance was granted under, so a
   // bid posted straight to the API has to satisfy them too.
@@ -349,12 +390,14 @@ router.post('/', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
 
   const { bidId } = insertBid(b, b.blocks, req.user.id);
   logBidEvent(bidId, req.user.id, 'CREATED', { totalExposure, complianceWarnings: compliance.warnings.map((w) => w.code) });
+  if (!funds.ok) logBidEvent(bidId, req.user.id, 'FUNDS_OVERRIDE', { reason: fundsOverride, shortfall: funds.shortfall });
 
   secureLogAudit(req, { action: 'CREATE_BID', module: 'TRADING', entityType: 'bid', entityId: bidId, details: { totalExposure, complianceWarnings: compliance.warnings } });
 
   res.status(201).json({
     ...withDetails(db.prepare('SELECT * FROM bids WHERE id = ?').get(bidId)),
     compliance_warnings: compliance.warnings,
+    funds,
   });
 });
 
@@ -379,6 +422,7 @@ router.post('/bulk', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
       delivery_date: String(raw.delivery_date ?? '').trim(),
       gate_closure_time: String(raw.gate_closure_time ?? '').trim(),
       time_block: String(raw.time_block ?? '').trim(),
+      type: normaliseBidType(raw.type ?? raw.bid_type),
       quantum_mw: Number(raw.quantum_mw),
       price_per_unit: Number(raw.price_per_unit),
     };
@@ -407,7 +451,7 @@ router.post('/bulk', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
 
     if (rowErrors.length) { errors.push({ row: line, errors: rowErrors }); return; }
 
-    const key = [row.client_id, row.exchange, row.product, row.bid_date, row.delivery_date, row.gate_closure_time].join('|');
+    const key = [row.client_id, row.exchange, row.product, row.bid_date, row.delivery_date, row.gate_closure_time, row.type].join('|');
     if (!groups.has(key)) {
       groups.set(key, { header: { ...row }, blocks: [], rows: [] });
     }
@@ -438,6 +482,22 @@ router.post('/bulk', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     }
   }
 
+  // Buy rows are paid for in advance: everything this upload asks for, per client,
+  // has to fit inside pre-payment + credit limit less what is already held.
+  const buyPerClient = new Map();
+  for (const group of groups.values()) {
+    if (group.header.type !== 'BUY') continue;
+    const exposure = rollUp(group.blocks, group.header.product).exposure;
+    buyPerClient.set(group.header.client_id, (buyPerClient.get(group.header.client_id) || 0) + exposure);
+  }
+  const bulkFundsOverride = String(req.body.funds_override_reason || '').trim();
+  for (const [clientId, requested] of buyPerClient) {
+    const client = clientCache.get(clientId);
+    if (!client) continue;
+    const funds = checkBidFunds({ client, type: 'BUY', requiredRs: requested });
+    if (!funds.ok && !bulkFundsOverride) errors.push({ row: null, errors: [fundsMessage(client, funds)] });
+  }
+
   const preview = [...groups.values()].map((g) => ({
     client_id: g.header.client_id,
     client_name: clientCache.get(g.header.client_id)?.name,
@@ -463,6 +523,7 @@ router.post('/bulk', requireRole(...ROLE_GROUPS.TRADING_WRITE), (req, res) => {
     for (const group of groups.values()) {
       const { bidId } = insertBid(group.header, group.blocks, req.user.id);
       logBidEvent(bidId, req.user.id, 'CREATED', { source: 'BULK_UPLOAD', rows: group.rows });
+      if (bulkFundsOverride && group.header.type === 'BUY') logBidEvent(bidId, req.user.id, 'FUNDS_OVERRIDE', { reason: bulkFundsOverride });
       ids.push(bidId);
     }
     return ids;
@@ -492,7 +553,7 @@ router.post('/:id/submit', requireRole(...ROLE_GROUPS.TRADING_WRITE), async (req
     const client = db.prepare('SELECT * FROM trading_clients WHERE id = ?').get(bid.client_id);
     const compliance = checkBidCompliance({
       client, product: bid.product, exchange: bid.exchange, deliveryDate: bid.delivery_date,
-      type: bid.type, blocks: fullBid.blocks, bidOn: bid.bid_on,
+      type: bid.bid_type, blocks: fullBid.blocks, bidOn: bid.bid_on,
       forcedOutage: !!req.body?.forced_outage, excludeBidId: bid.id,
     });
     if (compliance.violations.length) {
@@ -501,6 +562,21 @@ router.post('/:id/submit', requireRole(...ROLE_GROUPS.TRADING_WRITE), async (req
         violations: compliance.violations,
         warnings: compliance.warnings,
       });
+    }
+
+    // Funds can move between approval and submission (another buy bid went out, or
+    // the pre-payment was drawn down), so the check is repeated at the exchange
+    // boundary. A shortfall someone already accepted in writing at entry stands.
+    const accepted = db.prepare("SELECT 1 FROM bid_events WHERE bid_id = ? AND event_type = 'FUNDS_OVERRIDE'").get(bid.id);
+    const submitOverride = String(req.body?.funds_override_reason || '').trim();
+    const funds = checkBidFunds({
+      client, type: bid.bid_type, requiredRs: rollUp(fullBid.blocks, bid.product).exposure, excludeBidId: bid.id,
+    });
+    if (!funds.ok && !accepted && !submitOverride) {
+      return res.status(400).json({ error: fundsMessage(client, funds), code: 'INSUFFICIENT_FUNDS', funds });
+    }
+    if (!funds.ok && !accepted && submitOverride) {
+      logBidEvent(bid.id, req.user.id, 'FUNDS_OVERRIDE', { reason: submitOverride, shortfall: funds.shortfall, at: 'SUBMIT' });
     }
 
     const response = await placeOrder(fullBid);
@@ -686,6 +762,7 @@ router.post('/:id/carry-forward', requireRole(...ROLE_GROUPS.TRADING_WRITE), (re
     carry_forward_from: source.id,
     ocf_leg: (source.ocf_leg || 0) + 1,
     premium_discount: premium,
+    type: source.bid_type,
   };
 
   const { bidId, roll } = insertBid(header, blocks, req.user.id);

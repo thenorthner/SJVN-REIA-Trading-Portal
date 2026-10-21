@@ -191,7 +191,7 @@ export default function ThermalAdjustmentCorridor3D({
               <span style={{ fontSize: 11.5, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 STAGE 1: BASELINE
               </span>
-              <span style={{ fontSize: 11, color: '#64748b' }}>Original</span>
+              <span style={{ fontSize: 11, color: 'var(--slate-500)' }}>Original</span>
             </div>
             <div style={{ fontSize: 14.5, fontWeight: 700, color: '#ffffff', marginBottom: 4 }}>
               Provisional Thermal Billing
@@ -199,7 +199,7 @@ export default function ThermalAdjustmentCorridor3D({
             <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
               Period: {periodSpan}
             </div>
-            <div style={{ fontSize: 11.5, color: '#64748b' }}>Billed AFC Aggregate:</div>
+            <div style={{ fontSize: 11.5, color: 'var(--slate-500)' }}>Billed AFC Aggregate:</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: '#ffffff', fontFamily: 'monospace' }}>
               {fmtCurrency(fallback.baseline_billed)}
             </div>
@@ -257,7 +257,7 @@ export default function ThermalAdjustmentCorridor3D({
             style={{
               background: activeStep === 3 ? 'rgba(30, 41, 59, 0.8)' : 'rgba(15, 23, 42, 0.65)',
               borderRadius: 12,
-              border: `1px solid ${activeStep === 3 ? '#fbbf24' : 'rgba(251, 191, 36, 0.3)'}`,
+              border: `1px solid ${activeStep === 3 ? 'var(--t-amber-100)' : 'rgba(251, 191, 36, 0.3)'}`,
               padding: '16px 18px',
               transition: 'all 0.25s ease',
               transform: activeStep === 3 ? 'translateY(-3px)' : 'none',
@@ -276,7 +276,7 @@ export default function ThermalAdjustmentCorridor3D({
             <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
               Statutory Rate: {fallback.carrying_cost_rate}% p.a.
             </div>
-            <div style={{ fontSize: 11.5, color: '#64748b' }}>Carrying Interest Claim:</div>
+            <div style={{ fontSize: 11.5, color: 'var(--slate-500)' }}>Carrying Interest Claim:</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: '#fbbf24', fontFamily: 'monospace' }}>
               +{fmtCurrency(fallback.carrying_cost_amount)}
             </div>
@@ -311,7 +311,7 @@ export default function ThermalAdjustmentCorridor3D({
             <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>
               Across {beneficiaries.length} Thermal Off-takers
             </div>
-            <div style={{ fontSize: 11.5, color: '#64748b' }}>Total Arrear Payable:</div>
+            <div style={{ fontSize: 11.5, color: 'var(--slate-500)' }}>Total Arrear Payable:</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: '#34d399', fontFamily: 'monospace' }}>
               {fmtCurrency(totalAdjustment)}
             </div>

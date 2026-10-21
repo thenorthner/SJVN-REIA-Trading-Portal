@@ -48,7 +48,7 @@ export default function ReleasePlanner() {
             { key: 'due', header: 'Due', render: (r) => (r.due_date ? fmtDate(r.due_date) : '—') },
             { key: 'open', header: 'Open', render: (r) => fmtCurrency(r.open) },
             { key: 'realized', header: 'Realised from buyers', render: (r) => <>{fmtCurrency(r.realized)}<div style={{ fontSize: 12.5, color: 'var(--text-light)' }}>{r.linked_psa_bills} PSA bill{r.linked_psa_bills === 1 ? '' : 's'} · {fmtCurrency(r.released)} released</div></> },
-            { key: 'now', header: 'Releasable now', render: (r) => (r.blocked ? <span style={{ color: '#b91c1c', fontSize: 13 }}>{r.blocked}</span> : <strong>{fmtCurrency(r.releasable_now)}</strong>) },
+            { key: 'now', header: 'Releasable now', render: (r) => (r.blocked ? <span style={{ color: 'var(--red-deep)', fontSize: 13 }}>{r.blocked}</span> : <strong>{fmtCurrency(r.releasable_now)}</strong>) },
             { key: 'act', header: '', render: (r) => (canRelease && r.releasable_now > 0 ? <button type="button" className="btn btn-primary btn-sm" onClick={() => setForm({ row: r, amount: r.releasable_now, date: new Date().toISOString().slice(0, 10), reference: '' })}>Release</button> : null) },
           ]}
           rows={p?.rows || []}

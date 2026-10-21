@@ -77,7 +77,7 @@ export default function CeaExcelUploader() {
 
   return (
     <div className="page" style={{ 
-      background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+      background: 'linear-gradient(135deg, var(--slate-50) 0%, var(--slate-100) 100%)',
       minHeight: 'calc(100vh - 64px)',
       padding: '2rem 1rem'
     }}>
@@ -90,7 +90,7 @@ export default function CeaExcelUploader() {
         
         {/* Elite Glowing Card */}
         <div style={{ 
-          background: 'rgba(255, 255, 255, 0.85)',
+          background: 'var(--surface)',
           backdropFilter: 'blur(12px)',
           borderRadius: '16px',
           boxShadow: '0 20px 40px -15px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.05)',
@@ -103,20 +103,20 @@ export default function CeaExcelUploader() {
           <div style={{ height: 4, width: '100%', background: 'linear-gradient(90deg, #3b82f6, #8b5cf6, #ec4899)' }}></div>
           
           <div style={{ padding: '2rem 2.5rem' }}>
-            <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h3 style={{ margin: '0 0 1.5rem 0', fontSize: '1.25rem', fontWeight: 600, color: 'var(--slate-800)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <UploadCloud size={22} color="#3b82f6" />
               Upload Monthly Report
             </h3>
             
             {uploadError && (
-              <div className="animate-fade-in-up" style={{ marginBottom: 24, padding: 16, backgroundColor: '#fef2f2', borderLeft: '4px solid #ef4444', color: '#991b1b', borderRadius: '4px 8px 8px 4px', fontSize: 14, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div className="animate-fade-in-up" style={{ marginBottom: 24, padding: 16, backgroundColor: 'var(--t-red-50)', borderLeft: '4px solid #ef4444', color: 'var(--on-red)', borderRadius: '4px 8px 8px 4px', fontSize: 14, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <AlertCircle size={20} style={{ flexShrink: 0, marginTop: 2 }} color="#dc2626" />
                 <div style={{ fontWeight: 500 }}>{uploadError}</div>
               </div>
             )}
             
             {successMsg && (
-              <div className="animate-fade-in-up" style={{ marginBottom: 24, padding: 16, backgroundColor: '#f0fdf4', borderLeft: '4px solid #22c55e', color: '#166534', borderRadius: '4px 8px 8px 4px', fontSize: 14, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div className="animate-fade-in-up" style={{ marginBottom: 24, padding: 16, backgroundColor: 'var(--t-green-50)', borderLeft: '4px solid #22c55e', color: 'var(--on-green)', borderRadius: '4px 8px 8px 4px', fontSize: 14, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <CheckCircle2 size={20} style={{ flexShrink: 0, marginTop: 2 }} color="#16a34a" />
                 <div style={{ fontWeight: 500 }}>{successMsg}</div>
               </div>
@@ -125,12 +125,12 @@ export default function CeaExcelUploader() {
             <form onSubmit={handleUpload}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 28 }}>
                 <div className="form-group">
-                  <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 600, color: '#475569' }}>Reporting Month</label>
+                  <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 600, color: 'var(--slate-600)' }}>Reporting Month</label>
                   <select 
                     className="input elite-select" 
                     value={uploadData.month}
                     onChange={(e) => setUploadData({...uploadData, month: e.target.value})}
-                    style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', transition: 'all 0.2s', outline: 'none', cursor: 'pointer' }}
+                    style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--slate-300)', backgroundColor: 'var(--slate-50)', transition: 'all 0.2s', outline: 'none', cursor: 'pointer' }}
                     required
                   >
                     <option value="" disabled>Select Month</option>
@@ -141,20 +141,20 @@ export default function CeaExcelUploader() {
                 </div>
 
                 <div className="form-group">
-                  <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 600, color: '#475569' }}>Reporting Year</label>
+                  <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 600, color: 'var(--slate-600)' }}>Reporting Year</label>
                   <input 
                     type="number" 
                     className="input elite-input" 
                     value={uploadData.year}
                     onChange={(e) => setUploadData({...uploadData, year: e.target.value})}
-                    style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', transition: 'all 0.2s', outline: 'none' }}
+                    style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: '1px solid var(--slate-300)', backgroundColor: 'var(--slate-50)', transition: 'all 0.2s', outline: 'none' }}
                     required
                   />
                 </div>
               </div>
 
               <div className="form-group" style={{ marginBottom: 32 }}>
-                <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 600, color: '#475569' }}>Data Source File</label>
+                <label style={{ display: 'block', marginBottom: 8, fontSize: 14, fontWeight: 600, color: 'var(--slate-600)' }}>Data Source File</label>
                 
                 {/* Drag and Drop Zone */}
                 <div 
@@ -163,8 +163,8 @@ export default function CeaExcelUploader() {
                   onDrop={onDrop}
                   onClick={() => !uploadData.file && fileInputRef.current.click()}
                   style={{ 
-                    border: `2px dashed ${isDragging ? '#3b82f6' : (uploadData.file ? '#22c55e' : '#cbd5e1')}`, 
-                    backgroundColor: isDragging ? '#eff6ff' : (uploadData.file ? '#f0fdf4' : '#f8fafc'),
+                    border: `2px dashed ${isDragging ? '#3b82f6' : (uploadData.file ? '#22c55e' : 'var(--slate-300)')}`, 
+                    backgroundColor: isDragging ? 'var(--t-blue-50)' : (uploadData.file ? 'var(--t-green-50)' : 'var(--slate-50)'),
                     borderRadius: 12, 
                     padding: '3rem 2rem', 
                     textAlign: 'center',
@@ -187,17 +187,17 @@ export default function CeaExcelUploader() {
                   
                   {uploadData.file ? (
                     <div className="animate-fade-in-up" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                      <div style={{ background: '#dcfce7', padding: 16, borderRadius: '50%' }}>
+                      <div style={{ background: 'var(--t-green-100)', padding: 16, borderRadius: '50%' }}>
                         <FileSpreadsheet size={32} color="#16a34a" />
                       </div>
                       <div>
-                        <div style={{ fontWeight: 600, color: '#166534', fontSize: 16 }}>{uploadData.file.name}</div>
-                        <div style={{ color: '#15803d', fontSize: 13, marginTop: 4 }}>{(uploadData.file.size / 1024).toFixed(1)} KB</div>
+                        <div style={{ fontWeight: 600, color: 'var(--on-green)', fontSize: 16 }}>{uploadData.file.name}</div>
+                        <div style={{ color: 'var(--on-green-2)', fontSize: 13, marginTop: 4 }}>{(uploadData.file.size / 1024).toFixed(1)} KB</div>
                       </div>
                       <button 
                         type="button" 
                         onClick={(e) => { e.stopPropagation(); setUploadData({...uploadData, file: null}); if(fileInputRef.current) fileInputRef.current.value = ''; }}
-                        style={{ position: 'absolute', top: 16, right: 16, background: '#fee2e2', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#b91c1c', transition: 'all 0.2s' }}
+                        style={{ position: 'absolute', top: 16, right: 16, background: 'var(--t-red-100)', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--red-deep)', transition: 'all 0.2s' }}
                         title="Remove file"
                       >
                         <X size={18} />
@@ -205,12 +205,12 @@ export default function CeaExcelUploader() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, opacity: isDragging ? 1 : 0.7 }}>
-                      <div style={{ background: isDragging ? '#dbeafe' : '#e2e8f0', padding: 16, borderRadius: '50%', transition: 'all 0.2s' }}>
+                      <div style={{ background: isDragging ? 'var(--t-blue-100)' : 'var(--slate-200)', padding: 16, borderRadius: '50%', transition: 'all 0.2s' }}>
                         <UploadCloud size={32} color={isDragging ? '#2563eb' : '#64748b'} />
                       </div>
                       <div>
-                        <div style={{ fontWeight: 600, color: '#334155', fontSize: 16 }}>{isDragging ? 'Drop file here' : 'Click or drag Excel file to upload'}</div>
-                        <div style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>Supports .xlsx and .xls up to 10MB</div>
+                        <div style={{ fontWeight: 600, color: 'var(--slate-700)', fontSize: 16 }}>{isDragging ? 'Drop file here' : 'Click or drag Excel file to upload'}</div>
+                        <div style={{ color: 'var(--slate-500)', fontSize: 13, marginTop: 4 }}>Supports .xlsx and .xls up to 10MB</div>
                       </div>
                     </div>
                   )}
@@ -222,7 +222,7 @@ export default function CeaExcelUploader() {
                   type="submit" 
                   disabled={uploading || !uploadData.file} 
                   style={{ 
-                    background: (!uploading && uploadData.file) ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : '#cbd5e1',
+                    background: (!uploading && uploadData.file) ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : 'var(--slate-300)',
                     color: 'white',
                     border: 'none',
                     padding: '12px 32px',
@@ -258,36 +258,36 @@ export default function CeaExcelUploader() {
         {/* Elite Instructions Section */}
         <div style={{ 
           marginTop: 32, 
-          background: 'white', 
+          background: 'var(--surface)', 
           borderRadius: 16, 
-          border: '1px solid #e2e8f0',
+          border: '1px solid var(--slate-200)',
           overflow: 'hidden',
           boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)'
         }}>
-          <div style={{ padding: '16px 24px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ padding: '16px 24px', background: 'var(--slate-50)', borderBottom: '1px solid var(--slate-200)', display: 'flex', alignItems: 'center', gap: 10 }}>
             <Info size={18} color="#64748b" />
-            <h4 style={{ margin: 0, color: '#334155', fontSize: 15, fontWeight: 600 }}>Standard Operating Procedure</h4>
+            <h4 style={{ margin: 0, color: 'var(--slate-700)', fontSize: 15, fontWeight: 600 }}>Standard Operating Procedure</h4>
           </div>
           <div style={{ padding: 24 }}>
             <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 16 }}>
               <li style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#e0e7ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 14, flexShrink: 0 }}>1</div>
-                <div style={{ color: '#475569', fontSize: 14, lineHeight: 1.5 }}>
-                  <strong style={{ color: '#1e293b', display: 'block', marginBottom: 4 }}>Acquire Source Material</strong>
-                  Download the latest <i>"Installed Capacity"</i> or <i>"Power Supply Position"</i> executive summaries from the official <a href="https://cea.nic.in" target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>Central Electricity Authority (cea.nic.in)</a> portal.
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--t-blue-50)', color: 'var(--on-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 14, flexShrink: 0 }}>1</div>
+                <div style={{ color: 'var(--slate-600)', fontSize: 14, lineHeight: 1.5 }}>
+                  <strong style={{ color: 'var(--slate-800)', display: 'block', marginBottom: 4 }}>Acquire Source Material</strong>
+                  Download the latest <i>"Installed Capacity"</i> or <i>"Power Supply Position"</i> executive summaries from the official <a href="https://cea.nic.in" target="_blank" rel="noreferrer" style={{ color: 'var(--on-blue)', textDecoration: 'none', fontWeight: 500 }}>Central Electricity Authority (cea.nic.in)</a> portal.
                 </div>
               </li>
               <li style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#e0e7ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 14, flexShrink: 0 }}>2</div>
-                <div style={{ color: '#475569', fontSize: 14, lineHeight: 1.5 }}>
-                  <strong style={{ color: '#1e293b', display: 'block', marginBottom: 4 }}>Configure Metadata</strong>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--t-blue-50)', color: 'var(--on-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 14, flexShrink: 0 }}>2</div>
+                <div style={{ color: 'var(--slate-600)', fontSize: 14, lineHeight: 1.5 }}>
+                  <strong style={{ color: 'var(--slate-800)', display: 'block', marginBottom: 4 }}>Configure Metadata</strong>
                   Select the exact reporting month and year. This ensures the data maps correctly in the analytical dashboards and overwrites any existing partial data for that period.
                 </div>
               </li>
               <li style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#e0e7ff', color: '#4f46e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 14, flexShrink: 0 }}>3</div>
-                <div style={{ color: '#475569', fontSize: 14, lineHeight: 1.5 }}>
-                  <strong style={{ color: '#1e293b', display: 'block', marginBottom: 4 }}>Execute Ingestion</strong>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--t-blue-50)', color: 'var(--on-blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 14, flexShrink: 0 }}>3</div>
+                <div style={{ color: 'var(--slate-600)', fontSize: 14, lineHeight: 1.5 }}>
+                  <strong style={{ color: 'var(--slate-800)', display: 'block', marginBottom: 4 }}>Execute Ingestion</strong>
                   Drop the file into the upload zone and hit "Ingest Data". The platform's parsing engine will automatically scrub the sheets, extract tabular structures, and populate the central data warehouse.
                 </div>
               </li>

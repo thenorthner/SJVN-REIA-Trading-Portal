@@ -9,7 +9,7 @@ const CLIENT_TYPES = ['GENERATOR', 'DISCOM', 'TRADER', 'C&I', 'OTHER'];
 const RISK_RATINGS = ['LOW', 'MEDIUM', 'HIGH'];
 const EMPTY_FORM = {
   name: '', client_type: 'GENERATOR', risk_rating: 'MEDIUM',
-  exposure_limit: '', noc_valid_till: '', ppa_ref: '',
+  exposure_limit: '', credit_limit: '', virtual_account_no: '', noc_valid_till: '', ppa_ref: '',
 };
 
 export default function TradingClients() {
@@ -50,6 +50,8 @@ export default function TradingClients() {
         client_type: form.client_type,
         risk_rating: form.risk_rating,
         exposure_limit: Number(form.exposure_limit) || 0,
+        credit_limit: Number(form.credit_limit) || 0,
+        virtual_account_no: form.virtual_account_no.trim() || null,
         noc_valid_till: form.noc_valid_till || null,
         ppa_ref: form.ppa_ref || null,
       });
@@ -72,17 +74,18 @@ export default function TradingClients() {
   };
 
   const columns = [
-    { key: 'name', label: 'Client Name', render: r => <Link to={`/trading/clients/${r.id}`} style={{color: '#0052cc', fontWeight: 'bold'}}>{r.name}</Link> },
+    { key: 'name', label: 'Client Name', render: r => <Link to={`/trading/clients/${r.id}`} style={{color: 'var(--on-blue)', fontWeight: 'bold'}}>{r.name}</Link> },
     { key: 'client_type', label: 'Type', render: r => <Badge>{r.client_type}</Badge> },
     { key: 'risk_rating', label: 'Risk Rating', render: r => <Badge type={getRiskColor(r.risk_rating)}>{r.risk_rating}</Badge> },
     { key: 'exposure_limit', label: 'Exposure Limit (₹)', render: r => r.exposure_limit.toLocaleString('en-IN') },
+    { key: 'credit_limit', label: 'Credit Limit (₹)', render: r => (r.credit_limit || 0).toLocaleString('en-IN') },
     {
       key: 'noc_valid_till',
       label: 'NOC Validity',
       render: r => {
         if (!r.noc_valid_till) return 'N/A';
         const isExpiring = new Date(r.noc_valid_till) < new Date(Date.now() + 30*24*60*60*1000);
-        return <span style={{ color: isExpiring ? '#cf1322' : '#389e0d' }}>{r.noc_valid_till} {isExpiring && '(Expiring Soon)'}</span>;
+        return <span style={{ color: isExpiring ? 'var(--on-red)' : 'var(--on-green)' }}>{r.noc_valid_till} {isExpiring && '(Expiring Soon)'}</span>;
       }
     },
     { key: 'status', label: 'Status', render: r => <Badge type={r.status === 'ACTIVE' ? 'success' : 'danger'}>{r.status}</Badge> },
@@ -140,6 +143,18 @@ export default function TradingClients() {
                   value={form.exposure_limit}
                   onChange={(e) => setForm({ ...form, exposure_limit: e.target.value })}
                   placeholder="e.g. 50000000" />
+              </Field>
+              <Field label="Credit Limit (₹)">
+                <input type="number" min="0" step="1" className="input"
+                  value={form.credit_limit}
+                  onChange={(e) => setForm({ ...form, credit_limit: e.target.value })}
+                  placeholder="Bids allowed beyond pre-payment, e.g. 2000000" />
+              </Field>
+              <Field label="Virtual Account No.">
+                <input type="text" className="input"
+                  value={form.virtual_account_no}
+                  onChange={(e) => setForm({ ...form, virtual_account_no: e.target.value })}
+                  placeholder="As the bank names it on a receipt" />
               </Field>
               <Field label="NOC Valid Till">
                 <input type="date" className="input"

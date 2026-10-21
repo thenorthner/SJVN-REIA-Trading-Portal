@@ -78,7 +78,7 @@ export default function DisputeExtrasPanel({ disputeId, onChanged }) {
   const { sla, lps_estimate: lps, resolution: r, group } = x;
   const red = sla.breached && sla.stage !== 'RESPONSE' && sla.stage !== 'DONE';
   const clock = sla.stage === 'DONE' ? null : (
-    <div style={{ padding: '10px 12px', borderRadius: 8, fontSize: 13.5, fontWeight: 600, border: `1px solid ${red ? '#fca5a5' : sla.stage === 'CONTESTED' ? '#c4b5fd' : '#bfdbfe'}`, background: red ? '#fef2f2' : sla.stage === 'CONTESTED' ? '#f5f3ff' : '#eff6ff', color: red ? '#b91c1c' : sla.stage === 'CONTESTED' ? '#6d28d9' : '#1d4ed8' }}>
+    <div style={{ padding: '10px 12px', borderRadius: 8, fontSize: 13.5, fontWeight: 600, border: `1px solid ${red ? '#fca5a5' : sla.stage === 'CONTESTED' ? '#c4b5fd' : 'var(--t-blue-line)'}`, background: red ? 'var(--t-red-50)' : sla.stage === 'CONTESTED' ? 'var(--t-blue-50)' : 'var(--t-blue-50)', color: red ? 'var(--red-deep)' : sla.stage === 'CONTESTED' ? 'var(--on-blue)' : 'var(--on-blue)' }}>
       {sla.label}{sla.due ? <span style={{ fontWeight: 400 }}> · due {fmtDateTime(sla.due)}</span> : ''}
       {red && <span style={{ fontWeight: 400 }}> — escalated</span>}
     </div>
@@ -90,9 +90,9 @@ export default function DisputeExtrasPanel({ disputeId, onChanged }) {
       {clock}
 
       {lps.base > 0 && (
-        <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-main, #f8fafc)', fontSize: 13 }}>
+        <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-main, var(--slate-50))', fontSize: 13 }}>
           <strong>Late payment surcharge on the amount in question: {fmtCurrency(lps.amount)}</strong>
-          {lps.running && lps.per_day > 0 && <span style={{ color: '#b45309', fontWeight: 600 }}> · growing by {fmtCurrency(lps.per_day)} a day</span>}
+          {lps.running && lps.per_day > 0 && <span style={{ color: 'var(--amber-strong)', fontWeight: 600 }}> · growing by {fmtCurrency(lps.per_day)} a day</span>}
           <div style={{ color: 'var(--slate-600)', marginTop: 2 }}>
             {lps.not_yet_due
               ? `The bill falls due on ${fmtDate(lps.from)}; surcharge starts after that.`
@@ -126,7 +126,7 @@ export default function DisputeExtrasPanel({ disputeId, onChanged }) {
             {r.notes ? <div style={{ marginTop: 4 }}>{r.notes}</div> : null}
           </div>
           {r.response && (
-            <div style={{ fontSize: 13, marginTop: 8, color: r.response === 'ACCEPTED' ? '#15803d' : '#6d28d9' }}>
+            <div style={{ fontSize: 13, marginTop: 8, color: r.response === 'ACCEPTED' ? 'var(--on-green-2)' : 'var(--on-blue)' }}>
               <strong>{r.response === 'ACCEPTED' ? 'Accepted' : `Not accepted — ${fmtCurrency(r.contested_amount)} taken to ${r.forum_label}`}</strong> by {r.response_by} on {fmtDateTime(r.response_at)}
               {r.response_note ? ` — ${r.response_note}` : ''}
             </div>

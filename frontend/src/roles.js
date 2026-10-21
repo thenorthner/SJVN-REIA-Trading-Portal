@@ -4,17 +4,19 @@ export const ROLE_GROUPS = {
   // is shown screens whose every call answers 403; one listed there and not here
   // is allowed by the API but never offered the menu. The backend test
   // roleGroupsParity.test.js fails if the two lists drift apart again.
-  REIA_ALL: ['SJVN_ADMIN', 'REIA_ADMIN', 'IT_SUPER_ADMIN', 'REIA_USER', 'FINANCE_USER', 'MANAGEMENT'],
-  REIA_WRITE: ['SJVN_ADMIN', 'REIA_ADMIN', 'IT_SUPER_ADMIN', 'REIA_USER'],
+  // Target #2 Phase B: the SJVN / IT administrators read every desk and write on none.
+  REIA_ALL: ['SJVN_ADMIN', 'REIA_CHECKER', 'IT_SUPER_ADMIN', 'REIA_MAKER', 'REIA_APPROVER', 'FINANCE_USER', 'MANAGEMENT'],
+  REIA_WRITE: ['REIA_CHECKER', 'REIA_MAKER'],
+  REIA_APPROVE: ['REIA_APPROVER', 'MANAGEMENT'],
   COMMERCIAL_ALL: ['SJVN_ADMIN', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'MANAGEMENT'],
-  COMMERCIAL_WRITE: ['SJVN_ADMIN', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'IT_SUPER_ADMIN'],
+  COMMERCIAL_WRITE: ['COMMERCIAL_ADMIN', 'COMMERCIAL'],
   HYDRO_THERMAL_ALL: ['SJVN_ADMIN', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'MANAGEMENT'],
-  HYDRO_THERMAL_WRITE: ['SJVN_ADMIN', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'IT_SUPER_ADMIN'],
+  HYDRO_THERMAL_WRITE: ['COMMERCIAL_ADMIN', 'COMMERCIAL'],
   // Thermal billing's own desk and logins — mirrors THERMAL_ALL / THERMAL_WRITE in the API.
   THERMAL_ALL: ['SJVN_ADMIN', 'THERMAL_ADMIN', 'THERMAL_USER', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'MANAGEMENT'],
-  THERMAL_WRITE: ['SJVN_ADMIN', 'THERMAL_ADMIN', 'THERMAL_USER', 'IT_SUPER_ADMIN'],
-  TRADING_ALL: ['SJVN_ADMIN', 'TRADING_USER', 'FINANCE_USER', 'MANAGEMENT'],
-  TRADING_WRITE: ['SJVN_ADMIN', 'TRADING_USER'],
+  THERMAL_WRITE: ['THERMAL_ADMIN', 'THERMAL_USER'],
+  TRADING_ALL: ['SJVN_ADMIN', 'TRADING_USER', 'TRADING_ADMIN', 'FINANCE_USER', 'MANAGEMENT'],
+  TRADING_WRITE: ['TRADING_USER', 'TRADING_ADMIN'],
 
   // Counterparty portal roles. Company admins (SELLER / BUYER) plus the
   // maker-checker sub-users they create from Team Management. These must be
@@ -49,8 +51,9 @@ export const ROLE_GROUPS = {
   GOVERNANCE_REPORTS: ['SJVN_ADMIN', 'COMPLIANCE_AUDITOR', 'MANAGEMENT'],
 
   // Configurable master data (SRS). Write = ops + admin; read includes finance/mgmt.
-  MASTERS_WRITE: ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN'],
-  MASTERS_READ: ['SJVN_ADMIN', 'REIA_USER', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'MANAGEMENT'],
+  // Masters are governance (Target #2 Phase B): the administrators write them, the desks read them.
+  MASTERS_WRITE: ['SJVN_ADMIN', 'IT_SUPER_ADMIN'],
+  MASTERS_READ: ['SJVN_ADMIN', 'REIA_MAKER', 'REIA_CHECKER', 'REIA_APPROVER', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'MANAGEMENT'],
 };
 
 export const isSellerRole = (role) => ROLE_GROUPS.SELLER_ALL.includes(role);

@@ -1,4 +1,5 @@
 import db from '../db/index.js';
+import { contractIdInVerticalSql } from './verticals.js';
 import { invoiceLpsAsOf } from './invoiceLps.js';
 import { getParamNumber } from '../mastersService.js';
 import { ageingBuckets, openPosition, supersededByDeveloperSql } from './outstanding.js';
@@ -58,6 +59,7 @@ function openBills(direction) {
     FROM invoices i
     ${COUNTERPARTY_JOIN}
     WHERE i.direction = ? AND i.status IN ('APPROVED','SENT','PARTIALLY_PAID','DISPUTED') AND ${supersededByDeveloperSql('i')} AND ${OUTSTANDING_SQL} > 0
+      AND ${contractIdInVerticalSql('REIA', 'i.contract_id')}
     ORDER BY (i.due_date IS NULL), i.due_date
   `).all(direction);
 }
@@ -138,8 +140,8 @@ export function paymentMonitoring(side = 'RECEIVABLE') {
     annual_pct: defaults.annualPct,
     monthly_step_pct: defaults.monthlyStepPct,
     step_cap_pct: defaults.stepCapPct,
-    totals: { ...totals, ...openPosition(direction) },
-    ageing: ageingBuckets(direction),
+    totals: { ...totals, ...openPosition(direction, 'REIA') },
+    ageing: ageingBuckets(direction, 'REIA'),
     counterparties,
     bills,
   };

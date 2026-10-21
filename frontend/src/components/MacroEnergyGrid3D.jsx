@@ -88,7 +88,7 @@ const DISCOMS = [
     psa_no: 'PSA-DL-100MW',
     landed_tariff: 2.95,
     lc_status: 'ACTIVE_COVERED',
-    color: '#a855f7',
+    color: 'var(--on-blue)',
   },
   {
     id: 'DIS-RUVNL',
@@ -99,7 +99,7 @@ const DISCOMS = [
     psa_no: 'PSA-RJ-70MW',
     landed_tariff: 3.02,
     lc_status: 'ACTIVE_COVERED',
-    color: '#ec4899',
+    color: 'var(--on-blue)',
   },
 ];
 
@@ -418,7 +418,7 @@ export default function MacroEnergyGrid3D({
               <div style={{ fontSize: 24, fontWeight: 800, color: '#38bdf8', marginTop: 2 }}>
                 {fmtNumber(totalCapacityMw)} MW
               </div>
-              <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 3 }}>
+              <div style={{ fontSize: 12.5, color: 'var(--slate-500)', marginTop: 3 }}>
                 Est. {fmtNumber(Math.round(monthlyScheduledMwh))} MWh / month
               </div>
             </div>

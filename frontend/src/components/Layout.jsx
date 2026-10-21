@@ -7,7 +7,15 @@ import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from '../
 import { PortfolioSelect } from '../context/PortfolioContext.jsx';
 import { RouteSkeleton } from './ui.jsx';
 import ChangePasswordModal from './ChangePasswordModal.jsx';
+import ThemeToggle from './ThemeToggle.jsx';
 import { Lock } from 'lucide-react';
+import GovStrip, { SkipLink } from '../gigw/GovStrip.jsx';
+import GigwFooter from '../gigw/GigwFooter.jsx';
+import IdleTimeout from '../gigw/IdleTimeout.jsx';
+import LastLoginNotice from '../gigw/LastLoginNotice.jsx';
+import ProjectScopeNote from './ProjectScopeNote.jsx';
+import ActingSwitch, { ActingBanner } from './ActingSwitch.jsx';
+import ReadOnlyNotice from './ReadOnlyNotice.jsx';
 import { getNotificationAction, formatTimeAgo } from '../lib/notificationRouting.js';
 
 /**
@@ -118,15 +126,13 @@ const NAV_INTERNAL = [
     roles: ROLE_GROUPS.REIA_ALL,
     links: [
       { to: '/reia', label: 'REIA Dashboard', end: true },
-      { to: '/reia/entities', label: 'Stakeholders (Sellers/Buyers)' },
+      { to: '/reia/entities', label: 'Stakeholders & KYC Desk' },
       // Each company's portal users; only SJVN's administrators manage them.
-      { to: '/reia/company-users', label: 'Company Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN'] },
-      // What is waiting to be verified, and where each company's KYC stands.
-      { to: '/reia/document-desk', label: 'Documents & KYC Desk' },
+      // User administration is the platform administrators' (Target #2 Phase B).
+      { to: '/reia/company-users', label: 'Company Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN'] },
       { to: '/reia/contracts', label: 'Contracts (PPA/PSA)' },
-      // Tenure, commissioning, security and approvals, contract by contract.
-      { to: '/reia/contract-compliance', label: 'Contract Compliance' },
-      { to: '/reia/cerc-compliance', label: 'CERC Compliance' },
+      // Tenure, commissioning, security, statutory approvals & CERC Form-IV filings.
+      { to: '/reia/compliance', label: 'Compliance Desk' },
       { to: '/reia/energy-data', label: 'Energy Data & Validation' },
       { to: '/reia/invoices', label: 'Billing & Invoicing' },
       { to: '/reia/billing-readiness', label: 'Month-Close Board' },
@@ -149,7 +155,7 @@ const NAV_INTERNAL = [
       // the Power Trading section — without this entry the only roles allowed to
       // create these bills had no way to reach it. Scoped to the REIA-only roles
       // so nobody sees the same link twice.
-      { to: '/trading/generator-billing', label: 'Generator Billing & Settlement', roles: ['REIA_USER', 'REIA_ADMIN'] },
+      { to: '/trading/generator-billing', label: 'Generator Billing & Settlement', roles: ['REIA_MAKER', 'REIA_CHECKER'] },
       { to: '/reia/reconciliation', label: 'Reconciliation' },
       { to: '/reia/deviation', label: 'Deviation Settlement (DSM)' },
     ],
@@ -169,8 +175,7 @@ const NAV_INTERNAL = [
     links: [
       { to: '/hydro-thermal', label: 'Hydro Dashboard', end: true },
       // The beneficiaries a station bills. Onboarded here, not borrowed from REIA.
-      { to: '/hydro-thermal/stakeholders', label: 'Stakeholders (Beneficiaries)' },
-      { to: '/hydro-thermal/document-desk', label: 'Documents & KYC Desk' },
+      { to: '/hydro-thermal/stakeholders', label: 'Stakeholders & KYC Desk' },
       { to: '/hydro-thermal/stations', label: 'Stations & Tariff' },
       { to: '/hydro-thermal/ppas', label: 'Beneficiary PPAs & Allocation' },
       { to: '/hydro-thermal/regulatory', label: 'Regulatory Desk' },
@@ -209,8 +214,7 @@ const NAV_INTERNAL = [
     roles: ROLE_GROUPS.THERMAL_ALL,
     links: [
       { to: '/thermal', label: 'Thermal Dashboard', end: true },
-      { to: '/thermal/stakeholders', label: 'Stakeholders (Beneficiaries)' },
-      { to: '/thermal/document-desk', label: 'Documents & KYC Desk' },
+      { to: '/thermal/stakeholders', label: 'Stakeholders & KYC Desk' },
       { to: '/thermal/ppas', label: 'Beneficiary PPAs & Allocation' },
       { to: '/thermal/regulatory', label: 'Regulatory Desk' },
       { to: '/thermal/rea-register', label: 'REA Register & Validation' },
@@ -242,10 +246,12 @@ const NAV_INTERNAL = [
   },
   {
     section: 'Platform',
-    roles: [...new Set([...ROLE_GROUPS.AUDITOR, ...ROLE_GROUPS.MASTERS_READ, ...ROLE_GROUPS.TRADING_ALL, 'REIA_ADMIN', 'TRADING_ADMIN', 'THERMAL_ADMIN', 'IT_SUPER_ADMIN'])],
+    roles: [...new Set([...ROLE_GROUPS.AUDITOR, ...ROLE_GROUPS.MASTERS_READ, ...ROLE_GROUPS.TRADING_ALL, 'REIA_CHECKER', 'TRADING_ADMIN', 'THERMAL_ADMIN', 'IT_SUPER_ADMIN'])],
     links: [
       // SJVN's own officers on the platform; an administrator's page.
-      { to: '/admin/users', label: 'SJVN Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN', 'THERMAL_ADMIN'] },
+      { to: '/admin/users', label: 'SJVN Users', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN'] },
+      { to: '/admin/project-assignments', label: 'Project Assignments', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'MANAGEMENT', 'COMPLIANCE_AUDITOR'] },
+      { to: '/settings/delegations', label: 'Additional Charge & Break-glass', roles: ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'MANAGEMENT', 'COMPLIANCE_AUDITOR'] },
       { to: '/master/portfolio-registry', label: 'Portfolio Registry', roles: ROLE_GROUPS.TRADING_ALL },
       { to: '/masters', label: 'Master Data', roles: ROLE_GROUPS.MASTERS_READ },
       { to: '/audit-logs', label: 'Audit Trail', roles: ROLE_GROUPS.AUDITOR },
@@ -418,6 +424,63 @@ const NavGroup = ({ section, user }) => {
   );
 };
 
+function getPageContext(pathname, branded, entity, portalKind) {
+  if (branded) {
+    const raw = pathname.split('/').filter(Boolean).pop()?.replace(/-/g, ' ') || 'Dashboard';
+    const page = raw.charAt(0).toUpperCase() + raw.slice(1);
+    return {
+      desk: entity?.name || portalKind || 'Counterparty Portal',
+      page
+    };
+  }
+
+  const map = {
+    '/': { desk: 'SJVN Enterprise', page: 'Consolidated Overview' },
+    '/dashboard': { desk: 'SJVN Enterprise', page: 'Main Dashboard' },
+    '/reia': { desk: 'REIA Commercial Desk', page: 'Billing & Settlement' },
+    '/reia/entities': { desk: 'REIA Stakeholders', page: 'Stakeholders & KYC Desk' },
+    '/reia/company-users': { desk: 'REIA Stakeholders', page: 'Company Users' },
+    '/reia/document-desk': { desk: 'REIA Stakeholders', page: 'Documents & KYC Desk' },
+    '/reia/contracts': { desk: 'REIA Contracts', page: 'PPA & PSA Mapping' },
+    '/reia/contract-compliance': { desk: 'REIA Contracts', page: 'Contract Compliance' },
+    '/reia/cerc-compliance': { desk: 'REIA Statutory', page: 'CERC Form-IV & Compliance' },
+    '/reia/energy-data': { desk: 'REIA Energy Desk', page: 'Accounting & Validation' },
+    '/reia/invoices': { desk: 'REIA Invoicing', page: 'Billing & Surcharge' },
+    '/reia/billing-readiness': { desk: 'REIA Invoicing', page: 'Month-Close Board' },
+    '/reia/release-planner': { desk: 'REIA Settlement', page: 'Developer Payout Planner' },
+    '/reia/note-approvals': { desk: 'REIA Commercial', page: 'Notes for Approval' },
+    '/reia/verification': { desk: 'REIA Audit Desk', page: 'Invoice Verification' },
+    '/reia/payment-monitoring': { desk: 'REIA Cash Flow', page: 'Payment Monitoring' },
+    '/reia/payment-security': { desk: 'REIA Risk Desk', page: 'Payment Security (LC / BG)' },
+    '/reia/disputes': { desk: 'REIA Legal Desk', page: 'Dispute Management' },
+    '/reia/reconciliation': { desk: 'REIA Audit Desk', page: 'Periodic Reconciliation' },
+    '/reia/deviation': { desk: 'REIA Grid Desk', page: 'Deviation Settlement (DSM)' },
+    '/reia/seller-ledgers': { desk: 'REIA Finance Desk', page: 'Ledgers & Form 16A TDS' },
+    '/reia/advances': { desk: 'REIA Finance Desk', page: 'Advances & Unapplied Receipts' },
+    '/reia/generation-performance': { desk: 'REIA Technical', page: 'Generation Performance (CUF)' },
+    '/mail': { desk: 'Operational Desk', page: 'Quick Connect' },
+    '/notification-board': { desk: 'Alerts Desk', page: 'System Notifications' },
+  };
+
+  if (map[pathname]) return map[pathname];
+
+  if (pathname.startsWith('/reia')) {
+    const raw = pathname.replace('/reia/', '').replace(/-/g, ' ');
+    const page = raw.charAt(0).toUpperCase() + raw.slice(1);
+    return { desk: 'REIA Commercial Desk', page };
+  }
+  if (pathname.startsWith('/trading')) {
+    return { desk: 'Power Trading Desk', page: 'Market Operations' };
+  }
+  if (pathname.startsWith('/hydro')) {
+    return { desk: 'Hydro Power Desk', page: 'Commercial Scheduling' };
+  }
+  if (pathname.startsWith('/thermal')) {
+    return { desk: 'Thermal Power Desk', page: 'ECR & Busbar' };
+  }
+  return { desk: 'RE Commercial & Trading', page: 'Enterprise Platform' };
+}
+
 export default function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -533,6 +596,7 @@ export default function Layout() {
       ? 'Buyer Portal'
       : 'Trading Portal';
   const logoSrc = branded && entity.logo_url ? `http://localhost:4000${entity.logo_url}` : null;
+  const pageCtx = getPageContext(location.pathname, branded, entity, portalKind);
 
   function handleLogout() {
     logout();
@@ -541,7 +605,9 @@ export default function Layout() {
 
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`}>
+      {/* First focusable element on the page (GIGW / WCAG 2.4.1). */}
+      <SkipLink />
+      <aside className={`sidebar ${isSidebarCollapsed ? 'collapsed' : ''}`} aria-label="Sidebar">
         {branded ? (
           <div className="brand">
             {logoSrc ? (
@@ -563,7 +629,7 @@ export default function Layout() {
             </div>
           </div>
         )}
-        <nav className="nav">
+        <nav className="nav" aria-label="Main navigation">
           {navSections.filter((s) => !s.roles || s.roles.includes(user?.role)).map((section) => (
             <NavGroup key={section.section} section={section} user={user} />
           ))}
@@ -580,13 +646,14 @@ export default function Layout() {
         />
       )}
       <div className="main-col" ref={mainRef}>
+        <GovStrip />
         <header className="topbar">
-          <div className="topbar-left">
+          <div className="topbar-left" style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
             <button 
               className="icon-btn" 
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
               aria-label="Toggle Sidebar"
-              style={{ marginRight: 12, padding: 4 }}
+              style={{ marginRight: 12, padding: 4, flexShrink: 0 }}
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="3" y1="12" x2="21" y2="12"></line>
@@ -594,19 +661,65 @@ export default function Layout() {
                 <line x1="3" y1="18" x2="21" y2="18"></line>
               </svg>
             </button>
-            {!branded && (
-              <img className="topbar-logo" src="/sjvn-logo.png" alt="SJVN" />
+
+            {/* Logo shown ONLY when sidebar is collapsed to eliminate ugly duplication */}
+            {isSidebarCollapsed && (
+              !branded ? (
+                <img className="topbar-logo" src="/sjvn-logo.png" alt="SJVN" style={{ height: 32, width: 'auto', marginRight: 10, flexShrink: 0 }} />
+              ) : logoSrc ? (
+                <img className="topbar-logo" src={logoSrc} alt={entity.name} style={{ height: 32, width: 'auto', marginRight: 10, flexShrink: 0 }} />
+              ) : (
+                <div className="brand-mark" style={{ width: 32, height: 32, fontSize: 11, marginRight: 10, flexShrink: 0 }}>{entity?.name?.[0] ?? '?'}</div>
+              )
             )}
-            <div
-              className="topbar-title"
-              title={branded ? `${entity.name} — ${portalKind}` : 'Integrated Renewable Energy Commercial, Billing, Settlement & Power Trading Management Platform'}
-            >
-              {branded
-                ? `${entity.name} — ${portalKind}`
-                : 'Integrated Renewable Energy Commercial, Billing, Settlement & Power Trading Management Platform'}
+
+            {/* Clean, dynamic breadcrumb instead of repetitive truncated slogan */}
+            <div className="topbar-breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, overflow: 'hidden' }}>
+              <span style={{ 
+                fontSize: 13, 
+                fontWeight: 600, 
+                color: 'var(--text-muted)', 
+                whiteSpace: 'nowrap'
+              }}>
+                {pageCtx.desk}
+              </span>
+              <span style={{ color: 'var(--slate-400)', fontSize: 11, userSelect: 'none' }}>/</span>
+              <span style={{ 
+                fontSize: 12.5, 
+                fontWeight: 700, 
+                background: 'var(--primary-light)', 
+                color: 'var(--primary)', 
+                padding: '3px 9px', 
+                borderRadius: 6,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}>
+                {pageCtx.page}
+              </span>
             </div>
           </div>
           <div className="topbar-actions">
+            <NavLink
+              to="/home"
+              className="link-btn"
+              style={{
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: 'var(--text-muted)',
+                padding: '4px 8px',
+                borderRadius: 6,
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4
+              }}
+              title="View Public Portal Home, Policies &amp; RTI Information"
+            >
+              <span>Portal Home ↗</span>
+            </NavLink>
+            <ActingSwitch />
+            <ThemeToggle />
 
             <button
               className="icon-btn"
@@ -689,7 +802,7 @@ export default function Layout() {
                           <span
                             className="notif-type"
                             style={{
-                              color: isAlert ? '#ef4444' : 'var(--primary, #003366)',
+                              color: isAlert ? 'var(--on-red)' : 'var(--primary, #003366)',
                               fontWeight: 700,
                               fontSize: 13,
                               letterSpacing: '.02em',
@@ -725,7 +838,7 @@ export default function Layout() {
                             style={{
                               fontSize: 13,
                               fontWeight: 600,
-                              color: '#2563eb',
+                              color: 'var(--on-blue)',
                               display: 'inline-flex',
                               alignItems: 'center',
                               gap: 3,
@@ -740,7 +853,7 @@ export default function Layout() {
                       </div>
                     );
                   })}
-                  <div style={{ padding: '8px 14px', background: 'var(--slate-50, #f8fafc)', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+                  <div style={{ padding: '8px 14px', background: 'var(--slate-50, var(--slate-50))', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
                     <button
                       type="button"
                       className="link-btn"
@@ -754,42 +867,64 @@ export default function Layout() {
               )}
             </div>
             <div className="notif-wrap" style={{ position: 'relative' }} ref={profileRef}>
-              <div 
-                className="user-chip" 
+              <button
+                type="button"
+                className="user-chip"
                 style={{ cursor: 'pointer' }}
                 onClick={() => { setShowProfile((s) => !s); setShowNotif(false); }}
                 aria-expanded={showProfile}
+                aria-haspopup="menu"
               >
                 <div className="user-avatar">{user?.name?.[0] ?? '?'}</div>
                 <div className="user-meta">
                   <strong>Welcome, {user?.name}</strong>
-                  <span style={{ color: '#0056b3' }}>
+                  <span style={{ color: 'var(--on-blue)' }}>
                     {user?.linked_entity_id ? `Asset: ${user.linked_entity_id}` : user?.role?.replaceAll('_', ' ')}
                   </span>
                 </div>
-              </div>
+              </button>
               {showProfile && (
-                <div className="notif-dropdown" style={{ right: 0, width: 200, padding: 0 }}>
-                  <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => { navigate('/settings/user-profile'); setShowProfile(false); }}>
+                <div className="notif-dropdown" role="menu" aria-label="Account" style={{ right: 0, width: 220, padding: 0 }}>
+                  <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate('/settings/user-profile'); setShowProfile(false); }}>
                     My Account
-                  </div>
-                  {portfolioPath && (
-                    <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => { navigate(portfolioPath); setShowProfile(false); }}>
-                      Manage Portfolio
-                    </div>
+                  </button>
+                  {!user?.linked_entity_id && (
+                    <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate('/settings/delegations'); setShowProfile(false); }}>
+                      Additional charge &amp; break-glass
+                    </button>
                   )}
-                  <div className="notif-item" style={{ cursor: 'pointer' }} onClick={() => { setShowChangePassword(true); setShowProfile(false); }}>
+                  <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate('/settings/user-profile#privacy'); setShowProfile(false); }}>
+                    Privacy &amp; data rights
+                  </button>
+                  {['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMPLIANCE_AUDITOR'].includes(user?.role) && (
+                    <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate('/settings/privacy-requests'); setShowProfile(false); }}>
+                      Data requests &amp; declarations
+                    </button>
+                  )}
+                  {portfolioPath && (
+                    <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate(portfolioPath); setShowProfile(false); }}>
+                      Manage Portfolio
+                    </button>
+                  )}
+                  <button type="button" role="menuitem" className="notif-item" onClick={() => { navigate('/home'); setShowProfile(false); }}>
+                    Public Portal &amp; Policies
+                  </button>
+                  <button type="button" role="menuitem" className="notif-item" onClick={() => { setShowChangePassword(true); setShowProfile(false); }}>
                     Change Password
-                  </div>
-                  <div className="notif-item" style={{ cursor: 'pointer', borderTop: '1px solid var(--border)', color: 'var(--red)' }} onClick={handleLogout}>
+                  </button>
+                  <button type="button" role="menuitem" className="notif-item" style={{ borderTop: '1px solid var(--border)', color: 'var(--red)' }} onClick={handleLogout}>
                     Log out
-                  </div>
+                  </button>
                 </div>
               )}
             </div>
           </div>
         </header>
-        <main className="content">
+        <main className="content" id="main-content" tabIndex={-1}>
+          <ActingBanner />
+          <ReadOnlyNotice />
+          <LastLoginNotice />
+          <ProjectScopeNote />
           <RouteErrorBoundary key={location.pathname}>
             {/* The boundary nearest a suspending child wins, so putting one
                 here keeps the sidebar and top bar mounted while the next
@@ -799,7 +934,9 @@ export default function Layout() {
             </Suspense>
           </RouteErrorBoundary>
         </main>
+        <GigwFooter compact />
       </div>
+      <IdleTimeout />
       <ChangePasswordModal open={showChangePassword || !!user?.must_change_password} forced={!!user?.must_change_password && !showChangePassword} onClose={() => setShowChangePassword(false)} />
     </div>
   );

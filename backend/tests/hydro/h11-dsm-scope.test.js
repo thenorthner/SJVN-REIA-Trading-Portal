@@ -9,7 +9,7 @@ import { tokenFor, auth, makeContract } from '../helpers/reia.js';
 describe('A solar plant\'s DSM week', () => {
   it('is not edited, billed, linked or deleted by the Hydro or Thermal desk', async () => {
     const solar = makeContract({ project_type: 'Solar', contract_no: `PPA/REIA/QA11-${Math.random().toString(36).slice(2, 8)}` });
-    const made = await request(app).post('/api/deviation').set(auth(tokenFor('SJVN_ADMIN')))
+    const made = await request(app).post('/api/deviation').set(auth(tokenFor('REIA_MAKER')))
       .send({ contract_id: solar.id, period_month: '2026-08', week_no: 19, entry_type: 'PRIMARY', scheduled_mwh: 1000, actual_mwh: 1010, deviation_rate: 300 });
     expect(made.status, JSON.stringify(made.body)).toBe(201);
     for (const role of ['COMMERCIAL', 'THERMAL_USER']) {

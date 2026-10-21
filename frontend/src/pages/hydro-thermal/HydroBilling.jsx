@@ -6,6 +6,7 @@ import { writeRolesFor, pathFor, deskLabel } from '../../lib/stationVertical.js'
 import { parseAllocationPaste, parseEnergyPaste } from './allocationPaste.js';
 import HydroReaRun from './HydroReaRun.jsx';
 import HydroBillSend from './HydroBillSend.jsx';
+import HydroEnergyOverview from '../../components/HydroEnergyOverview.jsx';
 import { ThermalBillForm, ThermalBillSummary } from './ThermalBillForm.jsx';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { fmtDate } from '../../datetime.js';
@@ -432,7 +433,7 @@ function AllocationSheet({ alloc, station, canWrite, onSaved }) {
           <Field label="Allocation sheet" required htmlFor="hb-paste">
             <textarea
               id="hb-paste" rows={10} value={paste} onChange={(e) => setPaste(e.target.value)} required
-              style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, background: '#fff', border: '1px solid var(--slate-300)', padding: 12, borderRadius: 8, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)', resize: 'vertical' }}
+              style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, background: 'var(--surface)', border: '1px solid var(--slate-300)', padding: 12, borderRadius: 8, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)', resize: 'vertical' }}
               placeholder={'CHANDIGARH\t1.714551\nTPDDL\t2.905400\tDELHI\nGoHP*\t34.000000'}
             />
           </Field>
@@ -440,7 +441,7 @@ function AllocationSheet({ alloc, station, canWrite, onSaved }) {
           {paste.trim() && (
             <div style={{
               padding: '10px 12px', marginBottom: 12, borderRadius: 4,
-              background: 'var(--bg-subtle, #f7fafc)', fontVariantNumeric: 'tabular-nums',
+              background: 'var(--bg-subtle, var(--slate-50))', fontVariantNumeric: 'tabular-nums',
             }}>
               <div>
                 Read {parsed.rows.length} beneficiaries, totalling{' '}
@@ -490,8 +491,19 @@ function AllocationSheet({ alloc, station, canWrite, onSaved }) {
  * to reconcile: the deductions must add up to the surplus, or the station would
  * be billing energy it allocated to nobody.
  */
-function RegulationPanel({ ursNr, allocations, deductions, setDeductions, e3, previewLines }) {
+function RegulationPanel({ ursNr, allocations, deductions, setDeductions, e3, previewLines, contractId, month }) {
   const rows = allocations?.rows || [];
+
+  // Who the Regulation of Power Supply register says was regulated this month,
+  // so a deduction can be checked against a case with a notice behind it.
+  const [cases, setCases] = React.useState(null);
+  React.useEffect(() => {
+    if (!contractId || !/^\d{4}-\d{2}$/.test(month || '')) { setCases(null); return; }
+    api.hydroDesk.regulatedInMonth({ contract_id: contractId, month })
+      .then(setCases).catch(() => setCases(null));
+  }, [contractId, month]);
+  const caseOf = (name) => (cases || []).find((c) => c.beneficiary_name.trim().toUpperCase() === String(name).trim().toUpperCase());
+  const unbacked = Object.keys(deductions).filter((name) => cases && !caseOf(name));
 
   // Each beneficiary's entitlement on its own share — the ACTUAL SCHEDULED
   // ENERGY column, which is what a deduction is capped at.
@@ -532,6 +544,12 @@ function RegulationPanel({ ursNr, allocations, deductions, setDeductions, e3, pr
         must add up to the surplus before the bill can be raised. A regulated beneficiary still
         carries its capacity charge — only the energy is withheld.
       </p>
+      {unbacked.length > 0 && (
+        <div className="inline-note" style={{ color: 'var(--amber-strong)' }}>
+          No regulation case covers {unbacked.join(', ')} for this month — record the notice and regulation under
+          Regulation of Power Supply, so the withholding has its notice behind it.
+        </div>
+      )}
 
       <div className="table-wrap">
         <table className="data-table">
@@ -562,6 +580,11 @@ function RegulationPanel({ ursNr, allocations, deductions, setDeductions, e3, pr
                     {r.beneficiary_name}
                     {r.parent_state && (
                       <span style={{ color: 'var(--text-light)', fontSize: 13, marginLeft: 6 }}>· {r.parent_state}</span>
+                    )}
+                    {caseOf(r.beneficiary_name) && (
+                      <div style={{ fontSize: 12.5, color: 'var(--amber-strong)' }}>
+                        Regulated — {caseOf(r.beneficiary_name).case_no}, {caseOf(r.beneficiary_name).regulation_pct}% from {caseOf(r.beneficiary_name).regulate_from}
+                      </div>
                     )}
                   </td>
                   <td style={{ fontVariantNumeric: 'tabular-nums' }}>{Number(r.pct_proportionate).toFixed(6)}%</td>
@@ -641,7 +664,7 @@ function AdjustmentBillSummary({ bill }) {
             { key: 'capacity_charge', header: 'Capacity charge diff.', render: (l) => fmtCurrency(l.capacity_charge) },
             { key: 'energy_charge_total', header: 'Energy charge diff.', render: (l) => fmtCurrency(l.energy_charge_total) },
           ] : [{ key: 'pct_proportionate', header: 'Share %', render: (l) => Number(l.pct_proportionate).toFixed(4) }]),
-          { key: 'total_charges', header: 'Amount', render: (l) => <strong style={{ color: l.total_charges < 0 ? '#15803d' : undefined }}>{fmtCurrency(l.total_charges)}{l.total_charges < 0 ? ' (credit)' : ''}</strong> },
+          { key: 'total_charges', header: 'Amount', render: (l) => <strong style={{ color: l.total_charges < 0 ? 'var(--on-green)' : undefined }}>{fmtCurrency(l.total_charges)}{l.total_charges < 0 ? ' (credit)' : ''}</strong> },
         ]}
         rows={bill.lines || []}
       />
@@ -1134,6 +1157,15 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
         </Card>
       )}
 
+      {!isThermal && stationId && (
+        <HydroEnergyOverview
+          contractId={stationId}
+          showKpis={false}
+          title={`Regional Energy Account (REA) — Generation & Plant Availability for ${station?.station_name || 'Selected Station'}`}
+          subtitle="Certified Table D2 generation in MWh and monthly PAFM % from NRPC"
+        />
+      )}
+
       <Card title={`Bills raised for ${station?.station_name || 'this station'} — process them from here`}>
         <div className="form-grid" style={{ marginBottom: 10, maxWidth: 520 }}>
           <Field label="Station" htmlFor="hb-list-station">
@@ -1296,7 +1328,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
               <textarea
                 id="hb-epaste" rows={8} value={energyPaste}
                 onChange={(e) => setEnergyPaste(e.target.value)}
-                style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, background: '#fff', border: '1px solid var(--slate-300)', padding: 12, borderRadius: 8, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)', resize: 'vertical' }}
+                style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, background: 'var(--surface)', border: '1px solid var(--slate-300)', padding: 12, borderRadius: 8, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)', resize: 'vertical' }}
                 placeholder={'CHANDIGARH\t125.396150\nTPDDL\t212.428759\nGoHP\t1608.549250'}
               />
             </Field>
@@ -1304,7 +1336,7 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
             {energyPaste.trim() && (
               <div style={{
                 padding: '10px 12px', marginBottom: 12, borderRadius: 4,
-                background: 'var(--bg-subtle, #f7fafc)', fontVariantNumeric: 'tabular-nums',
+                background: 'var(--bg-subtle, var(--slate-50))', fontVariantNumeric: 'tabular-nums',
               }}>
                 <div>
                   Read {parsedEnergy.rows.length} beneficiaries, totalling{' '}
@@ -1350,6 +1382,8 @@ export default function HydroBilling({ vertical = 'HYDRO' }) {
           deductions={deductions}
           setDeductions={setDeductions}
           previewLines={preview?.lines}
+          contractId={stationId}
+          month={form.billing_month}
           e3={
             // The month's saleable energy: what the REA scheduled, less the free
             // power to the home state. Entitlements are shares of this.

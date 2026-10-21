@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { Card, Field } from '../../components/ui.jsx';
@@ -218,7 +219,7 @@ export default function ExchangeBidding() {
                 <input className="input" value={form.client_ref_no} onChange={(e) => set('client_ref_no', e.target.value)} required />
               </Field>
             </div>
-            <div style={{ borderTop: '1px dashed #cbd5e1', margin: '8px 0 16px' }} />
+            <div style={{ borderTop: '1px dashed var(--slate-300)', margin: '8px 0 16px' }} />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 12 }}>
               <Field label="Exchange" required>
                 <select className="input" value={form.exchange} onChange={(e) => set('exchange', e.target.value)} required>
@@ -282,13 +283,13 @@ export default function ExchangeBidding() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={(e) => setCsvName(e.target.files?.[0]?.name || '')} />
-                <button type="button" className="btn" style={{ background: '#475569', color: '#fff' }} onClick={handleCsvUpload}>
+                <WriteOnly><button type="button" className="btn" style={{ background: '#475569', color: '#fff' }} onClick={handleCsvUpload}>
                   Upload
-                </button>
-                <button type="button" className="btn btn-link" style={{ color: '#1d4ed8', padding: 0 }} onClick={downloadSample}>
+                </button></WriteOnly>
+                <button type="button" className="btn btn-link" style={{ color: 'var(--on-blue)', padding: 0 }} onClick={downloadSample}>
                   Download Samples
                 </button>
-                {csvName && <span style={{ fontSize: 13.5, color: '#64748b' }}>{csvName}</span>}
+                {csvName && <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{csvName}</span>}
               </div>
             </div>
           </FormSection>
@@ -296,10 +297,10 @@ export default function ExchangeBidding() {
           <FormSection title="Requested Schedule Details">
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', minWidth: 980, borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-                <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                <thead style={{ background: 'var(--slate-50)', borderBottom: '1px solid var(--slate-200)' }}>
                   <tr>
-                    <th colSpan="2" style={{ padding: 8, borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>Date</th>
-                    <th colSpan="2" style={{ padding: 8, borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>Hours</th>
+                    <th colSpan="2" style={{ padding: 8, borderRight: '1px solid var(--slate-200)', textAlign: 'center' }}>Date</th>
+                    <th colSpan="2" style={{ padding: 8, borderRight: '1px solid var(--slate-200)', textAlign: 'center' }}>Hours</th>
                     <th style={{ padding: 8 }}>Price (INR/MWh)</th>
                     <th style={{ padding: 8 }}>Capacity MW *</th>
                     <th style={{ padding: 8 }}>Buy/Sell</th>
@@ -311,19 +312,19 @@ export default function ExchangeBidding() {
                   </tr>
                   <tr style={{ color: 'var(--slate-500)', fontWeight: 'normal', fontSize: 13 }}>
                     <th style={{ padding: '4px 8px' }}>From *</th>
-                    <th style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>To *</th>
+                    <th style={{ padding: '4px 8px', borderRight: '1px solid var(--slate-200)' }}>To *</th>
                     <th style={{ padding: '4px 8px' }}>From *</th>
-                    <th style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>To *</th>
+                    <th style={{ padding: '4px 8px', borderRight: '1px solid var(--slate-200)' }}>To *</th>
                     <th /><th /><th /><th /><th />
                   </tr>
                 </thead>
                 <tbody>
                   {form.schedule_details.map((row, idx) => (
-                    <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <tr key={row.id} style={{ borderBottom: '1px solid var(--slate-100)' }}>
                       <td style={{ padding: 4 }}>
                         <input type="date" className="input" style={{ width: 130, padding: 4 }} value={row.date_from} onChange={(e) => updateRow(idx, 'date_from', e.target.value)} required />
                       </td>
-                      <td style={{ padding: 4, borderRight: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: 4, borderRight: '1px solid var(--slate-200)' }}>
                         <input type="date" className="input" style={{ width: 130, padding: 4 }} value={row.date_to} onChange={(e) => updateRow(idx, 'date_to', e.target.value)} required />
                       </td>
                       <td style={{ padding: 4 }}>
@@ -331,7 +332,7 @@ export default function ExchangeBidding() {
                           {TIME_BLOCKS.map((t) => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </td>
-                      <td style={{ padding: 4, borderRight: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: 4, borderRight: '1px solid var(--slate-200)' }}>
                         <select className="input" style={{ width: 90, padding: 4 }} value={row.time_to} onChange={(e) => updateRow(idx, 'time_to', e.target.value)}>
                           {TIME_BLOCKS.map((t) => <option key={t} value={t}>{t}</option>)}
                         </select>
@@ -349,10 +350,10 @@ export default function ExchangeBidding() {
                         </select>
                       </td>
                       <td style={{ padding: 4 }}>
-                        <button type="button" className="btn btn-sm btn-primary" onClick={() => addRow(row)}>Add Bids</button>
+                        <WriteOnly><button type="button" className="btn btn-sm btn-primary" onClick={() => addRow(row)}>Add Bids</button></WriteOnly>
                       </td>
                       <td style={{ padding: 4, textAlign: 'center', whiteSpace: 'nowrap' }}>
-                        <button type="button" style={{ background: '#fff', border: '1px solid #dc2626', color: '#dc2626', borderRadius: 4, padding: '1px 7px', marginRight: 4 }} onClick={() => addRow()}>+</button>
+                        <button type="button" style={{ background: 'var(--surface)', border: '1px solid #dc2626', color: 'var(--red-strong)', borderRadius: 4, padding: '1px 7px', marginRight: 4 }} onClick={() => addRow()}>+</button>
                         <button type="button" style={{ background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, padding: '1px 7px' }} onClick={() => removeRow(idx)}>×</button>
                       </td>
                     </tr>
@@ -363,10 +364,10 @@ export default function ExchangeBidding() {
           </FormSection>
 
           {error && (
-            <div style={{ color: '#991b1b', marginBottom: 12, background: '#fee2e2', padding: 10, borderRadius: 4, fontSize: 13 }}>{error}</div>
+            <div style={{ color: 'var(--on-red)', marginBottom: 12, background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>{error}</div>
           )}
           {success && (
-            <div style={{ color: '#166534', marginBottom: 12, background: '#dcfce7', padding: 10, borderRadius: 4, fontSize: 13 }}>
+            <div style={{ color: 'var(--on-green)', marginBottom: 12, background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>
               Bidding <strong>{success.id}</strong> submitted for {success.client_name} ({success.product_type} · {success.bidding_type}).
               {success.bid_ids?.length > 0 && (
                 <>
@@ -383,7 +384,7 @@ export default function ExchangeBidding() {
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 12, padding: '16px 0', borderTop: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 12, padding: '16px 0', borderTop: '1px solid var(--slate-200)' }}>
             <button type="button" className="btn btn-outline" onClick={() => navigate(-1)}>Close</button>
             <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Submitting…' : 'Submit'}</button>
           </div>

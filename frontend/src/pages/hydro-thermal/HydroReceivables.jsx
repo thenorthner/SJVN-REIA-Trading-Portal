@@ -115,7 +115,7 @@ export default function HydroReceivables({ vertical = 'HYDRO' }) {
                 { key: 'd1_30', header: '1–30 days', render: (r) => money(r.d1_30) },
                 { key: 'd31_60', header: '31–60', render: (r) => money(r.d31_60) },
                 { key: 'd61_90', header: '61–90', render: (r) => money(r.d61_90) },
-                { key: 'd90_plus', header: '90+', render: (r) => <span style={{ color: r.d90_plus > 0 ? '#b91c1c' : undefined, fontWeight: r.d90_plus > 0 ? 700 : 400 }}>{money(r.d90_plus)}</span> },
+                { key: 'd90_plus', header: '90+', render: (r) => <span style={{ color: r.d90_plus > 0 ? 'var(--red-deep)' : undefined, fontWeight: r.d90_plus > 0 ? 700 : 400 }}>{money(r.d90_plus)}</span> },
                 { key: 'outstanding', header: 'Outstanding', render: (r) => <strong>{money(r.outstanding)}</strong> },
                 { key: 'lps', header: 'LPS accrued', render: (r) => money(r.lps_accrued_not_charged) },
                 { key: 'last', header: 'Last payment', render: (r) => (r.last_payment_date ? `${fmtDate(r.last_payment_date)} · ${fmtCurrency(r.last_payment_amount)}` : 'none') },

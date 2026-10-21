@@ -88,7 +88,7 @@ export default function MyDocuments() {
           </div>
           <div
             role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label="KYC progress"
-            style={{ marginTop: 10, height: 10, borderRadius: 999, background: 'var(--slate-100, #f1f5f9)', overflow: 'hidden' }}
+            style={{ marginTop: 10, height: 10, borderRadius: 999, background: 'var(--slate-100, var(--slate-100))', overflow: 'hidden' }}
           >
             <div style={{ width: `${pct}%`, height: '100%', borderRadius: 999, background: pct === 100 ? '#16a34a' : '#2563eb', transition: 'width .3s' }} />
           </div>
@@ -107,13 +107,13 @@ export default function MyDocuments() {
               <div>
                 <strong style={{ fontSize: 13.5 }}>{r.document_type}</strong>
                 {r.due_date && (
-                  <span style={{ marginLeft: 8, fontSize: 13.5, fontWeight: 600, color: r.overdue ? '#b91c1c' : '#b45309' }}>
+                  <span style={{ marginLeft: 8, fontSize: 13.5, fontWeight: 600, color: r.overdue ? 'var(--red-deep)' : 'var(--amber-strong)' }}>
                     {r.overdue ? 'Was due' : 'Due'} {fmtDate(r.due_date)}
                   </span>
                 )}
                 {r.note && <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 2 }}>{r.note}</div>}
               </div>
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: '#92400e', background: '#fef3c7', padding: '4px 10px', borderRadius: 6 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--on-amber)', background: 'var(--t-amber-100)', padding: '4px 10px', borderRadius: 6 }}>
                 Submit physical copy to SJVN REIA desk
               </span>
             </div>
@@ -128,11 +128,11 @@ export default function MyDocuments() {
               <div style={{ minWidth: 0, flex: 1 }}>
                 <strong style={{ fontSize: 13.5, marginRight: 8 }}>{d.title}</strong>
                 <Badge status="REJECTED" />
-                <div style={{ fontSize: 13.5, color: '#b91c1c', marginTop: 2 }}>
+                <div style={{ fontSize: 13.5, color: 'var(--red-deep)', marginTop: 2 }}>
                   <strong>SJVN's remark:</strong> {d.verification_notes || 'No remark was given.'}
                 </div>
               </div>
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: '#b91c1c', background: '#fee2e2', padding: '4px 10px', borderRadius: 6 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--red-deep)', background: 'var(--t-red-100)', padding: '4px 10px', borderRadius: 6 }}>
                 Submit revised physical copy to SJVN
               </span>
             </div>
@@ -143,7 +143,7 @@ export default function MyDocuments() {
                 <strong style={{ fontSize: 13.5 }}>{d.title}</strong>
                 <div style={{ marginTop: 2 }}><ExpiryTag doc={d} /></div>
               </div>
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: '#92400e', background: '#fef3c7', padding: '4px 10px', borderRadius: 6 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--on-amber)', background: 'var(--t-amber-100)', padding: '4px 10px', borderRadius: 6 }}>
                 Submit renewed copy to SJVN
               </span>
             </div>

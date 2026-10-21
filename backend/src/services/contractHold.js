@@ -43,7 +43,7 @@ export function setManualHold(contractId, { on, reason, user, req = null }) {
   db.prepare(`UPDATE contracts SET on_hold = ?, hold_reason = ?, hold_set_by = ?, hold_set_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`)
     .run(on ? 1 : 0, on ? why : null, on ? user.name : null, c.id);
   logAudit({ req, user, action: on ? 'CONTRACT_HOLD' : 'CONTRACT_HOLD_RELEASED', module: 'REIA', entityType: 'contract', entityId: c.id, reason: why });
-  for (const role of ['REIA_USER', 'REIA_ADMIN', 'FINANCE_USER', 'MANAGEMENT']) {
+  for (const role of ['REIA_MAKER', 'REIA_CHECKER', 'FINANCE_USER', 'MANAGEMENT']) {
     pushNotification({ role, type: 'CONTRACT_HOLD', message: `${c.contract_no} ${on ? 'put on hold' : 'released from hold'} by ${user.name}: ${why}` });
   }
   return holdStatus(c.id);

@@ -217,7 +217,7 @@ export default function HydroAdjustmentBills({ vertical = 'HYDRO' }) {
                   { key: 'beneficiary_name', header: 'Beneficiary' },
                   { key: 'capacity_differential', header: 'Capacity charge', render: (b) => fmtCurrency(b.capacity_differential) },
                   { key: 'energy_differential', header: 'Energy charge', render: (b) => fmtCurrency(b.energy_differential) },
-                  { key: 'differential', header: 'Arrear', render: (b) => <strong style={{ color: b.differential < 0 ? '#15803d' : undefined }}>{fmtCurrency(b.differential)}{b.differential < 0 ? ' (credit)' : ''}</strong> },
+                  { key: 'differential', header: 'Arrear', render: (b) => <strong style={{ color: b.differential < 0 ? 'var(--on-green-2)' : undefined }}>{fmtCurrency(b.differential)}{b.differential < 0 ? ' (credit)' : ''}</strong> },
                 ]}
                 rows={preview.beneficiaries.map((b) => ({ ...b, id: b.beneficiary_name }))}
               />

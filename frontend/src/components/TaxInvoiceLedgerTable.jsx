@@ -6,7 +6,7 @@ export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
   
   const columns = [
     { key: 'deliveryDate', label: 'Delivery Date' },
-    { key: 'energyType', label: 'Energy Type', render: r => <span style={{ fontWeight: 'bold', color: marketSegment === 'GTAM' || marketSegment === 'REC' ? '#27ae60' : '#333' }}>{r.energyType || marketSegment}</span> },
+    { key: 'energyType', label: 'Energy Type', render: r => <span style={{ fontWeight: 'bold', color: marketSegment === 'GTAM' || marketSegment === 'REC' ? '#27ae60' : 'var(--slate-700)' }}>{r.energyType || marketSegment}</span> },
     { key: 'totalObligation', label: isCert ? 'Cert Qty' : 'Volume (MWh)', render: r => <strong>{fmtNumber(r.totalObligation || r.energyMUs)}</strong> },
     { key: 'totalAmount', label: 'Gross Revenue (₹)', render: r => <span>{fmtNumber(r.totalAmount || r.grossValue)}</span> },
     { key: 'margin', label: 'Trading Margin', render: r => <span>{fmtNumber(r.margin)}</span> },
@@ -18,10 +18,10 @@ export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
         {fmtNumber(r.grandTotal)}
       </div>
     )},
-    { key: 'deduction', label: 'Deductions', render: r => <span style={{ color: '#e74c3c' }}>{fmtNumber(r.deduction)}</span> },
+    { key: 'deduction', label: 'Deductions', render: r => <span style={{ color: 'var(--on-red)' }}>{fmtNumber(r.deduction)}</span> },
     { key: 'netTotal', label: 'Net Payout (₹)', render: r => <span style={{ color: '#27ae60', fontWeight: 'bold', fontSize: 15 }}>{fmtNumber(r.netTotal || r.netAmount)}</span> },
     { key: 'sapStatus', label: 'SAP FI Status', render: r => (
-      <span style={{ fontSize: 13, background: r.sapStatus === 'POSTED' ? '#e8f5e9' : '#fff3e0', color: r.sapStatus === 'POSTED' ? '#2e7d32' : '#f57c00', border: `1px solid ${r.sapStatus === 'POSTED' ? '#c8e6c9' : '#ffe0b2'}`, padding: '2px 6px', borderRadius: 12 }}>
+      <span style={{ fontSize: 13, background: r.sapStatus === 'POSTED' ? 'var(--t-green-50)' : 'var(--t-amber-50)', color: r.sapStatus === 'POSTED' ? 'var(--on-green)' : '#f57c00', border: `1px solid ${r.sapStatus === 'POSTED' ? 'var(--t-green-100)' : 'var(--t-amber-100)'}`, padding: '2px 6px', borderRadius: 12 }}>
         {r.sapStatus === 'POSTED' ? 'Posted' : 'Pending'}
       </span>
     )},
@@ -45,10 +45,10 @@ export default function TaxInvoiceLedgerTable({ records, marketSegment }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, padding: '10px 15px', background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, padding: '10px 15px', background: 'var(--slate-50)', border: '1px solid var(--slate-100)', borderRadius: 6 }}>
         <div>
           <strong style={{ fontSize: 14 }}>Commercial Tax Ledger</strong>
-          <div style={{ fontSize: 13.5, color: '#6c757d' }}>{marketSegment} Segment • Standardized Formula: (Gross + Margin + GST) - Deductions - TDS</div>
+          <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{marketSegment} Segment • Standardized Formula: (Gross + Margin + GST) - Deductions - TDS</div>
         </div>
         <button onClick={handleSapPost} className="btn btn-primary" style={{ background: '#f39c12', borderColor: '#e67e22', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 'bold' }}>
           <span></span> Generate SAP Journal Entry

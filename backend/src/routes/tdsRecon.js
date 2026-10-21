@@ -7,7 +7,8 @@ import { tdsRecon, markTdsRecon } from '../services/tdsRecon.js';
 const router = Router();
 router.use(requireAuth);
 const READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE, 'COMPLIANCE_AUDITOR'])];
-const WRITE = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'FINANCE_USER'];
+// Finance marks TDS (Target #2 Phase B: the administrators transact nothing).
+const WRITE = ['FINANCE_USER'];
 const fyOf = (q) => (q.fy && /^\d{4}-\d{2}$/.test(q.fy) ? q.fy : null);
 
 router.get('/', requireRole(...READ), (req, res) => res.json(tdsRecon({ fy: fyOf(req.query) })));

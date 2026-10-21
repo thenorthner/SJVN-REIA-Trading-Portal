@@ -176,7 +176,7 @@ export default function ThermalCapacityRecoveryGate3D({
             <div style={{ fontSize: 19, fontWeight: 700, color: '#f8fafc', fontVariantNumeric: 'tabular-nums' }}>
               {fmtCurrency(annualAfc)}
             </div>
-            <div style={{ fontSize: 12, color: '#78716c', marginTop: 3 }}>
+            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 3 }}>
               Monthly Base: {fmtCurrency(baseMonthlyCapacity)}
             </div>
           </div>
@@ -224,7 +224,7 @@ export default function ThermalCapacityRecoveryGate3D({
           onClick={() => setActiveStage(activeStage === 3 ? null : 3)}
           style={{
             background: 'linear-gradient(180deg, rgba(32, 17, 30, 0.8) 0%, rgba(18, 9, 18, 0.95) 100%)',
-            border: `1.5px solid ${activeStage === 3 ? (hasIncentive ? '#4ade80' : '#f87171') : 'rgba(74, 222, 128, 0.3)'}`,
+            border: `1.5px solid ${activeStage === 3 ? (hasIncentive ? 'var(--t-green-100)' : '#f87171') : 'rgba(74, 222, 128, 0.3)'}`,
             borderRadius: 12,
             padding: '16px 18px',
             position: 'relative',
@@ -326,7 +326,7 @@ export default function ThermalCapacityRecoveryGate3D({
           {activeStage === 3 && (
             <div>
               <strong style={{ color: '#4ade80' }}>Capacity Recovery Formula:</strong>
-              <div style={{ fontFamily: 'monospace', background: 'rgba(0,0,0,0.4)', padding: '6px 10px', borderRadius: 4, marginTop: 4, color: '#f43f5e' }}>
+              <div style={{ fontFamily: 'monospace', background: 'rgba(0,0,0,0.4)', padding: '6px 10px', borderRadius: 4, marginTop: 4, color: 'var(--on-red)' }}>
                 Capacity Charge = AFC × (Days in Month / Days in Year) × (PAFM / NAPAF) [capped at 1.0 for base AFC]
               </div>
             </div>

@@ -144,24 +144,24 @@ export default function EscertBidEntry() {
     <div style={{ padding: 20, maxWidth: 960, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ fontSize: 13.5, color: '#64748b' }}>Exchange · Certificates</div>
+          <div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>Exchange · Certificates</div>
           <h1 style={{ margin: 0, fontSize: 22 }}>ECERTS Bid Entry</h1>
         </div>
         <div style={{ display: 'flex', gap: 16, fontSize: 13 }}>
           <div>
-            <span style={{ color: '#64748b' }}>Registry available · </span>
+            <span style={{ color: 'var(--slate-500)' }}>Registry available · </span>
             <strong>{fmtNumber(meta.registry_available, 0)}</strong> ESCerts
           </div>
           {meta.price_band?.floor != null && (
             <div>
-              <span style={{ color: '#64748b' }}>Floor · </span>
+              <span style={{ color: 'var(--slate-500)' }}>Floor · </span>
               <strong>₹{meta.price_band.floor}</strong>
               {meta.price_band.forbearance != null && (
                 <> · Ceiling <strong>₹{meta.price_band.forbearance}</strong></>
               )}
             </div>
           )}
-          <Link to="/trading/rec/hub" style={{ color: '#1d4ed8' }}>Certificate hub →</Link>
+          <Link to="/trading/rec/hub" style={{ color: 'var(--on-blue)' }}>Certificate hub →</Link>
         </div>
       </div>
 
@@ -176,7 +176,7 @@ export default function EscertBidEntry() {
               </select>
             </Field>
             <Field label="Entity Id" required>
-              <input className="input" value={form.entity_id} disabled placeholder="client id" style={{ background: '#f1f5f9' }} />
+              <input className="input" value={form.entity_id} disabled placeholder="client id" style={{ background: 'var(--slate-100)' }} />
             </Field>
             <Field label="Exchange" required>
               <select className="input" value={form.exchange} onChange={(e) => set('exchange', e.target.value)} required>
@@ -195,8 +195,8 @@ export default function EscertBidEntry() {
             </Field>
             <Field label="Price (Rs./Certificate)" required>
               <input type="number" step="any" min="0" className="input" value={form.price} onChange={(e) => set('price', e.target.value)} required />
-              {priceError && <div style={{ marginTop: 4, fontSize: 13.5, color: '#991b1b', fontWeight: 600 }}>{priceError}</div>}
-              {!priceError && priceNote && <div style={{ marginTop: 4, fontSize: 13.5, color: '#64748b' }}>{priceNote}</div>}
+              {priceError && <div style={{ marginTop: 4, fontSize: 13.5, color: 'var(--on-red)', fontWeight: 600 }}>{priceError}</div>}
+              {!priceError && priceNote && <div style={{ marginTop: 4, fontSize: 13.5, color: 'var(--slate-500)' }}>{priceNote}</div>}
             </Field>
             <Field label="Quantity (Nos.)" required>
               <input type="number" min="1" step="1" className="input" value={form.quantity} onChange={(e) => set('quantity', e.target.value)} required />
@@ -214,21 +214,21 @@ export default function EscertBidEntry() {
           </div>
 
           {notional != null && !priceError && (
-            <div style={{ marginTop: 14, padding: '10px 12px', background: '#f8fafc', borderRadius: 6, fontSize: 13 }}>
+            <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--slate-50)', borderRadius: 6, fontSize: 13 }}>
               Estimated notional · <strong>₹{fmtNumber(notional, 2)}</strong>
               {form.side === 'Sell' && (
-                <span style={{ color: '#64748b' }}> · after trade registry ≈ {Math.max(0, Number(meta.registry_available) - Number(form.quantity || 0))} left</span>
+                <span style={{ color: 'var(--slate-500)' }}> · after trade registry ≈ {Math.max(0, Number(meta.registry_available) - Number(form.quantity || 0))} left</span>
               )}
             </div>
           )}
 
-          <p style={{ fontSize: 13.5, color: '#64748b', marginTop: 14 }}>
+          <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 14 }}>
             * 1 Certificate is equivalent to 1 Metric Ton of Oil Equivalent (MToE)
           </p>
 
-          {error && <div style={{ color: '#991b1b', background: '#fee2e2', padding: 10, borderRadius: 4, fontSize: 13, marginBottom: 10 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13, marginBottom: 10 }}>{error}</div>}
           {success && (
-            <div style={{ color: '#166534', background: '#dcfce7', padding: 10, borderRadius: 4, fontSize: 13, marginBottom: 10 }}>
+            <div style={{ color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13, marginBottom: 10 }}>
               Order <strong>{success.id}</strong> submitted — {success.side} {success.quantity} @ ₹{success.price} on {success.exchange}.
             </div>
           )}
@@ -248,7 +248,7 @@ export default function EscertBidEntry() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ background: '#f1f5f9' }}>
+              <tr style={{ background: 'var(--slate-100)' }}>
                 {['Order', 'Entity', 'Exchange', 'Type', 'Side', 'Qty', 'Price', 'Notional', 'Status', 'Created'].map((h) => (
                   <th key={h} style={{ padding: '8px 10px', textAlign: 'left' }}>{h}</th>
                 ))}
@@ -256,9 +256,9 @@ export default function EscertBidEntry() {
             </thead>
             <tbody>
               {orders.length === 0 ? (
-                <tr><td colSpan={10} style={{ padding: 16, color: '#64748b', textAlign: 'center' }}>No orders yet.</td></tr>
+                <tr><td colSpan={10} style={{ padding: 16, color: 'var(--slate-500)', textAlign: 'center' }}>No orders yet.</td></tr>
               ) : orders.slice(0, 15).map((o) => (
-                <tr key={o.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                <tr key={o.id} style={{ borderBottom: '1px solid var(--slate-200)' }}>
                   <td style={{ padding: '8px 10px', fontFamily: 'monospace' }}>{o.id}</td>
                   <td style={{ padding: '8px 10px' }}>{o.entity_name}</td>
                   <td style={{ padding: '8px 10px' }}>{o.exchange}</td>
@@ -281,13 +281,13 @@ export default function EscertBidEntry() {
           position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 50,
           display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
         }}>
-          <div style={{ background: '#fff', borderRadius: 8, padding: 24, maxWidth: 420, width: '100%' }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 8, padding: 24, maxWidth: 420, width: '100%' }}>
             <h3 style={{ marginTop: 0 }}>Confirm ESCert bid</h3>
             <p style={{ fontSize: 14, lineHeight: 1.5 }}>
               {form.side} <strong>{form.quantity}</strong> × {form.rec_type} @ <strong>₹{form.price}</strong> on {form.exchange}
               {notional != null && <> (₹{fmtNumber(notional, 2)})</>}.
             </p>
-            <p style={{ fontSize: 13.5, color: '#64748b' }}>{form.entity_name} · {form.portfolio_code}</p>
+            <p style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{form.entity_name} · {form.portfolio_code}</p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
               <button type="button" className="btn btn-outline" onClick={() => setConfirmOpen(false)} disabled={busy}>Cancel</button>
               <button type="button" className="btn btn-primary" onClick={confirmSubmit} disabled={busy}>

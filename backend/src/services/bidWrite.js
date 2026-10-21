@@ -24,6 +24,14 @@ export const rollUp = (blocks, product) => {
   return { quantum_mw: mw, price_per_unit: mw > 0 ? priceWeighted / mw : 0, exposure };
 };
 
+/** 'Buy'/'buy'/'BUYER' -> 'BUY', 'Sell'... -> 'SELL', anything else -> null (side unknown). */
+export function normaliseBidType(v) {
+  const t = String(v ?? '').trim().toUpperCase();
+  if (t.startsWith('BUY')) return 'BUY';
+  if (t.startsWith('SELL')) return 'SELL';
+  return null;
+}
+
 const LIVE_BID_STATUSES = ['SUBMITTED', 'CLEARED', 'PARTIALLY_CLEARED'];
 
 export const utilizedExposure = (clientId) => db.prepare(`
@@ -51,15 +59,15 @@ export function insertBid(header, blocks, actorId) {
     INSERT INTO bids (
       id, client_id, exchange, product, bid_date, delivery_date, gate_closure_time,
       quantum_mw, price_per_unit, bid_on, contract_id, carry_forward_from, ocf_leg, premium_discount,
-      is_no_bid, approval_status, status, created_by, source_kind, source_id
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING', 'DRAFT', ?, ?, ?)
+      is_no_bid, approval_status, status, created_by, source_kind, source_id, bid_type
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'PENDING', 'DRAFT', ?, ?, ?, ?)
   `).run(
     bidId, header.client_id, header.exchange, header.product, header.bid_date, header.delivery_date,
     header.gate_closure_time || null, roll.quantum_mw, roll.price_per_unit,
     header.bid_on === 'PERIPHERY' ? 'PERIPHERY' : 'EX-BUS',
     header.contract_id || null,
     header.carry_forward_from || null, header.ocf_leg || 0, header.premium_discount || 0, actorId,
-    sourceKind, sourceId,
+    sourceKind, sourceId, normaliseBidType(header.type ?? header.bid_type),
   );
 
   const insertBlock = db.prepare(

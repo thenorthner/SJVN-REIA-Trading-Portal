@@ -13,7 +13,7 @@ function inrCompact(v) {
 function StatCard({ label, value, sub, tone }) {
   const color = tone === 'good' ? '#047857' : tone === 'bad' ? 'var(--red-deep)' : 'var(--slate-900)';
   return (
-    <div style={{ background: '#fff', border: '1px solid var(--slate-200)', borderRadius: 8, padding: '14px 16px' }}>
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--slate-200)', borderRadius: 8, padding: '14px 16px' }}>
       <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none', letterSpacing: 0.4 }}>{label}</div>
       <div style={{ fontSize: 20, fontWeight: 700, color, marginTop: 4 }}>{value}</div>
       {sub && <div style={{ fontSize: 13.5, color: 'var(--text-subtle)', marginTop: 2 }}>{sub}</div>}
@@ -122,18 +122,18 @@ export default function Reports() {
     { key: 'sales_billed', header: 'Sales Billed (S→B)', render: (r) => fmtCurrency(r.sales_billed) },
     { key: 'purchase_billed', header: 'Purchases (Dev→SJVN)', render: (r) => fmtCurrency(r.purchase_billed) },
     { key: 'gross_margin', header: 'Gross Margin', render: (r) => (
-      <span style={{ color: r.gross_margin >= 0 ? '#047857' : 'var(--red-deep)', fontWeight: 600 }}>{fmtCurrency(r.gross_margin)}</span>
+      <span style={{ color: r.gross_margin >= 0 ? 'var(--on-green)' : 'var(--red-deep)', fontWeight: 600 }}>{fmtCurrency(r.gross_margin)}</span>
     )},
     { key: 'trading_margin', header: 'Trading Margin', render: (r) => fmtCurrency(r.trading_margin) },
     { key: 'rebate_saved', header: 'Rebate Saved', render: (r) => fmtCurrency(r.rebate_saved) },
     { key: 'lps_receivable', header: 'LPS Recv.', render: (r) => fmtCurrency(r.lps_receivable) },
     { key: 'net_profit', header: 'Net Profit', render: (r) => (
-      <span style={{ color: r.net_profit >= 0 ? '#047857' : 'var(--red-deep)', fontWeight: 700 }}>{fmtCurrency(r.net_profit)}</span>
+      <span style={{ color: r.net_profit >= 0 ? 'var(--on-green)' : 'var(--red-deep)', fontWeight: 700 }}>{fmtCurrency(r.net_profit)}</span>
     )},
     { key: 'collected', header: 'Collected', render: (r) => fmtCurrency(r.collected) },
     { key: 'paid_out', header: 'Paid Out', render: (r) => fmtCurrency(r.paid_out) },
     { key: 'net_cash_flow', header: 'Net Cash Flow', render: (r) => (
-      <span style={{ color: (r.net_cash_flow ?? 0) >= 0 ? '#047857' : 'var(--red-deep)', fontWeight: 600 }}>
+      <span style={{ color: (r.net_cash_flow ?? 0) >= 0 ? 'var(--on-green)' : 'var(--red-deep)', fontWeight: 600 }}>
         {fmtCurrency(r.net_cash_flow ?? (r.collected - r.paid_out))}
       </span>
     )},
@@ -224,12 +224,12 @@ export default function Reports() {
       </Card>
 
       {error && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: 'var(--red-deep)', padding: '10px 14px', borderRadius: 8, marginBottom: 12 }}>
+        <div style={{ background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', color: 'var(--red-deep)', padding: '10px 14px', borderRadius: 8, marginBottom: 12 }}>
           {error}
         </div>
       )}
       {success && !error && (
-        <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', padding: '10px 14px', borderRadius: 8, marginBottom: 12 }}>
+        <div style={{ background: 'var(--t-green-50)', border: '1px solid var(--t-green-100)', color: 'var(--on-green)', padding: '10px 14px', borderRadius: 8, marginBottom: 12 }}>
           {success}
         </div>
       )}

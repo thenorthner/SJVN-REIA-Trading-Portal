@@ -391,7 +391,7 @@ export default function Reconciliation() {
         <Card title="Auto-match trend (monthly)">
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 13 }}>
             {stats.trend.map((t) => (
-              <span key={t.period} style={{ padding: '6px 10px', background: 'var(--bg-main, #f3f4f6)', borderRadius: 6 }}>
+              <span key={t.period} style={{ padding: '6px 10px', background: 'var(--bg-main, var(--slate-100))', borderRadius: 6 }}>
                 {t.period}: <strong>{Number(t.auto_match_pct || 0).toFixed(0)}%</strong>
               </span>
             ))}
@@ -502,9 +502,9 @@ export default function Reconciliation() {
                 padding: '12px 16px',
                 borderRadius: 8,
                 marginBottom: 16,
-                background: ackFeedback.type === 'success' ? '#ecfdf5' : ackFeedback.type === 'danger' ? '#fef2f2' : '#eff6ff',
+                background: ackFeedback.type === 'success' ? 'var(--t-green-50)' : ackFeedback.type === 'danger' ? 'var(--t-red-50)' : 'var(--t-blue-50)',
                 border: `1px solid ${ackFeedback.type === 'success' ? '#10b981' : ackFeedback.type === 'danger' ? '#ef4444' : '#3b82f6'}`,
-                color: ackFeedback.type === 'success' ? '#065f46' : ackFeedback.type === 'danger' ? '#991b1b' : '#1e40af',
+                color: ackFeedback.type === 'success' ? 'var(--on-green)' : ackFeedback.type === 'danger' ? 'var(--on-red)' : 'var(--on-blue)',
                 fontSize: 13,
                 lineHeight: 1.5,
               }}>
@@ -528,7 +528,7 @@ export default function Reconciliation() {
             <div style={{
               marginTop: 16,
               padding: 16,
-              background: 'var(--surface-hover, #f8fafc)',
+              background: 'var(--surface-hover, var(--slate-50))',
               borderRadius: 8,
               border: '1px solid var(--border)',
             }}>
@@ -553,15 +553,15 @@ export default function Reconciliation() {
                 {/* SJVN Desk Card */}
                 <div style={{
                   padding: 12,
-                  background: detail.sjvn_ack_at ? '#ecfdf5' : '#ffffff',
-                  border: `1px solid ${detail.sjvn_ack_at ? '#a7f3d0' : 'var(--border)'}`,
+                  background: detail.sjvn_ack_at ? 'var(--t-green-50)' : 'var(--surface)',
+                  border: `1px solid ${detail.sjvn_ack_at ? 'var(--t-green-100)' : 'var(--border)'}`,
                   borderRadius: 6,
                 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'none', color: detail.sjvn_ack_at ? '#065f46' : 'var(--text-muted)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'none', color: detail.sjvn_ack_at ? 'var(--on-green)' : 'var(--text-muted)' }}>
                     SJVN REIA Desk Sign-Off
                   </div>
                   {detail.sjvn_ack_at ? (
-                    <div style={{ marginTop: 4, fontSize: 13, color: '#065f46' }}>
+                    <div style={{ marginTop: 4, fontSize: 13, color: 'var(--on-green)' }}>
                       <div style={{ fontWeight: 600 }}>Acknowledged by {detail.sjvn_ack_by}</div>
                       <div style={{ fontSize: 13, opacity: 0.8 }}>on {fmtDateTime(detail.sjvn_ack_at)}</div>
                     </div>
@@ -575,15 +575,15 @@ export default function Reconciliation() {
                 {/* Counterparty Card */}
                 <div style={{
                   padding: 12,
-                  background: detail.counterparty_ack_at ? '#ecfdf5' : '#ffffff',
-                  border: `1px solid ${detail.counterparty_ack_at ? '#a7f3d0' : 'var(--border)'}`,
+                  background: detail.counterparty_ack_at ? 'var(--t-green-50)' : 'var(--surface)',
+                  border: `1px solid ${detail.counterparty_ack_at ? 'var(--t-green-100)' : 'var(--border)'}`,
                   borderRadius: 6,
                 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'none', color: detail.counterparty_ack_at ? '#065f46' : 'var(--text-muted)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, textTransform: 'none', color: detail.counterparty_ack_at ? 'var(--on-green)' : 'var(--text-muted)' }}>
                     Counterparty (Buyer/Seller) Sign-Off
                   </div>
                   {detail.counterparty_ack_at ? (
-                    <div style={{ marginTop: 4, fontSize: 13, color: '#065f46' }}>
+                    <div style={{ marginTop: 4, fontSize: 13, color: 'var(--on-green)' }}>
                       <div style={{ fontWeight: 600 }}>Acknowledged by {detail.counterparty_ack_by}</div>
                       <div style={{ fontSize: 13, opacity: 0.8 }}>on {fmtDateTime(detail.counterparty_ack_at)}</div>
                     </div>
@@ -596,7 +596,7 @@ export default function Reconciliation() {
               </div>
 
               {detail.discrepancy_notes && (
-                <div style={{ marginTop: 10, fontSize: 13.5, color: 'var(--text-muted)', fontStyle: 'italic', background: '#ffffff', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--border)' }}>
+                <div style={{ marginTop: 10, fontSize: 13.5, color: 'var(--text-muted)', fontStyle: 'italic', background: 'var(--surface)', padding: '6px 10px', borderRadius: 4, border: '1px solid var(--border)' }}>
                   <strong>Notes / Remarks:</strong> {detail.discrepancy_notes}
                 </div>
               )}
@@ -630,7 +630,7 @@ export default function Reconciliation() {
                           <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRaiseDispute(it.id)}>→ Dispute</button>
                         </div>
                       )}
-                      {it.dispute_id && <div style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>Linked dispute</div>}
+                      {it.dispute_id && <div style={{ fontSize: 13, color: 'var(--on-red)', fontWeight: 600 }}>Linked dispute</div>}
                     </td>
                   </tr>
                 ))}
@@ -726,12 +726,12 @@ export default function Reconciliation() {
           {ackModal.decision === 'AGREE' ? (
             <div>
               <div style={{
-                background: '#ecfdf5',
-                border: '1px solid #a7f3d0',
+                background: 'var(--t-green-50)',
+                border: '1px solid var(--t-green-100)',
                 borderRadius: 8,
                 padding: 14,
                 marginBottom: 16,
-                color: '#065f46',
+                color: 'var(--on-green)',
                 fontSize: 13,
                 lineHeight: 1.5,
               }}>
@@ -787,12 +787,12 @@ export default function Reconciliation() {
           ) : (
             <div>
               <div style={{
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
+                background: 'var(--t-red-50)',
+                border: '1px solid var(--t-red-line)',
                 borderRadius: 8,
                 padding: 14,
                 marginBottom: 16,
-                color: '#991b1b',
+                color: 'var(--on-red)',
                 fontSize: 13,
                 lineHeight: 1.5,
               }}>

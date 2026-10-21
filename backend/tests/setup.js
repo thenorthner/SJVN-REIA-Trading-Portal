@@ -17,6 +17,8 @@ process.env.SJVN_DESK_DOC_DIR = path.join(dir, 'desk-docs');
 process.env.SJVN_DSA_DIR = path.join(dir, 'dsa-statements');
 // Attachments to in-portal mail, likewise.
 process.env.SJVN_MAIL_DIR = path.join(dir, 'mail-attachments');
+// A trading client's offline-signed statement, attached by the desk.
+process.env.SJVN_RECON_DOC_DIR = path.join(dir, 'recon-offline');
 process.env.JWT_SECRET = 'test-secret';
 process.env.SMTP_HOST = '';
 process.env.SMTP_USER = '';
@@ -89,3 +91,15 @@ beforeEach(({ task, onTestFailed }) => {
     console.error(`[flake-probe] "${task.name}" failed in pid ${process.pid}; its last ${recent.length} request(s):\n${lines.join('\n')}`);
   });
 });
+
+// ── Statutory declaration ─────────────────────────────────────────────────────
+// The UI sends X-Statutory-Declaration on every critical submission once the
+// user ticks the declaration, and the server refuses one without it. The suites
+// written before that act as a user who has ticked it; a test of the refusal
+// itself sets the header to '' (see tests/gigwCompliance.test.js).
+const originalEnd = SupertestTest.prototype.end;
+SupertestTest.prototype.end = function endWithDeclaration(fn) {
+  const has = Object.keys(this._header || this.header || {}).some((k) => k.toLowerCase() === 'x-statutory-declaration');
+  if (!has) this.set('X-Statutory-Declaration', 'SJVN-2026-V1');
+  return originalEnd.call(this, fn);
+};

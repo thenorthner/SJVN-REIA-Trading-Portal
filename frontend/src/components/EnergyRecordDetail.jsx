@@ -1,5 +1,6 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useNavigate } from 'react-router-dom';
 import api from '../api/client.js';
 import { Badge, Field, fmtNumber } from './ui.jsx';
 import { PreviewModal } from './DocumentManager.jsx';
@@ -39,6 +40,20 @@ function Summary({ d, run, onPreview, setError }) {
   const [file, setFile] = useState(null);
   const [kind, setKind] = useState(/REA|RPC|RLDC|SLDC/i.test(d.source || '') ? 'REA_COPY' : 'JMR_SIGNED');
   const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
+  // A counterparty asks SJVN's REIA desk for the paper through Quick Connect:
+  // the message opens pre-written, addressed to the desk, and goes when they send it.
+  async function askForSource() {
+    let to = [];
+    try {
+      const people = await api.mail.directory('');
+      to = people.filter((p) => ['REIA_MAKER', 'REIA_CHECKER'].includes(p.role) && p.company === 'SJVN');
+    } catch { /* the composer lets them pick someone */ }
+    const period = d.period_month;
+    const subject = `Source document for ${period}${d.contract_no ? ` — ${d.contract_no}` : ''}`;
+    const bodyHtml = `<p>Dear Sir/Madam,</p><p>Please share the source document (signed Joint Meter Reading or Regional/State Energy Account) for the energy recorded for <strong>${period}</strong>${d.contract_no ? ` under contract <strong>${d.contract_no}</strong>` : ''}, so that we can confirm the figure.</p><p>Regards</p>`;
+    navigate('/mail', { state: { compose: { title: 'Ask SJVN for the source document', to, subject, bodyHtml } } });
+  }
   const item = (label, value) => (
     <div className="detail-item"><span className="detail-label">{label}</span><span className="detail-value">{value}</span></div>
   );
@@ -87,7 +102,7 @@ function Summary({ d, run, onPreview, setError }) {
             {item('Provisional', mwh(d.comparison.provisional_mwh))}
             {item('Final', mwh(d.comparison.final_mwh))}
             {item('Difference', (
-              <strong style={{ color: d.comparison.difference_mwh < 0 ? '#b91c1c' : d.comparison.difference_mwh > 0 ? '#15803d' : 'inherit' }}>
+              <strong style={{ color: d.comparison.difference_mwh < 0 ? 'var(--on-red)' : d.comparison.difference_mwh > 0 ? 'var(--on-green)' : 'inherit' }}>
                 {d.comparison.difference_mwh > 0 ? '+' : ''}{fmtNumber(d.comparison.difference_mwh, 3)} MWh
                 {d.comparison.difference_pct != null ? ` (${d.comparison.difference_pct > 0 ? '+' : ''}${d.comparison.difference_pct}%)` : ''}
               </strong>
@@ -110,9 +125,16 @@ function Summary({ d, run, onPreview, setError }) {
           <button type="button" className="btn btn-primary btn-sm" onClick={() => onPreview(d.source_document.version_id, d.source_document.file_name)}>View source document</button>
         </div>
       ) : (
-        <p style={{ margin: 0, fontSize: 13, color: 'var(--slate-500)' }}>
-          {d.can_manage ? 'No source document is attached to this period yet.' : 'SJVN has not attached the source document for this period yet. You can ask for it through an objection or a notice on the contract.'}
-        </p>
+        <>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--slate-500)' }}>
+            {d.can_manage ? 'No source document is attached to this period yet.' : 'SJVN has not attached the source document for this period yet. You can ask for it in a message to the desk, or through an objection or a notice on the contract.'}
+          </p>
+          {!d.can_manage && (
+            <button type="button" className="btn btn-outline btn-sm" style={{ marginTop: 10 }} onClick={askForSource}>
+              Ask SJVN for the source document
+            </button>
+          )}
+        </>
       )}
       {d.rea && (
         <p style={{ margin: '8px 0 0', fontSize: 13 }}>
@@ -236,7 +258,7 @@ function Blocks({ d, reload, setError }) {
                     <td>{b.block_no}</td><td>{b.time}</td>
                     <td style={{ textAlign: 'right' }}>{b.scheduled_mwh ?? '—'}</td>
                     <td style={{ textAlign: 'right' }}>{b.actual_mwh ?? '—'}</td>
-                    <td style={{ textAlign: 'right', color: b.deviation_mwh < 0 ? '#b91c1c' : b.deviation_mwh > 0 ? '#15803d' : 'inherit' }}>
+                    <td style={{ textAlign: 'right', color: b.deviation_mwh < 0 ? 'var(--on-red)' : b.deviation_mwh > 0 ? 'var(--on-green)' : 'inherit' }}>
                       {b.deviation_mwh === null ? '—' : `${b.deviation_mwh > 0 ? '+' : ''}${b.deviation_mwh}`}
                     </td>
                   </tr>
@@ -311,7 +333,7 @@ function Response({ d, run, onPreview, setError, disputesPath }) {
             {d.response_version_id && <button type="button" className="btn-link" onClick={() => onPreview(d.response_version_id, 'meter-record')}>View their record</button>}
           </div>
           {d.objection_outcome && (
-            <div style={{ marginTop: 8, fontSize: 13, color: d.objection_outcome === 'UPHELD' ? '#15803d' : '#b91c1c' }}>
+            <div style={{ marginTop: 8, fontSize: 13, color: d.objection_outcome === 'UPHELD' ? 'var(--on-green)' : 'var(--on-red)' }}>
               <strong>{d.objection_outcome === 'UPHELD' ? 'SJVN agrees — the record is to be corrected' : 'SJVN has not accepted the objection'}</strong>
               {' '}· {d.objection_resolved_by_name} · {fmtDateTime(d.objection_resolved_at)} — {d.objection_resolution}
             </div>

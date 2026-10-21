@@ -105,14 +105,14 @@ export default function EnergyScheduleArchive() {
           }
         />
 
-        <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
+        <Card style={{ marginBottom: 20, background: 'var(--slate-50)' }}>
           <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
             <div>
               <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="energyschedulearchive-portfolio-id">Portfolio ID:</label>
               <PortfolioSelect id="energyschedulearchive-portfolio-id" scope="global" allLabel="-- Select portfolio --" />
             </div>
             
-            <div style={{ marginLeft: 20, borderLeft: '1px solid #ccc', paddingLeft: 20 }}>
+            <div style={{ marginLeft: 20, borderLeft: '1px solid var(--slate-100)', paddingLeft: 20 }}>
               <span style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }}>Quick Dates:</span>
               <div role="group" aria-label="Quick Dates" style={{ display: 'flex', gap: 5 }}>
                 <button 
@@ -135,7 +135,7 @@ export default function EnergyScheduleArchive() {
         <Card>
           <div style={{ overflowX: 'auto', maxHeight: '70vh' }}>
             {loading ? (
-              <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Loading Archives...</div>
+              <div style={{ padding: 40, textAlign: 'center', color: 'var(--slate-500)' }}>Loading Archives...</div>
             ) : (
               <Table columns={columns} data={archives} />
             )}
@@ -147,10 +147,10 @@ export default function EnergyScheduleArchive() {
       {drawerOpen && selectedPreview && (
         <div style={{ 
           position: 'fixed', right: 0, top: 0, bottom: 0, width: 400, 
-          background: '#fff', boxShadow: '-2px 0 10px rgba(0,0,0,0.1)', 
+          background: 'var(--surface)', boxShadow: '-2px 0 10px rgba(0,0,0,0.1)', 
           zIndex: 1000, display: 'flex', flexDirection: 'column' 
         }}>
-          <div style={{ padding: 20, background: '#f8f9fa', borderBottom: '1px solid #dee2e6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ padding: 20, background: 'var(--slate-50)', borderBottom: '1px solid var(--slate-100)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
              <h3 style={{ margin: 0, fontSize: 16 }}>Schedule Preview</h3>
              <button onClick={() => setDrawerOpen(false)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>&times;</button>
           </div>
@@ -174,7 +174,7 @@ export default function EnergyScheduleArchive() {
                  made up. The register keeps the upload — file, period, revision,
                  row count — and not the parsed block values, so this says what it
                  has rather than drawing a day that was never read. */}
-             <p style={{ fontSize: 13.5, color: '#555', marginTop: 20 }}>
+             <p style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 20 }}>
                 The platform records the file and its ingestion; the block-wise schedule inside it is not stored here.
              </p>
           </div>

@@ -186,7 +186,7 @@ describe('What the first end-to-end run found', () => {
     expect(told(sellerUser), "a seller was told how a buyer's dispute ended").not.toContain(d.body.dispute_no);
     expect(db.prepare(`SELECT COUNT(*) c FROM notifications WHERE role IN ('SELLER','BUYER')`).get().c).toBe(0);
     // And the desk hears of a new dispute, whichever of its roles is on duty.
-    expect(db.prepare(`SELECT COUNT(*) c FROM notifications WHERE role = 'REIA_ADMIN' AND message LIKE 'New dispute%'`).get().c).toBe(1);
+    expect(db.prepare(`SELECT COUNT(*) c FROM notifications WHERE role = 'REIA_CHECKER' AND message LIKE 'New dispute%'`).get().c).toBe(1);
   });
 
   it('raises one dispute for one claim, and none on a credit note', async () => {

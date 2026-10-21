@@ -922,7 +922,7 @@ const dispatchHandler = (req, res) => {
       details: { invoice_no, dispatch_date, amount: amt },
     });
     pushNotification({
-      role: 'REIA_USER',
+      role: 'REIA_MAKER',
       type: 'DSM_DISPATCHED',
       message: `DSM bill ${invoice_no} dispatched (${row.dsm_no}) — REIA supplementary invoice created`,
     });
@@ -972,7 +972,7 @@ router.post('/:id/link-invoice', requireRole(...WRITE), (req, res) => {
       details: { invoice_no, dispatch_date, amount: amt },
     });
     pushNotification({
-      role: 'REIA_USER',
+      role: 'REIA_MAKER',
       type: 'DSM_INVOICE_LINKED',
       message: `DSM ${row.dsm_no} linked to supplementary invoice ${invoice_no}`,
     });

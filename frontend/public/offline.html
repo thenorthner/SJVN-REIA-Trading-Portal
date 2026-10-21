@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0369a1" />
+  <title>Offline Directory — SJVN Limited | ऑफ़लाइन निर्देशिका</title>
+  <link rel="icon" type="image/png" href="/sjvn-logo.png" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #0284c7;
+      --primary-hover: #0369a1;
+      --border: #334155;
+      --amber: #f59e0b;
+      --green: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 24px 16px 48px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .offline-container {
+      max-width: 680px;
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 28px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+    .brand-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand-logo {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 2px;
+    }
+    .brand-titles h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+    }
+    .brand-titles p {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 20px;
+      margin-bottom: 18px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #fbbf24;
+      animation: pulseDot 1.8s infinite;
+    }
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+    .message-title {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #ffffff;
+    }
+    .message-lead {
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+    .directory-box {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 24px;
+    }
+    .directory-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #38bdf8;
+      margin-bottom: 12px;
+    }
+    .contact-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+    .contact-item {
+      font-size: 13px;
+    }
+    .contact-item strong {
+      display: block;
+      color: #e2e8f0;
+      font-size: 13px;
+    }
+    .contact-item span, .contact-item a {
+      color: var(--text-muted);
+      text-decoration: none;
+    }
+    .contact-item a:hover {
+      color: #38bdf8;
+      text-decoration: underline;
+    }
+    .action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .btn-retry {
+      background: var(--primary);
+      color: #ffffff;
+      border: none;
+      padding: 10px 22px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s ease;
+    }
+    .btn-retry:hover {
+      background: var(--primary-hover);
+    }
+    .btn-cached {
+      background: transparent;
+      color: #38bdf8;
+      border: 1px solid var(--border);
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: background 0.15s ease;
+    }
+    .btn-cached:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: #38bdf8;
+    }
+    .legal-note {
+      font-size: 11px;
+      color: #64748b;
+      text-align: center;
+      margin-top: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="offline-container" role="main">
+    <div class="brand-header">
+      <img src="/sjvn-logo.png" alt="SJVN Limited Logo" class="brand-logo" />
+      <div class="brand-titles">
+        <h1>एसजेवीएन लिमिटेड | SJVN Limited</h1>
+        <p>A Navratna CPSE under the Ministry of Power, Govt. of India</p>
+      </div>
+    </div>
+
+    <div class="status-badge" role="status">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span>Offline Mode / ऑफ़लाइन मोड (No Active Internet)</span>
+    </div>
+
+    <h2 class="message-title">You are currently offline</h2>
+    <p class="message-lead">
+      आपका इंटरनेट कनेक्शन विच्छेदित है। हालांकि, आवश्यक आपातकालीन संपर्क, स्टेशन नियंत्रण कक्ष और पहले से सहेजे गए वैधानिक दस्तावेज़ नीचे उपलब्ध हैं।
+      <br /><br />
+      <em>You can still access essential directory lines and cached policies. Live energy trading and bid submissions require an active network connection.</em>
+    </p>
+
+    <div class="directory-box">
+      <div class="directory-title">Emergency &amp; Key Institutional Contacts</div>
+      <div class="contact-grid">
+        <div class="contact-item">
+          <strong>Corporate HQ PBX (Shimla)</strong>
+          <a href="tel:+911772660003">+91-177-2660003</a> / <a href="tel:+911772660004">0004</a>
+        </div>
+        <div class="contact-item">
+          <strong>Web Information Manager (WIM)</strong>
+          <span>Shri Rajesh Patre, CGM (IT&amp;C)</span><br />
+          <a href="mailto:wim.it@sjvn.in">wim.it@sjvn.in</a>
+        </div>
+        <div class="contact-item">
+          <strong>Nathpa Jhakri HPS Control Room</strong>
+          <a href="tel:+911782275218">+91-1782-275218</a> (Himachal Pradesh)
+        </div>
+        <div class="contact-item">
+          <strong>Rampur Hydro Station Desk</strong>
+          <a href="tel:+911782275800">+91-1782-275800</a> (Bayal, HP)
+        </div>
+        <div class="contact-item">
+          <strong>Buxar Thermal Power Desk</strong>
+          <a href="tel:+916183295000">+91-6183-295000</a> (Chausa, Bihar)
+        </div>
+        <div class="contact-item">
+          <strong>National Grid NLDC Emergency</strong>
+          <a href="tel:1800110023">1800-11-0023</a> (Toll-Free POSOCO)
+        </div>
+      </div>
+    </div>
+
+    <div class="action-row">
+      <button type="button" class="btn-retry" onclick="window.location.reload()">
+        <span>↻ Retry Connection / पुनः लोड करें</span>
+      </button>
+      <a href="/" class="btn-cached">Open Cached Home / मुख्य पृष्ठ</a>
+      <a href="/privacy-policy" class="btn-cached">Privacy Policy</a>
+      <a href="/disclaimer" class="btn-cached">Disclaimer</a>
+    </div>
+
+    <p class="legal-note">
+      SJVN Integrated Energy Commercial &amp; Trading Platform · Progressive Web App (PWA) Offline Fallback
+      <br />
+      Compliant with GIGW 3.0 &amp; National Disaster Management Continuity Guidelines
+    </p>
+  </div>
+</body>
+</html>

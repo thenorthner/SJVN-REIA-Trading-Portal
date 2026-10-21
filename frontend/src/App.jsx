@@ -1,10 +1,19 @@
 import React, { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Layout from './components/Layout.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import { ROLE_GROUPS, isSellerRole, isBuyerRole, isTradingClientRole } from './roles.js';
 import { useAuth } from './context/AuthContext.jsx';
 import { EliteChartGradients } from './components/EliteChartGradients.jsx';
+import CookieConsent from './gigw/CookieConsent.jsx';
+import DeclarationGate from './gigw/DeclarationGate.jsx';
+
+const PublicHome = lazy(() => import('./pages/public/PublicHome.jsx'));
+const PolicyPage = lazy(() => import('./pages/public/PolicyPage.jsx'));
+const Sitemap = lazy(() => import('./pages/public/PolicyPage.jsx').then((m) => ({ default: m.Sitemap })));
+const PrivacyRequests = lazy(() => import('./pages/settings/PrivacyRequests.jsx'));
+const ProjectAssignments = lazy(() => import('./pages/settings/ProjectAssignments.jsx'));
+const Delegations = lazy(() => import('./pages/settings/Delegations.jsx'));
 
 const Login = lazy(() => import('./pages/Login.jsx'));
 const ConsolidatedDashboard = lazy(() => import('./pages/ConsolidatedDashboard.jsx'));
@@ -23,6 +32,7 @@ const Reconciliation = lazy(() => import('./pages/reia/Reconciliation.jsx'));
 const Reports = lazy(() => import('./pages/reia/Reports.jsx'));
 const PaymentMonitoring = lazy(() => import('./pages/reia/PaymentMonitoring.jsx'));
 const GenerationPerformance = lazy(() => import('./pages/reia/GenerationPerformance.jsx'));
+const ComplianceHub = lazy(() => import('./pages/reia/ComplianceHub.jsx'));
 const ContractCompliance = lazy(() => import('./pages/reia/ContractCompliance.jsx'));
 const VerificationQueue = lazy(() => import('./pages/reia/VerificationQueue.jsx'));
 const CercCompliance = lazy(() => import('./pages/reia/CercCompliance.jsx'));
@@ -50,7 +60,6 @@ const HydroSecurity = lazy(() => import('./pages/hydro-thermal/desk/HydroSecurit
 const HydroReconciliation = lazy(() => import('./pages/hydro-thermal/desk/HydroReconciliation.jsx'));
 const HydroTds = lazy(() => import('./pages/hydro-thermal/desk/HydroTds.jsx'));
 const ThermalStations = lazy(() => import('./pages/hydro-thermal/ThermalStations.jsx'));
-
 const StationMonthClose = lazy(() => import('./pages/hydro-thermal/desk/StationMonthClose.jsx'));
 const StationApprovals = lazy(() => import('./pages/hydro-thermal/desk/StationApprovals.jsx'));
 const StationAdvances = lazy(() => import('./pages/hydro-thermal/desk/StationAdvances.jsx'));
@@ -60,6 +69,7 @@ const StationRegulatory = lazy(() => import('./pages/hydro-thermal/desk/StationR
 const StationReaRegister = lazy(() => import('./pages/hydro-thermal/desk/StationReaRegister.jsx'));
 const HydroStations = lazy(() => import('./pages/hydro-thermal/HydroStations.jsx'));
 const StationPowerRegulation = lazy(() => import('./pages/hydro-thermal/desk/StationPowerRegulation.jsx'));
+
 const TradingDashboard = lazy(() => import('./pages/trading/TradingDashboard.jsx'));
 const TradingClients = lazy(() => import('./pages/trading/TradingClients.jsx'));
 const TradingClientProfile = lazy(() => import('./pages/trading/TradingClientProfile.jsx'));
@@ -233,7 +243,7 @@ function HomeRoute() {
   if (['THERMAL_ADMIN', 'THERMAL_USER'].includes(role)) return <Navigate to="/thermal" replace />;
   // The REIA admin works the same desk; without this it landed on the executive
   // dashboard, which it may not see, and met an "access restricted" wall.
-  if (role === 'REIA_USER' || role === 'REIA_ADMIN') return <Navigate to="/reia" replace />;
+  if (['REIA_MAKER', 'REIA_CHECKER', 'REIA_APPROVER'].includes(role)) return <Navigate to="/reia" replace />;
   if (role === 'COMPLIANCE_AUDITOR') return <Navigate to="/audit-logs" replace />;
 
   return (
@@ -258,28 +268,64 @@ function RouteFallback() {
   );
 }
 
+/**
+ * "/" is the public home page for a visitor who is not signed in (GIGW: the
+ * portal's front door carries the national identity, accessibility tools and
+ * statutory links) and the signed-in shell for everyone else. Any other path
+ * still sends a signed-out visitor to the sign-in screen.
+ */
+function RootShell() {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return <RouteFallback />;
+  if (!user && location.pathname === '/') return <PublicHome />;
+  return (
+    <ProtectedRoute>
+      <Layout />
+    </ProtectedRoute>
+  );
+}
+
+// Public statutory pages (GIGW 3.0 §5, §8): reachable without signing in.
+const PUBLIC_PAGES = [
+  'privacy-policy', 'terms-of-use', 'disclaimer', 'hyperlinking-policy', 'copyright-policy',
+  'cookie-policy', 'security-policy', 'accessibility-statement', 'screen-reader-access',
+  'grievance-redressal', 'contact-us', 'help',
+];
+
 export default function App() {
   return (
     <Suspense fallback={<RouteFallback />}>
       <EliteChartGradients />
     <Routes>
       <Route path="/login" element={<Login />} />
+      {PUBLIC_PAGES.map((slug) => <Route key={slug} path={`/${slug}`} element={<PolicyPage slug={slug} />} />)}
+      <Route path="/terms-of-service" element={<Navigate to="/terms-of-use" replace />} />
+      <Route path="/terms-and-conditions" element={<Navigate to="/terms-of-use" replace />} />
+      <Route path="/cookie-preferences" element={<Navigate to="/cookie-policy?openPreferences=true" replace />} />
+      <Route path="/contact" element={<Navigate to="/contact-us" replace />} />
+      <Route path="/accessibility" element={<Navigate to="/accessibility-statement" replace />} />
+      <Route path="/grievance" element={<Navigate to="/grievance-redressal" replace />} />
+      <Route path="/our-vision" element={<Navigate to="/?vision=true" replace />} />
+      <Route path="/vision" element={<Navigate to="/?vision=true" replace />} />
+      <Route path="/about-platform" element={<Navigate to="/?vision=true" replace />} />
+      <Route path="/about-us" element={<Navigate to="/?vision=true" replace />} />
+      <Route path="/about" element={<Navigate to="/?vision=true" replace />} />
+      <Route path="/sitemap" element={<Sitemap />} />
+      <Route path="/home" element={<PublicHome />} />
+      <Route path="/portal" element={<PublicHome />} />
 
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
-        }
-      >
+      <Route path="/" element={<RootShell />}>
         <Route index element={<HomeRoute />} />
 
         <Route path="reia" element={<ProtectedRoute roles={REIA_ROLES}><ReiaDashboard /></ProtectedRoute>} />
         <Route path="reia/entities" element={<ProtectedRoute roles={REIA_ROLES}><Entities /></ProtectedRoute>} />
-        <Route path="reia/document-desk" element={<ProtectedRoute roles={REIA_ROLES}><DocumentDesk /></ProtectedRoute>} />
-        <Route path="admin/users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'TRADING_ADMIN', 'THERMAL_ADMIN']}><StaffUsers /></ProtectedRoute>} />
-        <Route path="reia/company-users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN']}><CompanyUsers /></ProtectedRoute>} />
+        <Route path="reia/document-desk" element={<ProtectedRoute roles={REIA_ROLES}><Entities initialTab="kyc" /></ProtectedRoute>} />
+        <Route path="admin/users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN']}><StaffUsers /></ProtectedRoute>} />
+ {/* Every SJVN officer may ask for break-glass or act on a charge they hold; the screen shows each what applies. */}
+        <Route path="settings/delegations" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'MANAGEMENT', 'COMPLIANCE_AUDITOR', 'REIA_MAKER', 'REIA_CHECKER', 'REIA_APPROVER', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'COMMERCIAL_USER', 'THERMAL_ADMIN', 'THERMAL_USER', 'TRADING_USER', 'TRADING_ADMIN', 'FINANCE_USER']}><Delegations /></ProtectedRoute>} />
+        <Route path="admin/project-assignments" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'MANAGEMENT', 'COMPLIANCE_AUDITOR']}><ProjectAssignments /></ProtectedRoute>} />
+        <Route path="reia/company-users" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN']}><CompanyUsers /></ProtectedRoute>} />
         <Route path="reia/seller-ledgers" element={<ProtectedRoute roles={REIA_ROLES}><SellerLedgers /></ProtectedRoute>} />
         <Route path="reia/contracts" element={<ProtectedRoute roles={REIA_ROLES}><Contracts /></ProtectedRoute>} />
         <Route path="reia/energy-data" element={<ProtectedRoute roles={REIA_ROLES}><EnergyData /></ProtectedRoute>} />
@@ -299,10 +345,10 @@ export default function App() {
         <Route path="hydro-thermal" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroThermalDashboard /></ProtectedRoute>} />
         {/* The same onboarding screen, scoped to the vertical it is opened from. */}
         <Route path="hydro-thermal/stakeholders" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><Entities key="HYDRO" vertical="HYDRO" /></ProtectedRoute>} />
-        <Route path="hydro-thermal/document-desk" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><DocumentDesk key="HYDRO" vertical="HYDRO" /></ProtectedRoute>} />
+        <Route path="hydro-thermal/document-desk" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><Entities key="HYDRO" vertical="HYDRO" initialTab="kyc" /></ProtectedRoute>} />
         <Route path="thermal" element={<ProtectedRoute roles={THERMAL_ROLES}><ThermalDashboard /></ProtectedRoute>} />
         <Route path="thermal/stakeholders" element={<ProtectedRoute roles={THERMAL_ROLES}><Entities key="THERMAL" vertical="THERMAL" /></ProtectedRoute>} />
-        <Route path="thermal/document-desk" element={<ProtectedRoute roles={THERMAL_ROLES}><DocumentDesk key="THERMAL" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="thermal/document-desk" element={<ProtectedRoute roles={THERMAL_ROLES}><Entities key="THERMAL" vertical="THERMAL" initialTab="kyc" /></ProtectedRoute>} />
         <Route path="hydro-thermal/hydro-billing" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroBilling /></ProtectedRoute>} />
         <Route path="hydro-thermal/hydro-ledger" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroLedger /></ProtectedRoute>} />
         <Route path="hydro-thermal/hydro-claims" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroClaims /></ProtectedRoute>} />
@@ -316,7 +362,6 @@ export default function App() {
         <Route path="hydro-thermal/tds" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroTds /></ProtectedRoute>} />
         <Route path="hydro-thermal/receivables" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><HydroReceivables /></ProtectedRoute>} />
         <Route path="hydro-thermal/dsm" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><DeviationSettlements key="HYDRO" vertical="HYDRO" /></ProtectedRoute>} />
-        {/* Thermal billing: the same station-billing screens, on the thermal stations. */}
         <Route path="hydro-thermal/month-close" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationMonthClose key="H" vertical="HYDRO" /></ProtectedRoute>} />
         <Route path="hydro-thermal/approvals" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationApprovals key="H" vertical="HYDRO" /></ProtectedRoute>} />
         <Route path="hydro-thermal/advances" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationAdvances key="H" vertical="HYDRO" /></ProtectedRoute>} />
@@ -326,6 +371,7 @@ export default function App() {
         <Route path="hydro-thermal/regulatory" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationRegulatory key="H" vertical="HYDRO" /></ProtectedRoute>} />
         <Route path="hydro-thermal/rea-register" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationReaRegister key="H" vertical="HYDRO" /></ProtectedRoute>} />
         <Route path="hydro-thermal/power-regulation" element={<ProtectedRoute roles={HYDRO_THERMAL_ROLES}><StationPowerRegulation key="H" vertical="HYDRO" /></ProtectedRoute>} />
+        {/* Thermal billing: the same station-billing screens, on the thermal stations. */}
         <Route path="thermal/stations" element={<ProtectedRoute roles={THERMAL_ROLES}><ThermalStations /></ProtectedRoute>} />
         <Route path="thermal/billing" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroBilling key="T" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="thermal/arrear-supplementary" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroAdjustmentBills key="T" vertical="THERMAL" /></ProtectedRoute>} />
@@ -339,7 +385,6 @@ export default function App() {
         <Route path="thermal/claims" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroClaims key="T" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="thermal/finance" element={<ProtectedRoute roles={THERMAL_ROLES}><HydroFinance key="T" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="thermal/dsm" element={<ProtectedRoute roles={THERMAL_ROLES}><DeviationSettlements key="THERMAL" vertical="THERMAL" /></ProtectedRoute>} />
-        <Route path="reia/reports" element={<ProtectedRoute roles={REIA_ROLES}><Reports /></ProtectedRoute>} />
         <Route path="thermal/month-close" element={<ProtectedRoute roles={THERMAL_ROLES}><StationMonthClose key="T" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="thermal/approvals" element={<ProtectedRoute roles={THERMAL_ROLES}><StationApprovals key="T" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="thermal/advances" element={<ProtectedRoute roles={THERMAL_ROLES}><StationAdvances key="T" vertical="THERMAL" /></ProtectedRoute>} />
@@ -348,12 +393,14 @@ export default function App() {
         <Route path="thermal/regulatory" element={<ProtectedRoute roles={THERMAL_ROLES}><StationRegulatory key="T" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="thermal/rea-register" element={<ProtectedRoute roles={THERMAL_ROLES}><StationReaRegister key="T" vertical="THERMAL" /></ProtectedRoute>} />
         <Route path="thermal/power-regulation" element={<ProtectedRoute roles={THERMAL_ROLES}><StationPowerRegulation key="T" vertical="THERMAL" /></ProtectedRoute>} />
+        <Route path="reia/reports" element={<ProtectedRoute roles={REIA_ROLES}><Reports /></ProtectedRoute>} />
         <Route path="reia/payment-monitoring" element={<ProtectedRoute roles={REIA_ROLES}><PaymentMonitoring /></ProtectedRoute>} />
         <Route path="reia/generation-performance" element={<ProtectedRoute roles={REIA_ROLES}><GenerationPerformance /></ProtectedRoute>} />
-        <Route path="reia/contract-compliance" element={<ProtectedRoute roles={REIA_ROLES}><ContractCompliance /></ProtectedRoute>} />
+        <Route path="reia/compliance" element={<ProtectedRoute roles={[...new Set([...REIA_ROLES, ...TRADING_INTERNAL_ROLES, 'COMPLIANCE_AUDITOR'])]}><ComplianceHub /></ProtectedRoute>} />
+        <Route path="reia/contract-compliance" element={<ProtectedRoute roles={REIA_ROLES}><ComplianceHub defaultTab="contract" /></ProtectedRoute>} />
         <Route path="reia/verification" element={<ProtectedRoute roles={REIA_ROLES}><VerificationQueue /></ProtectedRoute>} />
         {/* The trading desk files Form-IV and pays the licence fee, so it reads this calendar too. */}
-        <Route path="reia/cerc-compliance" element={<ProtectedRoute roles={[...new Set([...REIA_ROLES, ...TRADING_INTERNAL_ROLES, 'COMPLIANCE_AUDITOR'])]}><CercCompliance /></ProtectedRoute>} />
+        <Route path="reia/cerc-compliance" element={<ProtectedRoute roles={[...new Set([...REIA_ROLES, ...TRADING_INTERNAL_ROLES, 'COMPLIANCE_AUDITOR'])]}><ComplianceHub defaultTab="cerc" /></ProtectedRoute>} />
 
         {/* Seller Portal */}
         <Route path="seller" element={<ProtectedRoute roles={SELLER_ROLES}><GuidedPage guide="dashboard"><SellerDashboard /></GuidedPage></ProtectedRoute>} />
@@ -568,9 +615,12 @@ export default function App() {
         <Route path="erp/noc-updation" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><NocUpdation /></ProtectedRoute>} />
         <Route path="erp/noc-status" element={<ProtectedRoute roles={TRADING_INTERNAL_ROLES}><GenericIsetReport kind="erp-noc-status" /></ProtectedRoute>} />
 
+        <Route path="settings/privacy-requests" element={<ProtectedRoute roles={['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'COMPLIANCE_AUDITOR']}><PrivacyRequests /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+      <CookieConsent />
+      <DeclarationGate />
     </Suspense>
   );
 }

@@ -7,7 +7,7 @@ import { db } from '../db/index.js';
 import crypto from 'crypto';
 import { ZipArchive } from 'archiver';
 import { unreadablePdf } from '../services/fileChecks.js';
-import { requireAuth, ROLE_GROUPS, SELLER_ROLES, BUYER_ROLES } from '../middleware/auth.js';
+import { requireAuth, ROLE_GROUPS, SELLER_ROLES, BUYER_ROLES, PLATFORM_ADMINS } from '../middleware/auth.js';
 import { pushNotification } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { fileURLToPath } from 'url';
@@ -59,9 +59,10 @@ const EXTERNAL_ROLES = [...SELLER_ROLES, ...BUYER_ROLES, 'TRADING_CLIENT', 'TRAD
 const isExternal = (user) => EXTERNAL_ROLES.includes(user?.role);
 // The desks that onboard stakeholders — REIA, Commercial (hydro) and Thermal —
 // each take in and verify their own stakeholders' papers.
-const INTAKE_ROLES = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
+// The administrators keep KYC intake and verification with onboarding (Target #2 Phase B).
+const INTAKE_ROLES = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE, ...PLATFORM_ADMINS])];
 const canVerify = (user) => INTAKE_ROLES.includes(user?.role);
-const ADMIN_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
+const ADMIN_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
 
 // Each desk takes in and reviews its own vertical's papers. The Hydro desk
 // rejected a REIA developer's PAN and the Thermal desk verified a hydro
@@ -71,7 +72,7 @@ function deskVerticals(user) {
   const role = user?.role;
   if (['THERMAL_ADMIN', 'THERMAL_USER'].includes(role)) return ['THERMAL'];
   if (['COMMERCIAL_ADMIN', 'COMMERCIAL', 'COMMERCIAL_USER'].includes(role)) return ['HYDRO'];
-  if (['REIA_ADMIN', 'REIA_USER'].includes(role)) return ['REIA'];
+  if (['REIA_CHECKER', 'REIA_MAKER'].includes(role)) return ['REIA'];
   return null;
 }
 /** The verticals a document's owner sits in: its company's, else its contract's. */

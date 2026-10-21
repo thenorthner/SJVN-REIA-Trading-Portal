@@ -129,7 +129,7 @@ function notifyBuyer(entityId, message, onlyApprovers = false) {
   } catch { /* the record stands; the bell is a courtesy */ }
 }
 const notifyFinance = (message) => {
-  try { for (const role of new Set(['FINANCE_USER', 'REIA_USER'])) pushNotification({ role, type: 'PAYMENT', message }); } catch { /* as above */ }
+  try { for (const role of new Set(['FINANCE_USER', 'REIA_MAKER'])) pushNotification({ role, type: 'PAYMENT', message }); } catch { /* as above */ }
 };
 
 // ── The buyer's bills ───────────────────────────────────────────────────────

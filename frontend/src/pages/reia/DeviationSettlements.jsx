@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/client.js';
 import { DsmStatementSync, DsmPoolTracker } from '../../components/DsmDeskPanels.jsx';
@@ -355,7 +356,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
             )}
 
             {!billed && official && (
-              <button
+              <WriteOnly><button
                 className="btn btn-xs btn-success"
                 disabled={r.dsa_superseded}
                 title={r.dsa_superseded
@@ -364,7 +365,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
                 onClick={() => openDispatch(r)}
               >
                 Generate supplementary bill
-              </button>
+              </button></WriteOnly>
             )}
 
             {/* An estimate is priced off a rate, which is not how NRPC settles.
@@ -413,9 +414,9 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
             <button className="btn btn-secondary" onClick={openUpload}>
               Upload official NRPC DSA
             </button>
-            <button className="btn btn-secondary" onClick={openAdd}>
+            <WriteOnly><button className="btn btn-secondary" onClick={openAdd}>
               Add manual estimate
-            </button>
+            </button></WriteOnly>
           </div>
         )}
       />
@@ -569,7 +570,7 @@ export default function DeviationSettlements({ vertical = 'REIA' }) {
 
             <div className="form-actions">
               <button type="button" className="btn btn-ghost" onClick={() => setShowUpload(false)}>Done</button>
-              <button type="button" className="btn btn-primary" onClick={() => { setShowUpload(false); setAccounts([]); openRaise(); }}>Raise a week from it</button>
+              <WriteOnly><button type="button" className="btn btn-primary" onClick={() => { setShowUpload(false); setAccounts([]); openRaise(); }}>Raise a week from it</button></WriteOnly>
             </div>
           </div>
         )}

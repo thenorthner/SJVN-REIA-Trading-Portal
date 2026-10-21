@@ -482,7 +482,7 @@ router.post('/from-contract/:contractId', requireRole(...REIA_WRITE), (req, res)
   res.status(201).json({ created: created.map(enrich), requirements: db.prepare('SELECT * FROM security_requirements WHERE contract_id = ?').all(req.params.contractId) });
 });
 
-router.post('/alerts/run', requireRole(...REIA_WRITE, 'MANAGEMENT'), (_req, res) => {
+router.post('/alerts/run', requireRole(...REIA_WRITE, ...ROLE_GROUPS.REIA_APPROVE), (_req, res) => {
   // The desk's own cascade, and the reminder to whoever holds the instrument and
   // has to have it extended — the button ran only the first.
   const cascade = runAlertCascade();
@@ -495,7 +495,7 @@ router.post('/alerts/run', requireRole(...REIA_WRITE, 'MANAGEMENT'), (_req, res)
 // the desk that wants the bid through is not the one that waives the cover
 // behind it, and an open-ended waiver is a gate switched off.
 const OVERRIDE_MAX_DAYS = 90;
-router.post('/overrides', requireRole('MANAGEMENT', 'SJVN_ADMIN'), (req, res) => {
+router.post('/overrides', requireRole(...ROLE_GROUPS.REIA_APPROVE), (req, res) => {
   const { contract_id, valid_until } = req.body;
   const reason = String(req.body.reason || '').trim();
   if (!contract_id || !reason) return res.status(400).json({ error: 'Choose the contract and say why its security is being treated as adequate' });

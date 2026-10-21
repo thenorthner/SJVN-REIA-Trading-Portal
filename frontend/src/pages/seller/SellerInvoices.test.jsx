@@ -65,7 +65,7 @@ describe('where signing in lands', () => {
   it("is home when the page belongs to someone else's portal", () => {
     expect(landingFor({ role: 'BUYER' }, at('/seller/invoices'))).toBe('/');
     expect(landingFor({ role: 'SELLER' }, at('/reia/invoices'))).toBe('/');
-    expect(landingFor({ role: 'REIA_USER' }, at('/buyer/invoices'))).toBe('/');
+    expect(landingFor({ role: 'REIA_MAKER' }, at('/buyer/invoices'))).toBe('/');
     expect(landingFor({ role: 'SJVN_ADMIN' }, null)).toBe('/');
     expect(landingFor({ role: 'SJVN_ADMIN' }, at('/login'))).toBe('/');
   });

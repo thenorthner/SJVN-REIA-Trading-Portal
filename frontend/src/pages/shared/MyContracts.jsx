@@ -75,7 +75,7 @@ export default function MyContracts({ contractType, title, subtitle, sourceLabel
       render: (r) => {
         const n = summary[r.id]?.next_milestone;
         if (!n) return <span style={{ color: 'var(--slate-500)' }}>—</span>;
-        return <span>{n.label.replace(/\s*\(.*\)$/, '')}{n.due_date ? <div style={{ fontSize: 13.5, color: n.status === 'DELAYED' ? '#b91c1c' : 'var(--slate-500)' }}>{fmtDate(n.due_date)}</div> : null}</span>;
+        return <span>{n.label.replace(/\s*\(.*\)$/, '')}{n.due_date ? <div style={{ fontSize: 13.5, color: n.status === 'DELAYED' ? 'var(--red-deep)' : 'var(--slate-500)' }}>{fmtDate(n.due_date)}</div> : null}</span>;
       },
     },
     {

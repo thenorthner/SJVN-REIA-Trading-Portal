@@ -77,7 +77,7 @@ export function alertLateBankClaims({ today = istToday() } = {}) {
     WHERE si.status = 'CLAIMED' AND si.bank_response_due IS NOT NULL AND si.bank_response_due < ? AND si.bank_late_alerted_at IS NULL
   `).all(today)) {
     const msg = `${i.invocation_no} (${i.contract_no}): the bank has not honoured or refused the ₹${Number(i.amount).toLocaleString('en-IN')} claim lodged on ${i.claim_submitted_on} — its answer was due ${i.bank_response_due}. Chase the bank and record its letter.`;
-    for (const role of ['REIA_ADMIN', 'REIA_USER', 'FINANCE_USER']) pushNotification({ role, type: 'SECURITY_CLAIM_LATE', message: msg });
+    for (const role of ['REIA_CHECKER', 'REIA_MAKER', 'FINANCE_USER']) pushNotification({ role, type: 'SECURITY_CLAIM_LATE', message: msg });
     db.prepare(`UPDATE security_invocations SET bank_late_alerted_at = datetime('now') WHERE id = ?`).run(i.id);
     logAudit({ user: { id: null, name: 'system', role: 'SYSTEM' }, action: 'BANK_CLAIM_LATE', module: 'REIA', entityType: 'security_invocation', entityId: i.id, details: { due: i.bank_response_due } });
     sent += 1;

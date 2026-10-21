@@ -129,8 +129,8 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
       {/* Modern Workflow Step Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
         <div style={{
-          background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.9) 0%, rgba(241, 245, 249, 0.7) 100%)',
-          border: '1px solid #e2e8f0',
+          background: 'linear-gradient(135deg, var(--slate-50) 0%, var(--slate-100) 100%)',
+          border: '1px solid var(--slate-200)',
           borderRadius: 10,
           padding: '12px 14px',
           display: 'flex',
@@ -144,9 +144,9 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
                 background: '#2563eb', color: '#fff', width: 20, height: 20, borderRadius: '50%',
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700
               }}>1</span>
-              <strong style={{ fontSize: 13, color: '#1e293b' }}>Template</strong>
+              <strong style={{ fontSize: 13, color: 'var(--slate-800)' }}>Template</strong>
             </div>
-            <p style={{ margin: 0, fontSize: 13.5, color: '#64748b', lineHeight: 1.4 }}>
+            <p style={{ margin: 0, fontSize: 13.5, color: 'var(--slate-500)', lineHeight: 1.4 }}>
               Download official CSV template, 1 bill per row with contract number.
             </p>
           </div>
@@ -161,8 +161,8 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
         </div>
 
         <div style={{
-          background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.9) 0%, rgba(241, 245, 249, 0.7) 100%)',
-          border: '1px solid #e2e8f0',
+          background: 'linear-gradient(135deg, var(--slate-50) 0%, var(--slate-100) 100%)',
+          border: '1px solid var(--slate-200)',
           borderRadius: 10,
           padding: '12px 14px',
           display: 'flex',
@@ -174,16 +174,16 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
               background: '#0284c7', color: '#fff', width: 20, height: 20, borderRadius: '50%',
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700
             }}>2</span>
-            <strong style={{ fontSize: 13, color: '#1e293b' }}>Input Data</strong>
+            <strong style={{ fontSize: 13, color: 'var(--slate-800)' }}>Input Data</strong>
           </div>
-          <p style={{ margin: 0, fontSize: 13.5, color: '#64748b', lineHeight: 1.4 }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--slate-500)', lineHeight: 1.4 }}>
             Drop or browse CSV file, or paste spreadsheet rows into the editor.
           </p>
         </div>
 
         <div style={{
-          background: 'linear-gradient(135deg, rgba(248, 250, 252, 0.9) 0%, rgba(241, 245, 249, 0.7) 100%)',
-          border: '1px solid #e2e8f0',
+          background: 'linear-gradient(135deg, var(--slate-50) 0%, var(--slate-100) 100%)',
+          border: '1px solid var(--slate-200)',
           borderRadius: 10,
           padding: '12px 14px',
           display: 'flex',
@@ -195,9 +195,9 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
               background: '#059669', color: '#fff', width: 20, height: 20, borderRadius: '50%',
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700
             }}>3</span>
-            <strong style={{ fontSize: 13, color: '#1e293b' }}>Verify & Raise</strong>
+            <strong style={{ fontSize: 13, color: 'var(--slate-800)' }}>Verify & Raise</strong>
           </div>
-          <p style={{ margin: 0, fontSize: 13.5, color: '#64748b', lineHeight: 1.4 }}>
+          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--slate-500)', lineHeight: 1.4 }}>
             Check validation against SJVN records. Invoices are raised reliably.
           </p>
         </div>
@@ -210,8 +210,8 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
         style={{
-          border: `2px dashed ${isDragging ? '#2563eb' : '#cbd5e1'}`,
-          backgroundColor: isDragging ? '#eff6ff' : '#f8fafc',
+          border: `2px dashed ${isDragging ? '#2563eb' : 'var(--slate-300)'}`,
+          backgroundColor: isDragging ? 'var(--t-blue-50)' : 'var(--slate-50)',
           borderRadius: 12,
           padding: '18px 24px',
           textAlign: 'center',
@@ -233,16 +233,16 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
           style={{ display: 'none' }}
         />
         {fileName ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#ffffff', border: '1px solid #bfdbfe', padding: '6px 14px', borderRadius: 20, boxShadow: '0 2px 5px rgba(37,99,235,0.08)' }}>
-            <strong style={{ fontSize: 13, color: '#1e3a8a' }}>{fileName}</strong>
-            {fileSize && <span style={{ fontSize: 13, color: '#64748b' }}>({fileSize})</span>}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: '1px solid var(--t-blue-line)', padding: '6px 14px', borderRadius: 20, boxShadow: '0 2px 5px rgba(37,99,235,0.08)' }}>
+            <strong style={{ fontSize: 13, color: 'var(--on-blue)' }}>{fileName}</strong>
+            {fileSize && <span style={{ fontSize: 13, color: 'var(--slate-500)' }}>({fileSize})</span>}
           </div>
         ) : (
           <div>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--slate-800)' }}>
               Choose a file or drag and drop
             </span>
-            <span style={{ fontSize: 13.5, color: '#64748b', display: 'block', marginTop: 2 }}>
+            <span style={{ fontSize: 13.5, color: 'var(--slate-500)', display: 'block', marginTop: 2 }}>
               Supports CSV, TSV, or TXT invoice sheets
             </span>
           </div>
@@ -251,8 +251,8 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
 
       {/* Direct Paste Container */}
       <div style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
+        background: 'var(--surface)',
+        border: '1px solid var(--slate-200)',
         borderRadius: 10,
         overflow: 'hidden',
         boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
@@ -263,14 +263,14 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '8px 14px',
-          background: '#f8fafc',
-          borderBottom: '1px solid #e2e8f0',
+          background: 'var(--slate-50)',
+          borderBottom: '1px solid var(--slate-200)',
           fontSize: 13.5
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#475569', fontWeight: 600 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--slate-600)', fontWeight: 600 }}>
             <span>Spreadsheet CSV Data</span>
             {parsed.rows.length > 0 && (
-              <span style={{ background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: 12, fontSize: 13, fontWeight: 700 }}>
+              <span style={{ background: 'var(--t-blue-100)', color: 'var(--on-blue)', padding: '2px 8px', borderRadius: 12, fontSize: 13, fontWeight: 700 }}>
                 {parsed.rows.length} {parsed.rows.length === 1 ? 'bill' : 'bills'} detected
               </span>
             )}
@@ -280,7 +280,7 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
               type="button"
               className="btn btn-ghost btn-xs"
               onClick={handleClear}
-              style={{ color: '#ef4444' }}
+              style={{ color: 'var(--on-red)' }}
             >
               Clear
             </button>
@@ -300,8 +300,8 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
             fontSize: 13.5,
             lineHeight: 1.6,
-            color: '#1e293b',
-            background: '#ffffff',
+            color: 'var(--slate-800)',
+            background: 'var(--surface)',
             boxSizing: 'border-box',
             resize: 'vertical',
             whiteSpace: 'pre',
@@ -320,8 +320,8 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
         justifyContent: 'space-between',
         gap: 12,
         padding: '12px 16px',
-        background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-        border: '1px solid #e2e8f0',
+        background: 'linear-gradient(135deg, var(--slate-50) 0%, var(--slate-100) 100%)',
+        border: '1px solid var(--slate-200)',
         borderRadius: 10,
         flexWrap: 'wrap'
       }}>
@@ -332,7 +332,7 @@ export default function SellerInvoiceUpload({ open, onClose, onRaised }) {
             borderRadius: '50%',
             backgroundColor: parsed.rows.length === 0 ? '#94a3b8' : (checked && checked.failed === 0 ? '#10b981' : '#3b82f6')
           }} />
-          <span style={{ fontSize: 13, fontWeight: 500, color: '#334155' }}>
+          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--slate-700)' }}>
             {parsed.rows.length === 0
               ? 'Nothing to raise yet.'
               : `${parsed.rows.length} ${parsed.rows.length === 1 ? 'bill' : 'bills'} ready to validate.`}

@@ -273,8 +273,8 @@ export default function ReaAutomationPipeline({
 
   return (
     <div className="rea-pipeline-container" style={{
-      background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-      border: '1px solid #cbd5e1',
+      background: 'linear-gradient(180deg, var(--surface) 0%, var(--slate-50) 100%)',
+      border: '1px solid var(--slate-300)',
       borderRadius: 12,
       boxShadow: '0 8px 30px rgba(0,0,0,0.06)',
       padding: '20px 24px',
@@ -283,7 +283,7 @@ export default function ReaAutomationPipeline({
       overflow: 'hidden',
     }}>
       {mode === 'DEMO' && (
-        <div role="note" style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 12 }}>
+        <div role="note" style={{ background: 'var(--t-amber-50)', border: '1px solid var(--t-amber-line)', color: 'var(--on-amber)', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 12 }}>
           <strong>Demonstration.</strong> This walks through the steps a fetch goes through. Nothing is being contacted, read or saved — use “Trigger Fetch” for a real run.
         </div>
       )}
@@ -294,7 +294,7 @@ export default function ReaAutomationPipeline({
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
             </svg>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' }}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: 'var(--slate-900)' }}>
               REA Automation Live Execution Monitor
             </h3>
             {isCompleted ? (
@@ -311,7 +311,7 @@ export default function ReaAutomationPipeline({
               </span>
             )}
           </div>
-          <div style={{ fontSize: 13, color: '#64748b', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 13, color: 'var(--slate-500)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <span><strong>RPC Target:</strong> {rpcSource}</span>
             <span><strong>Period:</strong> {periodMonth || 'Active Month'}</span>
             <span><strong>Data Type:</strong> {dataType}</span>
@@ -320,7 +320,7 @@ export default function ReaAutomationPipeline({
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ display: 'flex', background: '#e2e8f0', borderRadius: 8, padding: 2, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', background: 'var(--slate-200)', borderRadius: 8, padding: 2, flexWrap: 'wrap' }}>
             <button
               className={`btn btn-sm ${activeTab === 'pipeline' ? 'btn-primary' : 'btn-ghost'}`}
               style={{ padding: '4px 10px', fontSize: 13.5, borderRadius: 6 }}
@@ -363,8 +363,8 @@ export default function ReaAutomationPipeline({
       {/* Downloaded Document Banner */}
       {result?.download && (
         <div style={{
-          background: '#eff6ff',
-          border: '1px solid #bfdbfe',
+          background: 'var(--t-blue-50)',
+          border: '1px solid var(--t-blue-line)',
           borderRadius: 8,
           padding: '10px 14px',
           marginBottom: 16,
@@ -377,8 +377,8 @@ export default function ReaAutomationPipeline({
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 22 }}>📄</span>
             <div>
-              <strong style={{ fontSize: 13.5, color: '#1e40af' }}>Certified Regional Energy Account (REA) Source File</strong>
-              <div style={{ fontSize: 12.5, color: '#3b82f6' }}>
+              <strong style={{ fontSize: 13.5, color: 'var(--on-blue)' }}>Certified Regional Energy Account (REA) Source File</strong>
+              <div style={{ fontSize: 12.5, color: 'var(--on-blue)' }}>
                 File: <strong>{result.download.fileName}</strong> • Size: {((result.download.fileSizeBytes || 0) / (1024 * 1024)).toFixed(2)} MB • Source: {rpcSource} Official Account
               </div>
             </div>
@@ -405,11 +405,11 @@ export default function ReaAutomationPipeline({
 
       {/* Progress Bar with Gradient Glow */}
       <div style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, fontWeight: 600, color: '#475569', marginBottom: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, fontWeight: 600, color: 'var(--slate-600)', marginBottom: 6 }}>
           <span>Overall Workflow Progress: <strong>{STAGES[currentStepIdx]?.shortName || 'Processing'}</strong></span>
           <span>{progressPercent}%</span>
         </div>
-        <div style={{ height: 8, background: '#e2e8f0', borderRadius: 999, overflow: 'hidden', position: 'relative' }}>
+        <div style={{ height: 8, background: 'var(--slate-200)', borderRadius: 999, overflow: 'hidden', position: 'relative' }}>
           <div style={{
             height: '100%',
             width: `${progressPercent}%`,
@@ -434,8 +434,8 @@ export default function ReaAutomationPipeline({
               <div
                 key={stage.id}
                 style={{
-                  background: isActive ? '#f0f7ff' : isDone ? '#f0fdf4' : isErr ? '#fef2f2' : '#ffffff',
-                  border: `1.5px solid ${isActive ? '#0b5fff' : isDone ? '#22c55e' : isErr ? '#ef4444' : '#e2e8f0'}`,
+                  background: isActive ? 'var(--t-blue-50)' : isDone ? 'var(--t-green-50)' : isErr ? 'var(--t-red-50)' : 'var(--surface)',
+                  border: `1.5px solid ${isActive ? '#0b5fff' : isDone ? '#22c55e' : isErr ? '#ef4444' : 'var(--slate-200)'}`,
                   borderRadius: 10,
                   padding: '14px 16px',
                   position: 'relative',
@@ -451,8 +451,8 @@ export default function ReaAutomationPipeline({
                       width: 28,
                       height: 28,
                       borderRadius: '50%',
-                      background: isDone ? '#22c55e' : isActive ? '#0b5fff' : isErr ? '#ef4444' : '#f1f5f9',
-                      color: isDone || isActive || isErr ? '#ffffff' : '#64748b',
+                      background: isDone ? '#22c55e' : isActive ? '#0b5fff' : isErr ? '#ef4444' : 'var(--slate-100)',
+                      color: isDone || isActive || isErr ? '#ffffff' : 'var(--slate-500)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -461,13 +461,13 @@ export default function ReaAutomationPipeline({
                     }}>
                       {isDone ? '✓' : isErr ? '!' : stage.id}
                     </div>
-                    <strong style={{ fontSize: 13.5, color: '#0f172a' }}>{stage.shortName}</strong>
+                    <strong style={{ fontSize: 13.5, color: 'var(--slate-900)' }}>{stage.shortName}</strong>
                   </div>
                   <span>{STAGE_ICONS[idx]}</span>
                 </div>
 
                 {/* Step Body */}
-                <div style={{ fontSize: 13.5, color: '#475569', marginBottom: 8, minHeight: 34, lineHeight: 1.4 }}>
+                <div style={{ fontSize: 13.5, color: 'var(--slate-600)', marginBottom: 8, minHeight: 34, lineHeight: 1.4 }}>
                   {stage.id === 3 && result?.download?.fileName
                     ? `Downloaded certified ${result.download.fileName} (${((result.download.fileSizeBytes || 0) / (1024 * 1024)).toFixed(1)} MB)`
                     : stage.description}
@@ -477,8 +477,8 @@ export default function ReaAutomationPipeline({
                 <div style={{
                   fontSize: 13,
                   fontFamily: 'monospace',
-                  background: isActive ? '#e0efff' : isDone ? '#dcfce7' : isErr ? '#fee2e2' : '#f8fafc',
-                  color: isActive ? '#0369a1' : isDone ? '#15803d' : isErr ? '#b91c1c' : '#64748b',
+                  background: isActive ? 'var(--t-blue-50)' : isDone ? 'var(--t-green-100)' : isErr ? 'var(--t-red-100)' : 'var(--slate-50)',
+                  color: isActive ? 'var(--on-blue)' : isDone ? 'var(--on-green-2)' : isErr ? 'var(--red-deep)' : 'var(--slate-500)',
                   padding: '4px 8px',
                   borderRadius: 6,
                   border: '1px solid rgba(0,0,0,0.05)',
@@ -503,42 +503,42 @@ export default function ReaAutomationPipeline({
       {/* Main Tab 2: Station Extraction Preview (Real Extracted Data) */}
       {activeTab === 'stations' && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginBottom: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--slate-900)', marginBottom: 10 }}>
             Extracted Hydro / REIA Station Parameters ({rpcSource} Master)
           </div>
           {result?.stations && result.stations.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
               {result.stations.map((st, idx) => (
-                <div key={idx} style={{ border: '1px solid #cbd5e1', borderRadius: 10, padding: 16, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                <div key={idx} style={{ border: '1px solid var(--slate-300)', borderRadius: 10, padding: 16, background: 'var(--surface)', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <strong style={{ fontSize: 15, color: '#0f172a' }}>⚡ {st.station_name}</strong>
+                    <strong style={{ fontSize: 15, color: 'var(--slate-900)' }}>⚡ {st.station_name}</strong>
                     <Badge status={st.status === 'VALIDATED' ? 'ACTIVE' : st.status} label={st.status || 'INGESTED'} />
                   </div>
-                  <div style={{ fontSize: 13, color: '#64748b', marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, color: 'var(--slate-500)', marginBottom: 10 }}>
                     SJVN Ltd • {st.station_id === 'NATHPA_JHAKRI' ? '1,500 MW' : '412 MW'} Hydro • Himachal Pradesh
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13, background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13, background: 'var(--slate-50)', padding: 12, borderRadius: 8, border: '1px solid var(--slate-200)' }}>
                     <div>
-                      <span style={{ color: '#64748b', fontSize: 12 }}>Scheduled Energy:</span>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#0b5fff' }}>{fmtNumber(st.energy_mwh)} MWh</div>
+                      <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>Scheduled Energy:</span>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--on-blue)' }}>{fmtNumber(st.energy_mwh)} MWh</div>
                     </div>
                     <div>
-                      <span style={{ color: '#64748b', fontSize: 12 }}>PAF / Availability:</span>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: '#16a34a' }}>{fmtNumber(st.availability_percent)} %</div>
+                      <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>PAF / Availability:</span>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--green-strong)' }}>{fmtNumber(st.availability_percent)} %</div>
                     </div>
                     {st.free_energy_mwh != null && (
                       <div>
-                        <span style={{ color: '#64748b', fontSize: 12 }}>Free Energy (GoHP 12%):</span>
-                        <div style={{ fontWeight: 600, color: '#0f172a' }}>{fmtNumber(st.free_energy_mwh)} MWh</div>
+                        <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>Free Energy (GoHP 12%):</span>
+                        <div style={{ fontWeight: 600, color: 'var(--slate-900)' }}>{fmtNumber(st.free_energy_mwh)} MWh</div>
                       </div>
                     )}
                     <div>
-                      <span style={{ color: '#64748b', fontSize: 12 }}>Matched Contract:</span>
-                      <div style={{ fontWeight: 600, color: '#0f172a', fontFamily: 'monospace' }}>{st.contract_no}</div>
+                      <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>Matched Contract:</span>
+                      <div style={{ fontWeight: 600, color: 'var(--slate-900)', fontFamily: 'monospace' }}>{st.contract_no}</div>
                     </div>
                     <div style={{ gridColumn: 'span 2' }}>
-                      <span style={{ color: '#64748b', fontSize: 12 }}>Billing Family Ref (BFR):</span>
-                      <div style={{ fontFamily: 'monospace', fontSize: 12, color: '#334155', background: '#e2e8f0', padding: '3px 8px', borderRadius: 4, marginTop: 2, display: 'inline-block' }}>
+                      <span style={{ color: 'var(--slate-500)', fontSize: 12 }}>Billing Family Ref (BFR):</span>
+                      <div style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--slate-700)', background: 'var(--slate-200)', padding: '3px 8px', borderRadius: 4, marginTop: 2, display: 'inline-block' }}>
                         {st.bfr}
                       </div>
                     </div>
@@ -548,29 +548,29 @@ export default function ReaAutomationPipeline({
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
-              <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, background: '#ffffff' }}>
+              <div style={{ border: '1px solid var(--slate-200)', borderRadius: 8, padding: 14, background: 'var(--surface)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <strong>⚡ Nathpa Jhakri Hydro Power Station (NJHPS)</strong>
                   <Badge status="ACTIVE" label="1500 MW" />
                 </div>
-                <div style={{ fontSize: 13.5, color: '#64748b', marginBottom: 8 }}>SJVN Ltd • Himachal Pradesh (Satluj Basin)</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13.5, background: '#f8fafc', padding: 8, borderRadius: 6 }}>
-                  <div>Scheduled Energy: <strong style={{ color: '#0b5fff' }}>1,154,794.15 MWh</strong></div>
-                  <div>PAF Achieved: <strong style={{ color: '#16a34a' }}>106.45 %</strong></div>
+                <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginBottom: 8 }}>SJVN Ltd • Himachal Pradesh (Satluj Basin)</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13.5, background: 'var(--slate-50)', padding: 8, borderRadius: 6 }}>
+                  <div>Scheduled Energy: <strong style={{ color: 'var(--on-blue)' }}>1,154,794.15 MWh</strong></div>
+                  <div>PAF Achieved: <strong style={{ color: 'var(--green-strong)' }}>106.45 %</strong></div>
                   <div>PPA Ref: <strong>PPA/SJVN/NJHPS/001</strong></div>
                   <div>Status: <Badge status="ACTIVE" label="Matched" /></div>
                 </div>
               </div>
 
-              <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, background: '#ffffff' }}>
+              <div style={{ border: '1px solid var(--slate-200)', borderRadius: 8, padding: 14, background: 'var(--surface)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <strong>⚡ Rampur Hydro Electric Project (RHEP)</strong>
                   <Badge status="ACTIVE" label="412 MW" />
                 </div>
-                <div style={{ fontSize: 13.5, color: '#64748b', marginBottom: 8 }}>SJVN Ltd • Himachal Pradesh (Satluj Basin)</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13.5, background: '#f8fafc', padding: 8, borderRadius: 6 }}>
-                  <div>Scheduled Energy: <strong style={{ color: '#0b5fff' }}>317,031.53 MWh</strong></div>
-                  <div>PAF Achieved: <strong style={{ color: '#16a34a' }}>109.96 %</strong></div>
+                <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginBottom: 8 }}>SJVN Ltd • Himachal Pradesh (Satluj Basin)</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 13.5, background: 'var(--slate-50)', padding: 8, borderRadius: 6 }}>
+                  <div>Scheduled Energy: <strong style={{ color: 'var(--on-blue)' }}>317,031.53 MWh</strong></div>
+                  <div>PAF Achieved: <strong style={{ color: 'var(--green-strong)' }}>109.96 %</strong></div>
                   <div>PPA Ref: <strong>PPA/SJVN/RHPS/001</strong></div>
                   <div>Status: <Badge status="ACTIVE" label="Matched" /></div>
                 </div>
@@ -584,7 +584,7 @@ export default function ReaAutomationPipeline({
       {activeTab === 'records' && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: '#0f172a' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-900)' }}>
               Ingested Energy Ledger Entries ({result?.ingestedRecords?.length || result?.records || 0} Records)
             </span>
             {onViewRecords && (
@@ -593,7 +593,7 @@ export default function ReaAutomationPipeline({
               </button>
             )}
           </div>
-          <div style={{ background: '#ffffff', borderRadius: 8, border: '1px solid #cbd5e1', overflowX: 'auto' }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 8, border: '1px solid var(--slate-300)', overflowX: 'auto' }}>
             <table className="data-table" style={{ margin: 0 }}>
               <thead>
                 <tr>
@@ -629,7 +629,7 @@ export default function ReaAutomationPipeline({
                         <td><strong>{rec.contract_no}</strong></td>
                         <td>{rec.station_name}</td>
                         <td><span className="badge badge-blue">{rec.period_month}</span></td>
-                        <td style={{ fontWeight: 700, color: '#0b5fff' }}>{fmtNumber(rec.energy_mwh)} MWh</td>
+                        <td style={{ fontWeight: 700, color: 'var(--on-blue)' }}>{fmtNumber(rec.energy_mwh)} MWh</td>
                         <td>{rec.availability_percent != null ? `${fmtNumber(rec.availability_percent)}%` : '-'}</td>
                         <td><Badge status={rec.status} /></td>
                         <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{rec.billing_family_ref}</td>
@@ -637,7 +637,7 @@ export default function ReaAutomationPipeline({
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: 20, color: '#64748b' }}>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: 20, color: 'var(--slate-500)' }}>
                         No individual records cached in view. Click "View Ingested Energy Records in Ledger" to inspect all.
                       </td>
                     </tr>
@@ -653,7 +653,7 @@ export default function ReaAutomationPipeline({
       {(activeTab === 'logs' || showLogs) && (
         <div style={{ marginTop: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: '#475569' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--slate-600)' }}>
               🖥️ Live Automation Console Output
             </span>
             <button
@@ -703,8 +703,8 @@ export default function ReaAutomationPipeline({
       {isCompleted && (
         <div style={{
           marginTop: 16,
-          background: '#f0fdf4',
-          border: '1px solid #bbf7d0',
+          background: 'var(--t-green-50)',
+          border: '1px solid var(--t-green-line)',
           borderRadius: 8,
           padding: '14px 18px',
           display: 'flex',
@@ -719,13 +719,13 @@ export default function ReaAutomationPipeline({
               <polyline points="22 4 12 14.01 9 11.01" />
             </svg>
             <div>
-              <strong style={{ color: '#166534', fontSize: 14.5 }}>REA Import Cycle Completed Successfully!</strong>
-              <div style={{ fontSize: 13.5, color: '#15803d', marginTop: 2 }}>
+              <strong style={{ color: 'var(--on-green)', fontSize: 14.5 }}>REA Import Cycle Completed Successfully!</strong>
+              <div style={{ fontSize: 13.5, color: 'var(--on-green-2)', marginTop: 2 }}>
                 {result?.records !== undefined
                   ? `${result.records} record(s) imported from ${result.parsedStations || 2} station(s) into Energy Ledger.`
                   : 'Provisional/Final energy accounts matched & saved to Energy Ledger.'}
                 {result?.download?.fileName && (
-                  <span style={{ marginLeft: 6, color: '#166534' }}>
+                  <span style={{ marginLeft: 6, color: 'var(--on-green)' }}>
                     (Source: <strong>{result.download.fileName}</strong>)
                   </span>
                 )}

@@ -18,7 +18,7 @@ function saveBlob(blob, name) {
 
 export default function NoteApprovals() {
   const { user } = useAuth();
-  const canAct = ['FINANCE_USER', 'REIA_USER', 'REIA_ADMIN', 'SJVN_ADMIN'].includes(user?.role);
+  const canAct = ['FINANCE_USER', 'REIA_MAKER', 'REIA_CHECKER'].includes(user?.role);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [rejecting, setRejecting] = useState(null);

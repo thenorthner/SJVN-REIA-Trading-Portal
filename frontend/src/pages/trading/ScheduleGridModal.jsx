@@ -58,7 +58,7 @@ export function ScheduleGridModal({ tx, onClose, onSubmit }) {
             <input type="date" className="input" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} required />
           </Field>
           
-          <div style={{ borderLeft: '1px solid #ccc', paddingLeft: 15, display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+          <div style={{ borderLeft: '1px solid var(--slate-100)', paddingLeft: 15, display: 'flex', gap: 10, alignItems: 'flex-end' }}>
             <Field label="Bulk Fill (MW)">
               <input type="number" step="0.1" className="input" value={bulkMw} onChange={e => setBulkMw(e.target.value)} placeholder="e.g. 50" style={{ width: 120 }} />
             </Field>
@@ -100,7 +100,7 @@ export function ScheduleGridModal({ tx, onClose, onSubmit }) {
         </div>
 
         {error && (
-          <div style={{ marginTop: 12, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 4, color: 'var(--red-deep)', fontSize: 13 }}>
+          <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 4, color: 'var(--red-deep)', fontSize: 13 }}>
             {error}
           </div>
         )}

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { api } from '../../api/client.js';
@@ -197,7 +198,7 @@ export default function BilateralApplications() {
   };
 
   const exportBtn = { background: '#3b82f6', color: '#fff', border: 'none' };
-  const linkBtn = { color: '#1d4ed8', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, fontWeight: 500 };
+  const linkBtn = { color: 'var(--on-blue)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, fontWeight: 500 };
 
   return (
     <div style={{ padding: 20 }}>
@@ -227,7 +228,7 @@ export default function BilateralApplications() {
         </div>
 
         {message && (
-          <div style={{ marginBottom: 10, fontSize: 13, color: message.includes('fail') ? '#991b1b' : '#166534' }}>{message}</div>
+          <div style={{ marginBottom: 10, fontSize: 13, color: message.includes('fail') ? 'var(--on-red)' : 'var(--on-green)' }}>{message}</div>
         )}
 
         {loading ? (
@@ -262,13 +263,13 @@ export default function BilateralApplications() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10} style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
+                      <td colSpan={10} style={{ padding: 24, textAlign: 'center', color: 'var(--slate-500)' }}>
                         No bilateral applications yet.{' '}
                         <Link to="/trading/bilateral/bidding">Submit Format Generation</Link>
                       </td>
                     </tr>
                   ) : filtered.map((r, i) => (
-                    <tr key={r.id} style={{ background: i % 2 ? '#f8fafc' : '#fff', borderBottom: '1px solid #e2e8f0' }}>
+                    <tr key={r.id} style={{ background: i % 2 ? 'var(--slate-50)' : 'var(--surface)', borderBottom: '1px solid var(--slate-200)' }}>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{fmtDate(r.application_date)}</td>
                       <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: 13.5 }}>{r.application_id}</td>
                       <td style={{ padding: '10px 12px' }}>{r.applicant}</td>
@@ -281,11 +282,11 @@ export default function BilateralApplications() {
                       </td>
                       <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                         {r.transaction_id ? (
-                          <Link to={`/trading/bilateral/desk?tx=${encodeURIComponent(r.transaction_id)}`} style={{ color: '#1d4ed8', fontWeight: 500 }}>
+                          <Link to={`/trading/bilateral/desk?tx=${encodeURIComponent(r.transaction_id)}`} style={{ color: 'var(--on-blue)', fontWeight: 500 }}>
                             Open contract
                           </Link>
                         ) : r.bidding_id ? (
-                          <button type="button" style={linkBtn} onClick={() => openConvert(r)}>+ Create contract</button>
+                          <WriteOnly><button type="button" style={linkBtn} onClick={() => openConvert(r)}>+ Create contract</button></WriteOnly>
                         ) : (
                           <span style={{ color: '#94a3b8' }}>—</span>
                         )}
@@ -304,7 +305,7 @@ export default function BilateralApplications() {
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 12, fontSize: 13.5, color: '#64748b' }}>
+            <div style={{ marginTop: 12, fontSize: 13.5, color: 'var(--slate-500)' }}>
               Showing {filtered.length === 0 ? 0 : 1} to {filtered.length} of {filtered.length} entries
               {search.trim() && rows.length !== filtered.length ? ` (filtered from ${rows.length})` : ''}
             </div>
@@ -315,7 +316,7 @@ export default function BilateralApplications() {
       {convertRow && (
         <Modal open={true} onClose={() => setConvertRow(null)} title={`Create contract from ${convertRow.application_id}`}>
           <form onSubmit={submitConvert}>
-            <p style={{ fontSize: 13, color: '#475569', marginBottom: 14 }}>
+            <p style={{ fontSize: 13, color: 'var(--slate-600)', marginBottom: 14 }}>
               The parties, corridor and schedule come across from the application.
               The format-generation form carries no rate, so the commercial terms are set here.
             </p>
@@ -340,7 +341,7 @@ export default function BilateralApplications() {
               </Field>
             </div>
             {convertForm.sale_rate_per_unit && (
-              <p style={{ fontSize: 13.5, color: '#475569', marginTop: 10 }}>
+              <p style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 10 }}>
                 Purchase rate works out to{' '}
                 <strong>
                   ₹{(Number(convertForm.sale_rate_per_unit) - Number(convertForm.trading_margin_per_unit || 0)).toFixed(4)}
@@ -349,7 +350,7 @@ export default function BilateralApplications() {
               </p>
             )}
             {convertError && (
-              <div style={{ marginTop: 12, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, color: '#991b1b', fontSize: 13 }}>
+              <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 6, color: 'var(--on-red)', fontSize: 13 }}>
                 {convertError}
               </div>
             )}

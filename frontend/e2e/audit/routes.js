@@ -14,6 +14,8 @@ const APP = fs.readFileSync(path.join(here, '../../src/App.jsx'), 'utf8');
 const uniq = (...lists) => [...new Set(lists.flat())];
 const GUARDS = {
   REIA_ROLES: ROLE_GROUPS.REIA_ALL,
+  HYDRO_THERMAL_ROLES: ROLE_GROUPS.HYDRO_THERMAL_ALL,
+  THERMAL_ROLES: ROLE_GROUPS.THERMAL_ALL,
   TRADING_INTERNAL_ROLES: ROLE_GROUPS.TRADING_ALL,
   TRADING_CLIENT_ROLES: ROLE_GROUPS.TRADING_CLIENT_ALL,
   TRADING_COMBINED_ROLES: uniq(ROLE_GROUPS.TRADING_ALL, ROLE_GROUPS.TRADING_CLIENT_ALL),
@@ -32,7 +34,7 @@ const GUARDS = {
 export const DEMO_PASSWORD = 'password123';
 export const LOGINS = {
   SJVN_ADMIN: 'admin@sjvn.in',
-  REIA_USER: 'reia@sjvn.in',
+  REIA_MAKER: 'reia@sjvn.in',
   TRADING_USER: 'trading@sjvn.in',
   FINANCE_USER: 'finance@sjvn.in',
   MANAGEMENT: 'management@sjvn.in',

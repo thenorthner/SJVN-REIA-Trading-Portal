@@ -11,7 +11,7 @@ function ShortfallBar({ pct }) {
   const tone = pct >= 25 ? 'var(--danger, #b91c1c)' : pct >= 10 ? 'var(--warning, #b45309)' : 'var(--slate-400, #94a3b8)';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 120 }}>
-      <div style={{ flex: 1, height: 6, background: 'var(--slate-100, #f1f5f9)', borderRadius: 3, overflow: 'hidden' }}>
+      <div style={{ flex: 1, height: 6, background: 'var(--slate-100, var(--slate-100))', borderRadius: 3, overflow: 'hidden' }}>
         <div style={{ width: `${width}%`, height: '100%', background: tone }} />
       </div>
       <span style={{ fontSize: 13.5, color: tone, minWidth: 44, textAlign: 'right' }}>{fmtNumber(pct, 2)}%</span>

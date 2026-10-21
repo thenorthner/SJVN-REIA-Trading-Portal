@@ -65,7 +65,7 @@ export const DashboardKPIs = () => {
   return (
     <div className="animate-fade-in-up stagger-2">
       {failed && (
-        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b',
+        <div style={{ background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', color: 'var(--on-red)',
                       borderRadius: 6, padding: '8px 12px', marginBottom: 12, fontSize: 13 }}>
           Could not load live figures — the cards below are showing no value rather than a stale one.
         </div>

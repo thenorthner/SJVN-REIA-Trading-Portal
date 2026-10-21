@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { Link, useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { api } from '../../api/client.js';
@@ -155,9 +156,9 @@ export default function BilateralContractsSummary() {
           <button type="button" className="btn btn-sm btn-outline" style={{ color: '#fff', borderColor: 'rgba(255,255,255,0.5)' }} onClick={() => navigate('/trading/bilateral/desk')}>
             Operations desk
           </button>
-          <button type="button" className="btn btn-sm btn-primary" onClick={() => navigate('/trading/bilateral/desk?action=create')}>
+          <WriteOnly><button type="button" className="btn btn-sm btn-primary" onClick={() => navigate('/trading/bilateral/desk?action=create')}>
             + Create Contract
-          </button>
+          </button></WriteOnly>
         </div>
       </div>
 
@@ -207,15 +208,15 @@ export default function BilateralContractsSummary() {
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={4} style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
+                      <td colSpan={4} style={{ padding: 24, textAlign: 'center', color: 'var(--slate-500)' }}>
                         No bilateral contracts yet.{' '}
                         <Link to="/trading/bilateral/desk?action=create">Create one</Link>
                       </td>
                     </tr>
                   ) : filtered.map((r) => (
-                    <tr key={r.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                    <tr key={r.id} style={{ borderBottom: '1px solid var(--slate-200)' }}>
                       <td style={{ padding: '10px 12px' }}>
-                        <Link to={`/trading/bilateral/desk?tx=${encodeURIComponent(r.id)}`} style={{ color: '#1d4ed8', fontWeight: 500 }}>
+                        <Link to={`/trading/bilateral/desk?tx=${encodeURIComponent(r.id)}`} style={{ color: 'var(--on-blue)', fontWeight: 500 }}>
                           {r.loa_no || r.loi_contract_ref || r.id}
                         </Link>
                       </td>
@@ -227,7 +228,7 @@ export default function BilateralContractsSummary() {
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 12, fontSize: 13.5, color: '#64748b' }}>
+            <div style={{ marginTop: 12, fontSize: 13.5, color: 'var(--slate-500)' }}>
               Showing {filtered.length === 0 ? 0 : 1} to {filtered.length} of {filtered.length} entries
               {search.trim() && rows.length !== filtered.length ? ` (filtered from ${rows.length})` : ''}
             </div>

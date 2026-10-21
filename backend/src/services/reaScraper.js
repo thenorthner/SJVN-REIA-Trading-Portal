@@ -16,7 +16,7 @@
  */
 
 import { db } from '../db/index.js';
-import { newId, logAudit, pushNotification, buildBillingFamilyRef, directionForContract } from '../util.js';
+import { newId, logAudit, pushNotification, notifyRoles, buildBillingFamilyRef, directionForContract } from '../util.js';
 import { getParamNumber } from '../mastersService.js';
 import { RPC_SOURCES, mmyyToYYYYMM, yyyymmToMMYY } from '../config/rpcSources.js';
 import { checkAccountPeriod, shiftMonth, SAME_AS_ADJACENT_NOTE } from './reaMonthChecks.js';
@@ -325,7 +325,7 @@ function processAndSave(logId, parsedData, rpcKey, period, dataType) {
       
       // Push notification about orphan data
       pushNotification({
-        role: 'REIA_USER',
+        role: 'REIA_MAKER',
         type: 'REA_SCRAPER',
         message: `REA data for "${station.station_name}" (${period}) — no matching contract found. Manual mapping required.`,
       });
@@ -378,7 +378,7 @@ function processAndSave(logId, parsedData, rpcKey, period, dataType) {
         + `likely that month's account read again. Check the ${period} PDF before this is used.`;
       db.prepare(`UPDATE energy_data SET status = 'DISPUTED', deviation_notes = ?, updated_at = datetime('now') WHERE id = ?`).run(note, edId);
       pushNotification({
-        role: 'REIA_USER',
+        role: 'REIA_MAKER',
         type: 'REA_SCRAPER',
         message: `REA ${rpcKey} ${period}: ${contract.contract_no} energy ${station.energy_mwh} MWh is identical to ${twin.period_month} — held as DISPUTED, not validated.`,
       });
@@ -512,7 +512,7 @@ async function runFullCycle(rpcKey) {
     // Success notification
     if (results.records > 0) {
       pushNotification({
-        role: 'REIA_USER',
+        role: 'REIA_MAKER',
         type: 'REA_SCRAPER',
         message: ` REA Scraper: ${results.records} new energy record(s) imported from ${rpcKey} for ${newMonths.map(m => m.period).join(', ')}`,
       });
@@ -523,10 +523,11 @@ async function runFullCycle(rpcKey) {
     results.errors.push({ month: 'ALL', error: err.message });
 
     // Alert notification for scraper failure
-    pushNotification({
-      role: 'SJVN_ADMIN',
+    // To the desks that upload the account by hand when the pull fails (REIA
+    // energy data, hydro station bills) and to IT — not the administrator alone.
+    notifyRoles(['REIA_MAKER', 'COMMERCIAL_ADMIN', 'IT_SUPER_ADMIN'], {
       type: 'REA_SCRAPER',
-      message: ` REA Scraper FAILED for ${rpcKey}: ${err.message}. Please check manually or use manual upload.`,
+      message: `REA Scraper FAILED for ${rpcKey}: ${err.message}. Please check manually or use manual upload.`,
     });
   }
 
@@ -657,7 +658,7 @@ async function triggerManual(rpcKey, periodMonth, dataType = 'PROVISIONAL', { ur
   const fileSizeBytes = docVersion?.file_size_bytes || (fs.existsSync(download.filePath) ? fs.statSync(download.filePath).size : 0);
 
   pushNotification({
-    role: 'REIA_USER',
+    role: 'REIA_MAKER',
     type: 'REA_SCRAPER',
     message: ` Manual REA import: ${count} record(s) from ${rpcKey} for ${periodMonth}`,
   });

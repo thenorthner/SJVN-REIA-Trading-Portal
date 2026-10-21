@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { api } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
@@ -133,9 +134,9 @@ export default function PreTradeBoard() {
         description="Seller Availability & Buyer Consents"
         actions={
           (isTRADING || isSeller) && (
-            <button onClick={() => setShowCreate(true)} className="btn-primary">
+            <WriteOnly><button onClick={() => setShowCreate(true)} className="btn-primary">
               Declare Availability
-            </button>
+            </button></WriteOnly>
           )
         }
       />
@@ -177,7 +178,7 @@ export default function PreTradeBoard() {
                              </div>
                            )}
                            {c.status === 'CONFIRMED' && c.linked_transaction_id && (
-                               <span style={{ fontSize: 12.5, color: '#3b82f6' }}>Tx: {c.linked_transaction_id}</span>
+                               <span style={{ fontSize: 12.5, color: 'var(--on-blue)' }}>Tx: {c.linked_transaction_id}</span>
                            )}
                         </div>
                       </div>

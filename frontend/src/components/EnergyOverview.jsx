@@ -9,14 +9,15 @@ import { Card, StatCard, fmtNumber } from './ui.jsx';
 
 const monthLabel = (ym) => new Date(`${ym}-01T00:00:00`).toLocaleDateString('en-IN', { month: 'short', year: '2-digit' });
 
-export default function EnergyOverview({ contractId, period, status, rows = [], onShow }) {
+export default function EnergyOverview({ contractId, period, status, rows = [], onShow, vertical }) {
   // Read again whenever the list behind it changes — a record, a validation, a lock.
   const stamp = rows.map((r) => `${r.id}:${r.status}:${r.energy_mwh}`).join('|');
   const [a, setA] = useState(null);
   useEffect(() => {
     // A courtesy above the list: if it cannot load, the list stands without it.
-    Promise.resolve(api.energyRecords?.analytics?.(contractId ? { contract_id: contractId } : undefined)).then((r) => setA(r || false)).catch(() => setA(false));
-  }, [contractId, stamp]);
+    const queryParams = { ...(contractId ? { contract_id: contractId } : {}), ...(vertical ? { vertical } : {}) };
+    Promise.resolve(api.energyRecords?.analytics?.(Object.keys(queryParams).length ? queryParams : undefined)).then((r) => setA(r || false)).catch(() => setA(false));
+  }, [contractId, stamp, vertical]);
 
   const live = rows.filter((r) => !r.is_superseded);
   const awaiting = live.filter((r) => r.status === 'VALIDATED' && !r.response_status).length;

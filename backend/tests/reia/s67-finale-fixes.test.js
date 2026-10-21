@@ -32,7 +32,7 @@ beforeEach(() => {
 describe('A PSA reconciled on final source energy', () => {
   it('is on a final basis when every source PPA figure is final', async () => {
     makeInvoice({ contract_id: psa.id, direction: 'SJVN_TO_BUYER', status: 'SENT', billing_period: '2026-09', total_amount: 23600000, energy_mwh: 8000 });
-    const r = await post('/api/reconciliation/run', { contract_id: psa.id, period_type: 'MONTHLY', period: '2026-09' }, tokenFor('SJVN_ADMIN'));
+    const r = await post('/api/reconciliation/run', { contract_id: psa.id, period_type: 'MONTHLY', period: '2026-09' }, tokenFor('REIA_MAKER'));
     expect(r.status, JSON.stringify(r.body)).toBe(201);
     const d = (await get(`/api/reconciliation/${r.body.id}`)).body;
     expect(d.data_basis).toBe('FINAL');

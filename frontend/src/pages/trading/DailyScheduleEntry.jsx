@@ -49,7 +49,7 @@ export default function DailyScheduleEntry() {
     <div style={{ padding: 20, maxWidth: 820, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h1 style={{ margin: 0, fontSize: 22 }}>Daily Schedule Entry</h1>
-        <Link to="/reports/daily-schedule" style={{ color: '#1d4ed8', fontSize: 13 }}>Daily Schedule Report →</Link>
+        <Link to="/reports/daily-schedule" style={{ color: 'var(--on-blue)', fontSize: 13 }}>Daily Schedule Report →</Link>
       </div>
       <Card>
         <form onSubmit={handleSubmit}>
@@ -77,9 +77,9 @@ export default function DailyScheduleEntry() {
           <Field label="Remarks">
             <input className="input" value={form.remarks} onChange={(e) => set('remarks', e.target.value)} />
           </Field>
-          {error && <div role="alert" style={{ color: '#b91c1c', marginTop: 12 }}>{error}</div>}
+          {error && <div role="alert" style={{ color: 'var(--red-deep)', marginTop: 12 }}>{error}</div>}
           {success && (
-            <div role="status" style={{ color: '#15803d', marginTop: 12 }}>
+            <div role="status" style={{ color: 'var(--on-green-2)', marginTop: 12 }}>
               Saved ({success.id}). <Link to="/reports/daily-schedule">View report</Link>
             </div>
           )}

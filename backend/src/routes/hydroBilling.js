@@ -13,7 +13,7 @@ import path from 'path';
 import multer from 'multer';
 import { fileURLToPath } from 'url';
 import db from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, PLATFORM_ADMINS } from '../middleware/auth.js';
 import { newId, genInvoiceNo, pushNotification } from '../util.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1379,7 +1379,9 @@ export async function runReaAutoDraft({ rpc = 'NRPC', lookbackMonths = 3, now = 
     }
     // A station that threw is a fault in the platform, not a gap in the inputs.
     if (failed.length) {
-      noteOnce('SJVN_ADMIN', `Auto-draft failed on ${failed.length} station-month(s): ${reasons(failed)}`);
+      // The desk drafts these by hand when the run fails, so the desk is told;
+      // IT, because a throw is a platform fault (Target #2: not the administrator alone).
+      for (const role of ['COMMERCIAL_ADMIN', 'IT_SUPER_ADMIN']) noteOnce(role, `Auto-draft failed on ${failed.length} station-month(s): ${reasons(failed)}`);
     }
     const billNos = created.map((b) => b.bill_no);
     const left = blocked.map((b) => ({ month: b.month, contract_no: b.contract_no, reason: b.reason }));
@@ -1398,7 +1400,7 @@ export async function runReaAutoDraft({ rpc = 'NRPC', lookbackMonths = 3, now = 
   } catch (err) {
     job.status = 'FAILED';
     job.error = err.message;
-    noteOnce('SJVN_ADMIN', `Auto-draft from the ${rpc} REA failed for ${from}..${to}: ${err.message}. Draft from the Hydro Billing page instead.`);
+    for (const role of ['COMMERCIAL_ADMIN', 'IT_SUPER_ADMIN']) noteOnce(role, `Auto-draft from the ${rpc} REA failed for ${from}..${to}: ${err.message}. Draft from the Hydro Billing page instead.`);
     recordAutoDraft({ rpc, from, to, outcome: 'FAILED', detail: err.message, startedAt });
     return { job_id: id, from_month: from, to_month: to, error: err.message };
   } finally {
@@ -1433,6 +1435,90 @@ router.get('/from-rea/auto', requireRole(...READ), (_req, res) => {
     } : null,
     recent,
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REA fetch log — what the scheduled NRPC scan downloaded, read and recorded
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /hydro-billing/rea-fetch-log — every REA the scan has fetched, newest
+ * first, each with the station figures it recorded. The scan runs on a cron
+ * with no one watching; a month that never arrived or failed to read shows
+ * here instead of only as a bill that was never drafted.
+ */
+router.get('/rea-fetch-log', requireRole(...READ), (req, res) => {
+  const rpc = String(req.query.rpc || 'NRPC').toUpperCase();
+  const log = reaScraper.getFetchLog({ rpc_source: rpc });
+  const stationRows = db.prepare(`
+    SELECT ed.id, ed.contract_id, ed.energy_mwh, ed.availability_percent, ed.free_energy_mwh, ed.status,
+           c.contract_no, e.name AS station_name
+    FROM energy_data ed
+    JOIN contracts c ON c.id = ed.contract_id
+    LEFT JOIN entities e ON e.id = c.seller_id
+    WHERE ed.source = 'REA' AND ed.period_month = ? AND ed.data_type = ?
+    ORDER BY c.contract_no
+  `);
+  const status = reaScraper.getStatus()[rpc] || null;
+  // The server's disk path is not the desk's business; the PDF route serves it.
+  if (status?.latest_fetch) status.latest_fetch = { ...status.latest_fetch, local_file_path: undefined };
+  res.json({
+    rpc,
+    scanning: reaScanRunning,
+    status,
+    log: log.map((l) => ({
+      ...l,
+      has_pdf: Boolean(l.local_file_path && fs.existsSync(l.local_file_path)) || Boolean(l.version_id),
+      local_file_path: undefined,
+      stations: l.status === 'PROCESSED' ? stationRows.all(l.period_month, l.data_type) : [],
+    })),
+  });
+});
+
+// GET /hydro-billing/rea-fetch-log/:logId/pdf — the certified REA as fetched.
+router.get('/rea-fetch-log/:logId/pdf', requireRole(...READ), (req, res) => {
+  const log = db.prepare(`
+    SELECT l.*, v.file_path AS version_path FROM rea_fetch_log l
+    LEFT JOIN document_versions v ON v.document_id = l.document_id
+    WHERE l.id = ? ORDER BY v.version_number DESC LIMIT 1
+  `).get(req.params.logId);
+  const file = [log?.local_file_path, log?.version_path].find((f) => f && fs.existsSync(f));
+  if (!file) return res.status(404).json({ error: 'The REA PDF for this fetch is not on the server' });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${path.basename(file)}"`);
+  fs.createReadStream(file).pipe(res);
+});
+
+/**
+ * POST /hydro-billing/rea-scan — run the scheduled scan now: look for REAs
+ * not yet fetched, record their station figures, then the same auto-draft
+ * sweep the cron runs after it. Bills are only drafted, never issued.
+ */
+let reaScanRunning = false;
+router.post('/rea-scan', requireRole(...WRITE), async (req, res) => {
+  if (reaScanRunning) return res.status(409).json({ error: 'An NRPC scan is already running — wait for it to finish' });
+  reaScanRunning = true;
+  try {
+    const scan = await reaScraper.runFullCycle('NRPC');
+    let draft;
+    try {
+      draft = await runReaAutoDraft();
+    } catch (err) {
+      draft = { error: err.message };
+    }
+    secureLogAudit(req, {
+      action: 'HYDRO_REA_SCAN',
+      module: 'HYDRO',
+      entityType: 'rea_fetch_log',
+      entityId: 'NRPC',
+      afterValue: { new_months: scan.newMonths, downloaded: scan.downloaded, records: scan.records, errors: scan.errors, drafted: draft?.created?.length || 0 },
+    });
+    res.json({ scan, draft });
+  } catch (err) {
+    res.status(502).json({ error: `The NRPC scan failed: ${err.message}` });
+  } finally {
+    reaScanRunning = false;
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1496,7 +1582,8 @@ router.post('/:id/send-for-approval', requireRole(...WRITE), (req, res) => {
 });
 
 // POST /hydro-billing/:id/approve — approve, reject or forward the open step.
-router.post('/:id/approve', requireRole(...READ), (req, res) => {
+// Whoever the step is routed to decides it — but never a platform administrator (Target #2 Phase B).
+router.post('/:id/approve', requireRole(...READ.filter((r) => !PLATFORM_ADMINS.includes(r))), (req, res) => {
   try {
     const bill = db.prepare('SELECT * FROM hydro_station_bills WHERE id = ?').get(req.params.id);
     if (!bill) return res.status(404).json({ error: 'Bill not found' });
@@ -2513,20 +2600,31 @@ router.post('/:id/recall', requireRole(...WRITE), (req, res) => {
       return res.status(400).json({ error: `${bill.bill_no} is not with an approver — there is nothing to recall` });
     }
     // Recall is the maker's: anyone else on the desk with a view on the bill
-    // rejects it in the chain, where the decision is on record as theirs.
+    // rejects it in the chain, where the decision is on record as theirs. When
+    // the maker is away, the head of the bill's own desk recalls it for them,
+    // on record as doing so. This was the SJVN Administrator's override; it is
+    // the desk's now (Target #2) — the administrator does not handle bills.
     const isMaker = bill.created_by ? bill.created_by === req.user?.id : bill.prepared_by === (req.user?.name || req.user?.email);
-    if (!isMaker && !['SJVN_ADMIN', 'IT_SUPER_ADMIN'].includes(req.user?.role)) {
-      return res.status(403).json({ error: `Only whoever raised ${bill.bill_no} (${bill.prepared_by || 'the maker'}) can recall it — an approver rejects it instead` });
+    const deskHead = verticalOfContract(bill.contract_id) === 'THERMAL' ? 'THERMAL_ADMIN' : 'COMMERCIAL_ADMIN';
+    const forMaker = !isMaker && req.user?.role === deskHead;
+    if (!isMaker && !forMaker) {
+      return res.status(403).json({ error: `Only whoever raised ${bill.bill_no} (${bill.prepared_by || 'the maker'}) or the desk head can recall it — an approver rejects it instead` });
     }
     const reason = String(req.body?.reason || '').trim();
     if (reason.length < 5) return res.status(400).json({ error: 'Say why the bill is being recalled' });
+    const by = forMaker
+      ? `Recalled by the desk head (${req.user?.name || 'unknown'}) for the maker (${bill.prepared_by || 'unknown'})`
+      : `Recalled by the maker (${req.user?.name || 'unknown'})`;
     db.transaction(() => {
       // The step is closed, not deleted, so the trail shows the bill was taken back.
       db.prepare(`UPDATE hydro_bill_approvals SET status = 'REJECTED', comments = ?, acted_at = datetime('now') WHERE bill_id = ? AND status = 'PENDING'`)
-        .run(`Recalled by the maker (${req.user?.name || 'unknown'}): ${reason}`, bill.id);
+        .run(`${by}: ${reason}`, bill.id);
       db.prepare(`UPDATE hydro_station_bills SET approval_status = 'NOT_SENT', updated_at = datetime('now') WHERE id = ?`).run(bill.id);
     })();
-    secureLogAudit(req, { action: 'HYDRO_BILL_RECALLED', module: 'HYDRO', entityType: 'hydro_station_bills', entityId: bill.id, reason });
+    secureLogAudit(req, { action: 'HYDRO_BILL_RECALLED', module: 'HYDRO', entityType: 'hydro_station_bills', entityId: bill.id, reason, details: { on_behalf_of_maker: forMaker ? (bill.created_by || bill.prepared_by) : null } });
+    if (forMaker && bill.created_by) {
+      pushNotification({ userId: bill.created_by, type: 'HYDRO_BILL_RECALLED', message: `${bill.bill_no} was recalled for you by ${req.user?.name}: ${reason}` });
+    }
     res.json({ bill_no: bill.bill_no, approval_status: 'NOT_SENT' });
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });

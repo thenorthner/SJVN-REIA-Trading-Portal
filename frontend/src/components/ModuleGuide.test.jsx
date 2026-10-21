@@ -82,6 +82,22 @@ describe('ModuleGuide', () => {
     render({ ...FIXTURE, facts: undefined, quickRef: undefined });
     expect(host.textContent).toContain('First section');
   });
+
+  it('renders when passed sections prop directly without a guide prop', () => {
+    act(() => root.render(<ModuleGuide sections={[
+      { title: 'Ageing report', body: 'The ageing analysis shows each beneficiary.' },
+      { title: 'LPS', body: 'Late payment surcharge details.' },
+    ]} />));
+    expect(host.textContent).toContain('Ageing report');
+    expect(host.textContent).toContain('The ageing analysis shows each beneficiary.');
+    expect(host.textContent).toContain('LPS');
+    expect(host.textContent).toContain('Late payment surcharge details.');
+  });
+
+  it('renders safely when passed neither guide nor sections without crashing', () => {
+    act(() => root.render(<ModuleGuide />));
+    expect(host.textContent).toContain('Reference');
+  });
 });
 
 describe('the DSM guide', () => {

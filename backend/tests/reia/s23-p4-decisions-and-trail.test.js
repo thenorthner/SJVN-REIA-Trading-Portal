@@ -7,7 +7,8 @@ import { signToken } from '../../src/middleware/auth.js';
 import { invalidDecision } from '../../src/util.js';
 
 let reia;
-beforeEach(() => { resetReia(); reia = tokenFor('REIA_USER'); });
+// Level 1 is the checker's (Target #2 Phase B).
+beforeEach(() => { resetReia(); reia = tokenFor('REIA_CHECKER'); });
 
 describe('S23 An approve/reject endpoint needs an actual decision', () => {
   // Every one of these branched as `if (decision === 'REJECTED') { reject }

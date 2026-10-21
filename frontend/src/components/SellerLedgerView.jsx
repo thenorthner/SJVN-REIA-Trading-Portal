@@ -66,7 +66,7 @@ function PaymentAdvice({ paymentId, onClose }) {
               {line(`Less: other deductions${p.deduction_note ? ` — ${p.deduction_note}` : ''}`, p.other_deduction ? `− ${fmtCurrency(p.other_deduction)}` : '—')}
               <tr style={{ borderTop: '2px solid var(--border)' }}>
                 <td style={{ padding: '9px 0', fontWeight: 700 }}>{p.is_credit_note ? 'Adjusted, not paid in cash' : p.party_side === 'BUYER' ? 'Net amount received in SJVN\'s bank account' : 'Net amount paid to your bank account'}</td>
-                <td style={{ padding: '9px 0', textAlign: 'right', fontWeight: 700, color: '#15803d', fontSize: 16 }}>{fmtCurrency(p.net_paid)}</td>
+                <td style={{ padding: '9px 0', textAlign: 'right', fontWeight: 700, color: 'var(--on-green-2)', fontSize: 16 }}>{fmtCurrency(p.net_paid)}</td>
               </tr>
             </tbody>
           </table>
@@ -173,7 +173,7 @@ function Certificates({ entityId }) {
                   <td>{c.quarter} · {c.quarter_label}</td>
                   <td>{c.certificate_no || '—'}</td>
                   <td style={{ textAlign: 'right' }}>{c.awaited ? '—' : fmtCurrency(c.tds_amount)}</td>
-                  <td style={{ textAlign: 'right', color: differs ? '#b91c1c' : 'inherit', fontWeight: differs ? 700 : 400 }} title={differs ? 'Differs from the certificate' : undefined}>{fmtCurrency(c.tds_deducted)}</td>
+                  <td style={{ textAlign: 'right', color: differs ? 'var(--red-deep)' : 'inherit', fontWeight: differs ? 700 : 400 }} title={differs ? 'Differs from the certificate' : undefined}>{fmtCurrency(c.tds_deducted)}</td>
                   <td>{c.awaited ? '—' : <>{fmtDate(c.updated_at || c.created_at)}<div style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{c.uploaded_by_name || ''}</div></>}</td>
                   <td>
                     {c.awaited
@@ -317,7 +317,7 @@ export default function SellerLedgerView({ entityId = null, partySide = 'SELLER'
             ) : s.ageing.map((a) => (
               <div key={a.key} style={{ display: 'grid', gridTemplateColumns: '170px 1fr 150px 190px', gap: 12, alignItems: 'center', padding: '6px 0', fontSize: 13 }}>
                 <span>{a.label}</span>
-                <div style={{ height: 14, borderRadius: 999, background: 'var(--slate-100, #f1f5f9)', overflow: 'hidden' }}>
+                <div style={{ height: 14, borderRadius: 999, background: 'var(--slate-100, var(--slate-100))', overflow: 'hidden' }}>
                   <div style={{ width: `${(a.amount / maxBucket) * 100}%`, height: '100%', background: tones[a.key] }} />
                 </div>
                 <strong style={{ textAlign: 'right' }}>{fmtCurrency(a.amount)}</strong>
@@ -344,11 +344,11 @@ export default function SellerLedgerView({ entityId = null, partySide = 'SELLER'
                   {!s.outstanding.length && <tr><td colSpan={9} className="empty-cell">Every bill has been settled.</td></tr>}
                   {s.outstanding.map((o) => (
                     <tr key={o.invoice_id}>
-                      <td><strong>{o.invoice_no}</strong>{o.disputed > 0 && <div style={{ fontSize: 13.5, color: '#b91c1c' }}>{fmtCurrency(o.disputed)} under dispute</div>}</td>
+                      <td><strong>{o.invoice_no}</strong>{o.disputed > 0 && <div style={{ fontSize: 13.5, color: 'var(--red-deep)' }}>{fmtCurrency(o.disputed)} under dispute</div>}</td>
                       <td>{o.contract_no}</td><td>{o.billing_period}</td><td>{o.due_date ? fmtDate(o.due_date) : '—'}</td>
                       <td style={{ textAlign: 'right' }}>{fmtCurrency(o.billed)}</td><td style={{ textAlign: 'right' }}>{fmtCurrency(o.paid)}</td>
                       <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmtCurrency(o.balance)}</td>
-                      <td style={{ color: o.days_overdue > 60 ? '#b91c1c' : o.days_overdue > 0 ? '#b45309' : 'var(--slate-500)', fontWeight: o.days_overdue ? 700 : 400 }}>{o.days_overdue ? `${o.days_overdue} days` : 'Not due'}</td>
+                      <td style={{ color: o.days_overdue > 60 ? 'var(--red-deep)' : o.days_overdue > 0 ? 'var(--amber-strong)' : 'var(--slate-500)', fontWeight: o.days_overdue ? 700 : 400 }}>{o.days_overdue ? `${o.days_overdue} days` : 'Not due'}</td>
                       <td style={{ textAlign: 'right' }}>{o.accrued_lps > 0 ? fmtCurrency(o.accrued_lps) : '—'}</td>
                     </tr>
                   ))}
@@ -429,12 +429,12 @@ export default function SellerLedgerView({ entityId = null, partySide = 'SELLER'
                 {payments.map((p) => (
                   <tr key={p.id}>
                     <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(p.date)}</td>
-                    <td>{p.invoice_no}{p.credit_note && <div style={{ fontSize: 13.5, color: '#7c3aed' }}>Credit note adjustment</div>}</td>
+                    <td>{p.invoice_no}{p.credit_note && <div style={{ fontSize: 13.5, color: 'var(--on-blue)' }}>Credit note adjustment</div>}</td>
                     <td>{p.contract_no}</td><td>{p.ref}</td>
                     <td style={{ textAlign: 'right' }}>{fmtCurrency(p.net + p.tds + p.other)}</td>
-                    <td style={{ textAlign: 'right', color: p.tds ? '#b91c1c' : 'inherit' }}>{p.tds ? `− ${fmtCurrency(p.tds)}` : '—'}</td>
-                    <td style={{ textAlign: 'right', color: p.other ? '#b91c1c' : 'inherit' }}>{p.other ? `− ${fmtCurrency(p.other)}` : '—'}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#15803d' }}>{fmtCurrency(p.net)}</td>
+                    <td style={{ textAlign: 'right', color: p.tds ? 'var(--red-deep)' : 'inherit' }}>{p.tds ? `− ${fmtCurrency(p.tds)}` : '—'}</td>
+                    <td style={{ textAlign: 'right', color: p.other ? 'var(--red-deep)' : 'inherit' }}>{p.other ? `− ${fmtCurrency(p.other)}` : '—'}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--on-green-2)' }}>{fmtCurrency(p.net)}</td>
                     <td><button className="btn btn-secondary btn-sm" onClick={() => setAdvice(p.id)}>{buyer ? 'View receipt' : 'View payment advice'}</button></td>
                   </tr>
                 ))}

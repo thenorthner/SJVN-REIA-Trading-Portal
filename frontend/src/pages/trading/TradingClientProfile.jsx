@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext.jsx';
-import { isTradingClientRole } from '../../roles.js';
+import { isTradingClientRole, ROLE_GROUPS } from '../../roles.js';
 import api from '../../api/client';
 import { PageHeader, Card, Table, Badge, Modal } from '../../components/ui.jsx';
 import { DocumentManager } from '../../components/DocumentManager.jsx';
@@ -35,6 +36,19 @@ export default function TradingClientProfile() {
     });
   };
 
+  const canWrite = ROLE_GROUPS.TRADING_WRITE.includes(user?.role);
+
+  // Pre-payment moves only through this call, so each one carries who and why.
+  const handlePrepayment = () => {
+    const amount = Number(window.prompt('Amount received in ₹ (use a minus sign to take money off):'));
+    if (!amount) return;
+    const reason = window.prompt('Receipt / UTR reference or reason:');
+    if (!reason || !reason.trim()) return;
+    api.tradingClients.adjustPrepayment(id, amount, reason.trim())
+      .then(setClient)
+      .catch((err) => alert(err.response?.data?.error || 'Could not update the pre-payment balance'));
+  };
+
   const handleSuspend = () => {
     api.tradingClients.suspend(id, 'Risk limit breached or manual intervention').then(() => {
       setShowSuspendModal(false);
@@ -57,9 +71,9 @@ export default function TradingClientProfile() {
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn btn-outline" onClick={() => navigate('/trading/clients')}>Back to List</button>
               {client.status === 'ACTIVE' && (
-                <button className="btn btn-outline" style={{ borderColor: 'red', color: 'red' }} onClick={() => setShowSuspendModal(true)}>
+                <WriteOnly><button className="btn btn-outline" style={{ borderColor: 'red', color: 'red' }} onClick={() => setShowSuspendModal(true)}>
                   Suspend Client
-                </button>
+                </button></WriteOnly>
               )}
             </div>
           )
@@ -74,7 +88,16 @@ export default function TradingClientProfile() {
           <div><strong>Risk Rating:</strong> <Badge type={client.risk_rating === 'HIGH' ? 'danger' : client.risk_rating === 'LOW' ? 'success' : 'warning'}>{client.risk_rating}</Badge></div>
           <div><strong>Exposure Limit:</strong> ₹{client.exposure_limit?.toLocaleString('en-IN') || 0}</div>
           <div><strong>NOC Valid Till:</strong> <span style={{ color: new Date(client.noc_valid_till) < new Date() ? 'red' : 'green' }}>{client.noc_valid_till || 'Not Uploaded'}</span></div>
-          <div><strong>Pre-payment Balance:</strong> ₹{client.pre_payment_balance.toLocaleString('en-IN')}</div>
+          <div><strong>Virtual Account No.:</strong> {client.virtual_account_no || <span style={{ color: 'var(--slate-500)' }}>Not set — receipts cannot be matched automatically</span>}</div>
+          <div><strong>Credit Limit:</strong> ₹{(client.credit_limit || 0).toLocaleString('en-IN')}</div>
+          <div>
+            <strong>Pre-payment Balance:</strong> ₹{client.pre_payment_balance.toLocaleString('en-IN')}
+            {canWrite && !isClient && (
+              <button type="button" className="btn btn-outline" style={{ marginLeft: 10, padding: '2px 10px', fontSize: 12 }} onClick={handlePrepayment}>
+                Record receipt
+              </button>
+            )}
+          </div>
           <div><strong>Margin Available:</strong> ₹{client.margin_available.toLocaleString('en-IN')}</div>
           {client.entity_details && (
             <>
@@ -125,7 +148,7 @@ export default function TradingClientProfile() {
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
             <button className="btn btn-outline" onClick={() => setShowSuspendModal(false)}>Cancel</button>
-            <button className="btn" style={{ background: 'red', color: 'white' }} onClick={handleSuspend}>Suspend Client</button>
+            <WriteOnly><button className="btn" style={{ background: 'red', color: 'white' }} onClick={handleSuspend}>Suspend Client</button></WriteOnly>
           </div>
         </Modal>
       )}

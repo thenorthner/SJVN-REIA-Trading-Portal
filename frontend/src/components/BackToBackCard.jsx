@@ -4,9 +4,9 @@ import { fmtCurrency, fmtNumber } from './ui.jsx';
 
 // B1: a PSA bill against the PPA bills it passes through — MWh, rate, and the
 // spread against SJVN's margin, flagged red where they part.
-const TONE = { OK: { bg: '#ecfdf5', border: '#a7f3d0', text: '#065f46', label: 'Back-to-back matches' },
-  MISMATCH: { bg: '#fef2f2', border: '#fecaca', text: '#991b1b', label: 'Back-to-back does not match' },
-  INCOMPLETE: { bg: '#fffbeb', border: '#fde68a', text: '#92400e', label: 'Back-to-back waits for the PPA bill' } };
+const TONE = { OK: { bg: '#ecfdf5', border: 'var(--t-green-100)', text: '#065f46', label: 'Back-to-back matches' },
+  MISMATCH: { bg: '#fef2f2', border: 'var(--t-red-line)', text: '#991b1b', label: 'Back-to-back does not match' },
+  INCOMPLETE: { bg: '#fffbeb', border: 'var(--t-amber-line)', text: '#92400e', label: 'Back-to-back waits for the PPA bill' } };
 
 export default function BackToBackCard({ invoice }) {
   const [b, setB] = useState(null);
@@ -34,15 +34,15 @@ export default function BackToBackCard({ invoice }) {
               <td>{s.ppa_bill ? `${s.ppa_bill.invoice_no}${s.ppa_bill.own ? ' (developer)' : ' (SJVN)'}` : 'not in yet'}</td>
               <td style={{ textAlign: 'right' }}>{s.expected_mwh != null ? fmtNumber(s.expected_mwh) : '—'}</td>
               <td style={{ textAlign: 'right' }}>{s.psa_mwh != null ? fmtNumber(s.psa_mwh) : '—'}</td>
-              <td style={{ color: s.mwh_ok === false ? '#b91c1c' : undefined, fontWeight: 600 }}>{ok(s.mwh_ok)}</td>
+              <td style={{ color: s.mwh_ok === false ? 'var(--red-deep)' : undefined, fontWeight: 600 }}>{ok(s.mwh_ok)}</td>
               <td style={{ textAlign: 'right' }}>{s.ppa_rate_per_mwh != null ? `₹${fmtNumber(s.ppa_rate_per_mwh)}/MWh` : '—'}</td>
             </tr>
           ))}
         </tbody>
       </table>
       <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 13.5, marginTop: 8 }}>
-        <span>Pass-through: <strong>{b.pass_through_per_mwh != null ? `₹${fmtNumber(b.pass_through_per_mwh)}/MWh` : '—'}</strong> {b.rate_ok === false && <span style={{ color: '#b91c1c' }}>✗</span>}</span>
-        <span>Spread: <strong style={{ color: b.spread_ok === false ? '#b91c1c' : undefined }}>{b.spread_per_mwh != null ? `₹${fmtNumber(b.spread_per_mwh)}/MWh` : '—'}</strong> vs margin ₹{b.margin_per_mwh}/MWh</span>
+        <span>Pass-through: <strong>{b.pass_through_per_mwh != null ? `₹${fmtNumber(b.pass_through_per_mwh)}/MWh` : '—'}</strong> {b.rate_ok === false && <span style={{ color: 'var(--red-deep)' }}>✗</span>}</span>
+        <span>Spread: <strong style={{ color: b.spread_ok === false ? 'var(--red-deep)' : undefined }}>{b.spread_per_mwh != null ? `₹${fmtNumber(b.spread_per_mwh)}/MWh` : '—'}</strong> vs margin ₹{b.margin_per_mwh}/MWh</span>
         {b.spread_amount != null && <span>Spread on the bill: {fmtCurrency(b.spread_amount)} (margin {fmtCurrency(b.margin_amount)})</span>}
       </div>
       {b.flags.length > 0 && (

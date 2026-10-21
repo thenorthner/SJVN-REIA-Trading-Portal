@@ -17,7 +17,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import db from '../db/index.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, canonicalRole } from '../middleware/auth.js';
 import { newId, pushNotification } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { passwordComplaint, lockoutState, clearLoginAttempts } from './auth.js';
@@ -47,14 +47,15 @@ const nowSeconds = () => Math.floor(Date.now() / 1000);
 
 /** SJVN's roles, most senior first, with what each is for. */
 export const STAFF_ROLES = {
-  IT_SUPER_ADMIN: { label: 'IT Super Administrator', desk: 'Administration', does: 'Runs the platform: every section, every user, system settings.' },
-  SJVN_ADMIN: { label: 'SJVN Administrator', desk: 'Administration', does: 'Every section across REIA, trading and finance, and manages SJVN\'s and the companies\' users.' },
+  IT_SUPER_ADMIN: { label: 'IT Super Administrator', desk: 'Administration', does: 'Runs the platform: users, system settings, masters and the audit trail. Reads every desk; enters no transactions.' },
+  SJVN_ADMIN: { label: 'SJVN Administrator', desk: 'Administration', does: 'Masters, counterparty onboarding, SJVN\'s and the companies\' users, broadcasts and the audit trail. Reads every desk; enters no transactions.' },
   MANAGEMENT: { label: 'Management', desk: 'Management', does: 'Dashboards and reports across the verticals, and the approvals reserved for management. Does not enter data.' },
   COMMERCIAL_ADMIN: { label: 'Commercial Administrator (Hydro)', desk: 'Hydro', does: 'Hydro station billing, PAF, allocations, PTC billing, claims, ledgers and desk operations.' },
   THERMAL_ADMIN: { label: 'Thermal Administrator', desk: 'Thermal', does: 'Thermal station billing and its stakeholders, and manages the thermal desk\'s users.' },
   THERMAL_USER: { label: 'Thermal Desk', desk: 'Thermal', does: 'Thermal stakeholders, station data and billing.' },
-  REIA_ADMIN: { label: 'REIA Administrator', desk: 'REIA', does: 'Everything the REIA desk does, and manages the REIA desk\'s users and companies\' admin accounts.' },
-  REIA_USER: { label: 'REIA Desk', desk: 'REIA', does: 'Contracts, energy data, billing, disputes, payment security and reconciliation with sellers and buyers.' },
+  REIA_APPROVER: { label: 'REIA Approver (HOD)', desk: 'REIA', does: 'Final sanction on the REIA desk: the last approval level of invoices and the approvals reserved for the HOD. Does not enter data.' },
+  REIA_CHECKER: { label: 'REIA Checker', desk: 'REIA', does: 'Scrutinises what the maker prepared — verifies, recommends or sends back with observations — and can prepare too, never checking their own work.' },
+  REIA_MAKER: { label: 'REIA Maker', desk: 'REIA', does: 'Prepares: contracts, energy data, bills, disputes, payment security and reconciliation with sellers and buyers.' },
   FINANCE_USER: { label: 'Finance', desk: 'Finance', does: 'Payments and their confirmation against the bank, releases, TDS certificates and the SAP hand-over.' },
   TRADING_ADMIN: { label: 'Trading Administrator', desk: 'Trading', does: 'Everything the trading desk does, and manages the trading desk\'s users.' },
   TRADING_USER: { label: 'Trading Desk', desk: 'Trading', does: 'Bids, exchange contracts, scheduling, trading clients and their settlement.' },
@@ -62,24 +63,27 @@ export const STAFF_ROLES = {
 };
 const ROLES = Object.keys(STAFF_ROLES);
 const TOP = ['IT_SUPER_ADMIN', 'SJVN_ADMIN'];
-/** Which roles the holder of a role may add, change and switch off. */
+/**
+ * Which roles the holder of a role may add, change and switch off. Only the
+ * platform administrators (Target #2 Phase B): a desk head who checks the
+ * desk's transactions does not also create the people who make them. The desk
+ * heads' former power over their desk's users is the SJVN Administrator's now.
+ */
 const MANAGES = {
   IT_SUPER_ADMIN: ROLES,
   SJVN_ADMIN: ROLES.filter((r) => r !== 'IT_SUPER_ADMIN'),
-  REIA_ADMIN: ['REIA_USER'],
-  TRADING_ADMIN: ['TRADING_USER'],
-  THERMAL_ADMIN: ['THERMAL_USER'],
 };
 
 /** What each role reaches, section by section, as the navigation and the routes enforce it. */
 const ACCESS = [
-  ['Hydro billing — PAF, station billing, allocations, ledgers', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', MANAGEMENT: 'Read', COMMERCIAL_ADMIN: 'Full', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
-  ['Thermal billing — stations, stakeholders, billing', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', MANAGEMENT: 'Read', THERMAL_ADMIN: 'Full', THERMAL_USER: 'Full', FINANCE_USER: 'Read' }],
-  ['REIA billing & settlement — contracts, energy, invoices, disputes, security', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', MANAGEMENT: 'Read', REIA_ADMIN: 'Full', REIA_USER: 'Full', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
-  ['Payments — recording, confirming a buyer\'s payment, releases', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', REIA_USER: 'Full', FINANCE_USER: 'Full' }],
-  ['Power trading — bids, exchange, clients', { SJVN_ADMIN: 'Full', MANAGEMENT: 'Read', FINANCE_USER: 'Read', TRADING_ADMIN: 'Full', TRADING_USER: 'Full' }],
-  ['Companies\' users — reset or switch off a company admin', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full', REIA_ADMIN: 'Full' }],
-  ['SJVN\'s own users — this page', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'All but IT admins', REIA_ADMIN: 'REIA desk', TRADING_ADMIN: 'Trading desk' }],
+  ['Hydro billing — PAF, station billing, allocations, ledgers', { IT_SUPER_ADMIN: 'Read', SJVN_ADMIN: 'Read', MANAGEMENT: 'Read', COMMERCIAL_ADMIN: 'Full', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
+  ['Thermal billing — stations, stakeholders, billing', { IT_SUPER_ADMIN: 'Read', SJVN_ADMIN: 'Read', MANAGEMENT: 'Read', THERMAL_ADMIN: 'Full', THERMAL_USER: 'Full', FINANCE_USER: 'Read' }],
+  ['REIA billing & settlement — contracts, energy, invoices, disputes, security', { IT_SUPER_ADMIN: 'Read', SJVN_ADMIN: 'Read', MANAGEMENT: 'Approve', REIA_APPROVER: 'Approve', REIA_CHECKER: 'Check & prepare', REIA_MAKER: 'Prepare', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
+  ['Payments — recording, confirming a buyer\'s payment, releases', { REIA_MAKER: 'Record', FINANCE_USER: 'Full' }],
+  ['Power trading — bids, exchange, clients', { SJVN_ADMIN: 'Read', MANAGEMENT: 'Read', FINANCE_USER: 'Read', TRADING_ADMIN: 'Full', TRADING_USER: 'Full' }],
+  ['Masters — banks, parameters, losses, holidays, lookups, document types', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full' }],
+  ['Companies\' users — reset or switch off a company admin', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full' }],
+  ['SJVN\'s own users — this page', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'All but IT admins' }],
   ['Audit trail', { IT_SUPER_ADMIN: 'Read', SJVN_ADMIN: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
 ].map(([what, by]) => ({ what, by }));
 
@@ -110,7 +114,8 @@ function cleanPhone(v) {
   return phone || null;
 }
 function roleFor(scope, asked) {
-  const role = text(asked, 30).toUpperCase();
+  // A screen still offering the old REIA role names gets the roles they became.
+  const role = canonicalRole(text(asked, 30).toUpperCase());
   if (!STAFF_ROLES[role]) throw fail(400, 'Choose a role');
   if (!scope.manages.includes(role)) throw fail(403, `You cannot give someone the ${STAFF_ROLES[role].label} role`);
   return role;
@@ -145,7 +150,7 @@ function health(members) {
   if (admins.length === 1) out.push({ level: 'amber', text: `${admins[0].name} is the only active administrator. If that account is locked or its holder is away, nobody can add a user or reset a password. Give a second officer the administrator role.` });
   for (const [role, why] of [
     ['FINANCE_USER', 'nobody in Finance to confirm buyers\' payments or file TDS certificates'],
-    ['REIA_USER', 'nobody on the REIA desk to approve invoices, verify documents or answer disputes'],
+    ['REIA_MAKER', 'nobody on the REIA desk to approve invoices, verify documents or answer disputes'],
   ]) {
     if (!active.some((m) => m.role === role) && members.some((m) => m.role === role)) out.push({ level: 'red', text: `Every ${STAFF_ROLES[role].label} account is switched off — there is ${why}.` });
   }

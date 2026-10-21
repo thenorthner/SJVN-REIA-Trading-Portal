@@ -14,7 +14,7 @@ import { Field } from './ui.jsx';
 const emptyRevision = { effective_from: '', sale_rate_per_unit: '', purchase_rate_per_unit: '', reason: '', reference: '' };
 const emptyBuyer = () => ({ buyer_name: '', share_percent: '', drawal_state: '' });
 
-const box = { padding: '10px 12px', border: '1px solid var(--slate-200, #e2e8f0)', borderRadius: 8, background: 'var(--slate-50, #f8fafc)' };
+const box = { padding: '10px 12px', border: '1px solid var(--slate-200, var(--slate-200))', borderRadius: 8, background: 'var(--slate-50, var(--slate-50))' };
 const small = { fontSize: 13.5, color: 'var(--slate-600, #475569)' };
 
 export default function BilateralRevisionsPanel({ transaction, onChanged }) {
@@ -68,7 +68,7 @@ export default function BilateralRevisionsPanel({ transaction, onChanged }) {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12, marginBottom: 14 }}>
-      {error && <div role="alert" style={{ gridColumn: '1 / -1', padding: '8px 12px', borderRadius: 6, fontSize: 13, background: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b' }}>{error}</div>}
+      {error && <div role="alert" style={{ gridColumn: '1 / -1', padding: '8px 12px', borderRadius: 6, fontSize: 13, background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', color: 'var(--on-red)' }}>{error}</div>}
 
       <div style={box}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
@@ -146,7 +146,7 @@ export default function BilateralRevisionsPanel({ transaction, onChanged }) {
                   onClick={() => setSplitForm({ ...splitForm, buyers: splitForm.buyers.filter((_, j) => j !== i) })}>✕</button>
               </div>
             ))}
-            <div style={{ ...small, margin: '4px 0 8px', color: Math.abs(shareTotal - 100) > 0.01 ? '#b45309' : 'var(--slate-600, #475569)' }}>
+            <div style={{ ...small, margin: '4px 0 8px', color: Math.abs(shareTotal - 100) > 0.01 ? 'var(--amber-strong)' : 'var(--slate-600, #475569)' }}>
               Shares total {Number(shareTotal.toFixed(2))}%{Math.abs(shareTotal - 100) > 0.01 ? ' — they must total 100%' : ''}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>

@@ -34,8 +34,8 @@ const money = (v) => (v == null ? '—' : fmtNumber(v, 2));
 function Caveat({ children }) {
   return (
     <div role="note" style={{
-      background: 'var(--warning-bg, #fffbeb)',
-      border: '1px solid var(--warning-border, #fcd34d)',
+      background: 'var(--warning-bg, var(--t-amber-50))',
+      border: '1px solid var(--warning-border, var(--t-amber-100))',
       color: 'var(--warning-text, #92400e)',
       borderRadius: 6, padding: '10px 12px', marginBottom: 14, fontSize: 13,
     }}>

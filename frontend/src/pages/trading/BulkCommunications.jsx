@@ -100,7 +100,7 @@ function TreeCheckbox({ node, selected, toggle }) {
         <span>{node.label}</span>
       </div>
       {expanded && node.children && (
-        <div style={{ borderLeft: '1px dashed #ccc', marginLeft: 8 }}>
+        <div style={{ borderLeft: '1px dashed var(--slate-100)', marginLeft: 8 }}>
           {node.children.map(child => (
             <TreeCheckbox key={child.id} node={child} selected={selected} toggle={toggle} />
           ))}
@@ -235,7 +235,7 @@ export default function BulkCommunications() {
           
           {/* Left Sidebar: Recipient Group Selector */}
           <Card>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, borderBottom: '1px solid #eee', paddingBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>
               <h3 style={{ margin: 0, fontSize: 16 }}>Recipient Groups</h3>
             </div>
             
@@ -243,10 +243,10 @@ export default function BulkCommunications() {
               <button className="btn btn-sm" onClick={() => selectAllInCategory('portfolio')}>Select All Portfolios</button>
               <button className="btn btn-sm" onClick={() => selectAllInCategory('role')}>Select All Roles</button>
               <button className="btn btn-sm" onClick={() => selectAllInCategory('region')}>Select All Regions</button>
-              <button className="btn btn-sm" style={{ background: '#f5f5f5', color: '#333' }} onClick={() => setSelectedGroups([])}>Clear All</button>
+              <button className="btn btn-sm" style={{ background: 'var(--slate-50)', color: 'var(--slate-700)' }} onClick={() => setSelectedGroups([])}>Clear All</button>
             </div>
 
-            <div style={{ maxHeight: '500px', overflowY: 'auto', borderTop: '1px solid #eee', paddingTop: 10 }}>
+            <div style={{ maxHeight: '500px', overflowY: 'auto', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
               {RECIPIENT_GROUPS.map(group => (
                 <TreeCheckbox key={group.id} node={group} selected={selectedGroups} toggle={toggleGroup} />
               ))}
@@ -257,7 +257,7 @@ export default function BulkCommunications() {
           <Card>
             <form onSubmit={handleSend} style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
               
-              <div style={{ background: '#f9f9f9', padding: 15, borderRadius: 6, border: '1px solid #e0e0e0' }}>
+              <div style={{ background: 'var(--slate-50)', padding: 15, borderRadius: 6, border: '1px solid var(--border)' }}>
                 <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }} htmlFor="bulkcommunications-load-from-template">Load from Template:</label>
                 <select id="bulkcommunications-load-from-template" className="input" onChange={handleTemplateSelect} defaultValue="">
                   <option value="" disabled>-- Select a Template --</option>
@@ -288,7 +288,7 @@ export default function BulkCommunications() {
                   className="input"
                 />
                 {files.length > 0 && (
-                  <div style={{ marginTop: 5, fontSize: 13.5, color: '#666' }}>
+                  <div style={{ marginTop: 5, fontSize: 13.5, color: 'var(--slate-500)' }}>
                     {files.length} file(s) selected
                   </div>
                 )}
@@ -311,7 +311,7 @@ export default function BulkCommunications() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 20, background: '#f5f5f5', padding: 15, borderRadius: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20, background: 'var(--slate-50)', padding: 15, borderRadius: 6 }}>
                 <strong>Dispatch Channels:</strong>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
                   <input type="checkbox" checked={channels.email} onChange={e => setChannels(p => ({ ...p, email: e.target.checked }))} />
@@ -369,7 +369,7 @@ export default function BulkCommunications() {
                       <td>
                         <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                           {channels.map(ch => (
-                            <span key={ch} style={{ background: '#eee', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>
+                            <span key={ch} style={{ background: 'var(--border)', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>
                               {ch}
                             </span>
                           ))}

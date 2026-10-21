@@ -60,8 +60,8 @@ export function InvoiceStatusCell({ row, showValidation = false }) {
         <span
           title={`Overdue ${row.days_past_due || row.days_overdue} day(s) · accruing LPS`}
           style={{
-            fontSize: 13, fontWeight: 600, color: 'var(--red-deep)', background: '#fee2e2',
-            border: '1px solid #fecaca', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap',
+            fontSize: 13, fontWeight: 600, color: 'var(--red-deep)', background: 'var(--t-red-100)',
+            border: '1px solid var(--t-red-line)', borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap',
           }}
         >
           Overdue {row.days_past_due || row.days_overdue}d · LPS {fmtCurrency(row.accrued_lps)}
@@ -100,13 +100,13 @@ export function InvoiceBreakdown({ invoice, title = 'Invoice Breakdown' }) {
                 key={`${item.code}-${i}`}
                 style={
                   item.code === 'TOTAL'
-                    ? { fontWeight: 700, background: '#eef2ff', borderTop: '2px solid #4f46e5' }
+                    ? { fontWeight: 700, background: 'var(--t-blue-50)', borderTop: '2px solid #4f46e5' }
                     : item.code === 'PEN' && Number(item.value) < 0
                       ? { color: 'var(--error, var(--danger))' }
                       : {}
                 }
               >
-                <td style={{ padding: '8px 14px', fontFamily: 'monospace', fontSize: 13.5, color: '#4f46e5' }}>{item.code}</td>
+                <td style={{ padding: '8px 14px', fontFamily: 'monospace', fontSize: 13.5, color: 'var(--on-blue)' }}>{item.code}</td>
                 <td style={{ padding: '8px 14px', fontSize: 14.5 }}>{item.label}</td>
                 <td style={{ padding: '8px 14px', textAlign: 'right', fontSize: 14.5, fontFamily: 'monospace' }}>
                   {formatBreakdownValue(item)}

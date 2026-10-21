@@ -191,8 +191,36 @@ function useActiveSection(ids) {
   return active;
 }
 
-export default function ModuleGuide({ guide }) {
-  const ids = useMemo(() => guide.sections.map((s) => s.id), [guide]);
+export default function ModuleGuide({ guide, sections }) {
+  const effectiveGuide = useMemo(() => {
+    const raw = guide?.sections || sections || [];
+    const normalized = raw.map((s, idx) => {
+      const id = s.id || `sec-${idx}-${String(s.title || s.heading || idx).toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      const heading = s.heading || s.title || `Section ${idx + 1}`;
+      let blocks = s.blocks;
+      if (!blocks || !Array.isArray(blocks)) {
+        blocks = s.body ? [{ type: 'p', text: s.body }] : [];
+      }
+      return {
+        ...s,
+        id,
+        heading,
+        blurb: s.blurb || null,
+        blocks,
+      };
+    });
+    return {
+      eyebrow: guide?.eyebrow || 'Reference Guide',
+      title: guide?.title || 'Operational Reference Guide',
+      summary: guide?.summary || 'Key principles, operational guidance, and regulations.',
+      facts: guide?.facts || [],
+      quickRef: guide?.quickRef || null,
+      footnote: guide?.footnote || null,
+      sections: normalized,
+    };
+  }, [guide, sections]);
+
+  const ids = useMemo(() => effectiveGuide.sections.map((s) => s.id), [effectiveGuide]);
   const active = useActiveSection(ids);
   const rootRef = useRef(null);
   const [narrow, setNarrow] = useState(false);
@@ -219,24 +247,24 @@ export default function ModuleGuide({ guide }) {
           fontSize: 13, fontWeight: 700, letterSpacing: '.07em',
           textTransform: 'none', color: 'var(--primary)', marginBottom: 8,
         }}>
-          {guide.eyebrow || 'Reference'}
+          {effectiveGuide.eyebrow || 'Reference'}
         </div>
         <h2 style={{ margin: '0 0 8px', fontSize: 21, fontWeight: 700, color: 'var(--text)' }}>
-          {guide.title}
+          {effectiveGuide.title}
         </h2>
         <p style={{
           margin: 0, fontSize: 14.5, lineHeight: 1.7,
           color: 'var(--text-muted)', maxWidth: `${MAX_PROSE}ch`,
         }}>
-          {guide.summary}
+          {effectiveGuide.summary}
         </p>
 
-        {guide.facts?.length > 0 && (
+        {effectiveGuide.facts?.length > 0 && (
           <div style={{
             display: 'grid', gap: 12, marginTop: 20,
             gridTemplateColumns: `repeat(auto-fit, minmax(${narrow ? 180 : 210}px, 1fr))`,
           }}>
-            {guide.facts.map((f) => (
+            {effectiveGuide.facts.map((f) => (
               <div key={f.label} style={{
                 padding: '12px 14px', background: 'var(--bg)',
                 borderRadius: 8, border: '1px solid var(--border)',
@@ -267,7 +295,7 @@ export default function ModuleGuide({ guide }) {
           borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)',
           padding: '4px 26px 26px',
         }}>
-          {guide.sections.map((s, i) => (
+          {effectiveGuide.sections.map((s, i) => (
             <section
               key={s.id}
               id={s.id}
@@ -308,7 +336,7 @@ export default function ModuleGuide({ guide }) {
                 fontSize: 12.5, fontWeight: 700, letterSpacing: '.06em',
                 textTransform: 'none', color: 'var(--text-muted)', marginBottom: 10,
               }}>On this page</div>
-              {guide.sections.map((s) => (
+              {effectiveGuide.sections.map((s) => (
                 <a
                   key={s.id}
                   href={`#${s.id}`}
@@ -325,7 +353,7 @@ export default function ModuleGuide({ guide }) {
               ))}
             </div>
 
-            {guide.quickRef && (
+            {effectiveGuide.quickRef && (
               <div style={{
                 background: 'var(--surface)', border: '1px solid var(--border)',
                 borderRadius: 'var(--radius)', boxShadow: 'var(--shadow)',
@@ -334,8 +362,8 @@ export default function ModuleGuide({ guide }) {
                 <div style={{
                   fontSize: 12.5, fontWeight: 700, letterSpacing: '.06em',
                   textTransform: 'none', color: 'var(--text-muted)', marginBottom: 10,
-                }}>{guide.quickRef.title}</div>
-                {guide.quickRef.items.map((q) => (
+                }}>{effectiveGuide.quickRef.title}</div>
+                {effectiveGuide.quickRef.items.map((q) => (
                   <div key={q.k} style={{ marginBottom: 11 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--text)' }}>{q.k}</div>
                     <div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-muted)' }}>{q.v}</div>
@@ -347,11 +375,11 @@ export default function ModuleGuide({ guide }) {
         )}
       </div>
 
-      {guide.footnote && (
+      {effectiveGuide.footnote && (
         <p style={{
           fontSize: 13.5, color: 'var(--text-muted)', marginTop: 16,
           maxWidth: `${MAX_PROSE}ch`, lineHeight: 1.6,
-        }}>{guide.footnote}</p>
+        }}>{effectiveGuide.footnote}</p>
       )}
     </div>
   );

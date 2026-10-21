@@ -98,7 +98,14 @@ export function isUnreachable(err) {
 }
 
 export function logAudit({ req, user, action, module, entityType, entityId, beforeValue, afterValue, reason, details }) {
-  secureLogAudit(req || { user }, {
+  // The actor named by the caller wins over req.user. At sign-in there is no
+  // req.user yet, and taking req as it stood recorded every LOGIN and
+  // LOGIN_FAILED as SYSTEM with no user id — the sign-in trail CERT-In asks for
+  // could not say who had signed in.
+  const actorReq = req
+    ? { user: user || req.user, ip: req.ip, traceId: req.traceId, sessionID: req.sessionID }
+    : { user };
+  secureLogAudit(actorReq, {
     action,
     module,
     entityType,
@@ -108,6 +115,16 @@ export function logAudit({ req, user, action, module, entityType, entityId, befo
     reason,
     details
   });
+}
+
+/**
+ * The same alert to each of several roles, once per role. An alert must reach
+ * a role that can act on it: the SJVN Administrator governs and oversees, it
+ * does not draft bills or re-run imports, so an operational alert sent to it
+ * alone is one nobody acts on (Target #2, Phase A).
+ */
+export function notifyRoles(roles, { type, message, link = null }) {
+  for (const role of [...new Set(roles)]) pushNotification({ role, type, message, link });
 }
 
 export function pushNotification({ userId = null, role = null, type, message, link = null }) {

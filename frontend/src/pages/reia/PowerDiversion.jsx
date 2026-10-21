@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { ROLE_GROUPS } from '../../roles.js';
@@ -212,7 +213,7 @@ export default function PowerDiversion() {
           <Field label={form.reason === 'NON_REQUISITION' ? 'What shows it was not requisitioned (schedule / SLDC record)' : 'Notes'} required={form.reason === 'NON_REQUISITION'}><input value={form.notes} required={form.reason === 'NON_REQUISITION'} minLength={form.reason === 'NON_REQUISITION' ? 15 : undefined} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
           <div className="form-actions">
             <button type="button" className="btn btn-ghost" onClick={() => setShow(false)}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Record</button>
+            <WriteOnly><button type="submit" className="btn btn-primary">Record</button></WriteOnly>
           </div>
         </form>
       </Modal>

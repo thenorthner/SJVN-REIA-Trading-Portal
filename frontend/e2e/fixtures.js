@@ -19,7 +19,7 @@ export const LOGIN_USER = {
   name: 'E2E Reia User',
   email: 'e2e.reia@sjvn.test',
   password: 'e2e-Reia#2026',
-  role: 'REIA_USER',
+  role: 'REIA_MAKER',
 };
 
 export const ENTITIES = {
@@ -64,7 +64,7 @@ export const UNRELATED_DOCUMENT = { id: 'DOC-E2E-CERC', title: 'CERC MMC Report 
 // Evidence the setup files against the dispute — one with the kind of long name
 // that used to push the table past its box.
 export const EVIDENCE = [
-  { name: 'JMR May 2026 - NJHPS joint meter reading signed by SLDC and generator (final).pdf', mime: 'application/pdf', body: '%PDF-1.4 e2e joint meter reading' },
+  { name: 'JMR May 2026 - NJHPS joint meter reading signed by SLDC and generator (final).pdf', mime: 'application/pdf', body: '%PDF-1.4\n% e2e joint meter reading\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\nstartxref\n0\n%%EOF\n' },
   { name: 'sem-readings.csv', mime: 'text/csv', body: 'block,mwh\n1,12.5\n' },
 ];
 

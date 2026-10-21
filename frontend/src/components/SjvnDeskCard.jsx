@@ -21,7 +21,7 @@ export default function SjvnDeskCard() {
     <div className="ch-grid" style={{ marginTop: 0, marginBottom: 16 }}>
       <Card title={d.todo.length ? `Waiting on SJVN (${d.todo.length})` : 'Waiting on SJVN'}>
         {d.todo.length === 0 && <div className="ps-alert green" style={{ marginBottom: 0 }}>Nothing is waiting on SJVN.</div>}
-        {d.counts.red > 0 && <p style={{ margin: '0 0 10px', fontSize: 13, color: '#b91c1c' }}>{d.counts.red} of these {d.counts.red === 1 ? 'is' : 'are'} overdue, or holding up a counterparty.</p>}
+        {d.counts.red > 0 && <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--red-deep)' }}>{d.counts.red} of these {d.counts.red === 1 ? 'is' : 'are'} overdue, or holding up a counterparty.</p>}
         {d.todo.map((t) => (
           <button key={t.key} type="button" className={`ch-todo ${t.level}`} onClick={() => navigate(t.link)}>
             <div><strong>{t.title}</strong><span>{t.group} · {t.detail}</span></div>

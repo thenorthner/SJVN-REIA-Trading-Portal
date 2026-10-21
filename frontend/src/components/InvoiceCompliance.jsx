@@ -11,7 +11,7 @@ import { fmtDate, fmtDateTime } from '../datetime.js';
 
 const errText = (e) => e.response?.data?.error || e.message;
 const Tick = ({ ok, children }) => (
-  <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 3, color: ok === true ? '#15803d' : ok === false ? '#b91c1c' : 'var(--slate-500)' }}>
+  <div style={{ fontSize: 13.5, fontWeight: 600, marginTop: 3, color: ok === true ? 'var(--on-green-2)' : ok === false ? 'var(--red-deep)' : 'var(--slate-500)' }}>
     {ok === true ? '✓' : ok === false ? '✗' : '·'} {children}
   </div>
 );
@@ -23,12 +23,12 @@ const Row = ({ label, children }) => (
 export function TdsEstimate({ tds, total }) {
   if (!tds) return null;
   return (
-    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--bg-main, #f8fafc)' }}>
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, background: 'var(--bg-main, var(--slate-50))' }}>
       <div className="detail-grid mb-0">
         <Row label={`Billed earlier in ${tds.financial_year}`}>{fmtCurrency(tds.billed_before)}</Row>
         <Row label="Of this bill, liable to TDS">{fmtCurrency(tds.liable_amount)}</Row>
-        <Row label={`TDS u/s ${tds.section} @ ${tds.rate_pct}%`}><strong style={{ color: tds.tds_amount > 0 ? '#b45309' : 'inherit' }}>{fmtCurrency(tds.tds_amount)}</strong></Row>
-        <Row label="Expected net payment"><strong style={{ color: '#15803d' }}>{fmtCurrency(tds.net_payable ?? (total - tds.tds_amount))}</strong></Row>
+        <Row label={`TDS u/s ${tds.section} @ ${tds.rate_pct}%`}><strong style={{ color: tds.tds_amount > 0 ? 'var(--amber-strong)' : 'inherit' }}>{fmtCurrency(tds.tds_amount)}</strong></Row>
+        <Row label="Expected net payment"><strong style={{ color: 'var(--on-green-2)' }}>{fmtCurrency(tds.net_payable ?? (total - tds.tds_amount))}</strong></Row>
       </div>
       <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 13.5, color: 'var(--slate-500)', lineHeight: 1.5 }}>
         {tds.notes.map((n) => <li key={n}>{n}</li>)}
@@ -122,7 +122,7 @@ export default function InvoiceCompliance({ invoice, onChanged }) {
       {!sjvnBill && <TdsEstimate tds={c.tds} total={invoice.total_amount} />}
 
       <div className="section-title" style={{ marginTop: sjvnBill ? 0 : 18 }}>
-        E-invoice (IRN &amp; QR){c.requirements.irn ? <span style={{ color: '#b91c1c', fontWeight: 600 }}> — required before SJVN approves</span> : ''}
+        E-invoice (IRN &amp; QR){c.requirements.irn ? <span style={{ color: 'var(--red-deep)', fontWeight: 600 }}> — required before SJVN approves</span> : ''}
       </div>
       {e ? (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -170,7 +170,7 @@ export default function InvoiceCompliance({ invoice, onChanged }) {
       )}
 
       <div className="section-title" style={{ marginTop: 18 }}>
-        Digitally signed copy{c.requirements.signed_copy ? <span style={{ color: '#b91c1c', fontWeight: 600 }}> — required before SJVN approves</span> : ''}
+        Digitally signed copy{c.requirements.signed_copy ? <span style={{ color: 'var(--red-deep)', fontWeight: 600 }}> — required before SJVN approves</span> : ''}
       </div>
       {s ? (
         <div>

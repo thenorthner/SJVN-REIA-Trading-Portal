@@ -32,15 +32,15 @@ function unbilledOn(invoice) {
  *
  * @param {'SJVN_TO_BUYER'|'SELLER_TO_SJVN'} direction
  */
-export function lpsPosition(direction) {
-  const billed = lpsBilled(direction);
+export function lpsPosition(direction, vertical = null) {
+  const billed = lpsBilled(direction, vertical);
   const defaults = {
     annualPct: getParamNumber('lps_annual_pct', 15),
     monthlyStepPct: getParamNumber('lps_monthly_step_pct', 0),
     stepCapPct: getParamNumber('lps_step_cap_pct', 0),
   };
 
-  const overdue = openOverdueInvoices(direction);
+  const overdue = openOverdueInvoices(direction, vertical);
   let unbilled = 0;
   let invoicesAccruing = 0;
   for (const invoice of overdue) {

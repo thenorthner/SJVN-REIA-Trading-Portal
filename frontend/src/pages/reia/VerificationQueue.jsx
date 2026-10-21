@@ -34,7 +34,7 @@ export default function VerificationQueue() {
   const [open, setOpen] = useState(null);
 
   const { user } = useAuth() || {};
-  const canWrite = ['SJVN_ADMIN', 'REIA_ADMIN', 'IT_SUPER_ADMIN', 'REIA_USER'].includes(user?.role);
+  const canWrite = ['REIA_CHECKER', 'REIA_MAKER'].includes(user?.role);
   const [picked, setPicked] = useState([]);
   const [popup, setPopup] = useState(null);
   const [reload, setReload] = useState(0);
@@ -140,7 +140,7 @@ export default function VerificationQueue() {
                         <td>{b.status.replace(/_/g, ' ')}</td>
                         <td>{b.verification_status ? STATE_LABEL[b.verification_status] || b.verification_status : 'Never worked'}</td>
                         <td className="num">{fmtCurrency(b.total_amount)}</td>
-                        <td><Link className="btn btn-sm btn-outline" to={`/reia/invoices?id=${encodeURIComponent(b.invoice_id)}`}>Verify after the fact</Link></td>
+                        <td>{canWrite && <Link className="btn btn-sm btn-outline" to={`/reia/invoices?id=${encodeURIComponent(b.invoice_id)}`}>Verify after the fact</Link>}</td>
                       </tr>
                     ))}
                   </tbody>

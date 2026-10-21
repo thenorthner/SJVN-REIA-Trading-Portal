@@ -255,7 +255,7 @@ export default function LatePaymentSurchargeLadder3D({
 
               <div style={{ marginTop: 14, background: 'rgba(0,0,0,0.35)', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.05)' }}>
                 <div style={{ fontSize: 12, color: '#94a3b8' }}>Status at Day {activeDay}</div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: isCurrentActive ? tier.color : '#64748b', marginTop: 2 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: isCurrentActive ? tier.color: 'var(--slate-500)', marginTop: 2 }}>
                   {isCurrentActive ? tier.status : 'INACTIVE'}
                 </div>
               </div>

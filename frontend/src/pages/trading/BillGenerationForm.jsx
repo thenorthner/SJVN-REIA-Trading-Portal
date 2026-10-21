@@ -184,7 +184,7 @@ export default function BillGenerationForm() {
           </div>
 
           {selected && (
-            <p style={{ fontSize: 13.5, color: '#475569', marginTop: 4 }}>
+            <p style={{ fontSize: 13.5, color: 'var(--slate-600)', marginTop: 4 }}>
               {selected.kind} contract · {selected.state}
               {!selected.billable && ' — this one cannot be billed yet.'}
               {!form.from && !form.to && ' · leaving the period blank bills the whole contract.'}
@@ -192,7 +192,7 @@ export default function BillGenerationForm() {
           )}
 
           {error && (
-            <div style={{ marginTop: 14, padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, color: '#991b1b', fontSize: 13 }}>
+            <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 6, color: 'var(--on-red)', fontSize: 13 }}>
               {error}
             </div>
           )}
@@ -218,7 +218,7 @@ export default function BillGenerationForm() {
           </div>
 
           {blocked && (
-            <div style={{ marginBottom: 12, padding: '10px 12px', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 6, fontSize: 13, color: '#9a3412' }}>
+            <div style={{ marginBottom: 12, padding: '10px 12px', background: 'var(--t-orange-50)', border: '1px solid var(--t-amber-100)', borderRadius: 6, fontSize: 13, color: 'var(--on-red)' }}>
               {blocked.error}
               {blocked.would_bill != null && <> (would bill ₹{fmtNumber(blocked.would_bill, 0)})</>}
             </div>
@@ -226,7 +226,7 @@ export default function BillGenerationForm() {
 
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ background: '#f1f5f9' }}>
+              <tr style={{ background: 'var(--slate-100)' }}>
                 {['Description', 'Basis', 'Quantity', 'Rate', 'Amount (₹)'].map((h) => (
                   <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Amount (₹)' ? 'right' : 'left' }}>{h}</th>
                 ))}
@@ -234,9 +234,9 @@ export default function BillGenerationForm() {
             </thead>
             <tbody>
               {preview.line_items.map((l, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                <tr key={i} style={{ borderBottom: '1px solid var(--slate-200)' }}>
                   <td style={{ padding: '8px 10px' }}>{l.description}</td>
-                  <td style={{ padding: '8px 10px', color: '#64748b' }}>{l.basis}</td>
+                  <td style={{ padding: '8px 10px', color: 'var(--slate-500)' }}>{l.basis}</td>
                   <td style={{ padding: '8px 10px' }}>{l.quantity == null ? '—' : fmtNumber(l.quantity, 3)}</td>
                   <td style={{ padding: '8px 10px' }}>{l.rate == null ? '—' : fmtNumber(l.rate, 2)}</td>
                   <td style={{ padding: '8px 10px', textAlign: 'right' }}>{fmtNumber(l.amount, 0)}</td>
@@ -252,7 +252,7 @@ export default function BillGenerationForm() {
                 <td colSpan={4} style={{ padding: '8px 10px', textAlign: 'right' }}>Invoice amount</td>
                 <td style={{ padding: '8px 10px', textAlign: 'right' }}>{fmtNumber(preview.invoice_amount, 0)}</td>
               </tr>
-              <tr style={{ color: '#64748b' }}>
+              <tr style={{ color: 'var(--slate-500)' }}>
                 <td colSpan={4} style={{ padding: '8px 10px', textAlign: 'right' }}>Less TDS @ {preview.tds_rate}%</td>
                 <td style={{ padding: '8px 10px', textAlign: 'right' }}>{fmtNumber(preview.tds_deducted, 0)}</td>
               </tr>
@@ -264,7 +264,7 @@ export default function BillGenerationForm() {
           </table>
 
           {preview.warnings?.length > 0 && (
-            <ul style={{ margin: '10px 0 0 18px', fontSize: 13.5, color: '#9a3412' }}>
+            <ul style={{ margin: '10px 0 0 18px', fontSize: 13.5, color: 'var(--on-red)' }}>
               {preview.warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
           )}
@@ -273,9 +273,9 @@ export default function BillGenerationForm() {
 
       {raised && (
         <Card style={{ marginTop: 16 }}>
-          <div style={{ padding: '10px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, color: '#166534', fontSize: 13 }}>
+          <div style={{ padding: '10px 12px', background: 'var(--t-green-50)', border: '1px solid var(--t-green-line)', borderRadius: 6, color: 'var(--on-green)', fontSize: 13 }}>
             <strong>{raised.invoice_no}</strong> raised for ₹{fmtNumber(raised.invoice_amount, 0)} ({raised.settlement_basis}).{' '}
-            <Link to="/billing/view-bills" style={{ color: '#166534', textDecoration: 'underline' }}>Open View Bills</Link>
+            <Link to="/billing/view-bills" style={{ color: 'var(--on-green)', textDecoration: 'underline' }}>Open View Bills</Link>
           </div>
         </Card>
       )}

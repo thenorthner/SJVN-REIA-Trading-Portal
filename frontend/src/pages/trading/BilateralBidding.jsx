@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client.js';
 import { Card, Field } from '../../components/ui.jsx';
@@ -272,7 +273,7 @@ export default function BilateralBidding() {
     }
   }
 
-  const disabledStyle = { background: '#f1f5f9' };
+  const disabledStyle = { background: 'var(--slate-100)' };
 
   return (
     <div style={{ padding: 20 }}>
@@ -425,7 +426,7 @@ export default function BilateralBidding() {
                     {idx === 0 ? (
                       <button type="button" className="btn btn-sm" style={{ background: '#dc2626', color: '#fff', minWidth: 36 }} onClick={addSource}>+</button>
                     ) : (
-                      <button type="button" className="btn btn-sm btn-outline" style={{ color: '#dc2626', minWidth: 36 }} onClick={() => removeSource(idx)}>×</button>
+                      <button type="button" className="btn btn-sm btn-outline" style={{ color: 'var(--red-strong)', minWidth: 36 }} onClick={() => removeSource(idx)}>×</button>
                     )}
                   </div>
                 ))}
@@ -439,28 +440,28 @@ export default function BilateralBidding() {
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <input ref={fileRef} type="file" accept=".csv,text/csv" className="input" style={{ maxWidth: 280 }} />
-              <button type="button" className="btn btn-sm" style={{ background: '#475569', color: '#fff' }} onClick={handleCsvUpload}>Upload</button>
+              <WriteOnly><button type="button" className="btn btn-sm" style={{ background: '#475569', color: '#fff' }} onClick={handleCsvUpload}>Upload</button></WriteOnly>
               <button type="button" className="btn btn-sm" style={{ background: '#475569', color: '#fff' }} onClick={downloadSampleCsv}>Download Sample File</button>
-              {csvName && <span style={{ fontSize: 13.5, color: '#64748b' }}>{csvName}</span>}
+              {csvName && <span style={{ fontSize: 13.5, color: 'var(--slate-500)' }}>{csvName}</span>}
             </div>
           </div>
 
           <div style={{ overflowX: 'auto', marginBottom: 16 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
-                <tr style={{ background: '#f8fafc' }}>
-                  <th colSpan={2} style={{ padding: 8, border: '1px solid #e2e8f0', textAlign: 'center' }}>Date</th>
-                  <th colSpan={2} style={{ padding: 8, border: '1px solid #e2e8f0', textAlign: 'center' }}>Hours</th>
-                  <th style={{ padding: 8, border: '1px solid #e2e8f0', textAlign: 'center' }}>Capacity</th>
-                  <th style={{ padding: 8, border: '1px solid #e2e8f0', width: 70, textAlign: 'center' }}>Action</th>
+                <tr style={{ background: 'var(--slate-50)' }}>
+                  <th colSpan={2} style={{ padding: 8, border: '1px solid var(--slate-200)', textAlign: 'center' }}>Date</th>
+                  <th colSpan={2} style={{ padding: 8, border: '1px solid var(--slate-200)', textAlign: 'center' }}>Hours</th>
+                  <th style={{ padding: 8, border: '1px solid var(--slate-200)', textAlign: 'center' }}>Capacity</th>
+                  <th style={{ padding: 8, border: '1px solid var(--slate-200)', width: 70, textAlign: 'center' }}>Action</th>
                 </tr>
-                <tr style={{ background: '#f8fafc', fontSize: 13, color: '#64748b', fontWeight: 500 }}>
-                  <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>From *</th>
-                  <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>To *</th>
-                  <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>From *</th>
-                  <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>To *</th>
-                  <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0' }}>MW *</th>
-                  <th style={{ padding: '4px 8px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <tr style={{ background: 'var(--slate-50)', fontSize: 13, color: 'var(--slate-500)', fontWeight: 500 }}>
+                  <th style={{ padding: '4px 8px', border: '1px solid var(--slate-200)' }}>From *</th>
+                  <th style={{ padding: '4px 8px', border: '1px solid var(--slate-200)' }}>To *</th>
+                  <th style={{ padding: '4px 8px', border: '1px solid var(--slate-200)' }}>From *</th>
+                  <th style={{ padding: '4px 8px', border: '1px solid var(--slate-200)' }}>To *</th>
+                  <th style={{ padding: '4px 8px', border: '1px solid var(--slate-200)' }}>MW *</th>
+                  <th style={{ padding: '4px 8px', border: '1px solid var(--slate-200)', textAlign: 'center' }}>
                     <button type="button" className="btn btn-sm" style={{ background: '#dc2626', color: '#fff', padding: '2px 8px' }} onClick={addRow}>+</button>
                   </th>
                 </tr>
@@ -468,27 +469,27 @@ export default function BilateralBidding() {
               <tbody>
                 {form.schedule_details.map((row, idx) => (
                   <tr key={row.id}>
-                    <td style={{ padding: 4, border: '1px solid #e2e8f0' }}>
+                    <td style={{ padding: 4, border: '1px solid var(--slate-200)' }}>
                       <input type="date" className="input" style={{ padding: 4 }} value={row.date_from} onChange={(e) => updateRow(idx, 'date_from', e.target.value)} required />
                     </td>
-                    <td style={{ padding: 4, border: '1px solid #e2e8f0' }}>
+                    <td style={{ padding: 4, border: '1px solid var(--slate-200)' }}>
                       <input type="date" className="input" style={{ padding: 4 }} value={row.date_to} onChange={(e) => updateRow(idx, 'date_to', e.target.value)} required />
                     </td>
-                    <td style={{ padding: 4, border: '1px solid #e2e8f0' }}>
+                    <td style={{ padding: 4, border: '1px solid var(--slate-200)' }}>
                       <select className="input" style={{ padding: 4 }} value={row.time_from} onChange={(e) => updateRow(idx, 'time_from', e.target.value)} required>
                         {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
                       </select>
                     </td>
-                    <td style={{ padding: 4, border: '1px solid #e2e8f0' }}>
+                    <td style={{ padding: 4, border: '1px solid var(--slate-200)' }}>
                       <select className="input" style={{ padding: 4 }} value={row.time_to} onChange={(e) => updateRow(idx, 'time_to', e.target.value)} required>
                         {[...HOURS, '24:00'].map((h) => <option key={h} value={h}>{h}</option>)}
                       </select>
                     </td>
-                    <td style={{ padding: 4, border: '1px solid #e2e8f0' }}>
+                    <td style={{ padding: 4, border: '1px solid var(--slate-200)' }}>
                       <input type="number" step="any" min="0" className="input" style={{ padding: 4 }} value={row.capacity} onChange={(e) => updateRow(idx, 'capacity', e.target.value)} required />
                     </td>
-                    <td style={{ padding: 4, border: '1px solid #e2e8f0', textAlign: 'center' }}>
-                      <button type="button" className="btn btn-sm btn-outline" style={{ color: '#dc2626', padding: '2px 8px' }} onClick={() => removeRow(idx)} disabled={form.schedule_details.length <= 1}>🗑</button>
+                    <td style={{ padding: 4, border: '1px solid var(--slate-200)', textAlign: 'center' }}>
+                      <button type="button" className="btn btn-sm btn-outline" style={{ color: 'var(--red-strong)', padding: '2px 8px' }} onClick={() => removeRow(idx)} disabled={form.schedule_details.length <= 1}>🗑</button>
                     </td>
                   </tr>
                 ))}
@@ -509,9 +510,9 @@ export default function BilateralBidding() {
             </span>
           </label>
 
-          {error && <div style={{ color: '#991b1b', background: '#fee2e2', padding: 10, borderRadius: 4, fontSize: 13, marginBottom: 12 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13, marginBottom: 12 }}>{error}</div>}
           {success && (
-            <div style={{ color: '#166534', background: '#dcfce7', padding: 10, borderRadius: 4, fontSize: 13, marginBottom: 12 }}>
+            <div style={{ color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13, marginBottom: 12 }}>
               Application <strong>{success.id}</strong> submitted — {success.application_type} · {success.seller_contract_no} → {success.buyer_contract_no}.
               {success.application?.application_id && (
                 <> Listed as <strong>{success.application.application_id}</strong> under Bilateral Applications.</>

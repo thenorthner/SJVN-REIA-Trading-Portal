@@ -212,10 +212,10 @@ export default function CreateExchangeContract() {
                 </select>
               </Field>
               <Field label="Concerned SLDC" required>
-                <input type="text" className="input" value={form.concerned_sldc} disabled style={{ background: '#f1f5f9' }} />
+                <input type="text" className="input" value={form.concerned_sldc} disabled style={{ background: 'var(--slate-100)' }} />
               </Field>
               <Field label="Region" required>
-                <input type="text" className="input" value={form.region} disabled style={{ background: '#f1f5f9' }} />
+                <input type="text" className="input" value={form.region} disabled style={{ background: 'var(--slate-100)' }} />
               </Field>
               <Field label="Product" required>
                 <select className="input" value={form.product} onChange={(e) => set('product', e.target.value)} required>
@@ -249,10 +249,10 @@ export default function CreateExchangeContract() {
           <FormSection title="Requested Schedule Details">
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', minWidth: 900, borderCollapse: 'collapse', textAlign: 'left', fontSize: 13 }}>
-                <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                <thead style={{ background: 'var(--slate-50)', borderBottom: '1px solid var(--slate-200)' }}>
                   <tr>
-                    <th colSpan="2" style={{ padding: 8, borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>Date</th>
-                    <th colSpan="2" style={{ padding: 8, borderRight: '1px solid #e2e8f0', textAlign: 'center' }}>Hours</th>
+                    <th colSpan="2" style={{ padding: 8, borderRight: '1px solid var(--slate-200)', textAlign: 'center' }}>Date</th>
+                    <th colSpan="2" style={{ padding: 8, borderRight: '1px solid var(--slate-200)', textAlign: 'center' }}>Hours</th>
                     <th style={{ padding: 8 }}>Rate Type</th>
                     <th style={{ padding: 8 }}>Rate (INR/MWh) *</th>
                     <th style={{ padding: 8 }}>Quantum (MW) *</th>
@@ -261,9 +261,9 @@ export default function CreateExchangeContract() {
                   </tr>
                   <tr style={{ color: 'var(--slate-500)', fontWeight: 'normal', fontSize: 13 }}>
                     <th style={{ padding: '4px 8px' }}>From *</th>
-                    <th style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>To *</th>
+                    <th style={{ padding: '4px 8px', borderRight: '1px solid var(--slate-200)' }}>To *</th>
                     <th style={{ padding: '4px 8px' }}>From *</th>
-                    <th style={{ padding: '4px 8px', borderRight: '1px solid #e2e8f0' }}>To *</th>
+                    <th style={{ padding: '4px 8px', borderRight: '1px solid var(--slate-200)' }}>To *</th>
                     <th /><th /><th /><th />
                     <th style={{ textAlign: 'center' }}>
                       <button type="button" className="btn btn-sm" style={{ padding: '2px 8px', background: '#16a34a', color: '#fff', border: 'none' }} onClick={addScheduleRow}>+</button>
@@ -272,11 +272,11 @@ export default function CreateExchangeContract() {
                 </thead>
                 <tbody>
                   {form.schedule_details.map((row, idx) => (
-                    <tr key={row.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <tr key={row.id} style={{ borderBottom: '1px solid var(--slate-100)' }}>
                       <td style={{ padding: 4 }}>
                         <input type="date" className="input" style={{ width: 130, padding: 4 }} value={row.date_from} onChange={(e) => updateScheduleRow(idx, 'date_from', e.target.value)} required />
                       </td>
-                      <td style={{ padding: 4, borderRight: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: 4, borderRight: '1px solid var(--slate-200)' }}>
                         <input type="date" className="input" style={{ width: 130, padding: 4 }} value={row.date_to} onChange={(e) => updateScheduleRow(idx, 'date_to', e.target.value)} required />
                       </td>
                       <td style={{ padding: 4 }}>
@@ -284,7 +284,7 @@ export default function CreateExchangeContract() {
                           {TIME_BLOCKS.map((t) => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </td>
-                      <td style={{ padding: 4, borderRight: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: 4, borderRight: '1px solid var(--slate-200)' }}>
                         <select className="input" style={{ width: 90, padding: 4 }} value={row.time_to} onChange={(e) => updateScheduleRow(idx, 'time_to', e.target.value)} required>
                           {TIME_BLOCKS.map((t) => <option key={t} value={t}>{t}</option>)}
                         </select>
@@ -354,17 +354,17 @@ export default function CreateExchangeContract() {
           </FormSection>
 
           {error && (
-            <div style={{ color: '#991b1b', marginBottom: 12, background: '#fee2e2', padding: 10, borderRadius: 4, fontSize: 13 }}>
+            <div style={{ color: 'var(--on-red)', marginBottom: 12, background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>
               {error}
             </div>
           )}
           {success && (
-            <div style={{ color: '#166534', marginBottom: 12, background: '#dcfce7', padding: 10, borderRadius: 4, fontSize: 13 }}>
+            <div style={{ color: 'var(--on-green)', marginBottom: 12, background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13 }}>
               Exchange contract <strong>{success.id}</strong> created for {success.client_name} ({success.product}).
             </div>
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, position: 'sticky', bottom: 0, background: '#fff', padding: '16px 0', borderTop: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, position: 'sticky', bottom: 0, background: 'var(--surface)', padding: '16px 0', borderTop: '1px solid var(--slate-200)' }}>
             <button type="button" className="btn btn-outline" onClick={() => navigate(-1)}>Cancel</button>
             <button type="submit" className="btn btn-primary" disabled={busy}>
               {busy ? 'Saving…' : 'Create Contract'}

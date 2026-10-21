@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import db from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
-import { newId, logAudit, pushNotification, invalidDecision } from '../util.js';
+import { requireAuth, requireRole, ROLE_GROUPS, PLATFORM_ADMINS } from '../middleware/auth.js';
+import { newId, logAudit, pushNotification, notifyRoles, invalidDecision } from '../util.js';
 import {
   catalogForEntityType,
+  REGULATORY_APPROVAL_CATALOG,
   summarizeApprovals,
   APPROVAL_STATUSES,
   getRegulatoryLabel,
@@ -19,7 +20,10 @@ import { normaliseKycBody, validateKyc } from '../services/kycValidation.js';
 // Onboarding belongs to every vertical that bills a counterparty, not to REIA
 // alone: a hydro station's beneficiaries and a thermal station's are onboarded
 // by the Commercial desk, on the same record and under the same checks.
-const ENTITY_WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
+// Counterparty onboarding and KYC are governance as well as desk work (Target #2
+// Phase B): the SJVN / IT administrators keep them although they left the desks'
+// write groups. Built from those groups alone, this silently dropped them.
+const ENTITY_WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE, ...PLATFORM_ADMINS])];
 
 /**
  * The verticals a desk works in. A desk officer onboards and lists only its own
@@ -30,15 +34,20 @@ function deskVerticals(user) {
   if (['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'MANAGEMENT', 'FINANCE_USER', 'COMPLIANCE_AUDITOR'].includes(role)) return null;
   if (['THERMAL_ADMIN', 'THERMAL_USER'].includes(role)) return ['THERMAL'];
   if (['COMMERCIAL_ADMIN', 'COMMERCIAL', 'COMMERCIAL_USER'].includes(role)) return ['HYDRO'];
-  if (['REIA_ADMIN', 'REIA_USER'].includes(role)) return ['REIA'];
+  if (['REIA_CHECKER', 'REIA_MAKER'].includes(role)) return ['REIA'];
   return null;
 }
 // Barring a counterparty is an administrator's decision, not a desk officer's.
-const BLACKLIST_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
+const BLACKLIST_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
 const VERTICALS = ['REIA', 'HYDRO', 'THERMAL'];
 const VERTICAL_LABELS = { REIA: 'REIA', HYDRO: 'Hydro Billing', THERMAL: 'Thermal Billing' };
 
 const verticalsOf = (entity) => String(entity?.verticals || 'REIA').split(',').map((v) => v.trim()).filter(Boolean);
+
+// The checker of each vertical's desk — who onboards and re-approves its
+// stakeholders, and so who must hear about them.
+const DESK_HEAD = { REIA: 'REIA_CHECKER', HYDRO: 'COMMERCIAL_ADMIN', THERMAL: 'THERMAL_ADMIN' };
+const deskHeadsOf = (entity) => verticalsOf(entity).map((v) => DESK_HEAD[v]).filter(Boolean);
 
 /**
  * Why this desk may not act on this stakeholder, or null. Onboarding decisions
@@ -134,8 +143,40 @@ router.use(requireAuth);
 // so name resolution works out of the box.
 seedEntityAliases();
 
+/** Clearances an administrator added on top of the built-in eight, still in use. */
+function customCatalogItems() {
+  return db.prepare('SELECT * FROM custom_clearance_types WHERE is_active = 1 ORDER BY created_at, code').all()
+    .map((r, i) => ({
+      code: r.code, label: r.label, applies_to: r.applies_to, is_mandatory: !!r.is_mandatory,
+      doc_type: r.code, sort_order: 100 + i, help: r.help || 'Added by SJVN', is_custom: true,
+    }));
+}
+
+/** The built-in catalog plus the administrator's own additions. */
+function fullCatalog(entityType) {
+  return [
+    ...catalogForEntityType(entityType),
+    ...customCatalogItems().filter((a) => a.applies_to === 'BOTH' || a.applies_to === entityType),
+  ].sort((a, b) => a.sort_order - b.sort_order);
+}
+
+/** Put a custom clearance on the checklist of every stakeholder it applies to. */
+function addToStakeholders(t) {
+  const targets = db.prepare(`SELECT id FROM entities WHERE ? = 'BOTH' OR entity_type = ?`).all(t.applies_to, t.applies_to);
+  const ins = db.prepare(`
+    INSERT OR IGNORE INTO entity_regulatory_approvals (
+      id, entity_id, approval_code, label, is_mandatory, applies_to, doc_type, status, sort_order
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'NOT_STARTED', 100)
+  `);
+  for (const e of targets) {
+    ins.run(newId('REG'), e.id, t.code, t.label, t.is_mandatory ? 1 : 0, t.applies_to, t.code);
+    refreshRegulatorySummary(e.id);
+  }
+  return targets;
+}
+
 function seedRegulatoryChecklist(entityId, entityType) {
-  const catalog = catalogForEntityType(entityType);
+  const catalog = fullCatalog(entityType);
   const ins = db.prepare(`
     INSERT OR IGNORE INTO entity_regulatory_approvals (
       id, entity_id, approval_code, label, is_mandatory, applies_to, doc_type, status, sort_order
@@ -215,9 +256,72 @@ router.get('/regulatory-catalog', (req, res) => {
   const type = req.query.entity_type || 'SELLER';
   res.json({
     entity_type: type,
-    items: catalogForEntityType(type),
+    items: fullCatalog(type),
     statuses: APPROVAL_STATUSES,
+    // Every addition, retired ones included, for the administrator's list.
+    custom: BLACKLIST_ROLES.includes(req.user?.role)
+      ? db.prepare('SELECT * FROM custom_clearance_types ORDER BY created_at, code').all()
+      : undefined,
   });
+});
+
+// An administrator adds a compliance document SJVN wants on file beyond the
+// built-in eight. One step: it joins the checklist of every stakeholder it
+// applies to and the Document Desk's upload list, so it can be asked for and
+// scanned in straight away. Optional by default — a mandatory one would put
+// every stakeholder already admitted out of step with the checklist.
+router.post('/regulatory-catalog/custom', requireRole(...BLACKLIST_ROLES), (req, res) => {
+  const label = String(req.body?.label ?? '').trim().replace(/\s+/g, ' ');
+  const appliesTo = String(req.body?.applies_to ?? 'BOTH').toUpperCase();
+  const help = String(req.body?.help ?? '').trim().slice(0, 200) || null;
+  if (label.length < 3 || label.length > 80) {
+    return res.status(400).json({ error: 'Name the document in 3 to 80 characters.' });
+  }
+  if (!['SELLER', 'BUYER', 'BOTH'].includes(appliesTo)) {
+    return res.status(400).json({ error: 'Applies to must be Seller, Buyer or Both.' });
+  }
+  const slug = label.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+  if (!slug) return res.status(400).json({ error: 'The name must contain letters or digits.' });
+  const code = `CUSTOM_${slug}`;
+  const clash = db.prepare('SELECT label FROM custom_clearance_types WHERE code = ? OR LOWER(label) = LOWER(?)').get(code, label)
+    || REGULATORY_APPROVAL_CATALOG.find((a) => a.code === code || a.label.toLowerCase() === label.toLowerCase());
+  if (clash) return res.status(400).json({ error: `"${clash.label}" is already on the checklist.` });
+  const mandatory = req.body?.is_mandatory ? 1 : 0;
+
+  const add = db.transaction(() => {
+    db.prepare(`INSERT INTO custom_clearance_types (code, label, applies_to, is_mandatory, help, created_by) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(code, label, appliesTo, mandatory, help, req.user.name);
+    db.prepare(`
+      INSERT OR IGNORE INTO document_type_master (id, module_name, code, label, category, reason, is_mandatory, is_active, sort_order)
+      VALUES (?, 'STAKEHOLDERS', ?, ?, 'VERIFY', ?, 0, 1, 50)
+    `).run(newId('DTM'), code, label, help);
+    const targets = addToStakeholders({ code, label, applies_to: appliesTo, is_mandatory: mandatory });
+    return targets.length;
+  });
+  const applied = add();
+  logAudit({ req, user: req.user, action: 'CREATE', module: 'REIA', entityType: 'custom_clearance_type', entityId: code, details: { label, applies_to: appliesTo, is_mandatory: !!mandatory, added_to_stakeholders: applied } });
+  res.status(201).json({ code, label, applies_to: appliesTo, is_mandatory: !!mandatory, added_to_stakeholders: applied });
+});
+
+// Retire (or bring back) an addition. Never deleted: evidence already filed
+// against it stays on record. A retired one drops out of new stakeholders'
+// checklists and the upload list.
+router.patch('/regulatory-catalog/custom/:code', requireRole(...BLACKLIST_ROLES), (req, res) => {
+  const row = db.prepare('SELECT * FROM custom_clearance_types WHERE code = ?').get(req.params.code);
+  if (!row) return res.status(404).json({ error: 'No such compliance document.' });
+  const active = req.body?.is_active ? 1 : 0;
+  db.prepare('UPDATE custom_clearance_types SET is_active = ? WHERE code = ?').run(active, row.code);
+  db.prepare(`UPDATE document_type_master SET is_active = ? WHERE module_name = 'STAKEHOLDERS' AND code = ?`).run(active, row.code);
+  if (active) {
+    addToStakeholders(row);
+  } else {
+    // Untouched rows go; anything with evidence or a decision on it stays.
+    const untouched = db.prepare(`SELECT DISTINCT entity_id FROM entity_regulatory_approvals WHERE approval_code = ? AND status = 'NOT_STARTED'`).all(row.code);
+    db.prepare(`DELETE FROM entity_regulatory_approvals WHERE approval_code = ? AND status = 'NOT_STARTED'`).run(row.code);
+    for (const e of untouched) refreshRegulatorySummary(e.entity_id);
+  }
+  logAudit({ req, user: req.user, action: 'UPDATE', module: 'REIA', entityType: 'custom_clearance_type', entityId: row.code, details: { is_active: !!active } });
+  res.json({ code: row.code, is_active: !!active });
 });
 
 // Resolve any spelling to its canonical entity: /api/entities/resolve?name=...
@@ -455,8 +559,9 @@ router.post('/', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) => 
   })();
 
   logAudit({ req, user: req.user, action: 'CREATE', module: 'REIA', entityType: 'entity', entityId: id, details: { name: body.name } });
-  pushNotification({ role: 'SJVN_ADMIN', type: 'ONBOARDING', message: `New ${body.entity_type} onboarding request: ${body.name}` });
-  res.status(201).json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(id)));
+  const created = db.prepare('SELECT * FROM entities WHERE id = ?').get(id);
+  notifyRoles(['SJVN_ADMIN', ...deskHeadsOf(created)], { type: 'ONBOARDING', message: `New ${body.entity_type} onboarding request: ${body.name}` });
+  res.status(201).json(fetchEntityRelations(created));
 });
 
 router.put('/:id', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) => {
@@ -604,13 +709,15 @@ router.put('/:id', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) =
     details: { highRisk: isHighRisk, contacts_changed: contactsChanged, pending_bank: bankChangeRequested ? stagedBank : undefined },
   });
   if (bankChangeRequested) {
-    pushNotification({
-      role: 'SJVN_ADMIN', type: 'BANK_CHANGE_REQUESTED',
+    // Finance pays to this account, so Finance hears of the change as well.
+    notifyRoles(['SJVN_ADMIN', 'FINANCE_USER', ...deskHeadsOf(existing)], {
+      type: 'BANK_CHANGE_REQUESTED',
       message: `${existing.name} has requested a change of bank account. It is held until verified against the bank proof and re-approved.`,
     });
   }
   if (isHighRisk) {
-    pushNotification({ role: 'SJVN_ADMIN', type: 'RISK_UPDATE', message: `High-risk profile update by ${existing.name}. Re-approval required.` });
+    // The desk re-approves the profile, so the desk is told, not only the administrator.
+    notifyRoles(['SJVN_ADMIN', ...deskHeadsOf(existing)], { type: 'RISK_UPDATE', message: `High-risk profile update by ${existing.name}. Re-approval required.` });
   }
 
   res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id)));
@@ -761,6 +868,8 @@ router.post('/:id/own-station', requireRole('SJVN_ADMIN', 'IT_SUPER_ADMIN'), (re
   const on = req.body?.is_sjvn_own ? 1 : 0;
   const reason = String(req.body?.reason || '').trim();
   if (reason.length < 10) return res.status(400).json({ error: 'Say why (at least 10 characters) — it is what the audit trail shows.' });
+  // REIA's sellers are third-party developers by definition; an own station is a Hydro or Thermal desk's.
+  if (on && verticalsOf(entity).includes('REIA')) return res.status(400).json({ error: `${entity.name} is a REIA stakeholder, and no REIA stakeholder can be an SJVN-owned station. SJVN's own stations belong to the Hydro or Thermal desk.` });
   if (on && entity.entity_type !== 'SELLER') return res.status(400).json({ error: 'Only a seller can be one of SJVN\'s own stations.' });
   if ((entity.is_sjvn_own ? 1 : 0) === on) return res.status(400).json({ error: `${entity.name} is ${on ? 'already' : 'not'} marked as SJVN's own station.` });
   db.prepare(`UPDATE entities SET is_sjvn_own = ?, updated_at = datetime('now') WHERE id = ?`).run(on, entity.id);
@@ -790,7 +899,7 @@ router.post('/:id/bank-callback', requireRole(...ENTITY_WRITE), (req, res) => {
     .run(id, entity.id, entity.pending_bank_requested_at || null, name, phone, calledAt, b.confirmed ? 1 : 0, String(b.notes || '').slice(0, 500) || null, req.user.name, req.user.id || null);
   logAudit({ req, user: req.user, action: b.confirmed ? 'BANK_CALLBACK_CONFIRMED' : 'BANK_CALLBACK_NOT_CONFIRMED', module: 'REIA', entityType: 'entity', entityId: entity.id, details: { contact_name: name, phone_last4: phone.slice(-4), called_at: calledAt } });
   if (!b.confirmed) {
-    for (const role of ['REIA_ADMIN', 'SJVN_ADMIN', 'FINANCE_USER']) pushNotification({ role, type: 'BANK_CHANGE', message: `${entity.name}: the company contact called (${name}) did NOT confirm the requested change of bank account. Do not verify it; treat it as possible fraud.` });
+    for (const role of ['REIA_CHECKER', 'SJVN_ADMIN', 'FINANCE_USER']) pushNotification({ role, type: 'BANK_CHANGE', message: `${entity.name}: the company contact called (${name}) did NOT confirm the requested change of bank account. Do not verify it; treat it as possible fraud.` });
   }
   res.status(201).json(db.prepare('SELECT * FROM bank_change_callbacks WHERE id = ?').get(id));
 });
@@ -831,8 +940,8 @@ router.post('/:id/blacklist', requireRole(...BLACKLIST_ROLES), (req, res) => {
     module: 'REIA', entityType: 'entity', entityId: entity.id, reason,
     beforeValue: entity.is_blacklisted ? 'BLACKLISTED' : 'CLEAR', afterValue: blacklisted ? 'BLACKLISTED' : 'CLEAR',
   });
-  pushNotification({
-    role: 'SJVN_ADMIN', type: 'COMPLIANCE_ALERT',
+  notifyRoles(['SJVN_ADMIN', 'COMPLIANCE_AUDITOR', ...deskHeadsOf(entity)], {
+    type: 'COMPLIANCE_ALERT',
     message: blacklisted
       ? `${entity.name} has been blacklisted by ${req.user.name}: ${reason}`
       : `Blacklist on ${entity.name} cleared by ${req.user.name}: ${reason}`,
@@ -872,7 +981,7 @@ router.post('/:id/approve', requireRole(...ENTITY_WRITE), (req, res) => {
   const outside = outsideDesk(req.user, entity);
   if (outside) return res.status(403).json({ error: outside });
   const directAdmit = !!admin_direct_admit;
-  if (directAdmit && !['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'].includes(req.user.role)) {
+  if (directAdmit && !['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'].includes(req.user.role)) {
     return res.status(403).json({ error: 'Direct admission is for administrators; verify the checklist instead.' });
   }
 

@@ -424,7 +424,7 @@ export default function ReaDraftingCorridor3D({
                 <span style={{
                   fontSize: '11px',
                   fontWeight: 700,
-                  color: isActive ? '#38bdf8' : isDone ? '#34d399' : '#64748b',
+                  color: isActive ? '#38bdf8' : isDone ? '#34d399' : 'var(--slate-500)',
                 }}>
                   Stage {st.id}
                 </span>
@@ -443,7 +443,7 @@ export default function ReaDraftingCorridor3D({
 
               <div style={{
                 fontSize: '11.5px',
-                color: isActive ? '#cbd5e1' : '#64748b',
+                color: isActive ? '#cbd5e1' : 'var(--slate-500)',
                 lineHeight: 1.35,
                 marginBottom: '8px',
               }}>
@@ -453,7 +453,7 @@ export default function ReaDraftingCorridor3D({
               {/* Small Detail Tag */}
               <div style={{
                 fontSize: '10.5px',
-                color: isDone ? '#6ee7b7' : isActive ? '#93c5fd' : '#475569',
+                color: isDone ? '#6ee7b7' : isActive ? '#93c5fd' : 'var(--slate-600)',
                 borderTop: '1px solid rgba(255, 255, 255, 0.06)',
                 paddingTop: '6px',
               }}>
@@ -486,7 +486,7 @@ export default function ReaDraftingCorridor3D({
               </div>
             ))
           ) : (
-            <div style={{ color: '#64748b' }}>Ready to run. Select REA PDF or paste links to trigger the drafting pipeline.</div>
+            <div style={{ color: 'var(--slate-500)' }}>Ready to run. Select REA PDF or paste links to trigger the drafting pipeline.</div>
           )}
         </div>
       </div>

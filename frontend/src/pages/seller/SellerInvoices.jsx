@@ -66,7 +66,7 @@ function exportCsv(rows) {
 
 // A small mark for each thing that goes with the bill.
 const Mark = ({ on, children, title }) => (
-  <span title={title} style={{ display: 'inline-block', marginRight: 4, padding: '1px 6px', borderRadius: 999, fontSize: 12.5, fontWeight: 700, background: on ? '#dcfce7' : '#f1f5f9', color: on ? '#15803d' : '#94a3b8' }}>{children}</span>
+  <span title={title} style={{ display: 'inline-block', marginRight: 4, padding: '1px 6px', borderRadius: 999, fontSize: 12.5, fontWeight: 700, background: on ? 'var(--t-green-100)' : 'var(--slate-100)', color: on ? 'var(--on-green-2)' : '#94a3b8' }}>{children}</span>
 );
 
 function StatusStepper({ status }) {
@@ -428,7 +428,7 @@ export default function SellerInvoices() {
       // SJVN's own computation of a month, shown once it is approved, is not
       // one of the seller's invoices — say so.
       render: (r) => (r.raised_by_seller === false
-        ? <span>{r.invoice_no}<div style={{ fontSize: 13, color: '#1d4ed8' }}>Raised by SJVN</div></span>
+        ? <span>{r.invoice_no}<div style={{ fontSize: 13, color: 'var(--on-blue)' }}>Raised by SJVN</div></span>
         : r.invoice_no),
     },
     { key: 'contract_no', header: 'Contract' },

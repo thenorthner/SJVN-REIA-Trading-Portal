@@ -283,7 +283,7 @@ export default function HydroBeneficiaryWaterfall3D({
 
               {/* Status Footer */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, fontSize: 12 }}>
-                <span style={{ color: '#64748b' }}>{b.bill_no}</span>
+                <span style={{ color: 'var(--slate-500)' }}>{b.bill_no}</span>
                 <span style={{
                   padding: '1px 6px',
                   borderRadius: 4,

@@ -98,7 +98,8 @@ function lockEnergy(mwh, period = '2026-04') {
 /** Three approvers who are not the maker, each acting on their own level. */
 async function clearApprovalChain(invoiceId, levels) {
   for (let lvl = 1; lvl <= levels; lvl += 1) {
-    const role = lvl === 1 ? 'REIA_USER' : lvl === 2 ? 'FINANCE_USER' : 'MANAGEMENT';
+    // The three tiers (Target #2 Phase B): REIA checker, Finance, REIA approver (HOD).
+    const role = lvl === 1 ? 'REIA_CHECKER' : lvl === 2 ? 'FINANCE_USER' : 'REIA_APPROVER';
     const checker = makeUser(role, { name: `Checker L${lvl} ${Math.random()}` });
     const r = await post(`/api/invoices/${invoiceId}/approvals/${lvl}/act`, signFor(checker),
       { decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk', comments: `cleared at level ${lvl}` });
@@ -157,7 +158,7 @@ describe('E2E: a PSA month from energy data to a settled bill', () => {
     expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(inv.id).status).toBe('UNDER_APPROVAL');
 
     // Two of three levels is not approval.
-    const l1 = makeUser('REIA_USER', { name: 'Checker One' });
+    const l1 = makeUser('REIA_CHECKER', { name: 'Checker One' });
     const l2 = makeUser('FINANCE_USER', { name: 'Checker Two' });
     await post(`/api/invoices/${inv.id}/approvals/1/act`, signFor(l1), { decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk' });
     await post(`/api/invoices/${inv.id}/approvals/2/act`, signFor(l2), { decision: 'APPROVED', security_ack: 'test fixture: cover is tracked on the security desk' });

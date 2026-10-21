@@ -276,7 +276,7 @@ export default function SecurityInstrumentPanel({ instrumentId, onChanged }) {
       <div className="cw-card">
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', marginBottom: 8 }}>
           <strong>Bank confirmation (SFMS)</strong>
-          <span className={`cw-flag ${d.sfms.confirmed ? '' : 'amber'}`} style={d.sfms.confirmed ? { background: '#f0fdf4', color: '#15803d' } : undefined}>
+          <span className={`cw-flag ${d.sfms.confirmed ? '' : 'amber'}`} style={d.sfms.confirmed ? { background: 'var(--t-green-50)', color: 'var(--on-green-2)' } : undefined}>
             {d.sfms.confirmed ? 'Received by SJVN' : 'Not yet received'}
           </span>
         </div>
@@ -308,7 +308,7 @@ export default function SecurityInstrumentPanel({ instrumentId, onChanged }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
             <strong>Original document</strong>
-            {d.is_ebg && <span className="cw-flag" style={{ background: '#eff6ff', color: '#1d4ed8', marginLeft: 8 }}>e-BG{d.ebg_reference ? ` · ${d.ebg_reference}` : ''}</span>}
+            {d.is_ebg && <span className="cw-flag" style={{ background: 'var(--t-blue-50)', color: 'var(--on-blue)', marginLeft: 8 }}>e-BG{d.ebg_reference ? ` · ${d.ebg_reference}` : ''}</span>}
             <div style={{ fontSize: 13.5, color: 'var(--text-light)' }}>{d.document ? d.document.file_name : 'No scanned guarantee or e-BG is on file for this instrument.'}</div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -335,7 +335,7 @@ export default function SecurityInstrumentPanel({ instrumentId, onChanged }) {
           {d.chain.map((c, i) => (
             <li key={c.seq} className={i === d.chain.length - 1 ? 'current' : ''}>
               <span className="ps-step">{c.step}</span>
-              {i === d.chain.length - 1 && <span className="cw-flag" style={{ background: '#f0fdf4', color: '#15803d', marginLeft: 8 }}>In force</span>}
+              {i === d.chain.length - 1 && <span className="cw-flag" style={{ background: 'var(--t-green-50)', color: 'var(--on-green-2)', marginLeft: 8 }}>In force</span>}
               <span className="ps-meta"> · {fmtDate(c.date)}{c.reference ? ` · ${c.reference}` : ''}</span>
               <div>{fmtCurrency(c.limit)} · valid until {c.validity_end ? fmtDate(c.validity_end) : '—'}</div>
               {c.changes.map((ch) => <div key={ch.field} style={{ color: 'var(--primary-dark, #1e40af)' }}>{changeText([ch])}</div>)}

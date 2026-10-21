@@ -42,8 +42,8 @@ export default function SecurityBoardPanel({ canAsk }) {
             { key: 'heads', header: 'Required / in force / gap', render: (r) => r.heads.map((h) => (
               <div key={h.head} style={{ fontSize: 13.5 }}>
                 {h.label}: {fmtCurrency(h.required)} / {fmtCurrency(h.held)}
-                {h.gap > 0 ? <strong style={{ color: '#b91c1c' }}> / short {fmtCurrency(h.gap)}</strong> : <span style={{ color: '#15803d' }}> ✓</span>}
-                {h.unconfirmed > 0 && <span style={{ color: '#b45309' }}> ({fmtCurrency(h.unconfirmed)} not bank-confirmed)</span>}
+                {h.gap > 0 ? <strong style={{ color: 'var(--red-deep)' }}> / short {fmtCurrency(h.gap)}</strong> : <span style={{ color: 'var(--on-green-2)' }}> ✓</span>}
+                {h.unconfirmed > 0 && <span style={{ color: 'var(--amber-strong)' }}> ({fmtCurrency(h.unconfirmed)} not bank-confirmed)</span>}
               </div>
             )) },
             { key: 'exposure', header: 'At risk', render: (r) => <>{fmtCurrency(r.exposure)}<div style={{ fontSize: 13 }}>{r.adequate ? <Badge status="ACTIVE" label="Adequate" /> : <Badge status="REJECTED" label="Short" />}</div></> },
@@ -65,7 +65,7 @@ export default function SecurityBoardPanel({ canAsk }) {
               { key: 'instrument_no', header: 'LC', render: (r) => <><strong>{r.instrument_no}</strong><div style={{ fontSize: 13, color: 'var(--text-light)' }}>{r.contract_no} · {r.kind === 'BUYER_LC' ? "buyer's LC to SJVN" : "SJVN's LC to the seller"}</div></> },
               { key: 'drawn', header: 'Drawn', render: (r) => `${fmtCurrency(r.drawn)} of ${fmtCurrency(r.limit)}` },
               { key: 'drawn_on', header: 'Drawn on', render: (r) => fmtDate(r.drawn_on) },
-              { key: 'days', header: 'Waiting', render: (r) => <span style={{ fontWeight: 600, color: r.overdue ? '#b91c1c' : undefined }}>{r.days_since_draw} days{r.overdue ? ' — late' : ` (by ${fmtDate(r.due_by)})`}</span> },
+              { key: 'days', header: 'Waiting', render: (r) => <span style={{ fontWeight: 600, color: r.overdue ? 'var(--red-deep)' : undefined }}>{r.days_since_draw} days{r.overdue ? ' — late' : ` (by ${fmtDate(r.due_by)})`}</span> },
             ]}
             rows={lcs.rows}
           />

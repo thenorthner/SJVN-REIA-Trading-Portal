@@ -129,9 +129,9 @@ export default function ConsolidatedDashboard() {
   };
 
   const getTrendIcon = (val) => {
-    if (val > 0) return <span style={{ color: '#008a00' }}>↑ {val.toFixed(1)}%</span>;
-    if (val < 0) return <span style={{ color: '#e53e3e' }}>↓ {Math.abs(val).toFixed(1)}%</span>;
-    return <span style={{ color: '#718096' }}>— 0%</span>;
+    if (val > 0) return <span style={{ color: 'var(--on-green)' }}>↑ {val.toFixed(1)}%</span>;
+    if (val < 0) return <span style={{ color: 'var(--on-red)' }}>↓ {Math.abs(val).toFixed(1)}%</span>;
+    return <span style={{ color: 'var(--slate-500)' }}>— 0%</span>;
   };
 
   const capacityProgress = Math.min((data.reiaContractedCapacity / data.targetCapacity) * 100, 100);
@@ -225,7 +225,7 @@ export default function ConsolidatedDashboard() {
           <div className="detail-grid">
             <div className="detail-item">
               <span className="detail-label">Total Unresolved Exposure</span>
-              <span className="detail-value" style={{ color: data.totalUnresolvedExposure > 500000 ? '#e53e3e' : '#008a00' }}>
+              <span className="detail-value" style={{ color: data.totalUnresolvedExposure > 500000 ? 'var(--on-red)' : 'var(--on-green)' }}>
                 {fmtCurrency(data.totalUnresolvedExposure)}
               </span>
             </div>
@@ -258,7 +258,7 @@ export default function ConsolidatedDashboard() {
         </Card>
       </div>
 
-      <h3 className="animate-fade-in-up stagger-3" style={{ margin: '30px 0 15px 0', color: '#1c2536', borderBottom: '1px solid #eee', paddingBottom: 10 }}>Portfolio Overview</h3>
+      <h3 className="animate-fade-in-up stagger-3" style={{ margin: '30px 0 15px 0', color: 'var(--on-blue)', borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>Portfolio Overview</h3>
       <div className="kpi-grid animate-fade-in-up stagger-3">
         <StatCard label="Total Portfolio Billed Value" value={fmtCurrency(data.totalPortfolioValue)} tone="blue" hint={<div>MoM Trend: {getTrendIcon(data.revenueTrend)}</div>} onClick={() => navigate('/reia')} />
         <StatCard label="Overall Trading Profitability" value={fmtCurrency(data.overallProfitability)} tone="green" hint="SJVN trading margin across all trades" onClick={() => navigate('/trading')} />
@@ -266,7 +266,7 @@ export default function ConsolidatedDashboard() {
 
       {canViewReia && (
         <>
-          <h3 className="animate-fade-in-up stagger-4" style={{ margin: '30px 0 15px 0', color: '#1c2536', borderBottom: '1px solid #eee', paddingBottom: 10 }}>REIA Billing & Settlement</h3>
+          <h3 className="animate-fade-in-up stagger-4" style={{ margin: '30px 0 15px 0', color: 'var(--on-blue)', borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>REIA Billing & Settlement</h3>
           <div className="kpi-grid animate-fade-in-up stagger-4">
             <StatCard label="Contracted RE Capacity" value={`${fmtNumber(data.reiaContractedCapacity)} MW`} onClick={() => navigate('/reia/contracts')} />
             <StatCard label="REIA Receivables" value={fmtCurrency(data.reiaReceivables)} hint="Unpaid from buyers" onClick={() => navigate('/reia/invoices')} />
@@ -280,7 +280,7 @@ export default function ConsolidatedDashboard() {
 
       {canViewTrading && (
         <>
-          <h3 className="animate-fade-in-up stagger-5" style={{ margin: '30px 0 15px 0', color: '#1c2536', borderBottom: '1px solid #eee', paddingBottom: 10 }}>Power Trading Operations</h3>
+          <h3 className="animate-fade-in-up stagger-5" style={{ margin: '30px 0 15px 0', color: 'var(--on-blue)', borderBottom: '1px solid var(--border)', paddingBottom: 10 }}>Power Trading Operations</h3>
           <div className="kpi-grid animate-fade-in-up stagger-5">
             <StatCard label="Trading Revenue" value={fmtCurrency(data.tradingRevenue)} tone="blue" onClick={() => navigate('/trading/billing-settlement')} />
             <StatCard label="Trading Margin" value={fmtCurrency(data.tradingMargin)} tone="green" onClick={() => navigate('/trading/market-analytics')} />
@@ -316,7 +316,7 @@ export default function ConsolidatedDashboard() {
       <div className="no-print animate-fade-in-up stagger-5" style={{ marginTop: 32 }}>
         {/* Banner Card with Header & Decorative Graphic */}
         <div style={{
-          background: '#ffffff',
+          background: 'var(--surface)',
           border: '1px solid var(--slate-200)',
           borderRadius: '16px',
           padding: '24px 32px',
@@ -355,7 +355,7 @@ export default function ConsolidatedDashboard() {
         </div>
 
         {reportError && (
-          <div style={{ color: 'var(--red-deep)', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>
+          <div style={{ color: 'var(--red-deep)', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>
             {reportError}
           </div>
         )}
@@ -379,7 +379,7 @@ export default function ConsolidatedDashboard() {
                   key={r.path}
                   className="report-card-item"
                   style={{
-                    background: '#ffffff',
+                    background: 'var(--surface)',
                     border: '1px solid var(--slate-200)',
                     borderRadius: '12px',
                     padding: '20px',
@@ -429,7 +429,7 @@ export default function ConsolidatedDashboard() {
                       padding: '6px 14px',
                       borderRadius: '6px',
                       border: '1px solid var(--slate-300)',
-                      background: '#ffffff',
+                      background: 'var(--surface)',
                       color: 'var(--slate-900)',
                       fontSize: '13.5px',
                       fontWeight: 500,

@@ -9,7 +9,7 @@ import { PowerRoutingTree3D, routingPosition, shareMwOf } from '../../components
 import { ROLE_GROUPS } from '../../roles.js';
 import { paymentTermsText, rebateText, lpsText, SECURITY_TYPES, paymentSecurityText } from '../../lib/contractRules.js';
 
-// The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_ADMIN.
+// The server's REIA_WRITE group; a shorter copy here hid the buttons from REIA_CHECKER.
 const CAN_WRITE = ROLE_GROUPS.REIA_WRITE;
 
 // Must stay in lockstep with backend CONTRACT_TRANSITIONS. A draft is not yet
@@ -80,7 +80,7 @@ function renderTariffStructure(selected) {
           display = '';
         }
         return (
-          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--slate-100, #f1f5f9)', padding: '2px 8px', borderRadius: 4, fontSize: 13 }}>
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--slate-100, var(--slate-100))', padding: '2px 8px', borderRadius: 4, fontSize: 13 }}>
             <span style={{ color: 'var(--slate-600, #475569)', textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}:</span>
             <span style={{ fontWeight: 600 }}>{display}</span>
           </div>
@@ -166,6 +166,11 @@ export default function Contracts() {
   const [showCreate, setShowCreate] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const DEFAULT_PROJECT_TYPES = ['Solar', 'Wind', 'Hybrid', 'FDRE', 'PeakPower', 'Storage', 'Hydro', 'Pumped Storage'];
+  const [projectTypes, setProjectTypes] = useState(DEFAULT_PROJECT_TYPES);
+  const [showAddProjectType, setShowAddProjectType] = useState(false);
+  const [newProjectTypeLabel, setNewProjectTypeLabel] = useState('');
+  const [newProjectTypeSaving, setNewProjectTypeSaving] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   // The one message on screen that has to be read: { tone, title, message, items }.
@@ -248,7 +253,39 @@ export default function Contracts() {
     // Only approved entities
     api.entities.list({ entity_type: 'SELLER', status: 'APPROVED' }).then((d) => setSellers(Array.isArray(d) ? d : [])).catch(() => setSellers([]));
     api.entities.list({ entity_type: 'BUYER', status: 'APPROVED' }).then((d) => setBuyers(Array.isArray(d) ? d : [])).catch(() => setBuyers([]));
+    api.masters.lookups({ category: 'PROJECT_TYPE' })
+      .then((rows) => {
+        if (Array.isArray(rows) && rows.length > 0) {
+          const names = rows.map((r) => r.label || r.code);
+          setProjectTypes((prev) => Array.from(new Set([...prev, ...names])));
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  async function handleCreateNewProjectType(e) {
+    if (e) e.preventDefault();
+    const clean = newProjectTypeLabel.trim();
+    if (!clean) return;
+    setNewProjectTypeSaving(true);
+    try {
+      const code = clean.toUpperCase().replace(/[^A-Z0-9]+/g, '_').slice(0, 30);
+      await api.masters.createLookup({
+        category: 'PROJECT_TYPE',
+        code,
+        label: clean,
+        sort_order: projectTypes.length + 1,
+      });
+      setProjectTypes((prev) => Array.from(new Set([...prev, clean])));
+      setForm((prev) => ({ ...prev, project_type: clean }));
+      setShowAddProjectType(false);
+      setNewProjectTypeLabel('');
+    } catch (err) {
+      alert(err.response?.data?.error || err.message || 'Failed to add project type');
+    } finally {
+      setNewProjectTypeSaving(false);
+    }
+  }
 
   function openDetail(row) {
     api.contracts.get(row.id).then(setSelected).catch(() => setSelected(row));
@@ -672,14 +709,14 @@ export default function Contracts() {
     { key: 'tariff', header: 'Tariff', render: (r) => (
       <div>
         <div>₹{fmtTariff(r.tariff_per_unit)}/u</div>
-        <div style={{fontSize: 13, color:'#666'}}>{r.tariff_type}</div>
+        <div style={{fontSize: 13, color: 'var(--slate-500)'}}>{r.tariff_type}</div>
       </div>
     )},
     {
       key: 'next', header: 'Next milestone', render: (r) => {
         const n = attention[r.id]?.next_milestone;
         if (!n) return <span style={{ color: 'var(--slate-500)' }}>—</span>;
-        return <span>{n.label.replace(/\s*\(.*\)$/, '')}{n.due_date ? <div style={{ fontSize: 13.5, color: n.status === 'DELAYED' ? '#b91c1c' : 'var(--slate-500)' }}>{n.due_date}</div> : null}</span>;
+        return <span>{n.label.replace(/\s*\(.*\)$/, '')}{n.due_date ? <div style={{ fontSize: 13.5, color: n.status === 'DELAYED' ? 'var(--red-deep)' : 'var(--slate-500)' }}>{n.due_date}</div> : null}</span>;
       },
     },
     {
@@ -755,7 +792,7 @@ export default function Contracts() {
         </select>
         <select value={filters.project_type} onChange={(e) => setFilters({ ...filters, project_type: e.target.value })}>
           <option value="">All project types</option>
-          {['Solar', 'Wind', 'Hybrid', 'FDRE', 'PeakPower', 'Hydro', 'PSP', 'Storage'].map((pt) => <option key={pt} value={pt}>{pt}</option>)}
+          {projectTypes.map((pt) => <option key={pt} value={pt}>{pt}</option>)}
         </select>
         <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
           <option value="">All statuses</option>
@@ -775,7 +812,7 @@ export default function Contracts() {
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create New Contract" width={900}>
         <form onSubmit={handleCreate} onBlur={checkOnBlur} noValidate>
-          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+          <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 12px 0' }}>1. Basic Details</h4>
             <div className="form-grid">
               <Field label="Contract No."><input required value={form.contract_no} onChange={(e) => setForm({ ...form, contract_no: e.target.value })} /></Field>
@@ -800,29 +837,70 @@ export default function Contracts() {
                   </select>
                 </Field>
               )}
-              <Field label="Project Type">
-                <select value={form.project_type} onChange={(e) => setForm({ ...form, project_type: e.target.value })}>
-                  <option value="Solar">Solar</option>
-                  <option value="Wind">Wind</option>
-                  <option value="Hybrid">Hybrid</option>
-                  <option value="FDRE">FDRE</option>
-                  <option value="PeakPower">Peak Power</option>
-                  <option value="Hydro">Hydro</option>
-                  <option value="PSP">Pumped Storage (PSP)</option>
-                  <option value="Storage">BESS / Storage</option>
+              <Field
+                label={
+                  <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <span>Project Type</span>
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-outline"
+                      style={{ padding: '1px 8px', fontSize: 11, fontWeight: 600 }}
+                      onClick={() => setShowAddProjectType((prev) => !prev)}
+                    >
+                      {showAddProjectType ? 'Cancel' : '+ Add New'}
+                    </button>
+                  </span>
+                }
+              >
+                <select
+                  value={form.project_type}
+                  onChange={(e) => {
+                    if (e.target.value === '__NEW__') {
+                      setShowAddProjectType(true);
+                    } else {
+                      setForm({ ...form, project_type: e.target.value });
+                    }
+                  }}
+                >
+                  {projectTypes.map((pt) => (
+                    <option key={pt} value={pt}>{pt}</option>
+                  ))}
+                  <option value="__NEW__">+ Add New Project Type...</option>
                 </select>
+                {showAddProjectType && (
+                  <div style={{ marginTop: 8, padding: 12, background: 'var(--slate-50)', borderRadius: 6, border: '1px solid var(--slate-300)' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--slate-700)', marginBottom: 8 }}>
+                      Add New Project Type to Master
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        style={{ flex: 1 }}
+                        placeholder="e.g. Green Hydrogen, Offshore Wind"
+                        value={newProjectTypeLabel}
+                        onChange={(e) => setNewProjectTypeLabel(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        disabled={newProjectTypeSaving || !newProjectTypeLabel.trim()}
+                        onClick={handleCreateNewProjectType}
+                      >
+                        {newProjectTypeSaving ? 'Saving...' : 'Save & Select'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </Field>
             </div>
           </div>
 
-          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+          <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 12px 0' }}>2. Capacity & Tariff Structure</h4>
             <div className="form-grid">
               <Field label="Total Capacity (MW)"><input required type="number" step="0.01" value={form.capacity_mw} onChange={(e) => setForm({ ...form, capacity_mw: e.target.value })} /></Field>
               <Field label="Tariff Type">
                 <select value={form.tariff_type} onChange={(e) => setForm({ ...form, tariff_type: e.target.value })}>
                   <option value="FLAT">Flat / Fixed</option>
-                  <option value="TWO_PART">Two-Part (Fixed + Variable)</option>
                   <option value="ESCALATING">Escalating / Indexed</option>
                   <option value="SLAB">Time of Day / Slab</option>
                 </select>
@@ -849,7 +927,7 @@ export default function Contracts() {
             </div>
           </div>
 
-          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+          <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 12px 0' }}>3. Tenure & Payment Security</h4>
             <div className="form-grid">
               <Field label="Tenure Start"><input required type="date" value={form.tenure_start} onChange={(e) => setForm({ ...form, tenure_start: e.target.value })} /></Field>
@@ -863,7 +941,7 @@ export default function Contracts() {
               </Field>
             </div>
           </div>
-          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+          <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 12px 0' }}>4. Billing &amp; Regulatory Rules (CERC)</h4>
 
             {/* Payment terms → drives the invoice due date */}
@@ -921,37 +999,9 @@ export default function Contracts() {
             </div>
           </div>
 
-          {['Hydro', 'PSP'].includes(form.project_type) && (
-          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
-            <h4 style={{ margin: '0 0 12px 0', color: '#0369a1' }}>4b. Hydro-Specific Parameters (CERC)</h4>
-            <div className="form-grid">
-              <Field label="Annual Fixed Charges AFC (₹)">
-                <input type="number" step="1" placeholder="e.g. 14615741000" value={form.annual_afc || ''} onChange={(e) => setForm({ ...form, annual_afc: e.target.value })} />
-              </Field>
-              <Field label="Annual Design Energy DE (MWh)">
-                <input type="number" step="0.001" placeholder="e.g. 6612000" value={form.annual_design_energy_mwh || ''} onChange={(e) => setForm({ ...form, annual_design_energy_mwh: e.target.value })} />
-              </Field>
-              <Field label="NAPAF (%)">
-                <input type="number" step="0.01" placeholder="e.g. 87" value={form.napaf_percent || ''} onChange={(e) => setForm({ ...form, napaf_percent: e.target.value })} />
-              </Field>
-              <Field label="Normative Auxiliary Consumption (%)"><input type="number" step="0.01" placeholder="e.g. 1.2" value={form.normative_aux || ''} onChange={(e) => setForm({ ...form, normative_aux: e.target.value })} /></Field>
-              <Field label="Free Energy to Home State (%)"><input type="number" step="0.01" placeholder="e.g. 12" value={form.free_energy_home_state || ''} onChange={(e) => setForm({ ...form, free_energy_home_state: e.target.value })} /></Field>
-              <Field label="Legacy Monthly Capacity (₹ AFC/12) — optional fallback">
-                <input type="number" step="1" placeholder="only if AFC blank" value={form.capacity_charges_total || ''} onChange={(e) => setForm({ ...form, capacity_charges_total: e.target.value })} />
-              </Field>
-              <Field label="Transmission / Wheeling (₹/MWh)">
-                <input type="number" step="0.01" placeholder="Blank = master default" value={form.transmission_charge_per_mwh || ''} onChange={(e) => setForm({ ...form, transmission_charge_per_mwh: e.target.value })} />
-              </Field>
-            </div>
-            <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '8px 0 0' }}>
-              Capacity = AFC × 0.5 × days/year × (PAFM/NAPAF). ECR from AFC &amp; DE. PAFM comes from energy data availability %. β incentive = (3% × β × 0.5 × AFC)/12.
-            </p>
-          </div>
-          )}
-
           {['Solar', 'Wind', 'Hybrid', 'FDRE'].includes(form.project_type) && (
-          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
-            <h4 style={{ margin: '0 0 12px 0', color: '#0369a1' }}>4b. CUF Performance Threshold</h4>
+          <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
+            <h4 style={{ margin: '0 0 12px 0', color: 'var(--on-blue)' }}>4b. CUF Performance Threshold</h4>
             <div className="form-grid">
               <Field label="Min / Guaranteed CUF (%)">
                 <input type="number" step="0.01" min="0" max="100" placeholder={form.contract_type === 'PPA' ? 'As the PPA guarantees — needed to make it ACTIVE' : 'Blank = master default'} value={form.min_cuf_percent || ''} onChange={(e) => setForm({ ...form, min_cuf_percent: e.target.value })} />
@@ -973,7 +1023,7 @@ export default function Contracts() {
             <p style={{ fontSize: 13.5, color: 'var(--slate-500)', margin: '8px 0 0' }}>
               CUF is assessed over the contract year. If the year's CUF (from energy data, deemed generation counted) is below this threshold, the year-end true-up charges shortfall MWh × tariff × the compensation % above.
             </p>
-            <h4 style={{ margin: '16px 0 12px 0', color: '#0369a1' }}>4c. Peak Availability Obligation</h4>
+            <h4 style={{ margin: '16px 0 12px 0', color: 'var(--on-blue)' }}>4c. Peak Availability Obligation</h4>
             <div className="form-grid">
               <Field label="Peak window from">
                 <input type="time" value={form.peak_window_start || ''} onChange={(e) => setForm({ ...form, peak_window_start: e.target.value })} />
@@ -996,14 +1046,14 @@ export default function Contracts() {
           </div>
           )}
 
-          <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+          <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
             <h4 style={{ margin: '0 0 12px 0' }}>5. Contract Document</h4>
             <div className="form-grid">
               <Field label="Contract Agreement (PDF)" required>
                 <input type="file" accept="application/pdf,.pdf" onChange={(e) => pickContractFile(e.target.files[0])} />
               </Field>
             </div>
-            <p style={{ fontSize: 13.5, color: uploadFile ? '#15803d' : 'var(--slate-500)', margin: '4px 0 0' }}>
+            <p style={{ fontSize: 13.5, color: uploadFile ? 'var(--on-green-2)' : 'var(--slate-500)', margin: '4px 0 0' }}>
               {uploadFile
                 ? `Selected: ${uploadFile.name} (${(uploadFile.size / 1048576).toFixed(2)} MB)`
                 : 'Mandatory. A contract cannot be created — or later marked SIGNED / ACTIVE — without its agreement PDF on file.'}
@@ -1031,7 +1081,7 @@ export default function Contracts() {
           </div>
           <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginBottom: 20 }}>
             <div style={{ flex: 1, minWidth: 300 }}>
-              <h4 style={{ margin: '0 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Contract Info</h4>
+              <h4 style={{ margin: '0 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Contract Info</h4>
               <table className="detail-table">
                 <tbody>
                   <tr><td>Type</td><td><Badge status={selected.contract_type} /></td></tr>
@@ -1057,7 +1107,7 @@ export default function Contracts() {
             </div>
             
             <div style={{ flex: 1, minWidth: 300 }}>
-              <h4 style={{ margin: '0 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Commercials</h4>
+              <h4 style={{ margin: '0 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Commercials</h4>
               <table className="detail-table">
                 <tbody>
                   <tr><td>Tariff Type</td><td>{selected.tariff_type}</td></tr>
@@ -1092,10 +1142,10 @@ export default function Contracts() {
             </div>
           </div>
           
-          <h4 style={{ margin: '20px 0 12px 0', borderBottom: '1px solid #eee', paddingBottom: 8 }}>Projects Mapped</h4>
+          <h4 style={{ margin: '20px 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>Projects Mapped</h4>
           {selected.projects?.length > 0 ? (
             <Table columns={[{key:'name', header:'Project SPV'}, {key:'capacity', header:'Allocated (MW)', render: r=>r.allocated_capacity_mw}]} rows={selected.projects} />
-          ) : <div style={{ fontSize: 13, color: '#666' }}>No projects mapped.</div>}
+          ) : <div style={{ fontSize: 13, color: 'var(--slate-500)' }}>No projects mapped.</div>}
 
           {(() => {
             const isPpa = selected.contract_type === 'PPA';
@@ -1181,10 +1231,10 @@ export default function Contracts() {
                       {!isPpa && <span>Supplied on {formPos.asOf} <strong>{fmtNumber(formPos.coveredMw)} MW</strong>{formPos.live.length ? ` from ${formPos.live.map((a) => a.ppa_no).join(', ')}` : ''} · left <strong>{fmtNumber(Math.max(0, formPos.openMw))} MW</strong></span>}
                       {shareMw != null && <span>This share: <strong>{fmtNumber(shareMw)} MW</strong>{psaRec ? ` of ${psaRec.contract_no}'s ${fmtNumber(psaRec.capacity_mw)} MW` : ''}</span>}
                       {!isPpa && shareMw != null && shareMw > formPos.openMw + 1e-6 && (
-                        <span style={{ color: '#b91c1c', fontWeight: 600 }}>Takes it to {fmtNumber(Math.round((formPos.coveredMw + shareMw) * 100) / 100)} MW — more than the {fmtNumber(selected.capacity_mw)} MW it contracts for</span>
+                        <span style={{ color: 'var(--red-deep)', fontWeight: 600 }}>Takes it to {fmtNumber(Math.round((formPos.coveredMw + shareMw) * 100) / 100)} MW — more than the {fmtNumber(selected.capacity_mw)} MW it contracts for</span>
                       )}
                       {spread != null && (
-                        <span style={{ color: spread < 0 ? '#b91c1c' : '#15803d', fontWeight: 600 }}>
+                        <span style={{ color: spread < 0 ? 'var(--red-deep)' : 'var(--on-green-2)', fontWeight: 600 }}>
                           Spread {spread < 0 ? '−' : '+'}₹{Math.abs(spread).toFixed(2)}/unit {spread < 0 ? '(PSA sells below PPA — a loss on every unit)' : ''}
                         </span>
                       )}
@@ -1196,7 +1246,7 @@ export default function Contracts() {
                     )}
                     {allocationForm.need_reason && (
                       <div style={{ marginTop: 10 }}>
-                        <p style={{ fontSize: 13.5, color: '#b91c1c', margin: '0 0 6px' }}>{allocationForm.spread_message}</p>
+                        <p style={{ fontSize: 13.5, color: 'var(--red-deep)', margin: '0 0 6px' }}>{allocationForm.spread_message}</p>
                         <Field label="Reason for mapping below cost (order / VGF reference)" required>
                           <input value={allocationForm.negative_spread_reason || ''} onChange={(e) => setAllocationForm({ ...allocationForm, negative_spread_reason: e.target.value })} />
                         </Field>
@@ -1251,11 +1301,11 @@ export default function Contracts() {
                               const was = (dayBeforeIso ? sharesOn(dayBeforeIso) : []).find((a) => a.psa_id === r.psa_id);
                               return (
                                 <tr key={r.psa_id}>
-                                  <td><strong>{info.contract_no}</strong>{!was && ' '}{!was && <span style={{ marginLeft: 6, fontSize: 12.5, color: '#15803d' }}>new</span>}{was && Number(was.allocation_percent) !== pct && <div style={{ fontSize: 12.5, color: 'var(--slate-500)' }}>was {was.allocation_percent}%</div>}</td>
+                                  <td><strong>{info.contract_no}</strong>{!was && ' '}{!was && <span style={{ marginLeft: 6, fontSize: 12.5, color: 'var(--on-green-2)' }}>new</span>}{was && Number(was.allocation_percent) !== pct && <div style={{ fontSize: 12.5, color: 'var(--slate-500)' }}>was {was.allocation_percent}%</div>}</td>
                                   <td>{info.buyer_name || '—'}</td>
                                   <td><input type="number" step="0.01" min="0.01" max="100" aria-label={`Share % for ${info.contract_no}`} value={r.allocation_percent} onChange={(e) => setRow(i, e.target.value)} style={{ width: 90 }} /></td>
-                                  <td style={{ color: over ? '#b91c1c' : 'inherit', fontWeight: over ? 600 : 400 }}>{mw != null ? `${fmtNumber(mw)} of ${fmtNumber(info.capacity_mw)} MW` : '—'}</td>
-                                  <td style={{ color: sp != null && sp < 0 ? '#b91c1c' : '#15803d' }}>{sp == null ? '—' : `${sp < 0 ? '−' : '+'}₹${Math.abs(sp).toFixed(2)}`}</td>
+                                  <td style={{ color: over ? 'var(--red-deep)' : 'inherit', fontWeight: over ? 600 : 400 }}>{mw != null ? `${fmtNumber(mw)} of ${fmtNumber(info.capacity_mw)} MW` : '—'}</td>
+                                  <td style={{ color: sp != null && sp < 0 ? 'var(--red-deep)' : 'var(--on-green-2)' }}>{sp == null ? '—' : `${sp < 0 ? '−' : '+'}₹${Math.abs(sp).toFixed(2)}`}</td>
                                   <td><button type="button" className="btn btn-ghost btn-sm" onClick={() => setResplit({ ...resplit, rows: resplit.rows.filter((_, j) => j !== i) })}>End share</button></td>
                                 </tr>
                               );
@@ -1272,12 +1322,12 @@ export default function Contracts() {
                         <button type="button" className="btn btn-outline btn-sm" disabled={!resplit.add_psa_id} onClick={() => setResplit({ ...resplit, rows: [...resplit.rows, { psa_id: resplit.add_psa_id, allocation_percent: '' }], add_psa_id: '' })}>Add</button>
                       </div>
                       <div style={{ fontSize: 13.5, margin: '10px 0 0', display: 'flex', gap: 18, flexWrap: 'wrap' }}>
-                        <span style={{ color: total > 100 ? '#b91c1c' : 'var(--slate-600)', fontWeight: 600 }}>New total {total}% · {fmtNumber(Math.round(total * cap) / 100)} MW of {fmtNumber(cap)} MW</span>
+                        <span style={{ color: total > 100 ? 'var(--red-deep)' : 'var(--slate-600)', fontWeight: 600 }}>New total {total}% · {fmtNumber(Math.round(total * cap) / 100)} MW of {fmtNumber(cap)} MW</span>
                         {total <= 100 && <span style={{ color: 'var(--slate-600)' }}>Left unsold {Math.round((100 - total) * 100) / 100}%</span>}
-                        {ending.length > 0 && <span style={{ color: '#b45309' }}>Ending on {dayBefore}: {ending.map((a) => a.psa_no).join(', ')}</span>}
+                        {ending.length > 0 && <span style={{ color: 'var(--amber-strong)' }}>Ending on {dayBefore}: {ending.map((a) => a.psa_no).join(', ')}</span>}
                       </div>
                       {replaced.length > 0 && (
-                        <p style={{ fontSize: 13.5, color: '#b45309', margin: '8px 0 0' }}>
+                        <p style={{ fontSize: 13.5, color: 'var(--amber-strong)', margin: '8px 0 0' }}>
                           A split is already scheduled from {replaced.join(', ')}. Saving from {resplit.effective_from} replaces it — include every PSA that should keep a share after that date.
                         </p>
                       )}
@@ -1342,11 +1392,11 @@ export default function Contracts() {
       {statusForm && (
         <Modal open={true} onClose={() => setStatusForm(null)} title="Update Contract Lifecycle Stage">
           <form onSubmit={handleStatusChange} noValidate>
-            <p style={{ margin: '0 0 12px', fontSize: 13, color: '#475569' }}>
+            <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--slate-600)' }}>
               Current stage: <strong>{selected?.status}</strong>
             </p>
             {lifecycleHint(selected?.status) && (
-              <p style={{ margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.45, color: '#64748b' }}>
+              <p style={{ margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.45, color: 'var(--slate-500)' }}>
                 {lifecycleHint(selected?.status)}
               </p>
             )}
@@ -1395,8 +1445,8 @@ export default function Contracts() {
           <form onSubmit={handleAmend} noValidate>
 
             {/* Mandatory Amendment Metadata */}
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, marginBottom: 16 }}>
-              <h4 style={{ margin: '0 0 10px 0', fontSize: 13.5, color: '#1e3a8a' }}>{['DRAFT', 'UNDER_NEGOTIATION'].includes(amendForm.status) ? 'Correcting an unsigned draft — no new version is created' : 'Amendment Application'}</h4>
+            <div style={{ background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8, padding: 14, marginBottom: 16 }}>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: 13.5, color: 'var(--on-blue)' }}>{['DRAFT', 'UNDER_NEGOTIATION'].includes(amendForm.status) ? 'Correcting an unsigned draft — no new version is created' : 'Amendment Application'}</h4>
               <div className="form-grid">
                 {!['DRAFT', 'UNDER_NEGOTIATION'].includes(amendForm.status) && <Field label="Effective From" required>
                   <input
@@ -1425,7 +1475,7 @@ export default function Contracts() {
             </div>
 
             {/* 1. Capacity & Milestone Dates */}
-            <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+            <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
               <h4 style={{ margin: '0 0 12px 0', fontSize: 13.5 }}>1. Capacity & Milestone Dates</h4>
               <div className="form-grid">
                 <Field label="Contracted Capacity (MW)">
@@ -1444,13 +1494,12 @@ export default function Contracts() {
             </div>
 
             {/* 2. Tariff & Commercial Terms */}
-            <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+            <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
               <h4 style={{ margin: '0 0 12px 0', fontSize: 13.5 }}>2. Tariff & Commercial Structure</h4>
               <div className="form-grid">
                 <Field label="Tariff Type">
                   <select value={amendForm.tariff_type || 'FLAT'} onChange={(e) => setAmendForm({ ...amendForm, tariff_type: e.target.value })}>
                     <option value="FLAT">Flat / Fixed</option>
-                    <option value="TWO_PART">Two-Part (Fixed + Variable)</option>
                     <option value="ESCALATING">Escalating / Indexed</option>
                     <option value="SLAB">Time of Day / Slab</option>
                   </select>
@@ -1480,7 +1529,7 @@ export default function Contracts() {
             </div>
 
             {/* 3. Billing & Regulatory Rules (CERC) */}
-            <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+            <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
               <h4 style={{ margin: '0 0 12px 0', fontSize: 13.5 }}>3. Billing & Regulatory Rules (CERC)</h4>
               
               <div className="rule-block">
@@ -1534,7 +1583,7 @@ export default function Contracts() {
             </div>
 
             {/* 4. Payment Security & Guarantees */}
-            <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
+            <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
               <h4 style={{ margin: '0 0 12px 0', fontSize: 13.5 }}>4. Performance Security & Guarantee</h4>
               <div className="form-grid">
                 <Field label="PBG / Security Amount (₹)">
@@ -1554,8 +1603,8 @@ export default function Contracts() {
 
             {/* 5. Performance / Technology Specific Parameters */}
             {['Solar', 'Wind', 'Hybrid', 'FDRE'].includes(amendForm.project_type) && (
-              <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: 13.5, color: '#0369a1' }}>5. CUF Performance Threshold</h4>
+              <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: 16, marginBottom: 16 }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: 13.5, color: 'var(--on-blue)' }}>5. CUF Performance Threshold</h4>
                 <div className="form-grid">
                   <Field label="Min / Guaranteed CUF (%)">
                     <input type="number" step="0.01" min="0" max="100" value={amendForm.min_cuf_percent ?? ''} onChange={(e) => setAmendForm({ ...amendForm, min_cuf_percent: e.target.value })} />
@@ -1573,32 +1622,6 @@ export default function Contracts() {
                       </select>
                     </Field>
                   )}
-                </div>
-              </div>
-            )}
-
-            {['Hydro', 'PSP'].includes(amendForm.project_type) && (
-              <div style={{ borderBottom: '1px solid #eee', paddingBottom: 16, marginBottom: 16 }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: 13.5, color: '#0369a1' }}>5. Hydro-Specific Parameters (CERC)</h4>
-                <div className="form-grid">
-                  <Field label="Annual Fixed Charges AFC (₹)">
-                    <input type="number" step="1" value={amendForm.annual_afc ?? ''} onChange={(e) => setAmendForm({ ...amendForm, annual_afc: e.target.value })} />
-                  </Field>
-                  <Field label="Annual Design Energy DE (MWh)">
-                    <input type="number" step="0.001" value={amendForm.annual_design_energy_mwh ?? ''} onChange={(e) => setAmendForm({ ...amendForm, annual_design_energy_mwh: e.target.value })} />
-                  </Field>
-                  <Field label="NAPAF (%)">
-                    <input type="number" step="0.01" value={amendForm.napaf_percent ?? ''} onChange={(e) => setAmendForm({ ...amendForm, napaf_percent: e.target.value })} />
-                  </Field>
-                  <Field label="Normative Auxiliary (%)">
-                    <input type="number" step="0.01" value={amendForm.normative_aux ?? ''} onChange={(e) => setAmendForm({ ...amendForm, normative_aux: e.target.value })} />
-                  </Field>
-                  <Field label="Free Energy to Home State (%)">
-                    <input type="number" step="0.01" value={amendForm.free_energy_home_state ?? ''} onChange={(e) => setAmendForm({ ...amendForm, free_energy_home_state: e.target.value })} />
-                  </Field>
-                  <Field label="Transmission / Wheeling (₹/MWh)">
-                    <input type="number" step="0.01" value={amendForm.transmission_charge_per_mwh ?? ''} onChange={(e) => setAmendForm({ ...amendForm, transmission_charge_per_mwh: e.target.value })} />
-                  </Field>
                 </div>
               </div>
             )}

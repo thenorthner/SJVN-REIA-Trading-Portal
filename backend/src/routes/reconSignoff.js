@@ -23,6 +23,10 @@
  */
 import { Router } from 'express';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import multer from 'multer';
 import XLSX from 'xlsx';
 import db from '../db/index.js';
 import { requireAuth, ROLE_GROUPS, counterpartySide } from '../middleware/auth.js';
@@ -59,6 +63,34 @@ const SIGNABLE = ['PENDING_SIGN_OFF', 'AUTO_MATCHED', 'NEEDS_REVIEW'];
 // still under review froze its figures before SJVN had explained them, and
 // flipped it to "pending sign-off" with a line still open.
 const COUNTERPARTY_SIGNABLE = ['PENDING_SIGN_OFF', 'AUTO_MATCHED'];
+
+// A trading client signs its own side. When it signs on paper or by e-mail
+// instead of on the portal, the trading desk attaches the client's signed copy
+// and that is what stands as the client's signature (decided 19-Oct-2026,
+// Target #2). The desk never signs for the client.
+const TRADING_DESK = ['TRADING_USER', 'TRADING_ADMIN'];
+const isTradingClientStatement = (recon) => recon.scope === 'TRADING_CLIENT' || recon.counterparty_role === 'TRADING_CLIENT';
+const offlineDir = process.env.SJVN_RECON_DOC_DIR || path.join(path.dirname(fileURLToPath(import.meta.url)), '../../uploads/recon-offline');
+const offlineUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => { fs.mkdirSync(offlineDir, { recursive: true }); cb(null, offlineDir); },
+    filename: (_req, file, cb) => cb(null, `${Date.now()}-${String(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_')}`),
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+/** Both signed → closed (or agreed while an exception is open); otherwise awaiting the other side. */
+function settleAfterSignature(reconId) {
+  const now = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(reconId);
+  const openExceptions = db.prepare(`SELECT COUNT(*) c FROM recon_exceptions WHERE reconciliation_id = ? AND status = 'OPEN'`).get(reconId).c;
+  if (now.sjvn_ack_at && now.counterparty_ack_at) {
+    // Both have signed. With an exception still open it is agreed but not finished.
+    if (openExceptions) db.prepare(`UPDATE reconciliations SET status = 'AGREED', updated_at = datetime('now') WHERE id = ?`).run(reconId);
+    else db.prepare(`UPDATE reconciliations SET status = 'CLOSED', closed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`).run(reconId);
+  } else {
+    db.prepare(`UPDATE reconciliations SET status = 'PENDING_SIGN_OFF', updated_at = datetime('now') WHERE id = ?`).run(reconId);
+  }
+}
 
 function reconFor(user, id) {
   const recon = db.prepare(`
@@ -224,7 +256,11 @@ function detailOf(user, recon) {
   return {
     id: recon.id, recon_no: recon.recon_no, status: recon.status, period: recon.period, period_type: recon.period_type, contract_id: recon.contract_id,
     side,
-    can_sign: (side === 'SJVN' ? SIGNABLE : COUNTERPARTY_SIGNABLE).includes(recon.status) && !mine,
+    // The trading desk is not the client: it attaches the client's signed copy instead.
+    can_sign: (side === 'SJVN' ? SIGNABLE : COUNTERPARTY_SIGNABLE).includes(recon.status) && !mine
+      && !(side === 'COUNTERPARTY' && TRADING_DESK.includes(user.role)),
+    can_attach_client_signed_copy: TRADING_DESK.includes(user.role) && isTradingClientStatement(recon)
+      && COUNTERPARTY_SIGNABLE.includes(recon.status) && !recon.counterparty_ack_at,
     can_attach_certificate: side === 'COUNTERPARTY' && recon.scope === 'REIA_CONTRACT',
     can_resolve: side === 'SJVN' && ROLE_GROUPS.REIA_WRITE.includes(user.role),
     certificate_required: certRequiredFor().includes(recon.period_type),
@@ -263,7 +299,10 @@ router.post('/:id/sign', (req, res) => send(res, () => {
   if (side === 'COUNTERPARTY') {
     const cs = counterpartySide(req.user);
     const ok = (cs !== null && (recon.counterparty_role == null || cs === recon.counterparty_role))
-      || (recon.counterparty_role === 'TRADING_CLIENT' && ['TRADING_CLIENT', 'TRADING_USER'].includes(req.user.role));
+      || (recon.counterparty_role === 'TRADING_CLIENT' && req.user.role === 'TRADING_CLIENT');
+    if (!ok && TRADING_DESK.includes(req.user.role) && isTradingClientStatement(recon)) {
+      throw fail(403, 'The trading client signs its own side. If it signed outside the portal, attach its signed copy (offline sign-off) instead.');
+    }
     if (!ok) throw fail(403, 'Only counterparty can acknowledge on this side');
     if (recon.counterparty_ack_at) throw fail(400, `This statement was already signed for your company by ${recon.counterparty_ack_by}`);
     // A company's maker prepares; its checker or admin signs. This rule lived
@@ -362,15 +401,7 @@ router.post('/:id/sign', (req, res) => send(res, () => {
           counterparty_cert_json = COALESCE(?, counterparty_cert_json), updated_at = datetime('now') WHERE id = ?
       `).run(req.user.name, sign, cert ? JSON.stringify(cert) : null, recon.id);
     }
-    const now = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(recon.id);
-    const openExceptions = db.prepare(`SELECT COUNT(*) c FROM recon_exceptions WHERE reconciliation_id = ? AND status = 'OPEN'`).get(recon.id).c;
-    if (now.sjvn_ack_at && now.counterparty_ack_at) {
-      // Both have signed. With an exception still open it is agreed but not finished.
-      if (openExceptions) db.prepare(`UPDATE reconciliations SET status = 'AGREED', updated_at = datetime('now') WHERE id = ?`).run(recon.id);
-      else db.prepare(`UPDATE reconciliations SET status = 'CLOSED', closed_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`).run(recon.id);
-    } else {
-      db.prepare(`UPDATE reconciliations SET status = 'PENDING_SIGN_OFF', updated_at = datetime('now') WHERE id = ?`).run(recon.id);
-    }
+    settleAfterSignature(recon.id);
   })();
 
   recordEvent(recon.id, req.user, partial ? 'ACKNOWLEDGE_WITH_EXCEPTIONS' : 'ACKNOWLEDGE', { side, actor: req.user.name, role: req.user.role, remarks, exceptions: exceptions.length, certificate: !!cert });
@@ -397,6 +428,61 @@ router.post('/:id/sign', (req, res) => send(res, () => {
     reconciliation: updated,
     signoff: detailOf(req.user, updated),
   };
+}));
+
+// POST /:id/offline-counterparty-sign (multipart: file, signatory_name, signatory_designation, signed_on, remarks)
+// The trading client's own signature, given outside the portal: the desk
+// attaches the PDF the client signed. Recorded as the client's signature by the
+// named signatory, with the desk officer who attached it — never as the desk's.
+router.post('/:id/offline-counterparty-sign', offlineUpload.single('file'), (req, res) => send(res, () => {
+  const drop = () => { if (req.file) fs.rm(req.file.path, { force: true }, () => {}); };
+  try {
+    if (!TRADING_DESK.includes(req.user.role)) throw fail(403, 'Only the trading desk attaches a client\'s signed copy');
+    const recon = reconFor(req.user, req.params.id);
+    if (!isTradingClientStatement(recon)) throw fail(400, 'This is for a trading client\'s statement. A seller or buyer signs its own on the portal.');
+    if (recon.counterparty_ack_at) throw fail(400, `This statement was already signed for the client by ${recon.counterparty_ack_by}`);
+    if (!COUNTERPARTY_SIGNABLE.includes(recon.status)) throw fail(400, `${recon.recon_no} is ${String(recon.status).toLowerCase().replace(/_/g, ' ')} — the client signs once SJVN has finished its review`);
+    const signatory = String(req.body.signatory_name || '').trim().slice(0, 120);
+    if (signatory.length < 3) throw fail(400, 'Name the client\'s signatory who signed the copy');
+    const designation = String(req.body.signatory_designation || '').trim().slice(0, 120) || null;
+    const signedOn = String(req.body.signed_on || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(signedOn) || Number.isNaN(Date.parse(signedOn))) throw fail(400, 'Give the date the client signed (YYYY-MM-DD)');
+    if (signedOn > new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10)) throw fail(400, 'The signing date cannot be in the future');
+    if (!req.file) throw fail(400, 'Attach the PDF the client signed');
+    const info = inspectSignature(req.file.path);
+    if (!info.is_pdf) throw fail(400, 'The signed copy must be a PDF');
+    const remarks = String(req.body.remarks || '').trim().slice(0, 1000) || null;
+
+    const copy = {
+      file_name: req.file.originalname, file_path: path.relative(process.cwd(), req.file.path), size: req.file.size,
+      attached_by: req.user.name, attached_at: new Date().toISOString(), ...info,
+    };
+    const sign = JSON.stringify({
+      by: signatory, designation, role: 'TRADING_CLIENT', mode: 'OFFLINE_SIGNED_COPY', signed_on: signedOn,
+      attached_by: req.user.name, attached_by_id: req.user.id, at: new Date().toISOString(), ip: req.ip || null,
+      decision: 'AGREE', remarks, fingerprint: fingerprint(recon, itemsOf(recon.id), exceptionsOf(recon.id)),
+    });
+    db.transaction(() => {
+      const copies = parse(recon.signed_copies_json) || {};
+      copies.counterparty = copy;
+      db.prepare(`
+        UPDATE reconciliations SET counterparty_ack_at = datetime('now'), counterparty_ack_by = ?, counterparty_sign_json = ?,
+          signed_copies_json = ?, updated_at = datetime('now') WHERE id = ?
+      `).run(`${signatory} (client, signed offline; copy attached by ${req.user.name})`, sign, JSON.stringify(copies), recon.id);
+      settleAfterSignature(recon.id);
+    })();
+    recordEvent(recon.id, req.user, 'CLIENT_SIGNED_COPY_ATTACHED', { signatory, signed_on: signedOn, file: copy.file_name, signature_found: info.signed, attached_by: req.user.name });
+    audit(req, 'RECON_CLIENT_SIGNED_OFFLINE', recon.id, { afterValue: { recon_no: recon.recon_no, signatory, signed_on: signedOn, file_name: copy.file_name, signature_found: info.signed } });
+    for (const role of ROLE_GROUPS.REIA_WRITE) {
+      pushNotification({ role, type: 'RECON_SIGN_OFF', message: `${recon.recon_no}: the client's signed copy (${signatory}, ${signedOn}) was attached by ${req.user.name}.` });
+    }
+    const updated = db.prepare('SELECT r.*, c.contract_no, c.seller_id, c.buyer_id FROM reconciliations r LEFT JOIN contracts c ON c.id = r.contract_id WHERE r.id = ?').get(recon.id);
+    saveStatement(updated, itemsOf(recon.id), req.user);
+    return detailOf(req.user, updated);
+  } catch (err) {
+    drop();
+    throw err;
+  }
 }));
 
 // POST /exceptions/:id/resolve { outcome: ACCEPTED | REJECTED, note, dispute_id }

@@ -28,26 +28,26 @@ export default function DailyObligationReport() {
   }, [date, portfolio]);
 
   const renderVolume = (mw) => {
-    if (mw === 0) return <span style={{ color: '#6c757d' }}>0.00</span>;
+    if (mw === 0) return <span style={{ color: 'var(--slate-500)' }}>0.00</span>;
     if (mw < 0) return <span style={{ color: '#27ae60', fontWeight: 'bold' }}>{mw.toFixed(2)}</span>; // Green for cleared injection
     return <span>{mw.toFixed(2)}</span>;
   };
 
   const renderMcp = (mcp, volume) => {
     if (mcp >= 8000) {
-      return <Badge type="success" style={{ background: '#f1c40f', color: '#000', fontWeight: 'bold' }}>₹ {fmtNumber(mcp)}</Badge>; // Gold
+      return <Badge type="success" style={{ background: 'var(--t-amber-100)', color: 'var(--slate-900)', fontWeight: 'bold' }}>₹ {fmtNumber(mcp)}</Badge>; // Gold
     }
     // For zero-cleared blocks, show MCP normally but slightly faded
     if (volume === 0) {
-       return <span style={{ color: '#6c757d' }}>{fmtNumber(mcp)}</span>;
+       return <span style={{ color: 'var(--slate-500)' }}>{fmtNumber(mcp)}</span>;
     }
     return <span>{fmtNumber(mcp)}</span>;
   };
 
   const getRowStyle = (block) => {
-    if (block.volume_mw < 0) return { background: '#e8f5e9', borderBottom: '1px solid #c8e6c9' }; // Cleared & Generating
-    if (block.volume_mw === 0) return { background: '#f8f9fa', borderBottom: '1px solid #dee2e6' }; // Zero Cleared (Recorded Price)
-    return { borderBottom: '1px solid #eee' };
+    if (block.volume_mw < 0) return { background: 'var(--t-green-50)', borderBottom: '1px solid var(--t-green-100)' }; // Cleared & Generating
+    if (block.volume_mw === 0) return { background: 'var(--slate-50)', borderBottom: '1px solid var(--slate-100)' }; // Zero Cleared (Recorded Price)
+    return { borderBottom: '1px solid var(--border)' };
   };
 
   const TableHeader = () => (
@@ -67,7 +67,7 @@ export default function DailyObligationReport() {
       <td style={{ padding: 8, textAlign: 'right' }}>{renderVolume(block.volume_mw)}</td>
       <td style={{ padding: 8, textAlign: 'right' }}>{renderMcp(block.mcp, block.volume_mw)}</td>
       <td style={{ padding: 8, textAlign: 'right' }}>
-         {block.trade_value === 0 ? <span style={{ color: '#6c757d' }}>0.00</span> : fmtNumber(block.trade_value)}
+         {block.trade_value === 0 ? <span style={{ color: 'var(--slate-500)' }}>0.00</span> : fmtNumber(block.trade_value)}
       </td>
     </tr>
   );
@@ -89,7 +89,7 @@ export default function DailyObligationReport() {
         }
       />
 
-      <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
+      <Card style={{ marginBottom: 20, background: 'var(--slate-50)' }}>
         <div style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           <div>
             <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="dailyobligationreport-trading-date">Trading Date:</label>
@@ -99,7 +99,7 @@ export default function DailyObligationReport() {
             <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="dailyobligationreport-portfolio-tag">Portfolio Tag:</label>
             <PortfolioSelect id="dailyobligationreport-portfolio-tag" scope="global" allLabel="-- Select portfolio --" />
           </div>
-          <div style={{ marginLeft: 'auto', borderLeft: '1px solid #ccc', paddingLeft: 20 }}>
+          <div style={{ marginLeft: 'auto', borderLeft: '1px solid var(--slate-100)', paddingLeft: 20 }}>
             <span style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }}>Matrix Layout:</span>
             <div role="group" aria-label="Matrix Layout" style={{ display: 'flex', gap: 5 }}>
               <button 
@@ -121,10 +121,10 @@ export default function DailyObligationReport() {
 
       <Card>
         {loading || !data ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#666' }}>Loading DOR Data...</div>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--slate-500)' }}>Loading DOR Data...</div>
         ) : (
           <div>
-            <div style={{ marginBottom: 20, padding: 15, background: '#e9ecef', borderRadius: 4, display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ marginBottom: 20, padding: 15, background: 'var(--slate-100)', borderRadius: 4, display: 'flex', justifyContent: 'space-between' }}>
               <div>
                 <strong>Client:</strong> {data.portfolio}
               </div>
@@ -144,8 +144,8 @@ export default function DailyObligationReport() {
             </div>
 
             <div style={{ display: 'flex', gap: 15, marginBottom: 10, fontSize: 13.5 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{width: 12, height: 12, background: '#e8f5e9', border: '1px solid #c8e6c9'}}></div> Cleared & Generating</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{width: 12, height: 12, background: '#f8f9fa', border: '1px solid #dee2e6'}}></div> Zero Cleared (Price Recorded)</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{width: 12, height: 12, background: 'var(--t-green-50)', border: '1px solid var(--t-green-100)'}}></div> Cleared & Generating</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><div style={{width: 12, height: 12, background: 'var(--slate-50)', border: '1px solid var(--slate-100)'}}></div> Zero Cleared (Price Recorded)</span>
             </div>
 
             {layout === 'SPLIT' ? (
@@ -179,9 +179,9 @@ export default function DailyObligationReport() {
                 <tbody>
                   <tr>
                     <td style={{ width: '50%' }}>TOTAL SUMMARY ({data.summary.blocks_with_obligation ?? data.blocks.length} BLOCKS WITH AN OBLIGATION)</td>
-                    <td style={{ textAlign: 'right', paddingRight: 20 }}>Energy Cleared: <span style={{ color: '#2980b9' }}>{fmtNumber(data.summary.total_mwh)} MWh</span></td>
+                    <td style={{ textAlign: 'right', paddingRight: 20 }}>Energy Cleared: <span style={{ color: 'var(--on-blue)' }}>{fmtNumber(data.summary.total_mwh)} MWh</span></td>
                     <td style={{ textAlign: 'right', paddingRight: 20 }}>Avg Rate: <span style={{ color: '#27ae60' }}>₹{fmtNumber(data.summary.weighted_avg_rate)}/MWh</span></td>
-                    <td style={{ textAlign: 'right', color: '#c0392b' }}>Revenue: ₹{fmtNumber(data.summary.total_revenue)}</td>
+                    <td style={{ textAlign: 'right', color: 'var(--on-red)' }}>Revenue: ₹{fmtNumber(data.summary.total_revenue)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -193,7 +193,7 @@ export default function DailyObligationReport() {
                 PORTAL" — every figure invented by the API stub. Those charges are
                 raised on the exchange invoice, which is where they can be read
                 against something real. */}
-            <p style={{ marginTop: 24, fontSize: 13.5, color: '#555' }}>
+            <p style={{ marginTop: 24, fontSize: 13.5, color: 'var(--slate-600)' }}>
               This report is the cleared position from the bid book. The charges that turn it into a payout —
               NLDC, CTU, STU, SLDC, exchange fees and tax — are raised on the exchange invoice for the period.
             </p>

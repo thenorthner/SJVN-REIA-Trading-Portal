@@ -172,7 +172,7 @@ export default function HydroAdjustmentCorridor3D({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#c084fc' }}>STAGE 1: BASELINE</span>
-            <span style={{ fontSize: 12, color: '#64748b' }}>Original</span>
+            <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>Original</span>
           </div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Provisional Billing</div>
           <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>Period: {periodSpan}</div>
@@ -182,7 +182,7 @@ export default function HydroAdjustmentCorridor3D({
             <div style={{ fontSize: 19, fontWeight: 700, color: '#f8fafc' }}>
               {fmtCurrency(currentCase.baseline_billed)}
             </div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>Provisional REA invoices</div>
+            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 2 }}>Provisional REA invoices</div>
           </div>
         </div>
 
@@ -200,7 +200,7 @@ export default function HydroAdjustmentCorridor3D({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8' }}>STAGE 2: CERC DELTA</span>
-            <span style={{ fontSize: 12, color: '#64748b' }}>Approved Order</span>
+            <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>Approved Order</span>
           </div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Tariff True-Up Order</div>
           <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>Cap Cost & RoE Restatement</div>
@@ -235,7 +235,7 @@ export default function HydroAdjustmentCorridor3D({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#fbbf24' }}>STAGE 3: CARRYING COST</span>
-            <span style={{ fontSize: 12, color: '#64748b' }}>MCLR + 350 bps</span>
+            <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>MCLR + 350 bps</span>
           </div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Interest Compounding</div>
           <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>Rate: {currentCase.carrying_cost_rate}% p.a.</div>
@@ -245,7 +245,7 @@ export default function HydroAdjustmentCorridor3D({
             <div style={{ fontSize: 19, fontWeight: 700, color: '#fbbf24' }}>
               +{fmtCurrency(currentCase.carrying_cost_amount)}
             </div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>CERC Reg 10(7) compliant</div>
+            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 2 }}>CERC Reg 10(7) compliant</div>
           </div>
         </div>
 
@@ -263,7 +263,7 @@ export default function HydroAdjustmentCorridor3D({
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#4ade80' }}>STAGE 4: ARREAR BILL</span>
-            <span style={{ fontSize: 12, color: '#64748b' }}>Recovery</span>
+            <span style={{ fontSize: 12, color: 'var(--slate-500)' }}>Recovery</span>
           </div>
           <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Net Supplementary Bill</div>
           <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 2 }}>Across {beneficiaries.length} Beneficiaries</div>

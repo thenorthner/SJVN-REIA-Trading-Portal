@@ -1,5 +1,5 @@
 import db from '../../src/db/index.js';
-import { signToken } from '../../src/middleware/auth.js';
+import { signToken, canonicalRole } from '../../src/middleware/auth.js';
 import { newId } from '../../src/util.js';
 import { buildTemplate as buildVerificationTemplate } from '../../src/services/invoiceVerification.js';
 
@@ -8,6 +8,9 @@ import { buildTemplate as buildVerificationTemplate } from '../../src/services/i
 // rather than as a pile of inserts.
 
 export function makeUser(role, overrides = {}) {
+  // Suites written before Target #2 Phase B ask for REIA_USER / REIA_ADMIN;
+  // those accounts are REIA_MAKER / REIA_CHECKER now, as the migration makes them.
+  role = canonicalRole(role);
   const id = overrides.id || newId('USR');
   db.prepare(`
     INSERT INTO users (id, name, email, password_hash, role, linked_entity_id, is_active)

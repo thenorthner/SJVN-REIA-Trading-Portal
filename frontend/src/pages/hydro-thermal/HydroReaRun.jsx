@@ -7,6 +7,7 @@ import api from '../../api/client.js';
 import { Card, Table, Badge, Field, Modal, fmtCurrency, fmtNumber } from '../../components/ui.jsx';
 import HydroBeneficiaryWaterfall3D from '../../components/HydroBeneficiaryWaterfall3D.jsx';
 import ReaDraftingCorridor3D from '../../components/ReaDraftingCorridor3D.jsx';
+import ReaFetchLog from './ReaFetchLog.jsx';
 
 // Draft a run of months' hydro bills straight from the Regional Energy Account.
 //
@@ -278,13 +279,13 @@ export default function HydroReaRun({ onDone }) {
             fontSize: '13.5px',
             fontWeight: 500,
             borderRadius: '6px',
-            color: '#475569',
-            border: '1px solid #cbd5e1',
-            background: '#ffffff',
+            color: 'var(--slate-600)',
+            border: '1px solid var(--slate-300)',
+            background: 'var(--surface)',
             cursor: 'pointer',
           }}
         >
-          <HelpCircle size={14} style={{ color: '#0284c7' }} />
+          <HelpCircle size={14} style={{ color: 'var(--on-blue)' }} />
           <span>Instructions</span>
         </button>
       }
@@ -314,8 +315,8 @@ export default function HydroReaRun({ onDone }) {
             border: 'none',
             cursor: 'pointer',
             transition: 'all 0.2s',
-            background: activeTab === 'UPLOAD' ? '#041F4B' : '#f1f5f9',
-            color: activeTab === 'UPLOAD' ? '#ffffff' : '#475569',
+            background: activeTab === 'UPLOAD' ? '#041F4B' : 'var(--slate-100)',
+            color: activeTab === 'UPLOAD' ? '#ffffff' : 'var(--slate-600)',
             boxShadow: activeTab === 'UPLOAD' ? '0 2px 4px rgba(4, 31, 75, 0.2)' : 'none',
           }}
         >
@@ -337,8 +338,8 @@ export default function HydroReaRun({ onDone }) {
             border: 'none',
             cursor: 'pointer',
             transition: 'all 0.2s',
-            background: activeTab === 'PASTE' ? '#041F4B' : '#f1f5f9',
-            color: activeTab === 'PASTE' ? '#ffffff' : '#475569',
+            background: activeTab === 'PASTE' ? '#041F4B' : 'var(--slate-100)',
+            color: activeTab === 'PASTE' ? '#ffffff' : 'var(--slate-600)',
             boxShadow: activeTab === 'PASTE' ? '0 2px 4px rgba(4, 31, 75, 0.2)' : 'none',
           }}
         >
@@ -356,11 +357,11 @@ export default function HydroReaRun({ onDone }) {
             onDrop={handleDrop}
             onClick={() => !selectedFile && fileInputRef.current?.click()}
             style={{
-              border: `2px dashed ${dragOver ? '#2563eb' : selectedFile ? '#10b981' : '#cbd5e1'}`,
+              border: `2px dashed ${dragOver ? '#2563eb' : selectedFile ? '#10b981' : 'var(--slate-300)'}`,
               borderRadius: '12px',
               padding: selectedFile ? '18px 24px' : '36px 20px',
               textAlign: 'center',
-              backgroundColor: dragOver ? '#eff6ff' : selectedFile ? '#f0fdf4' : '#f8fafc',
+              backgroundColor: dragOver ? 'var(--t-blue-50)' : selectedFile ? 'var(--t-green-50)' : 'var(--slate-50)',
               cursor: selectedFile ? 'default' : 'pointer',
               transition: 'all 0.2s ease',
               marginBottom: '16px',
@@ -378,18 +379,18 @@ export default function HydroReaRun({ onDone }) {
             {!selectedFile ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
                 <div style={{
-                  background: '#e0f2fe',
-                  color: '#0284c7',
+                  background: 'var(--t-blue-50)',
+                  color: 'var(--on-blue)',
                   padding: '12px',
                   borderRadius: '50%',
                   display: 'flex',
                 }}>
                   <FileUp size={28} />
                 </div>
-                <div style={{ fontSize: '15px', fontWeight: 600, color: '#0f172a' }}>
+                <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--slate-900)' }}>
                   Click to select or drag & drop REA PDF here
                 </div>
-                <div style={{ fontSize: '13px', color: '#64748b' }}>
+                <div style={{ fontSize: '13px', color: 'var(--slate-500)' }}>
                   Supports official NRPC Regional Energy Account PDF files (e.g., REA0826_P.pdf, REA0826_F.pdf)
                 </div>
               </div>
@@ -397,8 +398,8 @@ export default function HydroReaRun({ onDone }) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px', textAlign: 'left' }}>
                   <div style={{
-                    background: '#fee2e2',
-                    color: '#dc2626',
+                    background: 'var(--t-red-100)',
+                    color: 'var(--red-strong)',
                     padding: '10px',
                     borderRadius: '10px',
                     display: 'flex',
@@ -406,16 +407,16 @@ export default function HydroReaRun({ onDone }) {
                     <FileText size={24} />
                   </div>
                   <div>
-                    <div style={{ fontSize: '14.5px', fontWeight: 700, color: '#0f172a' }}>
+                    <div style={{ fontSize: '14.5px', fontWeight: 700, color: 'var(--slate-900)' }}>
                       {selectedFile.name}
                     </div>
-                    <div style={{ fontSize: '12.5px', color: '#64748b' }}>
+                    <div style={{ fontSize: '12.5px', color: 'var(--slate-500)' }}>
                       Size: {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                       {detectedMonth && (
                         <span style={{
                           marginLeft: '10px',
-                          background: '#dbeafe',
-                          color: '#1d4ed8',
+                          background: 'var(--t-blue-100)',
+                          color: 'var(--on-blue)',
                           padding: '2px 8px',
                           borderRadius: '12px',
                           fontWeight: 600,
@@ -444,9 +445,9 @@ export default function HydroReaRun({ onDone }) {
                       if (fileInputRef.current) fileInputRef.current.value = '';
                     }}
                     style={{
-                      background: '#fee2e2',
-                      color: '#b91c1c',
-                      border: '1px solid #fecaca',
+                      background: 'var(--t-red-100)',
+                      color: 'var(--red-deep)',
+                      border: '1px solid var(--t-red-line)',
                       borderRadius: '6px',
                       padding: '4px 8px',
                       cursor: 'pointer',
@@ -577,6 +578,8 @@ export default function HydroReaRun({ onDone }) {
         </div>
       )}
 
+      <ReaFetchLog onScanned={loadAuto} />
+
       {showGuide && (
         <Modal
           open={showGuide}
@@ -584,9 +587,9 @@ export default function HydroReaRun({ onDone }) {
           title="Bills from Regional Energy Account — Instructions & Process Guide"
           width={600}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: '13.5px', lineHeight: 1.6, color: '#334155' }}>
-            <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '12px 14px' }}>
-              <h4 style={{ margin: '0 0 6px', fontSize: '14px', color: '#0369a1', fontWeight: 600 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontSize: '13.5px', lineHeight: 1.6, color: 'var(--slate-700)' }}>
+            <div style={{ background: 'var(--t-blue-50)', border: '1px solid var(--t-blue-100)', borderRadius: 8, padding: '12px 14px' }}>
+              <h4 style={{ margin: '0 0 6px', fontSize: '14px', color: 'var(--on-blue)', fontWeight: 600 }}>
                 Purpose & Scope
               </h4>
               <p style={{ margin: 0 }}>
@@ -595,7 +598,7 @@ export default function HydroReaRun({ onDone }) {
             </div>
 
             <div>
-              <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>
+              <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600, color: 'var(--slate-900)' }}>
                 Option 1: Upload REA PDF Directly
               </h4>
               <p style={{ margin: 0 }}>
@@ -604,7 +607,7 @@ export default function HydroReaRun({ onDone }) {
             </div>
 
             <div>
-              <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>
+              <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600, color: 'var(--slate-900)' }}>
                 Option 2: Copy REA PDF Links from NRPC
               </h4>
               <ol style={{ margin: 0, paddingLeft: 20 }}>
@@ -616,7 +619,7 @@ export default function HydroReaRun({ onDone }) {
             </div>
 
             <div>
-              <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600, color: '#0f172a' }}>
+              <h4 style={{ margin: '0 0 6px', fontSize: '14px', fontWeight: 600, color: 'var(--slate-900)' }}>
                 Date Range & Billing Sequence
               </h4>
               <ul style={{ margin: 0, paddingLeft: 20 }}>
@@ -625,7 +628,7 @@ export default function HydroReaRun({ onDone }) {
               </ul>
             </div>
 
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', fontSize: '13.5px', color: '#64748b' }}>
+            <div style={{ background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8, padding: '10px 14px', fontSize: '13.5px', color: 'var(--slate-500)' }}>
               <strong>Automatic Sweep:</strong> The same run happens automatically after each scheduled REA scan. This desk form is reserved for manual PDF uploads, or for months the automated scan could not reach.
             </div>
           </div>

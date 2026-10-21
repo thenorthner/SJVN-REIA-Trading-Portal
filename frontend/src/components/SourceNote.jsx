@@ -13,7 +13,7 @@ export default function SourceNote({ source, period, live = false }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 6, marginTop: 8,
-      fontSize: 13, color: live ? '#047857' : '#6b7280',
+      fontSize: 13, color: live ? 'var(--on-green)' : 'var(--slate-500)',
     }}>
       <span style={{
         width: 6, height: 6, borderRadius: '50%',

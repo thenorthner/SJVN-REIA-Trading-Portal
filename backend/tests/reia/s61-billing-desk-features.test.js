@@ -82,12 +82,13 @@ describe('B3 band roles and the people who can sign', () => {
       expect((await post(`/api/invoices/${bill.id}/submit-for-approval`)).status).toBe(200);
       const detail = (await get(`/api/invoices/${bill.id}`)).body;
       const l1 = detail.approvals.find((a) => a.level === 1);
-      expect(l1.approver_roles).toEqual(['REIA_ADMIN']);
+      // A band saved with the old name is read as the role it became.
+      expect(l1.approver_roles).toEqual(['REIA_CHECKER']);
       expect(l1.eligible_signers).toContain('Asha Admin');
       expect(l1.eligible_signers).not.toContain('Ravi Ops');
       const ops = await post(`/api/invoices/${bill.id}/approvals/1/act`, { decision: 'APPROVED', comments: 'ok', security_ack: 'cover tracked on the desk' }, tokenFor('REIA_USER', { name: 'Other Ops' }));
       expect(ops.status).toBe(403);
-      expect(ops.body.error).toMatch(/of a bill this size is approved by REIA Admin/);
+      expect(ops.body.error).toMatch(/of a bill this size is approved by REIA Checker/);
       const ok = await post(`/api/invoices/${bill.id}/approvals/1/act`, { decision: 'APPROVED', comments: 'ok', security_ack: 'cover tracked on the desk' }, signToken(admin));
       expect(ok.status, JSON.stringify(ok.body)).toBe(200);
     } finally {
@@ -142,6 +143,9 @@ describe('Own-station flag', () => {
     const st = makeEntity('SELLER');
     expect((await post(`/api/entities/${st.id}/own-station`, { is_sjvn_own: true, reason: 'SJVN hydro station selling here' })).status).toBe(403);
     const admin = tokenFor('SJVN_ADMIN');
+    // A REIA stakeholder is a third-party developer and can never be SJVN's own.
+    expect((await post(`/api/entities/${st.id}/own-station`, { is_sjvn_own: true, reason: 'SJVN hydro station selling here' }, admin)).status).toBe(400);
+    db.prepare(`UPDATE entities SET verticals = 'HYDRO' WHERE id = ?`).run(st.id);
     expect((await post(`/api/entities/${st.id}/own-station`, { is_sjvn_own: true, reason: 'short' }, admin)).status).toBe(400);
     const ok = await post(`/api/entities/${st.id}/own-station`, { is_sjvn_own: true, reason: 'SJVN hydro station selling here' }, admin);
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);

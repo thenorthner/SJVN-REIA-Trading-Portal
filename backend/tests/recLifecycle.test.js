@@ -20,7 +20,7 @@ beforeEach(() => {
   db.prepare('DELETE FROM rec_bids').run();
   db.prepare('DELETE FROM rec_ledger').run();
   trader = tokenFor('TRADING_USER');
-  checker = tokenFor('SJVN_ADMIN');
+  checker = tokenFor('TRADING_ADMIN'); // Target #2 Phase B: the trading desk head checks
 });
 
 function makeLot({ vintage = '2026-01', qty = 1000, tech = 'Solar', cost = 100 } = {}) {

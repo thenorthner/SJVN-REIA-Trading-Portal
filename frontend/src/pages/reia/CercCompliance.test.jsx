@@ -7,7 +7,7 @@ import { MemoryRouter } from 'react-router-dom';
 // Which CERC returns are owed — including the periods nobody has started, which a
 // register of prepared filings cannot show.
 
-const state = vi.hoisted(() => ({ answer: null, calls: [], role: 'REIA_USER', annexures: null, licence: null, saved: [], path: '/' }));
+const state = vi.hoisted(() => ({ answer: null, calls: [], role: 'REIA_MAKER', annexures: null, licence: null, saved: [], path: '/' }));
 vi.mock('../../context/AuthContext.jsx', () => ({ useAuth: () => ({ user: { role: state.role } }) }));
 vi.mock('../../api/client.js', () => {
   const api = {
@@ -53,7 +53,7 @@ let host, root;
 beforeEach(() => {
   state.answer = ANSWER;
   state.calls = [];
-  state.role = 'REIA_USER';
+  state.role = 'REIA_MAKER';
   state.saved = [];
   state.path = '/';
   host = document.createElement('div');

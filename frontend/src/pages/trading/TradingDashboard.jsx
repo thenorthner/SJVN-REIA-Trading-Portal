@@ -75,10 +75,10 @@ export default function TradingDashboard() {
     return (
       <div style={{
         padding: 15, marginBottom: 24, borderRadius: 8,
-        backgroundColor: isOk ? '#e3fce8' : '#fff3cd',
-        border: `1px solid ${isOk ? '#b7eb8f' : '#ffe58f'}`
+        backgroundColor: isOk ? 'var(--t-green-50)' : 'var(--t-amber-100)',
+        border: `1px solid ${isOk ? 'var(--t-green-100)' : 'var(--t-amber-100)'}`
       }}>
-        <strong style={{ color: isOk ? '#389e0d' : '#d48806' }}>
+        <strong style={{ color: isOk ? 'var(--on-green)' : '#d48806' }}>
           {isOk ? `Exchange Integrations Online (Last Sync: ${new Date(health.last_sync).toLocaleTimeString()})` : "Exchange Integration Degradation Detected"}
         </strong>
         <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
@@ -99,14 +99,14 @@ export default function TradingDashboard() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 20, marginBottom: 24 }}>
           <Card title="Open Bids (Unmatched)">
             <h2 style={{ margin: 0 }}>{num(data.open_positions?.count, 0)}</h2>
-            <div style={{ color: '#666', fontSize: 14 }}>/ {num(data.open_positions?.quantum_mw).toFixed(2)} MW</div>
+            <div style={{ color: 'var(--slate-500)', fontSize: 14 }}>/ {num(data.open_positions?.quantum_mw).toFixed(2)} MW</div>
           </Card>
-          <Card title="Live Exchange Rates (Mock)">
+          <Card title="Latest Exchange Rates">
             <div style={{ display: 'flex', gap: 32 }}>
               {Object.entries(data.live_rates || {}).map(([ex, rate]) => (
                 <div key={ex}>
-                  <div style={{ color: '#666', fontSize: 14 }}>{ex} (₹/kWh)</div>
-                  <h3 style={{ margin: 0, color: '#389e0d' }}>↑ ₹{num(rate).toFixed(2)}</h3>
+                  <div style={{ color: 'var(--slate-500)', fontSize: 14 }}>{ex} (₹/kWh)</div>
+                  <h3 style={{ margin: 0, color: 'var(--on-green)' }}>↑ ₹{num(rate).toFixed(2)}</h3>
                 </div>
               ))}
             </div>
@@ -125,10 +125,10 @@ export default function TradingDashboard() {
                   const perc = limit > 0 ? (num(r.utilized) / limit) * 100 : 0;
                   return (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ flex: 1, height: 8, background: '#eee', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ flex: 1, height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
                         <div style={{ height: '100%', background: perc > 90 ? '#cf1322' : '#1890ff', width: `${Math.min(perc, 100)}%` }} />
                       </div>
-                      <span style={{ fontSize: 13.5, color: perc > 90 ? '#cf1322' : '#666' }}>{perc.toFixed(1)}%</span>
+                      <span style={{ fontSize: 13.5, color: perc > 90 ? 'var(--on-red)' : 'var(--slate-500)' }}>{perc.toFixed(1)}%</span>
                     </div>
                   );
                 }
@@ -152,8 +152,8 @@ export default function TradingDashboard() {
             <h2 style={{ margin: 0 }}>{num(s.totalBids, 0)}</h2>
           </Card>
           <Card title="Cleared Bids">
-            <h2 style={{ margin: 0, color: '#1890ff' }}>{num(s.clearedBids, 0)}</h2>
-            <div style={{ color: '#666', fontSize: 14 }}>({num(s.clearRatio).toFixed(1)}%)</div>
+            <h2 style={{ margin: 0, color: 'var(--on-blue)' }}>{num(s.clearedBids, 0)}</h2>
+            <div style={{ color: 'var(--slate-500)', fontSize: 14 }}>({num(s.clearRatio).toFixed(1)}%)</div>
           </Card>
           <Card title="Quantum Bid (MW)">
             <h2 style={{ margin: 0 }}>{num(s.quantumBid).toFixed(2)}</h2>
@@ -166,16 +166,16 @@ export default function TradingDashboard() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           <Card title="Today's P&L (₹)">
             <div style={{ marginBottom: 16 }}>
-              <div style={{ color: '#666', fontSize: 14 }}>Realized Margin</div>
-              <h2 style={{ margin: 0, color: '#389e0d' }}>₹{num(pnl.realized).toLocaleString('en-IN')}</h2>
+              <div style={{ color: 'var(--slate-500)', fontSize: 14 }}>Realized Margin</div>
+              <h2 style={{ margin: 0, color: 'var(--on-green)' }}>₹{num(pnl.realized).toLocaleString('en-IN')}</h2>
             </div>
             <div>
-              <div style={{ color: '#666', fontSize: 14 }}>Unrealized Margin (Open Positions)</div>
+              <div style={{ color: 'var(--slate-500)', fontSize: 14 }}>Unrealized Margin (Open Positions)</div>
               <h3 style={{ margin: 0 }}>₹{num(pnl.unrealized).toLocaleString('en-IN')}</h3>
             </div>
           </Card>
           <Card title="Bid Rejection Analysis">
-            {rejected.length === 0 ? <p style={{ color: '#389e0d' }}>No rejected bids today.</p> :
+            {rejected.length === 0 ? <p style={{ color: 'var(--on-green)' }}>No rejected bids today.</p> :
               <Table
                 data={rejected}
                 columns={[
@@ -209,12 +209,12 @@ export default function TradingDashboard() {
           </Card>
           <Card title="Product Mix (Cleared MW)">
             {(data.product_mix || []).length === 0 ? (
-              <p style={{ color: '#666' }}>No cleared volume yet.</p>
+              <p style={{ color: 'var(--slate-500)' }}>No cleared volume yet.</p>
             ) : (
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                 {(data.product_mix || []).map(p => (
-                  <div key={p.product} style={{ width: '45%', padding: 15, border: '1px solid #eee', borderRadius: 8, textAlign: 'center' }}>
-                    <div style={{ color: '#666', fontSize: 14, marginBottom: 8 }}>{p.product}</div>
+                  <div key={p.product} style={{ width: '45%', padding: 15, border: '1px solid var(--border)', borderRadius: 8, textAlign: 'center' }}>
+                    <div style={{ color: 'var(--slate-500)', fontSize: 14, marginBottom: 8 }}>{p.product}</div>
                     <h3 style={{ margin: 0 }}>{num(p.cleared_mw).toFixed(2)} MW</h3>
                   </div>
                 ))}
@@ -246,7 +246,7 @@ export default function TradingDashboard() {
         <StatCard label="CERC Form-IV" value={overview.formIv?.latest_status || 'Pending'} hint={`${overview.formIv?.submitted || 0} submitted · ${overview.formIv?.pending || 0} pending`} tone={overview.formIv?.latest_status === 'SUBMITTED' ? 'green' : 'amber'} />
       </div>
 
-      <div style={{ marginBottom: 20, borderBottom: '1px solid #ddd', display: 'flex', gap: 20 }}>
+      <div style={{ marginBottom: 20, borderBottom: '1px solid var(--border)', display: 'flex', gap: 20 }}>
         {['realtime', 'daily', 'periodic'].map(t => (
           <button 
             key={t}
@@ -254,7 +254,7 @@ export default function TradingDashboard() {
             style={{
               padding: '10px 0', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16,
               borderBottom: activeTab === t ? '2px solid #0052cc' : '2px solid transparent',
-              color: activeTab === t ? '#0052cc' : '#555', fontWeight: activeTab === t ? 'bold' : 'normal'
+              color: activeTab === t ? 'var(--on-blue)' : 'var(--slate-600)', fontWeight: activeTab === t ? 'bold' : 'normal'
             }}
           >
             {t === 'realtime' ? 'Real-Time Intraday' : t === 'daily' ? 'Daily Settlement' : 'Periodic & Trends'}

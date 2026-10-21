@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import api from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -409,7 +410,7 @@ export default function RECManagement() {
               ...(canWrite ? [{
                 key: 'actions',
                 header: '',
-                render: (r) => <button className="btn btn-xs btn-primary" onClick={() => openLotFrom(r)}>Apply</button>,
+                render: (r) => <WriteOnly><button className="btn btn-xs btn-primary" onClick={() => openLotFrom(r)}>Apply</button></WriteOnly>,
               }] : []),
             ]}
             rows={issuable}

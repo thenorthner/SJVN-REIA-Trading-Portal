@@ -13,9 +13,10 @@
  * A board belongs to a scope: SJVN staff share one, and each seller or buyer
  * company has its own, built only from its own contracts.
  */
+import { contractVerticalSql } from './verticals.js';
 import db from '../db/index.js';
 import { newId } from '../util.js';
-import { ROLE_GROUPS } from '../middleware/auth.js';
+import { ROLE_GROUPS, PLATFORM_ADMINS } from '../middleware/auth.js';
 import { deliverDirect } from './notificationService.js';
 import { getSmsConfig, templateIdFor } from './smsService.js';
 import { invoiceBalance } from './invoiceLps.js';
@@ -45,8 +46,9 @@ export const BOARD_READ = [...new Set([
   ...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.TRADING_ALL, 'COMPLIANCE_AUDITOR',
   ...COUNTERPARTY_ROLES,
 ])];
+// Broadcasts stay with the SJVN / IT administrators (Target #2 Phase B) as well as the desks.
 export const BOARD_WRITE = [...new Set([
-  ...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE,
+  ...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...PLATFORM_ADMINS,
 ])];
 
 /** Safe single-row query — returns {} if the table is missing on this DB. */
@@ -225,6 +227,10 @@ export function computeAlerts(scope) {
     const col = scope.kind === 'SELLER' ? 'seller_id' : 'buyer_id';
     contractSub = `(SELECT id FROM contracts WHERE ${col} = ?)`;
     scopeParams = [scope.entityId];
+  } else {
+    // SJVN's own board is the REIA board: the Hydro desk has its alerts above,
+    // and a hydro or thermal contract's bills are not REIA's to chase.
+    contractSub = `(SELECT c_v.id FROM contracts c_v WHERE ${contractVerticalSql('REIA', 'c_v')})`;
   }
   const invFilter = contractSub ? ` AND contract_id IN ${contractSub}` : '';
   const disputeFilter = contractSub ? ` AND invoice_id IN (SELECT id FROM invoices WHERE contract_id IN ${contractSub})` : '';

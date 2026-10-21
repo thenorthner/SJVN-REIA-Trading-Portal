@@ -13,6 +13,8 @@ backend/uploads/disputes/**
 !backend/uploads/disputes/.gitkeep
 dist/
 build/
+__pycache__/
+*.pyc
 
 # Logs
 *.log

@@ -123,14 +123,14 @@ export default function MmrExcelUploader() {
                   onChange={onFileChange}
                   required
                 />
-                {fileName && <div style={{ fontSize: 13.5, color: '#64748b', marginTop: 6 }}>{fileName}</div>}
+                {fileName && <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 6 }}>{fileName}</div>}
               </div>
             </div>
           </div>
 
-          {error && <div style={{ color: '#991b1b', background: '#fee2e2', padding: 10, borderRadius: 4, fontSize: 13, marginTop: 16 }}>{error}</div>}
+          {error && <div style={{ color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, fontSize: 13, marginTop: 16 }}>{error}</div>}
           {success && (
-            <div style={{ color: '#166534', background: '#dcfce7', padding: 10, borderRadius: 4, fontSize: 13, marginTop: 16 }}>
+            <div style={{ color: 'var(--on-green)', background: 'var(--t-green-100)', padding: 10, borderRadius: 4, fontSize: 13, marginTop: 16 }}>
               Upload <strong>{success.id}</strong> submitted — {success.filename}
               {success.revision_no ? ` · period ${success.revision_no}` : ''}.
             </div>
@@ -148,7 +148,7 @@ export default function MmrExcelUploader() {
           <div style={{ overflowX: 'auto', marginTop: 8 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
               <thead>
-                <tr style={{ background: '#f1f5f9' }}>
+                <tr style={{ background: 'var(--slate-100)' }}>
                   {['Id', 'Period', 'File', 'Status', 'Created'].map((h) => (
                     <th key={h} style={{ padding: '6px 8px', textAlign: 'left' }}>{h}</th>
                   ))}
@@ -156,7 +156,7 @@ export default function MmrExcelUploader() {
               </thead>
               <tbody>
                 {recent.slice(0, 8).map((r) => (
-                  <tr key={r.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <tr key={r.id} style={{ borderBottom: '1px solid var(--slate-200)' }}>
                     <td style={{ padding: '6px 8px', fontFamily: 'monospace' }}>{r.id}</td>
                     <td style={{ padding: '6px 8px' }}>{r.revision_no || '—'}</td>
                     <td style={{ padding: '6px 8px' }}>{r.filename}</td>

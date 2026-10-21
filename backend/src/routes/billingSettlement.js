@@ -55,7 +55,9 @@ router.get('/invoices', (req, res) => {
   res.json(db.prepare(sql).all(...params));
 });
 
-router.post('/invoices/generate', (req, res) => {
+// Writes are the trading desk's and Finance's; SJVN_ADMIN reads this register only.
+const SETTLEMENT_WRITE = ['TRADING_USER', 'FINANCE_USER'];
+router.post('/invoices/generate', requireRole(...SETTLEMENT_WRITE, 'TRADING_CLIENT'), (req, res) => {
   if (isTradingClient(req.user)) return res.status(403).json({ error: 'Clients cannot generate invoices' });
   try {
     // Priced and written by the shared service, so a settlement bill and an
@@ -120,7 +122,7 @@ router.get('/netting/preview', (req, res) => {
 // A client could post entries against its own account — or, since client_id came
 // from the body, against another's. The amounts are no longer taken from the
 // request at all: see services/tradingNetting.js.
-router.post('/netting', (req, res) => {
+router.post('/netting', requireRole(...SETTLEMENT_WRITE, 'TRADING_CLIENT'), (req, res) => {
   if (isTradingClient(req.user)) return res.status(403).json({ error: 'Clients cannot post netting entries' });
   const { client_id, period } = req.body || {};
   if (!client_id) return res.status(400).json({ error: 'client_id is required' });

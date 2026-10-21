@@ -65,8 +65,8 @@ export default function RecOrderReport() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <h1 style={{ margin: 0, fontSize: 22 }}>REC Order Report</h1>
         <div style={{ display: 'flex', gap: 14, fontSize: 13 }}>
-          <Link to="/trading/rec" style={{ color: '#1d4ed8' }}>← REC Order</Link>
-          <Link to="/trading/rec/bid-entry" style={{ color: '#1d4ed8' }}>Bid Entry →</Link>
+          <Link to="/trading/rec" style={{ color: 'var(--on-blue)' }}>← REC Order</Link>
+          <Link to="/trading/rec/bid-entry" style={{ color: 'var(--on-blue)' }}>Bid Entry →</Link>
         </div>
       </div>
 
@@ -88,14 +88,14 @@ export default function RecOrderReport() {
         </form>
       </Card>
 
-      {error && <div style={{ color: '#991b1b', background: '#fee2e2', padding: 10, borderRadius: 4, marginTop: 12 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--on-red)', background: 'var(--t-red-100)', padding: 10, borderRadius: 4, marginTop: 12 }}>{error}</div>}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 16 }}>
         {cards.map((c) => (
-          <div key={c.label} style={{ background: '#d6eaf8', borderRadius: 6, padding: '16px 14px', textAlign: 'center' }}>
-            <div style={{ fontSize: 13.5, color: '#1e3a5f', fontWeight: 600, marginBottom: 6 }}>{c.label}</div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: '#0f172a' }}>{c.value}</div>
-            <div style={{ fontSize: 13.5, color: '#334155', marginTop: 4 }}>{c.unit}</div>
+          <div key={c.label} style={{ background: 'var(--t-blue-100)', borderRadius: 6, padding: '16px 14px', textAlign: 'center' }}>
+            <div style={{ fontSize: 13.5, color: 'var(--on-blue)', fontWeight: 600, marginBottom: 6 }}>{c.label}</div>
+            <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--slate-900)' }}>{c.value}</div>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-700)', marginTop: 4 }}>{c.unit}</div>
           </div>
         ))}
       </div>
@@ -103,7 +103,7 @@ export default function RecOrderReport() {
       <div className="form-section-header" style={{ marginTop: 20 }}>Trade Date</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {tradeDates.length === 0 ? (
-          <div style={{ padding: 16, color: '#64748b', textAlign: 'center', background: '#f8fafc', borderRadius: 6 }}>No trades in this range.</div>
+          <div style={{ padding: 16, color: 'var(--slate-500)', textAlign: 'center', background: 'var(--slate-50)', borderRadius: 6 }}>No trades in this range.</div>
         ) : tradeDates.map((t) => (
           <button
             key={t.trade_date}
@@ -115,8 +115,8 @@ export default function RecOrderReport() {
               borderRadius: 6,
               padding: '12px 16px',
               cursor: 'pointer',
-              background: selected === t.trade_date ? '#101a2e' : '#d6eaf8',
-              color: selected === t.trade_date ? '#fff' : '#0f172a',
+              background: selected === t.trade_date ? '#101a2e' : 'var(--t-blue-100)',
+              color: selected === t.trade_date ? '#fff' : 'var(--slate-900)',
               fontWeight: 600,
               fontSize: 14,
             }}
@@ -135,7 +135,7 @@ export default function RecOrderReport() {
           <div style={{ overflowX: 'auto', marginTop: 10 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
-                <tr style={{ background: '#f1f5f9' }}>
+                <tr style={{ background: 'var(--slate-100)' }}>
                   {['Order', 'Buyer', 'Invoice', 'RECs Sold', 'Discovered ₹', 'Obligation', 'Net Revenue', 'Total Amt'].map((h) => (
                     <th key={h} style={{ padding: '8px 10px', textAlign: 'left' }}>{h}</th>
                   ))}
@@ -143,7 +143,7 @@ export default function RecOrderReport() {
               </thead>
               <tbody>
                 {(selectedBlock.orders || []).map((o) => (
-                  <tr key={o.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <tr key={o.id} style={{ borderBottom: '1px solid var(--slate-200)' }}>
                     <td style={{ padding: '8px 10px', fontFamily: 'monospace' }}>{o.id}</td>
                     <td style={{ padding: '8px 10px' }}>{o.buyer_name || '—'}</td>
                     <td style={{ padding: '8px 10px' }}>{o.invoice_no || '—'}</td>

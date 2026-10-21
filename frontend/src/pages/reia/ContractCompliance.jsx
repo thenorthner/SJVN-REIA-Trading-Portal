@@ -26,7 +26,7 @@ const FILTERS = [
   { key: 'NOT_LIVE', label: 'Not live' },
 ];
 
-export default function ContractCompliance() {
+export default function ContractCompliance({ embedded = false }) {
   const [view, setView] = useState('main');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -36,8 +36,10 @@ export default function ContractCompliance() {
   const [open, setOpen] = useState(null);
   const loaded = useRef(90);
   const { user } = useAuth() || {};
-  const canDesk = ['SJVN_ADMIN', 'REIA_ADMIN', 'IT_SUPER_ADMIN', 'REIA_USER'].includes(user?.role);
-  const canLift = ['MANAGEMENT', 'SJVN_ADMIN'].includes(user?.role);
+  // The REIA desk acts here; the administrators read (Target #2 Phase B).
+  const canDesk = ['REIA_CHECKER', 'REIA_MAKER'].includes(user?.role);
+  // Lifting a hold is the approver's: the REIA HOD or Management (ROLE_GROUPS.REIA_APPROVE).
+  const canLift = ['MANAGEMENT', 'REIA_APPROVER'].includes(user?.role);
   const [holdForm, setHoldForm] = useState(null); // { contract, mode: HOLD|RELEASE|OVERRIDE, reason, valid_until }
   const [notice2, setNotice2] = useState(null);
   async function act(fn, done) {
@@ -102,7 +104,7 @@ export default function ContractCompliance() {
       {view === 'main' && (
       <>
       <AlertPopup open={!!error} title="Could not show the register" message={error} onClose={() => setError('')} />
-      <DeskTasksPanel desk="CONTRACT_COMPLIANCE" canWrite={['SJVN_ADMIN', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role)} />
+      <DeskTasksPanel desk="CONTRACT_COMPLIANCE" canWrite={['REIA_CHECKER', 'REIA_MAKER'].includes(user?.role)} />
 
       {loading && !data ? (
         <Card><div className="audit-placeholder">Loading…</div></Card>
@@ -224,7 +226,7 @@ export default function ContractCompliance() {
                                     <th scope="row" style={{ textAlign: 'left' }}>Hold</th>
                                     <td>{c.hold?.on_hold ? <Badge type="danger">On hold</Badge> : <Badge type="success">Not held</Badge>}</td>
                                     <td>
-                                      {c.hold?.flagged && !c.hold?.on_hold && <div style={{ color: '#b45309' }}>Flag only (automatic hold is switched off): {c.hold.flag_reason}</div>}
+                                      {c.hold?.flagged && !c.hold?.on_hold && <div style={{ color: 'var(--amber-strong)' }}>Flag only (automatic hold is switched off): {c.hold.flag_reason}</div>}
                                       {c.hold?.reason || (c.hold?.override ? `Breach lifted by ${c.hold.override.approved_by} until ${fmtDate(c.hold.override.valid_until)}: ${c.hold.override.reason}` : 'New bills and scheduling go ahead.')}
                                       <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }} onClick={(e) => e.stopPropagation()}>
                                         {canDesk && !c.hold?.manual && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setHoldForm({ contract: c, mode: 'HOLD', reason: '' })}>Put on hold</button>}

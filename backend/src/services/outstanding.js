@@ -1,4 +1,5 @@
 import db from '../db/index.js';
+import { contractIdInVerticalSql } from './verticals.js';
 
 // What is still owed, as opposed to what was once billed.
 //
@@ -47,6 +48,8 @@ export function supersededByDeveloperSql(alias = 'i') {
       AND s.id <> ${alias}.id AND s.direction = 'SELLER_TO_SJVN' AND TRIM(COALESCE(s.invoice_breakdown_json, '')) = ''
       AND s.status IN ('APPROVED','SENT','PARTIALLY_PAID','DISPUTED','PAID')))`;
 }
+// Optional desk cut: REIA's figures must not carry the Hydro or Thermal desks' bills.
+const scope = (vertical) => (vertical ? ` AND ${contractIdInVerticalSql(vertical, 'i.contract_id')}` : '');
 const OPEN = `i.status IN ('APPROVED','SENT','PARTIALLY_PAID','DISPUTED') AND ${supersededByDeveloperSql('i')}`;
 
 function sum(where, params = []) {
@@ -54,13 +57,13 @@ function sum(where, params = []) {
 }
 
 /** Still collectible from buyers. */
-export function receivablesOutstanding() {
-  return sum(`i.direction = 'SJVN_TO_BUYER' AND ${OPEN}`);
+export function receivablesOutstanding(vertical = null) {
+  return sum(`i.direction = 'SJVN_TO_BUYER' AND ${OPEN}${scope(vertical)}`);
 }
 
 /** Still owed to generators. */
-export function payablesOutstanding() {
-  return sum(`i.direction = 'SELLER_TO_SJVN' AND ${OPEN}`);
+export function payablesOutstanding(vertical = null) {
+  return sum(`i.direction = 'SELLER_TO_SJVN' AND ${OPEN}${scope(vertical)}`);
 }
 
 /**
@@ -77,8 +80,8 @@ export function outstandingForContracts(direction, contractIds = []) {
 }
 
 /** Receivable that is already past its due date. */
-export function overdueReceivable() {
-  return sum(`i.direction = 'SJVN_TO_BUYER' AND ${OPEN} AND i.due_date IS NOT NULL AND i.due_date < date('now')`);
+export function overdueReceivable(vertical = null) {
+  return sum(`i.direction = 'SJVN_TO_BUYER' AND ${OPEN} AND i.due_date IS NOT NULL AND i.due_date < date('now')${scope(vertical)}`);
 }
 
 /**
@@ -87,11 +90,11 @@ export function overdueReceivable() {
  * Counted rather than summed, and a bill whose balance has been cleared to zero
  * without the status catching up is not overdue for any amount.
  */
-export function overdueCount() {
+export function overdueCount(vertical = null) {
   return db.prepare(`
     SELECT COUNT(*) c FROM invoices i
     WHERE ${OPEN} AND i.due_date IS NOT NULL AND i.due_date < date('now')
-      AND ${OUTSTANDING_SQL} > 0
+      AND ${OUTSTANDING_SQL} > 0${scope(vertical)}
   `).get().c;
 }
 
@@ -119,32 +122,32 @@ const AGEING_BUCKETS = [
  * Only bills with something left on them: a fully collected invoice whose status
  * has not caught up is not ageing debt.
  */
-export function ageingBuckets(direction) {
+export function ageingBuckets(direction, vertical = null) {
   return AGEING_BUCKETS.map(({ bucket, label, where }) => {
     const row = db.prepare(`
       SELECT COUNT(*) invoices, COALESCE(SUM(${OUTSTANDING_SQL}), 0) amount
       FROM invoices i
-      WHERE i.direction = ? AND ${OPEN} AND ${OUTSTANDING_SQL} > 0 AND ${where}
+      WHERE i.direction = ? AND ${OPEN} AND ${OUTSTANDING_SQL} > 0 AND ${where}${scope(vertical)}
     `).get(direction);
     return { bucket, label, invoices: row.invoices, amount: row.amount };
   });
 }
 
 /** What is still open in one direction: how many bills, and how much of it is late. */
-export function openPosition(direction) {
+export function openPosition(direction, vertical = null) {
   const row = db.prepare(`
     SELECT COUNT(*) invoices, COALESCE(SUM(${OUTSTANDING_SQL}), 0) amount
-    FROM invoices i WHERE i.direction = ? AND ${OPEN} AND ${OUTSTANDING_SQL} > 0
+    FROM invoices i WHERE i.direction = ? AND ${OPEN} AND ${OUTSTANDING_SQL} > 0${scope(vertical)}
   `).get(direction);
   const late = db.prepare(`
     SELECT COUNT(*) invoices, COALESCE(SUM(${OUTSTANDING_SQL}), 0) amount
     FROM invoices i
     WHERE i.direction = ? AND ${OPEN} AND ${OUTSTANDING_SQL} > 0
-      AND i.due_date IS NOT NULL AND date(i.due_date) < date('now')
+      AND i.due_date IS NOT NULL AND date(i.due_date) < date('now')${scope(vertical)}
   `).get(direction);
   const disputed = db.prepare(`
     SELECT COUNT(*) invoices, COALESCE(SUM(i.disputed_amount), 0) amount
-    FROM invoices i WHERE i.direction = ? AND ${OPEN} AND COALESCE(i.disputed_amount, 0) > 0
+    FROM invoices i WHERE i.direction = ? AND ${OPEN} AND COALESCE(i.disputed_amount, 0) > 0${scope(vertical)}
   `).get(direction);
   return {
     invoices: row.invoices,
@@ -159,20 +162,20 @@ export function openPosition(direction) {
 /** Late payment surcharge already raised on bills, and what became of it. */
 // An LPS bill (PM5) is surcharge in full; any other bill carries it in its lps column.
 const L = `CASE WHEN i.invoice_no LIKE 'LPS-%' THEN i.total_amount ELSE COALESCE(i.lps, 0) END`;
-export function lpsBilled(direction) {
+export function lpsBilled(direction, vertical = null) {
   const row = db.prepare(`
     SELECT
       COALESCE(SUM(${L}), 0) AS charged,
       COALESCE(SUM(CASE WHEN i.status = 'PAID' THEN ${L} ELSE 0 END), 0) AS recovered,
       COALESCE(SUM(CASE WHEN i.status NOT IN ('PAID','CANCELLED','DRAFT') THEN ${L} ELSE 0 END), 0) AS open_charged,
       COALESCE(SUM(CASE WHEN i.status = 'CANCELLED' THEN ${L} ELSE 0 END), 0) AS cancelled
-    FROM invoices i WHERE i.direction = ?
+    FROM invoices i WHERE i.direction = ?${scope(vertical)}
   `).get(direction);
   return row;
 }
 
 /** The open bills a surcharge accrues on, with what each has already been charged. */
-export function openOverdueInvoices(direction) {
+export function openOverdueInvoices(direction, vertical = null) {
   return db.prepare(`
     SELECT i.id, i.invoice_no, i.contract_id, i.direction, i.total_amount, i.disputed_amount,
            i.lps, i.due_date, i.status,
@@ -180,7 +183,7 @@ export function openOverdueInvoices(direction) {
            ${OUTSTANDING_SQL} AS outstanding
     FROM invoices i
     WHERE i.direction = ? AND ${OPEN} AND ${OUTSTANDING_SQL} > 0
-      AND i.due_date IS NOT NULL AND date(i.due_date) < date('now')
+      AND i.due_date IS NOT NULL AND date(i.due_date) < date('now')${scope(vertical)}
     ORDER BY i.due_date
   `).all(direction);
 }

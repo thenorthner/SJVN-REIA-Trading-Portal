@@ -231,7 +231,7 @@ router.get('/violations/sod', requireRole(...AUDITOR), (req, res) => {
 // and any payload — a way to put noise, or a false trail, into the chain. The
 // screens that call it are SJVN's own.
 const EXPORT_LOGGERS = [
-  'SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN', 'REIA_USER',
+  'SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'REIA_MAKER',
   'TRADING_USER', 'FINANCE_USER', 'MANAGEMENT', 'COMPLIANCE_AUDITOR',
 ];
 

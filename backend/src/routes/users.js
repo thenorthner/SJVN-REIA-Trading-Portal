@@ -11,7 +11,7 @@ router.get('/', requireAuth, (req, res) => {
   let sql;
   let params = [];
   
-  if (['SJVN_ADMIN', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(req.user.role)) {
+  if (['SJVN_ADMIN', 'REIA_CHECKER', 'IT_SUPER_ADMIN'].includes(req.user.role)) {
     // Admins see all users
     sql = 'SELECT id, name, email, role, linked_entity_id, is_active, created_at FROM users';
   } else if (req.user.linked_entity_id) {
@@ -36,7 +36,8 @@ router.post('/', requireAuth, (req, res) => {
   }
   
   // Validate caller has permission to create users
-  const isSuperAdmin = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN'].includes(req.user.role);
+  // User administration is the platform administrators' (Target #2 Phase B).
+  const isSuperAdmin = ['SJVN_ADMIN', 'IT_SUPER_ADMIN'].includes(req.user.role);
   const isCompanyAdmin = ['SELLER', 'BUYER', 'SELLER_L3', 'BUYER_L3'].includes(req.user.role);
   
   if (!isSuperAdmin && !isCompanyAdmin) {
@@ -83,7 +84,8 @@ router.put('/:id/status', requireAuth, (req, res) => {
   
   if (!targetUser) return res.status(404).json({ error: 'User not found' });
   
-  const isSuperAdmin = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_ADMIN'].includes(req.user.role);
+  // User administration is the platform administrators' (Target #2 Phase B).
+  const isSuperAdmin = ['SJVN_ADMIN', 'IT_SUPER_ADMIN'].includes(req.user.role);
   const isCompanyAdmin = ['SELLER', 'BUYER', 'SELLER_L3', 'BUYER_L3'].includes(req.user.role);
   
   if (!isSuperAdmin && !(isCompanyAdmin && targetUser.linked_entity_id === req.user.linked_entity_id)) {

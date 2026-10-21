@@ -473,6 +473,44 @@ function migrateBidsWorkflow() {
 }
 migrateBidsWorkflow();
 
+// Credit limit per trading client, and which side (BUY/SELL) a bid is on.
+// The side was never stored, so the generator-buy clause could not be re-checked
+// at submit and a buyer's committed funds could not be told from a seller's
+// offers. Older bids keep a NULL side and are left out of the funds check.
+function migrateBidFunds() {
+  const clientCols = db.prepare('PRAGMA table_info(trading_clients)').all().map((c) => c.name);
+  if (!clientCols.includes('credit_limit')) {
+    db.exec('ALTER TABLE trading_clients ADD COLUMN credit_limit REAL NOT NULL DEFAULT 0');
+  }
+  const bidCols = db.prepare('PRAGMA table_info(bids)').all().map((c) => c.name);
+  if (!bidCols.includes('bid_type')) {
+    db.exec("ALTER TABLE bids ADD COLUMN bid_type TEXT CHECK (bid_type IN ('BUY','SELL'))");
+  }
+}
+migrateBidFunds();
+
+// Bank receipts that credit a client's pre-payment. A receipt is told apart by
+// its UTR (one credit per UTR, however many times a statement is re-pasted),
+// and the client it was applied to and when are kept on the row so a receipt
+// can never be credited twice. The virtual account number is how the bank
+// names the client on a receipt.
+function migrateBankReceipts() {
+  const txCols = db.prepare('PRAGMA table_info(bank_transactions)').all().map((c) => c.name);
+  if (!txCols.includes('client_id')) db.exec('ALTER TABLE bank_transactions ADD COLUMN client_id TEXT');
+  if (!txCols.includes('applied_at')) db.exec('ALTER TABLE bank_transactions ADD COLUMN applied_at TEXT');
+  if (!txCols.includes('created_by')) db.exec('ALTER TABLE bank_transactions ADD COLUMN created_by TEXT');
+  const clientCols = db.prepare('PRAGMA table_info(trading_clients)').all().map((c) => c.name);
+  if (!clientCols.includes('virtual_account_no')) db.exec('ALTER TABLE trading_clients ADD COLUMN virtual_account_no TEXT');
+  try {
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_bank_transactions_utr ON bank_transactions (utr_no)');
+  } catch (e) {
+    // Existing rows already share a UTR; the endpoint still refuses repeats itself.
+    console.warn('bank_transactions UTR index not created:', e.message);
+  }
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_trading_clients_van ON trading_clients (virtual_account_no) WHERE virtual_account_no IS NOT NULL');
+}
+migrateBankReceipts();
+
 // Multi-channel notifications: a per-channel delivery log, and a phone column
 // on users so internal recipients can receive SMS once numbers are captured.
 function migrateNotificationDelivery() {
@@ -1089,6 +1127,17 @@ try {
 /** Stakeholder regulatory approval checklist table + backfill for existing entities. */
 function migrateRegulatoryApprovalsSchema() {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS custom_clearance_types (
+      code TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      applies_to TEXT NOT NULL DEFAULT 'BOTH' CHECK (applies_to IN ('SELLER','BUYER','BOTH')),
+      is_mandatory INTEGER NOT NULL DEFAULT 0,
+      help TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS entity_regulatory_approvals (
       id TEXT PRIMARY KEY,
       entity_id TEXT NOT NULL REFERENCES entities(id),
@@ -3457,7 +3506,9 @@ function migrateTeamMembers() {
   const cols = db.pragma('table_info(users)').map((c) => c.name);
   if (!cols.length) return;
   for (const [col, type] of [['designation', 'TEXT'], ['must_change_password', 'INTEGER NOT NULL DEFAULT 0'], ['sessions_revoked_at', 'INTEGER'],
-    ['deactivated_at', 'TEXT'], ['deactivated_by', 'TEXT'], ['deactivation_reason', 'TEXT'], ['created_by', 'TEXT']]) {
+    ['deactivated_at', 'TEXT'], ['deactivated_by', 'TEXT'], ['deactivation_reason', 'TEXT'], ['created_by', 'TEXT'],
+    // Target #2 Phase C: ALL projects, or only those in user_project_assignments.
+    ['project_scope', "TEXT NOT NULL DEFAULT 'ALL'"]]) {
     if (!cols.includes(col)) db.exec(`ALTER TABLE users ADD COLUMN ${col} ${type}`);
   }
 }
@@ -3802,6 +3853,11 @@ function migrateDecisions20261017() {
     // SJVN's own hydro stations, registered as sellers so their bills run here.
     db.prepare(`UPDATE entities SET is_sjvn_own = 1 WHERE id IN ('SEL-NJHPS', 'SEL-RHPS')`).run();
   }
+  // SJVN's own stations are cost-plus generation on the Hydro desk, not REIA
+  // developers: keep them out of the REIA stakeholder register.
+  if (ownCol.length) {
+    db.prepare(`UPDATE entities SET verticals = 'HYDRO' WHERE is_sjvn_own = 1 AND COALESCE(verticals, 'REIA') = 'REIA'`).run();
+  }
   addCol('reconciliations', 'finance_ack_by', 'TEXT');
 
   // A CHECK list grown by a value: SQLite cannot alter one in place, so the
@@ -3879,5 +3935,71 @@ try {
   // Non-fatal
 }
 
-export default db;
+/**
+ * Target #2, Phase B (20-Oct-2026): the REIA desk is Maker / Checker /
+ * Approver. REIA_USER becomes REIA_MAKER and REIA_ADMIN becomes REIA_CHECKER;
+ * REIA_APPROVER (the HOD) is new. The old names stay in the CHECK list so a row
+ * written by an older build, or a token issued before this ran, is still read —
+ * middleware/auth.js treats them as the new roles — but no account keeps them.
+ *
+ * The table is rebuilt from its own current DDL, so every column added since
+ * (phone, designation, sessions_revoked_at …) is carried over, not just the
+ * original eight.
+ */
+const REIA_ROLE_RENAMES = { REIA_USER: 'REIA_MAKER', REIA_ADMIN: 'REIA_CHECKER' };
+function migrateReiaThreeTier() {
+  const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'").get()?.sql;
+  if (!ddl) return;
+  if (!ddl.includes('REIA_APPROVER')) {
+    const widened = ddl
+      .replace(/CREATE TABLE "?users"?/, 'CREATE TABLE users_role_migration')
+      .replace("'REIA_USER'", "'REIA_USER', 'REIA_MAKER', 'REIA_CHECKER', 'REIA_APPROVER'");
+    if (!widened.includes('REIA_APPROVER')) throw new Error('users.role CHECK has no REIA_USER to widen from');
+    const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+    db.exec('PRAGMA foreign_keys=OFF');
+    try {
+      db.transaction(() => {
+        db.exec('DROP TABLE IF EXISTS users_role_migration');
+        db.exec(widened);
+        db.exec(`INSERT INTO users_role_migration (${cols.join(',')}) SELECT ${cols.join(',')} FROM users`);
+        db.exec('DROP TABLE users');
+        db.exec('ALTER TABLE users_role_migration RENAME TO users');
+      })();
+      console.log('[MIGRATE] users.role widened for REIA maker / checker / approver');
+    } finally {
+      db.exec('PRAGMA foreign_keys=ON');
+    }
+  }
+  for (const [from, to] of Object.entries(REIA_ROLE_RENAMES)) {
+    const n = db.prepare('UPDATE users SET role = ? WHERE role = ?').run(to, from).changes;
+    if (n) console.log(`[MIGRATE] ${n} ${from} account(s) are now ${to}`);
+    // A notification addressed to a role is read by whoever holds that role
+    // now; left on the old name it would reach nobody. The audit trail is not
+    // touched: it records the role held when the action was taken.
+    db.prepare('UPDATE notifications SET role = ? WHERE role = ?').run(to, from);
+  }
+}
 
+/**
+ * The demo REIA approver (HOD), beside the demo maker and checker. Only on a
+ * database that already carries the demo REIA accounts — never on one that
+ * does not, so no demo login appears on a real installation.
+ */
+function seedReiaApprover() {
+  if (!db.prepare("SELECT 1 FROM users WHERE email = 'reia@sjvn.in'").get()) return;
+  if (db.prepare("SELECT 1 FROM users WHERE email = 'reia.approver@sjvn.in'").get()) return;
+  db.prepare(`
+    INSERT INTO users (id, name, email, password_hash, role, linked_entity_id, is_active)
+    VALUES ('USR-REIA-APPROVER', 'Vikram (REIA HOD, Approver)', 'reia.approver@sjvn.in', ?, 'REIA_APPROVER', NULL, 1)
+  `).run(bcrypt.hashSync('password123', 8));
+  console.log('[SEED] reia.approver@sjvn.in seeded as REIA_APPROVER');
+}
+
+try {
+  migrateReiaThreeTier();
+  seedReiaApprover();
+} catch (e) {
+  console.error('REIA three-tier role migration failed:', e.message);
+}
+
+export default db;

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import * as XLSX from 'xlsx';
 import { Link } from 'react-router-dom';
 import { api } from '../../api/client.js';
@@ -427,7 +428,7 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
                     <button type="button" className="btn-link" onClick={() => raiseNote(r)}>Note</button>
                   </td>
                   <td>
-                    <button type="button" className="btn-link" onClick={() => cancelInv(r)}>Cancel</button>
+                    <WriteOnly><button type="button" className="btn-link" onClick={() => cancelInv(r)}>Cancel</button></WriteOnly>
                   </td>
                 </tr>
               ))}
@@ -467,7 +468,7 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
             {viewRow.superseded_by_invoice_id && <div><strong>Replaced By:</strong> {viewRow.superseded_by_invoice_id}</div>}
             {viewRow.cancel_reason && <div><strong>Cancel Reason:</strong> {viewRow.cancel_reason}</div>}
             {viewRow.received_amount != null && (
-              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
+              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--slate-200)' }}>
                 <div><strong>Received:</strong> ₹{fmtNumber(viewRow.received_amount, 2)}</div>
                 <div><strong>Payment Date:</strong> {fmtDisplayDate(viewRow.payment_date)}</div>
                 <div><strong>TDS:</strong> {viewRow.tds_rate}% · ₹{fmtNumber(viewRow.tds_deducted, 2)}</div>
@@ -475,18 +476,18 @@ export default function ViewBillInvoiceLedger({ billType, title, showPaymentColu
                 <div><strong>Remarks:</strong> {viewRow.remarks || '—'}</div>
               </div>
             )}
-            <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
+            <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid var(--slate-200)' }}>
               <div><strong>Debit / Credit Notes</strong></div>
               {notes.length ? notes.map((n) => (
                 <div key={n.id} style={{ marginTop: 6 }}>
                   {n.note_no} · {n.note_type} · ₹{fmtNumber(n.amount, 2)} · {n.status}
                   {n.status !== 'CANCELLED' && (
                     <>
-                      {' '}<button type="button" className="btn-link" onClick={() => cancelNote(n)}>Cancel</button>
+                      {' '}<WriteOnly><button type="button" className="btn-link" onClick={() => cancelNote(n)}>Cancel</button></WriteOnly>
                     </>
                   )}
                 </div>
-              )) : <div style={{ color: '#64748b' }}>No notes raised.</div>}
+              )) : <div style={{ color: 'var(--slate-500)' }}>No notes raised.</div>}
             </div>
           </div>
         </Modal>

@@ -23,6 +23,12 @@ export function AuthProvider({ children }) {
     const res = await api.auth.login(email, password);
     localStorage.setItem('sjvn_token', res.token);
     localStorage.setItem('sjvn_user', JSON.stringify(res.user));
+    // Shown once on the dashboard: when and from where this account last signed
+    // in, and whether another session is still open (CERT-In session security).
+    try {
+      if (res.previous_login) sessionStorage.setItem('sjvn_previous_login', JSON.stringify(res.previous_login));
+      else sessionStorage.removeItem('sjvn_previous_login');
+    } catch { /* ignore */ }
     setUser(res.user);
     return res.user;
   }
@@ -46,9 +52,16 @@ export function AuthProvider({ children }) {
     return res;
   }
 
-  function logout() {
+  /**
+   * End the session. The server is told first (it records the sign-out in the
+   * audit log, as CERT-In asks); `silent` is for callers that have already told
+   * it themselves, such as the inactivity sign-out.
+   */
+  function logout({ silent = false } = {}) {
+    if (!silent && localStorage.getItem('sjvn_token')) api.auth.logout('USER_LOGOUT').catch(() => {});
     localStorage.removeItem('sjvn_token');
     localStorage.removeItem('sjvn_user');
+    try { sessionStorage.removeItem('sjvn_acting'); } catch { /* ignore */ }
     setUser(null);
   }
 

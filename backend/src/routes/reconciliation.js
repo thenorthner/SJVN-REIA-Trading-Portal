@@ -14,6 +14,7 @@ import {
 } from '../reconciliationEngine.js';
 import { OPEN_RECON_STATUSES, summariseItems } from '../reconciliationConstants.js';
 import { lastCompleteMonth } from '../services/energyRules.js';
+import { clientScope, mayUseClient } from '../services/tradingClientScope.js';
 import { OPEN_STATUSES as OPEN_DISPUTE_STATUSES, REASON_CODES, CHARGE_LINES } from '../disputesConstants.js';
 
 const router = Router();
@@ -90,7 +91,10 @@ function enrichListRow(r) {
 function canAccessRecon(user, recon) {
   if (isReia(user)) return true;
   if (recon.scope === 'TRADING_CLIENT') {
-    return user.role === 'TRADING_CLIENT' || user.role === 'TRADING_USER' || user.role === 'SJVN_ADMIN';
+    // A client sees its own statements only. Any client login used to open —
+    // and sign — every other client's (found 19-Oct-2026).
+    if (user.role === 'TRADING_CLIENT') return mayUseClient(user, recon.trading_client_id);
+    return user.role === 'TRADING_USER' || user.role === 'SJVN_ADMIN';
   }
   if (!recon.contract_id) return false;
   const c = db.prepare('SELECT seller_id, buyer_id FROM contracts WHERE id = ?').get(recon.contract_id);
@@ -188,7 +192,7 @@ function persistRun({
   });
 
   pushNotification({
-    role: 'REIA_USER',
+    role: 'REIA_MAKER',
     type: 'RECONCILIATION',
     message: `Reconciliation ${reconNo} (${period}) — ${built.metrics.auto_match_pct}% auto-matched, ${built.metrics.items_exception} exception(s)`,
   });
@@ -367,6 +371,8 @@ router.get('/', (req, res) => {
     // Anyone else used to fall through and was handed every statement.
     if (!ROLE_GROUPS.TRADING_ALL.includes(req.user.role) && req.user.role !== 'TRADING_CLIENT') return res.status(403).json({ error: 'Not authorized' });
     sql += ` AND r.scope = 'TRADING_CLIENT'`;
+    const own = clientScope(req.user, 'r.trading_client_id');
+    if (own.restricted) { sql += own.sql; params.push(...own.params); }
   }
 
   if (status) { sql += ' AND r.status = ?'; params.push(status); }
@@ -433,12 +439,12 @@ router.post('/run', requireRole(...REIA_WRITE, 'TRADING_USER'), (req, res) => {
   }
 });
 
-router.post('/run-scheduled', requireRole(...REIA_WRITE, 'MANAGEMENT'), (_req, res) => {
+router.post('/run-scheduled', requireRole(...REIA_WRITE, ...ROLE_GROUPS.REIA_APPROVE), (_req, res) => {
   res.json(runScheduledReconciliations());
 });
 
 // ---- reopen act (before /:id) ----
-router.post('/reopen-requests/:id/act', requireRole('SJVN_ADMIN', 'FINANCE_USER', ...REIA_WRITE), (req, res) => {
+router.post('/reopen-requests/:id/act', requireRole('FINANCE_USER', ...REIA_WRITE), (req, res) => {
   const { decision } = req.body; // APPROVED | REJECTED
   const badDecision = invalidDecision(decision);
   if (badDecision) return res.status(400).json({ error: badDecision });
@@ -698,8 +704,13 @@ router.post('/:id/acknowledge', (req, res) => {
     const side = counterpartySide(req.user);
     const okRole =
       (side !== null && (recon.counterparty_role == null || side === recon.counterparty_role)) ||
-      (recon.counterparty_role === 'TRADING_CLIENT' && ['TRADING_CLIENT', 'TRADING_USER'].includes(req.user.role));
-    if (!okRole && req.user.role !== 'SJVN_ADMIN') {
+      // The trading desk does not sign for the client (decided 19-Oct-2026).
+      (recon.counterparty_role === 'TRADING_CLIENT' && req.user.role === 'TRADING_CLIENT');
+    // Nobody at SJVN signs for the counterparty. (The SJVN Administrator was
+    // exempted here; it never reached this branch because it signs as SJVN
+    // above, but an exemption that lets SJVN sign the other side's statement
+    // must not exist to come alive when roles are re-cut — Target #2.)
+    if (!okRole) {
       return res.status(403).json({ error: 'Only counterparty can acknowledge on this side' });
     }
     if (side === 'BUYER' && (req.user.role === 'BUYER_L1' || req.user.role.endsWith('_L1'))) {
@@ -814,7 +825,7 @@ router.post('/:id/withdraw', requireRole(...REIA_WRITE), (req, res) => {
   res.json({ withdrawn: recon.recon_no, period: recon.period });
 });
 
-router.post('/:id/regenerate-statement', requireRole(...REIA_WRITE, 'TRADING_USER', 'MANAGEMENT'), (req, res) => {
+router.post('/:id/regenerate-statement', requireRole(...REIA_WRITE, 'TRADING_USER', ...ROLE_GROUPS.REIA_APPROVE), (req, res) => {
   const recon = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(req.params.id);
   if (!recon) return res.status(404).json({ error: 'Not found' });
   // Its figures are what the two signatures are on — unless the other side has

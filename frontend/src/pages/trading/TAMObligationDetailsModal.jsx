@@ -88,29 +88,29 @@ export default function TAMObligationDetailsModal({ record, product = 'TAM', onC
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
       padding: '5vh 5vw',
     }}>
-      <div style={{ background: '#fff', borderRadius: 14, width: '90vw', maxWidth: '90vw', height: '90vh', maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px -10px rgba(15, 23, 42, 0.35)' }}>
-        <div style={{ padding: '15px 20px', borderBottom: '1px solid #ddd', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8f9fa', borderRadius: '8px 8px 0 0' }}>
+      <div style={{ background: 'var(--surface)', borderRadius: 14, width: '90vw', maxWidth: '90vw', height: '90vh', maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px -10px rgba(15, 23, 42, 0.35)' }}>
+        <div style={{ padding: '15px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--slate-50)', borderRadius: '8px 8px 0 0' }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: 18, color: '#333' }}>{product} cleared blocks</h2>
-            <div style={{ fontSize: 13.5, color: '#666', marginTop: 4 }}>
+            <h2 style={{ margin: 0, fontSize: 18, color: 'var(--slate-700)' }}>{product} cleared blocks</h2>
+            <div style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 4 }}>
               {record.client_name} · {record.exchange} · {record.deliveryDate}
             </div>
           </div>
-          <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', fontSize: 24, cursor: 'pointer', color: '#888' }}>&times;</button>
+          <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', fontSize: 24, cursor: 'pointer', color: 'var(--slate-500)' }}>&times;</button>
         </div>
 
         <div style={{ padding: 20 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px 20px', marginBottom: 24 }}>
             <div>
-              <div style={{ fontSize: 13, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Client</div>
+              <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Client</div>
               <div style={{ fontSize: 14 }}>{record.client_name}</div>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Exchange</div>
+              <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Exchange</div>
               <div style={{ fontSize: 14 }}>{record.exchange}</div>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Contract</div>
+              <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Contract</div>
               <div style={{ fontSize: 14 }}>
                 {record.contract_id
                   ? <Link to={`/trading/exchange/contracts/${record.contract_id}`}>{record.contract_id}</Link>
@@ -118,21 +118,21 @@ export default function TAMObligationDetailsModal({ record, product = 'TAM', onC
               </div>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Status</div>
+              <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Status</div>
               <div style={{ fontSize: 14 }}>{record.status}</div>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Cleared energy</div>
+              <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Cleared energy</div>
               <div style={{ fontSize: 14, fontWeight: 'bold' }}>{fmtNumber(totalMwh, 3)} MWh</div>
             </div>
             <div>
-              <div style={{ fontSize: 13, color: '#666', fontWeight: 'bold', textTransform: 'none' }}>Value</div>
+              <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none' }}>Value</div>
               <div style={{ fontSize: 14, fontWeight: 'bold' }}>₹{fmtNumber(totalValue, 2)}</div>
             </div>
           </div>
 
           {scheduleData.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', color: '#666' }}>No bid blocks on this row.</div>
+            <div style={{ padding: 24, textAlign: 'center', color: 'var(--slate-500)' }}>No bid blocks on this row.</div>
           ) : (
             <Table columns={scheduleCols} data={scheduleData} />
           )}

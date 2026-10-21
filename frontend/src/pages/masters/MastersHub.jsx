@@ -747,21 +747,21 @@ export default function MastersHub() {
             </div>
           )}
         >
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+          <div style={{ background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8, padding: 16, marginBottom: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
               <div>
-                <h4 style={{ margin: '0 0 4px 0', fontSize: 14, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <h4 style={{ margin: '0 0 4px 0', fontSize: 14, color: 'var(--slate-800)', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span></span> Live Due-Date & Working-Days Simulator
                 </h4>
-                <p style={{ margin: 0, fontSize: 13.5, color: '#64748b' }}>
+                <p style={{ margin: 0, fontSize: 13.5, color: 'var(--slate-500)' }}>
                   Verify how state-specific public holidays and weekly offs affect payment deadlines & late-payment surcharge (LPS).
                 </p>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                <span className="badge" style={{ background: '#e0f2fe', color: '#0369a1', fontSize: 13 }}>
+                <span className="badge" style={{ background: 'var(--t-blue-50)', color: 'var(--on-blue)', fontSize: 13 }}>
                   Weekly Offs: {holidaySettings?.weekly_off_names?.join(', ') || 'Saturday, Sunday'}
                 </span>
-                <span className="badge" style={{ background: '#fef3c7', color: '#92400e', fontSize: 13 }}>
+                <span className="badge" style={{ background: 'var(--t-amber-100)', color: 'var(--on-amber)', fontSize: 13 }}>
                   Counting Mode: {holidaySettings?.due_date_counting_mode || 'CALENDAR_ROLL_FORWARD'}
                 </span>
               </div>
@@ -769,7 +769,7 @@ export default function MastersHub() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, alignItems: 'end' }}>
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Bill Presentation Date</label>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--slate-600)', marginBottom: 4 }}>Bill Presentation Date</label>
                 <input
                   type="date"
                   className="input"
@@ -779,7 +779,7 @@ export default function MastersHub() {
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Credit Terms (Days)</label>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--slate-600)', marginBottom: 4 }}>Credit Terms (Days)</label>
                 <input
                   type="number"
                   min="1"
@@ -791,7 +791,7 @@ export default function MastersHub() {
                 />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#475569', marginBottom: 4 }}>Beneficiary / Buyer State</label>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--slate-600)', marginBottom: 4 }}>Beneficiary / Buyer State</label>
                 <select
                   className="input"
                   value={simState}
@@ -806,34 +806,34 @@ export default function MastersHub() {
 
             {simResult && (
               <div style={{ marginTop: 14 }}>
-                <div style={{ padding: 14, background: '#ffffff', borderRadius: 8, border: '1px solid #cbd5e1', display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
+                <div style={{ padding: 14, background: 'var(--surface)', borderRadius: 8, border: '1px solid var(--slate-300)', display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
                   <div>
-                    <div style={{ fontSize: 13, color: '#64748b', textTransform: 'none', fontWeight: 700, letterSpacing: 0.5 }}>Calculated Due Date (Target)</div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>
-                      {simResult.due_date} <span style={{ fontSize: 13, fontWeight: 600, color: '#0284c7' }}>({formatDayName(simResult.due_date)})</span>
+                    <div style={{ fontSize: 13, color: 'var(--slate-500)', textTransform: 'none', fontWeight: 700, letterSpacing: 0.5 }}>Calculated Due Date (Target)</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--slate-900)' }}>
+                      {simResult.due_date} <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--on-blue)' }}>({formatDayName(simResult.due_date)})</span>
                     </div>
                   </div>
-                  <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16 }}>
-                    <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>Working Days Target</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#16a34a' }}>
+                  <div style={{ borderLeft: '1px solid var(--slate-200)', paddingLeft: 16 }}>
+                    <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 600 }}>Working Days Target</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--green-strong)' }}>
                       {simResult.terms_days} Working Days
                     </div>
                   </div>
-                  <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16 }}>
-                    <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>Total Calendar Days Span</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#334155' }}>
+                  <div style={{ borderLeft: '1px solid var(--slate-200)', paddingLeft: 16 }}>
+                    <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 600 }}>Total Calendar Days Span</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--slate-700)' }}>
                       {simResult.calendar_days_taken} Calendar Days
                     </div>
                   </div>
-                  <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16 }}>
-                    <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>Non-Working Days Skipped</div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: '#dc2626' }}>
+                  <div style={{ borderLeft: '1px solid var(--slate-200)', paddingLeft: 16 }}>
+                    <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 600 }}>Non-Working Days Skipped</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--red-strong)' }}>
                       {(simResult.calendar_days_taken || 0) - (simResult.terms_days || 0)} Days (Weekends + Holidays)
                     </div>
                   </div>
-                  <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: 16, flex: 1, minWidth: 200 }}>
-                    <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>LPS Protection</div>
-                    <div style={{ fontSize: 13.5, color: '#334155' }}>
+                  <div style={{ borderLeft: '1px solid var(--slate-200)', paddingLeft: 16, flex: 1, minWidth: 200 }}>
+                    <div style={{ fontSize: 13, color: 'var(--slate-500)', fontWeight: 600 }}>LPS Protection</div>
+                    <div style={{ fontSize: 13.5, color: 'var(--slate-700)' }}>
                       Weekends & {simState ? `${simState} gazetted holidays` : 'gazetted holidays'} skipped from counting. Surcharge starts strictly after due date.
                     </div>
                   </div>
@@ -841,10 +841,10 @@ export default function MastersHub() {
 
                 {/* Day by Day Step Breakdown */}
                 {Array.isArray(simResult.daily_breakdown) && simResult.daily_breakdown.length > 0 && (
-                  <div style={{ marginTop: 12, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#334155', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ marginTop: 12, background: 'var(--slate-50)', border: '1px solid var(--slate-200)', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--slate-700)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span>Step-by-Step Counting Progression ({simResult.daily_breakdown.length} days total):</span>
-                      <span style={{ fontSize: 13, fontWeight: 'normal', color: '#64748b' }}>
+                      <span style={{ fontSize: 13, fontWeight: 'normal', color: 'var(--slate-500)' }}>
                         Working Day | Day 0 | Skipped (Sat/Sun/Holiday)
                       </span>
                     </div>
@@ -902,7 +902,7 @@ export default function MastersHub() {
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16, background: '#f1f5f9', padding: '10px 14px', borderRadius: 6 }}>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 16, background: 'var(--slate-100)', padding: '10px 14px', borderRadius: 6 }}>
             <div>
               <span style={{ fontSize: 13.5, fontWeight: 700, marginRight: 6 }}>Year:</span>
               <select value={holidayYear} onChange={(e) => setHolidayYear(e.target.value)} style={{ fontSize: 13.5, padding: '4px 8px' }}>
@@ -936,10 +936,10 @@ export default function MastersHub() {
           <Table
             columns={[
               { key: 'holiday_date', header: 'Date', render: (r) => <strong style={{ fontSize: 13 }}>{r.holiday_date}</strong> },
-              { key: 'day', header: 'Day', render: (r) => <span style={{ color: '#64748b', fontSize: 13.5 }}>{formatDayName(r.holiday_date)}</span> },
+              { key: 'day', header: 'Day', render: (r) => <span style={{ color: 'var(--slate-500)', fontSize: 13.5 }}>{formatDayName(r.holiday_date)}</span> },
               { key: 'name', header: 'Holiday Name', render: (r) => <span style={{ fontWeight: 600 }}>{r.name}</span> },
               { key: 'scope', header: 'Scope', render: (r) => <Badge status={r.scope === 'NATIONAL' ? 'ACTIVE' : 'PENDING'} label={r.scope} /> },
-              { key: 'state', header: 'State / Region', render: (r) => r.state ? <span style={{ color: '#0284c7', fontWeight: 600 }}>{r.state}</span> : <span style={{ color: '#64748b' }}>All India (National)</span> },
+              { key: 'state', header: 'State / Region', render: (r) => r.state ? <span style={{ color: 'var(--on-blue)', fontWeight: 600 }}>{r.state}</span> : <span style={{ color: 'var(--slate-500)' }}>All India (National)</span> },
               { key: 'holiday_type', header: 'Type', render: (r) => <Badge status="DRAFT" label={r.holiday_type} /> },
               { key: 'remarks', header: 'Remarks / Gazette Ref', render: (r) => r.remarks || '—' },
               { key: 'is_active', header: 'Status', render: (r) => r.is_active ? <Badge status="ACTIVE" label="Active" /> : <Badge status="REJECTED" label="Withdrawn" /> },
@@ -1017,7 +1017,7 @@ export default function MastersHub() {
 
       <Modal open={showBulkHoliday} onClose={() => setShowBulkHoliday(false)} title="Bulk Import Holidays">
         <form onSubmit={saveBulkHolidays}>
-          <p style={{ fontSize: 13.5, color: '#64748b', marginTop: 0 }}>
+          <p style={{ fontSize: 13.5, color: 'var(--slate-500)', marginTop: 0 }}>
             Paste comma-separated or tab-separated holiday entries (one per line):<br />
             <code>YYYY-MM-DD, Holiday Name, Scope (NATIONAL/STATE), State (optional), Type (PUBLIC/BANK)</code>
           </p>
@@ -1042,7 +1042,7 @@ export default function MastersHub() {
       <Modal open={!!deactivateHolidayObj} onClose={() => setDeactivateHolidayObj(null)} title="Withdraw Holiday">
         {deactivateHolidayObj && (
           <form onSubmit={handleDeactivateHoliday}>
-            <p style={{ fontSize: 13, color: '#334155', marginTop: 0 }}>
+            <p style={{ fontSize: 13, color: 'var(--slate-700)', marginTop: 0 }}>
               Are you sure you want to withdraw <strong>{deactivateHolidayObj.name}</strong> on <strong>{deactivateHolidayObj.holiday_date}</strong>?
             </p>
             <Field label="Reason / Justification for withdrawal">

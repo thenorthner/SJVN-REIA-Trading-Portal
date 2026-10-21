@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, StatCard, fmtCurrency } from '../../components/ui.jsx';
 
@@ -88,7 +89,7 @@ export default function TDSRegister() {
       key: 'actions',
       label: '',
       render: r => (r.status === 'DEDUCTED'
-        ? <button className="btn btn-outline btn-sm" onClick={() => { setChallanFor(r); setChallan(EMPTY_CHALLAN); }}>Record challan</button>
+        ? <WriteOnly><button className="btn btn-outline btn-sm" onClick={() => { setChallanFor(r); setChallan(EMPTY_CHALLAN); }}>Record challan</button></WriteOnly>
         : null),
     },
   ];
@@ -113,7 +114,7 @@ export default function TDSRegister() {
       <PageHeader
         title="TDS Register"
         subtitle="Tax withheld on open-access and energy payments, with challan tracking for deposit with the government"
-        actions={<button className="btn btn-primary" onClick={() => setShowRecord(true)}>+ Record deduction</button>}
+        actions={<WriteOnly><button className="btn btn-primary" onClick={() => setShowRecord(true)}>+ Record deduction</button></WriteOnly>}
       />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 15, marginBottom: 20 }}>

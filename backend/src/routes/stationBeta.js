@@ -285,7 +285,7 @@ router.post('/:id/true-up', requireRole(...WRITE), (req, res) => {
   });
 
   pushNotification({
-    role: 'REIA_USER',
+    role: 'REIA_MAKER',
     type: 'BETA_TRUE_UP',
     message: `β true-up ${invoice_no}: ₹${delta.toLocaleString('en-IN')} for ${contract.contract_no} / ${betaRow.period_month}`,
   });

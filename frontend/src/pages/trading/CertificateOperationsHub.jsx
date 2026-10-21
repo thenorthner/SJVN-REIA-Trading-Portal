@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { api } from '../../api/client.js';
 import { PortfolioSelect } from '../../context/PortfolioContext.jsx';
 import { PageHeader, Card, Table, StatCard, fmtNumber, Badge, Modal, Field } from '../../components/ui.jsx';
@@ -246,7 +247,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
         { key: 'state', label: 'State' },
         { key: 'totalObligation', label: 'Total Obligation (Units)', render: r => <strong>{r.totalObligation}</strong> },
         { key: 'totalAmount', label: 'Total (₹)', render: r => <span style={{ color: '#27ae60', fontWeight: 'bold' }}>{fmtNumber(r.totalAmount)}</span> },
-        { key: 'fileName', label: 'File Name', render: r => <span style={{ color: '#2980b9', textDecoration: 'underline', cursor: 'pointer' }}>{r.fileName}</span> },
+        { key: 'fileName', label: 'File Name', render: r => <span style={{ color: 'var(--on-blue)', textDecoration: 'underline', cursor: 'pointer' }}>{r.fileName}</span> },
         ...(activeTab === 'REC' ? [
           { key: 'solar', label: 'Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Solar Details" aria-label="View Solar Details"></button> },
           { key: 'nonsolar', label: 'Non-Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Non-Solar Details" aria-label="View Non-Solar Details"></button> }
@@ -267,8 +268,8 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
             {r.totalObligation}
           </strong>
         )},
-        { key: 'totalAmount', label: 'Total (₹)', render: r => <span style={{ color: '#333', fontWeight: 'bold' }}>{fmtNumber(r.totalAmount)}</span> },
-        { key: 'fileName', label: 'File Name', render: r => <span style={{ color: '#2980b9', textDecoration: 'underline', cursor: 'pointer' }}>{r.fileName}</span> },
+        { key: 'totalAmount', label: 'Total (₹)', render: r => <span style={{ color: 'var(--slate-700)', fontWeight: 'bold' }}>{fmtNumber(r.totalAmount)}</span> },
+        { key: 'fileName', label: 'File Name', render: r => <span style={{ color: 'var(--on-blue)', textDecoration: 'underline', cursor: 'pointer' }}>{r.fileName}</span> },
         ...(activeTab === 'REC' ? [
           { key: 'solar', label: 'Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Solar Details" aria-label="View Solar Details"></button> },
           { key: 'nonsolar', label: 'Non-Solar Certificate', render: () => <button className="btn btn-sm btn-outline" title="View Non-Solar Details" aria-label="View Non-Solar Details"></button> }
@@ -293,28 +294,28 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
     <div style={{ padding: '0 20px 20px' }}>
       
       {/* Top Module Tabs */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20, borderBottom: '2px solid #ddd' }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20, borderBottom: '2px solid var(--border)' }}>
         <button 
           onClick={() => { setActiveTab('REC'); setCreateForm(f => ({...f, certType: 'Non-Solar REC'})); }}
-          style={{ padding: '12px 24px', background: 'transparent', border: 'none', borderBottom: activeTab === 'REC' ? '3px solid #2980b9' : '3px solid transparent', color: activeTab === 'REC' ? '#2980b9' : '#666', fontWeight: 'bold', cursor: 'pointer', fontSize: 16 }}>
+          style={{ padding: '12px 24px', background: 'transparent', border: 'none', borderBottom: activeTab === 'REC' ? '3px solid #2980b9' : '3px solid transparent', color: activeTab === 'REC' ? 'var(--on-blue)' : 'var(--slate-500)', fontWeight: 'bold', cursor: 'pointer', fontSize: 16 }}>
           Renewable Energy Certificates (RECs)
         </button>
         <button 
           onClick={() => { setActiveTab('ESCERT'); setCreateForm(f => ({...f, certType: 'ESCERT'})); }}
-          style={{ padding: '12px 24px', background: 'transparent', border: 'none', borderBottom: activeTab === 'ESCERT' ? '3px solid #2980b9' : '3px solid transparent', color: activeTab === 'ESCERT' ? '#2980b9' : '#666', fontWeight: 'bold', cursor: 'pointer', fontSize: 16 }}>
+          style={{ padding: '12px 24px', background: 'transparent', border: 'none', borderBottom: activeTab === 'ESCERT' ? '3px solid #2980b9' : '3px solid transparent', color: activeTab === 'ESCERT' ? 'var(--on-blue)' : 'var(--slate-500)', fontWeight: 'bold', cursor: 'pointer', fontSize: 16 }}>
           Energy Saving Certificates (ESCerts)
         </button>
       </div>
 
       {activeSubView === 'BIDDING' && (
-        <div style={{ background: '#fff3cd', border: '1px solid #ffe69c', padding: '10px 15px', borderRadius: 6, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ color: '#664d03', fontWeight: 600 }}>
+        <div style={{ background: 'var(--t-amber-100)', border: '1px solid var(--t-amber-100)', padding: '10px 15px', borderRadius: 6, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ color: 'var(--on-amber)', fontWeight: 600 }}>
             {/* The gate closure used to count down from a literal string. The
                 exchange's calendar is not something the platform holds. */}
             {activeTab} bids are placed on the exchange's own session; check its calendar for the gate closure.
           </div>
           <div>
-            <button className="btn btn-primary btn-sm" style={{ background: '#664d03', borderColor: '#664d03' }} onClick={() => setShowCreate(true)}>Create New Bid</button>
+            <WriteOnly><button className="btn btn-primary btn-sm" style={{ background: '#664d03', borderColor: '#664d03' }} onClick={() => setShowCreate(true)}>Create New Bid</button></WriteOnly>
           </div>
         </div>
       )}
@@ -323,22 +324,22 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
       <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
         <button 
           onClick={() => setActiveSubView('BIDDING')}
-          style={{ padding: '8px 16px', background: activeSubView === 'BIDDING' ? '#2c3e50' : '#ecf0f1', color: activeSubView === 'BIDDING' ? '#fff' : '#333', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: 'bold' }}>
+          style={{ padding: '8px 16px', background: activeSubView === 'BIDDING' ? '#2c3e50' : 'var(--slate-50)', color: activeSubView === 'BIDDING' ? '#fff' : 'var(--slate-700)', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: 'bold' }}>
           Bid Management
         </button>
         <button 
           onClick={() => setActiveSubView('REGISTRY')}
-          style={{ padding: '8px 16px', background: activeSubView === 'REGISTRY' ? '#2c3e50' : '#ecf0f1', color: activeSubView === 'REGISTRY' ? '#fff' : '#333', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: 'bold' }}>
+          style={{ padding: '8px 16px', background: activeSubView === 'REGISTRY' ? '#2c3e50' : 'var(--slate-50)', color: activeSubView === 'REGISTRY' ? '#fff' : 'var(--slate-700)', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: 'bold' }}>
           Registry Holdings
         </button>
         <button 
           onClick={() => setActiveSubView('OBLIGATION')}
-          style={{ padding: '8px 16px', background: activeSubView === 'OBLIGATION' ? '#2c3e50' : '#ecf0f1', color: activeSubView === 'OBLIGATION' ? '#fff' : '#333', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: 'bold' }}>
+          style={{ padding: '8px 16px', background: activeSubView === 'OBLIGATION' ? '#2c3e50' : 'var(--slate-50)', color: activeSubView === 'OBLIGATION' ? '#fff' : 'var(--slate-700)', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: 'bold' }}>
           Clearing Obligations
         </button>
         <button 
           onClick={() => setActiveSubView('INVOICE')}
-          style={{ padding: '8px 16px', background: activeSubView === 'INVOICE' ? '#2c3e50' : '#ecf0f1', color: activeSubView === 'INVOICE' ? '#fff' : '#333', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: 'bold' }}>
+          style={{ padding: '8px 16px', background: activeSubView === 'INVOICE' ? '#2c3e50' : 'var(--slate-50)', color: activeSubView === 'INVOICE' ? '#fff' : 'var(--slate-700)', border: 'none', borderRadius: 20, cursor: 'pointer', fontWeight: 'bold' }}>
           Commercial Tax Ledger & Invoices
         </button>
       </div>
@@ -400,7 +401,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
         }
       />
 
-      <Card style={{ marginBottom: 20, background: '#f5f7f9' }}>
+      <Card style={{ marginBottom: 20, background: 'var(--slate-50)' }}>
         <div style={{ display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
           <div>
             <label style={{ display: 'block', fontSize: 13.5, fontWeight: 'bold', marginBottom: 5 }} htmlFor="certificateoperationshub-exchange">Exchange:</label>
@@ -469,13 +470,13 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
                   <option value="AUTO_ROUTE">Auto-Route (Best Depth)</option>
                 </select>
                 {createForm.exchange === 'IEX' && (
-                  <div style={{ marginTop: 5, fontSize: 13, color: '#666' }}>30-Day Liquidity: ~85,000 RECs cleared</div>
+                  <div style={{ marginTop: 5, fontSize: 13, color: 'var(--slate-500)' }}>30-Day Liquidity: ~85,000 RECs cleared</div>
                 )}
                 {createForm.exchange === 'PXIL' && (
-                  <div style={{ marginTop: 5, fontSize: 13, color: '#666' }}>30-Day Liquidity: ~12,000 RECs cleared</div>
+                  <div style={{ marginTop: 5, fontSize: 13, color: 'var(--slate-500)' }}>30-Day Liquidity: ~12,000 RECs cleared</div>
                 )}
                 {(createForm.exchange === 'SMART_SPLIT' || createForm.exchange === 'AUTO_ROUTE') && (
-                  <div style={{ marginTop: 5, fontSize: 13, color: '#2980b9', fontWeight: 'bold' }}>
+                  <div style={{ marginTop: 5, fontSize: 13, color: 'var(--on-blue)', fontWeight: 'bold' }}>
                     {createForm.exchange === 'SMART_SPLIT' ? ' Splitting order to hedge execution risk.' : ' Routing to exchange with highest order-book depth.'}
                   </div>
                 )}
@@ -524,17 +525,17 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
             
             {/* Auto-calculating Estimator */}
             {createForm.qty && createForm.price && (
-              <div style={{ background: '#f8f9fa', border: '1px dashed #adb5bd', padding: 15, borderRadius: 8, marginBottom: 20 }}>
-                <div style={{ fontSize: 13.5, color: '#6c757d', fontWeight: 'bold', textTransform: 'none', marginBottom: 5 }}>Order Value Estimator</div>
+              <div style={{ background: 'var(--slate-50)', border: '1px dashed #adb5bd', padding: 15, borderRadius: 8, marginBottom: 20 }}>
+                <div style={{ fontSize: 13.5, color: 'var(--slate-500)', fontWeight: 'bold', textTransform: 'none', marginBottom: 5 }}>Order Value Estimator</div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>{fmtNumber(createForm.qty)} Units × ₹{fmtNumber(createForm.price)}</span>
-                  <span style={{ fontSize: 20, fontWeight: 'bold', color: '#2c3e50' }}>₹{fmtNumber(createForm.qty * createForm.price)}</span>
+                  <span style={{ fontSize: 20, fontWeight: 'bold', color: 'var(--on-blue)' }}>₹{fmtNumber(createForm.qty * createForm.price)}</span>
                 </div>
               </div>
             )}
             
             {formError && (
-              <div style={{ background: '#f8d7da', color: '#842029', border: '1px solid #f5c2c7', padding: '10px 15px', borderRadius: 4, marginBottom: 15, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ background: 'var(--t-red-100)', color: 'var(--on-red)', border: '1px solid var(--t-red-100)', padding: '10px 15px', borderRadius: 4, marginBottom: 15, display: 'flex', alignItems: 'center', gap: 10 }}>
                  {formError}
               </div>
             )}
@@ -555,7 +556,7 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
           <div style={{ textAlign: 'center', padding: '10px 0' }}>
             <div style={{ fontSize: 48, marginBottom: 10 }}>{createForm.type === 'Buy' ? '' : ''}</div>
             <h3 style={{ margin: '0 0 10px 0' }}>Confirm {createForm.type} Order</h3>
-            <p style={{ color: '#666', marginBottom: 20 }}>
+            <p style={{ color: 'var(--slate-500)', marginBottom: 20 }}>
               This raises the bid in the desk's own book, where it is approved and then executed.
               It is not sent to the exchange from here.
             </p>
@@ -563,26 +564,26 @@ export default function CertificateOperationsHub({ defaultTab = 'ESCERT' }) {
             <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', marginBottom: 20 }}>
               <tbody>
                 <tr>
-                  <td style={{ padding: '8px 0', borderBottom: '1px solid #eee', color: '#666' }}>Exchange</td>
-                  <td style={{ padding: '8px 0', borderBottom: '1px solid #eee', fontWeight: 'bold', textAlign: 'right' }}>{createForm.exchange}</td>
+                  <td style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', color: 'var(--slate-500)' }}>Exchange</td>
+                  <td style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', fontWeight: 'bold', textAlign: 'right' }}>{createForm.exchange}</td>
                 </tr>
                 <tr>
-                  <td style={{ padding: '8px 0', borderBottom: '1px solid #eee', color: '#666' }}>Order Type</td>
-                  <td style={{ padding: '8px 0', borderBottom: '1px solid #eee', fontWeight: 'bold', textAlign: 'right' }}>
+                  <td style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', color: 'var(--slate-500)' }}>Order Type</td>
+                  <td style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', fontWeight: 'bold', textAlign: 'right' }}>
                     <Badge type={createForm.type === 'Buy' ? 'primary' : 'success'}>{createForm.type}</Badge>
                   </td>
                 </tr>
                 <tr>
-                  <td style={{ padding: '8px 0', borderBottom: '1px solid #eee', color: '#666' }}>Quantity</td>
-                  <td style={{ padding: '8px 0', borderBottom: '1px solid #eee', fontWeight: 'bold', textAlign: 'right' }}>{fmtNumber(createForm.qty)} {createForm.certType}s</td>
+                  <td style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', color: 'var(--slate-500)' }}>Quantity</td>
+                  <td style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', fontWeight: 'bold', textAlign: 'right' }}>{fmtNumber(createForm.qty)} {createForm.certType}s</td>
                 </tr>
                 <tr>
-                  <td style={{ padding: '8px 0', borderBottom: '1px solid #eee', color: '#666' }}>Limit Price</td>
-                  <td style={{ padding: '8px 0', borderBottom: '1px solid #eee', fontWeight: 'bold', textAlign: 'right' }}>₹{fmtNumber(createForm.price)}</td>
+                  <td style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', color: 'var(--slate-500)' }}>Limit Price</td>
+                  <td style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', fontWeight: 'bold', textAlign: 'right' }}>₹{fmtNumber(createForm.price)}</td>
                 </tr>
-                <tr style={{ background: '#f5f7f9' }}>
-                  <td style={{ padding: '12px 10px', color: '#333', fontWeight: 'bold' }}>Total Capital Obligation</td>
-                  <td style={{ padding: '12px 10px', fontWeight: 'bold', textAlign: 'right', fontSize: 18, color: '#2c3e50' }}>
+                <tr style={{ background: 'var(--slate-50)' }}>
+                  <td style={{ padding: '12px 10px', color: 'var(--slate-700)', fontWeight: 'bold' }}>Total Capital Obligation</td>
+                  <td style={{ padding: '12px 10px', fontWeight: 'bold', textAlign: 'right', fontSize: 18, color: 'var(--on-blue)' }}>
                     ₹{fmtNumber(createForm.qty * createForm.price)}
                   </td>
                 </tr>

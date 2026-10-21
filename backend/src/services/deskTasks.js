@@ -19,8 +19,8 @@ export const ROOT_CAUSE_TASKS = {
   TARIFF_RATE_ERROR: { desk: 'CONTRACT_COMPLIANCE', task_type: 'TARIFF_REVIEW', label: 'Review the tariff on record' },
 };
 export const DESK_ROLES = {
-  ENERGY_DATA: ['REIA_USER', 'REIA_ADMIN'],
-  CONTRACT_COMPLIANCE: ['REIA_ADMIN', 'SJVN_ADMIN'],
+  ENERGY_DATA: ['REIA_MAKER', 'REIA_CHECKER'],
+  CONTRACT_COMPLIANCE: ['REIA_CHECKER', 'SJVN_ADMIN'],
 };
 
 /** Raise the root-cause task for a dispute SJVN accepted; null when none applies. */

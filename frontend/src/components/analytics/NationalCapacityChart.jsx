@@ -116,7 +116,7 @@ const NationalCapacityChart = () => {
               label={{ value: 'Nuclear', angle: 90, position: 'insideRight', fill: '#9CA3AF', dy: -20 }}
             />
             
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F3F4F6' }} />
+            <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(148, 163, 184, 0.18)' }} />
             
             <Legend 
               verticalAlign="bottom" 

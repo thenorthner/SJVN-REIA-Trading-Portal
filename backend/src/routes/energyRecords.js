@@ -20,6 +20,7 @@ import { requireAuth, ROLE_GROUPS, counterpartySide } from '../middleware/auth.j
 import { newId, pushNotification, billableCapacityMw } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import { contractVisibleTo, PRESENTED_STATUSES } from '../services/counterpartyScope.js';
+import { contractVerticalSql, parseVertical } from '../services/verticals.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -66,7 +67,7 @@ function recordFor(user, id) {
 }
 
 /** The contracts whose energy the caller may see. */
-function contractsFor(user, contractId) {
+function contractsFor(user, contractId, vertical) {
   const side = sideOf(user);
   if (!side) throw fail(403, 'Access denied');
   let sql = 'SELECT * FROM contracts WHERE 1 = 1';
@@ -78,6 +79,7 @@ function contractsFor(user, contractId) {
     params.push(user.linked_entity_id);
   }
   if (contractId) { sql += ' AND id = ?'; params.push(contractId); }
+  if (vertical) { sql += ` AND ${contractVerticalSql(vertical, 'contracts')}`; }
   return { side, contracts: db.prepare(sql).all(...params) };
 }
 
@@ -119,9 +121,14 @@ export function announceValidated(row) {
   if (contract) notifyCounterparty(contract, `${contract.contract_no}: energy for ${row.period_month} (${row.energy_mwh} MWh) is ready for your confirmation under Energy Data.`);
 }
 
-// GET /analytics?contract_id=&months=24 — month on month, with the numbers that sum it up.
+// GET /analytics?contract_id=&months=24&vertical=REIA — month on month, with the numbers that sum it up.
 router.get('/analytics', (req, res) => send(res, () => {
-  const { side, contracts } = contractsFor(req.user, req.query.contract_id);
+  let verticalFilter;
+  try { verticalFilter = parseVertical(req.query.vertical); } catch (e) { throw fail(400, e.message); }
+  if (!verticalFilter && req.query.vertical === undefined && !counterpartySide(req.user)) {
+    verticalFilter = 'REIA';
+  }
+  const { side, contracts } = contractsFor(req.user, req.query.contract_id, verticalFilter);
   const months = Math.min(Math.max(Number(req.query.months) || 24, 1), 120);
   // When aggregating across all contracts, do not double-count back-to-back PSAs
   // whose energy is already accounted for in the parent PPA.

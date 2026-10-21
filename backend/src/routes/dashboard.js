@@ -1,5 +1,6 @@
 import { licenceCompliance } from '../services/cercLicence.js';
 import { Router } from 'express';
+import { contractVerticalSql, contractIdInVerticalSql } from '../services/verticals.js';
 import db from '../db/index.js';
 import { observedDays, latestObservedDate } from '../services/marketPrices.js';
 import {
@@ -22,50 +23,53 @@ const EXECUTIVE_ROLES = ROLE_GROUPS.EXECUTIVE;
 
 // M. REIA dashboards
 router.get('/reia', (req, res) => {
-  const activeContracts = db.prepare(`SELECT COUNT(*) c FROM contracts WHERE status = 'ACTIVE'`).get().c;
+  // REIA's own book: Hydro and Thermal contracts are billed on their desks.
+  const VC = contractVerticalSql('REIA', 'c');
+  const VI = contractIdInVerticalSql('REIA', 'i.contract_id');
+  const activeContracts = db.prepare(`SELECT COUNT(*) c FROM contracts c WHERE c.status = 'ACTIVE' AND ${VC}`).get().c;
   // Generation / source capacity (excluding child PSAs allocated from PPAs to prevent 2x double counting)
   const contractedCapacity = db.prepare(`
-    SELECT COALESCE(SUM(capacity_mw),0) s FROM contracts
-    WHERE status = 'ACTIVE' AND (contract_type = 'PPA' OR id NOT IN (SELECT psa_id FROM contract_allocations))
+    SELECT COALESCE(SUM(c.capacity_mw),0) s FROM contracts c
+    WHERE c.status = 'ACTIVE' AND ${VC} AND (c.contract_type = 'PPA' OR c.id NOT IN (SELECT psa_id FROM contract_allocations))
   `).get().s;
   const energySupplied = db.prepare(`
     SELECT COALESCE(SUM(e.energy_mwh),0) s FROM energy_data e
     JOIN contracts c ON c.id = e.contract_id
-    WHERE (c.contract_type = 'PPA' OR c.id NOT IN (SELECT psa_id FROM contract_allocations))
+    WHERE ${VC} AND (c.contract_type = 'PPA' OR c.id NOT IN (SELECT psa_id FROM contract_allocations))
   `).get().s;
   // Billed energy: volume supplied to buyers
   const billedEnergy = db.prepare(`
     SELECT COALESCE(SUM(i.energy_mwh),0) s FROM invoices i
-    WHERE i.direction = 'SJVN_TO_BUYER' AND i.status != 'CANCELLED'
+    WHERE i.direction = 'SJVN_TO_BUYER' AND i.status != 'CANCELLED' AND ${VI}
   `).get().s;
-  const pendingApprovals = db.prepare(`SELECT COUNT(*) c FROM invoices WHERE status = 'UNDER_APPROVAL'`).get().c;
-  const pendingDisputes = db.prepare(`SELECT COUNT(*) c FROM disputes WHERE status IN (${OPEN_STATUSES.map(() => '?').join(',')})`).get(...OPEN_STATUSES).c;
-  const reconciliationExceptions = db.prepare(`SELECT COUNT(*) c FROM reconciliations WHERE status IN ('NEEDS_REVIEW','DISPUTED','REOPENED')`).get().c;
+  const pendingApprovals = db.prepare(`SELECT COUNT(*) c FROM invoices i WHERE i.status = 'UNDER_APPROVAL' AND ${VI}`).get().c;
+  const pendingDisputes = db.prepare(`SELECT COUNT(*) c FROM disputes d WHERE d.status IN (${OPEN_STATUSES.map(() => '?').join(',')}) AND d.invoice_id IN (SELECT i.id FROM invoices i WHERE ${VI})`).get(...OPEN_STATUSES).c;
+  const reconciliationExceptions = db.prepare(`SELECT COUNT(*) c FROM reconciliations r WHERE r.status IN ('NEEDS_REVIEW','DISPUTED','REOPENED') AND (r.contract_id IS NULL OR ${contractIdInVerticalSql('REIA', 'r.contract_id')})`).get().c;
 
-  const totalInvoices = db.prepare(`SELECT COUNT(*) c, COALESCE(SUM(total_amount),0) s FROM invoices WHERE status != 'CANCELLED'`).get();
-  const receivables = receivablesOutstanding();
-  const payables = payablesOutstanding();
+  const totalInvoices = db.prepare(`SELECT COUNT(*) c, COALESCE(SUM(i.total_amount),0) s FROM invoices i WHERE i.status != 'CANCELLED' AND ${VI}`).get();
+  const receivables = receivablesOutstanding('REIA');
+  const payables = payablesOutstanding('REIA');
   const paymentsReceived = db.prepare(`
     SELECT COALESCE(SUM(p.amount),0) s FROM payments p
-    JOIN invoices i ON i.id = p.invoice_id WHERE i.direction = 'SJVN_TO_BUYER'
+    JOIN invoices i ON i.id = p.invoice_id WHERE i.direction = 'SJVN_TO_BUYER' AND ${VI}
   `).get().s;
   const paymentsDisbursed = db.prepare(`
     SELECT COALESCE(SUM(p.amount),0) s FROM payments p
-    JOIN invoices i ON i.id = p.invoice_id WHERE i.direction = 'SELLER_TO_SJVN'
+    JOIN invoices i ON i.id = p.invoice_id WHERE i.direction = 'SELLER_TO_SJVN' AND ${VI}
   `).get().s;
-  const overdue = overdueCount();
+  const overdue = overdueCount('REIA');
 
-  const byStatus = db.prepare(`SELECT status, COUNT(*) c FROM invoices WHERE status != 'CANCELLED' GROUP BY status`).all();
+  const byStatus = db.prepare(`SELECT i.status, COUNT(*) c FROM invoices i WHERE i.status != 'CANCELLED' AND ${VI} GROUP BY i.status`).all();
   const byProjectType = db.prepare(`
     SELECT c.project_type, COUNT(*) contracts, COALESCE(SUM(c.capacity_mw),0) capacity
-    FROM contracts c WHERE c.status = 'ACTIVE' AND (c.contract_type = 'PPA' OR c.id NOT IN (SELECT psa_id FROM contract_allocations))
+    FROM contracts c WHERE c.status = 'ACTIVE' AND ${VC} AND (c.contract_type = 'PPA' OR c.id NOT IN (SELECT psa_id FROM contract_allocations))
     GROUP BY c.project_type
   `).all();
   const monthlyBilling = db.prepare(`
     SELECT billing_period,
            COALESCE(SUM(CASE WHEN direction = 'SJVN_TO_BUYER' THEN total_amount ELSE 0 END),0) total,
            COALESCE(SUM(CASE WHEN direction = 'SJVN_TO_BUYER' THEN energy_mwh ELSE 0 END),0) energy
-    FROM invoices WHERE status != 'CANCELLED' GROUP BY billing_period ORDER BY billing_period
+    FROM invoices i WHERE status != 'CANCELLED' AND ${VI} GROUP BY billing_period ORDER BY billing_period
   `).all();
 
   const expiringSecurities = db.prepare(`
@@ -80,7 +84,9 @@ router.get('/reia', (req, res) => {
   // paperwork is about to lapse. A screen about contracts and their parties that
   // could not say how many parties there were.
   const entityCounts = db.prepare(`
-    SELECT entity_type, status, COUNT(*) c FROM entities GROUP BY entity_type, status
+    SELECT entity_type, status, COUNT(*) c FROM entities
+    WHERE (',' || COALESCE(verticals, 'REIA') || ',') LIKE '%,REIA,%'
+    GROUP BY entity_type, status
   `).all();
   const countOf = (type, status) => entityCounts
     .filter((r) => r.entity_type === type && r.status === status)
@@ -97,12 +103,12 @@ router.get('/reia', (req, res) => {
   // Contract statuses. byStatus is invoice statuses, which on a contracts
   // dashboard was answering a question nobody asked of it.
   const contractsByStatus = db.prepare(`
-    SELECT status, COUNT(*) c FROM contracts GROUP BY status ORDER BY c DESC
+    SELECT c.status, COUNT(*) c FROM contracts c WHERE ${VC} GROUP BY c.status ORDER BY c DESC
   `).all();
 
   const contractsNearingExpiry = db.prepare(`
-    SELECT COUNT(*) c FROM contracts
-    WHERE tenure_end IS NOT NULL
+    SELECT COUNT(*) c FROM contracts c
+    WHERE ${VC} AND tenure_end IS NOT NULL
       AND date(tenure_end) BETWEEN date('now') AND date('now','+30 days')
       AND status NOT IN ('TERMINATED','CLOSED','EXPIRED')
   `).get().c;
@@ -127,18 +133,18 @@ router.get('/reia', (req, res) => {
   // and how old that money is. All on the same outstanding formula as the KPIs
   // above, so the cards and the ageing table cannot disagree.
   const lps = {
-    receivable: lpsPosition('SJVN_TO_BUYER'),
-    payable: lpsPosition('SELLER_TO_SJVN'),
+    receivable: lpsPosition('SJVN_TO_BUYER', 'REIA'),
+    payable: lpsPosition('SELLER_TO_SJVN', 'REIA'),
   };
 
   const pendingSplit = {
-    buyer: openPosition('SJVN_TO_BUYER'),
-    developer: openPosition('SELLER_TO_SJVN'),
+    buyer: openPosition('SJVN_TO_BUYER', 'REIA'),
+    developer: openPosition('SELLER_TO_SJVN', 'REIA'),
   };
 
   const ageing = {
-    receivable: ageingBuckets('SJVN_TO_BUYER'),
-    payable: ageingBuckets('SELLER_TO_SJVN'),
+    receivable: ageingBuckets('SJVN_TO_BUYER', 'REIA'),
+    payable: ageingBuckets('SELLER_TO_SJVN', 'REIA'),
   };
 
   // Where the CERC trading-margin return stands. The filing register already

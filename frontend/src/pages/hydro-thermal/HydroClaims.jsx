@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import api from '../../api/client.js';
 import { writeRolesFor, pathFor, deskLabel } from '../../lib/stationVertical.js';
 import { useAuth } from '../../context/AuthContext.jsx';
@@ -329,7 +330,7 @@ export default function HydroClaims({ vertical = 'HYDRO' }) {
               />
             </Field>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button type="submit" className="btn btn-primary" disabled={busy}>Record it</button>
+              <WriteOnly><button type="submit" className="btn btn-primary" disabled={busy}>Record it</button></WriteOnly>
               <button type="button" className="btn" onClick={() => setChargeForm(null)}>Cancel</button>
             </div>
           </form>
@@ -341,7 +342,7 @@ export default function HydroClaims({ vertical = 'HYDRO' }) {
           <form onSubmit={doClaim}>
             <div style={{
               padding: '10px 12px', marginBottom: 12, borderRadius: 4,
-              background: 'var(--bg-subtle, #f7fafc)', fontVariantNumeric: 'tabular-nums',
+              background: 'var(--bg-subtle, var(--slate-50))', fontVariantNumeric: 'tabular-nums',
             }}>
               {chosen.length
                 ? `${chosen.length} entry(ies) ticked`
@@ -374,9 +375,9 @@ export default function HydroClaims({ vertical = 'HYDRO' }) {
               />
             </Field>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button type="submit" className="btn btn-primary" disabled={busy || !claimRows.length}>
+              <WriteOnly><button type="submit" className="btn btn-primary" disabled={busy || !claimRows.length}>
                 Raise the claim bill
-              </button>
+              </button></WriteOnly>
               <button type="button" className="btn" onClick={() => setClaimForm(null)}>Cancel</button>
             </div>
           </form>
@@ -435,7 +436,7 @@ export default function HydroClaims({ vertical = 'HYDRO' }) {
             {tcsPreview && (
               <div style={{
                 padding: '10px 12px', marginBottom: 12, borderRadius: 4,
-                background: 'var(--bg-subtle, #f7fafc)', fontVariantNumeric: 'tabular-nums',
+                background: 'var(--bg-subtle, var(--slate-50))', fontVariantNumeric: 'tabular-nums',
               }}>
                 {tcsPreview.ok ? (
                   <>
@@ -455,9 +456,9 @@ export default function HydroClaims({ vertical = 'HYDRO' }) {
               />
             </Field>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button type="submit" className="btn btn-primary" disabled={busy || !tcsPreview?.ok}>
+              <WriteOnly><button type="submit" className="btn btn-primary" disabled={busy || !tcsPreview?.ok}>
                 Raise the TCS bill
-              </button>
+              </button></WriteOnly>
               <button type="button" className="btn" onClick={() => { setTcsForm(null); setTcsPreview(null); }}>
                 Cancel
               </button>

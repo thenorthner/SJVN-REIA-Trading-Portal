@@ -47,19 +47,19 @@ export function ExtractedChecks({ extracted }) {
   if (!extracted) return null;
   if (!extracted.readable && !extracted.checks?.length) {
     return (
-      <div style={{ fontSize: 13.5, color: 'var(--slate-500)', background: 'var(--slate-50, #f8fafc)', padding: '8px 10px', borderRadius: 6 }}>
+      <div style={{ fontSize: 13.5, color: 'var(--slate-500)', background: 'var(--slate-50, var(--slate-50))', padding: '8px 10px', borderRadius: 6 }}>
         No text could be read from this file (a scan or a picture), so its PAN / GSTIN was not checked automatically. Check it by eye.
       </div>
     );
   }
   const found = [...(extracted.pan || []).map((v) => `PAN ${v}`), ...(extracted.gstin || []).map((v) => `GSTIN ${v}`)];
   return (
-    <div style={{ fontSize: 13.5, background: 'var(--slate-50, #f8fafc)', padding: '8px 10px', borderRadius: 6 }}>
+    <div style={{ fontSize: 13.5, background: 'var(--slate-50, var(--slate-50))', padding: '8px 10px', borderRadius: 6 }}>
       <div style={{ color: 'var(--slate-600)' }}>
         Read from the file: {found.length ? found.join(' · ') : 'no PAN or GSTIN found'}
       </div>
       {(extracted.checks || []).map((c, i) => (
-        <div key={i} style={{ marginTop: 4, fontWeight: 600, color: c.ok ? '#15803d' : '#b91c1c' }}>
+        <div key={i} style={{ marginTop: 4, fontWeight: 600, color: c.ok ? 'var(--on-green-2)' : 'var(--red-deep)' }}>
           {c.ok ? '✓' : '✗'} {c.text}
         </div>
       ))}
@@ -253,7 +253,7 @@ function ExcelViewer({ blob, fileName }) {
 
   if (parseError) {
     return (
-      <div style={{ padding: 24, color: 'var(--red-deep)', background: 'var(--red-bg, #fef2f2)', borderRadius: 8 }}>
+      <div style={{ padding: 24, color: 'var(--red-deep)', background: 'var(--red-bg, var(--t-red-50))', borderRadius: 8 }}>
         <strong>Spreadsheet Preview Error:</strong> {parseError}
       </div>
     );
@@ -275,7 +275,7 @@ function ExcelViewer({ blob, fileName }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
       {/* Sheets switcher & Search toolbar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, background: 'var(--bg, #f8fafc)', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border, #e2e8f0)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, background: 'var(--bg, var(--slate-50))', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border, var(--slate-200))' }}>
         {/* Sheet Tabs */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, fontWeight: 700, textTransform: 'none', color: 'var(--text-light, #64748b)', marginRight: 4 }}>
@@ -291,8 +291,8 @@ function ExcelViewer({ blob, fileName }) {
                 fontSize: 13.5,
                 fontWeight: 600,
                 borderRadius: 6,
-                border: activeSheet === s ? '1px solid var(--primary, #0284c7)' : '1px solid var(--border, #cbd5e1)',
-                background: activeSheet === s ? 'var(--primary, #0284c7)' : 'var(--surface, #ffffff)',
+                border: activeSheet === s ? '1px solid var(--primary, #0284c7)' : '1px solid var(--border, var(--slate-300))',
+                background: activeSheet === s ? 'var(--primary, #0284c7)' : 'var(--surface, var(--surface))',
                 color: activeSheet === s ? '#ffffff' : 'var(--text, #1e293b)',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease'
@@ -314,8 +314,8 @@ function ExcelViewer({ blob, fileName }) {
               padding: '5px 10px',
               fontSize: 13.5,
               borderRadius: 6,
-              border: '1px solid var(--border, #cbd5e1)',
-              background: 'var(--surface, #ffffff)',
+              border: '1px solid var(--border, var(--slate-300))',
+              background: 'var(--surface, var(--surface))',
               color: 'var(--text, #1e293b)',
               width: 190
             }}
@@ -330,20 +330,20 @@ function ExcelViewer({ blob, fileName }) {
       <div style={{
         maxHeight: '62vh',
         overflow: 'auto',
-        border: '1px solid var(--border, #cbd5e1)',
+        border: '1px solid var(--border, var(--slate-300))',
         borderRadius: 8,
-        background: 'var(--surface, #ffffff)',
+        background: 'var(--surface, var(--surface))',
         boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.04)'
       }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, fontFamily: 'inherit' }}>
-          <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg, #f1f5f9)' }}>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg, var(--slate-100))' }}>
             <tr>
               <th style={{
                 width: 44,
                 padding: '6px 8px',
-                borderRight: '1px solid var(--border, #cbd5e1)',
-                borderBottom: '2px solid var(--border, #cbd5e1)',
-                background: 'var(--bg, #e2e8f0)',
+                borderRight: '1px solid var(--border, var(--slate-300))',
+                borderBottom: '2px solid var(--border, var(--slate-300))',
+                background: 'var(--bg, var(--slate-200))',
                 color: 'var(--text-light, #64748b)',
                 fontSize: 13,
                 textAlign: 'center',
@@ -357,9 +357,9 @@ function ExcelViewer({ blob, fileName }) {
               {Array.from({ length: maxCols }).map((_, colIdx) => (
                 <th key={colIdx} style={{
                   padding: '7px 12px',
-                  borderRight: '1px solid var(--border, #e2e8f0)',
-                  borderBottom: '2px solid var(--border, #cbd5e1)',
-                  background: 'var(--bg, #f1f5f9)',
+                  borderRight: '1px solid var(--border, var(--slate-200))',
+                  borderBottom: '2px solid var(--border, var(--slate-300))',
+                  background: 'var(--bg, var(--slate-100))',
                   color: 'var(--text, #1e293b)',
                   fontSize: 13,
                   fontWeight: 700,
@@ -381,15 +381,15 @@ function ExcelViewer({ blob, fileName }) {
                 <tr
                   key={rowIdx}
                   style={{
-                    background: rowIdx % 2 === 0 ? 'var(--surface, #ffffff)' : 'var(--bg-subtle, #f8fafc)',
+                    background: rowIdx % 2 === 0 ? 'var(--surface, var(--surface))' : 'var(--bg-subtle, var(--slate-50))',
                     transition: 'background 0.1s'
                   }}
                 >
                   <td style={{
                     padding: '5px 8px',
-                    borderRight: '1px solid var(--border, #cbd5e1)',
-                    borderBottom: '1px solid var(--border, #e2e8f0)',
-                    background: 'var(--bg, #f1f5f9)',
+                    borderRight: '1px solid var(--border, var(--slate-300))',
+                    borderBottom: '1px solid var(--border, var(--slate-200))',
+                    background: 'var(--bg, var(--slate-100))',
                     color: 'var(--text-light, #64748b)',
                     fontSize: 13,
                     textAlign: 'center',
@@ -408,8 +408,8 @@ function ExcelViewer({ blob, fileName }) {
                         key={colIdx}
                         style={{
                           padding: '6px 12px',
-                          borderRight: '1px solid var(--border, #e2e8f0)',
-                          borderBottom: '1px solid var(--border, #e2e8f0)',
+                          borderRight: '1px solid var(--border, var(--slate-200))',
+                          borderBottom: '1px solid var(--border, var(--slate-200))',
                           color: 'var(--text, #1e293b)',
                           textAlign: isNum ? 'right' : 'left',
                           whiteSpace: 'nowrap',
@@ -667,7 +667,7 @@ export function DocumentManager({ moduleName, entityId, contractId, category = n
                     <div style={{ maxWidth: 260, whiteSpace: 'normal', wordWrap: 'break-word' }}>
                       <DocStatus doc={doc} />
                       {doc.verification_status === 'REJECTED' && doc.verification_notes && (
-                        <div style={{ marginTop: 4, fontSize: 13.5, color: '#b91c1c', lineHeight: 1.35 }}>
+                        <div style={{ marginTop: 4, fontSize: 13.5, color: 'var(--red-deep)', lineHeight: 1.35 }}>
                           <strong>SJVN's remark:</strong> {doc.verification_notes}
                         </div>
                       )}
@@ -774,10 +774,10 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
   const { user } = useAuth();
   const [expiry, setExpiry] = useState('');
   // Segregation of duties: general internal users (Finance / Trading) are reviewers,
-  // but SJVN_ADMIN / REIA_USER / REIA_ADMIN / IT_SUPER_ADMIN are fully empowered
+  // but SJVN_ADMIN / REIA_MAKER / REIA_CHECKER / IT_SUPER_ADMIN are fully empowered
   // to onboard stakeholders directly and upload their regulatory verification documents.
   const isInternal = !isOutsideRole(user?.role);
-  const canAdminDirectUpload = ['SJVN_ADMIN', 'REIA_USER', 'REIA_ADMIN', 'IT_SUPER_ADMIN'].includes(user?.role);
+  const canAdminDirectUpload = ['SJVN_ADMIN', 'REIA_MAKER', 'REIA_CHECKER', 'IT_SUPER_ADMIN'].includes(user?.role);
   const filterTypes = (list) => (isInternal && !canAdminDirectUpload ? list.filter((t) => t.category !== 'VERIFY') : list);
 
   const fallbackTypes = filterTypes(DOCUMENT_TAXONOMY[moduleName] || [{ value: 'OTHER', label: 'Other Document', category: 'RECORD', reason: '' }]);
@@ -786,6 +786,45 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
   const [docType, setDocType] = useState(presetDocType || fallbackTypes[0]?.value || 'OTHER');
   const [title, setTitle] = useState(presetTitle);
   const [uploading, setUploading] = useState(false);
+  const [showAddDocType, setShowAddDocType] = useState(false);
+  const [newTypeLabel, setNewTypeLabel] = useState('');
+  const [newTypeCategory, setNewTypeCategory] = useState('VERIFY');
+  const [newTypeSaving, setNewTypeSaving] = useState(false);
+
+  async function handleCreateNewDocType(e) {
+    if (e) e.preventDefault();
+    const cleanLabel = newTypeLabel.trim();
+    if (!cleanLabel) return;
+    setNewTypeSaving(true);
+    try {
+      const code = cleanLabel.toUpperCase().replace(/[^A-Z0-9]+/g, '_').slice(0, 40);
+      const res = await api.masters.createDocumentType({
+        module_name: moduleName || 'GENERAL',
+        code,
+        label: cleanLabel,
+        category: newTypeCategory,
+        reason: 'Added from Upload Document modal',
+        is_mandatory: false,
+      });
+      const newEntry = {
+        value: res.code || code,
+        label: res.label || cleanLabel,
+        category: res.category || newTypeCategory,
+        reason: res.reason || '',
+      };
+      setAvailableTypes((prev) => {
+        const exists = prev.some((t) => t.value === newEntry.value);
+        return exists ? prev : [newEntry, ...prev];
+      });
+      setDocType(newEntry.value);
+      setShowAddDocType(false);
+      setNewTypeLabel('');
+    } catch (err) {
+      alert(err.response?.data?.error || err.message || 'Failed to create document type');
+    } finally {
+      setNewTypeSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -910,18 +949,77 @@ export function UploadModal({ open, onClose, onSuccess, moduleName, entityId, co
         <Field label="Title">
           <input required placeholder="e.g., Q3 Payment Guarantee" value={title} onChange={(e) => setTitle(e.target.value)} />
         </Field>
-        <Field label="Document Type">
-          <select value={docType} onChange={e => setDocType(e.target.value)} disabled={presetLocked} style={presetLocked ? { backgroundColor: 'var(--slate-50)', color: 'var(--slate-700)' } : undefined}>
-            {availableTypes.map(t => (
+        <Field
+          label={
+            <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span>Document Type</span>
+              {!presetLocked && (
+                <button
+                  type="button"
+                  className="btn btn-xs btn-outline"
+                  style={{ padding: '1px 8px', fontSize: 11, fontWeight: 600 }}
+                  onClick={() => setShowAddDocType((prev) => !prev)}
+                >
+                  {showAddDocType ? 'Cancel New Type' : '+ Add New Type'}
+                </button>
+              )}
+            </span>
+          }
+        >
+          <select
+            value={docType}
+            onChange={(e) => {
+              if (e.target.value === '__NEW__') {
+                setShowAddDocType(true);
+              } else {
+                setDocType(e.target.value);
+              }
+            }}
+            disabled={presetLocked}
+            style={presetLocked ? { backgroundColor: 'var(--slate-50)', color: 'var(--slate-700)' } : undefined}
+          >
+            {availableTypes.map((t) => (
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
+            {!presetLocked && <option value="__NEW__">+ Add New Document Type...</option>}
           </select>
+          {showAddDocType && (
+            <div style={{ marginTop: 8, padding: 12, background: 'var(--slate-50)', borderRadius: 6, border: '1px solid var(--slate-300)' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--slate-700)', marginBottom: 8 }}>
+                Add New Document Type to {moduleName} Master
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                <input
+                  style={{ flex: 2, minWidth: 160 }}
+                  placeholder="e.g. Tripartite Agreement"
+                  value={newTypeLabel}
+                  onChange={(e) => setNewTypeLabel(e.target.value)}
+                />
+                <select
+                  style={{ flex: 1, minWidth: 120 }}
+                  value={newTypeCategory}
+                  onChange={(e) => setNewTypeCategory(e.target.value)}
+                >
+                  <option value="VERIFY">VERIFY (Approval workflow)</option>
+                  <option value="RECORD">RECORD (Record only)</option>
+                </select>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  disabled={newTypeSaving || !newTypeLabel.trim()}
+                  onClick={handleCreateNewDocType}
+                >
+                  {newTypeSaving ? 'Saving...' : 'Save & Select'}
+                </button>
+              </div>
+            </div>
+          )}
           {presetLocked && (
             <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
               Linked to this regulatory approval — type is fixed.
             </div>
           )}
-          {activeDef.reason && (
+          {activeDef?.reason && !showAddDocType && (
             <div style={{ fontSize: 13, color: 'var(--slate-500)', marginTop: 4 }}>
               <i>Why is this needed?</i> {activeDef.reason}
             </div>
@@ -997,7 +1095,7 @@ export function ReviewModal({ open, doc, onClose, onSuccess }) {
   return (
     <Modal open={open} onClose={onClose} title="Review Document" width={740}>
       {actionError && (
-        <div style={{ padding: '9px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#b91c1c', fontSize: 13, marginBottom: 16 }}>
+        <div style={{ padding: '9px 14px', background: 'var(--t-red-50)', border: '1px solid var(--t-red-line)', borderRadius: 8, color: 'var(--red-deep)', fontSize: 13, marginBottom: 16 }}>
           ⚠️ {actionError}
         </div>
       )}
@@ -1098,7 +1196,7 @@ function HistoryModal({ doc, onClose }) {
                   <td style={{ maxWidth: 240 }}>
                     <DocStatus doc={v} />
                     {v.verification_notes && (
-                      <div style={{ marginTop: 4, fontSize: 13.5, color: '#b91c1c' }}>{v.verification_notes}</div>
+                      <div style={{ marginTop: 4, fontSize: 13.5, color: 'var(--red-deep)' }}>{v.verification_notes}</div>
                     )}
                   </td>
                   <td>

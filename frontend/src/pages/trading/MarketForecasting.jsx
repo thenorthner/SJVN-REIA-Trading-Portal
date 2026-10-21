@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import {
   ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
@@ -660,7 +661,7 @@ export default function MarketForecasting() {
               <button type="button" className="btn btn-primary btn-sm" disabled={busy || !series?.days} onClick={generate}>
                 {busy ? 'Forecasting…' : 'Make forecast'}
               </button>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setUploadOpen(true)}>Load price file</button>
+              <WriteOnly><button type="button" className="btn btn-secondary btn-sm" onClick={() => setUploadOpen(true)}>Load price file</button></WriteOnly>
             </>
           )}
         </div>

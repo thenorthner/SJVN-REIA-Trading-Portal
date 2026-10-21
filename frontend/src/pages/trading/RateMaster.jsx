@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import WriteOnly from '../../components/WriteOnly.jsx';
 import { api } from '../../api/client.js';
 import { PageHeader, Card, Table, Badge, Modal, Field, fmtNumber } from '../../components/ui.jsx';
 
@@ -91,8 +92,8 @@ export default function RateMaster() {
         subtitle="Effective-dated ISTS, STU, RLDC/SLDC and NOAR charges used to price open-access applications"
         actions={(
           <>
-            <button className="btn btn-secondary" onClick={() => setShowRevise(true)}>Revise a rate</button>
-            <button className="btn btn-primary" onClick={() => setShowNew(true)}>+ New charge</button>
+            <WriteOnly><button className="btn btn-secondary" onClick={() => setShowRevise(true)}>Revise a rate</button></WriteOnly>
+            <WriteOnly><button className="btn btn-primary" onClick={() => setShowNew(true)}>+ New charge</button></WriteOnly>
           </>
         )}
       />

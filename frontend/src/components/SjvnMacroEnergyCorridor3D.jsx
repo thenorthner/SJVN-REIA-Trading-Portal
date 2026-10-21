@@ -187,7 +187,7 @@ export default function SjvnMacroEnergyCorridor3D({
             <div style={{ fontSize: 20, fontWeight: 700, color: '#38bdf8', fontVariantNumeric: 'tabular-nums' }}>
               {fmtNumber(totalCapacityMw, 0)} <span style={{ fontSize: 13, fontWeight: 500 }}>MW</span>
             </div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 3 }}>
               {filteredStations.length} station{filteredStations.length === 1 ? '' : 's'} on record
             </div>
           </div>
@@ -223,7 +223,7 @@ export default function SjvnMacroEnergyCorridor3D({
             <div style={{ fontSize: 20, fontWeight: 700, color: '#c084fc', fontVariantNumeric: 'tabular-nums' }}>
               {fmtNumber(totalGenMu, 1)} <span style={{ fontSize: 13, fontWeight: 500 }}>MU</span>
             </div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 3 }}>
               Latest billed month · Hydro: {fmtNumber(muOf('HYDRO'), 1)} MU{mwOf('THERMAL') > 0 ? ` | Thermal: ${fmtNumber(muOf('THERMAL'), 1)} MU` : ''}
             </div>
           </div>
@@ -234,7 +234,7 @@ export default function SjvnMacroEnergyCorridor3D({
           onClick={() => setActiveStage(activeStage === 3 ? null : 3)}
           style={{
             background: 'linear-gradient(180deg, rgba(17, 24, 39, 0.8) 0%, rgba(10, 15, 26, 0.95) 100%)',
-            border: `1.5px solid ${activeStage === 3 ? '#fbbf24' : 'rgba(251, 191, 36, 0.3)'}`,
+            border: `1.5px solid ${activeStage === 3 ? 'var(--t-amber-100)' : 'rgba(251, 191, 36, 0.3)'}`,
             borderRadius: 12,
             padding: '16px 18px',
             position: 'relative',
@@ -259,7 +259,7 @@ export default function SjvnMacroEnergyCorridor3D({
             <div style={{ fontSize: 20, fontWeight: 800, color: '#fbbf24', fontVariantNumeric: 'tabular-nums' }}>
               ₹{fmtNumber(totalBillingCr, 1)} <span style={{ fontSize: 13, fontWeight: 500 }}>Cr</span>
             </div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+            <div style={{ fontSize: 12, color: 'var(--slate-500)', marginTop: 3 }}>
               Latest billed month · {kpis?.beneficiariesCount ?? 0} beneficiaries
             </div>
           </div>
@@ -270,7 +270,7 @@ export default function SjvnMacroEnergyCorridor3D({
           onClick={() => setActiveStage(activeStage === 4 ? null : 4)}
           style={{
             background: 'linear-gradient(180deg, rgba(17, 24, 39, 0.8) 0%, rgba(10, 15, 26, 0.95) 100%)',
-            border: `1.5px solid ${activeStage === 4 ? '#4ade80' : 'rgba(74, 222, 128, 0.3)'}`,
+            border: `1.5px solid ${activeStage === 4 ? 'var(--t-green-100)' : 'rgba(74, 222, 128, 0.3)'}`,
             borderRadius: 12,
             padding: '16px 18px',
             position: 'relative',
