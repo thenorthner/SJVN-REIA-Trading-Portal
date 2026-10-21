@@ -419,9 +419,6 @@ html, body { scroll-padding-top: 12px; }
   object-position: center 48%;
   aspect-ratio: 16 / 9;
 }
-.gigw-hero-video {
-  aspect-ratio: 16 / 9;
-}
 .gigw-hero-panoramic-overlay {
   position: absolute;
   inset: 0;
@@ -2237,31 +2234,6 @@ html[data-contrast="high"] .gigw-skip { background: #ffff00; color: #000 !import
   background: #11141c;
   border-color: #2b3548;
   color: #94a3b8;
-}
-
-/* ---------- Ambient Hero Video & Picture Fallback ---------- */
-.gigw-hero-video-wrapper {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  z-index: 0;
-}
-
-.gigw-hero-video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center 48%;
-  opacity: 0.95;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .gigw-hero-video {
-    display: none !important;
-  }
 }
 
 /* ---------- Interactive GIS India Asset Map ---------- */

@@ -230,18 +230,19 @@ async function testHomepage() {
   const heroH1 = await page.textContent('.gigw-panoramic-h1');
   assert(heroH1.includes('SJVN Integrated') && heroH1.includes('REIA'), 'Hero H1 displays Integrated Energy & REIA branding');
 
-  // Video Background and Fallback Tests
+  // Static Crisp Background Picture Test (Simple, clean, zero motion)
+  const heroPicture = await page.$('.gigw-hero-panoramic-picture');
+  assert(heroPicture !== null, 'Crisp static panoramic picture element present');
+  const heroImg = await page.$('img.gigw-hero-panoramic-img');
+  assert(heroImg !== null, 'Crisp static panoramic dam image rendered');
   const heroVideo = await page.$('video.gigw-hero-video');
-  assert(heroVideo !== null, 'Ambient video background element rendered in hero');
-  const videoSrc = await page.$eval('video.gigw-hero-video source', (el) => el.getAttribute('src'));
-  assert(videoSrc === '/images/sjvn-hero-panoramic.mp4', 'Hero video source points to /images/sjvn-hero-panoramic.mp4', videoSrc);
+  assert(heroVideo === null, 'Moving video background removed for clean, simple, static hero');
 
   const heroBgFallback = await page.$('.gigw-hero-panoramic-bg');
-  assert(heroBgFallback !== null, 'Crisp AVIF/PNG static background fallback element present');
+  assert(heroBgFallback !== null, 'Crisp AVIF/PNG background layer present');
 
-  // Verify clean Hero video background (no clunky motion button obstructing view)
   const videoToggleBtn = await page.$('.gigw-hero-video-toggle');
-  assert(videoToggleBtn === null, 'Clunky video motion play/pause toggle button cleanly removed');
+  assert(videoToggleBtn === null, 'Clunky video motion play/pause toggle button absent');
 
   const ctaBtn = await page.$('.btn-access-portal');
   assert(ctaBtn !== null, 'Hero CTA [Access Portal →] exists');

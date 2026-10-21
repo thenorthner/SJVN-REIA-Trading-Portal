@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Sun, LineChart, Droplets, Factory, ShieldCheck, Zap, 
@@ -38,8 +38,8 @@ const HERO_STATS = [
     colorClass: 'metric-icon-green'
   },
   { 
-    value: '2', 
-    label: 'Power Exchanges Integrated (IEX, PXIL)', 
+    value: '3', 
+    label: 'Synchronized Exchanges (IEX, PXIL, HPX)', 
     icon: BarChart3,
     colorClass: 'metric-icon-purple'
   },
@@ -129,15 +129,11 @@ export default function PublicHome() {
   const { t, lang } = useGigw();
   const { user } = useAuth() || {};
   const [assetViewMode, setAssetViewMode] = useState('MAP'); // 'MAP' | 'CARDS'
-  const videoRef = useRef(null);
 
   useEffect(() => {
     const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReducedMotion) {
       document.querySelectorAll('.reveal-fade-up').forEach((el) => el.classList.add('is-revealed'));
-      if (videoRef.current) {
-        videoRef.current.pause();
-      }
       return;
     }
 
@@ -162,43 +158,28 @@ export default function PublicHome() {
   return (
     <PublicShell>
       <OfflineBanner />
-      {/* Panoramic Hydroelectric Dam Hero Section with Ambient Motion & Fallback */}
+      {/* Panoramic Hydroelectric Dam Hero Section with Crisp Static Background */}
       <section className="gigw-hero-panoramic" aria-labelledby="panoramic-hero-title">
-        {/* Ambient video background loop with static AVIF/WebP/PNG fallback */}
-        <div className="gigw-hero-video-wrapper" aria-hidden="true">
-          <video
-            ref={videoRef}
-            className="gigw-hero-video"
-            autoPlay
-            loop
-            muted
-            playsInline
+        {/* Crisp static panoramic dam picture (AVIF / WebP / PNG fallback) */}
+        <picture className="gigw-hero-panoramic-picture" aria-hidden="true">
+          <source srcSet="/images/sjvn-hero-panoramic.avif" type="image/avif" />
+          <source srcSet="/images/sjvn-hero-panoramic.webp" type="image/webp" />
+          <img
+            src="/images/sjvn-hero-panoramic.png"
+            alt="Panoramic aerial view of SJVN Nathpa Jhakri Dam Spillway and Hydro Power Station"
+            className="gigw-hero-panoramic-img"
             width="1920"
             height="1080"
-            poster="/images/sjvn-hero-panoramic.avif"
-          >
-            <source src="/images/sjvn-hero-panoramic.mp4" type="video/mp4" />
-          </video>
-          <picture className="gigw-hero-panoramic-picture">
-            <source srcSet="/images/sjvn-hero-panoramic.avif" type="image/avif" />
-            <source srcSet="/images/sjvn-hero-panoramic.webp" type="image/webp" />
-            <img
-              src="/images/sjvn-hero-panoramic.png"
-              alt="Panoramic aerial view of SJVN Nathpa Jhakri Dam Spillway and Hydro Power Station"
-              className="gigw-hero-panoramic-img"
-              width="1920"
-              height="1080"
-              fetchpriority="high"
-              decoding="async"
-            />
-          </picture>
-          <div className="gigw-hero-panoramic-bg" aria-hidden="true" />
-        </div>
+            fetchpriority="high"
+            decoding="async"
+          />
+        </picture>
+        <div className="gigw-hero-panoramic-bg" aria-hidden="true" />
 
         <div className="gigw-hero-panoramic-overlay" aria-hidden="true" />
         
         {/* Hero Top Content Row */}
-        <div className="gigw-hero-panoramic-content reveal-fade-up is-revealed">
+        <div className="gigw-hero-panoramic-content">
           <div className="gigw-hero-left">
             <div className="gigw-hero-tagline">
               <span className="gigw-tagline-bar" aria-hidden="true" />
@@ -441,6 +422,24 @@ export default function PublicHome() {
               </div>
             );
           })}
+        </div>
+
+        {/* Public Bulletin & Regulatory Transparency Bar */}
+        <div className="gigw-public-bulletin-bar">
+          <div className="bulletin-left">
+            <span className="bulletin-tag">
+              <Bell size={13} />
+              <span>{lang === 'hi' ? 'ताज़ा सूचना' : 'LATEST DISCLOSURE'}</span>
+            </span>
+            <span className="bulletin-text">
+              {lang === 'hi' 
+                ? 'REIA 1200 MW ISTS सौर ऊर्जा निविदा (Tranche-I) शुद्धिपत्र एवं मासिक CERC Form-IV नियामक विवरणिका उपलब्ध।'
+                : 'REIA 1,200 MW ISTS Solar Bidding (Tranche-I) Corrigendum & Monthly CERC Form-IV Trading Disclosures published.'}
+            </span>
+          </div>
+          <Link to="/disclaimer" className="bulletin-link">
+            <span>{lang === 'hi' ? 'सभी सार्वजनिक सूचनाएँ देखें →' : 'View Public Circulars →'}</span>
+          </Link>
         </div>
 
         {/* 4 Compliance & Trust Pillars */}
