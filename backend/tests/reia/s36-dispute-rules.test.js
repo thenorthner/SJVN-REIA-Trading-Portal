@@ -11,7 +11,7 @@ import { addDaysIso } from '../../src/disputesConstants.js';
 // up: where a bill goes back to when its dispute closes, whose dispute a bill's
 // can be, and who may move one on.
 
-let reia, finance, management, sellerCo, buyerCo, contract, seller, buyer;
+let reia, checker, finance, management, sellerCo, buyerCo, contract, seller, buyer;
 
 const get = (path, who) => request(app).get(path).set(auth(who));
 const post = (path, who, body = {}) => request(app).post(path).set(auth(who)).send(body);
@@ -20,11 +20,13 @@ const pay = (inv, amount) => db.prepare(`INSERT INTO payments (id, invoice_id, a
 const raise = (inv, who = reia, over = {}) => post('/api/disputes', who, {
   invoice_id: inv.id, reason_code: 'ENERGY_DATA_MISMATCH', charge_line: 'energy_charges', disputed_amount: 50000, issue_description: 'metering gap', ...over,
 });
-const resolve = (dispute, body) => post(`/api/disputes/${dispute.id}/resolve`, reia, { resolution_notes: 'checked against the REA', ...body });
+// Phase B.2: the checker runs a dispute and the REIA approver decides it.
+const resolve = (dispute, body, who = tokenFor('REIA_APPROVER')) => post(`/api/disputes/${dispute.id}/resolve`, who, { resolution_notes: 'checked against the REA', ...body });
 
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
+  checker = tokenFor('REIA_CHECKER');
   finance = tokenFor('FINANCE_USER');
   management = tokenFor('MANAGEMENT');
   sellerCo = makeEntity('SELLER');
@@ -70,11 +72,12 @@ describe('Where a bill stands once its dispute is over', () => {
     const inv = bill('PARTIALLY_PAID');
     pay(inv, 350000);
     const d = await raise(inv);
-    await resolve(d.body, { outcome: 'FULL_CREDIT' });
+    const approver = tokenFor('REIA_APPROVER');
+    await resolve(d.body, { outcome: 'FULL_CREDIT' }, approver);
     // Still held while the credit note waits; settled once someone else approves it.
     expect(statusOf(inv).status).toBe('DISPUTED');
     const note = db.prepare('SELECT id FROM debit_credit_notes WHERE invoice_id = ?').get(inv.id);
-    expect((await post(`/api/notes/${note.id}/approve`, reia)).status, 'the resolver approved their own credit').toBe(403);
+    expect((await post(`/api/notes/${note.id}/approve`, approver)).status, 'the resolver approved their own credit').toBe(403);
     expect((await post(`/api/notes/${note.id}/approve`, finance)).status).toBe(200);
     expect(db.prepare('SELECT total_amount FROM invoices WHERE id = ?').get(inv.id).total_amount, 'the bill as issued was rewritten').toBe(400000);
     expect(statusOf(inv).status).toBe('PAID');
@@ -148,12 +151,12 @@ describe('Who may move a dispute on', () => {
     // ask for information or close one.
     expect((await move(finance, 'INFO_REQUESTED', 'x')).status).toBe(403);
     expect((await move(management, 'UNDER_REVIEW')).status).toBe(403);
-    expect((await move(reia, 'UNDER_REVIEW')).status).toBe(200);
-    expect((await move(reia, 'INFO_REQUESTED', 'please send the JMR')).status).toBe(200);
+    expect((await move(checker, 'UNDER_REVIEW')).status).toBe(200);
+    expect((await move(checker, 'INFO_REQUESTED', 'please send the JMR')).status).toBe(200);
   });
 
   it('lets the submitter answer a request for information, and nothing else', async () => {
-    await move(reia, 'INFO_REQUESTED', 'please send the JMR');
+    await move(checker, 'INFO_REQUESTED', 'please send the JMR');
     expect((await move(seller, 'UNDER_REVIEW')).status, 'the other party moved it').toBe(403);
     expect((await move(buyer, 'ESCALATED')).status).toBe(403);
     expect((await move(buyer, 'UNDER_REVIEW')).status).toBe(200);
@@ -165,11 +168,11 @@ describe('Who may move a dispute on', () => {
     expect((await move(buyer, 'CLOSED')).status).toBe(403);
     expect((await move(finance, 'CLOSED')).status).toBe(403);
     // Not before the party has had its chance to accept or contest.
-    const early = await move(reia, 'CLOSED');
+    const early = await move(checker, 'CLOSED');
     expect(early.status).toBe(400);
     expect(early.body.error).toMatch(/15 days to accept or contest/);
     db.prepare(`UPDATE disputes SET resolved_at = datetime('now', '-16 days') WHERE id = ?`).run(dispute.id);
-    expect((await move(reia, 'CLOSED')).status).toBe(200);
+    expect((await move(checker, 'CLOSED')).status).toBe(200);
   });
 });
 

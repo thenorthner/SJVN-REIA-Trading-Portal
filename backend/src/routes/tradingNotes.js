@@ -33,8 +33,10 @@ import { secureLogAudit } from '../auditEngine.js';
 const router = Router();
 router.use(requireAuth);
 
-const READ = [...new Set([...ROLE_GROUPS.TRADING_ALL, ...ROLE_GROUPS.FINANCE, 'COMPLIANCE_AUDITOR'])];
-const WRITE = [...new Set([...ROLE_GROUPS.TRADING_WRITE, ...ROLE_GROUPS.FINANCE])];
+// Finance by name: the FINANCE group also holds the REIA maker (it records REIA
+// buyer payments), which put a REIA officer on the trading desk's notes (22-Oct-2026).
+const READ = [...new Set([...ROLE_GROUPS.TRADING_ALL, 'FINANCE_USER', 'COMPLIANCE_AUDITOR'])];
+const WRITE = [...new Set([...ROLE_GROUPS.TRADING_WRITE, 'FINANCE_USER'])];
 
 const REASONS = [
   'SCHEDULE_SHORTFALL_PURCHASE',

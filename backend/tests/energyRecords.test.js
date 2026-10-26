@@ -10,7 +10,7 @@ import { auth, makeUser, makeEntity, makeContract, makeInvoice, auditFor } from 
 // the 15-minute blocks, and the answer — accept or object — that stands on
 // record before the period is billed.
 
-let reia, seller, otherSeller, alpha, beta, contract;
+let reia, checker, seller, otherSeller, alpha, beta, contract;
 const as = (u) => auth(signToken(u));
 const get = (u, path) => request(app).get(`/api/energy-records${path}`).set(as(u));
 const post = (u, path, body) => request(app).post(`/api/energy-records${path}`).set(as(u)).send(body);
@@ -39,6 +39,8 @@ beforeEach(() => {
   contract = makeContract({ seller_id: alpha.id, capacity_mw: 100 });
   db.prepare('UPDATE contracts SET min_cuf_percent = 20 WHERE id = ?').run(contract.id);
   reia = makeUser('REIA_USER', { name: 'Riya REIA' });
+  // Phase B.2: the checker rules on an objection and locks the period.
+  checker = makeUser('REIA_ADMIN', { name: 'Chetan Checker' });
   seller = makeUser('SELLER', { name: 'Arun Alpha', linked_entity_id: alpha.id });
   otherSeller = makeUser('SELLER', { name: 'Bina Beta', linked_entity_id: beta.id });
 });
@@ -131,22 +133,23 @@ describe('accepting and objecting', () => {
     const obj = await post(seller, `/${id}/respond`, { response: 'OBJECTED', note: 'Our check meter reads higher', claimed_mwh: 9600 });
     expect(obj.body).toMatchObject({ response_status: 'OBJECTED', claimed_mwh: 9600 });
 
-    const lock = () => request(app).post(`/api/energy-data/${id}/lock`).set(as(reia));
+    const lock = () => request(app).post(`/api/energy-data/${id}/lock`).set(as(checker));
     const refused = await lock().send({});
     expect(refused.status).toBe(400);
     expect(refused.body.error).toMatch(/objected/);
 
     expect((await post(seller, `/${id}/resolve-objection`, { outcome: 'REJECTED', note: 'x' })).status).toBe(403);
-    expect((await post(reia, `/${id}/resolve-objection`, { outcome: 'REJECTED' })).status).toBe(400);
-    const answered = await post(reia, `/${id}/resolve-objection`, { outcome: 'REJECTED', note: 'JMR is signed by both parties' });
-    expect(answered.body).toMatchObject({ objection_outcome: 'REJECTED', objection_resolved_by_name: 'Riya REIA' });
+    expect((await post(reia, `/${id}/resolve-objection`, { outcome: 'REJECTED', note: 'x' })).status).toBe(403);
+    expect((await post(checker, `/${id}/resolve-objection`, { outcome: 'REJECTED' })).status).toBe(400);
+    const answered = await post(checker, `/${id}/resolve-objection`, { outcome: 'REJECTED', note: 'JMR is signed by both parties' });
+    expect(answered.body).toMatchObject({ objection_outcome: 'REJECTED', objection_resolved_by_name: 'Chetan Checker' });
     expect((await lock().send({})).status).toBe(200);
   });
 
   it('lets SJVN lock over an open objection only with a reason on record', async () => {
     const id = energy('2026-05', 9450);
     await post(seller, `/${id}/respond`, { response: 'OBJECTED', note: 'Disagree' });
-    const r = await request(app).post(`/api/energy-data/${id}/lock`).set(as(reia)).send({ override_reason: 'Billing deadline; objection to follow as a dispute' });
+    const r = await request(app).post(`/api/energy-data/${id}/lock`).set(as(checker)).send({ override_reason: 'Billing deadline; objection to follow as a dispute' });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(db.prepare('SELECT lock_override_reason FROM energy_data WHERE id = ?').get(id).lock_override_reason).toMatch(/Billing deadline/);
   });

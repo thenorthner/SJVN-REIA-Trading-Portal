@@ -50,7 +50,10 @@ describe('the REIA invoice chain: checker, Finance, approver', () => {
     const inv = threeLevels(makeContract({ status: 'ACTIVE' }));
     const r = await act(inv, 1, tokenFor('REIA_MAKER'));
     expect(r.status).toBe(403);
-    expect(r.body.error).toMatch(/approved by REIA Checker/);
+    // Phase B.2: the maker is no reviewer at all — not even to send a bill back.
+    expect(r.body.error).toMatch(/REIA_MAKER is not authorized/);
+    const back = await post(`/api/invoices/${inv.id}/approvals/1/act`, tokenFor('REIA_MAKER'), { decision: 'REJECTED', comments: 'x', ...ack });
+    expect(back.status).toBe(403);
   });
 
   it('runs checker → Finance → REIA approver to approval', async () => {

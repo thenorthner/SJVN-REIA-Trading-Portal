@@ -41,7 +41,7 @@ describe('S2 Contract management', () => {
 
   it('blocks an illegal jump straight from DRAFT to ACTIVE', async () => {
     const c = makeContract({ status: 'DRAFT' });
-    const r = await request(app).post(`/api/contracts/${c.id}/status`).set(auth(reia)).send({ status: 'ACTIVE' });
+    const r = await request(app).post(`/api/contracts/${c.id}/status`).set(auth(tokenFor('REIA_CHECKER'))).send({ status: 'ACTIVE' });
     // A contract must pass through signing and regulatory approval first.
     expect(r.status).toBeGreaterThanOrEqual(400);
   });
@@ -147,7 +147,7 @@ describe('S2 Contract management', () => {
 describe('S02 A contract is signed only with its agreement on file', () => {
   let token;
   beforeEach(() => { resetReia(); token = tokenFor('REIA_USER'); });
-  const move = (id, status) => request(app).post(`/api/contracts/${id}/status`).set(auth(token)).send({ status });
+  const move = (id, status) => request(app).post(`/api/contracts/${id}/status`).set(auth(tokenFor('REIA_CHECKER'))).send({ status });
 
   it('refuses SIGNED while no document is on file, and allows it once there is', async () => {
     const c = makeContract({ status: 'DRAFT' });

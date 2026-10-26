@@ -562,7 +562,7 @@ router.get('/lps-bills/preview', requireRole(...ROLE_GROUPS.REIA_ALL, ...ROLE_GR
     res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong' });
   }
 });
-router.post('/lps-bills', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/lps-bills', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   try {
     const r = raiseLpsBills({ period: req.body?.period_month, contractIds: req.body?.contract_ids, user: req.user, req });
     res.status(r.raised.length ? 201 : 400).json(r.raised.length ? r : { ...r, error: `No LPS bill to raise for ${r.period}${r.skipped.length ? ' — already raised' : ''}.` });
@@ -584,7 +584,7 @@ router.get('/month-close', requireRole(...ROLE_GROUPS.REIA_ALL), (req, res) => {
 
 // Raise every READY contract's bill for the month, each through Generate in
 // its own transaction; one refusal does not hold up the rest.
-router.post('/generate-ready', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/generate-ready', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   let board;
   try { board = readinessBoard(req.body?.period_month || undefined); } catch (err) {
     return res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong' });
@@ -1481,7 +1481,7 @@ function reasonLike(reason) {
 // Arrear bill — a manual recovery bill for a past period (charges missed / under-billed
 // earlier, e.g. retrospective tariff order, delayed adjustment). Mirrors SAP bill type 'A'.
 
-router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/generate', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const { contract_id, period_month, split_by_allocation } = req.body;
 
   try {
@@ -1548,7 +1548,7 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   }
 });
 
-router.post('/arrear', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/arrear', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const { contract_id, arrear_period, amount, taxes, reason } = req.body;
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contract_id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
@@ -1639,7 +1639,7 @@ const SUPP_REASONS = [
  * Manual Supplementary invoice — tariff revision / change-in-law / energy revision / etc.
  * Distinct from dispute auto-credit supplementary (which still uses its own path).
  */
-router.post('/supplementary', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/supplementary', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const {
     contract_id,
     billing_period,
@@ -1857,7 +1857,7 @@ function checkInvoiceRow(raw, user, contractCache, seenKeys) {
  * anyone else's as SUBMITTED — and is validated against SJVN's own figure for
  * that period the same way.
  */
-router.post('/upload', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/upload', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
   const dryRun = !!req.body?.dry_run;
   if (rows.length === 0) return res.status(400).json({ error: 'No rows supplied' });
@@ -1975,7 +1975,7 @@ router.post('/upload', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), 
   res.status(201).json(results);
 });
 
-router.post('/', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/', requireRole(...SELLER_ROLES, ...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const b = req.body;
   const id = newId('INV');
   // A penalty is assessed by SJVN and comes off a bill, as on SJVN's own bills
@@ -2166,6 +2166,17 @@ router.put('/:id/revise', requireRole(...SELLER_ROLES), (req, res) => {
 router.post('/:id/cancel', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
+  // Phase B.2: the maker withdraws a bill still on its own desk (a draft, or one
+  // sent back); once it is with the reviewers, cancelling it is the checker's call.
+  const onMakersDesk = ['DRAFT', 'REJECTED', 'PENDING_L2'].includes(inv.status);
+  if (CANCELABLE_STATUSES.includes(inv.status)
+    && !(onMakersDesk ? ROLE_GROUPS.REIA_MAKE : ROLE_GROUPS.REIA_CHECK).includes(req.user.role)) {
+    return res.status(403).json({
+      error: onMakersDesk
+        ? `${inv.invoice_no} is still a ${inv.status === 'DRAFT' ? 'draft' : 'returned bill'}; the REIA maker withdraws it.`
+        : `${inv.invoice_no} is with the reviewers; cancelling it is the REIA checker's call.`,
+    });
+  }
 
   if (inv.status === 'CANCELLED') {
     return res.status(400).json({ error: 'Invoice is already cancelled' });
@@ -2255,7 +2266,7 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE, ...SELLER_RO
 });
 
 // Waive a mismatch / partial validation (REIA only)
-router.post('/:id/validation/waive', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/validation/waive', requireRole(...ROLE_GROUPS.REIA_CHECK), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status === 'CANCELLED') {
@@ -2300,7 +2311,7 @@ router.get('/:id/back-to-back', requireRole(...ROLE_GROUPS.REIA_ALL), (req, res)
 });
 
 // ── V1: send a developer's bill back with its failed checks ─────────────────
-router.post('/:id/send-back', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/send-back', requireRole(...ROLE_GROUPS.REIA_CHECK), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   if (!verificationApplies(inv)) return res.status(400).json({ error: 'Only a developer\'s own bill is sent back with its checklist.' });
@@ -2344,7 +2355,7 @@ export function bulkEligibility(inv) {
   if (Math.abs(gap) >= 1) return { eligible: false, why: `build-up differs by ₹${Math.abs(gap).toLocaleString('en-IN')}`, template };
   return { eligible: true, template };
 }
-router.post('/verify-bulk', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/verify-bulk', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const ids = Array.isArray(req.body?.invoice_ids) ? req.body.invoice_ids.map(String) : [];
   if (!ids.length) return res.status(400).json({ error: 'Choose the bills to verify' });
   if (ids.length > 50) return res.status(400).json({ error: 'At most 50 bills in one pass' });
@@ -2398,7 +2409,7 @@ router.get('/:id/verification', requireRole(...ROLE_GROUPS.REIA_ALL, ...SELLER_R
 // status string, energy charges from the request, negative damages, and stamp
 // "verified by" whatever the result. It now takes a developer's bill that is
 // with SJVN, and only the checks and adjustments the verifier owns.
-router.post('/:id/verification', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/verification', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   if (!verificationApplies(inv)) {
@@ -2433,7 +2444,7 @@ router.post('/:id/verification', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, r
 // G. Invoice Approval Workflow
 // Sending a seller's bill to SJVN is for the company admin and its checkers;
 // the maker's draft reaches SJVN through them (submit-l2, then approve-l2).
-router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, ...STATION_DESK_WRITE, 'SELLER', 'SELLER_L2', 'SELLER_L3'), (req, res) => {
+router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_MAKE, ...STATION_DESK_WRITE, 'SELLER', 'SELLER_L2', 'SELLER_L3'), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv || !ownsInvoice(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
   const notDesk = stationDeskRefusal(req.user, inv);
@@ -2473,7 +2484,7 @@ router.post('/:id/submit-for-approval', requireRole(...ROLE_GROUPS.REIA_WRITE, .
   res.json(db.prepare('SELECT * FROM invoices WHERE id = ?').get(inv.id));
 });
 
-router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, ...STATION_DESK_WRITE, 'FINANCE_USER', ...ROLE_GROUPS.REIA_APPROVE), (req, res) => {
+router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_CHECK, ...STATION_DESK_WRITE, 'FINANCE_USER', ...ROLE_GROUPS.REIA_APPROVE), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   const notDesk = stationDeskRefusal(req.user, inv);
@@ -2605,7 +2616,7 @@ router.post('/:id/approvals/:level/act', requireRole(...ROLE_GROUPS.REIA_WRITE, 
 });
 
 // Submit invoice to L2 (Maker)
-router.post('/:id/submit-l2', requireRole('SELLER_L1', 'BUYER_L1', ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/submit-l2', requireRole('SELLER_L1', 'BUYER_L1', ...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const inv = db.prepare('SELECT id, status, contract_id FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv || !ownsInvoice(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.status !== 'DRAFT') return res.status(400).json({ error: 'Only DRAFT invoices can be submitted to L2' });
@@ -2624,7 +2635,7 @@ router.post('/:id/submit-l2', requireRole('SELLER_L1', 'BUYER_L1', ...ROLE_GROUP
 // Approve invoice from L2 to SJVN (Checker)
 // The company admin approves as well as its checkers: a company that has not
 // appointed a checker could otherwise never send its maker's draft to SJVN.
-router.post('/:id/approve-l2', requireRole('SELLER', 'SELLER_L2', 'SELLER_L3', 'BUYER', 'BUYER_L2', 'BUYER_L3', ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/approve-l2', requireRole('SELLER', 'SELLER_L2', 'SELLER_L3', 'BUYER', 'BUYER_L2', 'BUYER_L3', ...ROLE_GROUPS.REIA_CHECK), (req, res) => {
   const { comments } = req.body || {};
   const inv = db.prepare('SELECT id, contract_id, status, created_by, created_by_id, validation_status FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv || !ownsInvoice(req.user, inv)) return res.status(404).json({ error: 'Invoice not found' });
@@ -2651,7 +2662,7 @@ router.post('/:id/approve-l2', requireRole('SELLER', 'SELLER_L2', 'SELLER_L3', '
 });
 
 // Distribution — email PDF to counterparty + mark SENT
-router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res) => {
+router.post('/:id/send', requireRole(...ROLE_GROUPS.REIA_MAKE), async (req, res) => {
   try {
     const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
     if (!inv) return res.status(404).json({ error: 'Invoice not found' });
@@ -2896,6 +2907,38 @@ export function generatorRealization(devInvoiceId) {
 
 // Record a payment against an invoice and roll up rebate / LPS / status. Shared
 // by buyer payment recording and generator pay-out release.
+/**
+ * The early-payment rebate a payment made on `payDate` earns, as a fraction of
+ * the part of the bill it settles (pass-through charges, taxes and surcharge
+ * carry none). 0 where none applies. The same figure caps what may be paid out,
+ * so cash and rebate together never settle more than the bill.
+ */
+export function rebateRateOn(inv, payDate) {
+  const rebateTerms = db.prepare('SELECT rebate_pct, rebate_days, rebate_basis FROM contracts WHERE id = ?').get(inv.contract_id);
+  const buyerRebate = inv.direction === 'SJVN_TO_BUYER' && Number(rebateTerms?.rebate_pct) > 0;
+  if (inv.direction !== 'SELLER_TO_SJVN' && !buyerRebate) return 0;
+  // Measured from presentation, not from when the row was created. The rebate
+  // is for paying promptly once the bill arrives, and a bill held three weeks
+  // in draft reached the seller with its five-day window already spent — the
+  // same basis error the dispute window had, and for the same reason: nothing
+  // recorded presentation until issued_at existed.
+  const billDate = billPresentedOn(inv);
+  let pct = contractRebatePct(rebateTerms, { billDate, dueDate: inv.due_date, payDate });
+  // 2nd: global tiered rebate. 3rd: flat % if paid on/before due date. Seller bills only.
+  if (pct === null && buyerRebate) pct = 0;
+  if (pct === null) {
+    pct = tieredRebatePct(Math.max(0, daysBetween(new Date(billDate), payDate)), getParam('early_payment_rebate_tiers', null));
+  }
+  if (pct === null) {
+    pct = (inv.due_date && payDate <= new Date(inv.due_date)) ? getParamNumber('early_payment_rebate_pct', 2) : 0;
+  }
+  if (!(pct > 0)) return 0;
+  const gross = Number(inv.total_amount) || 0;
+  // Rebate-eligible base excludes pass-through charges, taxes and LPS (PSA Art. 6.4).
+  const base = Math.max(0, gross - otherChargesSum(inv) - (Number(inv.taxes) || 0) - (Number(inv.lps) || 0));
+  return gross > 0 ? (pct / 100) * (base / gross) : 0;
+}
+
 export function applyInvoicePayment(inv, { amount, payment_date, mode, reference, deduction, release_source, breakup = null, lps_component = null }, req) {
   const id = newId('PAY');
   db.prepare(`INSERT INTO payments (id, invoice_id, amount, payment_date, mode, reference, deduction, release_source, lps_component) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -2915,41 +2958,18 @@ export function applyInvoicePayment(inv, { amount, payment_date, mode, reference
   // for the day it arrived. Before, the first payment's date fixed the rate for
   // the whole bill, so a token payment inside five days bought 1.5% off all of
   // it however late the rest came.
-  const rebateTerms = db.prepare('SELECT rebate_pct, rebate_days, rebate_basis FROM contracts WHERE id = ?').get(inv.contract_id);
-  const buyerRebate = inv.direction === 'SJVN_TO_BUYER' && Number(rebateTerms?.rebate_pct) > 0;
-  if (inv.direction === 'SELLER_TO_SJVN' || buyerRebate) {
-    const contract = rebateTerms;
-    // Measured from presentation, not from when the row was created. The rebate
-    // is for paying promptly once the bill arrives, and a bill held three weeks
-    // in draft reached the seller with its five-day window already spent — the
-    // same basis error the dispute window had, and for the same reason: nothing
-    // recorded presentation until issued_at existed.
-    const billDate = billPresentedOn(inv);
-    let pct = contractRebatePct(contract, { billDate, dueDate: inv.due_date, payDate });
-    // 2nd: global tiered rebate. 3rd: flat % if paid on/before due date. Seller bills only.
-    if (pct === null && buyerRebate) pct = 0;
-    if (pct === null) {
-      pct = tieredRebatePct(Math.max(0, daysBetween(new Date(billDate), payDate)), getParam('early_payment_rebate_tiers', null));
-    }
-    if (pct === null) {
-      pct = (inv.due_date && payDate <= new Date(inv.due_date)) ? getParamNumber('early_payment_rebate_pct', 2) : 0;
-    }
-    if (pct > 0) {
-      const gross = Number(inv.total_amount) || 0;
-      // Rebate-eligible base excludes pass-through charges, taxes and LPS (PSA Art. 6.4).
-      const base = Math.max(0, gross - otherChargesSum(inv) - (Number(inv.taxes) || 0) - (Number(inv.lps) || 0));
-      const share = gross > 0 ? base / gross : 0;
-      const rate = (pct / 100) * share;
-      const paidBefore = db.prepare(
-        'SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)),0) s FROM payments WHERE invoice_id = ? AND id != ?',
-      ).get(inv.id, id).s;
-      // What is left to settle, counting rebate already allowed as settled.
-      const open = Math.max(0, gross - (Number(inv.disputed_amount) || 0) - paidBefore - (Number(inv.rebate) || 0));
-      const thisPayment = (Number(amount) || 0) + (Number(deduction) || 0);
-      // Cash c settles c / (1 - rate) of the bill when it earns `rate`.
-      const settles = rate < 1 ? Math.min(open, thisPayment / (1 - rate)) : 0;
-      newRebate = Math.round((Number(inv.rebate) || 0) + settles * rate);
-    }
+  const rate = rebateRateOn(inv, payDate);
+  if (rate > 0) {
+    const gross = Number(inv.total_amount) || 0;
+    const paidBefore = db.prepare(
+      'SELECT COALESCE(SUM(amount + COALESCE(deduction, 0)),0) s FROM payments WHERE invoice_id = ? AND id != ?',
+    ).get(inv.id, id).s;
+    // What is left to settle, counting rebate already allowed as settled.
+    const open = Math.max(0, gross - (Number(inv.disputed_amount) || 0) - paidBefore - (Number(inv.rebate) || 0));
+    const thisPayment = (Number(amount) || 0) + (Number(deduction) || 0);
+    // Cash c settles c / (1 - rate) of the bill when it earns `rate`.
+    const settles = rate < 1 ? Math.min(open, thisPayment / (1 - rate)) : 0;
+    newRebate = Math.round((Number(inv.rebate) || 0) + settles * rate);
   }
 
   // ── LPS earned to the payment date, day by day on what was unpaid ──
@@ -3008,7 +3028,7 @@ export function buyerOutstanding(buyerId, contractId = null) {
 // principal and so on. Each payment it records says how much of it was
 // surcharge, so the bill, the outstanding position and the next accrual all
 // read the same split.
-router.post('/waterfall-payment', requireRole(...ROLE_GROUPS.FINANCE, ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/waterfall-payment', requireRole(...ROLE_GROUPS.FINANCE), (req, res) => {
   const { buyer_id, amount, payment_date, reference } = req.body;
   if (!buyer_id) return res.status(400).json({ error: 'buyer_id is required' });
   const amt = Number(amount);
@@ -3151,7 +3171,9 @@ router.post('/:id/payments', requireRole(...ROLE_GROUPS.FINANCE_CONFIRM, ...BUYE
 // their PPA invoice, funded from DISCOM realization / own fund / payment security
 // fund. DISCOM_REALIZATION can only draw what the buyer has actually paid.
 const RELEASE_SOURCES = ['DISCOM_REALIZATION', 'OWN_FUND', 'PAYMENT_SECURITY_FUND'];
-router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+// Phase B.2: paying a generator out is a decision on money — Finance or the
+// REIA checker, not the maker who prepared the bill.
+router.post('/:id/release-to-generator', requireRole('FINANCE_USER', ...ROLE_GROUPS.REIA_CHECK), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   if (inv.direction !== 'SELLER_TO_SJVN') {
@@ -3221,11 +3243,18 @@ router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...
   // No more than the bill has left — less anything already paid on SJVN's
   // computed bill of the same month. Own Fund and Payment Security releases had
   // no ceiling at all.
-  const left = Math.max(0, invoiceBalance(inv).balance - twinPaid);
+  const owed = Math.max(0, invoiceBalance(inv).balance - (Number(inv.rebate) || 0) - twinPaid);
+  // Paid out within the rebate window, the generator's bill is settled at a
+  // discount: cash c settles c / (1 - rate). Paying the whole balance in cash
+  // as well as allowing the rebate settled more than the bill (22-Oct-2026,
+  // ₹3,26,700 over on a ₹2.18 Cr bill), so cash is capped at what settles it.
+  const rate = rebateRateOn(inv, payment_date ? new Date(payment_date) : new Date());
+  const left = Math.floor(owed * (1 - rate) * 100) / 100;
   if (amt + held > left + 1) {
     return res.status(400).json({
-      error: `₹${(amt + held).toLocaleString('en-IN')} is more than the ₹${Math.round(left).toLocaleString('en-IN')} left on ${inv.invoice_no}${twinPaid ? ` after ₹${Math.round(twinPaid).toLocaleString('en-IN')} already paid on ${twin.invoice_no}` : ''}.`,
+      error: `₹${(amt + held).toLocaleString('en-IN')} is more than the ₹${Math.round(left).toLocaleString('en-IN')} left on ${inv.invoice_no}${twinPaid ? ` after ₹${Math.round(twinPaid).toLocaleString('en-IN')} already paid on ${twin.invoice_no}` : ''}${rate > 0 ? ` (₹${Math.round(owed).toLocaleString('en-IN')} owed, less the ${(rate * 100).toFixed(2)}% early-payment rebate it earns if paid today)` : ''}.`,
       left,
+      rebate_rate: rate,
     });
   }
 
@@ -3261,7 +3290,7 @@ router.post('/:id/release-to-generator', requireRole(...ROLE_GROUPS.FINANCE, ...
 // Set the pass-through "other charges" on an invoice (transmission / RLDC-SLDC /
 // CTU-STU / open access / scheduling). Replaces the full set; adjusts the invoice
 // total by the delta. These are rebate-excluded.
-router.post('/:id/other-charges', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/other-charges', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
   // These change the bill's total. Once it is in approval or past it, that

@@ -145,4 +145,27 @@ router.get('/admin/declarations', requireRole(...DPO_ROLES), (req, res) => {
   res.json(db.prepare(`SELECT * FROM statutory_declarations ${where} ORDER BY rowid DESC LIMIT ?`).all(...args, limit));
 });
 
+// The Web Information Manager's queue for feedback from the public Feedback page.
+const FEEDBACK_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN'];
+router.get('/admin/feedback', requireRole(...FEEDBACK_ROLES), (req, res) => {
+  const status = String(req.query.status || '');
+  const rows = ['NEW', 'REPLIED', 'CLOSED'].includes(status)
+    ? db.prepare('SELECT * FROM public_feedback WHERE status = ? ORDER BY created_at DESC LIMIT 500').all(status)
+    : db.prepare('SELECT * FROM public_feedback ORDER BY created_at DESC LIMIT 500').all();
+  res.json(rows);
+});
+
+router.patch('/admin/feedback/:id', requireRole(...FEEDBACK_ROLES), (req, res) => {
+  const row = db.prepare('SELECT * FROM public_feedback WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Feedback not found' });
+  const { status, reply } = req.body || {};
+  if (!['REPLIED', 'CLOSED'].includes(status)) return res.status(400).json({ error: 'status must be REPLIED or CLOSED' });
+  const text = String(reply || '').trim();
+  if (status === 'REPLIED' && text.length < 5) return res.status(400).json({ error: 'Write the reply that was sent to the visitor.' });
+  db.prepare(`UPDATE public_feedback SET status = ?, reply = COALESCE(?, reply), replied_by = ?, replied_at = datetime('now') WHERE id = ?`)
+    .run(status, text || null, req.user.id, row.id);
+  logAudit({ req, user: req.user, action: `FEEDBACK_${status}`, module: 'PUBLIC_FEEDBACK', entityType: 'public_feedback', entityId: row.id, afterValue: { status, reference_no: row.reference_no } });
+  res.json(db.prepare('SELECT * FROM public_feedback WHERE id = ?').get(row.id));
+});
+
 export default router;

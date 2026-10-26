@@ -239,6 +239,14 @@ export const ROLE_GROUPS = {
   // REIA desk: the maker drafts, the checker scrutinises, the approver (HOD) sanctions.
   REIA_ALL: ['SJVN_ADMIN', 'REIA_CHECKER', 'IT_SUPER_ADMIN', 'REIA_MAKER', 'REIA_APPROVER', 'FINANCE_USER', 'MANAGEMENT'],
   REIA_WRITE: ['REIA_CHECKER', 'REIA_MAKER'],
+  // Target #2 Phase B.2 (22-Oct-2026): the maker prepares — creates, edits,
+  // uploads, records, verifies a bill's checklist and submits; the checker
+  // decides — validates, locks, approves, sends back, waives, posts. REIA_WRITE
+  // is left for the few acts that are either's (tests/roleMatrix.test.js names
+  // them). A checker does not create: when the maker is away an administrator
+  // records an additional charge (Phase D) and the work is done "X for Y".
+  REIA_MAKE: ['REIA_MAKER'],
+  REIA_CHECK: ['REIA_CHECKER'],
   // Final sanction on the REIA desk: its HOD, or SJVN management.
   REIA_APPROVE: ['REIA_APPROVER', 'MANAGEMENT'],
   COMMERCIAL_ALL: ['SJVN_ADMIN', 'COMMERCIAL_ADMIN', 'COMMERCIAL', 'IT_SUPER_ADMIN', 'FINANCE_USER', 'MANAGEMENT'],

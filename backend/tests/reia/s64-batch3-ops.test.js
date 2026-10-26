@@ -12,7 +12,7 @@ import { checkAdequacy } from '../../src/paymentSecurityEngine.js';
 // back, V2 verification SLA, V3 bulk verify, DSM1 statement sync, DSM4 pool
 // tracker, SM1 default gate, SM5 diversion P&L.
 
-let reia, finance, sellerCo, buyerCo, ppa, psa;
+let reia, checker, finance, sellerCo, buyerCo, ppa, psa;
 const get = (path, who = reia) => request(app).get(path).set(auth(who));
 const post = (path, body = {}, who = reia) => request(app).post(path).set(auth(who)).send(body);
 const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
@@ -21,6 +21,8 @@ const lock = (contract, period, mwh) => db.prepare(`INSERT INTO energy_data (id,
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
+  // Phase B.2: checking is the checker's.
+  checker = tokenFor('REIA_CHECKER');
   finance = tokenFor('FINANCE_USER');
   sellerCo = makeEntity('SELLER');
   buyerCo = makeEntity('BUYER');
@@ -86,7 +88,7 @@ describe('Verification queue', () => {
   it('V1: sends a bill back with its failed checks, and the developer is told them', async () => {
     lock(ppa, '2026-08', 8200);
     const inv = await raise({ tariff_per_unit: 3.1, energy_charges: 25420000 });
-    const r = await post(`/api/invoices/${inv.id}/send-back`, {});
+    const r = await post(`/api/invoices/${inv.id}/send-back`, {}, checker);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(r.body.status).toBe('REJECTED');
     expect(r.body.sent_back.join(' ')).toMatch(/Tariff Verified/);

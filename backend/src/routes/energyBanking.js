@@ -11,7 +11,9 @@ const router = Router();
 router.use(requireAuth);
 
 const BANK_READ = [...ROLE_GROUPS.REIA_ALL];
-const BANK_WRITE = [...ROLE_GROUPS.REIA_WRITE];
+// Phase B.2: the maker banks and draws energy; settling a closed cycle is the checker's.
+const BANK_WRITE = [...ROLE_GROUPS.REIA_MAKE];
+const BANK_SETTLE = [...ROLE_GROUPS.REIA_CHECK];
 
 // The developer's banking statement for a PPA (SM3): per cycle, what was
 // banked, drawn back, settled in money and lapsed, and what is still in the
@@ -134,7 +136,7 @@ router.post('/draw', requireRole(...BANK_WRITE), (req, res) => {
 // Settle cycles that closed with energy unused. Also runs on a schedule.
 // Only a cycle that has actually closed: the sweep took any "as of", so naming
 // 2099 cashed out a cycle still running.
-router.post('/settle', requireRole(...BANK_WRITE), (req, res) => {
+router.post('/settle', requireRole(...BANK_SETTLE), (req, res) => {
   const today = new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
   const asOf = req.body?.as_of;
   if (asOf !== undefined && asOf !== null && asOf !== '') {

@@ -146,6 +146,12 @@ describe('H4–H6 — powers the administrator shares already have a desk owner'
     expect((await request(app).get('/api/disputes').set(auth(checker))).status).toBe(200);
     expect((await request(app).get('/api/dispute-extras/forum-tracker').set(auth(checker))).status).toBe(200);
   });
+
+  it('H6 disputes: the REIA approver, who decides them, reads the forum tracker too (role sync 22-Oct-2026)', async () => {
+    const approver = tokenFor('REIA_APPROVER');
+    expect((await request(app).get('/api/disputes/stats').set(auth(approver))).status).toBe(200);
+    expect((await request(app).get('/api/dispute-extras/forum-tracker').set(auth(approver))).status).toBe(200);
+  });
 });
 
 describe('a trading client signs its own side (decided 19-Oct-2026)', () => {

@@ -26,9 +26,23 @@ describe('S8 Payment security', () => {
     expect(row.issuing_bank).toBe('SBI');
   });
 
+  it('takes the bank\'s confirmation from the checker, once, with its reference', async () => {
+    const r = await mkLc();
+    const verify = (role, ref) => request(app).post(`/api/payment-security/${r.body.id}/verify`).set(auth(tokenFor(role))).send({ bank_confirmation_ref: ref });
+    expect((await verify('REIA_MAKER', 'SFMS-760-0001')).status).toBe(403);
+    expect((await verify('REIA_CHECKER', '')).body.error).toMatch(/confirmation reference/);
+    const ok = await verify('REIA_CHECKER', 'SFMS-760-0001');
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ bank_confirmation_ref: 'SFMS-760-0001' });
+    expect(ok.body.verified_at).toBeTruthy();
+    const again = await verify('REIA_CHECKER', 'SFMS-760-0002');
+    expect(again.status).toBe(409);
+    expect(db.prepare('SELECT bank_confirmation_ref FROM payment_security WHERE id = ?').get(r.body.id).bank_confirmation_ref).toBe('SFMS-760-0001');
+  });
+
   it('reduces the available limit as it is drawn against', async () => {
     const r = await mkLc();
-    await request(app).post(`/api/payment-security/${r.body.id}/utilize`).set(auth(reia)).send({ amount: 250000, reason: 'Buyer default on the June bill' });
+    await request(app).post(`/api/payment-security/${r.body.id}/utilize`).set(auth(tokenFor('REIA_CHECKER'))).send({ amount: 250000, reason: 'Buyer default on the June bill' });
     const row = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(r.body.id);
     const available = row.available_amount ?? (row.limit_amount - (row.utilized_amount || 0));
     expect(available).toBe(750000);
@@ -111,7 +125,7 @@ describe('S8 Payment security', () => {
                 VALUES ('INV-OPEN', 'INV-OPEN', ?, 'FINAL', 'SJVN_TO_BUYER', '2026-04', 100, 3, 300000, 300000, 'SENT')`)
       .run(contract.id);
     db.prepare(`UPDATE security_releases SET checklist_no_dues = 1, checklist_no_disputes = 1 WHERE id = 'REL-1'`).run();
-    const r = await request(app).post('/api/payment-security/releases/REL-1/act').set(auth(reia)).send({ decision: 'APPROVED' });
+    const r = await request(app).post('/api/payment-security/releases/REL-1/act').set(auth(tokenFor('REIA_CHECKER'))).send({ decision: 'APPROVED' });
     const released = db.prepare('SELECT status FROM security_releases WHERE id = ?').get('REL-1').status;
     expect(r.status, 'security released while an invoice was still unsettled').toBe(400);
     expect(released).toBe('PENDING');

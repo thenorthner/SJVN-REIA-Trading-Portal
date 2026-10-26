@@ -9,7 +9,7 @@ import { ROLE_GROUPS as UI } from '../../frontend/src/roles.js';
 // REIA module from REIA_ADMIN whom the API allowed, and listed four
 // trading-client sub-roles the users table would not accept.
 const SHARED = [
-  'REIA_ALL', 'REIA_WRITE',
+  'REIA_ALL', 'REIA_WRITE', 'REIA_MAKE', 'REIA_CHECK', 'REIA_APPROVE',
   'COMMERCIAL_ALL', 'COMMERCIAL_WRITE',
   'HYDRO_THERMAL_ALL', 'HYDRO_THERMAL_WRITE',
   'THERMAL_ALL', 'THERMAL_WRITE',

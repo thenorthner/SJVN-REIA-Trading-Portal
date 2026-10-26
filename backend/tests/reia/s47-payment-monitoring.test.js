@@ -51,7 +51,16 @@ describe('S47 One month is owed to a developer once', () => {
     expect(onComputed.body.error).toMatch(/developer's own invoice/);
     const over = await post(`/api/invoices/${d.id}/release-to-generator`, { amount: 5000000, source: 'OWN_FUND' });
     expect(over.status, 'an Own Fund release had no ceiling').toBe(400);
-    expect((await post(`/api/invoices/${d.id}/release-to-generator`, { amount: 1000000, source: 'OWN_FUND' })).status).toBe(201);
+    // Paid today, inside the rebate window: the whole bill in cash as well as the
+    // rebate it earns would settle more than the bill (22-Oct-2026).
+    const whole = await post(`/api/invoices/${d.id}/release-to-generator`, { amount: 1000000, source: 'OWN_FUND' });
+    expect(whole.status).toBe(400);
+    expect(whole.body.rebate_rate).toBeGreaterThan(0);
+    expect(whole.body.error).toMatch(/early-payment rebate/);
+    expect((await post(`/api/invoices/${d.id}/release-to-generator`, { amount: whole.body.left, source: 'OWN_FUND' })).status).toBe(201);
+    const after = db.prepare('SELECT status, rebate FROM invoices WHERE id = ?').get(d.id);
+    expect(after.status).toBe('PAID');
+    expect(Math.round(whole.body.left + after.rebate), 'cash and rebate settle the bill, no more').toBe(1000000);
   });
 
   it('takes off what was already paid on the computed bill', async () => {
@@ -60,7 +69,7 @@ describe('S47 One month is owed to a developer once', () => {
     const d = developerBill();
     const r = await post(`/api/invoices/${d.id}/release-to-generator`, { amount: 700000, source: 'OWN_FUND' });
     expect(r.status).toBe(400);
-    expect(r.body.error).toMatch(/₹6,00,000 left .* after ₹4,00,000 already paid/);
+    expect(r.body.error).toMatch(/left .* after ₹4,00,000 already paid .*₹6,00,000 owed, less the .*% early-payment rebate/);
   });
 });
 

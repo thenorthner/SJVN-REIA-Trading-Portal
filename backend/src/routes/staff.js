@@ -53,8 +53,8 @@ export const STAFF_ROLES = {
   COMMERCIAL_ADMIN: { label: 'Commercial Administrator (Hydro)', desk: 'Hydro', does: 'Hydro station billing, PAF, allocations, PTC billing, claims, ledgers and desk operations.' },
   THERMAL_ADMIN: { label: 'Thermal Administrator', desk: 'Thermal', does: 'Thermal station billing and its stakeholders, and manages the thermal desk\'s users.' },
   THERMAL_USER: { label: 'Thermal Desk', desk: 'Thermal', does: 'Thermal stakeholders, station data and billing.' },
-  REIA_APPROVER: { label: 'REIA Approver (HOD)', desk: 'REIA', does: 'Final sanction on the REIA desk: the last approval level of invoices and the approvals reserved for the HOD. Does not enter data.' },
-  REIA_CHECKER: { label: 'REIA Checker', desk: 'REIA', does: 'Scrutinises what the maker prepared — verifies, recommends or sends back with observations — and can prepare too, never checking their own work.' },
+  REIA_APPROVER: { label: 'REIA Approver (HOD)', desk: 'REIA', does: 'Final sanction on the REIA desk: the last approval level of invoices, deciding disputes, and the approvals reserved for the HOD. Does not enter data.' },
+  REIA_CHECKER: { label: 'REIA Checker', desk: 'REIA', does: 'Scrutinises what the maker prepared — validates, approves the first level, verifies documents or sends back with observations. Does not prepare: a maker away is covered by an additional charge.' },
   REIA_MAKER: { label: 'REIA Maker', desk: 'REIA', does: 'Prepares: contracts, energy data, bills, disputes, payment security and reconciliation with sellers and buyers.' },
   FINANCE_USER: { label: 'Finance', desk: 'Finance', does: 'Payments and their confirmation against the bank, releases, TDS certificates and the SAP hand-over.' },
   TRADING_ADMIN: { label: 'Trading Administrator', desk: 'Trading', does: 'Everything the trading desk does, and manages the trading desk\'s users.' },
@@ -78,7 +78,7 @@ const MANAGES = {
 const ACCESS = [
   ['Hydro billing — PAF, station billing, allocations, ledgers', { IT_SUPER_ADMIN: 'Read', SJVN_ADMIN: 'Read', MANAGEMENT: 'Read', COMMERCIAL_ADMIN: 'Full', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
   ['Thermal billing — stations, stakeholders, billing', { IT_SUPER_ADMIN: 'Read', SJVN_ADMIN: 'Read', MANAGEMENT: 'Read', THERMAL_ADMIN: 'Full', THERMAL_USER: 'Full', FINANCE_USER: 'Read' }],
-  ['REIA billing & settlement — contracts, energy, invoices, disputes, security', { IT_SUPER_ADMIN: 'Read', SJVN_ADMIN: 'Read', MANAGEMENT: 'Approve', REIA_APPROVER: 'Approve', REIA_CHECKER: 'Check & prepare', REIA_MAKER: 'Prepare', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
+  ['REIA billing & settlement — contracts, energy, invoices, disputes, security', { IT_SUPER_ADMIN: 'Read', SJVN_ADMIN: 'Read', MANAGEMENT: 'Approve', REIA_APPROVER: 'Approve', REIA_CHECKER: 'Check', REIA_MAKER: 'Prepare', FINANCE_USER: 'Read', COMPLIANCE_AUDITOR: 'Read' }],
   ['Payments — recording, confirming a buyer\'s payment, releases', { REIA_MAKER: 'Record', FINANCE_USER: 'Full' }],
   ['Power trading — bids, exchange, clients', { SJVN_ADMIN: 'Read', MANAGEMENT: 'Read', FINANCE_USER: 'Read', TRADING_ADMIN: 'Full', TRADING_USER: 'Full' }],
   ['Masters — banks, parameters, losses, holidays, lookups, document types', { IT_SUPER_ADMIN: 'Full', SJVN_ADMIN: 'Full' }],
@@ -150,7 +150,10 @@ function health(members) {
   if (admins.length === 1) out.push({ level: 'amber', text: `${admins[0].name} is the only active administrator. If that account is locked or its holder is away, nobody can add a user or reset a password. Give a second officer the administrator role.` });
   for (const [role, why] of [
     ['FINANCE_USER', 'nobody in Finance to confirm buyers\' payments or file TDS certificates'],
-    ['REIA_MAKER', 'nobody on the REIA desk to approve invoices, verify documents or answer disputes'],
+    // Phase B.2: the REIA desk's three tiers each do what the others may not.
+    ['REIA_MAKER', 'nobody on the REIA desk to raise bills, record energy data or take documents in'],
+    ['REIA_CHECKER', 'nobody on the REIA desk to approve a bill\'s first level, validate energy data or verify documents'],
+    ['REIA_APPROVER', 'no REIA approver to sign a bill\'s last level or decide disputes (Management can, if it is told)'],
   ]) {
     if (!active.some((m) => m.role === role) && members.some((m) => m.role === role)) out.push({ level: 'red', text: `Every ${STAFF_ROLES[role].label} account is switched off — there is ${why}.` });
   }

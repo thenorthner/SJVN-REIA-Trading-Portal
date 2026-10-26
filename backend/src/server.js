@@ -133,6 +133,7 @@ import publicInfoRoutes from './routes/publicInfo.js';
 import privacyRoutes from './routes/privacy.js';
 import projectScopeRoutes from './routes/projectScope.js';
 import delegationsRoutes from './routes/delegations.js';
+import circularsRoutes from './routes/circulars.js';
 import { projectScopeGuard, alertUncoveredProjects } from './services/projectScope.js';
 
 // Read-level access to the trading desk screens. There is no TRADING_READ group
@@ -237,6 +238,8 @@ app.use('/verify', verifyRoutes);
 app.use('/api/auth', authRoutes);
 // GIGW public facts (officers, last updated, session policy) and the consent receipt — no sign-in.
 app.use('/api/public', publicInfoRoutes);
+// Public Circulars, Tenders & Statutory Disclosures (Public read + Admin management)
+app.use('/api/circulars', circularsRoutes);
 // DPDP Act data-principal rights.
 app.use('/api/privacy', privacyRoutes);
 // Project assignments and coverage (Target #2 Phase C).

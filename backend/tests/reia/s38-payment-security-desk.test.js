@@ -12,7 +12,7 @@ import { tokenFor, auth, makeUser, makeEntity, makeContract, makeInvoice, resetR
 // filed a notice for a draw of nothing, and a demand sent to every buyer on the
 // platform.
 
-let reia, finance, sellerCo, buyerCo, otherBuyerCo, ppa, psa, seller, buyer, otherBuyer;
+let reia, checker, finance, sellerCo, buyerCo, otherBuyerCo, ppa, psa, seller, buyer, otherBuyer;
 
 const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
 const get = (path, who = reia) => request(app).get(path).set(auth(who));
@@ -43,6 +43,8 @@ const bill = (contract, over = {}) => makeInvoice({
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER', { name: 'Riya REIA' });
+  // Phase B.2: the checker moves a demand on, draws and decides a release.
+  checker = tokenFor('REIA_CHECKER', { name: 'Chetan Checker' });
   finance = tokenFor('FINANCE_USER');
   sellerCo = makeEntity('SELLER');
   buyerCo = makeEntity('BUYER');
@@ -153,7 +155,7 @@ describe('Invoking the waterfall from the desk', () => {
     instrument(psa);
     bill(psa);
     const inv = (await post('/api/payment-security/invocations', { contract_id: psa.id, amount: 300000 })).body;
-    const move = (status) => post(`/api/payment-security/invocations/${inv.id}/transition`, { status });
+    const move = (status) => post(`/api/payment-security/invocations/${inv.id}/transition`, { status }, checker);
     const skip = await move('FUNDS_RECEIVED');
     expect(skip.status, 'funds were recorded on a demand never lodged with the bank').toBe(400);
     expect(skip.body.error).toMatch(/cannot move/);
@@ -181,7 +183,7 @@ describe('Invoking the waterfall from the desk', () => {
 
 describe('Drawing on an instrument', () => {
   it('is only possible while it is in force', async () => {
-    const draw = (ps, amount = 1000) => post(`/api/payment-security/${ps.id}/utilize`, { amount, reason: 'Drawn for the test default' });
+    const draw = (ps, amount = 1000) => post(`/api/payment-security/${ps.id}/utilize`, { amount, reason: 'Drawn for the test default' }, checker);
     for (const status of ['DRAFT', 'RELEASED', 'CLOSED', 'EXPIRED']) {
       const r = await draw(instrument(psa, { status }));
       expect(r.status, `a draw was taken on an instrument that is ${status}`).toBe(400);
@@ -217,7 +219,7 @@ describe('What the first end-to-end run found', () => {
   it('tells the owner of every draw, with dates and money as people write them', async () => {
     // Only a draw that left a revolving LC short was announced.
     const plain = instrument(psa, { is_revolving: 0 });
-    await post(`/api/payment-security/${plain.id}/utilize`, { amount: 100000, reason: 'Drawn for the test default' });
+    await post(`/api/payment-security/${plain.id}/utilize`, { amount: 100000, reason: 'Drawn for the test default' }, checker);
     expect(notesFor(buyer).join(' ')).toMatch(/₹1,00,000 has been drawn on .* leaving ₹9,00,000\./);
     expect(notesFor(otherBuyer)).toEqual([]);
 
@@ -249,7 +251,7 @@ describe('What the first end-to-end run found', () => {
 
 describe('Releasing an instrument', () => {
   const ask = (ps, who = signToken(buyer)) => post(`/api/payment-security/${ps.id}/release-request`, { reason: 'PSA has run its term' }, who);
-  const decide = (rel, body, who = reia) => post(`/api/payment-security/releases/${rel.id}/act`, body, who);
+  const decide = (rel, body, who = checker) => post(`/api/payment-security/releases/${rel.id}/act`, body, who);
 
   it('is decided on the position today, not the one stamped when it was asked for', async () => {
     const ps = instrument(psa);

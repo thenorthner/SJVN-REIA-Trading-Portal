@@ -39,8 +39,9 @@ beforeEach(() => {
   alpha = makeEntity('SELLER', { name: 'Alpha Solar', pan_no: 'ABCDE1234F', gst_no: '02ABCDE1234F1Z5' });
   beta = makeEntity('SELLER', { name: 'Beta Wind', pan_no: 'PQRSX9876K' });
   admin = makeUser('SJVN_ADMIN', { name: 'Asha Admin' });
-  reia = makeUser('REIA_USER', { name: 'Riya REIA' });
-  intake = makeUser('REIA_ADMIN', { name: 'Ishan Intake' });
+  // Phase B.2: the maker takes the papers in, the checker reviews them.
+  reia = makeUser('REIA_ADMIN', { name: 'Riya REIA' });
+  intake = makeUser('REIA_USER', { name: 'Ishan Intake' });
   finance = makeUser('FINANCE_USER', { name: 'Farhan Finance' });
   seller = makeUser('SELLER', { name: 'Arun Alpha', linked_entity_id: alpha.id });
   sellerL1 = makeUser('SELLER_L1', { name: 'Anu Alpha', linked_entity_id: alpha.id });
@@ -203,7 +204,7 @@ describe('expiry, history, queue and report', () => {
 
 describe('asking for a document', () => {
   it('reaches the company, and closes when the document arrives', async () => {
-    const ask = await request(app).post('/api/documents/requests').set(as(reia))
+    const ask = await request(app).post('/api/documents/requests').set(as(intake))
       .send({ entity_id: alpha.id, document_type: 'PAN_CARD', note: 'Need the latest', due_date: '2020-01-01' });
     expect(ask.status, JSON.stringify(ask.body)).toBe(201);
     expect((await request(app).post('/api/documents/requests').set(as(seller)).send({ entity_id: alpha.id, document_type: 'X' })).status).toBe(403);

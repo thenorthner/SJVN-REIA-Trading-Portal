@@ -14,7 +14,7 @@ import { buildContractReconItems } from '../../src/reconciliationEngine.js';
 // SJVN's signature alone; a disputed statement could go nowhere; and a reopen
 // was approved by the person who asked for it.
 
-let reia, admin, sellerCo, seller, ppa;
+let reia, checker, admin, sellerCo, seller, ppa;
 const post = (path, body = {}, who = reia) => request(app).post(path).set(auth(who)).send(body);
 const energy = (contract, period, mwh, over = {}) => db.prepare(`
   INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, availability_percent, cuf_percent, status)
@@ -25,6 +25,8 @@ const line = (built, type) => built.items.find((i) => i.item_type === type);
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
+  // Phase B.2: checking is the checker's.
+  checker = tokenFor('REIA_CHECKER');
   admin = tokenFor('SJVN_ADMIN');
   sellerCo = makeEntity('SELLER');
   seller = signToken(makeUser('SELLER', { linked_entity_id: sellerCo.id }));
@@ -106,8 +108,8 @@ describe('S48 Signing', () => {
   it('lets a disputed statement be reviewed again, setting aside the signatures on it', async () => {
     const st = await statement();
     const item = db.prepare(`SELECT id FROM recon_items WHERE reconciliation_id = ? AND match_status = 'EXCEPTION'`).get(st.id);
-    await post(`/api/reconciliation/${st.id}/override`, { item_id: item.id, reason: 'bill raised next month' });
-    expect((await post(`/api/recon-signoff/${st.id}/sign`, { decision: 'AGREE' })).status).toBe(200);
+    await post(`/api/reconciliation/${st.id}/override`, { item_id: item.id, reason: 'bill raised next month' }, checker);
+    expect((await post(`/api/recon-signoff/${st.id}/sign`, { decision: 'AGREE' }, checker)).status).toBe(200);
     expect((await post(`/api/reconciliation/${st.id}/acknowledge`, { decision: 'DISAGREE', note: 'our JMR differs' }, seller)).status).toBe(200);
     const again = await post(`/api/reconciliation/${st.id}/regenerate-statement`, {});
     expect(again.status, 'a disputed statement could go nowhere').toBe(200);
@@ -117,7 +119,7 @@ describe('S48 Signing', () => {
   it('drops an override when the figures under it change', async () => {
     const st = await statement();
     const item = db.prepare(`SELECT id FROM recon_items WHERE reconciliation_id = ? AND item_type = 'ENERGY_THREE_WAY'`).get(st.id);
-    await post(`/api/reconciliation/${st.id}/override`, { item_id: item.id, reason: 'bill raised next month' });
+    await post(`/api/reconciliation/${st.id}/override`, { item_id: item.id, reason: 'bill raised next month' }, checker);
     db.prepare(`UPDATE energy_data SET energy_mwh = 9000 WHERE contract_id = ?`).run(ppa.id);
     await post(`/api/reconciliation/${st.id}/regenerate-statement`, {});
     const now = db.prepare(`SELECT match_status, metered_value, notes FROM recon_items WHERE reconciliation_id = ? AND item_type = 'ENERGY_THREE_WAY'`).get(st.id);

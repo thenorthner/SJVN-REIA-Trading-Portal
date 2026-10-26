@@ -125,6 +125,36 @@ function paymentsSum(invoiceIds) {
   `).get(...invoiceIds).s;
 }
 
+/**
+ * What "paid" is made of: money received, what the payer kept back (TDS and
+ * other deductions), and credit notes set against the bills. A credit note
+ * settles a bill without any money changing hands, so a statement that counts
+ * it as paid says so.
+ */
+function paidMakeUp(invoiceIds) {
+  if (!invoiceIds.length) return { cash: 0, withheld: 0, credit: 0, notes: [] };
+  const ph = invoiceIds.map(() => '?').join(',');
+  const r = db.prepare(`
+    SELECT
+      COALESCE(SUM(CASE WHEN mode = 'CREDIT_NOTE' THEN 0 ELSE amount END), 0) cash,
+      COALESCE(SUM(CASE WHEN mode = 'CREDIT_NOTE' THEN 0 ELSE COALESCE(deduction, 0) END), 0) withheld,
+      COALESCE(SUM(CASE WHEN mode = 'CREDIT_NOTE' THEN amount + COALESCE(deduction, 0) ELSE 0 END), 0) credit
+    FROM payments WHERE invoice_id IN (${ph})
+  `).get(...invoiceIds);
+  const notes = db.prepare(`SELECT DISTINCT reference FROM payments WHERE mode = 'CREDIT_NOTE' AND invoice_id IN (${ph}) AND reference IS NOT NULL`)
+    .all(...invoiceIds).map((n) => n.reference);
+  return { ...r, notes };
+}
+
+const inr = (v) => `₹${Math.round(v).toLocaleString('en-IN')}`;
+function paidWords({ cash, withheld, credit, notes }) {
+  if (!credit && !withheld) return '';
+  const parts = [`received ${inr(cash)}`];
+  if (withheld) parts.push(`${inr(withheld)} TDS/deductions`);
+  if (credit) parts.push(`${inr(credit)} by credit note${notes.length ? ` ${notes.join(', ')}` : ''}`);
+  return `Paid = ${parts.join(' + ')}; `;
+}
+
 function openDisputesForPeriod(contractId, period) {
   return db.prepare(`
     SELECT d.* FROM disputes d
@@ -273,7 +303,7 @@ export function buildContractReconItems({ contractId, period, periodType = 'MONT
     unit: 'INR',
     ...finCls,
     invoice_id: primaryInv?.id,
-    notes: `${notYetDue > 0 ? `₹${Math.round(notYetDue).toLocaleString('en-IN')} not yet due, left out; ` : ''}Due ₹${dueTotal.toLocaleString('en-IN')}${rebateTotal ? ` (after ₹${Math.round(rebateTotal).toLocaleString('en-IN')} rebate)` : ''}${lpsBilled ? ` incl. ₹${Math.round(lpsBilled).toLocaleString('en-IN')} surcharge` : ''}; payable now (ex-disputed): ₹${payableAgg.toLocaleString('en-IN')}; disputed ₹${disputedTotal.toLocaleString('en-IN')}`,
+    notes: `${paidWords(paidMakeUp(invoiceIds))}${notYetDue > 0 ? `₹${Math.round(notYetDue).toLocaleString('en-IN')} not yet due, left out; ` : ''}Due ₹${dueTotal.toLocaleString('en-IN')}${rebateTotal ? ` (after ₹${Math.round(rebateTotal).toLocaleString('en-IN')} rebate)` : ''}${lpsBilled ? ` incl. ₹${Math.round(lpsBilled).toLocaleString('en-IN')} surcharge` : ''}; payable now (ex-disputed): ₹${payableAgg.toLocaleString('en-IN')}; disputed ₹${disputedTotal.toLocaleString('en-IN')}`,
     pattern_flag: checkPatternFlag(contractId, null, 'FINANCIAL_THREE_WAY') && finCls.match_status === 'EXCEPTION',
   }));
 

@@ -15,7 +15,7 @@ import { auth, makeUser, makeEntity, makeContract, makeInvoice, auditFor, resetR
 // with the bill, the signed copy, an estimate of the tax deducted at source, and
 // the hard copy's journey.
 
-let reia, seller, otherSeller, alpha, beta, contract, inv;
+let reia, checker, seller, otherSeller, alpha, beta, contract, inv;
 const as = (u) => auth(signToken(u));
 const get = (u, p) => request(app).get(`/api/invoice-compliance${p}`).set(as(u));
 const post = (u, p, body) => request(app).post(`/api/invoice-compliance${p}`).set(as(u)).send(body);
@@ -29,6 +29,8 @@ beforeEach(() => {
   beta = makeEntity('SELLER', { name: 'Beta Wind' });
   contract = makeContract({ seller_id: alpha.id });
   reia = makeUser('REIA_USER', { name: 'Riya REIA' });
+  // Phase B.2: the checker records that the hard copy arrived.
+  checker = makeUser('REIA_ADMIN', { name: 'Chetan Checker' });
   seller = makeUser('SELLER', { name: 'Arun Alpha', linked_entity_id: alpha.id });
   otherSeller = makeUser('SELLER', { name: 'Bina Beta', linked_entity_id: beta.id });
   inv = makeInvoice({ contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'SUBMITTED', billing_period: '2026-06', total_amount: 3000000, invoice_no: 'AS/2026/06/001' });
@@ -135,13 +137,13 @@ describe('signed copy', () => {
 
 describe('hard copy', () => {
   it('is dispatched by the seller and received by SJVN, in that order', async () => {
-    expect((await post(reia, `/${inv.id}/hardcopy/received`, {})).status).toBe(400);
+    expect((await post(checker, `/${inv.id}/hardcopy/received`, {})).status).toBe(400);
     expect((await post(seller, `/${inv.id}/hardcopy`, { courier: 'Blue Dart' })).status).toBe(400);
     const sent = await post(seller, `/${inv.id}/hardcopy`, { courier: 'Blue Dart', docket_no: '7812-3456-90' });
     expect(sent.body.hardcopy).toMatchObject({ courier: 'Blue Dart', docket_no: '7812-3456-90', received_on: null });
     expect((await post(seller, `/${inv.id}/hardcopy/received`, {})).status).toBe(403);
-    const got = await post(reia, `/${inv.id}/hardcopy/received`, { note: 'Inward no. 4471' });
-    expect(got.body.hardcopy).toMatchObject({ received_by: 'Riya REIA', note: 'Inward no. 4471' });
+    const got = await post(checker, `/${inv.id}/hardcopy/received`, { note: 'Inward no. 4471' });
+    expect(got.body.hardcopy).toMatchObject({ received_by: 'Chetan Checker', note: 'Inward no. 4471' });
     expect((await post(seller, `/${inv.id}/hardcopy`, { courier: 'DTDC', docket_no: 'X12345' })).status).toBe(400);
 
     const draft = makeInvoice({ contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'DRAFT', billing_period: '2026-08' });

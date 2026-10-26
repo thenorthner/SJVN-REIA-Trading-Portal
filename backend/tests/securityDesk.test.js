@@ -10,7 +10,7 @@ import { remindExpiringSecurity } from '../src/routes/securityDesk.js';
 // lapsing, the bank's SFMS advice, the scanned copy, each amendment in order,
 // and the letter of credit SJVN opens the other way.
 
-let reia, finance, seller, otherSeller, alpha, beta, contract;
+let reia, checker, finance, seller, otherSeller, alpha, beta, contract;
 const as = (u) => auth(signToken(u));
 const get = (u, p) => request(app).get(`/api/security-desk${p}`).set(as(u));
 const post = (u, p, body) => request(app).post(`/api/security-desk${p}`).set(as(u)).send(body);
@@ -47,6 +47,8 @@ beforeEach(() => {
   beta = makeEntity('SELLER', { name: 'Beta Wind' });
   contract = makeContract({ seller_id: alpha.id, pbg_amount: 5000000 });
   reia = makeUser('REIA_USER', { name: 'Riya REIA' });
+  // Phase B.2: the checker accepts instruments and amendments and closes an LC.
+  checker = makeUser('REIA_ADMIN', { name: 'Chetan Checker' });
   finance = makeUser('FINANCE_USER', { name: 'Farid Finance' });
   seller = makeUser('SELLER', { name: 'Arun Alpha', linked_entity_id: alpha.id });
   otherSeller = makeUser('SELLER', { name: 'Bina Beta', linked_entity_id: beta.id });
@@ -106,8 +108,8 @@ describe('extension and amendment', () => {
     const amendmentId = sub.body.pending_amendment.id;
 
     expect((await post(seller, `/amendments/${amendmentId}/decide`, { decision: 'ACCEPTED' })).status).toBe(403);
-    expect((await post(reia, `/amendments/${amendmentId}/decide`, { decision: 'REJECTED' })).body.error).toMatch(/Say why/);
-    const ok = await post(reia, `/amendments/${amendmentId}/decide`, { decision: 'ACCEPTED', sfms_message_type: 'MT767', sfms_date: day(0), sfms_reference: 'SBINH26280000123' });
+    expect((await post(checker, `/amendments/${amendmentId}/decide`, { decision: 'REJECTED' })).body.error).toMatch(/Say why/);
+    const ok = await post(checker, `/amendments/${amendmentId}/decide`, { decision: 'ACCEPTED', sfms_message_type: 'MT767', sfms_date: day(0), sfms_reference: 'SBINH26280000123' });
     expect(ok.status, JSON.stringify(ok.body)).toBe(200);
     expect(ok.body).toMatchObject({ validity_end: day(385), claim_deadline: day(415), amendment_count: 1, pending_amendment: null });
     expect(ok.body.expiry.level).toBe('OK');
@@ -129,16 +131,16 @@ describe('extension and amendment', () => {
 
     expect((await post(seller, `/instruments/${ps.id}/amendments`, { new_limit: 500000, reason: 'Reduced', document_version_id: doc() })).body.error).toMatch(/already been drawn/);
     const up = await post(seller, `/instruments/${ps.id}/amendments`, { new_limit: 7500000, reason: 'Capacity enhanced', document_version_id: doc() });
-    const refused = await post(reia, `/amendments/${up.body.pending_amendment.id}/decide`, { decision: 'REJECTED', note: 'Letter is unsigned' });
+    const refused = await post(checker, `/amendments/${up.body.pending_amendment.id}/decide`, { decision: 'REJECTED', note: 'Letter is unsigned' });
     expect(refused.body).toMatchObject({ limit_amount: 5000000, amendment_count: 1 });
     expect(refused.body.amendments.find((a) => a.status === 'REJECTED').decision_note).toBe('Letter is unsigned');
 
     const again = await post(seller, `/instruments/${ps.id}/amendments`, { new_limit: 7500000, reason: 'Capacity enhanced', document_version_id: doc() });
-    expect((await post(reia, `/amendments/${again.body.pending_amendment.id}/withdraw`, {})).status).toBe(403);
+    expect((await post(checker, `/amendments/${again.body.pending_amendment.id}/withdraw`, {})).status).toBe(403);
     expect((await post(seller, `/amendments/${again.body.pending_amendment.id}/withdraw`, {})).body.pending_amendment).toBeNull();
 
     const third = await post(seller, `/instruments/${ps.id}/amendments`, { new_limit: 7500000, reason: 'Capacity enhanced', document_version_id: doc() });
-    const done = await post(reia, `/amendments/${third.body.pending_amendment.id}/decide`, { decision: 'ACCEPTED' });
+    const done = await post(checker, `/amendments/${third.body.pending_amendment.id}/decide`, { decision: 'ACCEPTED' });
     expect(done.body).toMatchObject({ limit_amount: 7500000, available_amount: 6500000, status: 'PARTIALLY_UTILIZED' });
     expect(done.body.chain.map((c) => [c.step, c.limit, c.validity_end])).toEqual([
       ['Original', 5000000, day(100)], ['Amendment 1', 5000000, day(400)], ['Amendment 2', 7500000, day(400)],
@@ -201,7 +203,7 @@ describe('a guarantee submitted by the seller', () => {
     expect(o.contracts[0].pbg_shortfall).toBe(5000000);
 
     expect((await post(seller, `/instruments/${s.body.id}/decide`, { decision: 'ACCEPTED' })).status).toBe(403);
-    const ok = await post(reia, `/instruments/${s.body.id}/decide`, { decision: 'ACCEPTED', sfms_message_type: 'MT760', sfms_date: day(0), sfms_reference: 'SBINH1' });
+    const ok = await post(checker, `/instruments/${s.body.id}/decide`, { decision: 'ACCEPTED', sfms_message_type: 'MT760', sfms_date: day(0), sfms_reference: 'SBINH1' });
     expect(ok.body).toMatchObject({ status: 'ACTIVE' });
     expect(ok.body.sfms.confirmed).toBe(true);
     o = (await get(seller, '/overview')).body;
@@ -209,7 +211,7 @@ describe('a guarantee submitted by the seller', () => {
     expect(o.contracts[0].pbg_shortfall).toBe(0);
 
     const second = await post(seller, '/instruments', submission({ bank_reference_no: 'SBI/BG/0002' }));
-    const no = await post(reia, `/instruments/${second.body.id}/decide`, { decision: 'REJECTED', note: 'Beneficiary name is wrong' });
+    const no = await post(checker, `/instruments/${second.body.id}/decide`, { decision: 'REJECTED', note: 'Beneficiary name is wrong' });
     expect(no.body).toMatchObject({ status: 'CLOSED', rejection_note: 'Beneficiary name is wrong' });
   });
 
@@ -250,8 +252,8 @@ describe('SJVN\'s letter of credit in the seller\'s favour', () => {
     expect(amended.body.events.map((e) => e.event_type)).toEqual(['OPENED', 'AMENDED']);
     expect((await get(seller, '/overview')).body.contracts[0].lc_shortfall).toBe(0);
 
-    expect((await post(reia, `/lcs/${made.body.id}/close`, {})).body.error).toMatch(/Say why/);
-    expect((await post(reia, `/lcs/${made.body.id}/close`, { note: 'PPA terminated' })).status).toBe(200);
+    expect((await post(checker, `/lcs/${made.body.id}/close`, {})).body.error).toMatch(/Say why/);
+    expect((await post(checker, `/lcs/${made.body.id}/close`, { note: 'PPA terminated' })).status).toBe(200);
     expect((await get(seller, '/overview')).body.totals.lc_open).toBe(0);
   });
 

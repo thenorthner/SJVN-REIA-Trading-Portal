@@ -37,6 +37,14 @@ const INTERNAL_READ = [...new Set([...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'
 const canManage = (user) => ROLE_GROUPS.REIA_WRITE.includes(user?.role);
 /** Opening and amending SJVN's own letters of credit is Finance's work as much as the desk's. */
 const canManageLc = (user) => canManage(user) || user?.role === 'FINANCE_USER';
+// Phase B.2: the maker records — a bank's confirmation, SJVN's documents and
+// amendment asks, a letter of credit and its amendment; the checker decides —
+// accepting an instrument or an amendment, drawing on, reinstating or closing an
+// LC. Finance keeps its hand in the letters of credit either way.
+const canMake = (user) => ROLE_GROUPS.REIA_MAKE.includes(user?.role);
+const canCheck = (user) => ROLE_GROUPS.REIA_CHECK.includes(user?.role);
+const canMakeLc = (user) => canMake(user) || user?.role === 'FINANCE_USER';
+const canCheckLc = (user) => canCheck(user) || user?.role === 'FINANCE_USER';
 const sideOf = (user) => counterpartySide(user) || (INTERNAL_READ.includes(user?.role) ? 'SJVN' : null);
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
@@ -438,6 +446,7 @@ function overview(user) {
     thresholds: { warn_days: warnDays(), critical_days: criticalDays() },
     instruments, lcs, contracts, totals,
     can_manage: canManage(user), can_manage_lc: canManageLc(user),
+    can_make: canMake(user), can_check: canCheck(user), can_make_lc: canMakeLc(user), can_check_lc: canCheckLc(user),
   };
 }
 
@@ -508,6 +517,7 @@ function detail(user, id) {
     ...instrumentView(ps, { withChain: true }),
     side,
     can_manage: canManage(user),
+    can_make: canMake(user), can_check: canCheck(user),
     counterparty_side: counterpartyOf(contract),
     events: db.prepare('SELECT id, event_type, actor_name, details, created_at FROM security_events WHERE payment_security_id = ? ORDER BY created_at, rowid').all(ps.id),
     releases: db.prepare('SELECT * FROM security_releases WHERE payment_security_id = ? ORDER BY created_at DESC').all(ps.id),
@@ -592,7 +602,7 @@ function writeSfms(ps, sfms, user, bankRef) {
 
 // POST /instruments/:id/sfms — SJVN records the advice its bank received.
 router.post('/instruments/:id/sfms', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk records a bank confirmation');
+  if (!canMake(req.user)) throw fail(403, 'The REIA maker records a bank confirmation');
   const { ps, contract } = instrumentFor(req.user, req.params.id);
   const sfms = sfmsFrom(req.body || {}, { required: true });
   writeSfms(ps, sfms, req.user, text(req.body.bank_reference_no, 80));
@@ -604,7 +614,7 @@ router.post('/instruments/:id/sfms', (req, res) => send(res, () => {
 
 // POST /instruments/:id/decide — accept or refuse a counterparty's submission.
 router.post('/instruments/:id/decide', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk accepts an instrument');
+  if (!canCheck(req.user)) throw fail(403, 'Accepting an instrument is the REIA checker\'s');
   const { ps, contract } = instrumentFor(req.user, req.params.id);
   if (ps.status !== 'DRAFT') throw fail(400, 'This instrument is not awaiting acceptance');
   const decision = String(req.body.decision || '').toUpperCase();
@@ -637,7 +647,7 @@ router.post('/instruments/:id/decide', (req, res) => send(res, () => {
 // POST /instruments/:id/document — put the scanned guarantee or e-BG on the instrument.
 router.post('/instruments/:id/document', (req, res) => send(res, () => {
   const { ps, side } = instrumentFor(req.user, req.params.id);
-  if (side === 'SJVN' && !canManage(req.user)) throw fail(403, 'Not authorized');
+  if (side === 'SJVN' && !canMake(req.user)) throw fail(403, 'The REIA maker does this for SJVN');
   const doc = docOf(ps.contract_id, req.body.document_version_id);
   if (!doc) throw fail(400, 'Attach a file');
   // Once SJVN has accepted the instrument the copy on file is the one it accepted.
@@ -656,7 +666,7 @@ router.post('/instruments/:id/document', (req, res) => send(res, () => {
 // POST /instruments/:id/amendments — an extension or change the bank has made.
 router.post('/instruments/:id/amendments', (req, res) => send(res, () => {
   const { ps, contract, side } = instrumentFor(req.user, req.params.id);
-  if (side === 'SJVN' && !canManage(req.user)) throw fail(403, 'Not authorized');
+  if (side === 'SJVN' && !canMake(req.user)) throw fail(403, 'The REIA maker does this for SJVN');
   if (![...LIVE, 'EXPIRED'].includes(ps.status)) throw fail(400, `An instrument that is ${ps.status.toLowerCase().replace(/_/g, ' ')} cannot be amended`);
   if (db.prepare(`SELECT 1 FROM security_amendments WHERE payment_security_id = ? AND status = 'PENDING'`).get(ps.id)) {
     throw fail(409, 'An amendment on this instrument is already awaiting SJVN');
@@ -721,7 +731,7 @@ function amendmentFor(user, id) {
 
 // POST /amendments/:id/decide — SJVN takes it on record, or refuses it.
 router.post('/amendments/:id/decide', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk decides an amendment');
+  if (!canCheck(req.user)) throw fail(403, 'Deciding an amendment is the REIA checker\'s');
   const { a, ps, contract } = amendmentFor(req.user, req.params.id);
   if (a.status !== 'PENDING') throw fail(400, `This amendment has already been ${a.status.toLowerCase()}`);
   const decision = String(req.body.decision || '').toUpperCase();
@@ -762,11 +772,11 @@ router.post('/amendments/:id/withdraw', (req, res) => send(res, () => {
 
 router.get('/lcs/:id', (req, res) => send(res, () => {
   const { lc, contract } = lcFor(req.user, req.params.id);
-  return { ...lcView(lc, { withEvents: true }), required_amount: lcRequired(contract), open_on_contract: lcOpenOn(contract.id), can_manage_lc: canManageLc(req.user) };
+  return { ...lcView(lc, { withEvents: true }), required_amount: lcRequired(contract), open_on_contract: lcOpenOn(contract.id), can_manage_lc: canManageLc(req.user), can_make_lc: canMakeLc(req.user), can_check_lc: canCheckLc(req.user) };
 }));
 
 router.post('/lcs', (req, res) => send(res, () => {
-  if (!canManageLc(req.user)) throw fail(403, 'Only the REIA desk or Finance records a letter of credit');
+  if (!canMakeLc(req.user)) throw fail(403, 'The REIA maker or Finance records a letter of credit');
   const b = req.body || {};
   const { contract } = contractFor(req.user, b.contract_id);
   if (contract.contract_type !== 'PPA' || !contract.seller_id) throw fail(400, 'SJVN opens a letter of credit in a seller\'s favour under a PPA');
@@ -794,7 +804,7 @@ router.post('/lcs', (req, res) => send(res, () => {
 
 // POST /lcs/:id/amend — value, validity, the bank's advice or the copy on file.
 router.post('/lcs/:id/amend', (req, res) => send(res, () => {
-  if (!canManageLc(req.user)) throw fail(403, 'Only the REIA desk or Finance amends a letter of credit');
+  if (!canMakeLc(req.user)) throw fail(403, 'The REIA maker or Finance amends a letter of credit');
   const { lc, contract } = lcFor(req.user, req.params.id);
   if (lc.status !== 'ACTIVE') throw fail(400, 'This letter of credit is closed');
   const b = req.body || {};
@@ -832,7 +842,7 @@ router.post('/lcs/:id/amend', (req, res) => send(res, () => {
 
 // POST /lcs/:id/draws — the seller has drawn on SJVN's letter of credit.
 router.post('/lcs/:id/draws', (req, res) => send(res, () => {
-  if (!canManageLc(req.user)) throw fail(403, 'Only the REIA desk or Finance records a draw');
+  if (!canCheckLc(req.user)) throw fail(403, 'Drawing on a letter of credit is the REIA checker\'s or Finance\'s');
   const { lc, contract } = lcFor(req.user, req.params.id);
   if (lc.status !== 'ACTIVE') throw fail(400, 'This letter of credit is closed');
   const b = req.body || {};
@@ -853,7 +863,7 @@ router.post('/lcs/:id/draws', (req, res) => send(res, () => {
 
 // POST /lcs/:id/reinstate — a revolving letter of credit restored after a draw.
 router.post('/lcs/:id/reinstate', (req, res) => send(res, () => {
-  if (!canManageLc(req.user)) throw fail(403, 'Only the REIA desk or Finance records a reinstatement');
+  if (!canCheckLc(req.user)) throw fail(403, 'Reinstating a letter of credit is the REIA checker\'s or Finance\'s');
   const { lc, contract } = lcFor(req.user, req.params.id);
   if (lc.status !== 'ACTIVE') throw fail(400, 'This letter of credit is closed');
   if (!lc.is_revolving) throw fail(400, `${lc.lc_no} is not revolving — amend its value instead`);
@@ -869,7 +879,7 @@ router.post('/lcs/:id/reinstate', (req, res) => send(res, () => {
 }));
 
 router.post('/lcs/:id/close', (req, res) => send(res, () => {
-  if (!canManageLc(req.user)) throw fail(403, 'Only the REIA desk or Finance closes a letter of credit');
+  if (!canCheckLc(req.user)) throw fail(403, 'Closing a letter of credit is the REIA checker\'s or Finance\'s');
   const { lc, contract } = lcFor(req.user, req.params.id);
   if (lc.status !== 'ACTIVE') throw fail(400, 'This letter of credit is already closed');
   const note = text(req.body.note, 500);

@@ -31,6 +31,11 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 // dashboards read their stations' REA here and were refused (Hydro QA run 16).
 const INTERNAL_READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.THERMAL_ALL, 'COMPLIANCE_AUDITOR'])];
 const canManage = (user) => ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+// Phase B.2: loading blocks and attaching the source are the maker's preparation;
+// ruling on a counterparty's objection, like validating and locking the figure
+// (energyData.js), is the checker's.
+const canMake = (user) => ROLE_GROUPS.REIA_MAKE.includes(user?.role);
+const canCheck = (user) => ROLE_GROUPS.REIA_CHECK.includes(user?.role);
 const sideOf = (user) => counterpartySide(user) || (INTERNAL_READ.includes(user?.role) ? 'SJVN' : null);
 
 const fail = (status, message) => Object.assign(new Error(message), { status });
@@ -254,6 +259,8 @@ function detailOf(row, contract, side, user = null) {
     min_cuf_percent: contract.min_cuf_percent,
     side,
     can_manage: side === 'SJVN' && (!user || canManage(user)),
+    can_make: side === 'SJVN' && (!user || canMake(user)),
+    can_check: side === 'SJVN' && (!user || canCheck(user)),
     lock_override_by: row.lock_override_by || null,
     // A locked figure nobody answered is past answering: the bill is where it is taken up.
     can_respond: side !== 'SJVN' && (['VALIDATED', 'DISPUTED'].includes(row.status) || (row.status === 'LOCKED' && row.response_status === 'OBJECTED')) && row.response_status !== 'ACCEPTED',
@@ -335,7 +342,7 @@ function asDay(v) {
 
 // POST /:id/blocks (file) — load a month's 15-minute blocks, replacing what was there.
 router.post('/:id/blocks', upload.single('file'), (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk can load block data');
+  if (!canMake(req.user)) throw fail(403, 'Loading block data is the REIA maker\'s');
   const { row, contract } = recordFor(req.user, req.params.id);
   // The blocks behind a billed month are part of what was billed.
   if (row.status === 'LOCKED') throw fail(400, `${row.period_month} is locked for billing; its 15-minute blocks cannot be replaced.`);
@@ -402,7 +409,7 @@ router.post('/:id/blocks', upload.single('file'), (req, res) => send(res, () => 
 
 // POST /:id/source-document { version_id } — the JMR or REA this figure was taken from.
 router.post('/:id/source-document', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk can attach the source document');
+  if (!canMake(req.user)) throw fail(403, 'Attaching the source document is the REIA maker\'s');
   const { row, contract, side } = recordFor(req.user, req.params.id);
   const v = db.prepare(`
     SELECT v.id FROM document_versions v JOIN documents d ON d.id = v.document_id WHERE v.id = ? AND d.contract_id = ?
@@ -455,7 +462,7 @@ router.post('/:id/respond', (req, res) => send(res, () => {
 
 // POST /:id/resolve-objection { outcome: UPHELD|REJECTED, note } — SJVN's answer to an objection.
 router.post('/:id/resolve-objection', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk can answer an objection');
+  if (!canCheck(req.user)) throw fail(403, 'Ruling on an objection is the REIA checker\'s');
   const { row, contract, side } = recordFor(req.user, req.params.id);
   if (row.response_status !== 'OBJECTED' || row.objection_outcome) throw fail(400, 'There is no open objection on this period');
   const outcome = String(req.body.outcome || '').toUpperCase();

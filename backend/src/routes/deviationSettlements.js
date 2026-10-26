@@ -14,6 +14,10 @@ router.use(requireAuth);
 // Commercial the hydro stations, Thermal the thermal ones.
 const READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.THERMAL_ALL, 'COMPLIANCE_AUDITOR'])];
 const WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
+// Phase B.2: the REIA maker raises, edits and dispatches a deviation bill.
+// Dispatching drafts a supplementary invoice, which the checker then signs at
+// its first level — the check is there, not here.
+const MAKE = [...new Set([...ROLE_GROUPS.REIA_MAKE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
 
 /** The contracts a vertical's desk settles DSM for, as a SQL condition on alias c. */
 const VERTICAL_TYPES = {
@@ -436,7 +440,7 @@ router.get('/statement-sync', requireRole(...READ), (req, res) => {
 });
 
 // One click: raise the week from the statement and bill it.
-router.post('/raise-from-statement', requireRole(...WRITE), async (req, res) => {
+router.post('/raise-from-statement', requireRole(...MAKE), async (req, res) => {
   const { dsa_account_id: accountId, contract_id: contractId } = req.body || {};
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(contractId);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
@@ -645,10 +649,10 @@ const fromDsaHandler = (req, res) => {
   });
   res.status(201).json(withContract(db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(id)));
 };
-router.post('/from-dsa', requireRole(...WRITE), fromDsaHandler);
+router.post('/from-dsa', requireRole(...MAKE), fromDsaHandler);
 
 // Create a weekly deviation entry (data provided by NRPC)
-router.post('/', requireRole(...WRITE), (req, res) => {
+router.post('/', requireRole(...MAKE), (req, res) => {
   const b = req.body;
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(b.contract_id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
@@ -744,7 +748,7 @@ router.post('/', requireRole(...WRITE), (req, res) => {
 });
 
 // Edit (recomputes net); blocked once dispatched
-router.put('/:id', requireRole(...WRITE), (req, res) => {
+router.put('/:id', requireRole(...MAKE), (req, res) => {
   const row = db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Deviation record not found' });
   // Each desk works its own stations' weeks on every step, not only when one
@@ -932,13 +936,13 @@ const dispatchHandler = (req, res) => {
     res.status(500).json({ error: err.message || 'Failed to dispatch DSM and create invoice' });
   }
 };
-router.post('/:id/dispatch', requireRole(...WRITE), dispatchHandler);
+router.post('/:id/dispatch', requireRole(...MAKE), dispatchHandler);
 
 /**
  * Backfill: create linked SUPPLEMENTARY invoice for a legacy DISPATCHED DSM
  * that has invoice_no but no invoice_id.
  */
-router.post('/:id/link-invoice', requireRole(...WRITE), (req, res) => {
+router.post('/:id/link-invoice', requireRole(...MAKE), (req, res) => {
   const row = db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Deviation record not found' });
   // Each desk works its own stations' weeks on every step, not only when one
@@ -983,7 +987,7 @@ router.post('/:id/link-invoice', requireRole(...WRITE), (req, res) => {
   }
 });
 
-router.delete('/:id', requireRole(...WRITE), (req, res) => {
+router.delete('/:id', requireRole(...MAKE), (req, res) => {
   const row = db.prepare('SELECT * FROM deviation_settlements WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Deviation record not found' });
   // Each desk works its own stations' weeks on every step, not only when one

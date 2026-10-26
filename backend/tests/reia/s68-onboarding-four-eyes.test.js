@@ -24,34 +24,40 @@ const statusOf = (id) => db.prepare('SELECT status FROM entities WHERE id = ?').
 
 beforeEach(() => resetReia());
 
+// Phase B.2: on the REIA desk the maker onboards and the checker clears, so
+// the two are different people by role as well as by record. The station desks
+// have no split yet: there one role does both, and four-eyes is by person.
 describe.each([
-  ['REIA', 'REIA_ADMIN'],
-  ['Hydro', 'COMMERCIAL_ADMIN'],
-  ['Thermal', 'THERMAL_ADMIN'],
-])('S68 Onboarding four-eyes — %s desk', (_desk, role) => {
+  ['REIA', 'REIA_MAKER', 'REIA_CHECKER'],
+  ['Hydro', 'COMMERCIAL_ADMIN', 'COMMERCIAL_ADMIN'],
+  ['Thermal', 'THERMAL_ADMIN', 'THERMAL_ADMIN'],
+])('S68 Onboarding four-eyes — %s desk', (_desk, makerRole, checkerRole) => {
+  const split = makerRole !== checkerRole;
+
   it('records who onboarded the company', async () => {
-    const maker = tokenFor(role);
+    const maker = tokenFor(makerRole);
     const c = await onboard(maker);
     expect(c.status).toBe(201);
     expect(c.body.onboarded_by_user_id).toBeTruthy();
+    if (split) expect((await onboard(tokenFor(checkerRole))).status).toBe(403);
   });
 
   it('refuses the onboarding officer’s own approval, and lets a second officer approve', async () => {
-    const maker = tokenFor(role);
+    const maker = tokenFor(makerRole);
     const id = (await onboard(maker)).body.id;
     clearGates(id);
     const own = await decide(maker, id, { decision: 'APPROVED' });
     expect(own.status).toBe(403);
-    expect(own.body.error).toMatch(/another officer/i);
+    if (!split) expect(own.body.error).toMatch(/another officer/i);
     expect(statusOf(id)).toBe('PENDING');
 
-    const ok = await decide(tokenFor(role), id, { decision: 'APPROVED' });
+    const ok = await decide(tokenFor(checkerRole), id, { decision: 'APPROVED' });
     expect(ok.status).toBe(200);
     expect(statusOf(id)).toBe('APPROVED');
   });
 
   it('refuses the onboarding administrator’s direct admission too', async () => {
-    const maker = tokenFor(role);
+    const maker = tokenFor(makerRole);
     const id = (await onboard(maker)).body.id;
     clearGates(id);
     const r = await decide(maker, id, { decision: 'APPROVED', admin_direct_admit: true });
@@ -59,10 +65,10 @@ describe.each([
     expect(statusOf(id)).toBe('PENDING');
   });
 
-  it('still lets the onboarding officer reject', async () => {
-    const maker = tokenFor(role);
+  it('lets a reviewer reject — on a split desk the checker, otherwise the onboarding officer too', async () => {
+    const maker = tokenFor(makerRole);
     const id = (await onboard(maker)).body.id;
-    const r = await decide(maker, id, { decision: 'REJECTED', remarks: 'PAN card does not match the company name' });
+    const r = await decide(split ? tokenFor(checkerRole) : maker, id, { decision: 'REJECTED', remarks: 'PAN card does not match the company name' });
     expect(r.status).toBe(200);
     expect(statusOf(id)).toBe('REJECTED');
   });

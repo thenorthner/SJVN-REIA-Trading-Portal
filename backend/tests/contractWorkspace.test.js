@@ -34,7 +34,9 @@ describe('who may open a contract’s working file', () => {
   it('is its own parties and SJVN', async () => {
     expect((await ws(seller)).status).toBe(200);
     expect((await ws(buyer)).body.side).toBe('BUYER');
-    expect((await ws(reia)).body).toMatchObject({ side: 'SJVN', can_manage: true });
+    expect((await ws(reia)).body).toMatchObject({ side: 'SJVN', can_manage: true, can_make: true, can_check: false });
+    // Phase B.2: the checker decides what the maker set up.
+    expect((await ws(reia2)).body).toMatchObject({ can_make: false, can_check: true });
     expect((await ws(finance)).body.can_manage).toBe(false);
     expect((await ws(otherSeller)).status).toBe(404);
     expect((await ws(makeUser('TRADING_CLIENT', { name: 'Trader' }))).status).toBe(404);
@@ -66,11 +68,11 @@ describe('milestones', () => {
     expect((await post(seller, `/milestones/${fc.id}/confirm`, {})).status).toBe(403);
     expect((await post(otherSeller, `/milestones/${fc.id}/report`, { achieved_date: day(-2) })).status).toBe(404);
 
-    const no = await post(reia, `/milestones/${fc.id}/confirm`, { accept: false, note: 'Letter is conditional' });
+    const no = await post(reia2, `/milestones/${fc.id}/confirm`, { accept: false, note: 'Letter is conditional' });
     expect(no.body.find((m) => m.id === fc.id)).toMatchObject({ status: 'PENDING', reported_date: null });
 
     await post(seller, `/milestones/${fc.id}/report`, { achieved_date: day(-1) });
-    const yes = await post(reia, `/milestones/${fc.id}/confirm`, {});
+    const yes = await post(reia2, `/milestones/${fc.id}/confirm`, {});
     expect(yes.body.find((m) => m.id === fc.id)).toMatchObject({ status: 'ACHIEVED', achieved_date: day(-1) });
     expect(auditFor(fc.id).map((a) => a.action)).toEqual(expect.arrayContaining(['MILESTONE_REPORTED', 'MILESTONE_CONFIRMED']));
   });
@@ -96,8 +98,10 @@ describe('requests', () => {
     expect((await ws(buyer)).body.requests).toEqual([]);
 
     expect((await post(seller, `/requests/${id}/decide`, { decision: 'APPROVED' })).status).toBe(403);
-    expect((await post(reia, `/requests/${id}/decide`, { decision: 'REJECTED' })).status).toBe(400);
-    const ok = await post(reia, `/requests/${id}/decide`, { decision: 'APPROVED', approved_date: day(90), note: 'Ninety days granted' });
+    // Phase B.2: the maker who keeps the milestones does not decide the request.
+    expect((await post(reia, `/requests/${id}/decide`, { decision: 'APPROVED', approved_date: day(90) })).status).toBe(403);
+    expect((await post(reia2, `/requests/${id}/decide`, { decision: 'REJECTED' })).status).toBe(400);
+    const ok = await post(reia2, `/requests/${id}/decide`, { decision: 'APPROVED', approved_date: day(90), note: 'Ninety days granted' });
     expect(ok.body[0]).toMatchObject({ status: 'APPROVED', approved_date: day(90) });
     expect((await ws(seller)).body.milestones.find((m) => m.id === scod.id)).toMatchObject({ due_date: day(90), original_due_date: day(30), extended: true });
     expect((await post(reia2, `/requests/${id}/decide`, { decision: 'REJECTED', note: 'x' })).status).toBe(400);
@@ -112,7 +116,7 @@ describe('requests', () => {
     db.prepare(`INSERT INTO document_versions (id, document_id, version_number, file_path, file_name, file_size_bytes, mime_type) VALUES ('V1', 'D1', 1, '/nowhere', 'pbg.pdf', 10, 'application/pdf')`).run();
     const raised = await post(seller, `/${contract.id}/requests`, { request_type: 'PBG_RENEWAL', requested_date: day(400), amount: 6000000, bank: 'SBI', description: 'Renewed for a year', attachment_version_id: 'V1' });
     expect(raised.status, JSON.stringify(raised.body)).toBe(200);
-    await post(reia, `/requests/${raised.body[0].id}/decide`, { decision: 'APPROVED' });
+    await post(reia2, `/requests/${raised.body[0].id}/decide`, { decision: 'APPROVED' });
     expect((await ws(seller)).body.guarantee).toMatchObject({ state: 'VALID', expiry: day(400), amount: 6000000 });
   });
 
@@ -121,7 +125,7 @@ describe('requests', () => {
     const id = raised.body[0].id;
     expect((await post(buyer, `/requests/${id}/withdraw`)).status).toBe(404);
     expect((await post(seller, `/requests/${id}/withdraw`)).body[0].status).toBe('WITHDRAWN');
-    expect((await post(reia, `/requests/${id}/decide`, { decision: 'APPROVED' })).status).toBe(400);
+    expect((await post(reia2, `/requests/${id}/decide`, { decision: 'APPROVED' })).status).toBe(400);
   });
 });
 
@@ -137,9 +141,9 @@ describe('notices', () => {
     expect((await post(seller, `/notices/${n.id}/acknowledge`)).status).toBe(400);
     expect((await post(finance, `/notices/${n.id}/acknowledge`)).status).toBe(403);
     expect((await post(buyer, `/notices/${n.id}/acknowledge`)).status).toBe(404);
-    const ack = await post(reia, `/notices/${n.id}/acknowledge`);
-    expect(ack.body[0]).toMatchObject({ awaiting: null, acknowledged_by_name: 'Riya REIA' });
-    expect((await post(reia, `/notices/${n.id}/acknowledge`)).status).toBe(400);
+    const ack = await post(reia2, `/notices/${n.id}/acknowledge`);
+    expect(ack.body[0]).toMatchObject({ awaiting: null, acknowledged_by_name: 'Ravi REIA' });
+    expect((await post(reia2, `/notices/${n.id}/acknowledge`)).status).toBe(400);
 
     // SJVN must say which party it is writing to when the contract has two.
     expect((await post(reia, `/${contract.id}/notices`, { notice_type: 'DEFAULT', subject: 's', body: 'b' })).status).toBe(400);

@@ -88,7 +88,7 @@ describe('S23 An amended contract carries its own history', () => {
     const seller = makeEntity('SELLER');
     const c = makeContract({ status: 'ACTIVE', seller_id: seller.id, tariff_per_unit: 3.0,
       tenure_start: '2026-04-01', tenure_end: '2031-03-31' });
-    const r = await request(app).post(`/api/contracts/${c.id}/amend`).set(auth(reia))
+    const r = await request(app).post(`/api/contracts/${c.id}/amend`).set(auth(tokenFor('REIA_MAKER')))
       .send({ tariff_per_unit: 3.4, effective_from: '2027-04-01' });
     expect(r.status).toBe(201);
 
@@ -104,7 +104,7 @@ describe('S23 An amended contract carries its own history', () => {
     const seller = makeEntity('SELLER');
     const c = makeContract({ status: 'ACTIVE', seller_id: seller.id, tariff_per_unit: 3.0,
       tenure_start: '2026-04-01', tenure_end: '2031-03-31' });
-    await request(app).post(`/api/contracts/${c.id}/amend`).set(auth(reia))
+    await request(app).post(`/api/contracts/${c.id}/amend`).set(auth(tokenFor('REIA_MAKER')))
       .send({ tariff_per_unit: 3.4, effective_from: '2027-04-01' });
     expect(db.prepare(`SELECT * FROM audit_logs WHERE entity_id = ? AND action = 'AMEND'`).get(c.id)).toBeTruthy();
   });

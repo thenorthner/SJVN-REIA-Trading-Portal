@@ -14,7 +14,7 @@ describe('S7 Invoice approval and distribution', () => {
   it('will not send an invoice before its approvals are signed off', async () => {
     const inv = makeInvoice({ contract_id: contract.id, status: 'SUBMITTED' });
     db.prepare(`INSERT INTO invoice_approvals (id, invoice_id, level, status) VALUES ('AP-1', ?, 1, 'PENDING')`).run(inv.id);
-    const r = await request(app).post(`/api/invoices/${inv.id}/send`).set(auth(reia)).send({});
+    const r = await request(app).post(`/api/invoices/${inv.id}/send`).set(auth(tokenFor('REIA_MAKER'))).send({});
     expect(r.status, 'an invoice with a pending approval was dispatched').toBeGreaterThanOrEqual(400);
   });
 
@@ -28,7 +28,7 @@ describe('S7 Invoice approval and distribution', () => {
 
   it('routes a high-value invoice through more than one level', async () => {
     const inv = makeInvoice({ contract_id: contract.id, status: 'DRAFT', total_amount: 500000000 });
-    await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(reia)).send({});
+    await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(tokenFor('REIA_MAKER'))).send({});
     const levels = db.prepare('SELECT COUNT(*) c FROM invoice_approvals WHERE invoice_id = ?').get(inv.id).c;
     expect(levels, 'a very large invoice was routed through a single approval level').toBeGreaterThan(1);
   });
@@ -224,7 +224,7 @@ describe('S7 A bill is approved out of the approval stage, level by level', () =
     // moment they are raised. The bands were only applied where none existed,
     // so a 12,00,000 arrear went to APPROVED on a single signature.
     const inv = withLevels('DRAFT', 1, { total_amount: 1200000 });
-    const r = await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(reia)).send({});
+    const r = await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(tokenFor('REIA_MAKER'))).send({});
     expect(r.status).toBe(200);
     const rows = db.prepare('SELECT level, status FROM invoice_approvals WHERE invoice_id = ? ORDER BY level').all(inv.id);
     expect(rows.map((x) => x.level)).toEqual([1, 2, 3]);
@@ -233,14 +233,14 @@ describe('S7 A bill is approved out of the approval stage, level by level', () =
 
   it('drops the levels a smaller bill no longer needs on resubmission', async () => {
     const inv = withLevels('REJECTED', 3, { total_amount: 50000 });
-    await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(reia)).send({});
+    await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(tokenFor('REIA_MAKER'))).send({});
     expect(db.prepare('SELECT COUNT(*) c FROM invoice_approvals WHERE invoice_id = ?').get(inv.id).c).toBe(1);
   });
 
   it('keeps the reason a bill was sent back after it is resubmitted', async () => {
     const inv = withLevels('UNDER_APPROVAL', 1);
     await request(app).post(`/api/invoices/${inv.id}/approvals/1/act`).set(auth(reia)).send({ decision: 'REJECTED', comments: 'wrong tariff' });
-    await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(reia)).send({});
+    await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(tokenFor('REIA_MAKER'))).send({});
     const got = await request(app).get(`/api/invoices/${inv.id}`).set(auth(reia));
     expect(got.body.approvals[0]).toMatchObject({ status: 'PENDING', comments: null });
     expect(got.body.approval_history).toHaveLength(1);
@@ -336,7 +336,7 @@ describe('S7 A different person at each level, where SJVN asks for it', () => {
     const inv = threeLevels();
     await act(inv, 1, a);
     await act(inv, 2, a, 'REJECTED');
-    await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(reia)).send({});
+    await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(tokenFor('REIA_MAKER'))).send({});
     expect((await act(inv, 1, a)).status, 'a signature from the earlier round still counted').toBe(200);
     const got = await request(app).get(`/api/invoices/${inv.id}`).set(auth(reia));
     expect(got.body.approval_rules).toEqual({ distinct_approvers: true });
@@ -356,7 +356,7 @@ describe('S7 Approval levels follow the amount', () => {
   });
   const levelsFor = async (total_amount) => {
     const inv = makeInvoice({ contract_id: contract.id, status: 'DRAFT', total_amount });
-    await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(reia)).send({});
+    await request(app).post(`/api/invoices/${inv.id}/submit-for-approval`).set(auth(tokenFor('REIA_MAKER'))).send({});
     return db.prepare('SELECT COUNT(*) c FROM invoice_approvals WHERE invoice_id = ?').get(inv.id).c;
   };
 

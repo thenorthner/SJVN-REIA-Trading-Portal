@@ -53,7 +53,7 @@ router.get('/site-info', (req, res) => {
   });
 });
 
-const CHOICES = ['all', 'essential'];
+const CHOICES = ['all', 'essential', 'custom'];
 let insertConsent = null;
 
 // The cookie notice's answer, kept as evidence of consent (DPDP Act s.6). The
@@ -73,17 +73,59 @@ function tooMany(ip) {
 
 router.post('/consent', (req, res) => {
   if (tooMany(req.ip || 'unknown')) return res.status(429).json({ error: 'Too many requests; try again later.' });
-  const { purpose = 'COOKIES', choice, version } = req.body || {};
+  const { purpose = 'COOKIES', choice, version, categories } = req.body || {};
   if (!CHOICES.includes(choice)) return res.status(400).json({ error: `choice must be one of ${CHOICES.join(', ')}` });
   if (purpose !== 'COOKIES') return res.status(400).json({ error: 'Unknown consent purpose' });
   const user = userFromToken(req);
   insertConsent = insertConsent || db.prepare(`
-    INSERT INTO consent_records (id, user_id, purpose, choice, version, ip_address, user_agent)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO consent_records (id, user_id, purpose, choice, categories, version, ip_address, user_agent)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
+  // Only the categories the notice offers are kept; essential is always on.
+  const cats = choice === 'custom'
+    ? JSON.stringify({ essential: true, functional: !!categories?.functional })
+    : null;
   const id = newId('CNS');
-  insertConsent.run(id, user?.id || null, purpose, choice, String(version || '').slice(0, 20) || null, req.ip || null, String(req.get('User-Agent') || '').slice(0, 300));
+  insertConsent.run(id, user?.id || null, purpose, choice, cats, String(version || '').slice(0, 20) || null, req.ip || null, String(req.get('User-Agent') || '').slice(0, 300));
   res.status(201).json({ id, recorded_at: new Date().toISOString() });
+});
+
+// Feedback from the public Feedback page (GIGW 3.0 quality guideline 11).
+// Checked here as well as in the form, and rate-limited like the consent receipt.
+export const FEEDBACK_CATEGORIES = ['content', 'accessibility', 'technical', 'translation', 'suggestion'];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function nextFeedbackRef() {
+  const year = new Date().getFullYear();
+  const last = db.prepare("SELECT reference_no FROM public_feedback WHERE reference_no LIKE ? ORDER BY reference_no DESC LIMIT 1").get(`FB/${year}/%`);
+  const n = last ? Number(last.reference_no.split('/').pop()) + 1 : 1;
+  return `FB/${year}/${String(n).padStart(5, '0')}`;
+}
+
+router.post('/feedback', (req, res) => {
+  if (tooMany(req.ip || 'unknown')) return res.status(429).json({ error: 'Too many requests; try again later.' });
+  const b = req.body || {};
+  const name = String(b.name || '').trim();
+  const email = String(b.email || '').trim().toLowerCase();
+  const message = String(b.message || '').trim();
+  const pageUrl = String(b.page_url || '').trim().slice(0, 300) || null;
+  const errors = {};
+  if (name.length < 2 || name.length > 100) errors.name = 'Enter your name (2 to 100 characters).';
+  if (!EMAIL_RE.test(email) || email.length > 200) errors.email = 'Enter a valid e-mail address.';
+  if (!FEEDBACK_CATEGORIES.includes(b.category)) errors.category = `category must be one of ${FEEDBACK_CATEGORIES.join(', ')}`;
+  if (message.length < 20 || message.length > 2000) errors.message = 'Write between 20 and 2,000 characters.';
+  if (b.consent !== true) errors.consent = 'Consent to be contacted is required.';
+  if (Object.keys(errors).length) return res.status(400).json({ error: 'Please correct the highlighted fields.', fields: errors });
+  const id = newId('FBK');
+  const ref = db.transaction(() => {
+    const r = nextFeedbackRef();
+    db.prepare(`
+      INSERT INTO public_feedback (id, reference_no, name, email, category, page_url, message, lang, ip_address, user_agent)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(id, r, name, email, b.category, pageUrl, message, ['en', 'hi', 'gu', 'mr'].includes(b.lang) ? b.lang : 'en', req.ip || null, String(req.get('User-Agent') || '').slice(0, 300));
+    return r;
+  })();
+  res.status(201).json({ id, reference_no: ref });
 });
 
 /**
@@ -181,5 +223,28 @@ router.get('/clean-energy', (req, res) => {
   }
 });
 
+/**
+ * Public Generation Assets:
+ * Active power plants, solar parks, wind farms, hydro projects, and PSPs
+ * for the National GIS Asset Map and public transparency.
+ */
+router.get('/generation-assets', (req, res) => {
+  try {
+    // Only what the map shows. The row also says which officer created it, which
+    // is not for the public.
+    const assets = db.prepare(`
+      SELECT id, name, hindi_name, type, capacity, capacity_num, config, location, state, state_code,
+             basin, grid, status, status_category, status_color, design_energy, beneficiaries,
+             coords_x, coords_y, color, description, updated_at
+      FROM generation_assets WHERE is_active = 1 ORDER BY capacity_num DESC
+    `).all();
+    res.json(assets);
+  } catch (err) {
+    console.error('Error fetching public generation assets:', err);
+    res.status(500).json({ error: 'Failed to fetch generation assets' });
+  }
+});
+
 export default router;
+
 

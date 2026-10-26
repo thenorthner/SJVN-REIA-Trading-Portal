@@ -155,7 +155,7 @@ describe('S25 Lifecycle and versions', () => {
   it('ends a contract\'s shares on its termination date', async () => {
     const ppa = ppaOf({ status: 'ACTIVE' }); const psa = psaOf({ status: 'ACTIVE' });
     await map(ppa, psa, 60);
-    const r = await request(app).post(`/api/contracts/${psa.id}/status`).set(auth(reia))
+    const r = await request(app).post(`/api/contracts/${psa.id}/status`).set(auth(tokenFor('REIA_CHECKER')))
       .send({ status: 'TERMINATED', termination_date: '2026-12-31', termination_ground: 'FOR_CONVENIENCE' });
     expect(r.status).toBe(200);
     const a = db.prepare('SELECT effective_to FROM contract_allocations WHERE psa_id = ?').get(psa.id);
@@ -164,7 +164,7 @@ describe('S25 Lifecycle and versions', () => {
 
   it('refuses a termination dated after the contract ends', async () => {
     const ppa = ppaOf({ status: 'ACTIVE' });
-    const r = await request(app).post(`/api/contracts/${ppa.id}/status`).set(auth(reia))
+    const r = await request(app).post(`/api/contracts/${ppa.id}/status`).set(auth(tokenFor('REIA_CHECKER')))
       .send({ status: 'TERMINATED', termination_date: '2099-01-01', termination_ground: 'FOR_CAUSE' });
     expect(r.status).toBe(400);
   });
@@ -196,7 +196,7 @@ describe('S25 Lifecycle and versions', () => {
     const v2 = (await request(app).post(`/api/contracts/${ppa.id}/amend`).set(auth(reia))
       .send({ tariff_per_unit: 2.4, effective_from: '2027-04-01', amendment_reason: 'CERC order' })).body;
     db.prepare(`INSERT INTO documents (id, contract_id, document_type, category, title) VALUES ('DOC-S25', ?, 'CONTRACT', 'RECORD', 'Agreement')`).run(ppa.id);
-    expect((await request(app).post(`/api/contracts/${v2.id}/status`).set(auth(reia)).send({ status: 'ACTIVE' })).status).toBe(200);
+    expect((await request(app).post(`/api/contracts/${v2.id}/status`).set(auth(tokenFor('REIA_CHECKER'))).send({ status: 'ACTIVE' })).status).toBe(200);
     expect(db.prepare('SELECT effective_to FROM contract_allocations WHERE ppa_id = ?').get(ppa.id).effective_to).toBe('2027-03-31');
     expect(db.prepare('SELECT effective_from FROM contract_allocations WHERE ppa_id = ?').get(v2.id).effective_from).toBe('2027-04-01');
   });

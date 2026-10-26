@@ -44,6 +44,7 @@ beforeEach(() => {
   beta = makeEntity('SELLER', { name: 'Beta Wind' });
   contract = makeContract({ seller_id: alpha.id });
   reia = makeUser('REIA_USER', { name: 'Riya REIA' });
+  // Phase B.2: the checker signs for SJVN and settles exceptions.
   reia2 = makeUser('REIA_ADMIN', { name: 'Ravi REIA' });
   seller = makeUser('SELLER', { name: 'Arun Alpha', linked_entity_id: alpha.id });
   otherSeller = makeUser('SELLER', { name: 'Bina Beta', linked_entity_id: beta.id });
@@ -90,7 +91,7 @@ describe('signing', () => {
     expect((await request(app).post(`/api/reconciliation/${recon.id}/acknowledge`).set(as(seller)).send({ decision: 'AGREE' })).status).toBe(400);
     expect((await post(otherSeller, `/${recon.id}/sign`, { decision: 'AGREE' })).status).toBe(403);
 
-    const theirs = await post(reia, `/${recon.id}/sign`, { decision: 'AGREE' });
+    const theirs = await post(reia2, `/${recon.id}/sign`, { decision: 'AGREE' });
     expect(theirs.body).toMatchObject({ dual_signed: true });
     expect(theirs.body.reconciliation.status).toBe('CLOSED');
     expect(theirs.body.signoff.same_content).toBe(true);
@@ -101,7 +102,7 @@ describe('signing', () => {
     bill('A/JUN', 1000000, '2026-06');
     expect((await post(seller, `/${recon.id}/sign`, { decision: 'AGREE_WITH_EXCEPTIONS' })).status).toBe(400);
     expect((await post(seller, `/${recon.id}/sign`, { decision: 'AGREE_WITH_EXCEPTIONS', exceptions: [{ label: 'Everything', amount: 2000000, reason: 'x' }] })).status).toBe(400);
-    expect((await post(reia, `/${recon.id}/sign`, { decision: 'AGREE_WITH_EXCEPTIONS', exceptions: [{ label: 'x', amount: 1, reason: 'y' }] })).status).toBe(400);
+    expect((await post(reia2, `/${recon.id}/sign`, { decision: 'AGREE_WITH_EXCEPTIONS', exceptions: [{ label: 'x', amount: 1, reason: 'y' }] })).status).toBe(400);
 
     const signed = await post(seller, `/${recon.id}/sign`, {
       decision: 'AGREE_WITH_EXCEPTIONS',
@@ -112,12 +113,12 @@ describe('signing', () => {
     expect(signed.body.signoff.exceptions.map((e) => e.label)).toEqual(['Liquidated damages', 'Energy: meter vs bill']);
 
     // Both signed with exceptions open: agreed, not closed.
-    const sjvn = await post(reia, `/${recon.id}/sign`, { decision: 'AGREE' });
+    const sjvn = await post(reia2, `/${recon.id}/sign`, { decision: 'AGREE' });
     expect(sjvn.body.reconciliation.status).toBe('AGREED');
     const [a, b] = sjvn.body.signoff.exceptions;
     expect((await post(seller, `/exceptions/${a.id}/resolve`, { outcome: 'ACCEPTED', note: 'x' })).status).toBe(403);
-    expect((await post(reia, `/exceptions/${a.id}/resolve`, { outcome: 'ACCEPTED' })).status).toBe(400);
-    const one = await post(reia, `/exceptions/${a.id}/resolve`, { outcome: 'ACCEPTED', note: 'Force majeure notice was on record' });
+    expect((await post(reia2, `/exceptions/${a.id}/resolve`, { outcome: 'ACCEPTED' })).status).toBe(400);
+    const one = await post(reia2, `/exceptions/${a.id}/resolve`, { outcome: 'ACCEPTED', note: 'Force majeure notice was on record' });
     expect(one.body).toMatchObject({ status: 'AGREED', excepted_amount: 25000 });
     const two = await post(reia2, `/exceptions/${b.id}/resolve`, { outcome: 'REJECTED', note: 'JMR is jointly signed' });
     expect(two.body).toMatchObject({ status: 'CLOSED', excepted_amount: 0 });

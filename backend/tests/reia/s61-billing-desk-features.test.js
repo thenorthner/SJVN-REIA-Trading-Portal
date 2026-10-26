@@ -88,7 +88,8 @@ describe('B3 band roles and the people who can sign', () => {
       expect(l1.eligible_signers).not.toContain('Ravi Ops');
       const ops = await post(`/api/invoices/${bill.id}/approvals/1/act`, { decision: 'APPROVED', comments: 'ok', security_ack: 'cover tracked on the desk' }, tokenFor('REIA_USER', { name: 'Other Ops' }));
       expect(ops.status).toBe(403);
-      expect(ops.body.error).toMatch(/of a bill this size is approved by REIA Checker/);
+      // Phase B.2: a maker is no reviewer at all, so the route turns them away before the band is read.
+      expect(ops.body.error).toMatch(/REIA_MAKER is not authorized/);
       const ok = await post(`/api/invoices/${bill.id}/approvals/1/act`, { decision: 'APPROVED', comments: 'ok', security_ack: 'cover tracked on the desk' }, signToken(admin));
       expect(ok.status, JSON.stringify(ok.body)).toBe(200);
     } finally {

@@ -91,7 +91,7 @@ router.get('/', (req, res) => {
   res.json(db.prepare(sql).all(...params));
 });
 
-router.post('/parse-rea', requireRole(...ROLE_GROUPS.REIA_WRITE), upload.single('file'), (req, res) => {
+router.post('/parse-rea', requireRole(...ROLE_GROUPS.REIA_MAKE), upload.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No PDF file uploaded' });
   }
@@ -172,7 +172,7 @@ router.get('/account-template', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, re
 
 router.post(
   '/upload-account',
-  requireRole(...ROLE_GROUPS.REIA_WRITE),
+  requireRole(...ROLE_GROUPS.REIA_MAKE),
   (req, res, next) => accountUpload.single('file')(req, res, (err) => {
     if (!err) return next();
     res.status(400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'The file is larger than 10 MB.' : err.message });
@@ -209,7 +209,7 @@ router.post(
   },
 );
 
-router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const b = req.body;
   const dataType = b.data_type || 'PROVISIONAL';
   if (!['PROVISIONAL', 'FINAL'].includes(dataType)) return res.status(400).json({ error: 'Data type is Provisional or Final' });
@@ -270,7 +270,7 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
 });
 
 // Validate against contract parameters (simple deviation check demo)
-router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_CHECK), (req, res) => {
   const row = db.prepare('SELECT * FROM energy_data WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Energy data not found' });
   // A locked period is what the bill was raised on. Validating it again used to
@@ -375,7 +375,7 @@ router.post('/:id/validate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) 
 // G2: certified curtailment / backing-down hours for a month, with the SLDC
 // instruction they rest on. They lower the possible energy CUF is judged
 // against; they do not change the billed figure.
-router.post('/:id/curtailment', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/curtailment', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const row = db.prepare('SELECT * FROM energy_data WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Energy data not found' });
   const hours = Number(req.body?.hours);
@@ -388,7 +388,7 @@ router.post('/:id/curtailment', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, re
   res.json(db.prepare('SELECT * FROM energy_data WHERE id = ?').get(row.id));
 });
 
-router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/lock', requireRole(...ROLE_GROUPS.REIA_CHECK), (req, res) => {
   const row = db.prepare('SELECT * FROM energy_data WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Energy data not found' });
   if (row.status === 'LOCKED') return res.status(400).json({ error: 'This period is already locked' });
@@ -582,7 +582,7 @@ router.get('/rea-download/:logId', requireRole(...ROLE_GROUPS.REIA_ALL), (req, r
 });
 
 // POST /rea-trigger — Manually trigger scrape
-router.post('/rea-trigger', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res) => {
+router.post('/rea-trigger', requireRole(...ROLE_GROUPS.REIA_MAKE), async (req, res) => {
   const { rpc, period_month, data_type } = req.body;
   
   if (!rpc || !period_month) {
@@ -608,7 +608,7 @@ router.post('/rea-trigger', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, 
 });
 
 // POST /rea-scan — Trigger full scan for all RPCs (or one specific RPC)
-router.post('/rea-scan', requireRole(...ROLE_GROUPS.REIA_WRITE), async (req, res) => {
+router.post('/rea-scan', requireRole(...ROLE_GROUPS.REIA_MAKE), async (req, res) => {
   const { rpc } = req.body;
   
   try {

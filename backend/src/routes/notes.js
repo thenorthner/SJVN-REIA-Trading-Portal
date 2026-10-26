@@ -35,6 +35,11 @@ router.use(requireAuth);
 
 const READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE, 'COMPLIANCE_AUDITOR'])];
 const WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.FINANCE])];
+// Phase B.2: the maker (or Finance) drafts and applies a note; the checker (or
+// Finance) approves, rejects or cancels it. Named FINANCE_USER rather than the
+// FINANCE group, which also holds the REIA maker.
+const MAKE = [...new Set([...ROLE_GROUPS.REIA_MAKE, 'FINANCE_USER'])];
+const CHECK = [...new Set([...ROLE_GROUPS.REIA_CHECK, 'FINANCE_USER'])];
 
 const REASONS = ['REVISED_REA', 'CHANGE_IN_LAW', 'TRANSMISSION_CHARGES', 'LPS', 'COMPENSATION_EVENT',
   'LIQUIDATED_DAMAGES', 'SCHEDULE_SHORTFALL_PURCHASE', 'SCHEDULE_EXCESS_RETURN', 'OTHER'];
@@ -214,7 +219,7 @@ router.get('/summary', requireRole(...READ), (req, res) => {
 });
 
 // ── Raise (DRAFT) ────────────────────────────────────────────────────────────
-router.post('/', requireRole(...WRITE), (req, res) => {
+router.post('/', requireRole(...MAKE), (req, res) => {
   const b = req.body || {};
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(b.invoice_id);
   if (!inv) return res.status(404).json({ error: 'Linked invoice not found' });
@@ -277,7 +282,7 @@ router.get('/cuf-true-up', requireRole(...READ), (req, res) => {
 
 // R4 / G3 / V4: one click from an accepted exception, a CUF shortfall or the
 // verifier's damages to a draft note (services/noteEngine.js).
-router.post('/from-exception', requireRole(...WRITE), (req, res) => {
+router.post('/from-exception', requireRole(...MAKE), (req, res) => {
   try {
     const b = req.body || {};
     const ref = b.ref || b.exception_id || b.invoice_id || (b.contract_id && b.contract_year ? `${b.contract_id}:${b.contract_year}` : null);
@@ -289,7 +294,7 @@ router.post('/from-exception', requireRole(...WRITE), (req, res) => {
   }
 });
 
-router.post('/cuf-true-up', requireRole(...WRITE), (req, res) => {
+router.post('/cuf-true-up', requireRole(...MAKE), (req, res) => {
   try {
     const note = noteFromException({ kind: 'CUF_SHORTFALL', ref: `${req.body?.contract_id}:${req.body?.contract_year}`, user: req.user, req });
     res.status(201).json(note.true_up);
@@ -299,7 +304,7 @@ router.post('/cuf-true-up', requireRole(...WRITE), (req, res) => {
 });
 
 // ── Approve → issue ──────────────────────────────────────────────────────────
-router.post('/:id/approve', requireRole(...WRITE), (req, res) => {
+router.post('/:id/approve', requireRole(...CHECK), (req, res) => {
   try {
     const note = getNote(req.params.id);
     if (!note) throw httpError(404, 'Note not found');
@@ -369,7 +374,7 @@ router.post('/:id/approve', requireRole(...WRITE), (req, res) => {
   }
 });
 
-router.post('/:id/reject', requireRole(...WRITE), (req, res) => {
+router.post('/:id/reject', requireRole(...CHECK), (req, res) => {
   const note = getNote(req.params.id);
   if (!note) return res.status(404).json({ error: 'Note not found' });
   if (note.status !== 'DRAFT') return res.status(400).json({ error: `Only a draft can be rejected — this note is ${note.status}` });
@@ -384,7 +389,7 @@ router.post('/:id/reject', requireRole(...WRITE), (req, res) => {
 });
 
 // ── Apply leftover credit to another open bill of the same contract ─────────
-router.post('/:id/apply', requireRole(...WRITE), (req, res) => {
+router.post('/:id/apply', requireRole(...MAKE), (req, res) => {
   try {
     const note = getNote(req.params.id);
     if (!note) throw httpError(404, 'Note not found');
@@ -411,7 +416,7 @@ router.post('/:id/apply', requireRole(...WRITE), (req, res) => {
 });
 
 // ── Cancel ───────────────────────────────────────────────────────────────────
-router.post('/:id/cancel', requireRole(...WRITE), (req, res) => {
+router.post('/:id/cancel', requireRole(...CHECK), (req, res) => {
   try {
     const note = getNote(req.params.id);
     if (!note) throw httpError(404, 'Note not found');

@@ -77,7 +77,7 @@ describe('S20 A part-commissioned plant is judged on what is commissioned', () =
     // 25 MW at 22% CUF expects 3,960 MWh; 10 MW expects 1,584.
     const c = makeContract({ status: 'ACTIVE', project_type: 'SOLAR', capacity_mw: 25, commissioned_capacity_mw: 10 });
     const e = await energy(c.id, '2026-06', 3960);
-    const v = await request(app).post(`/api/energy-data/${e.body.id}/validate`).set(auth(reia)).send({});
+    const v = await request(app).post(`/api/energy-data/${e.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     expect(v.body.status, 'output impossible for the commissioned plant was called clean').toBe('DISPUTED');
     expect(v.body.deviation_notes, 'the note does not say which capacity it judged').toMatch(/10 MW commissioned of 25 MW contracted/);
   });
@@ -85,14 +85,14 @@ describe('S20 A part-commissioned plant is judged on what is commissioned', () =
   it('accepts what the commissioned plant plausibly did produce', async () => {
     const c = makeContract({ status: 'ACTIVE', project_type: 'SOLAR', capacity_mw: 25, commissioned_capacity_mw: 10 });
     const e = await energy(c.id, '2026-06', 1584);
-    const v = await request(app).post(`/api/energy-data/${e.body.id}/validate`).set(auth(reia)).send({});
+    const v = await request(app).post(`/api/energy-data/${e.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     expect(v.body.status).toBe('VALIDATED');
   });
 
   it('leaves a fully commissioned plant judged exactly as before', async () => {
     const c = makeContract({ status: 'ACTIVE', project_type: 'SOLAR', capacity_mw: 25 });
     const e = await energy(c.id, '2026-06', 3960);
-    const v = await request(app).post(`/api/energy-data/${e.body.id}/validate`).set(auth(reia)).send({});
+    const v = await request(app).post(`/api/energy-data/${e.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     expect(v.body.status).toBe('VALIDATED');
     expect(v.body.deviation_notes).not.toMatch(/commissioned of/);
   });
@@ -109,7 +109,7 @@ describe('S20 Ending a contract asks the money question', () => {
   });
 
   const setStatus = (status, body = {}) =>
-    request(app).post(`/api/contracts/${c.id}/status`).set(auth(reia)).send({ status, ...body });
+    request(app).post(`/api/contracts/${c.id}/status`).set(auth(tokenFor('REIA_CHECKER'))).send({ status, ...body });
 
   it('reports nothing outstanding on a clean contract', () => {
     expect(settlementPosition(c.id).settled).toBe(true);

@@ -14,7 +14,7 @@ import { alertLateBankClaims } from '../../src/services/invocationClaims.js';
 // scorecard, S2 bank claim tracker, L4 TDS vs 16A, R5 balance confirmation,
 // CC5 compliance register export.
 
-let reia;
+let reia, checker;
 const get = (path, who = reia) => request(app).get(path).set(auth(who));
 const post = (path, body = {}, who = reia) => request(app).post(path).set(auth(who)).send(body);
 const day = (n) => new Date(Date.now() + 5.5 * 3600 * 1000 + n * 86400000).toISOString().slice(0, 10);
@@ -28,6 +28,8 @@ const binary = (res, cb) => { const chunks = []; res.on('data', (c) => chunks.pu
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
+  // Phase B.2: checking is the checker's.
+  checker = tokenFor('REIA_CHECKER');
 });
 
 describe('CC1/CERC1/SM4 90-day compliance calendar', () => {
@@ -58,7 +60,8 @@ describe('D4 dispute root-cause tasks', () => {
       VALUES (?, ?, ?, 'SELLER', ?, 'energy_charges', 'x', 20000, 'UNDER_REVIEW')`).run(id, `DSP/D4/${id}`, inv.id, reason);
     return id;
   };
-  const resolve = (id, outcome) => post(`/api/disputes/${id}/resolve`, { outcome, accepted_amount: 10000, resolution_notes: 'Checked against the JMR' }, tokenFor('REIA_ADMIN'));
+  // Phase B.2: the REIA approver decides a dispute.
+  const resolve = (id, outcome) => post(`/api/disputes/${id}/resolve`, { outcome, accepted_amount: 10000, resolution_notes: 'Checked against the JMR' }, tokenFor('REIA_APPROVER'));
 
   it('sends an accepted energy mismatch to the Energy Data desk, and a tariff error to Contract Compliance', async () => {
     const energy = dispute('ENERGY_DATA_MISMATCH');
@@ -110,8 +113,8 @@ describe('S2 bank claim tracker', () => {
     const inv = newId('SI');
     db.prepare(`INSERT INTO security_invocations (id, invocation_no, contract_id, payment_security_id, amount, status) VALUES (?, 'INV-S2/1', ?, ?, 300000, 'NOTICE_ISSUED')`).run(inv, psa.id, ps);
 
-    expect((await post(`/api/payment-security/invocations/${inv}/transition`, { status: 'CLAIMED', claim_submitted_on: day(1) })).status).toBe(400);
-    const r = await post(`/api/payment-security/invocations/${inv}/transition`, { status: 'CLAIMED', claim_submitted_on: day(-10), claim_reference: 'SBI/CLM/77' });
+    expect((await post(`/api/payment-security/invocations/${inv}/transition`, { status: 'CLAIMED', claim_submitted_on: day(1) }, checker)).status).toBe(400);
+    const r = await post(`/api/payment-security/invocations/${inv}/transition`, { status: 'CLAIMED', claim_submitted_on: day(-10), claim_reference: 'SBI/CLM/77' }, checker);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     const t = (await get('/api/payment-security/invocations/claim-tracker')).body;
     expect(t.rows[0]).toMatchObject({ claim_submitted_on: day(-10), bank_response_due: day(-3), bank_late: true, days_waiting: 10 });
@@ -119,7 +122,7 @@ describe('S2 bank claim tracker', () => {
     expect(alertLateBankClaims().sent).toBe(1);
     expect(alertLateBankClaims().sent, 'once').toBe(0);
 
-    expect((await post(`/api/payment-security/invocations/${inv}/transition`, { status: 'REJECTED', bank_responded_on: day(-1) })).status).toBe(200);
+    expect((await post(`/api/payment-security/invocations/${inv}/transition`, { status: 'REJECTED', bank_responded_on: day(-1) }, checker)).status).toBe(200);
     const pdf = await makePdf('The bank refuses the claim.');
     const up = await request(app).post(`/api/payment-security/invocations/${inv}/letter`).set(auth(reia)).attach('file', pdf, 'refusal.pdf');
     expect(up.status, JSON.stringify(up.body)).toBe(201);

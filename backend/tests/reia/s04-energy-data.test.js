@@ -22,7 +22,7 @@ const PLAUSIBLE_MWH = 15840;
 /** Upload and take the period through validation, the way a period reaches lock. */
 const uploadValidated = async (body) => {
   const r = await upload({ energy_mwh: PLAUSIBLE_MWH, ...body });
-  const v = await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(reia)).send({});
+  const v = await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
   expect(v.body.status, 'the fixture figure did not validate clean').toBe('VALIDATED');
   return r;
 };
@@ -42,14 +42,14 @@ describe('S4 Energy data accounting', () => {
 
   it('locks final data so it can no longer be edited', async () => {
     const r = await uploadValidated({ data_type: 'FINAL' });
-    const lock = await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(reia)).send({});
+    const lock = await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     expect(lock.status).toBeLessThan(400);
     expect(db.prepare('SELECT status FROM energy_data WHERE id = ?').get(r.body.id).status).toBe('LOCKED');
   });
 
   it('refuses to edit locked data without a reopening', async () => {
     const r = await uploadValidated({ data_type: 'FINAL' });
-    await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(reia)).send({});
+    await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     const edit = await request(app).post('/api/energy-data').set(auth(reia))
       .send({ contract_id: contract.id, period_month: '2026-04', data_type: 'FINAL', source: 'SELLER', energy_mwh: 9999 });
     const locked = db.prepare(`SELECT energy_mwh FROM energy_data WHERE id = ?`).get(r.body.id);
@@ -68,14 +68,14 @@ describe('S4 Energy data accounting', () => {
   it('accepts generation that is plausible for the plant', async () => {
     // 100 MW solar at 22% CUF over a month is roughly 15,840 MWh.
     const r = await upload({ data_type: 'PROVISIONAL', energy_mwh: 15840 });
-    const v = await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(reia)).send({});
+    const v = await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     expect(v.status).toBeLessThan(400);
     expect(db.prepare('SELECT status FROM energy_data WHERE id = ?').get(r.body.id).status).toBe('VALIDATED');
   });
 
   it('disputes generation far outside the plausible band', async () => {
     const r = await upload({ data_type: 'PROVISIONAL', energy_mwh: 1000 });
-    await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(reia)).send({});
+    await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     const row = db.prepare('SELECT status, deviation_notes FROM energy_data WHERE id = ?').get(r.body.id);
     expect(row.status).toBe('DISPUTED');
     expect(row.deviation_notes).toMatch(/Deviation/);
@@ -86,7 +86,7 @@ describe('S4 Energy data accounting', () => {
     // each other — so one of them is wrong and billing either silently hides it.
     await upload({ data_type: 'PROVISIONAL', source: 'SELLER', energy_mwh: 15840 });
     const sea = await upload({ data_type: 'PROVISIONAL', source: 'SEA', energy_mwh: 22000 });
-    await request(app).post(`/api/energy-data/${sea.body.id}/validate`).set(auth(reia)).send({});
+    await request(app).post(`/api/energy-data/${sea.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     const row = db.prepare('SELECT status, deviation_notes FROM energy_data WHERE id = ?').get(sea.body.id);
     expect(row.deviation_notes, 'validation never compares the two sources').toMatch(/Source mismatch/);
     expect(row.deviation_notes).toMatch(/SELLER/);
@@ -96,7 +96,7 @@ describe('S4 Energy data accounting', () => {
   it('passes two sources that agree, and says it checked', async () => {
     await upload({ data_type: 'PROVISIONAL', source: 'SELLER', energy_mwh: 15840 });
     const sea = await upload({ data_type: 'PROVISIONAL', source: 'SEA', energy_mwh: 15900 });
-    await request(app).post(`/api/energy-data/${sea.body.id}/validate`).set(auth(reia)).send({});
+    await request(app).post(`/api/energy-data/${sea.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     const row = db.prepare('SELECT status, deviation_notes FROM energy_data WHERE id = ?').get(sea.body.id);
     expect(row.status).toBe('VALIDATED');
     expect(row.deviation_notes).toMatch(/Cross-checked against 1 other source/);
@@ -109,7 +109,7 @@ describe('S4 Energy data accounting', () => {
   it('bills from locked data rather than a stale draft', async () => {
     const draft = await upload({ data_type: 'PROVISIONAL', energy_mwh: 500 });
     const final = await upload({ data_type: 'FINAL', energy_mwh: 1000 });
-    await request(app).post(`/api/energy-data/${final.body.id}/lock`).set(auth(reia)).send({});
+    await request(app).post(`/api/energy-data/${final.body.id}/lock`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     const inv = await request(app).post('/api/invoices/generate').set(auth(reia))
       .send({ contract_id: contract.id, billing_period: '2026-04' });
     if (inv.status === 201) {
@@ -131,7 +131,7 @@ describe('S4 Validation gates the lock', () => {
 
   it('refuses to lock a period that was never validated', async () => {
     const r = await upload({ data_type: 'FINAL' });
-    const lock = await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(reia)).send({});
+    const lock = await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     expect(lock.status, 'an unvalidated period locked and became billable').toBe(400);
     expect(lock.body.error).toMatch(/validate/i);
     expect(db.prepare('SELECT status FROM energy_data WHERE id = ?').get(r.body.id).status).toBe('DRAFT');
@@ -139,10 +139,10 @@ describe('S4 Validation gates the lock', () => {
 
   it('refuses to lock a period validation flagged, with no reason given', async () => {
     const r = await implausible();
-    await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(reia)).send({});
+    await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     expect(db.prepare('SELECT status FROM energy_data WHERE id = ?').get(r.body.id).status).toBe('DISPUTED');
 
-    const lock = await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(reia)).send({});
+    const lock = await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     expect(lock.status, 'a period that failed validation locked and was billed anyway').toBe(400);
     expect(lock.body.validation_note, 'the refusal did not say what failed').toBeTruthy();
     expect(db.prepare('SELECT status FROM energy_data WHERE id = ?').get(r.body.id).status).toBe('DISPUTED');
@@ -150,8 +150,8 @@ describe('S4 Validation gates the lock', () => {
 
   it('allows the override but records who did it and why', async () => {
     const r = await implausible();
-    await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(reia)).send({});
-    const lock = await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(reia))
+    await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
+    const lock = await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(tokenFor('REIA_CHECKER')))
       .send({ override_reason: 'Plant was under forced outage for 26 days — SLDC log attached.' });
 
     expect(lock.status).toBeLessThan(400);
@@ -168,7 +168,7 @@ describe('S4 Validation gates the lock', () => {
 
   it('leaves a clean lock unmarked, with no override recorded', async () => {
     const r = await uploadValidated({ data_type: 'FINAL' });
-    await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(reia)).send({});
+    await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     const row = db.prepare('SELECT * FROM energy_data WHERE id = ?').get(r.body.id);
     expect(row.status).toBe('LOCKED');
     expect(row.lock_override_reason).toBeNull();
@@ -180,7 +180,7 @@ describe('S4 Validation gates the lock', () => {
   // the validation result changed nothing either way.
   it('refuses to bill a period that failed validation', async () => {
     const r = await implausible();
-    await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(reia)).send({});
+    await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
 
     const inv = await request(app).post('/api/invoices/generate').set(auth(reia))
       .send({ contract_id: contract.id, period_month: '2026-04' });
@@ -190,8 +190,8 @@ describe('S4 Validation gates the lock', () => {
 
   it('bills once the flag is owned, and the bill discloses it', async () => {
     const r = await implausible();
-    await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(reia)).send({});
-    await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(reia))
+    await request(app).post(`/api/energy-data/${r.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
+    await request(app).post(`/api/energy-data/${r.body.id}/lock`).set(auth(tokenFor('REIA_CHECKER')))
       .send({ override_reason: 'Forced outage 26 days — SLDC log attached.' });
 
     const inv = await request(app).post('/api/invoices/generate').set(auth(reia))

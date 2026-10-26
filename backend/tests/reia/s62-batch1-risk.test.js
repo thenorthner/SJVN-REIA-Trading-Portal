@@ -10,7 +10,7 @@ import { signToken } from '../../src/middleware/auth.js';
 // release checklist, D1 dispute impact, D3 Finance note queue, G4 duplicate
 // reading, G1 contract-year CUF tracker.
 
-let reia, finance, sellerCo, buyerCo, psa, ppa;
+let reia, checker, approver, finance, sellerCo, buyerCo, psa, ppa;
 const get = (path, who = reia) => request(app).get(path).set(auth(who));
 const post = (path, body = {}, who = reia) => request(app).post(path).set(auth(who)).send(body);
 const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
@@ -26,6 +26,9 @@ const instrument = (contract, over = {}) => {
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
+  // Phase B.2: the checker validates, locks and decides releases; the approver decides disputes.
+  checker = tokenFor('REIA_CHECKER');
+  approver = tokenFor('REIA_APPROVER');
   finance = tokenFor('FINANCE_USER');
   sellerCo = makeEntity('SELLER');
   buyerCo = makeEntity('BUYER');
@@ -73,7 +76,7 @@ describe('S5 release checklist', () => {
     expect((await post(`/api/payment-security/releases/${rel.id}/finance-signoff`, {}, finance)).status).toBe(200);
     q = (await get('/api/payment-security/releases')).body.find((r) => r.id === rel.id);
     expect(q.checklist.ready).toBe(true);
-    expect((await post(`/api/payment-security/releases/${rel.id}/act`, { decision: 'APPROVED' })).status).toBe(200);
+    expect((await post(`/api/payment-security/releases/${rel.id}/act`, { decision: 'APPROVED' }, checker)).status).toBe(200);
   });
 });
 
@@ -88,7 +91,7 @@ describe('D1 and D3 disputes', () => {
     expect(detail.dispute_impact).toMatchObject({ held: 50000 });
     expect(detail.dispute_impact.open_disputes[0].dispute_no).toBe(d.dispute_no);
 
-    expect((await post(`/api/disputes/${d.id}/resolve`, { outcome: 'PARTIAL_CREDIT', accepted_amount: 20000, resolution_notes: 'Tariff schedule supports part of the claim' })).status).toBe(200);
+    expect((await post(`/api/disputes/${d.id}/resolve`, { outcome: 'PARTIAL_CREDIT', accepted_amount: 20000, resolution_notes: 'Tariff schedule supports part of the claim' }, approver)).status).toBe(200);
     detail = (await get(`/api/invoices/${inv.id}`)).body;
     expect(detail.dispute_impact.pending_credit).toBe(20000);
 
@@ -109,13 +112,13 @@ describe('G4 duplicate reading', () => {
     };
     row('2026-07', 1460.25, 'LOCKED');
     const aug = row('2026-08', 1460.25, 'DRAFT');
-    const v = (await post(`/api/energy-data/${aug}/validate`)).body;
+    const v = (await post(`/api/energy-data/${aug}/validate`, {}, checker)).body;
     expect(v.status).toBe('DISPUTED');
     expect(v.deviation_notes).toMatch(/Same as 2026-07 to the decimal/);
-    const lock = await post(`/api/energy-data/${aug}/lock`);
+    const lock = await post(`/api/energy-data/${aug}/lock`, {}, checker);
     expect(lock.status).toBe(400);
     expect(lock.body.error).toMatch(/exactly 2026-07's figure/);
-    expect((await post(`/api/energy-data/${aug}/lock`, { override_reason: 'Confirmed with the SLDC: identical by coincidence' })).status).toBe(200);
+    expect((await post(`/api/energy-data/${aug}/lock`, { override_reason: 'Confirmed with the SLDC: identical by coincidence' }, checker)).status).toBe(200);
   });
 });
 

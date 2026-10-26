@@ -258,11 +258,13 @@ function detailOf(user, recon) {
     side,
     // The trading desk is not the client: it attaches the client's signed copy instead.
     can_sign: (side === 'SJVN' ? SIGNABLE : COUNTERPARTY_SIGNABLE).includes(recon.status) && !mine
+      && !(side === 'SJVN' && !ROLE_GROUPS.REIA_CHECK.includes(user.role) && user.role !== 'FINANCE_USER')
       && !(side === 'COUNTERPARTY' && TRADING_DESK.includes(user.role)),
     can_attach_client_signed_copy: TRADING_DESK.includes(user.role) && isTradingClientStatement(recon)
       && COUNTERPARTY_SIGNABLE.includes(recon.status) && !recon.counterparty_ack_at,
     can_attach_certificate: side === 'COUNTERPARTY' && recon.scope === 'REIA_CONTRACT',
-    can_resolve: side === 'SJVN' && ROLE_GROUPS.REIA_WRITE.includes(user.role),
+    // Phase B.2: signing for SJVN and settling an exception are the REIA checker's.
+    can_resolve: side === 'SJVN' && ROLE_GROUPS.REIA_CHECK.includes(user.role),
     certificate_required: certRequiredFor().includes(recon.period_type),
     finance_concurrence: (() => {
       const need = financeConcurrenceNeeded(recon);
@@ -327,7 +329,7 @@ router.post('/:id/sign', (req, res) => send(res, () => {
       const fresh = db.prepare('SELECT r.*, c.contract_no, c.seller_id, c.buyer_id FROM reconciliations r LEFT JOIN contracts c ON c.id = r.contract_id WHERE r.id = ?').get(recon.id);
       return { success: true, side: 'SJVN', finance_concurred: true, message: `Finance has concurred. The REIA desk can now sign ${recon.recon_no} for SJVN.`, reconciliation: fresh, signoff: detailOf(req.user, fresh) };
     }
-    if (!ROLE_GROUPS.REIA_WRITE.includes(req.user.role)) throw fail(403, 'Only the REIA desk signs a statement for SJVN');
+    if (!ROLE_GROUPS.REIA_CHECK.includes(req.user.role)) throw fail(403, 'The REIA checker signs a statement for SJVN');
     if (needsFinance && !recon.finance_ack_at) {
       throw fail(400, `${recon.recon_no} covers ${inr(needsFinance.billed)} billed, above the ${inr(needsFinance.limit)} limit. Finance concurs before SJVN signs.`);
     }
@@ -490,7 +492,7 @@ router.post('/exceptions/:id/resolve', (req, res) => send(res, () => {
   const x = db.prepare('SELECT * FROM recon_exceptions WHERE id = ?').get(req.params.id);
   if (!x) throw fail(404, 'Exception not found');
   const recon = reconFor(req.user, x.reconciliation_id);
-  if (!ROLE_GROUPS.REIA_WRITE.includes(req.user.role)) throw fail(403, 'Only the REIA desk settles an exception');
+  if (!ROLE_GROUPS.REIA_CHECK.includes(req.user.role)) throw fail(403, 'Settling an exception is the REIA checker\'s');
   if (x.status !== 'OPEN') throw fail(400, 'This exception has already been settled');
   const outcome = String(req.body.outcome || '').toUpperCase();
   if (!['ACCEPTED', 'REJECTED'].includes(outcome)) throw fail(400, 'outcome must be ACCEPTED or REJECTED');

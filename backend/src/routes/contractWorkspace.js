@@ -36,6 +36,10 @@ router.use(requireAuth);
 
 const INTERNAL_READ = [...new Set([...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'])];
 const canManage = (user) => ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+// Phase B.2: the maker sets milestones and writes notices; the checker accepts
+// a reported milestone, decides a counterparty's request and acknowledges a notice.
+const canMake = (user) => ROLE_GROUPS.REIA_MAKE.includes(user?.role);
+const canCheck = (user) => ROLE_GROUPS.REIA_CHECK.includes(user?.role);
 /** Which side of the table the caller sits on: SJVN, SELLER or BUYER — or null for nobody. */
 const sideOf = (user) => counterpartySide(user) || (INTERNAL_READ.includes(user?.role) ? 'SJVN' : null);
 
@@ -353,6 +357,8 @@ router.get('/:contractId', (req, res) => send(res, () => {
     contract: { id: contract.id, contract_no: contract.contract_no, contract_type: contract.contract_type, status: contract.status, cod_date: contract.cod_date, tenure_end: contract.tenure_end, has_seller: !!contract.seller_id, has_buyer: !!contract.buyer_id },
     side,
     can_manage: canManage(req.user),
+    can_make: canMake(req.user),
+    can_check: canCheck(req.user),
     // What this contract has room for, so the screen offers only that.
     has_project: hasProject(contract),
     request_types: side === 'SJVN' ? [] : requestTypesFor(contract, side),
@@ -369,7 +375,7 @@ router.get('/:contractId', (req, res) => send(res, () => {
 
 // POST /:contractId/milestones/standard — the usual three, for SJVN to put dates on.
 router.post('/:contractId/milestones/standard', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk can set milestones');
+  if (!canMake(req.user)) throw fail(403, 'Setting milestones is the REIA maker\'s');
   const { contract } = contractFor(req.user, req.params.contractId);
   const have = new Set(milestonesOf(contract.id).map((m) => m.milestone_type));
   const cod = contract.cod_date && DAY.test(contract.cod_date) ? contract.cod_date : null;
@@ -384,7 +390,7 @@ router.post('/:contractId/milestones/standard', (req, res) => send(res, () => {
 
 // POST /:contractId/milestones { milestone_type, label, due_date }
 router.post('/:contractId/milestones', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk can set milestones');
+  if (!canMake(req.user)) throw fail(403, 'Setting milestones is the REIA maker\'s');
   const { contract } = contractFor(req.user, req.params.contractId);
   const id = addMilestone(contract, req.body, req.user);
   audit(req, 'MILESTONE_ADDED', 'contract_milestones', id, { afterValue: { contract_id: contract.id, milestone_type: req.body.milestone_type, due_date: req.body.due_date || null } });
@@ -393,7 +399,7 @@ router.post('/:contractId/milestones', (req, res) => send(res, () => {
 
 // PATCH /milestones/:id { due_date, achieved_date, remarks } — SJVN setting the dates.
 router.patch('/milestones/:id', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk can change a milestone');
+  if (!canMake(req.user)) throw fail(403, 'Changing a milestone is the REIA maker\'s');
   const { milestone: m, contract } = milestoneFor(req.user, req.params.id);
   const next = { due_date: m.due_date, achieved_date: m.achieved_date, remarks: m.remarks };
   for (const k of ['due_date', 'achieved_date']) {
@@ -421,7 +427,7 @@ router.patch('/milestones/:id', (req, res) => send(res, () => {
 
 // DELETE /milestones/:id — only one nothing has happened on yet.
 router.delete('/milestones/:id', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk can remove a milestone');
+  if (!canMake(req.user)) throw fail(403, 'Removing a milestone is the REIA maker\'s');
   const { milestone: m, contract } = milestoneFor(req.user, req.params.id);
   if (m.achieved_date || m.reported_date) throw fail(400, 'A milestone that has been reported or achieved stays on record');
   if (db.prepare('SELECT 1 FROM contract_requests WHERE milestone_id = ?').get(m.id)) throw fail(400, 'A request has been raised against this milestone, so it stays on record');
@@ -449,7 +455,7 @@ router.post('/milestones/:id/report', (req, res) => send(res, () => {
 
 // POST /milestones/:id/confirm { accept, achieved_date, note } — SJVN accepting the report, or not.
 router.post('/milestones/:id/confirm', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk can confirm a milestone');
+  if (!canCheck(req.user)) throw fail(403, 'Confirming a milestone is the REIA checker\'s');
   const { milestone: m, contract } = milestoneFor(req.user, req.params.id);
   if (!m.reported_date || m.achieved_date) throw fail(400, 'There is nothing reported on this milestone to confirm');
   const accept = req.body.accept !== false;
@@ -528,7 +534,7 @@ router.post('/:contractId/requests', (req, res) => send(res, () => {
 
 // POST /requests/:id/decide { decision: APPROVED|REJECTED, note, approved_date }
 router.post('/requests/:id/decide', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk can decide a request');
+  if (!canCheck(req.user)) throw fail(403, 'Deciding a request is the REIA checker\'s');
   const { request: r, contract } = requestFor(req.user, req.params.id);
   if (r.status !== 'PENDING') throw fail(400, `This request has already been ${r.status.toLowerCase()}`);
   if (r.raised_by === req.user.id) throw fail(403, 'A request cannot be decided by the person who raised it');
@@ -594,7 +600,7 @@ router.post('/requests/:id/withdraw', (req, res) => send(res, () => {
 // POST /:contractId/notices — a formal notice, from either side to the other.
 router.post('/:contractId/notices', (req, res) => send(res, () => {
   const { contract, side } = contractFor(req.user, req.params.contractId);
-  if (side === 'SJVN' && !canManage(req.user)) throw fail(403, 'Only the REIA desk can issue a notice for SJVN');
+  if (side === 'SJVN' && !canMake(req.user)) throw fail(403, 'A notice for SJVN is written by the REIA maker');
   const b = req.body;
   if (!NOTICE_TYPES[b.notice_type]) throw fail(400, `notice_type must be one of ${Object.keys(NOTICE_TYPES).join(', ')}`);
   const subject = text(b.subject, 200);
@@ -646,7 +652,7 @@ router.post('/notices/:id/acknowledge', (req, res) => send(res, () => {
   if (side !== 'SJVN' && side !== n.counterparty_side) throw fail(404, 'Notice not found');
   const receiver = n.sent_by_side === 'SJVN' ? n.counterparty_side : 'SJVN';
   if (side !== receiver) throw fail(400, 'A notice is acknowledged by the side it was sent to');
-  if (side === 'SJVN' && !canManage(req.user)) throw fail(403, 'Only the REIA desk can acknowledge a notice for SJVN');
+  if (side === 'SJVN' && !canCheck(req.user)) throw fail(403, 'A notice to SJVN is acknowledged by the REIA checker');
   if (n.acknowledged_at) throw fail(400, 'This notice has already been acknowledged');
   db.prepare(`UPDATE contract_notices SET acknowledged_at = datetime('now'), acknowledged_by = ? WHERE id = ?`).run(req.user.id, n.id);
   audit(req, 'CONTRACT_NOTICE_ACKNOWLEDGED', 'contract_notices', n.id);

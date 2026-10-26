@@ -144,14 +144,14 @@ describe('an issued debit note', () => {
   it('cannot be cancelled once money has come in against it', async () => {
     const issued = (await approve((await raise(bill().id)).body.id)).body;
     await pay(issued.supp_invoice_id, 5000, '2026-09-05');
-    const r = await post(`/api/notes/${issued.id}/cancel`, { reason: 'x' });
+    const r = await post(`/api/notes/${issued.id}/cancel`, { reason: 'x' }, checker);
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/credit note instead/);
   });
 
   it('withdraws its bill when cancelled before any payment', async () => {
     const issued = (await approve((await raise(bill().id)).body.id)).body;
-    const r = await post(`/api/notes/${issued.id}/cancel`, { reason: 'raised in error' });
+    const r = await post(`/api/notes/${issued.id}/cancel`, { reason: 'raised in error' }, checker);
     expect(r.body.status).toBe('CANCELLED');
     expect(inv(issued.supp_invoice_id).status).toBe('CANCELLED');
   });
@@ -200,7 +200,7 @@ describe('an issued credit note', () => {
     await pay(b.id, 90000, '2026-06-30');
     const issued = (await approve((await raise(b.id, { note_type: 'CREDIT', taxable_amount: 10000 })).body.id)).body;
     expect(inv(b.id).status).toBe('PAID');
-    await post(`/api/notes/${issued.id}/cancel`, { reason: 'wrong bill' });
+    await post(`/api/notes/${issued.id}/cancel`, { reason: 'wrong bill' }, checker);
     expect(inv(b.id).status).toBe('PARTIALLY_PAID');
     expect(db.prepare("SELECT COUNT(*) c FROM payments WHERE mode = 'CREDIT_NOTE'").get().c).toBe(0);
   });
@@ -228,7 +228,7 @@ describe('notes raised before V2', () => {
       INSERT INTO debit_credit_notes (id, note_no, note_type, invoice_id, contract_id, reason_code, amount, taxable_amount, status, model, issued_date, created_by)
       VALUES (?, 'DN/2026-04/0001', 'DEBIT', ?, ?, 'REVISED_REA', 10000, 10000, 'ISSUED', 'LEGACY', '2026-05-01', 'someone')
     `).run(id, b.id, contract.id);
-    await post(`/api/notes/${id}/cancel`, { reason: 'x' });
+    await post(`/api/notes/${id}/cancel`, { reason: 'x' }, checker);
     expect(inv(b.id).total_amount).toBe(100000);
   });
 });

@@ -61,7 +61,8 @@ router.get('/', (req, res) => {
 
 // POST /generator-billing/generate
 // Generate a new CERC-compliant two-part tariff bill
-router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+// Phase B.2: the maker generates the bill; the checker moves its status on.
+router.post('/generate', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const {
     station_name, beneficiary_id, billing_month,
     afc, napaf, actual_paf, ex_bus_energy, ecr, design_energy_mu
@@ -174,7 +175,7 @@ router.post('/generate', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
 
 // POST /generator-billing/:id/status
 // Update status (e.g., DRAFT -> FINAL -> PAID)
-router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_CHECK), (req, res) => {
   const { status } = req.body;
   try {
     if (!BILL_STATUSES.includes(status)) {

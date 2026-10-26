@@ -18,7 +18,8 @@ const router = Router();
 router.use(requireAuth);
 
 const READ = [...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR', 'FINANCE_USER', 'MANAGEMENT'];
-const WRITE = [...ROLE_GROUPS.REIA_WRITE];
+// Phase B.2: the beta schedule and its true-up are prepared by the maker.
+const WRITE = [...ROLE_GROUPS.REIA_MAKE];
 
 function enrich(row) {
   if (!row) return row;

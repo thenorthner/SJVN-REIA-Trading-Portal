@@ -34,7 +34,7 @@ describe('S11 Dispute management', () => {
     // Raised, not acknowledged: acknowledging is the desk's act (17-Oct-2026),
     // and taking it into review acknowledges it in that officer's name.
     expect(db.prepare('SELECT status, acknowledged_at FROM disputes WHERE id = ?').get(id)).toMatchObject({ status: 'RAISED', acknowledged_at: null });
-    const rev = await request(app).post(`/api/disputes/${id}/transition`).set(auth(reia)).send({ status: 'UNDER_REVIEW' });
+    const rev = await request(app).post(`/api/disputes/${id}/transition`).set(auth(tokenFor('REIA_CHECKER'))).send({ status: 'UNDER_REVIEW' });
     expect(rev.status).toBeLessThan(400);
     expect(db.prepare('SELECT status FROM disputes WHERE id = ?').get(id).status).toBe('UNDER_REVIEW');
     expect(db.prepare('SELECT acknowledged_by FROM disputes WHERE id = ?').get(id).acknowledged_by).toBeTruthy();
@@ -42,7 +42,7 @@ describe('S11 Dispute management', () => {
 
   it('blocks an illegal jump straight from raised to closed', async () => {
     const r = await raise();
-    const bad = await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/transition`).set(auth(reia)).send({ status: 'CLOSED' });
+    const bad = await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/transition`).set(auth(tokenFor('REIA_CHECKER'))).send({ status: 'CLOSED' });
     expect(bad.status, 'a dispute jumped straight from RAISED to CLOSED').toBeGreaterThanOrEqual(400);
   });
 
@@ -62,8 +62,8 @@ describe('S11 Dispute management', () => {
 
   it('raises a credit note for approval when resolution changes the amount, and leaves the bill as issued', async () => {
     const r = await raise();
-    await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/transition`).set(auth(reia)).send({ status: 'UNDER_REVIEW' });
-    const res = await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/resolve`).set(auth(reia))
+    await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/transition`).set(auth(tokenFor('REIA_CHECKER'))).send({ status: 'UNDER_REVIEW' });
+    const res = await request(app).post(`/api/disputes/${r.body.id || latestDisputeId()}/resolve`).set(auth(tokenFor('REIA_APPROVER')))
       .send({ outcome: 'PARTIAL_CREDIT', accepted_amount: 30000, resolution_notes: 'partly upheld' });
     expect(res.status).toBeLessThan(400);
     const note = db.prepare(`SELECT note_type, status, amount FROM debit_credit_notes WHERE invoice_id = ?`).get(invoice.id);

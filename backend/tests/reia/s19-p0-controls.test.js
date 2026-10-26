@@ -84,12 +84,12 @@ describe('S19 A change of bank account is not the live one until it is verified'
     await changeBank();
     db.prepare(`UPDATE entity_regulatory_approvals SET status = 'VERIFIED' WHERE entity_id = ?`).run(ent.id);
     proveNewAccount(ent.id);
-    const r = await request(app).post(`/api/entities/${ent.id}/approve`).set(auth(reia)).send({ decision: 'APPROVED' });
+    const r = await request(app).post(`/api/entities/${ent.id}/approve`).set(auth(tokenFor('REIA_CHECKER'))).send({ decision: 'APPROVED' });
     if (r.status === 400) {
       // The checklist is seeded on first approval; verify it and go again.
       db.prepare(`UPDATE entity_regulatory_approvals SET status = 'VERIFIED' WHERE entity_id = ?`).run(ent.id);
       proveNewAccount(ent.id);
-      await request(app).post(`/api/entities/${ent.id}/approve`).set(auth(reia)).send({ decision: 'APPROVED' });
+      await request(app).post(`/api/entities/${ent.id}/approve`).set(auth(tokenFor('REIA_CHECKER'))).send({ decision: 'APPROVED' });
     }
     expect(row().status).toBe('APPROVED');
     expect(row().account_no).toBe('999988887777');
@@ -120,7 +120,7 @@ describe('S19 Money does not move to an unverified account', () => {
     inv = makeInvoice({ contract_id: contract.id, direction: 'SELLER_TO_SJVN', status: 'APPROVED', total_amount: 100000 });
   });
 
-  const release = () => request(app).post(`/api/invoices/${inv.id}/release-to-generator`).set(auth(reia))
+  const release = () => request(app).post(`/api/invoices/${inv.id}/release-to-generator`).set(auth(tokenFor('REIA_CHECKER')))
     .send({ amount: 50000, source: 'OWN_FUND', reference: 'T' });
 
   it('releases to a verified account', async () => {

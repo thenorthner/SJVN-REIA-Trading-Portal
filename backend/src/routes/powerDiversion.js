@@ -25,7 +25,8 @@ const router = Router();
 router.use(requireAuth);
 
 const READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE, 'COMPLIANCE_AUDITOR'])];
-const WRITE = ROLE_GROUPS.REIA_WRITE;
+// Phase B.2: recording a diversion, its recovery and the deficit bill is the maker's.
+const WRITE = ROLE_GROUPS.REIA_MAKE;
 const REASONS = ['PAYMENT_DEFAULT', 'NON_REQUISITION'];
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 // The exchange price ceiling (₹/MWh) a diverted sale cannot have cleared above.

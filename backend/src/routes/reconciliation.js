@@ -22,6 +22,10 @@ router.use(requireAuth);
 
 const REIA_ROLES = ROLE_GROUPS.REIA_ALL;
 const REIA_WRITE = ROLE_GROUPS.REIA_WRITE;
+// Phase B.2: the maker runs a reconciliation and sends it out; the checker
+// overrides an item, withdraws a statement and decides a reopen request.
+const REIA_MAKE = ROLE_GROUPS.REIA_MAKE;
+const REIA_CHECK = ROLE_GROUPS.REIA_CHECK;
 
 function isReia(user) {
   return REIA_ROLES.includes(user.role) || user.role === 'SJVN_ADMIN';
@@ -396,7 +400,7 @@ router.get('/', (req, res) => {
 });
 
 // ---- run ----
-router.post('/run', requireRole(...REIA_WRITE, 'TRADING_USER'), (req, res) => {
+router.post('/run', requireRole(...REIA_MAKE, 'TRADING_USER'), (req, res) => {
   const {
     contract_id, trading_client_id, period_type = 'MONTHLY', period,
     scope, sap_amount, tax_filed, sap_factor,
@@ -444,7 +448,7 @@ router.post('/run-scheduled', requireRole(...REIA_WRITE, ...ROLE_GROUPS.REIA_APP
 });
 
 // ---- reopen act (before /:id) ----
-router.post('/reopen-requests/:id/act', requireRole('FINANCE_USER', ...REIA_WRITE), (req, res) => {
+router.post('/reopen-requests/:id/act', requireRole('FINANCE_USER', ...REIA_CHECK), (req, res) => {
   const { decision } = req.body; // APPROVED | REJECTED
   const badDecision = invalidDecision(decision);
   if (badDecision) return res.status(400).json({ error: badDecision });
@@ -552,7 +556,7 @@ router.get('/:id/statement', (req, res) => {
 });
 
 // ---- override ----
-router.post('/:id/override', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/:id/override', requireRole(...REIA_CHECK), (req, res) => {
   const { item_id, reason } = req.body;
   if (!String(reason || '').trim()) return res.status(400).json({ error: 'Say why the variance is being accepted' });
   const recon = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(req.params.id);
@@ -589,7 +593,7 @@ router.post('/:id/override', requireRole(...REIA_WRITE), (req, res) => {
 });
 
 // ---- raise dispute from exception ----
-router.post('/:id/raise-dispute', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/:id/raise-dispute', requireRole(...REIA_MAKE), (req, res) => {
   const { item_id, reason_code = 'ENERGY_DATA_MISMATCH', charge_line = 'energy_charges', issue_description } = req.body;
   const recon = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(req.params.id);
   if (!recon) return res.status(404).json({ error: 'Not found' });
@@ -636,7 +640,7 @@ router.post('/:id/raise-dispute', requireRole(...REIA_WRITE), (req, res) => {
 });
 
 // ---- request sign-off ----
-router.post('/:id/request-signoff', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/:id/request-signoff', requireRole(...REIA_MAKE), (req, res) => {
   const recon = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(req.params.id);
   if (!recon) return res.status(404).json({ error: 'Not found' });
   const openExc = db.prepare(`
@@ -673,7 +677,7 @@ router.post('/:id/acknowledge', (req, res) => {
     return res.status(400).json({ error: 'Sign the statement from its sign-off panel (/api/recon-signoff/:id/sign).' });
   }
   if (decision === 'DISAGREE' && !String(note || remarks || '').trim()) return res.status(400).json({ error: 'Say what is not agreed' });
-  if (decision === 'DISAGREE' && isReia(req.user) && !REIA_WRITE.includes(req.user.role)) return res.status(403).json({ error: 'Only the REIA desk disagrees with a statement for SJVN' });
+  if (decision === 'DISAGREE' && isReia(req.user) && !REIA_CHECK.includes(req.user.role)) return res.status(403).json({ error: 'Disagreeing with a statement for SJVN is the REIA checker\'s' });
   const finalNote = note || remarks || 'Digitally acknowledged and verified';
 
   if (decision === 'DISAGREE') {
@@ -787,7 +791,7 @@ router.post('/:id/reopen-request', (req, res) => {
 // bill, each sent to its counterparty as "ready for your sign-off" (reia-15).
 // The statement table has no cancelled state, so it is removed, with its full
 // record kept in the audit log and the counterparty told.
-router.post('/:id/withdraw', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/:id/withdraw', requireRole(...REIA_CHECK), (req, res) => {
   const recon = db.prepare('SELECT * FROM reconciliations WHERE id = ?').get(req.params.id);
   if (!recon) return res.status(404).json({ error: 'Not found' });
   const reason = String(req.body?.reason || '').trim();

@@ -9,7 +9,7 @@ import { auth, makeUser, makeEntity, makeContract, makeInvoice, resetReia, audit
 // amount is earning in surcharge, the submitter's answer to the resolution,
 // several bills disputed for one cause, and the whole file as a dossier.
 
-let reia, seller, otherSeller, alpha, beta, contract;
+let reia, checker, approver, seller, otherSeller, alpha, beta, contract;
 const as = (u) => auth(signToken(u));
 const get = (u, p) => request(app).get(`/api/dispute-extras${p}`).set(as(u));
 const post = (u, p, body) => request(app).post(`/api/dispute-extras${p}`).set(as(u)).send(body);
@@ -24,8 +24,9 @@ async function raise(inv, amount = 100000, u = seller) {
   expect(r.status, JSON.stringify(r.body)).toBe(201);
   return r.body;
 }
-const resolve = (id, body) => request(app).post(`/api/disputes/${id}/resolve`).set(as(reia)).send({ resolution_notes: 'Checked against the PPA', ...body });
-const underReview = (id) => request(app).post(`/api/disputes/${id}/transition`).set(as(reia)).send({ status: 'UNDER_REVIEW' });
+// Phase B.2: the checker runs a dispute, the REIA approver decides it.
+const resolve = (id, body) => request(app).post(`/api/disputes/${id}/resolve`).set(as(approver)).send({ resolution_notes: 'Checked against the PPA', ...body });
+const underReview = (id) => request(app).post(`/api/disputes/${id}/transition`).set(as(checker)).send({ status: 'UNDER_REVIEW' });
 
 beforeEach(() => {
   resetReia();
@@ -34,6 +35,8 @@ beforeEach(() => {
   contract = makeContract({ seller_id: alpha.id });
   db.prepare('UPDATE contracts SET lps_annual_pct = 18.25 WHERE id = ?').run(contract.id);
   reia = makeUser('REIA_USER', { name: 'Riya REIA' });
+  checker = makeUser('REIA_ADMIN', { name: 'Chetan Checker' });
+  approver = makeUser('REIA_APPROVER', { name: 'Asha Approver' });
   seller = makeUser('SELLER', { name: 'Arun Alpha', linked_entity_id: alpha.id });
   otherSeller = makeUser('SELLER', { name: 'Bina Beta', linked_entity_id: beta.id });
 });
@@ -43,7 +46,7 @@ describe('the clock', () => {
     const d = await raise(bill('A/1'));
     // Until the desk acknowledges it, that is SJVN's move.
     expect((await get(seller, `/${d.id}`)).body.sla).toMatchObject({ stage: 'ACKNOWLEDGE', owner: 'SJVN', breached: false });
-    expect((await request(app).post(`/api/disputes/${d.id}/transition`).set(as(reia)).send({ status: 'ACKNOWLEDGED' })).status).toBe(200);
+    expect((await request(app).post(`/api/disputes/${d.id}/transition`).set(as(checker)).send({ status: 'ACKNOWLEDGED' })).status).toBe(200);
     const fresh = (await get(seller, `/${d.id}`)).body;
     expect(fresh.sla).toMatchObject({ stage: 'RESOLVE', owner: 'SJVN', breached: false });
     expect(fresh.sla.days_left).toBe(15);
@@ -112,8 +115,9 @@ describe('answering the resolution', () => {
     expect((await get(reia, '/overview')).body.totals.contested).toBe(1);
 
     expect((await post(seller, `/${d.id}/conclude`, { note: 'x' })).status).toBe(403);
-    expect((await post(reia, `/${d.id}/conclude`, {})).status).toBe(400);
-    const done = await post(reia, `/${d.id}/conclude`, { note: 'Arbitral award dated 1 Sept: claim allowed in part' });
+    expect((await post(reia, `/${d.id}/conclude`, { note: 'x' })).status).toBe(403);
+    expect((await post(approver, `/${d.id}/conclude`, {})).status).toBe(400);
+    const done = await post(approver, `/${d.id}/conclude`, { note: 'Arbitral award dated 1 Sept: claim allowed in part' });
     expect(done.body).toMatchObject({ status: 'CLOSED' });
     expect(done.body.resolution.escalation_outcome).toMatch(/Arbitral award/);
   });

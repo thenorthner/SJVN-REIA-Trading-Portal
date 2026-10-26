@@ -12,9 +12,9 @@ import { computeCoverage, createInstrumentsFromRequirements } from '../../src/pa
 // owed, twice for the same bill; money received under a demand settled nothing;
 // a refused demand left the cover drawn.
 
-let reia, psa, ppa;
+let reia, checker, psa, ppa;
 const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
-const post = (path, body = {}) => request(app).post(path).set(auth(reia)).send(body);
+const post = (path, body = {}, who = reia) => request(app).post(path).set(auth(who)).send(body);
 const row = (id) => db.prepare('SELECT * FROM payment_security WHERE id = ?').get(id);
 
 function instrument(contract, over = {}) {
@@ -33,6 +33,8 @@ const overdueBill = (amount = 100000) => makeInvoice({ contract_id: psa.id, dire
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
+  // Phase B.2: checking is the checker's.
+  checker = tokenFor('REIA_CHECKER');
   psa = makeContract({ contract_type: 'PSA', project_type: 'Solar', capacity_mw: 50, tariff_per_unit: 2.95, buyer_id: makeEntity('BUYER').id });
   ppa = makeContract({ contract_type: 'PPA', project_type: 'Solar', seller_id: makeEntity('SELLER').id, pbg_amount: 5000000 });
 });
@@ -77,8 +79,8 @@ describe('S45 Invoking a buyer\'s letter of credit', () => {
     const lc = instrument(psa);
     const bill = overdueBill(100000);
     const inv = (await post('/api/payment-security/invocations', { contract_id: psa.id })).body;
-    await post(`/api/payment-security/invocations/${inv.id}/transition`, { status: 'CLAIMED' });
-    const paid = await post(`/api/payment-security/invocations/${inv.id}/transition`, { status: 'FUNDS_RECEIVED' });
+    await post(`/api/payment-security/invocations/${inv.id}/transition`, { status: 'CLAIMED' }, checker);
+    const paid = await post(`/api/payment-security/invocations/${inv.id}/transition`, { status: 'FUNDS_RECEIVED' }, checker);
     expect(paid.body.settled).toEqual([{ invoice_no: bill.invoice_no, amount: 100000 }]);
     // The principal is paid; only the surcharge earned while it was late is left.
     const after = db.prepare('SELECT status, lps FROM invoices WHERE id = ?').get(bill.id);
@@ -89,7 +91,7 @@ describe('S45 Invoking a buyer\'s letter of credit', () => {
     const bill2 = overdueBill(50000);
     const inv2 = (await post('/api/payment-security/invocations', { contract_id: psa.id, amount: 50000 })).body;
     expect(row(lc.id).utilized_amount).toBe(150000);
-    await post(`/api/payment-security/invocations/${inv2.id}/transition`, { status: 'REJECTED', notes: 'Bank refused' });
+    await post(`/api/payment-security/invocations/${inv2.id}/transition`, { status: 'REJECTED', notes: 'Bank refused' }, checker);
     expect(row(lc.id).utilized_amount, 'a refused demand left the cover drawn').toBe(100000);
     expect(db.prepare('SELECT status FROM invoices WHERE id = ?').get(bill2.id).status).toBe('SENT');
   });
@@ -104,8 +106,8 @@ describe('S45 Invoking a buyer\'s letter of credit', () => {
 describe('S45 Drawing, releasing and accepting', () => {
   it('says why a draw is taken', async () => {
     const lc = instrument(psa);
-    expect((await post(`/api/payment-security/${lc.id}/utilize`, { amount: 1000 })).status).toBe(400);
-    expect((await post(`/api/payment-security/${lc.id}/utilize`, { amount: 1000, reason: 'Default on the June bill' })).status).toBe(200);
+    expect((await post(`/api/payment-security/${lc.id}/utilize`, { amount: 1000 }, checker)).status).toBe(400);
+    expect((await post(`/api/payment-security/${lc.id}/utilize`, { amount: 1000, reason: 'Default on the June bill' }, checker)).status).toBe(200);
   });
 
   it('keeps an instrument as cover while its release is only asked for', async () => {
@@ -117,7 +119,7 @@ describe('S45 Drawing, releasing and accepting', () => {
 
   it('does not take on a submission that ran out while it waited', async () => {
     const ps = instrument(ppa, { mechanism_type: 'BANK_GUARANTEE', bg_subtype: 'PBG', status: 'DRAFT', submitted_by_side: 'SELLER', validity_end: day(-1) });
-    const r = await post(`/api/security-desk/instruments/${ps.id}/decide`, { decision: 'ACCEPTED' });
+    const r = await post(`/api/security-desk/instruments/${ps.id}/decide`, { decision: 'ACCEPTED' }, checker);
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/expired on .* while it awaited acceptance/);
     expect(row(ps.id).status).toBe('DRAFT');

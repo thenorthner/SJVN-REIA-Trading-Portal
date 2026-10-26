@@ -11,7 +11,7 @@ import { tokenFor, auth, makeUser, makeEntity, makeContract, resetReia, makeInvo
 // times over), SJVN signing past lines that had not matched, and "awaiting your
 // signature" sent to every seller on the platform.
 
-let reia, sellerCo, otherCo, contract, seller, other;
+let reia, checker, sellerCo, otherCo, contract, seller, other;
 const post = (path, body = {}, who = reia) => request(app).post(path).set(auth(who)).send(body);
 const get = (path, who = reia) => request(app).get(path).set(auth(who));
 const run = (over = {}) => post('/api/reconciliation/run', { contract_id: contract.id, period: '2026-04', scope: 'REIA_CONTRACT', ...over });
@@ -20,6 +20,8 @@ const notesFor = (u) => db.prepare('SELECT message FROM notifications WHERE user
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
+  // Phase B.2: checking is the checker's.
+  checker = tokenFor('REIA_CHECKER');
   sellerCo = makeEntity('SELLER');
   otherCo = makeEntity('SELLER');
   contract = makeContract({ status: 'ACTIVE', seller_id: sellerCo.id });
@@ -70,14 +72,14 @@ describe('Signing and deciding', () => {
 
   it('does not let SJVN sign past a line that has not matched', async () => {
     const r = await withException();
-    const sign = await post(`/api/recon-signoff/${r.id}/sign`, { decision: 'AGREE' });
+    const sign = await post(`/api/recon-signoff/${r.id}/sign`, { decision: 'AGREE' }, checker);
     expect(sign.status, 'SJVN signed a statement with an unexplained line').toBe(400);
     expect(sign.body.error).toMatch(/not matched/);
     const item = db.prepare(`SELECT id FROM recon_items WHERE reconciliation_id = ? AND match_status = 'EXCEPTION'`).get(r.id);
-    expect((await post(`/api/reconciliation/${r.id}/override`, { item_id: item.id, reason: '  ' })).status).toBe(400);
-    expect((await post(`/api/reconciliation/${r.id}/override`, { item_id: item.id, reason: 'metering rounding' })).status).toBe(200);
-    expect((await post(`/api/reconciliation/${r.id}/override`, { item_id: item.id, reason: 'again' })).status, 'a matched line was overridden').toBe(400);
-    expect((await post(`/api/recon-signoff/${r.id}/sign`, { decision: 'AGREE' })).status).toBe(200);
+    expect((await post(`/api/reconciliation/${r.id}/override`, { item_id: item.id, reason: '  ' }, checker)).status).toBe(400);
+    expect((await post(`/api/reconciliation/${r.id}/override`, { item_id: item.id, reason: 'metering rounding' }, checker)).status).toBe(200);
+    expect((await post(`/api/reconciliation/${r.id}/override`, { item_id: item.id, reason: 'again' }, checker)).status, 'a matched line was overridden').toBe(400);
+    expect((await post(`/api/recon-signoff/${r.id}/sign`, { decision: 'AGREE' }, checker)).status).toBe(200);
   });
 
   it('is the desk that signs for SJVN, and a signed statement keeps its figures', async () => {
@@ -85,7 +87,7 @@ describe('Signing and deciding', () => {
     db.prepare(`UPDATE recon_items SET match_status = 'EXACT' WHERE reconciliation_id = ?`).run(r.id);
     db.prepare(`UPDATE reconciliations SET status = 'PENDING_SIGN_OFF', items_exception = 0 WHERE id = ?`).run(r.id);
     expect((await post(`/api/recon-signoff/${r.id}/sign`, { decision: 'AGREE' }, tokenFor('FINANCE_USER'))).status).toBe(403);
-    expect((await post(`/api/recon-signoff/${r.id}/sign`, { decision: 'AGREE' })).status).toBe(200);
+    expect((await post(`/api/recon-signoff/${r.id}/sign`, { decision: 'AGREE' }, checker)).status).toBe(200);
     const regen = await post(`/api/reconciliation/${r.id}/regenerate-statement`);
     expect(regen.status, 'a signed statement was recalculated').toBe(400);
     expect(regen.body.error).toMatch(/has been signed/);
@@ -94,7 +96,7 @@ describe('Signing and deciding', () => {
   it('tells the company on the statement, and no other', async () => {
     const r = await withException();
     const item = db.prepare(`SELECT id FROM recon_items WHERE reconciliation_id = ? AND match_status = 'EXCEPTION'`).get(r.id);
-    await post(`/api/reconciliation/${r.id}/override`, { item_id: item.id, reason: 'ok' });
+    await post(`/api/reconciliation/${r.id}/override`, { item_id: item.id, reason: 'ok' }, checker);
     db.prepare(`UPDATE reconciliations SET status = 'NEEDS_REVIEW', counterparty_role = 'SELLER' WHERE id = ?`).run(r.id);
     expect((await post(`/api/reconciliation/${r.id}/request-signoff`)).status).toBe(200);
     expect(notesFor(seller).join(' ')).toContain(r.recon_no);

@@ -11,13 +11,15 @@ import { contractCompliance } from '../../src/services/contractCompliance.js';
 // The open questions from the REIA QA runs, decided on 17-Oct-2026
 // (docs/DECISIONS_2026-10-17.md). One test per decision that changes behaviour.
 
-let reia, finance;
+let reia, checker, finance;
 const post = (path, body = {}, who = reia) => request(app).post(path).set(auth(who)).send(body);
 const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
 
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
+  // Phase B.2: activating a contract and drawing on an LC are the checker's.
+  checker = tokenFor('REIA_CHECKER');
   finance = tokenFor('FINANCE_USER');
 });
 
@@ -27,7 +29,7 @@ describe('Contracts', () => {
   it('stays SIGNED until its start date', async () => {
     const c = makeContract({ status: 'SIGNED', tenure_start: day(30), tenure_end: day(400), min_cuf_percent: 20 });
     doc(c);
-    const r = await post(`/api/contracts/${c.id}/status`, { status: 'ACTIVE' });
+    const r = await post(`/api/contracts/${c.id}/status`, { status: 'ACTIVE' }, checker);
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/stays SIGNED until then/);
   });
@@ -36,11 +38,11 @@ describe('Contracts', () => {
     const c = makeContract({ status: 'SIGNED', project_type: 'Solar', tenure_start: day(-10), tenure_end: day(400) });
     db.prepare('UPDATE contracts SET min_cuf_percent = NULL WHERE id = ?').run(c.id);
     doc(c);
-    const r = await post(`/api/contracts/${c.id}/status`, { status: 'ACTIVE' });
+    const r = await post(`/api/contracts/${c.id}/status`, { status: 'ACTIVE' }, checker);
     expect(r.status).toBe(400);
     expect(r.body.missing_field).toBe('min_cuf_percent');
     db.prepare('UPDATE contracts SET min_cuf_percent = 21 WHERE id = ?').run(c.id);
-    expect((await post(`/api/contracts/${c.id}/status`, { status: 'ACTIVE' })).status).toBe(200);
+    expect((await post(`/api/contracts/${c.id}/status`, { status: 'ACTIVE' }, checker)).status).toBe(200);
   });
 });
 
@@ -108,10 +110,10 @@ describe('SJVN\'s own letters of credit', () => {
     const c = makeContract({ contract_type: 'PPA' });
     const lc = (await post('/api/security-desk/lcs', { contract_id: c.id, amount: 1000000, issuing_bank: 'SBI', validity_end: day(300) })).body;
     expect((await post(`/api/security-desk/lcs/${lc.id}/amend`, { utilized_amount: 5000 })).status).toBe(400);
-    const drawn = await post(`/api/security-desk/lcs/${lc.id}/draws`, { amount: 200000, draw_date: day(0), bank_reference: 'BNK-77' });
+    const drawn = await post(`/api/security-desk/lcs/${lc.id}/draws`, { amount: 200000, draw_date: day(0), bank_reference: 'BNK-77' }, checker);
     expect(drawn.status, JSON.stringify(drawn.body)).toBe(200);
     expect(drawn.body).toMatchObject({ utilized_amount: 200000, available_amount: 800000 });
-    expect((await post(`/api/security-desk/lcs/${lc.id}/reinstate`, {})).body.utilized_amount).toBe(0);
+    expect((await post(`/api/security-desk/lcs/${lc.id}/reinstate`, {}, checker)).body.utilized_amount).toBe(0);
   });
 });
 

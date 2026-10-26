@@ -14,7 +14,7 @@ import { tokenFor, auth, makeUser, makeEntity, makeContract, makeInvoice, resetR
 // on a PSA at a typed ₹30 into a closed cycle and paid out at once (₹112.5
 // crore); and a sweep "as of 2099" cashing out a cycle still running.
 
-let reia, buyer, psa, otherPsa, ppa;
+let reia, checker, buyer, psa, otherPsa, ppa;
 const post = (path, body, who = reia) => request(app).post(path).set(auth(who)).send(body);
 const divert = (over = {}) => post('/api/power-diversion', {
   contract_id: psa.id, period_month: '2026-08', reason: 'PAYMENT_DEFAULT', quantum_mwh: 250, sale_rate_per_mwh: 4200, expenses: 25000, ...over,
@@ -26,6 +26,8 @@ const bank = (over = {}) => post('/api/energy-banking', {
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
+  // Phase B.2: checking is the checker's.
+  checker = tokenFor('REIA_CHECKER');
   buyer = makeEntity('BUYER');
   psa = makeContract({ contract_type: 'PSA', buyer_id: buyer.id, capacity_mw: 50, tenure_start: '2026-04-01' });
   otherPsa = makeContract({ contract_type: 'PSA', buyer_id: buyer.id, capacity_mw: 50, tenure_start: '2026-04-01' });
@@ -110,10 +112,10 @@ describe('S54 Energy banking', () => {
 
   it('settles only cycles that have closed: a future "as of" is refused', async () => {
     await bank();
-    const r = await post('/api/energy-banking/settle', { as_of: '2099-01-01' });
+    const r = await post('/api/energy-banking/settle', { as_of: '2099-01-01' }, checker);
     expect(r.status).toBe(400);
     expect(db.prepare(`SELECT status FROM energy_banking WHERE contract_id = ?`).get(ppa.id).status).toBe('OPEN');
-    expect((await post('/api/energy-banking/settle', {})).body.settled).toBe(0);
+    expect((await post('/api/energy-banking/settle', {}, checker)).body.settled).toBe(0);
   });
 
   it('stops drawing once the cycle has closed, whatever the request says the date is', async () => {

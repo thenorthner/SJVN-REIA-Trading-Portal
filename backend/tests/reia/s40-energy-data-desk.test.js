@@ -8,7 +8,7 @@ import { tokenFor, auth, makeUser, makeEntity, makeContract, resetReia } from '.
 // locked period that validating again unlocked, the same account recorded
 // twice, any figure taken for energy, and every record open to anyone signed in.
 
-let reia, contract;
+let reia, checker, contract;
 const post = (path, body = {}, who = reia) => request(app).post(path).set(auth(who)).send(body);
 const get = (path, who = reia) => request(app).get(path).set(auth(who));
 const record = (over = {}) => post('/api/energy-data', { contract_id: contract.id, period_month: '2026-05', data_type: 'PROVISIONAL', source: 'JMR', energy_mwh: 14000, ...over });
@@ -18,6 +18,8 @@ beforeEach(() => {
   resetReia();
   db.prepare('DELETE FROM energy_data').run();
   reia = tokenFor('REIA_USER');
+  // Phase B.2: checking is the checker's.
+  checker = tokenFor('REIA_CHECKER');
   contract = makeContract({ status: 'ACTIVE', capacity_mw: 100 });
 });
 
@@ -51,12 +53,12 @@ describe('Recording a period', () => {
 describe('Validating and locking', () => {
   it('leaves a locked period locked', async () => {
     const row = (await record()).body;
-    expect((await post(`/api/energy-data/${row.id}/lock`)).status, 'an unvalidated period was locked').toBe(400);
-    await post(`/api/energy-data/${row.id}/validate`);
-    if (status(row.id) !== 'VALIDATED') await post(`/api/energy-data/${row.id}/lock`, { override_reason: 'fixture' });
-    else expect((await post(`/api/energy-data/${row.id}/lock`)).status).toBe(200);
+    expect((await post(`/api/energy-data/${row.id}/lock`, {}, checker)).status, 'an unvalidated period was locked').toBe(400);
+    await post(`/api/energy-data/${row.id}/validate`, {}, checker);
+    if (status(row.id) !== 'VALIDATED') await post(`/api/energy-data/${row.id}/lock`, { override_reason: 'fixture' }, checker);
+    else expect((await post(`/api/energy-data/${row.id}/lock`, {}, checker)).status).toBe(200);
     expect(status(row.id)).toBe('LOCKED');
-    const again = await post(`/api/energy-data/${row.id}/validate`);
+    const again = await post(`/api/energy-data/${row.id}/validate`, {}, checker);
     expect(again.status, 'validating a locked period took it out of LOCKED').toBe(400);
     expect(status(row.id)).toBe('LOCKED');
   });
@@ -64,7 +66,7 @@ describe('Validating and locking', () => {
   it('says so when there is no capacity to validate against', async () => {
     db.prepare('UPDATE contracts SET capacity_mw = 0, commissioned_capacity_mw = 0 WHERE id = ?').run(contract.id);
     const row = (await record()).body;
-    const r = await post(`/api/energy-data/${row.id}/validate`);
+    const r = await post(`/api/energy-data/${row.id}/validate`, {}, checker);
     expect(r.status, 'a deviation of NaN% passed as validated').toBe(400);
     expect(status(row.id)).toBe('DRAFT');
   });
@@ -74,21 +76,22 @@ describe('An objection SJVN upheld', () => {
   it('stops the unchanged figure being locked without a reason', async () => {
     const row = (await record()).body;
     db.prepare(`UPDATE energy_data SET status = 'VALIDATED', response_status = 'OBJECTED', response_note = 'check meter reads less', objection_outcome = 'UPHELD' WHERE id = ?`).run(row.id);
-    const plain = await post(`/api/energy-data/${row.id}/lock`);
+    const plain = await post(`/api/energy-data/${row.id}/lock`, {}, checker);
     expect(plain.status, 'a figure SJVN agreed was wrong was locked as it stood').toBe(400);
     expect(plain.body.hint).toBeTruthy();
-    expect((await post(`/api/energy-data/${row.id}/lock`, { override_reason: 'difference adjusted in next bill' })).status).toBe(200);
+    expect((await post(`/api/energy-data/${row.id}/lock`, { override_reason: 'difference adjusted in next bill' }, checker)).status).toBe(200);
     expect(db.prepare('SELECT lock_override_reason r FROM energy_data WHERE id = ?').get(row.id).r).toMatch(/next bill/);
   });
 });
 
 describe('Who may read the records', () => {
-  it('is SJVN and the parties, and the whole desk may start a fetch', async () => {
+  it('is SJVN and the parties, and the maker starts a fetch', async () => {
     await record();
     expect((await get('/api/energy-data', tokenFor('TRADING_CLIENT'))).status, 'a trading client was handed every energy record').toBe(403);
     expect((await get('/api/energy-data', tokenFor('COMPLIANCE_AUDITOR'))).body).toHaveLength(1);
-    // Offered to REIA Admin on the screen, and refused it by the route.
-    const fetchIt = await post('/api/energy-data/rea-trigger', { period_month: '2026-05' }, tokenFor('REIA_ADMIN'));
+    // Phase B.2: bringing the REA in is the maker's preparation; the checker validates what came.
+    expect((await post('/api/energy-data/rea-trigger', { period_month: '2026-05' }, tokenFor('REIA_CHECKER'))).status).toBe(403);
+    const fetchIt = await post('/api/energy-data/rea-trigger', { period_month: '2026-05' });
     expect(fetchIt.status).toBe(400);            // asks for the RPC — not a 403
   });
 });
@@ -96,13 +99,13 @@ describe('Who may read the records', () => {
 describe('What the first end-to-end run found', () => {
   it("measures a month by its own days, and a pair of sources by one gap", async () => {
     const feb = (await record({ period_month: '2026-07', energy_mwh: 13000 })).body;
-    const note = (await post(`/api/energy-data/${feb.id}/validate`)).body.deviation_notes;
+    const note = (await post(`/api/energy-data/${feb.id}/validate`, {}, checker)).body.deviation_notes;
     expect(note, 'July was held to a 30-day month').toMatch(/over 31 days/);
 
     const jmr = (await record({ period_month: '2026-06', energy_mwh: 13000 })).body;
     const rea = (await record({ period_month: '2026-06', energy_mwh: 14500, source: 'REA' })).body;
-    const a = (await post(`/api/energy-data/${jmr.id}/validate`)).body.deviation_notes;
-    const b = (await post(`/api/energy-data/${rea.id}/validate`)).body.deviation_notes;
+    const a = (await post(`/api/energy-data/${jmr.id}/validate`, {}, checker)).body.deviation_notes;
+    const b = (await post(`/api/energy-data/${rea.id}/validate`, {}, checker)).body.deviation_notes;
     expect(a).toMatch(/10\.3% apart/);
     expect(b, 'one pair of figures was two different gaps').toMatch(/10\.3% apart/);
   });
@@ -110,9 +113,9 @@ describe('What the first end-to-end run found', () => {
   it('shows the locked figure on the trail, not the one validation threw out', async () => {
     const jmr = (await record({ period_month: '2026-06', energy_mwh: 13000 })).body;
     const rea = (await record({ period_month: '2026-06', energy_mwh: 14500, source: 'REA' })).body;
-    await post(`/api/energy-data/${jmr.id}/validate`);
-    await post(`/api/energy-data/${rea.id}/validate`);
-    expect((await post(`/api/energy-data/${rea.id}/lock`, { override_reason: 'REA is the settled figure' })).status).toBe(200);
+    await post(`/api/energy-data/${jmr.id}/validate`, {}, checker);
+    await post(`/api/energy-data/${rea.id}/validate`, {}, checker);
+    expect((await post(`/api/energy-data/${rea.id}/lock`, { override_reason: 'REA is the settled figure' }, checker)).status).toBe(200);
     const trail = (await get(`/api/billing-trail?energy_id=${jmr.id}`)).body;
     expect(trail.provisional_energy).toMatchObject({ id: rea.id, status: 'LOCKED', energy_mwh: 14500 });
   });
@@ -124,9 +127,9 @@ describe('What the first end-to-end run found', () => {
     db.prepare('UPDATE contracts SET seller_id = ? WHERE id = ?').run(co.id, contract.id);
     const seller = makeUser('SELLER', { linked_entity_id: co.id });
     const row = (await record({ period_month: '2026-06', energy_mwh: 14000 })).body;
-    await post(`/api/energy-data/${row.id}/validate`);
+    await post(`/api/energy-data/${row.id}/validate`, {}, checker);
     db.prepare(`UPDATE energy_data SET status = 'VALIDATED' WHERE id = ?`).run(row.id);
-    await post(`/api/energy-data/${row.id}/lock`);
+    await post(`/api/energy-data/${row.id}/lock`, {}, checker);
     const told = db.prepare('SELECT message FROM notifications WHERE user_id = ?').all(seller.id).map((n) => n.message).join(' ');
     expect(told, 'the seller was left with "ready for your confirmation" on a locked figure').toMatch(/locked .* without waiting for your confirmation/);
 

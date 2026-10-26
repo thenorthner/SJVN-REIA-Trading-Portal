@@ -61,6 +61,11 @@ function tellRaiser(dispute, type, message) {
 
 const REIA_ROLES = ROLE_GROUPS.REIA_ALL;
 const REIA_WRITE = ROLE_GROUPS.REIA_WRITE;
+// Phase B.2: the maker raises a dispute for SJVN; the checker runs it (assigns,
+// reviews, asks for information, closes); the REIA approver or Management
+// decides it (Target #2 H6).
+const REIA_MAKE = ROLE_GROUPS.REIA_MAKE;
+const REIA_CHECK = ROLE_GROUPS.REIA_CHECK;
 
 function isReia(user) {
   return REIA_ROLES.includes(user.role);
@@ -790,7 +795,7 @@ const sendRefusal = (res, err) => {
   throw err;
 };
 
-router.post('/', requireRole(...SELLER_ROLES, ...BUYER_ROLES, ...REIA_WRITE), (req, res) => {
+router.post('/', requireRole(...SELLER_ROLES, ...BUYER_ROLES, ...REIA_MAKE), (req, res) => {
   try {
     res.status(201).json(raiseDispute(req.user, req.body, req));
   } catch (err) { sendRefusal(res, err); }
@@ -799,7 +804,7 @@ router.post('/', requireRole(...SELLER_ROLES, ...BUYER_ROLES, ...REIA_WRITE), (r
 // Several bills disputed for one cause: every dispute is raised, and linked
 // under one group reference, or none is. Raised one after another, a refusal
 // on the second bill left the first raised and holding money, unlinked.
-router.post('/batch', requireRole(...SELLER_ROLES, ...BUYER_ROLES, ...REIA_WRITE), (req, res) => {
+router.post('/batch', requireRole(...SELLER_ROLES, ...BUYER_ROLES, ...REIA_MAKE), (req, res) => {
   const items = Array.isArray(req.body?.items) ? req.body.items : [];
   const title = String(req.body?.group_title || '').trim().slice(0, 200);
   if (items.length < 2) return res.status(400).json({ error: 'Choose at least two bills for linked disputes' });
@@ -846,9 +851,9 @@ router.post('/:id/transition', (req, res) => {
   // calling this directly.
   const submitterReply = dispute.status === 'INFO_REQUESTED' && toStatus === 'UNDER_REVIEW'
     && counterpartySide(req.user) === dispute.raised_by_role;
-  if (!submitterReply && !REIA_WRITE.includes(req.user.role)) {
+  if (!submitterReply && !REIA_CHECK.includes(req.user.role)) {
     return res.status(403).json({
-      error: toStatus === 'CLOSED' ? 'Only SJVN team can close disputes' : 'Only the REIA desk moves a dispute on',
+      error: toStatus === 'CLOSED' ? 'Closing a dispute is the REIA checker\'s' : 'The REIA checker moves a dispute on',
     });
   }
 
@@ -924,7 +929,7 @@ router.post('/:id/transition', (req, res) => {
 });
 
 // ---------- resolve ----------
-router.post('/:id/resolve', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/:id/resolve', requireRole(...ROLE_GROUPS.REIA_APPROVE), (req, res) => {
   const {
     outcome, // FULL_CREDIT | PARTIAL_CREDIT | REJECTED
     accepted_amount,
@@ -1124,7 +1129,7 @@ router.get('/:id/evidence/:filename', (req, res) => {
 });
 
 // ---------- assign / reassign ----------
-router.post('/:id/assign', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/:id/assign', requireRole(...REIA_CHECK), (req, res) => {
   const { assigned_to } = req.body;
   const dispute = db.prepare('SELECT * FROM disputes WHERE id = ?').get(req.params.id);
   if (!dispute) return res.status(404).json({ error: 'Dispute not found' });

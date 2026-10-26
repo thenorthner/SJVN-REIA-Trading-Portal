@@ -47,6 +47,10 @@ const router = Router();
 router.use(requireAuth);
 
 const REIA_WRITE = ROLE_GROUPS.REIA_WRITE;
+// Phase B.2: the maker records instruments, asks and drafts; the checker verifies,
+// draws, invokes and decides a release.
+const REIA_MAKE = ROLE_GROUPS.REIA_MAKE;
+const REIA_CHECK = ROLE_GROUPS.REIA_CHECK;
 const REIA_ALL = ROLE_GROUPS.REIA_ALL;
 
 function isReia(user) {
@@ -252,7 +256,7 @@ router.get('/releases', requireRole(...REIA_ALL), (_req, res) => {
 router.get('/board', requireRole(...REIA_ALL), (_req, res) => res.json(securityBoard()));
 
 // S1: ask the counterparty to make up the gap.
-router.post('/board/:contractId/request', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/board/:contractId/request', requireRole(...REIA_MAKE), (req, res) => {
   const c = db.prepare(`SELECT c.*, s.name AS seller_name, b.name AS buyer_name FROM contracts c
     LEFT JOIN entities s ON s.id = c.seller_id LEFT JOIN entities b ON b.id = c.buyer_id WHERE c.id = ?`).get(req.params.contractId);
   if (!c) return res.status(404).json({ error: 'Contract not found' });
@@ -309,7 +313,7 @@ router.get('/invocations/claim-tracker', requireRole(...REIA_ALL), (req, res) =>
 });
 
 // The bank's settlement or refusal letter, filed once it has answered.
-router.post('/invocations/:id/letter', requireRole(...REIA_WRITE), letterUpload.single('file'), (req, res) => {
+router.post('/invocations/:id/letter', requireRole(...REIA_MAKE), letterUpload.single('file'), (req, res) => {
   const inv = db.prepare('SELECT * FROM security_invocations WHERE id = ?').get(req.params.id);
   const refuse = (status, error) => { discardUpload(req.file); return res.status(status).json({ error }); };
   if (!inv) return refuse(404, 'Not found');
@@ -396,7 +400,7 @@ router.get('/:id', (req, res) => {
   });
 });
 
-router.post('/', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/', requireRole(...REIA_MAKE), (req, res) => {
   const b = req.body || {};
   if (!b.contract_id) return res.status(400).json({ error: 'Choose the contract this instrument secures' });
   const c = db.prepare('SELECT * FROM contracts WHERE id = ?').get(String(b.contract_id));
@@ -473,7 +477,7 @@ router.post('/', requireRole(...REIA_WRITE), (req, res) => {
   res.status(201).json(enrich(db.prepare('SELECT * FROM payment_security WHERE id = ?').get(id)));
 });
 
-router.post('/from-contract/:contractId', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/from-contract/:contractId', requireRole(...REIA_MAKE), (req, res) => {
   if (!db.prepare('SELECT 1 FROM contracts WHERE id = ?').get(req.params.contractId)) {
     return res.status(404).json({ error: 'Contract not found' });
   }
@@ -522,7 +526,7 @@ router.post('/overrides', requireRole(...ROLE_GROUPS.REIA_APPROVE), (req, res) =
   res.status(201).json(db.prepare('SELECT * FROM security_adequacy_overrides WHERE id = ?').get(id));
 });
 
-router.post('/invocations', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/invocations', requireRole(...REIA_MAKE), (req, res) => {
   const { contract_id, amount, invoice_ids, side } = req.body;
   if (!contract_id) return res.status(400).json({ error: 'Choose the contract whose security is being invoked' });
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(String(contract_id));
@@ -596,7 +600,7 @@ const INVOCATION_NEXT = {
   REJECTED: [],
 };
 
-router.post('/invocations/:id/transition', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/invocations/:id/transition', requireRole(...REIA_CHECK), (req, res) => {
   const { status, notes } = req.body;
   if (!Object.keys(INVOCATION_NEXT).includes(status)) return res.status(400).json({ error: 'Invalid status' });
   const inv = db.prepare('SELECT * FROM security_invocations WHERE id = ?').get(req.params.id);
@@ -671,7 +675,7 @@ router.post('/invocations/:id/transition', requireRole(...REIA_WRITE), (req, res
   res.json({ ...db.prepare('SELECT * FROM security_invocations WHERE id = ?').get(inv.id), settled });
 });
 
-router.post('/releases/:id/act', requireRole(...REIA_WRITE, 'FINANCE_USER'), (req, res) => {
+router.post('/releases/:id/act', requireRole(...REIA_CHECK, 'FINANCE_USER'), (req, res) => {
   const { decision } = req.body; // APPROVED | REJECTED
   const badDecision = invalidDecision(decision);
   if (badDecision) return res.status(400).json({ error: badDecision });
@@ -762,11 +766,17 @@ router.post('/releases/:id/act', requireRole(...REIA_WRITE, 'FINANCE_USER'), (re
   res.json(db.prepare('SELECT * FROM security_releases WHERE id = ?').get(rel.id));
 });
 
-router.post('/:id/verify', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/:id/verify', requireRole(...REIA_CHECK), (req, res) => {
   const { bank_confirmation_ref } = req.body;
-  if (!bank_confirmation_ref) return res.status(400).json({ error: 'bank_confirmation_ref required' });
+  if (String(bank_confirmation_ref || '').trim().length < 4) {
+    return res.status(400).json({ error: "Record the bank's confirmation reference (the SFMS message or advice number, at least 4 characters)" });
+  }
   const ps = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(req.params.id);
   if (!ps) return res.status(404).json({ error: 'Not found' });
+  // Confirmed once: a second confirmation would overwrite who checked it and when.
+  if (ps.verified_at) {
+    return res.status(409).json({ error: `${ps.instrument_no} was already confirmed by ${ps.verified_by} (${ps.bank_confirmation_ref})` });
+  }
   db.prepare(`
     UPDATE payment_security SET bank_confirmation_ref = ?, verified_at = datetime('now'), verified_by = ?, updated_at = datetime('now')
     WHERE id = ?
@@ -775,7 +785,7 @@ router.post('/:id/verify', requireRole(...REIA_WRITE), (req, res) => {
   res.json(enrich(db.prepare('SELECT * FROM payment_security WHERE id = ?').get(ps.id)));
 });
 
-router.post('/:id/utilize', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/:id/utilize', requireRole(...REIA_CHECK), (req, res) => {
   const amount = Number(req.body.amount);
   const ps = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(req.params.id);
   if (!ps) return res.status(404).json({ error: 'Not found' });
@@ -827,7 +837,7 @@ router.post('/:id/utilize', requireRole(...REIA_WRITE), (req, res) => {
 // The whole buyer company, not only its admin: topping up a revolving LC is
 // the sort of thing a company's finance maker does. Ownership is enforced by
 // canAccessInstrument below either way.
-router.post('/:id/replenish', requireRole(...REIA_WRITE, ...BUYER_ROLES), (req, res) => {
+router.post('/:id/replenish', requireRole(...REIA_MAKE, ...BUYER_ROLES), (req, res) => {
   const amount = Number(req.body.amount);
   const ps = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(req.params.id);
   if (!ps) return res.status(404).json({ error: 'Not found' });
@@ -882,7 +892,7 @@ router.post('/:id/replenish', requireRole(...REIA_WRITE, ...BUYER_ROLES), (req, 
   res.json(enrich(fresh));
 });
 
-router.post('/:id/renew', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/:id/renew', requireRole(...REIA_MAKE), (req, res) => {
   const { validity_end, limit_amount, amount } = req.body;
   const existing = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });
@@ -922,7 +932,7 @@ function sideForInstrument(instrument, explicit) {
   return null;
 }
 
-router.post('/:id/invoke', requireRole(...REIA_WRITE), (req, res) => {
+router.post('/:id/invoke', requireRole(...REIA_CHECK), (req, res) => {
   const { amount } = req.body;
   const existing = db.prepare('SELECT * FROM payment_security WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found' });

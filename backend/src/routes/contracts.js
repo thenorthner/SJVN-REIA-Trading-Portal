@@ -228,7 +228,7 @@ router.get('/:id', (req, res) => {
   res.json({ ...contractForCounterparty(req.user, fetchContractRelations(contract)), versions, amendments });
 });
 
-router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const id = newId('CON');
   const b = { ...req.body };
   b.contract_no = normalizeContractNo(b.contract_no);
@@ -328,7 +328,7 @@ router.post('/', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
 // Discarding an empty draft. Used when the agreement upload that follows
 // creation fails: the rule is no contract without its agreement, and the record
 // created a moment earlier would otherwise stay behind with nothing on file.
-router.delete('/:id', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.delete('/:id', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const c = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
   if (!c) return res.status(404).json({ error: 'Contract not found' });
   if (c.status !== 'DRAFT' || c.version > 1) return res.status(400).json({ error: `${c.contract_no} is ${c.status} — only an unsigned first draft can be discarded.` });
@@ -369,6 +369,17 @@ router.post('/:id/status', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) =>
   const contract = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
   const { status, remarks, termination_reason, termination_date } = req.body;
+  // Phase B.2: the maker carries a draft through negotiation; signing,
+  // activating, ending or closing a contract is the checker's decision.
+  const drafting = ['DRAFT', 'UNDER_NEGOTIATION'];
+  const makerMove = drafting.includes(contract.status) && drafting.includes(status);
+  if (makerMove ? !ROLE_GROUPS.REIA_MAKE.includes(req.user.role) : !ROLE_GROUPS.REIA_CHECK.includes(req.user.role)) {
+    return res.status(403).json({
+      error: makerMove
+        ? 'Moving a draft through negotiation is the REIA maker\'s.'
+        : `Moving a contract to ${String(status || '').replace(/_/g, ' ')} is the REIA checker's decision.`,
+    });
+  }
 
   const allowed = CONTRACT_TRANSITIONS[contract.status];
   if (!allowed) {
@@ -562,14 +573,14 @@ router.post('/:id/hold/override', requireRole(...ROLE_GROUPS.REIA_APPROVE), (req
     res.status(e.status || 500).json({ error: e.status ? e.message : 'Something went wrong' });
   }
 });
-router.post('/:id/compliance-request', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/compliance-request', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   try { res.status(201).json(requestFromCheck(req.params.id, String(req.body?.code || ''), { dueDate: req.body?.due_date || null, user: req.user, req })); } catch (e) {
     res.status(e.status || 500).json({ error: e.status ? e.message : 'Something went wrong' });
   }
 });
 
 // Amendment -> creates a new version, marks old as AMENDED
-router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/amend', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const original = db.prepare('SELECT * FROM contracts WHERE id = ?').get(req.params.id);
   if (!original) return res.status(404).json({ error: 'Contract not found' });
   if (['TERMINATED', 'CLOSED', 'EXPIRED', 'AMENDED'].includes(original.status)) {
@@ -745,7 +756,7 @@ router.get('/:id/allocations', (req, res) => {
 // Split a period's PPA energy across the PSAs it is allocated to. The
 // allocations were recorded but nothing consumed them, so the split that every
 // downstream bill depends on had to be done by hand.
-router.post('/:id/allocate-energy', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/allocate-energy', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const ppa = db.prepare(`SELECT * FROM contracts WHERE id = ? AND contract_type = 'PPA'`).get(req.params.id);
   if (!ppa) return res.status(404).json({ error: 'PPA not found' });
 
@@ -884,7 +895,7 @@ function shareFitProblem(ppa, psa, percent, from, to, reason) {
 
 const refuseWith = (res, p) => res.status(p.status).json(Object.fromEntries(Object.entries(p).filter(([k]) => k !== 'status')));
 
-router.post('/:id/allocations', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/allocations', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const ppa = db.prepare(`SELECT * FROM contracts WHERE id = ? AND contract_type = 'PPA'`).get(req.params.id);
   if (!ppa) return res.status(404).json({ error: 'PPA not found' });
 
@@ -941,7 +952,7 @@ router.post('/:id/allocations', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, re
 
 // Removing a share is a correction of a mistaken entry, so it is refused once
 // anything has been billed against it — the history a bill was built on stays.
-router.delete('/:id/allocations/:allocId', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.delete('/:id/allocations/:allocId', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const contract = db.prepare(`SELECT * FROM contracts WHERE id = ?`).get(req.params.id);
   if (!contract) return res.status(404).json({ error: 'Contract not found' });
   const alloc = db.prepare(`SELECT * FROM contract_allocations WHERE id = ? AND (ppa_id = ? OR psa_id = ?)`).get(req.params.allocId, contract.id, contract.id);
@@ -984,7 +995,7 @@ router.delete('/:id/allocations/:allocId', requireRole(...ROLE_GROUPS.REIA_WRITE
  * is one whose share ends here — which is how a departing buyer is recorded,
  * rather than by allocating it nothing.
  */
-router.post('/:id/allocations/revise', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/allocations/revise', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const ppa = db.prepare(`SELECT * FROM contracts WHERE id = ? AND contract_type = 'PPA'`).get(req.params.id);
   if (!ppa) return res.status(404).json({ error: 'PPA not found' });
 
@@ -1208,7 +1219,7 @@ function checkBulkRow(raw, entityCache, seenNumbers) {
  * contract needs are enforced — and the good rows of a mixed file still load,
  * with every rejected row named by its spreadsheet line.
  */
-router.post('/bulk-upload', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/bulk-upload', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
   const dryRun = !!req.body?.dry_run;
   if (rows.length === 0) return res.status(400).json({ error: 'No rows supplied' });

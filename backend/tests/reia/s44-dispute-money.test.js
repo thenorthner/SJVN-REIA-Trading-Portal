@@ -39,7 +39,8 @@ const bill = (contract, over = {}) => {
 const raise = (who, b, amount, over = {}) => post('/api/disputes', who, {
   invoice_id: b.id, reason_code: 'ENERGY_DATA_MISMATCH', charge_line: 'energy_charges', disputed_amount: amount, issue_description: 'QA meter gap', ...over,
 });
-const resolve = (d, body) => post(`/api/disputes/${d.id}/resolve`, reia, { resolution_notes: 'checked against the REA', ...body });
+// Phase B.2: the REIA approver decides a dispute.
+const resolve = (d, body, who = tokenFor('REIA_APPROVER')) => post(`/api/disputes/${d.id}/resolve`, who, { resolution_notes: 'checked against the REA', ...body });
 
 describe('S44 A seller disputes to be paid more', () => {
   it('holds nothing back from what SJVN owes it, and an accepted claim is a debit note SJVN pays', async () => {
@@ -62,12 +63,13 @@ describe('S44 A buyer\'s accepted claim', () => {
     const b = bill(psa);
     const d = (await raise(buyer, b, 10000)).body;
     expect(inv(b.id)).toMatchObject({ status: 'DISPUTED', disputed_amount: 10000 });
-    await resolve(d, { outcome: 'PARTIAL_CREDIT', accepted_amount: 6000 });
+    const approver = tokenFor('REIA_APPROVER');
+    await resolve(d, { outcome: 'PARTIAL_CREDIT', accepted_amount: 6000 }, approver);
     // Held while the note waits, so the buyer is not asked for money agreed off.
     expect(inv(b.id)).toMatchObject({ total_amount: 60000, disputed_amount: 6000 });
     expect(db.prepare('SELECT COUNT(*) c FROM invoices WHERE total_amount < 0').get().c, 'a negative credit bill was booked on top').toBe(0);
     const note = db.prepare('SELECT id FROM debit_credit_notes WHERE invoice_id = ?').get(b.id);
-    expect((await post(`/api/notes/${note.id}/approve`, reia)).status, 'the resolver approved their own credit').toBe(403);
+    expect((await post(`/api/notes/${note.id}/approve`, approver)).status, 'the resolver approved their own credit').toBe(403);
     expect((await post(`/api/notes/${note.id}/approve`, finance)).status).toBe(200);
     expect((await get(`/api/invoices/${b.id}`, reia)).body.balance_due).toBe(54000);
   });
@@ -88,7 +90,7 @@ describe('S44 The desk and the party\'s answer', () => {
     const b = bill(psa);
     const d = (await raise(buyer, b, 5000)).body;
     await resolve(d, { outcome: 'REJECTED' });
-    expect((await post(`/api/disputes/${d.id}/transition`, reia, { status: 'CLOSED' })).status).toBe(400);
+    expect((await post(`/api/disputes/${d.id}/transition`, tokenFor('REIA_CHECKER'), { status: 'CLOSED' })).status).toBe(400);
     await post(`/api/dispute-extras/${d.id}/respond`, buyer, { response: 'ACCEPT' });
     expect(db.prepare('SELECT status FROM disputes WHERE id = ?').get(d.id).status).toBe('CLOSED');
   });
@@ -96,8 +98,8 @@ describe('S44 The desk and the party\'s answer', () => {
   it('asks for information in words, and stops its clock while it waits', async () => {
     const b = bill(psa);
     const d = (await raise(buyer, b, 5000)).body;
-    expect((await post(`/api/disputes/${d.id}/transition`, reia, { status: 'INFO_REQUESTED' })).status).toBe(400);
-    expect((await post(`/api/disputes/${d.id}/transition`, reia, { status: 'INFO_REQUESTED', note: 'Send the June telemetry log' })).status).toBe(200);
+    expect((await post(`/api/disputes/${d.id}/transition`, tokenFor('REIA_CHECKER'), { status: 'INFO_REQUESTED' })).status).toBe(400);
+    expect((await post(`/api/disputes/${d.id}/transition`, tokenFor('REIA_CHECKER'), { status: 'INFO_REQUESTED', note: 'Send the June telemetry log' })).status).toBe(200);
     // The resolve date passes while the buyer has not answered: no escalation.
     db.prepare(`UPDATE disputes SET sla_resolve_due = datetime('now', '-1 day'), info_requested_at = datetime('now', '-3 days') WHERE id = ?`).run(d.id);
     await get('/api/disputes', reia);
@@ -144,8 +146,8 @@ describe('S44 What a forum awards', () => {
     const d = (await raise(buyer, b, 5000)).body;
     await resolve(d, { outcome: 'REJECTED' });
     await post(`/api/dispute-extras/${d.id}/respond`, buyer, { response: 'ESCALATE', forum: 'CERC', note: 'Clause 6.2 misread' });
-    expect((await post(`/api/dispute-extras/${d.id}/conclude`, reia, { note: 'CERC order allowed the claim', awarded_amount: 9000 })).status).toBe(400);
-    expect((await post(`/api/dispute-extras/${d.id}/conclude`, reia, { note: 'CERC order allowed the claim', awarded_amount: 5000 })).status).toBe(200);
+    expect((await post(`/api/dispute-extras/${d.id}/conclude`, tokenFor('REIA_APPROVER'), { note: 'CERC order allowed the claim', awarded_amount: 9000 })).status).toBe(400);
+    expect((await post(`/api/dispute-extras/${d.id}/conclude`, tokenFor('REIA_APPROVER'), { note: 'CERC order allowed the claim', awarded_amount: 5000 })).status).toBe(200);
     expect(db.prepare('SELECT note_type, amount, status FROM debit_credit_notes WHERE invoice_id = ?').get(b.id)).toEqual({ note_type: 'CREDIT', amount: 5000, status: 'DRAFT' });
   });
 });

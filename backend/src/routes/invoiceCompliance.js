@@ -30,6 +30,10 @@ router.use(requireAuth);
 
 const INTERNAL_READ = [...new Set([...ROLE_GROUPS.REIA_ALL, 'COMPLIANCE_AUDITOR'])];
 const canManage = (user) => ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+// Phase B.2: putting the IRN or the signed copy on a bill, and its hard-copy
+// dispatch, are the maker's; confirming the hard copy arrived is the checker's.
+const canMake = (user) => ROLE_GROUPS.REIA_MAKE.includes(user?.role);
+const canCheck = (user) => ROLE_GROUPS.REIA_CHECK.includes(user?.role);
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const send = (res, fn) => Promise.resolve().then(fn).then((v) => res.json(v)).catch((err) => {
   if (!err.status) console.error('[INVOICE]', err);
@@ -51,7 +55,7 @@ function invoiceFor(user, id) {
   if (!contract || !side || !contractVisibleTo(user, contract)) throw fail(404, 'Invoice not found');
   if (!invoicePresentedTo(user, inv) && !authoredBy(user, inv)) throw fail(404, 'Invoice not found');
   const seller = contract.seller_id ? db.prepare('SELECT id, name, pan_no, gst_no FROM entities WHERE id = ?').get(contract.seller_id) : null;
-  return { inv, contract, seller, side };
+  return { inv, contract, seller, side, user };
 }
 
 /** The seller's own invoice, while it can still be added to: before SJVN has approved it. */
@@ -60,11 +64,11 @@ function ownOpenInvoice(user, id) {
   // A bill SJVN raises on a buyer is SJVN's document: its desk puts the IRN and
   // the signed copy on it, and the buyer reads them.
   if (ctx.inv.direction === 'SJVN_TO_BUYER') {
-    if (!canManage(user)) throw fail(403, 'Only the REIA desk adds this to a bill SJVN has raised');
+    if (!canMake(user)) throw fail(403, 'The REIA maker adds this to a bill SJVN has raised');
     return ctx;
   }
   if (ctx.inv.direction !== 'SELLER_TO_SJVN') throw fail(400, 'This applies to a seller\'s invoice to SJVN');
-  if (ctx.side !== 'SELLER' && !canManage(user)) throw fail(403, 'Only the seller can add this to its invoice');
+  if (ctx.side !== 'SELLER' && !canMake(user)) throw fail(403, 'Only the seller can add this to its invoice');
   return ctx;
 }
 const EDITABLE = ['DRAFT', 'PENDING_L2', 'SUBMITTED', 'UNDER_APPROVAL', 'REJECTED'];
@@ -227,9 +231,12 @@ function panel(ctx) {
     invoice_no: inv.invoice_no,
     status: inv.status,
     side,
-    can_edit: sellerInvoice ? (side === 'SELLER' || side === 'SJVN') && EDITABLE.includes(inv.status) : side === 'SJVN' && inv.status !== 'CANCELLED',
+    // Phase B.2: on SJVN's side the maker puts the IRN and signed copy on a bill.
+    can_edit: sellerInvoice ? (side === 'SELLER' || (side === 'SJVN' && canMake(ctx.user))) && EDITABLE.includes(inv.status) : side === 'SJVN' && canMake(ctx.user) && inv.status !== 'CANCELLED',
     sjvn_bill: !sellerInvoice,
     can_manage: side === 'SJVN',
+    // Recording that the hard copy arrived is the checker's.
+    can_check: side === 'SJVN' && canCheck(ctx.user),
     requirements: { irn: flag('seller_invoice_requires_irn'), signed_copy: flag('seller_invoice_requires_signed_copy') },
     tds: sellerInvoice ? estimateTds({ seller, billingPeriod: inv.billing_period, amount: inv.total_amount, taxes: inv.taxes, excludeInvoiceId: inv.id }) : null,
     einvoice: inv.irn ? {
@@ -321,7 +328,7 @@ router.post('/:id/signed-copy', (req, res) => send(res, () => {
 router.post('/:id/hardcopy', (req, res) => send(res, () => {
   const ctx = invoiceFor(req.user, req.params.id);
   if (ctx.inv.direction !== 'SELLER_TO_SJVN') throw fail(400, 'This applies to a seller\'s invoice to SJVN');
-  if (ctx.side !== 'SELLER' && !canManage(req.user)) throw fail(403, 'Only the seller records the dispatch of its hard copy');
+  if (ctx.side !== 'SELLER' && !canMake(req.user)) throw fail(403, 'Only the seller records the dispatch of its hard copy');
   if (['DRAFT', 'PENDING_L2', 'CANCELLED'].includes(ctx.inv.status)) throw fail(400, 'The hard copy goes out once the invoice has been submitted to SJVN');
   if (ctx.inv.hardcopy_received_on) throw fail(400, 'SJVN has already recorded receipt of the hard copy');
   const courier = String(req.body.courier || '').trim().slice(0, 80);
@@ -339,7 +346,7 @@ router.post('/:id/hardcopy', (req, res) => send(res, () => {
 
 // POST /:id/hardcopy/received { received_on, note } — SJVN saying it has arrived.
 router.post('/:id/hardcopy/received', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk records receipt of a hard copy');
+  if (!canCheck(req.user)) throw fail(403, 'The REIA checker records receipt of a hard copy');
   const ctx = invoiceFor(req.user, req.params.id);
   if (!ctx.inv.hardcopy_docket_no) throw fail(400, 'The seller has not recorded a dispatch for this invoice');
   if (ctx.inv.hardcopy_received_on) throw fail(400, 'Receipt has already been recorded');

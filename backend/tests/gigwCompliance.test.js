@@ -56,6 +56,51 @@ describe('public site info', () => {
     const bad = await request(app).post('/api/public/consent').send({ choice: 'everything' });
     expect(bad.status).toBe(400);
   });
+
+  it('records the categories of a customised cookie choice (DBIM v3 s.7.6) and drops unknown ones', async () => {
+    const res = await request(app).post('/api/public/consent')
+      .send({ purpose: 'COOKIES', choice: 'custom', version: 'v1', categories: { functional: true, tracking: true } });
+    expect(res.status).toBe(201);
+    const row = db.prepare('SELECT * FROM consent_records WHERE id = ?').get(res.body.id);
+    expect(row.choice).toBe('custom');
+    expect(JSON.parse(row.categories)).toEqual({ essential: true, functional: true });
+  });
+});
+
+describe('public feedback (GIGW 3.0 quality 11)', () => {
+  const good = { name: 'Asha Verma', email: 'asha@example.com', category: 'accessibility', message: 'The contrast toggle does not reach the sitemap cards.', consent: true };
+
+  it('takes valid feedback without sign-in and gives a yearly reference number', async () => {
+    const a = await request(app).post('/api/public/feedback').send(good);
+    const b = await request(app).post('/api/public/feedback').send({ ...good, category: 'suggestion' });
+    expect(a.status).toBe(201);
+    expect(a.body.reference_no).toMatch(new RegExp(`^FB/${new Date().getFullYear()}/\\d{5}$`));
+    expect(Number(b.body.reference_no.split('/').pop())).toBe(Number(a.body.reference_no.split('/').pop()) + 1);
+    const row = db.prepare('SELECT * FROM public_feedback WHERE id = ?').get(a.body.id);
+    expect(row).toMatchObject({ status: 'NEW', category: 'accessibility', email: 'asha@example.com' });
+  });
+
+  it('refuses each invalid field, and feedback without consent to reply', async () => {
+    const res = await request(app).post('/api/public/feedback')
+      .send({ name: 'A', email: 'not-an-email', category: 'other', message: 'too short', consent: false });
+    expect(res.status).toBe(400);
+    expect(Object.keys(res.body.fields).sort()).toEqual(['category', 'consent', 'email', 'message', 'name']);
+  });
+
+  it('lets an admin mark it replied, and keeps other roles out of the queue', async () => {
+    const { body } = await request(app).post('/api/public/feedback').send(good);
+    const { signToken } = await import('../src/middleware/auth.js');
+    const admin = makeUser('SJVN_ADMIN');
+    const adminToken = signToken(admin);
+    expect((await request(app).get('/api/privacy/admin/feedback').set(auth(tokenFor('REIA_USER')))).status).toBe(403);
+    const list = await request(app).get('/api/privacy/admin/feedback?status=NEW').set(auth(adminToken));
+    expect(list.body.some((r) => r.id === body.id)).toBe(true);
+    const noReply = await request(app).patch(`/api/privacy/admin/feedback/${body.id}`).set(auth(adminToken)).send({ status: 'REPLIED', reply: '' });
+    expect(noReply.status).toBe(400);
+    const done = await request(app).patch(`/api/privacy/admin/feedback/${body.id}`).set(auth(adminToken)).send({ status: 'REPLIED', reply: 'Fixed in the next release; thank you.' });
+    expect(done.status).toBe(200);
+    expect(done.body).toMatchObject({ status: 'REPLIED', replied_by: admin.id });
+  });
 });
 
 describe('statutory declaration', () => {

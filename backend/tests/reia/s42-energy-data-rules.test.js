@@ -23,8 +23,8 @@ beforeEach(() => {
 });
 
 const record = (body) => request(app).post('/api/energy-data').set(auth(reia)).send({ period_month: AUG, ...body });
-const validate = (id) => request(app).post(`/api/energy-data/${id}/validate`).set(auth(reia));
-const lock = (id, reason) => request(app).post(`/api/energy-data/${id}/lock`).set(auth(reia)).send(reason ? { override_reason: reason } : {});
+const validate = (id) => request(app).post(`/api/energy-data/${id}/validate`).set(auth(tokenFor('REIA_CHECKER')));
+const lock = (id, reason) => request(app).post(`/api/energy-data/${id}/lock`).set(auth(tokenFor('REIA_CHECKER'))).send(reason ? { override_reason: reason } : {});
 
 describe('S42 Recording a figure', () => {
   it('refuses the month still running and a future month', async () => {
@@ -120,7 +120,7 @@ describe('S42 Locking and objections', () => {
     await validate(a.id);
     const o = await request(app).post(`/api/energy-records/${a.id}/respond`).set(auth(sellerUser)).send({ response: 'OBJECTED', note: 'Our meter shows 8,200', claimed_mwh: 8200 });
     expect(o.status).toBe(200);
-    await request(app).post(`/api/energy-records/${a.id}/resolve-objection`).set(auth(reia)).send({ outcome: 'UPHELD', note: 'Agreed' });
+    await request(app).post(`/api/energy-records/${a.id}/resolve-objection`).set(auth(tokenFor('REIA_CHECKER'))).send({ outcome: 'UPHELD', note: 'Agreed' });
     expect((await lock(a.id)).status).toBe(400);
     const fixed = await record({ contract_id: solar.id, energy_mwh: 8200, source: 'JMR' });
     expect(fixed.status).toBe(200);

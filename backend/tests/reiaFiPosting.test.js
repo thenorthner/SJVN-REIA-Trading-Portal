@@ -101,10 +101,10 @@ describe('prepare, post, reverse', () => {
     const twice = await post(`/api/reia-fi/${p.body.id}/post`, tokenFor('REIA_ADMIN'), { fi_document_no: 'VCH-2' });
     expect(twice.status).toBe(409);
 
-    const noReason = await post(`/api/reia-fi/${p.body.id}/reverse`, reia, {});
+    const noReason = await post(`/api/reia-fi/${p.body.id}/reverse`, tokenFor('REIA_ADMIN'), {});
     expect(noReason.status).toBe(400);
-    expect((await post(`/api/reia-fi/${p.body.id}/reverse`, reia, { reason: '   ' })).status).toBe(400);
-    const rev = await post(`/api/reia-fi/${p.body.id}/reverse`, reia, { reason: 'booked to the wrong GL' });
+    expect((await post(`/api/reia-fi/${p.body.id}/reverse`, tokenFor('REIA_ADMIN'), { reason: '   ' })).status).toBe(400);
+    const rev = await post(`/api/reia-fi/${p.body.id}/reverse`, tokenFor('REIA_ADMIN'), { reason: 'booked to the wrong GL' });
     expect(rev.status).toBe(200);
     expect(rev.body.reversal_posting_no).toBe(`${p.body.posting_no}/REV`);
 

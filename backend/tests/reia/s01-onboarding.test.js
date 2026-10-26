@@ -55,7 +55,7 @@ describe('S1 Stakeholder onboarding', () => {
 
   it('refuses approval while mandatory regulatory items are outstanding', async () => {
     const c = await request(app).post('/api/entities').set(auth(reia)).send({ ...seller, name: 'Approve Me' });
-    const a = await request(app).post(`/api/entities/${c.body.id}/approve`).set(auth(checker)).send({ decision: 'APPROVED' });
+    const a = await request(app).post(`/api/entities/${c.body.id}/approve`).set(auth(tokenFor('REIA_CHECKER'))).send({ decision: 'APPROVED' });
     expect(a.status).toBe(400);
     expect(a.body.error).toMatch(/regulatory|penny/i);
     expect(db.prepare('SELECT status FROM entities WHERE id = ?').get(c.body.id).status).toBe('PENDING');
@@ -67,7 +67,7 @@ describe('S1 Stakeholder onboarding', () => {
     // Clear the two gates the route enforces.
     db.prepare(`UPDATE entity_regulatory_approvals SET status = 'VERIFIED' WHERE entity_id = ?`).run(id);
     db.prepare('UPDATE entities SET is_penny_drop_verified = 1 WHERE id = ?').run(id);
-    const a = await request(app).post(`/api/entities/${id}/approve`).set(auth(checker)).send({ decision: 'APPROVED' });
+    const a = await request(app).post(`/api/entities/${id}/approve`).set(auth(tokenFor('REIA_CHECKER'))).send({ decision: 'APPROVED' });
     expect(a.status).toBe(200);
     expect(db.prepare('SELECT status FROM entities WHERE id = ?').get(id).status).toBe('APPROVED');
   });
@@ -83,7 +83,7 @@ describe('S1 Stakeholder onboarding', () => {
 
   it('records an audit trail for the onboarding decision', async () => {
     const c = await request(app).post('/api/entities').set(auth(reia)).send({ ...seller, name: 'Audited Co' });
-    await request(app).post(`/api/entities/${c.body.id}/approve`).set(auth(checker)).send({ decision: 'APPROVED' });
+    await request(app).post(`/api/entities/${c.body.id}/approve`).set(auth(tokenFor('REIA_CHECKER'))).send({ decision: 'APPROVED' });
     const logs = db.prepare('SELECT * FROM audit_logs WHERE entity_id = ?').all(c.body.id);
     expect(logs.length).toBeGreaterThan(0);
   });
@@ -328,7 +328,7 @@ describe('S01 Onboarding from another vertical, and blacklisting', () => {
     const e = makeEntity('SELLER', { status: 'APPROVED' });
     await request(app).post(`/api/entities/${e.id}/blacklist`).set(auth(admin)).send({ blacklisted: true, reason: 'Debarred by MNRE order' });
 
-    const approve = await request(app).post(`/api/entities/${e.id}/approve`).set(auth(reiaTok)).send({ decision: 'APPROVED' });
+    const approve = await request(app).post(`/api/entities/${e.id}/approve`).set(auth(tokenFor('REIA_CHECKER'))).send({ decision: 'APPROVED' });
     expect(approve.status).toBe(400);
     expect(approve.body.error).toMatch(/blacklisted/i);
 

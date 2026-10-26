@@ -16,7 +16,7 @@ import { refreshTotals } from '../../src/services/cercFormIv.js';
 // clearance expiry, K3 bank-change call-back, G2 curtailment in CUF, D5 forum
 // tracker, PM2 statement of account, SM3 banking statement.
 
-let reia;
+let reia, checker;
 const get = (path, who = reia) => request(app).get(path).set(auth(who));
 const post = (path, body = {}, who = reia) => request(app).post(path).set(auth(who)).send(body);
 const day = (n) => new Date(Date.now() + 5.5 * 3600 * 1000 + n * 86400000).toISOString().slice(0, 10);
@@ -25,6 +25,8 @@ const setParam = (k, v) => { db.prepare('UPDATE system_parameters SET param_valu
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
+  // Phase B.2: checking is the checker's.
+  checker = tokenFor('REIA_CHECKER');
 });
 
 describe('CERC4 annual Form-IV roll-up', () => {
@@ -108,17 +110,17 @@ describe('K3 bank-change call-back', () => {
   });
 
   it('takes only a number already on record', async () => {
-    const r = await post(`/api/entities/${ent.id}/bank-callback`, { contact_name: 'CFO', phone: '9000000001', confirmed: true });
+    const r = await post(`/api/entities/${ent.id}/bank-callback`, { contact_name: 'CFO', phone: '9000000001', confirmed: true }, checker);
     expect(r.status).toBe(400);
     expect(r.body.error).toMatch(/already on record/);
-    const ok = await post(`/api/entities/${ent.id}/bank-callback`, { contact_name: 'CFO', phone: '9876543210', confirmed: true });
+    const ok = await post(`/api/entities/${ent.id}/bank-callback`, { contact_name: 'CFO', phone: '9876543210', confirmed: true }, checker);
     expect(ok.status, JSON.stringify(ok.body)).toBe(201);
     expect(ok.body.confirmed).toBe(1);
     expect((await get(`/api/entities/${ent.id}/bank-callbacks`)).body).toHaveLength(1);
   });
 
   it('alerts the admins when the contact does not confirm, and verification stays blocked', async () => {
-    await post(`/api/entities/${ent.id}/bank-callback`, { contact_name: 'CFO', phone: '9876543210', confirmed: false });
+    await post(`/api/entities/${ent.id}/bank-callback`, { contact_name: 'CFO', phone: '9876543210', confirmed: false }, checker);
     expect(db.prepare(`SELECT COUNT(*) n FROM notifications WHERE type = 'BANK_CHANGE' AND message LIKE '%did NOT confirm%'`).get().n).toBeGreaterThan(0);
     const later = new Date(Date.now() + 2000).toISOString();
     db.prepare(`INSERT INTO entity_regulatory_approvals (id, entity_id, approval_code, label, is_mandatory, status, verified_at, reference_no)

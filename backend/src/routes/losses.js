@@ -1,12 +1,14 @@
 import express from 'express';
-import { requireRole, ROLE_GROUPS } from '../middleware/auth.js';
+import { requireRole, ROLE_GROUPS, PLATFORM_ADMINS } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // Loss percentages feed energy accounting, so editing them is master-data write,
 // not something any logged-in counterparty may do.
 const LOSSES_READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.TRADING_ALL, 'COMPLIANCE_AUDITOR'])];
-const LOSSES_WRITE = ROLE_GROUPS.REIA_WRITE;
+// Masters are governance (Target #2 Phase B): a maker editing the losses it bills
+// from is an SoD finding, so the administrators keep them; the desks read.
+const LOSSES_WRITE = PLATFORM_ADMINS;
 
 // Mock store for transmission losses
 let lossesData = {

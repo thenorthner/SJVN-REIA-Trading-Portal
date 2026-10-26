@@ -16,7 +16,9 @@ router.use(requireAuth);
 const READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE, 'COMPLIANCE_AUDITOR'])];
 // REIA hands the month over and records the voucher Finance returns; Finance
 // reads (tests/reiaFiPosting.test.js holds this as the design).
-const WRITE = [...ROLE_GROUPS.REIA_WRITE];
+// Phase B.2: the maker prepares a posting; posting it to the ledger, or reversing it, is the checker's.
+const WRITE = [...ROLE_GROUPS.REIA_MAKE];
+const POST = [...ROLE_GROUPS.REIA_CHECK];
 
 const month = (v) => (/^\d{4}-\d{2}$/.test(String(v || '')) ? String(v) : null);
 const fail = (res, err) => res.status(err.status || 400).json({ error: err.message });
@@ -89,7 +91,7 @@ router.post('/prepare', requireRole(...WRITE), (req, res) => {
 });
 
 // POST /reia-fi/:postingId/post — book it in Finance.
-router.post('/:postingId/post', requireRole(...WRITE), (req, res) => {
+router.post('/:postingId/post', requireRole(...POST), (req, res) => {
   try {
     const posting = postToFinance(req.params.postingId, {
       fiDocumentNo: req.body.fi_document_no || null,
@@ -113,7 +115,7 @@ router.post('/:postingId/post', requireRole(...WRITE), (req, res) => {
 });
 
 // POST /reia-fi/:postingId/reverse — back a booked entry out.
-router.post('/:postingId/reverse', requireRole(...WRITE), (req, res) => {
+router.post('/:postingId/reverse', requireRole(...POST), (req, res) => {
   try {
     const result = reversePosting(req.params.postingId, {
       reason: req.body.reason,

@@ -4571,13 +4571,35 @@ CREATE TABLE IF NOT EXISTS consent_records (
   id TEXT PRIMARY KEY,
   user_id TEXT,
   purpose TEXT NOT NULL,
-  choice TEXT NOT NULL,           -- all | essential | withdrawn
+  choice TEXT NOT NULL,           -- all | essential | custom | withdrawn
+  categories TEXT,                -- JSON of the categories chosen under "custom"
   version TEXT,
   ip_address TEXT,
   user_agent TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_consent_user ON consent_records (user_id, created_at);
+
+-- Feedback sent from the public Feedback page (GIGW 3.0 quality guideline 11,
+-- DBIM v3 s.5.6). The Web Information Manager answers it from Settings.
+CREATE TABLE IF NOT EXISTS public_feedback (
+  id TEXT PRIMARY KEY,
+  reference_no TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  category TEXT NOT NULL CHECK (category IN ('content','accessibility','technical','translation','suggestion')),
+  page_url TEXT,
+  message TEXT NOT NULL,
+  lang TEXT,
+  status TEXT NOT NULL DEFAULT 'NEW' CHECK (status IN ('NEW','REPLIED','CLOSED')),
+  reply TEXT,
+  replied_by TEXT,
+  replied_at TEXT,
+  ip_address TEXT,
+  user_agent TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_public_feedback_status ON public_feedback (status, created_at);
 
 -- A Data Principal's request under the DPDP Act: access, correction, erasure,
 -- nomination or grievance, worked by the Data Protection Officer.
@@ -4655,3 +4677,59 @@ CREATE TABLE IF NOT EXISTS break_glass_grants (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_break_glass_user ON break_glass_grants (user_id, status);
+
+-- ---------------------------------------------------------------
+-- Public Circulars & Statutory Disclosures (GIGW 3.0 / CERC Compliance)
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public_circulars (
+  id TEXT PRIMARY KEY,
+  circular_no TEXT NOT NULL,
+  title_en TEXT NOT NULL,
+  title_hi TEXT,
+  category TEXT NOT NULL CHECK (category IN (
+    'REIA_TENDER','CORRIGENDUM','CERC_FORM_IV','POWER_MARKET','REGULATORY_ORDER','GENERAL'
+  )),
+  issue_date TEXT NOT NULL,
+  file_url TEXT,
+  file_name TEXT,
+  file_size_bytes INTEGER DEFAULT 0,
+  is_pinned INTEGER NOT NULL DEFAULT 0,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_public_circulars_active ON public_circulars (is_active, is_pinned, issue_date DESC);
+
+-- ---------------------------------------------------------------
+-- SJVN Generation Assets & Power Stations Master (GIS National Map)
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS generation_assets (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  hindi_name TEXT,
+  type TEXT NOT NULL CHECK (type IN ('HYDRO','THERMAL','SOLAR','WIND','PSP','REIA')),
+  capacity TEXT NOT NULL,
+  capacity_num REAL NOT NULL,
+  config TEXT,
+  location TEXT NOT NULL,
+  state TEXT NOT NULL,
+  state_code TEXT NOT NULL,
+  basin TEXT,
+  grid TEXT,
+  status TEXT NOT NULL,
+  status_category TEXT NOT NULL CHECK (status_category IN ('OPERATIONAL','UNDER_CONSTRUCTION','DEVELOPMENT')),
+  status_color TEXT DEFAULT '#10b981',
+  design_energy TEXT,
+  beneficiaries TEXT,
+  coords_x REAL NOT NULL,
+  coords_y REAL NOT NULL,
+  color TEXT,
+  description TEXT,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_gen_assets_active ON generation_assets (is_active, type, state_code);
+

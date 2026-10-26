@@ -10,7 +10,7 @@ import { tokenFor, auth, makeEntity, makeContract, makeInvoice, resetReia } from
 // buyer's bill is never held back for want of security, but its final approver
 // acknowledges an under-secured buyer in so many words.
 
-let reia, buyer, psa;
+let reia, checker, buyer, psa;
 const post = (path, body = {}, who = reia) => request(app).post(path).set(auth(who)).send(body);
 const statement = (contract, period, over = {}) => {
   const id = newId('RCN');
@@ -25,6 +25,8 @@ beforeEach(() => {
   db.prepare('DELETE FROM recon_events').run();
   db.prepare('DELETE FROM reconciliations').run();
   reia = tokenFor('REIA_USER');
+  // Phase B.2: withdrawing a statement is the checker's.
+  checker = tokenFor('REIA_CHECKER');
   buyer = makeEntity('BUYER');
   psa = makeContract({ contract_type: 'PSA', buyer_id: buyer.id, tenure_start: '2026-04-01' });
 });
@@ -32,8 +34,8 @@ beforeEach(() => {
 describe('S58 Withdrawing a statement that should not exist', () => {
   it('withdraws an unsigned statement for a month with nothing to reconcile, with a reason', async () => {
     const id = statement(psa, '2026-09');
-    expect((await post(`/api/reconciliation/${id}/withdraw`, { reason: 'empty' })).status).toBe(400);
-    const r = await post(`/api/reconciliation/${id}/withdraw`, { reason: 'Made by the scheduler: no energy and no bill for September' });
+    expect((await post(`/api/reconciliation/${id}/withdraw`, { reason: 'empty' }, checker)).status).toBe(400);
+    const r = await post(`/api/reconciliation/${id}/withdraw`, { reason: 'Made by the scheduler: no energy and no bill for September' }, checker);
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(db.prepare('SELECT COUNT(*) n FROM reconciliations WHERE id = ?').get(id).n).toBe(0);
     expect(db.prepare(`SELECT COUNT(*) n FROM audit_logs WHERE action = 'RECON_WITHDRAWN' AND entity_id = ?`).get(id).n).toBe(1);
@@ -46,17 +48,17 @@ describe('S58 Withdrawing a statement that should not exist', () => {
     expect(run.status).toBe(400);
     expect(run.body.error).toMatch(/Nothing to reconcile/);
     const id = statement(psa, '2026-09');
-    expect((await post(`/api/reconciliation/${id}/withdraw`, { reason: 'Made by the scheduler: no energy and no bill' })).status).toBe(200);
+    expect((await post(`/api/reconciliation/${id}/withdraw`, { reason: 'Made by the scheduler: no energy and no bill' }, checker)).status).toBe(200);
   });
 
   it('keeps one that is signed, or whose month now has something to reconcile', async () => {
     const signed = statement(psa, '2026-08', { status: 'CLOSED' });
-    expect((await post(`/api/reconciliation/${signed}/withdraw`, { reason: 'Made by the scheduler by mistake' })).body.error).toMatch(/has been signed/);
+    expect((await post(`/api/reconciliation/${signed}/withdraw`, { reason: 'Made by the scheduler by mistake' }, checker)).body.error).toMatch(/has been signed/);
     makeInvoice({ contract_id: psa.id, direction: 'SJVN_TO_BUYER', status: 'SENT', billing_period: '2026-07' });
     // R1: a month with its bill and its energy locked is one to reconcile.
     db.prepare(`INSERT INTO energy_data (id, contract_id, period_month, data_type, source, energy_mwh, status) VALUES (?, ?, '2026-07', 'FINAL', 'SEA', 1000, 'LOCKED')`).run(newId('ENG'), psa.id);
     const live = statement(psa, '2026-07', { status: 'NEEDS_REVIEW' });
-    expect((await post(`/api/reconciliation/${live}/withdraw`, { reason: 'Made by the scheduler by mistake' })).body.error).toMatch(/regenerate/);
+    expect((await post(`/api/reconciliation/${live}/withdraw`, { reason: 'Made by the scheduler by mistake' }, checker)).body.error).toMatch(/regenerate/);
   });
 });
 

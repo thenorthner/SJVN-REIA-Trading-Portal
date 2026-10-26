@@ -35,7 +35,7 @@ describe('S25 Invoking an instrument draws on the side it answers for', () => {
   });
   // A seller default is put on record with its ground; a buyer's is what it owes past the rule.
   const invoke = (id, body = {}) =>
-    request(app).post(`/api/payment-security/${id}/invoke`).set(auth(reia)).send({ amount: 300000, reason: 'Seller missed the minimum CUF for the year', ...body });
+    request(app).post(`/api/payment-security/${id}/invoke`).set(auth(tokenFor('REIA_CHECKER'))).send({ amount: 300000, reason: 'Seller missed the minimum CUF for the year', ...body });
   const owes = (amount) => makeInvoice({ contract_id: contract.id, direction: 'SJVN_TO_BUYER', status: 'SENT', total_amount: amount, due_date: day(-45) });
   const usedOn = (id) => db.prepare('SELECT utilized_amount FROM payment_security WHERE id = ?').get(id).utilized_amount;
 
@@ -93,7 +93,7 @@ describe('S25 Drawing on security records what was left standing', () => {
   it('carries the position before and after', async () => {
     const c = makeContract({ status: 'ACTIVE' });
     const id = instrument(c.id, { amount: 1000000 });
-    await request(app).post(`/api/payment-security/${id}/utilize`).set(auth(reia))
+    await request(app).post(`/api/payment-security/${id}/utilize`).set(auth(tokenFor('REIA_CHECKER')))
       .send({ amount: 300000, reason: 'Buyer default on 2026-06' });
     const e = db.prepare(`SELECT * FROM security_events WHERE payment_security_id = ? AND event_type = 'UTILIZE'`).get(id);
     const d = JSON.parse(e.details);

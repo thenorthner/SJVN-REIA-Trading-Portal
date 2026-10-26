@@ -90,8 +90,8 @@ describe('S56 Booking the month', () => {
   it('withdraws an unbooked batch without a counter-entry, and wants a real reason', async () => {
     saleBill();
     const p = (await post('/api/reia-fi/prepare', reia, { period_month: MONTH, category: 'SALE' })).body;
-    expect((await post(`/api/reia-fi/${p.id}/reverse`, reia, { reason: '   ' })).status).toBe(400);
-    const r = await post(`/api/reia-fi/${p.id}/reverse`, reia, { reason: 'prepared before the PSPCL bill was sent' });
+    expect((await post(`/api/reia-fi/${p.id}/reverse`, tokenFor('REIA_CHECKER'), { reason: '   ' })).status).toBe(400);
+    const r = await post(`/api/reia-fi/${p.id}/reverse`, tokenFor('REIA_CHECKER'), { reason: 'prepared before the PSPCL bill was sent' });
     expect(r.body).toMatchObject({ withdrawn: true });
     expect(db.prepare('SELECT COUNT(*) n FROM reia_fi_postings WHERE period_month = ?').get(MONTH).n).toBe(1);
   });

@@ -3769,6 +3769,12 @@ function collapseDuplicateReconciliations() {
   console.log(`[MIGRATE] reconciliations: removed ${stale.length} duplicate open statement(s) left by the hourly sweep`);
 }
 
+// DBIM v3 s.7.6: the cookie notice now records the categories of a "custom" choice.
+function migrateDbimConsentColumns() {
+  const cols = db.pragma('table_info(consent_records)').map((c) => c.name);
+  if (cols.length && !cols.includes('categories')) db.exec('ALTER TABLE consent_records ADD COLUMN categories TEXT');
+}
+
 function migrateBillingQaColumns() {
   const pay = db.pragma('table_info(payments)').map((c) => c.name);
   if (pay.length && !pay.includes('lps_component')) db.exec('ALTER TABLE payments ADD COLUMN lps_component REAL');
@@ -3805,6 +3811,7 @@ function migrateBillingQaColumns() {
 
 try {
   migrateBillingQaColumns();
+  migrateDbimConsentColumns();
   collapseDuplicateReconciliations();
   const notifCols = db.pragma('table_info(notifications)').map((c) => c.name);
   if (notifCols.length && !notifCols.includes('link')) {
@@ -3995,11 +4002,157 @@ function seedReiaApprover() {
   console.log('[SEED] reia.approver@sjvn.in seeded as REIA_APPROVER');
 }
 
+/**
+ * Public Circulars & Statutory Disclosures table (published from /admin/circulars).
+ */
+function migratePublicCirculars() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS public_circulars (
+      id TEXT PRIMARY KEY,
+      circular_no TEXT NOT NULL,
+      title_en TEXT NOT NULL,
+      title_hi TEXT,
+      category TEXT NOT NULL CHECK (category IN (
+        'REIA_TENDER','CORRIGENDUM','CERC_FORM_IV','POWER_MARKET','REGULATORY_ORDER','GENERAL'
+      )),
+      issue_date TEXT NOT NULL,
+      file_url TEXT,
+      file_name TEXT,
+      file_size_bytes INTEGER DEFAULT 0,
+      is_pinned INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_public_circulars_active ON public_circulars (is_active, is_pinned, issue_date DESC);
+  `);
+}
+
+/**
+ * SJVN Generation Assets Master table (power plants on National GIS Map).
+ */
+function migrateGenerationAssets() {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS generation_assets (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      hindi_name TEXT,
+      type TEXT NOT NULL CHECK (type IN ('HYDRO','THERMAL','SOLAR','WIND','PSP','REIA')),
+      capacity TEXT NOT NULL,
+      capacity_num REAL NOT NULL,
+      config TEXT,
+      location TEXT NOT NULL,
+      state TEXT NOT NULL,
+      state_code TEXT NOT NULL,
+      basin TEXT,
+      grid TEXT,
+      status TEXT NOT NULL,
+      status_category TEXT NOT NULL CHECK (status_category IN ('OPERATIONAL','UNDER_CONSTRUCTION','DEVELOPMENT')),
+      status_color TEXT DEFAULT '#10b981',
+      design_energy TEXT,
+      beneficiaries TEXT,
+      coords_x REAL NOT NULL,
+      coords_y REAL NOT NULL,
+      color TEXT,
+      description TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_gen_assets_active ON generation_assets (is_active, type, state_code);
+  `);
+
+  const count = db.prepare('SELECT COUNT(*) as c FROM generation_assets').get()?.c || 0;
+  if (count === 0) {
+    const SEED_GEN_ASSETS = [
+      { id: 'NJHPS', name: 'Nathpa Jhakri HPS', hindi_name: 'नाथपा झाकड़ी जलविद्युत स्टेशन', type: 'HYDRO', capacity: '1,500 MW', capacity_num: 1500, config: '6 × 250 MW Francis Turbines', location: 'Shimla & Kinnaur, Himachal Pradesh', state: 'Himachal Pradesh', state_code: 'HP', basin: 'Satluj River Basin', grid: 'Northern Regional Grid (NRPC)', status: 'Operational · Flagship', status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: '6,950 MUs / year', beneficiaries: 'Punjab, Haryana, Delhi, HP, Rajasthan, UP, J&K, Chandigarh', coords_x: 223.4, coords_y: 151.0, color: '#0284c7', description: "India's premier underground hydro station on the Satluj river with one of the world's largest deep desilting chambers." },
+      { id: 'RHPS', name: 'Rampur Hydro Station', hindi_name: 'रामपुर जलविद्युत स्टेशन', type: 'HYDRO', capacity: '412 MW', capacity_num: 412, config: '6 × 68.67 MW Francis Cascade', location: 'Shimla & Kullu, Himachal Pradesh', state: 'Himachal Pradesh', state_code: 'HP', basin: 'Satluj River (Tandem Cascade)', grid: 'Northern Regional Grid (NRPC)', status: 'Operational', status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: '1,878 MUs / year', beneficiaries: 'Northern Region Beneficiary States', coords_x: 217.0, coords_y: 153.3, color: '#0284c7', description: 'Eco-friendly cascade utilizing tailrace discharge from Nathpa Jhakri with zero reservoir requirement.' },
+      { id: 'LUHRI', name: 'Luhri Hydro Project (Stage-I)', hindi_name: 'लूहरी जलविद्युत परियोजना (चरण-1)', type: 'HYDRO', capacity: '210 MW', capacity_num: 210, config: 'Run-of-River Dam Scheme (2 × 80 MW + 2 × 25 MW)', location: 'Shimla & Kullu, Himachal Pradesh', state: 'Himachal Pradesh', state_code: 'HP', basin: 'Satluj River Basin', grid: 'NRPC Grid Interconnection', status: 'Under Construction', status_category: 'UNDER_CONSTRUCTION', status_color: '#f59e0b', design_energy: '758 MUs / year', beneficiaries: 'Himachal Pradesh & Northern Grid', coords_x: 213.0, coords_y: 155.7, color: '#0284c7', description: 'Key upcoming clean baseload project advancing towards scheduled commissioning on the Satluj.' },
+      { id: 'LUHRI_2', name: 'Luhri Hydro Project (Stage-II)', hindi_name: 'लूहरी जलविद्युत परियोजना (चरण-2)', type: 'HYDRO', capacity: '172 MW', capacity_num: 172, config: 'Run-of-River Scheme', location: 'Shimla & Mandi, Himachal Pradesh', state: 'Himachal Pradesh', state_code: 'HP', basin: 'Satluj River Basin', grid: 'NRPC Interconnection', status: 'In Development', status_category: 'DEVELOPMENT', status_color: '#38bdf8', design_energy: '620 MUs / year', beneficiaries: 'Northern Regional Grid Discoms', coords_x: 209.8, coords_y: 154.2, color: '#0284c7', description: 'Downstream cascade project on Satluj optimizing hydroelectric potential between Luhri-I and Sunni Dam.' },
+      { id: 'SUNNI', name: 'Sunni Dam Hydro Project', hindi_name: 'सुन्नी बांध जलविद्युत परियोजना', type: 'HYDRO', capacity: '382 MW', capacity_num: 382, config: 'Run-of-the-River with Diurnal Pondage', location: 'Shimla & Mandi, Himachal Pradesh', state: 'Himachal Pradesh', state_code: 'HP', basin: 'Satluj River Basin', grid: 'NRPC Interconnection', status: 'Under Construction', status_category: 'UNDER_CONSTRUCTION', status_color: '#f59e0b', design_energy: '1,382 MUs / year', beneficiaries: 'Northern Grid Discoms', coords_x: 207.4, coords_y: 157.4, color: '#0284c7', description: 'High-head hydro project balancing renewable integration in the Northern Regional Grid.' },
+      { id: 'DHAULASIDH', name: 'Dhaulasidh Hydro Project', hindi_name: 'धौलासिद्ध जलविद्युत परियोजना', type: 'HYDRO', capacity: "69.5 MW", capacity_num: 69.5, config: "Run-of-River Scheme", location: 'Hamirpur & Kangra, Himachal Pradesh', state: 'Himachal Pradesh', state_code: 'HP', basin: 'Beas River Basin', grid: 'HP State Grid / NRPC', status: 'Under Construction', status_category: 'UNDER_CONSTRUCTION', status_color: '#f59e0b', design_energy: '247 MUs / year', beneficiaries: 'HP State Electricity Board & Northern Grid', coords_x: 195.5, coords_y: 145.6, color: '#0284c7', description: 'Vital regional hydro project supplying clean peaking energy on the Beas River.' },
+      { id: 'JANGI', name: 'Jangi Thopan Powari Hydro Project', hindi_name: 'जंगी थोपन पोवारी जलविद्युत परियोजना', type: 'HYDRO', capacity: '804 MW', capacity_num: 804, config: 'Run-of-River High Head Scheme', location: 'Kinnaur, Himachal Pradesh', state: 'Himachal Pradesh', state_code: 'HP', basin: 'Upper Satluj Basin', grid: 'NRPC / National Grid', status: 'In Development', status_category: 'DEVELOPMENT', status_color: '#38bdf8', design_energy: '3,200 MUs / year', beneficiaries: 'Northern Region States', coords_x: 229.5, coords_y: 147.2, color: '#0284c7', description: 'Major upcoming high-capacity hydro asset on the upper reaches of the Satluj river.' },
+      { id: 'NAITWAR', name: 'Naitwar Mori HPS', hindi_name: 'नैटवाड़ मोरी जलविद्युत स्टेशन', type: 'HYDRO', capacity: '60 MW', capacity_num: 60, config: '2 × 30 MW Francis Units', location: 'Uttarkashi, Uttarakhand', state: 'Uttarakhand', state_code: 'UK', basin: 'Tons River (Yamuna Basin)', grid: 'NRPC Grid Connection', status: 'Operational', status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: '265 MUs / year', beneficiaries: 'Uttarakhand Power Corp & Home State', coords_x: 224.9, coords_y: 161.7, color: '#0284c7', description: 'Commissioned run-of-the-river hydroelectric scheme in Uttarakhand with dedicated 220 kV evacuation line.' },
+      { id: 'DEVSARI', name: 'Devsari Hydro Electric Project', hindi_name: 'देवसारी जलविद्युत परियोजना', type: 'HYDRO', capacity: '252 MW', capacity_num: 252, config: '3 × 84 MW Underground Francis Turbines', location: 'Chamoli, Uttarakhand', state: 'Uttarakhand', state_code: 'UK', basin: 'Pindar River (Alaknanda Basin)', grid: 'NRPC Interconnection', status: 'In Development', status_category: 'DEVELOPMENT', status_color: '#38bdf8', design_energy: '910 MUs / year', beneficiaries: 'Uttarakhand & Northern Regional Discoms', coords_x: 252.0, coords_y: 176.0, color: '#0284c7', description: 'Environment-friendly run-of-river scheme on Pindar River in Uttarakhand.' },
+      { id: 'ARUN_3', name: 'Arun-3 Hydro Electric Project (Cross-Border)', hindi_name: 'अरुण-3 जलविद्युत परियोजना (900 MW नेपाल)', type: 'HYDRO', capacity: '900 MW', capacity_num: 900, config: '4 × 225 MW Vertical Francis Turbines', location: 'Sankhuwasabha, Nepal (Evacuating to Sitamarhi, Bihar)', state: 'Cross-Border (Nepal-India)', state_code: 'NP', basin: 'Arun River Basin', grid: 'ERPC / 400 kV Cross-Border D/C Line to India', status: 'Under Construction · Flagship SAPDC', status_category: 'UNDER_CONSTRUCTION', status_color: '#f59e0b', design_energy: '4,018 MUs / year', beneficiaries: 'Nepal (21.9% free energy), balance to Indian National Grid (ERPC/NRPC)', coords_x: 395.0, coords_y: 228.0, color: '#0284c7', description: "SJVN's premier cross-border venture via SAPDC with dedicated 400 kV D/C transmission corridor into Sitamarhi, Bihar." },
+      { id: 'LOWER_ARUN', name: 'Lower Arun Hydro Project', hindi_name: 'लोअर अरुण जलविद्युत परियोजना', type: 'HYDRO', capacity: '669 MW', capacity_num: 669, config: 'Tandem Cascade Scheme below Arun-3', location: 'Sankhuwasabha & Bhojpur, Nepal', state: 'Cross-Border (Nepal-India)', state_code: 'NP', basin: 'Arun River Basin', grid: 'ERPC Interconnection', status: 'In Development · SLPDC', status_category: 'DEVELOPMENT', status_color: '#38bdf8', design_energy: '2,900 MUs / year', beneficiaries: 'Indian Grid & Nepal', coords_x: 402.0, coords_y: 232.0, color: '#0284c7', description: 'Downstream cascade harnessing tailrace outflow of Arun-3 with zero reservoir inundation.' },
+      { id: 'BUXAR', name: 'Buxar Thermal Power Plant', hindi_name: 'बक्सर सुपरक्रिटिकल थर्मल पावर प्लांट', type: 'THERMAL', capacity: '1,320 MW', capacity_num: 1320, config: '2 × 660 MW Supercritical Boilers', location: 'Chausa, Buxar, Bihar', state: 'Bihar', state_code: 'BR', basin: 'Ganga Plains (Eastern India)', grid: 'Eastern Regional Grid (ERPC)', status: "Operational · Unit-1 COD Nov 2025, Unit-2 COD Sep 2026", status_category: "OPERATIONAL", status_color: "#10b981", design_energy: '9,828 MUs / year', beneficiaries: 'Bihar Discoms (85%), Eastern Grid', coords_x: 333.0, coords_y: 280.6, color: '#ea580c', description: 'Ultra-modern supercritical coal-fired baseload powerhouse featuring low-emission FGD and high thermal efficiency via STPL.' },
+      { id: 'BIKANER', name: 'Bikaner Solar Power Project', hindi_name: 'बीकानेर 1000 MW सौर ऊर्जा पार्क', type: 'SOLAR', capacity: '1,000 MW', capacity_num: 1000, config: 'High-Efficiency Bifacial Solar Modules', location: 'Bikaner, Rajasthan', state: 'Rajasthan', state_code: 'RJ', basin: 'Thar High-Irradiance Zone', grid: 'National ISTS Grid (Northern Grid)', status: 'Operational · CPSU Scheme', status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: '2,450 MUs / year', beneficiaries: 'Pan-India Discoms under MNRE CPSU Scheme', coords_x: 133.7, coords_y: 222.4, color: '#eab308', description: "One of India's largest single-location utility solar projects directly evacuating through 765 kV ISTS network." },
+      { id: 'OMKARESHWAR', name: 'Omkareshwar Floating Solar Project', hindi_name: 'ओंकारेश्वर 90 MW फ्लोटिंग सोलर प्लांट', type: 'SOLAR', capacity: '90 MW', capacity_num: 90, config: 'Reservoir Floating Solar PV Array', location: 'Khandwa, Madhya Pradesh', state: 'Madhya Pradesh', state_code: 'MP', basin: 'Narmada River Reservoir', grid: 'WRPC / MPPMCL State Grid', status: 'Operational', status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: '196 MUs / year', beneficiaries: 'MP Power Management Company Ltd (MPPMCL)', coords_x: 182.0, coords_y: 358.0, color: '#eab308', description: 'Landmark floating solar installation on Omkareshwar reservoir conserving land and reducing water evaporation.' },
+      { id: 'KHAVDA', name: "Khavda Solar Project", hindi_name: "खावड़ा 200 MW सौर परियोजना", type: 'SOLAR', capacity: "200 MW", capacity_num: 200, config: "Utility-scale solar PV, 200 MW (AC)", location: 'Kutch, Gujarat', state: 'Gujarat', state_code: 'GJ', basin: 'Rann of Kutch Hybrid Zone', grid: 'Western Regional Grid (WRPC / ISTS)', status: 'Under Construction', status_category: 'UNDER_CONSTRUCTION', status_color: '#f59e0b', design_energy: null, beneficiaries: "Gujarat Urja Vikas Nigam Ltd (GUVNL)", coords_x: 60.2, coords_y: 307.1, color: '#eab308', description: "200 MW (AC) at Khavda Solar Park, Kutch, by SJVN Green Energy; the power goes to GUVNL under a PPA." },
+      { id: 'RAGHANESDA', name: "Radhanesda Solar Project", hindi_name: "राधनेसडा 100 MW सौर ऊर्जा परियोजना", type: 'SOLAR', capacity: '100 MW', capacity_num: 100, config: 'Ground Mounted Utility Solar', location: 'Banaskantha, Gujarat', state: 'Gujarat', state_code: 'GJ', basin: 'North Gujarat Solar Belt', grid: 'GUVNL / WRPC Network', status: 'Operational', status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: '240 MUs / year', beneficiaries: 'Gujarat Urja Vikas Nigam Ltd (GUVNL)', coords_x: 87.2, coords_y: 299.8, color: '#eab308', description: 'Fully commissioned grid-tied utility project generating reliable green power for Gujarat.' },
+      { id: 'CHARANKA', name: 'Charanka Solar Power Station', hindi_name: "चारणका 5.6 MW सौर ऊर्जा केंद्र (पहला सौर संयंत्र)", type: 'SOLAR', capacity: "5.6 MW", capacity_num: 5.6, config: 'Crystalline PV Array (SJVN Maiden Solar)', location: 'Patan, Gujarat', state: 'Gujarat', state_code: 'GJ', basin: 'Patan Solar Park', grid: 'GETCO / GUVNL Grid', status: 'Operational · Pioneer', status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: '8.5 MUs / year', beneficiaries: 'Gujarat Discoms', coords_x: 90.5, coords_y: 308.0, color: '#eab308', description: "SJVN's foundational utility solar installation marking entry into the renewable energy sector." },
+      { id: 'DHOLERA', name: 'Dholera Solar Park', hindi_name: 'धोलेरा 100 MW सौर ऊर्जा संयंत्र', type: 'SOLAR', capacity: '100 MW', capacity_num: 100, config: 'Smart Inverter Ground Array', location: 'Dholera SIR, Gujarat', state: 'Gujarat', state_code: 'GJ', basin: 'Gulf of Khambhat Industrial Region', grid: 'WRPC / GUVNL Network', status: 'Awarded 2020 · commissioning not confirmed', status_category: 'UNDER_CONSTRUCTION', status_color: '#f59e0b', design_energy: '228 MUs / year', beneficiaries: 'GUVNL & Western Grid Offtakers', coords_x: 105.1, coords_y: 344.8, color: '#eab308', description: '100 MW won in the GUVNL Dholera tender (2020) at ₹2.80/unit. SJVN reports no commissioning yet, and its FY26 operating total does not include it.' },
+      { id: 'PARASAN', name: 'Parasan Solar Power Plant', hindi_name: 'परासन 75 MW सौर ऊर्जा संयंत्र', type: 'SOLAR', capacity: '75 MW', capacity_num: 75, config: 'Fixed Tilt Utility Ground Mount Array', location: 'Jalaun, Uttar Pradesh', state: 'Uttar Pradesh', state_code: 'UP', basin: 'Bundelkhand Sun Corridor', grid: 'UPPCL / NRPC Network', status: 'Operational', status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: '165 MUs / year', beneficiaries: 'Uttar Pradesh Power Corp (UPPCL)', coords_x: 246.4, coords_y: 266.5, color: '#eab308', description: 'Operational solar park energizing the Bundelkhand clean energy transmission highway.' },
+      { id: 'GURAH', name: 'Gurah Solar Power Plant', hindi_name: 'गुरहा 75 MW सौर ऊर्जा संयंत्र', type: 'SOLAR', capacity: '75 MW', capacity_num: 75, config: 'High-Efficiency Multi-String Inverter Array', location: 'Jalaun, Uttar Pradesh', state: 'Uttar Pradesh', state_code: 'UP', basin: 'Bundelkhand Clean Energy Highway', grid: 'UPPCL / NRPC Network', status: 'Operational', status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: '165 MUs / year', beneficiaries: 'UPPCL State Discoms', coords_x: 254.0, coords_y: 270.0, color: '#eab308', description: 'Commissioned utility solar station feeding stable renewable power into Uttar Pradesh.' },
+      { id: 'GUJRAI', name: 'Gujrai Solar Power Plant', hindi_name: 'गुजराई 50 MW सौर ऊर्जा संयंत्र', type: 'SOLAR', capacity: '50 MW', capacity_num: 50, config: 'Smart Monofacial PV Ground Installation', location: 'Kanpur Dehat, Uttar Pradesh', state: 'Uttar Pradesh', state_code: 'UP', basin: 'Central UP Green Corridor', grid: 'UPPCL Network', status: 'Operational', status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: '110 MUs / year', beneficiaries: 'UPPCL Offtakers', coords_x: 265.0, coords_y: 264.0, color: '#eab308', description: 'Operational solar plant in Kanpur Dehat delivering clean green electrons under long-term PPA.' },
+      { id: 'JAMUI', name: 'Jamui Solar Power Project', hindi_name: "जमुई 75 MW सौर ऊर्जा परियोजना", type: 'SOLAR', capacity: "75 MW", capacity_num: 75, config: "Ground-mounted solar PV (SJVN Green Energy)", location: 'Jamui, Bihar', state: 'Bihar', state_code: 'BR', basin: 'South Bihar Green Corridor', grid: 'BSPHCL / Eastern Grid (ERPC)', status: "Operational · COD Aug 2026", status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: "90 MUs (first year)", beneficiaries: 'Bihar State Power Holding Company Ltd (BSPHCL)', coords_x: 372.0, coords_y: 292.0, color: '#eab308', description: "75 MW at Kakanchor, Jamui, built by SJVN Green Energy for the Bihar discoms." },
+      { id: 'BANKA', name: 'Banka Solar Power Project', hindi_name: 'बांका 75 MW सौर ऊर्जा परियोजना', type: 'SOLAR', capacity: '75 MW', capacity_num: 75, config: 'Ground Mounted Grid-tied PV Park', location: 'Banka, Bihar', state: 'Bihar', state_code: 'BR', basin: 'Eastern Bihar Renewable Basin', grid: 'BSPHCL / ERPC Network', status: 'Under Construction', status_category: 'UNDER_CONSTRUCTION', status_color: '#f59e0b', design_energy: '165 MUs / year', beneficiaries: 'Bihar State Discoms', coords_x: 388.0, coords_y: 294.0, color: '#eab308', description: 'Under-construction solar project advancing renewable procurement targets in Bihar.' },
+      { id: 'DHUBRI', name: 'Dhubri Solar Power Project', hindi_name: "धुबरी 70 MW सौर ऊर्जा परियोजना", type: 'SOLAR', capacity: '70 MW', capacity_num: 70, config: "Ground-mounted solar PV (SJVN Green Energy)", location: 'Dhubri, Assam', state: 'Assam', state_code: 'AS', basin: 'Brahmaputra Valley Corridor', grid: 'NERPC (North-Eastern Regional Grid)', status: "Operational · COD Feb 2026", status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: "141 MUs (first year)", beneficiaries: 'Assam Power Distribution Company Ltd (APDCL)', coords_x: 456.0, coords_y: 272.0, color: '#eab308', description: "Assam's first utility-scale solar plant, built by SJVN Green Energy on land leased from APDCL; APDCL buys the power at ₹3.92/unit." },
+      { id: 'KHIRVIRE_WIND', name: 'Khirvire Wind Power Project', hindi_name: 'खिड़विरे 47.6 MW पवन ऊर्जा संयंत्र', type: 'WIND', capacity: '47.6 MW', capacity_num: 47.6, config: '56 × 850 kW Gamesa Wind Turbines', location: 'Ahmednagar, Maharashtra', state: 'Maharashtra', state_code: 'MH', basin: 'Western Ghats Wind Corridor', grid: 'MSEDCL / Western Grid (WRPC)', status: 'Operational', status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: '90 MUs / year', beneficiaries: 'Maharashtra State Electricity Distribution Co (MSEDCL)', coords_x: 145.0, coords_y: 432.0, color: '#10b981', description: "SJVN's high-performing commercial wind farm situated along the high-wind ridgelines of Maharashtra." },
+      { id: 'SADLA_WIND', name: 'Sadla Wind Power Project', hindi_name: 'सादला 50 MW पवन ऊर्जा संयंत्र', type: 'WIND', capacity: '50 MW', capacity_num: 50, config: '25 × 2.0 MW Suzlon Wind Turbine Generators', location: 'Surendranagar, Gujarat', state: 'Gujarat', state_code: 'GJ', basin: 'Saurashtra High-Wind Regimes', grid: 'GUVNL / WRPC Network', status: 'Operational', status_category: 'OPERATIONAL', status_color: '#10b981', design_energy: '115 MUs / year', beneficiaries: 'Gujarat Urja Vikas Nigam Ltd (GUVNL)', coords_x: 93.0, coords_y: 332.0, color: '#10b981', description: 'High-availability wind generating asset in Saurashtra feeding green energy into the Western Grid.' },
+      { id: 'MAHA_PSP', name: 'Maharashtra Pumped Storage Portfolio', hindi_name: 'महाराष्ट्र 8,100 MW पंप्ड स्टोरेज प्रोजेक्ट्स', type: 'PSP', capacity: '8,100 MW', capacity_num: 8100, config: "5 PSPs: Kolmondapada 800, Sidgarh 1,500, Chornai 2,000, Baitarni 1,800, Jalvara 2,000 MW", location: 'Western Ghats, Maharashtra', state: 'Maharashtra', state_code: 'MH', basin: 'Sahyadri Hydro-Peaking Corridors', grid: 'Western Regional Grid (WRPC)', status: 'In Development · MoU Signed', status_category: 'DEVELOPMENT', status_color: '#8b5cf6', design_energy: null, beneficiaries: 'Govt. of Maharashtra, National Grid Storage Mandate', coords_x: 155.0, coords_y: 450.0, color: '#8b5cf6', description: "MoU with the Govt. of Maharashtra (Water Resources Dept., Sept 2024) for five pumped storage projects; estimated investment ₹48,000 crore." },
+      { id: 'DARZO_PSP', name: "Darzo Lui Pumped Storage Project", hindi_name: "दार्ज़ो लुई 2,400 MW पंप्ड स्टोरेज परियोजना", type: 'PSP', capacity: "2,400 MW", capacity_num: 2400, config: 'Reversible Pump Turbine Units', location: "Mizoram", state: 'Mizoram', state_code: 'MZ', basin: "Darzo Nallah (tributary of the Tuipui)", grid: 'NERPC Interconnection', status: "In Development · LoI from Govt. of Mizoram (Jul 2024)", status_category: 'DEVELOPMENT', status_color: '#8b5cf6', design_energy: null, beneficiaries: 'Govt. of Mizoram & North-Eastern Grid', coords_x: 508.0, coords_y: 335.0, color: '#8b5cf6', description: "Letter of Intent from the Govt. of Mizoram in July 2024; estimated cost ₹13,947.50 crore at April 2023 prices." },
+      { id: 'REIA_ISTS', name: 'REIA Pan-India Bidding Mandate', hindi_name: 'REIA राष्ट्रीय नवीकरणीय निविदा पोर्टफोलियो', type: 'REIA', capacity: '2,400+ MW', capacity_num: 2400, config: 'Solar · Wind · RTC Hybrid ISTS Tenders', location: 'Pan-India ISTS Sub-stations (RJ, GJ, MP, MH, AP, TN)', state: 'Pan-India (ISTS)', state_code: 'ISTS', basin: 'National Clean Energy Footprint', grid: 'National Transmission Grid (ISTS)', status: 'MNRE Mandate · Active Tendering', status_category: 'OPERATIONAL', status_color: '#3b82f6', design_energy: 'Over 5,800 MUs contracted', beneficiaries: 'Multiple State Discoms & Offtakers nationwide', coords_x: 207.7, coords_y: 327.6, color: '#6366f1', description: 'Designated Renewable Energy Implementing Agency (REIA) by Ministry of Power / MNRE for utility-scale procurement and tariff management.' }
+    ];
+
+    const insert = db.prepare(`
+      INSERT OR IGNORE INTO generation_assets (
+        id, name, hindi_name, type, capacity, capacity_num, config, location,
+        state, state_code, basin, grid, status, status_category, status_color,
+        design_energy, beneficiaries, coords_x, coords_y, color, description, is_active
+      ) VALUES (
+        @id, @name, @hindi_name, @type, @capacity, @capacity_num, @config, @location,
+        @state, @state_code, @basin, @grid, @status, @status_category, @status_color,
+        @design_energy, @beneficiaries, @coords_x, @coords_y, @color, @description, 1
+      )
+    `);
+
+    const insertMany = db.transaction((assets) => {
+      for (const a of assets) insert.run(a);
+    });
+
+    insertMany(SEED_GEN_ASSETS);
+    console.log(`[SEED] Seeded ${SEED_GEN_ASSETS.length} generation assets into generation_assets table.`);
+  }
+
+  // Corrections to the first seed (checked against SJVN's own releases, 22-Oct-2026).
+  // A row is touched only while it still holds the figure first seeded, so an
+  // administrator's own edit is never overwritten. The 'Jaisalmer Wind Station'
+  // was never an SJVN plant: its 47.6 MW is the Khirvire project in Maharashtra.
+  const fixes = [
+    ['JAMUI', 'capacity_num', 200, { capacity: '75 MW', capacity_num: 75, hindi_name: 'जमुई 75 MW सौर ऊर्जा परियोजना', config: 'Ground-mounted solar PV (SJVN Green Energy)', status: 'Operational · COD Aug 2026', design_energy: '90 MUs (first year)', description: '75 MW at Kakanchor, Jamui, built by SJVN Green Energy for the Bihar discoms.' }],
+    ['KHAVDA', 'capacity_num', 700, { name: 'Khavda Solar Project', hindi_name: 'खावड़ा 200 MW सौर परियोजना', capacity: '200 MW', capacity_num: 200, config: 'Utility-scale solar PV, 200 MW (AC)', design_energy: null, beneficiaries: 'Gujarat Urja Vikas Nigam Ltd (GUVNL)', description: '200 MW (AC) at Khavda Solar Park, Kutch, by SJVN Green Energy; the power goes to GUVNL under a PPA.' }],
+    ['DARZO_PSP', 'capacity_num', 1500, { name: 'Darzo Lui Pumped Storage Project', hindi_name: 'दार्ज़ो लुई 2,400 MW पंप्ड स्टोरेज परियोजना', capacity: '2,400 MW', capacity_num: 2400, location: 'Mizoram', basin: 'Darzo Nallah (tributary of the Tuipui)', status: 'In Development · LoI from Govt. of Mizoram (Jul 2024)', design_energy: null, description: 'Letter of Intent from the Govt. of Mizoram in July 2024; estimated cost ₹13,947.50 crore at April 2023 prices.' }],
+    ['MAHA_PSP', 'config', '5 Closed-loop PSP Stations (Kolleru, Malshej, etc.)', { config: '5 PSPs: Kolmondapada 800, Sidgarh 1,500, Chornai 2,000, Baitarni 1,800, Jalvara 2,000 MW', design_energy: null, description: 'MoU with the Govt. of Maharashtra (Water Resources Dept., Sept 2024) for five pumped storage projects; estimated investment ₹48,000 crore.' }],
+    ['CHARANKA', 'capacity_num', 5, { capacity: '5.6 MW', capacity_num: 5.6, hindi_name: 'चारणका 5.6 MW सौर ऊर्जा केंद्र (पहला सौर संयंत्र)' }],
+    ['DHAULASIDH', 'capacity_num', 66, { capacity: '69.5 MW', capacity_num: 69.5, config: 'Run-of-River Scheme' }],
+    ['BUXAR', 'status_category', 'UNDER_CONSTRUCTION', { status: 'Operational · Unit-1 COD Nov 2025, Unit-2 COD Sep 2026', status_category: 'OPERATIONAL', status_color: '#10b981' }],
+    ['DHUBRI', 'status', 'Operational · SGEL-APDCL JV', { hindi_name: 'धुबरी 70 MW सौर ऊर्जा परियोजना', config: 'Ground-mounted solar PV (SJVN Green Energy)', status: 'Operational · COD Feb 2026', design_energy: '141 MUs (first year)', description: "Assam's first utility-scale solar plant, built by SJVN Green Energy on land leased from APDCL; APDCL buys the power at ₹3.92/unit." }],
+    ['DHOLERA', 'status', 'Operational', { status: 'Awarded 2020 · commissioning not confirmed', status_category: 'UNDER_CONSTRUCTION', status_color: '#f59e0b', description: '100 MW won in the GUVNL Dholera tender (2020) at ₹2.80/unit. SJVN reports no commissioning yet, and its FY26 operating total does not include it.' }],
+    ['RAGHANESDA', 'name', 'Raghanesda Solar Park', { name: 'Radhanesda Solar Project', hindi_name: 'राधनेसडा 100 MW सौर ऊर्जा परियोजना' }],
+  ];
+  const fixAll = db.transaction(() => {
+    for (const [id, col, seeded, to] of fixes) {
+      const row = db.prepare(`SELECT ${col} AS v FROM generation_assets WHERE id = ?`).get(id);
+      if (!row || row.v !== seeded) continue;
+      const cols = Object.keys(to);
+      db.prepare(`UPDATE generation_assets SET ${cols.map((c) => `${c} = @${c}`).join(', ')}, updated_at = datetime('now') WHERE id = @id`).run({ ...to, id });
+    }
+    db.prepare(`DELETE FROM generation_assets WHERE id = 'JAISALMER_WIND' AND name = 'Jaisalmer Wind Station'`).run();
+  });
+  fixAll();
+}
+
 try {
   migrateReiaThreeTier();
   seedReiaApprover();
+  migratePublicCirculars();
+  migrateGenerationAssets();
 } catch (e) {
-  console.error('REIA three-tier role migration failed:', e.message);
+  console.error('Database migration/seed failed:', e.message);
 }
 
 export default db;

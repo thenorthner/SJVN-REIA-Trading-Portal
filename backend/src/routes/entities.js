@@ -24,6 +24,10 @@ import { normaliseKycBody, validateKyc } from '../services/kycValidation.js';
 // Phase B): the SJVN / IT administrators keep them although they left the desks'
 // write groups. Built from those groups alone, this silently dropped them.
 const ENTITY_WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE, ...PLATFORM_ADMINS])];
+// Phase B.2: on the REIA desk the maker records a counterparty and the checker
+// clears it (KYC approval, bank verification). The station desks have no split yet.
+const ENTITY_MAKE = [...new Set([...ROLE_GROUPS.REIA_MAKE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE, ...PLATFORM_ADMINS])];
+const ENTITY_CHECK = [...new Set([...ROLE_GROUPS.REIA_CHECK, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE, ...PLATFORM_ADMINS])];
 
 /**
  * The verticals a desk works in. A desk officer onboards and lists only its own
@@ -379,7 +383,7 @@ router.get('/:id', (req, res) => {
   res.json({ ...fetchEntityRelations(entity), history });
 });
 
-router.post('/', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) => {
+router.post('/', requireRole(...ENTITY_MAKE, 'SELLER', 'BUYER'), (req, res) => {
   const id = newId('ENT');
   const body = normaliseKycBody(req.body || {});
   if (!body.entity_type || !body.name || !body.category) {
@@ -564,7 +568,7 @@ router.post('/', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) => 
   res.status(201).json(fetchEntityRelations(created));
 });
 
-router.put('/:id', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), (req, res) => {
+router.put('/:id', requireRole(...ENTITY_MAKE, 'SELLER', 'BUYER'), (req, res) => {
   req.body = normaliseKycBody(req.body || {});
   const existing = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   // A counterparty edits its own record only. This let any seller rename another
@@ -742,6 +746,15 @@ router.put('/:id/regulatory-approvals/:approvalId', requireRole(...ENTITY_WRITE,
     const outside = outsideDesk(req.user, entity);
     if (outside) return res.status(403).json({ error: outside });
   }
+  // Phase B.2: on the REIA desk the maker records a clearance's details; marking
+  // it verified, rejected or not applicable is the checker's decision.
+  const deciding = ['VERIFIED', 'REJECTED', 'NOT_APPLICABLE'].includes(status) && status !== row.status;
+  if (ROLE_GROUPS.REIA_MAKE.includes(req.user.role) && deciding) {
+    return res.status(403).json({ error: `Marking ${row.label} ${status.replace(/_/g, ' ').toLowerCase()} is the REIA checker's decision.` });
+  }
+  if (ROLE_GROUPS.REIA_CHECK.includes(req.user.role) && !deciding) {
+    return res.status(403).json({ error: `The REIA maker records ${row.label}'s details; the checker decides on them.` });
+  }
   // A counterparty submits its evidence; deciding on it is SJVN's. It could set
   // anything but VERIFIED — and NOT_APPLICABLE, which counts as cleared, let it
   // waive its own mandatory items.
@@ -813,7 +826,7 @@ router.put('/:id/regulatory-approvals/:approvalId', requireRole(...ENTITY_WRITE,
 // cheque). No money is sent: there is no penny-drop integration, and the screen
 // used to offer a "₹1 penny drop" button that only set a flag. '/penny-drop' is
 // kept as an alias for callers that still use the old path.
-router.post(['/:id/verify-bank', '/:id/penny-drop'], requireRole(...ENTITY_WRITE), (req, res) => {
+router.post(['/:id/verify-bank', '/:id/penny-drop'], requireRole(...ENTITY_CHECK), (req, res) => {
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
   const outside = outsideDesk(req.user, entity);
@@ -878,7 +891,7 @@ router.post('/:id/own-station', requireRole('SJVN_ADMIN', 'IT_SUPER_ADMIN'), (re
 });
 
 // K3: record the call-back that confirms (or does not) a change of bank account.
-router.post('/:id/bank-callback', requireRole(...ENTITY_WRITE), (req, res) => {
+router.post('/:id/bank-callback', requireRole(...ENTITY_CHECK), (req, res) => {
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
   if (!entity.pending_bank_json) return res.status(400).json({ error: `${entity.name} has no change of bank account waiting.` });
@@ -952,7 +965,7 @@ router.post('/:id/blacklist', requireRole(...BLACKLIST_ROLES), (req, res) => {
 // Register an existing counterparty under another vertical. The same DISCOM
 // buys under a REIA PSA and draws from a hydro station; it is one legal entity
 // with one PAN, so it is linked, not onboarded a second time.
-router.post('/:id/verticals', requireRole(...ENTITY_WRITE), (req, res) => {
+router.post('/:id/verticals', requireRole(...ENTITY_MAKE), (req, res) => {
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
   const vertical = req.body?.vertical;
@@ -970,7 +983,7 @@ router.post('/:id/verticals', requireRole(...ENTITY_WRITE), (req, res) => {
   res.json(fetchEntityRelations(db.prepare('SELECT * FROM entities WHERE id = ?').get(entity.id)));
 });
 
-router.post('/:id/approve', requireRole(...ENTITY_WRITE), (req, res) => {
+router.post('/:id/approve', requireRole(...ENTITY_CHECK), (req, res) => {
   const { decision, remarks, admin_direct_admit } = req.body;
   // Unvalidated, this wrote `status = decision` — an omitted field tripped the
   // NOT NULL constraint and came back a 500 rather than saying what was wrong.
@@ -1074,7 +1087,7 @@ const ownDeskOnly = (req, res, next) => {
   if (outside) return res.status(403).json({ error: outside });
   return next();
 };
-router.post('/:id/logo', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), ownDeskOnly, upload.single('logo'), (req, res) => {
+router.post('/:id/logo', requireRole(...ENTITY_MAKE, 'SELLER', 'BUYER'), ownDeskOnly, upload.single('logo'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No logo file provided' });
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity || !entityVisibleTo(req.user, entity.id)) return res.status(404).json({ error: 'Entity not found' });
@@ -1085,7 +1098,7 @@ router.post('/:id/logo', requireRole(...ENTITY_WRITE, 'SELLER', 'BUYER'), ownDes
   res.json({ success: true, logo_url: logoUrl });
 });
 
-router.post('/:id/signature', requireRole(...ROLE_GROUPS.REIA_WRITE, 'SELLER', 'BUYER'), upload.single('signature'), (req, res) => {
+router.post('/:id/signature', requireRole(...ROLE_GROUPS.REIA_MAKE, 'SELLER', 'BUYER'), upload.single('signature'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No signature file provided' });
   const entity = db.prepare('SELECT * FROM entities WHERE id = ?').get(req.params.id);
   if (!entity || !entityVisibleTo(req.user, entity.id)) return res.status(404).json({ error: 'Entity not found' });
@@ -1105,7 +1118,7 @@ router.get('/:id/aliases', (req, res) => {
 });
 
 // Register a new spelling for an entity.
-router.post('/:id/aliases', requireRole(...ROLE_GROUPS.REIA_WRITE), (req, res) => {
+router.post('/:id/aliases', requireRole(...ROLE_GROUPS.REIA_MAKE), (req, res) => {
   const entity = db.prepare('SELECT id FROM entities WHERE id = ?').get(req.params.id);
   if (!entity) return res.status(404).json({ error: 'Entity not found' });
   const { alias_name } = req.body;

@@ -20,7 +20,8 @@ import { newDoc, header, kpiBand, sectionTitle, table, notes as footNotes, pageN
 const router = Router();
 router.use(requireAuth);
 const READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.FINANCE, 'COMPLIANCE_AUDITOR'])];
-const WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, 'FINANCE_USER'])];
+// Phase B.2: asking for, and filing, a balance confirmation is record-keeping — the maker's, or Finance's.
+const WRITE = [...new Set([...ROLE_GROUPS.REIA_MAKE, 'FINANCE_USER'])];
 const upload = deskUpload('balance-certificates');
 const money = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const inr = (v) => Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

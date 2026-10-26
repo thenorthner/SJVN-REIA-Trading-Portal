@@ -10,7 +10,7 @@ import { fyWeekStart } from '../../src/routes/deviationSettlements.js';
 // ₹11,00,000 for one week), a second revision had nowhere to go, and estimates
 // took a ₹120 crore week on a 412 MW plant, a negative rate and week 40 in May.
 
-let reia, admin, rampur;
+let reia, checker, admin, rampur;
 const post = (path, body = {}, who = reia) => request(app).post(path).set(auth(who)).send(body);
 
 function statement(id, revision, lakh, status = 'ACTIVE') {
@@ -30,6 +30,8 @@ beforeEach(() => {
   db.prepare('DELETE FROM nrpc_dsa_entity_totals').run();
   db.prepare('DELETE FROM nrpc_dsa_accounts').run();
   reia = tokenFor('REIA_USER');
+  // Phase B.2: checking is the checker's.
+  checker = tokenFor('REIA_CHECKER');
   admin = tokenFor('SJVN_ADMIN');
   rampur = makeContract({ contract_no: 'PPA/SJVN/RHPS/T1', project_type: 'Hydro', capacity_mw: 412 });
 });

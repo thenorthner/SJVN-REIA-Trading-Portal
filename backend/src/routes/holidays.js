@@ -8,7 +8,7 @@
  */
 import { Router } from 'express';
 import db from '../db/index.js';
-import { requireAuth, requireRole, ROLE_GROUPS } from '../middleware/auth.js';
+import { requireAuth, requireRole, ROLE_GROUPS, PLATFORM_ADMINS } from '../middleware/auth.js';
 import { newId } from '../util.js';
 import { secureLogAudit } from '../auditEngine.js';
 import {
@@ -25,7 +25,9 @@ const READ = [...new Set([
   ...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.TRADING_ALL, ...ROLE_GROUPS.FINANCE,
   ...ROLE_GROUPS.SELLER_ACCESS, ...ROLE_GROUPS.BUYER_ACCESS, 'COMPLIANCE_AUDITOR',
 ])];
-const WRITE = ROLE_GROUPS.REIA_WRITE;
+// Masters are governance (Target #2 Phase B): the administrators keep the
+// holiday calendar, the desks read it. Left with the REIA desk until B.2.
+const WRITE = PLATFORM_ADMINS;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TYPES = ['PUBLIC', 'RESTRICTED', 'BANK', 'LOCAL'];

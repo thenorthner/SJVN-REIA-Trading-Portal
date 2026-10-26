@@ -40,6 +40,10 @@ router.use(requireAuth);
 const REIA_ROLES = ROLE_GROUPS.REIA_ALL;
 const isSjvn = (user) => REIA_ROLES.includes(user?.role);
 const canManage = (user) => ROLE_GROUPS.REIA_WRITE.includes(user?.role);
+// Phase B.2: the maker keeps the forum record; how a contested dispute ended is
+// decided by the REIA approver or Management, who decide disputes (Target #2 H6).
+const canRecord = (user) => ROLE_GROUPS.REIA_MAKE.includes(user?.role);
+const canDecide = (user) => ROLE_GROUPS.REIA_APPROVE.includes(user?.role);
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const send = (res, fn) => {
   try { res.json(fn()); } catch (err) {
@@ -169,7 +173,7 @@ function view(user, d) {
     can: {
       respond: submitter && RESOLVED.includes(d.status) && !d.resolution_response,
       withdraw: submitter && open,
-      conclude: canManage(user) && RESOLVED.includes(d.status) && d.resolution_response === 'CONTESTED',
+      conclude: canDecide(user) && RESOLVED.includes(d.status) && d.resolution_response === 'CONTESTED',
     },
     // What is waiting on the person asking.
     awaiting_me: isSjvn(user) ? (open && sla.owner === 'SJVN') || sla.stage === 'CONTESTED' : submitter && (d.status === 'INFO_REQUESTED' || sla.stage === 'RESPONSE'),
@@ -215,7 +219,9 @@ router.get('/overview', (req, res) => send(res, () => {
 // note for the amount awarded.
 const today = () => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
 router.get('/forum-tracker', (req, res) => send(res, () => {
-  if (!canManage(req.user) && !['FINANCE_USER', 'MANAGEMENT', 'SJVN_ADMIN'].includes(req.user.role)) throw fail(403, 'Not authorized');
+  // Read by the desk, its approver (who sees every dispute it may be asked to
+  // decide), Finance, Management and the administrator.
+  if (!canManage(req.user) && !['REIA_APPROVER', 'FINANCE_USER', 'MANAGEMENT', 'SJVN_ADMIN'].includes(req.user.role)) throw fail(403, 'Not authorized');
   const rows = db.prepare(`
     SELECT d.*, i.invoice_no, c.contract_no FROM disputes d JOIN invoices i ON i.id = d.invoice_id JOIN contracts c ON c.id = i.contract_id
     WHERE d.resolution_response = 'CONTESTED' ORDER BY (d.status = 'CLOSED'), d.next_hearing IS NULL, d.next_hearing, d.escalated_at
@@ -234,7 +240,7 @@ router.get('/forum-tracker', (req, res) => send(res, () => {
 }));
 
 router.post('/:id/forum', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk keeps the forum record');
+  if (!canRecord(req.user)) throw fail(403, 'The REIA maker keeps the forum record');
   const d = disputeFor(req.user, req.params.id);
   if (d.resolution_response !== 'CONTESTED') throw fail(400, 'This dispute has not been taken to a forum');
   const b = req.body || {};
@@ -251,7 +257,7 @@ router.post('/:id/forum', (req, res) => send(res, () => {
 }));
 
 router.post('/:id/hearings', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk keeps the forum record');
+  if (!canRecord(req.user)) throw fail(403, 'The REIA maker keeps the forum record');
   const d = disputeFor(req.user, req.params.id);
   if (d.resolution_response !== 'CONTESTED' || d.status === 'CLOSED') throw fail(400, 'This dispute is not pending before a forum');
   const b = req.body || {};
@@ -304,7 +310,7 @@ router.post('/:id/respond', (req, res) => send(res, () => {
     setInvoiceOpenDispute(d.invoice_id);
     recordEvent(d.id, req.user, 'RESOLUTION_CONTESTED', d.status, d.status, { forum, contested_amount: money(amount), note });
     audit(req, 'DISPUTE_RESOLUTION_CONTESTED', d.id, { afterValue: { forum, contested_amount: money(amount) }, reason: note });
-    for (const role of [...new Set([...ROLE_GROUPS.REIA_WRITE, 'MANAGEMENT'])]) {
+    for (const role of [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.REIA_APPROVE])]) {
       pushNotification({ role, type: 'DISPUTE', message: `${d.dispute_no}: ${req.user.name} does not accept the resolution and is taking Rs ${inr(amount)} to ${FORUMS[forum]}.` });
     }
   } else {
@@ -315,7 +321,7 @@ router.post('/:id/respond', (req, res) => send(res, () => {
 
 // POST /:id/conclude { note } — SJVN recording how a contested dispute ended.
 router.post('/:id/conclude', (req, res) => send(res, () => {
-  if (!canManage(req.user)) throw fail(403, 'Only the REIA desk records the outcome of an escalation');
+  if (!canDecide(req.user)) throw fail(403, 'How an escalation ended is recorded by the REIA approver or Management');
   const d = disputeFor(req.user, req.params.id);
   if (!RESOLVED.includes(d.status) || d.resolution_response !== 'CONTESTED') throw fail(400, 'This dispute is not under escalation');
   const note = String(req.body.note || '').trim().slice(0, 2000);

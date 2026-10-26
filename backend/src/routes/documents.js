@@ -62,6 +62,12 @@ const isExternal = (user) => EXTERNAL_ROLES.includes(user?.role);
 // The administrators keep KYC intake and verification with onboarding (Target #2 Phase B).
 const INTAKE_ROLES = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE, ...PLATFORM_ADMINS])];
 const canVerify = (user) => INTAKE_ROLES.includes(user?.role);
+// Phase B.2: on the REIA desk the maker takes documents in and asks for them;
+// the checker verifies or rejects them. The administrators keep both (KYC is
+// governance), and the station desks have no split yet.
+const STATIONS_AND_ADMINS = [...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE, ...PLATFORM_ADMINS];
+const canTakeIn = (user) => [...ROLE_GROUPS.REIA_MAKE, ...STATIONS_AND_ADMINS].includes(user?.role);
+const canReview = (user) => [...ROLE_GROUPS.REIA_CHECK, ...STATIONS_AND_ADMINS].includes(user?.role);
 const ADMIN_ROLES = ['SJVN_ADMIN', 'IT_SUPER_ADMIN', 'REIA_CHECKER', 'COMMERCIAL_ADMIN', 'THERMAL_ADMIN'];
 
 // Each desk takes in and reviews its own vertical's papers. The Hydro desk
@@ -414,7 +420,7 @@ router.get('/requests', requireAuth, (req, res) => {
 
 // POST /requests { entity_id, document_type, note, due_date }
 router.post('/requests', requireAuth, (req, res) => {
-  if (!canVerify(req.user)) return res.status(403).json({ error: 'Only the REIA desk can ask for a document' });
+  if (!canTakeIn(req.user)) return res.status(403).json({ error: 'The REIA maker asks for a document' });
   const { entity_id, document_type, note, due_date } = req.body;
   const entity = entity_id && db.prepare('SELECT id, name FROM entities WHERE id = ?').get(entity_id);
   if (!entity) return res.status(400).json({ error: 'Choose the company to ask' });
@@ -436,7 +442,7 @@ router.post('/requests', requireAuth, (req, res) => {
 
 // POST /requests/:id/cancel
 router.post('/requests/:id/cancel', requireAuth, (req, res) => {
-  if (!canVerify(req.user)) return res.status(403).json({ error: 'Only the REIA desk can withdraw a request' });
+  if (!canTakeIn(req.user)) return res.status(403).json({ error: 'The REIA maker withdraws a request' });
   const r = db.prepare(`SELECT * FROM document_requests WHERE id = ?`).get(req.params.id);
   if (!r) return res.status(404).json({ error: 'Request not found' });
   const outsideCancel = outsideDesk(req.user, { entity_id: r.entity_id });
@@ -480,7 +486,7 @@ router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
   // Counterparties submit physical documents directly to SJVN REIA office.
   // SJVN Admin and REIA desk officers scan, upload, and intake compliance/KYC documents on behalf of stakeholders.
   const actualCategory = existing ? existing.category : category;
-  const canAdminUpload = INTAKE_ROLES.includes(req.user.role);
+  const canAdminUpload = canTakeIn(req.user);
   if (external && actualCategory === 'VERIFY') {
     return refuse(403, 'KYC and Regulatory compliance documents must be submitted physically to the SJVN office for administrative intake and verification.');
   }
@@ -597,7 +603,7 @@ router.post('/upload', requireAuth, upload.single('file'), async (req, res) => {
 
 /** The version being reviewed, if it is one that can be: the latest, and waiting. */
 function reviewable(req, res, action = 'review') {
-  if (!canVerify(req.user)) { res.status(403).json({ error: 'Only the REIA desk can review documents' }); return null; }
+  if (!canReview(req.user)) { res.status(403).json({ error: 'Reviewing documents is the REIA checker\'s' }); return null; }
   const v = db.prepare(`
     SELECT v.*, d.title, d.document_type, d.category, d.entity_id, d.contract_id,
            (SELECT MAX(version_number) FROM document_versions WHERE document_id = d.id) AS latest

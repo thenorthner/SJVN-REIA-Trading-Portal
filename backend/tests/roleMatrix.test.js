@@ -19,6 +19,8 @@ const PLATFORM_ADMINS = new Set(['SJVN_ADMIN', 'IT_SUPER_ADMIN']);
 // Governance kept with the platform administrators on purpose, with why.
 const ADMIN_GOVERNANCE = {
   'PATCH /api/privacy/admin/requests/:id': 'Data Protection Officer queue (DPDP Act) — governance, not a transaction',
+  'GET /api/privacy/admin/feedback': 'Web Information Manager queue for public feedback (GIGW 3.0) — governance, not a transaction',
+  'PATCH /api/privacy/admin/feedback/:id': 'Web Information Manager replies to public feedback (GIGW 3.0) — governance, not a transaction',
   'POST /api/entities/:id/own-station': 'Marks an entity as an SJVN-owned station — master data',
 };
 // Whole areas that are governance (Target #2 Phase B): masters are the
@@ -38,6 +40,7 @@ const ADMIN_MAY_WRITE = [
   [/^\/api\/audit-logs\//, 'audit trail integrity check and the record of an export'],
   [/^\/api\/alerts\//, 'broadcasts, and the user\'s own alert acknowledgements and preferences'],
   [/^\/api\/communications\/broadcast$/, 'notices to counterparties'],
+  [/^\/api\/circulars\/admin/, 'public circulars and statutory disclosures on the website — site content, like broadcasts'],
   [/^\/api\/project-scope\//, 'assigning REIA officers to projects — user administration'],
   [/^\/api\/delegations\//, 'recording an additional charge; approving break-glass — governance (Target #2 Phase D)'],
   [/^\/api\/notifications\//, 'mail delivery retries and the test e-mail — platform operation'],
@@ -45,6 +48,32 @@ const ADMIN_MAY_WRITE = [
   [/^\/api\/cerc-market\/(trigger|scan)$/, 'fetching CERC\'s published reports — a data feed, not a transaction'],
   [/\/(preview|estimate|ecr-preview|arrears\/preview|tcs\/preview|consolidate)$/, 'computes and returns figures; saves nothing'],
 ];
+
+// Target #2 Phase B.2 (22-Oct-2026): on the REIA desk the maker prepares and
+// the checker decides. These are the only writes left open to both, each with
+// why. Two of them are split inside the handler by what is being done.
+const MAKER_CHECKER_SHARED = {
+  'POST /api/contracts/:id/hold': 'putting a contract on hold is a protective stop anyone on the desk (or its approver) may pull; lifting it is the approver\'s',
+  'POST /api/contracts/:id/status': 'split inside: the maker moves a draft through negotiation, the checker signs, activates, terminates and closes',
+  'PUT /api/entities/:id/regulatory-approvals/:approvalId': 'split inside: the maker records a clearance\'s details, the checker marks it verified, rejected or not applicable',
+  'POST /api/invoices/:id/cancel': 'split inside: the maker withdraws a draft or a returned bill, the checker cancels one that is with the reviewers',
+  'POST /api/invoices/:id/validate': 'runs the system\'s own comparison of a bill against the contract; it decides nothing',
+  'POST /api/desk-tasks/:id/close': 'closing one\'s own desk reminder',
+  'POST /api/disputes/sla/check': 'a sweep that marks overdue clocks; decides nothing',
+  'POST /api/payment-security/alerts/run': 'a sweep that raises expiry alerts; decides nothing',
+  'POST /api/reconciliation/run-scheduled': 'the scheduled run, on demand; produces statements for the maker to send',
+  'POST /api/reconciliation/:id/regenerate-statement': 'redraws the statement document from figures already on record',
+  'POST /api/communications/broadcast': 'notices to counterparties',
+  'PUT /api/reports/cerc-compliance/licence/:fy': 'the licence register for the CERC filing calendar',
+  'POST /api/notifications/test-email': 'the user\'s own test mail',
+  'POST /api/alerts/board/ack': 'the user\'s own alert acknowledgement',
+  'POST /api/alerts/board/unack': 'the user\'s own alert acknowledgement',
+  'PUT /api/alerts/preferences': 'the user\'s own alert preferences',
+  'POST /api/alerts/broadcasts': 'desk-wide notices on the alert board',
+  'DELETE /api/alerts/broadcasts/:id': 'desk-wide notices on the alert board',
+  'POST /api/audit-logs/log-export': 'records that an export was taken',
+  'POST /api/sandbox/age': 'test-environment clock, not a transaction',
+};
 
 const inventory = routeInventory();
 if (process.env.ROLE_MATRIX_OUT) fs.writeFileSync(process.env.ROLE_MATRIX_OUT, JSON.stringify(inventory, null, 1));
@@ -113,6 +142,19 @@ describe('role matrix', () => {
     const valid = new Set([...ddl.matchAll(/'([A-Z_0-9]+)'/g)].map((m) => m[1]));
     const named = new Set(inventory.flatMap((r) => r.roles || []));
     expect([...named].filter((r) => !valid.has(r)).sort()).toEqual([]);
+  });
+
+  it('keeps the REIA maker and checker apart (Target #2 Phase B.2)', () => {
+    const shared = inventory
+      .filter((r) => r.method !== 'GET' && r.roles && r.roles.includes('REIA_MAKER') && r.roles.includes('REIA_CHECKER'))
+      .map((r) => `${r.method} ${r.path}`)
+      .filter((key) => !MAKER_CHECKER_SHARED[key]);
+    expect(shared).toEqual([]);
+  });
+
+  it('keeps every maker/checker exception pointing at a route that still exists', () => {
+    const keys = new Set(inventory.map((r) => `${r.method} ${r.path}`));
+    expect(Object.keys(MAKER_CHECKER_SHARED).filter((k) => !keys.has(k))).toEqual([]);
   });
 
   it('has no gate that nobody at all can pass', () => {

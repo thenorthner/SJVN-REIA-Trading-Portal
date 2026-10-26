@@ -65,7 +65,7 @@ describe('S21 An amendment waits, and says when it applies', () => {
     // The agreement on file is what lets a version go live.
     db.prepare(`INSERT INTO documents (id, contract_id, document_type, category, title) VALUES (?, ?, 'CONTRACT', 'RECORD', 'Agreement')`)
       .run(`DOC-${r.body.id}`, c.id);
-    await request(app).post(`/api/contracts/${r.body.id}/status`).set(auth(reia)).send({ status: 'ACTIVE' });
+    await request(app).post(`/api/contracts/${r.body.id}/status`).set(auth(tokenFor('REIA_CHECKER'))).send({ status: 'ACTIVE' });
     expect(statusOf(r.body.id)).toBe('ACTIVE');
     expect(statusOf(c.id), 'the superseded version was left live alongside its replacement').toBe('AMENDED');
   });

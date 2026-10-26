@@ -96,7 +96,7 @@ describe('S24 One answer for what a plant is expected to generate', () => {
     const c = makeContract({ status: 'ACTIVE', project_type: 'WIND', capacity_mw: 20 });
     const e = await request(app).post('/api/energy-data').set(auth(reia))
       .send({ contract_id: c.id, period_month: '2026-06', data_type: 'PROVISIONAL', source: 'MANUAL', energy_mwh: 4320 });
-    const v = await request(app).post(`/api/energy-data/${e.body.id}/validate`).set(auth(reia)).send({});
+    const v = await request(app).post(`/api/energy-data/${e.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     expect(v.body.status, 'a wind plant was measured against solar output').toBe('VALIDATED');
     expect(v.body.deviation_notes).toMatch(/30% CUF/);
   });
@@ -105,7 +105,7 @@ describe('S24 One answer for what a plant is expected to generate', () => {
     const c = makeContract({ status: 'ACTIVE', project_type: 'HYDRO', capacity_mw: 10 });
     const e = await request(app).post('/api/energy-data').set(auth(reia))
       .send({ contract_id: c.id, period_month: '2026-06', data_type: 'PROVISIONAL', source: 'MANUAL', energy_mwh: 2000 });
-    const v = await request(app).post(`/api/energy-data/${e.body.id}/validate`).set(auth(reia)).send({});
+    const v = await request(app).post(`/api/energy-data/${e.body.id}/validate`).set(auth(tokenFor('REIA_CHECKER'))).send({});
     expect(v.body.deviation_notes, 'hydro was held to the tighter non-hydro tolerance').toMatch(/Tolerance: 80%/);
   });
 });

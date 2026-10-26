@@ -60,6 +60,7 @@ export function approvalParamProblem(key, value) {
 
 router.get('/summary', requireRole(...MASTERS_READ), (req, res) => {
   res.json({
+    generation_assets: db.prepare('SELECT COUNT(*) c FROM generation_assets WHERE is_active = 1').get().c,
     entities: db.prepare('SELECT COUNT(*) c FROM entities').get().c,
     contracts: db.prepare(`SELECT COUNT(*) c FROM contracts WHERE status != 'TERMINATED'`).get().c,
     projects: db.prepare('SELECT COUNT(*) c FROM entities WHERE parent_entity_id IS NOT NULL').get().c,
@@ -338,6 +339,114 @@ router.get('/resolved-billing', requireRole(...MASTERS_READ), (req, res) => {
     nrldc_fee_per_mw: getParam('nrldc_fee_per_mw', 100),
     default_payment_terms_days: getParam('default_payment_terms_days', 30),
   });
+});
+
+// ── SJVN Generation Assets Master (Power Plants on GIS Map) ──
+// What the public map shows of SJVN's fleet. The administrators keep it, like
+// every master; the desks read it.
+const GEN_TYPES = ['HYDRO', 'THERMAL', 'SOLAR', 'WIND', 'PSP', 'REIA'];
+const GEN_STAGES = ['OPERATIONAL', 'UNDER_CONSTRUCTION', 'DEVELOPMENT'];
+const GEN_TYPE_COLOR = { HYDRO: '#0284c7', THERMAL: '#ea580c', SOLAR: '#eab308', WIND: '#10b981', PSP: '#8b5cf6', REIA: '#6366f1' };
+const GEN_STAGE_COLOR = { OPERATIONAL: '#10b981', UNDER_CONSTRUCTION: '#f59e0b', DEVELOPMENT: '#38bdf8' };
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const genText = (v, max) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
+
+/** The asset as it would be saved, or the first thing wrong with it, said in words. */
+function genAssetFrom(b) {
+  const name = genText(b.name, 160);
+  if (!name) return { error: 'Give the plant a name.' };
+  const type = String(b.type || '').toUpperCase();
+  if (!GEN_TYPES.includes(type)) return { error: `Type must be one of ${GEN_TYPES.join(', ')}.` };
+  const stage = String(b.status_category || 'OPERATIONAL').toUpperCase();
+  if (!GEN_STAGES.includes(stage)) return { error: `Stage must be one of ${GEN_STAGES.join(', ')}.` };
+  const capNum = Number(b.capacity_num);
+  if (!Number.isFinite(capNum) || capNum <= 0 || capNum > 100000) return { error: 'Capacity in MW must be a number above 0.' };
+  const blank = (v) => v == null || String(v).trim() === '';
+  const x = blank(b.coords_x) ? NaN : Number(b.coords_x);
+  const y = blank(b.coords_y) ? NaN : Number(b.coords_y);
+  // The map is drawn on a 620 × 700 canvas; a point off it is a plant nobody can see.
+  if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 620 || y < 0 || y > 700) {
+    return { error: 'Map position must be inside the map (x 0–620, y 0–700). Pick the state to fill it in.' };
+  }
+  const state = genText(b.state, 80);
+  if (!state) return { error: 'Say which state (or cross-border location) the plant is in.' };
+  for (const k of ['color', 'status_color']) {
+    if (b[k] && !HEX.test(String(b[k]))) return { error: `${k.replace('_', ' ')} must be a colour like #0284c7.` };
+  }
+  return {
+    row: {
+      name, hindi_name: genText(b.hindi_name, 160), type,
+      // The figure shown is the figure counted: one source, not two that can disagree.
+      capacity: genText(b.capacity, 40) || `${capNum.toLocaleString('en-IN')} MW`, capacity_num: capNum,
+      config: genText(b.config, 300), location: genText(b.location, 200) || state,
+      state, state_code: (genText(b.state_code, 8) || 'IN').toUpperCase(), basin: genText(b.basin, 200), grid: genText(b.grid, 200) || 'National Grid',
+      status: genText(b.status, 120) || (stage === 'OPERATIONAL' ? 'Operational' : stage === 'UNDER_CONSTRUCTION' ? 'Under Construction' : 'In Development'),
+      status_category: stage, status_color: b.status_color || GEN_STAGE_COLOR[stage],
+      design_energy: genText(b.design_energy, 120), beneficiaries: genText(b.beneficiaries, 400),
+      coords_x: x, coords_y: y, color: b.color || GEN_TYPE_COLOR[type], description: genText(b.description, 1000),
+      is_active: b.is_active === undefined ? 1 : (b.is_active ? 1 : 0),
+    },
+  };
+}
+
+router.get('/generation-assets', requireRole(...MASTERS_READ), (req, res) => {
+  const assets = db.prepare('SELECT * FROM generation_assets ORDER BY capacity_num DESC').all();
+  res.json(assets);
+});
+
+router.post('/generation-assets', requireRole(...MASTERS_WRITE), (req, res) => {
+  const { row, error } = genAssetFrom(req.body || {});
+  if (error) return res.status(400).json({ error });
+  const assetId = req.body.id ? String(req.body.id).toUpperCase().replace(/[^A-Z0-9_]/g, '_').slice(0, 40) : newId('GEN');
+  if (db.prepare('SELECT 1 FROM generation_assets WHERE id = ?').get(assetId)) {
+    return res.status(409).json({ error: `A plant with code ${assetId} is already on the master. Edit that one, or pick another code.` });
+  }
+  db.prepare(`
+    INSERT INTO generation_assets (
+      id, name, hindi_name, type, capacity, capacity_num, config, location,
+      state, state_code, basin, grid, status, status_category, status_color,
+      design_energy, beneficiaries, coords_x, coords_y, color, description, is_active, created_by
+    ) VALUES (
+      @id, @name, @hindi_name, @type, @capacity, @capacity_num, @config, @location,
+      @state, @state_code, @basin, @grid, @status, @status_category, @status_color,
+      @design_energy, @beneficiaries, @coords_x, @coords_y, @color, @description, @is_active, @created_by
+    )
+  `).run({ ...row, id: assetId, created_by: req.user?.id || null });
+  const created = db.prepare('SELECT * FROM generation_assets WHERE id = ?').get(assetId);
+  logAudit({ req, user: req.user, action: 'CREATE', module: 'MASTERS', entityType: 'generation_assets', entityId: assetId, afterValue: created });
+  res.status(201).json(created);
+});
+
+router.put('/generation-assets/:id', requireRole(...MASTERS_WRITE), (req, res) => {
+  const existing = db.prepare('SELECT * FROM generation_assets WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Plant not found' });
+  // A capacity typed as text alone used to leave the counted figure as it was.
+  const body = { ...existing, ...req.body };
+  if (req.body.capacity !== undefined && req.body.capacity_num === undefined) {
+    body.capacity_num = parseFloat(String(req.body.capacity).replace(/[^0-9.]/g, ''));
+  }
+  const { row, error } = genAssetFrom(body);
+  if (error) return res.status(400).json({ error });
+  db.prepare(`
+    UPDATE generation_assets SET
+      name=@name, hindi_name=@hindi_name, type=@type, capacity=@capacity, capacity_num=@capacity_num, config=@config, location=@location,
+      state=@state, state_code=@state_code, basin=@basin, grid=@grid, status=@status, status_category=@status_category, status_color=@status_color,
+      design_energy=@design_energy, beneficiaries=@beneficiaries, coords_x=@coords_x, coords_y=@coords_y, color=@color, description=@description,
+      is_active=@is_active, updated_at=datetime('now')
+    WHERE id=@id
+  `).run({ ...row, id: req.params.id });
+  const updated = db.prepare('SELECT * FROM generation_assets WHERE id = ?').get(req.params.id);
+  logAudit({ req, user: req.user, action: 'UPDATE', module: 'MASTERS', entityType: 'generation_assets', entityId: req.params.id, beforeValue: existing, afterValue: updated });
+  res.json(updated);
+});
+
+router.delete('/generation-assets/:id', requireRole(...MASTERS_WRITE), (req, res) => {
+  const existing = db.prepare('SELECT * FROM generation_assets WHERE id = ?').get(req.params.id);
+  if (!existing) return res.status(404).json({ error: 'Plant not found' });
+  db.prepare('DELETE FROM generation_assets WHERE id = ?').run(req.params.id);
+  // The whole record goes into the trail, so a removal can be seen and undone.
+  logAudit({ req, user: req.user, action: 'DELETE', module: 'MASTERS', entityType: 'generation_assets', entityId: req.params.id, beforeValue: existing });
+  res.json({ message: 'Plant removed', id: req.params.id });
 });
 
 export default router;

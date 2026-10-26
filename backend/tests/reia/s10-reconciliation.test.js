@@ -26,6 +26,18 @@ describe('S10 Reconciliation', () => {
     expect(types).toMatch(/FINANCIAL|PAY/i);
   });
 
+  it('says how much of "paid" was money and how much a credit note', async () => {
+    const inv = db.prepare(`SELECT id FROM invoices WHERE contract_id = ? AND billing_period = '2026-04'`).get(contract.id);
+    db.prepare(`INSERT INTO payments (id, invoice_id, amount, payment_date, mode, reference, deduction) VALUES (?, ?, 290000, '2026-05-10', 'RTGS', 'UTR-T-1', 0)`).run(`PAY-T-${Math.random()}`, inv.id);
+    db.prepare(`INSERT INTO payments (id, invoice_id, amount, payment_date, mode, reference, deduction) VALUES (?, ?, 0, '2026-05-08', 'CREDIT_NOTE', 'CN/T/0001', 10000)`).run(`PAY-T-${Math.random()}`, inv.id);
+    const r = await run();
+    expect(r.status).toBeLessThan(400);
+    const statement = JSON.parse(db.prepare('SELECT statement_json FROM reconciliations WHERE id = ?').get(r.body.id).statement_json);
+    const fin = statement.items.find((i) => i.type === 'FINANCIAL_THREE_WAY');
+    expect(fin.paid).toBe(300000);
+    expect(fin.notes).toMatch(/Paid = received ₹2,90,000 \+ ₹10,000 by credit note CN\/T\/0001/);
+  });
+
   it('auto-matches inside tolerance and flags outside it', async () => {
     const r = await run();
     const recon = db.prepare('SELECT * FROM reconciliations ORDER BY rowid DESC').get();
@@ -46,9 +58,9 @@ describe('S10 Reconciliation', () => {
     const recon = db.prepare('SELECT * FROM reconciliations ORDER BY rowid DESC').get();
     // Explain every line that did not match, then sign for SJVN.
     for (const it of db.prepare(`SELECT id FROM recon_items WHERE reconciliation_id = ? AND match_status IN ('EXCEPTION','CARRIED')`).all(recon.id)) {
-      await request(app).post(`/api/reconciliation/${recon.id}/override`).set(auth(reia)).send({ item_id: it.id, reason: 'accepted for the test' });
+      await request(app).post(`/api/reconciliation/${recon.id}/override`).set(auth(tokenFor('REIA_CHECKER'))).send({ item_id: it.id, reason: 'accepted for the test' });
     }
-    await request(app).post(`/api/recon-signoff/${recon.id}/sign`).set(auth(reia)).send({ decision: 'AGREE' });
+    await request(app).post(`/api/recon-signoff/${recon.id}/sign`).set(auth(tokenFor('REIA_CHECKER'))).send({ decision: 'AGREE' });
     const after = db.prepare('SELECT status, sjvn_ack_at, counterparty_ack_at FROM reconciliations WHERE id = ?').get(recon.id);
     expect(after.sjvn_ack_at).toBeTruthy();
     expect(after.status, 'closed on one signature alone').not.toBe('CLOSED');

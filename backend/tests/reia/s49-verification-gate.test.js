@@ -12,7 +12,7 @@ import { tokenFor, auth, makeUser, makeEntity, makeContract, makeInvoice, resetR
 // seller could read another company's checklist; and four of the seven queue
 // rows were DSM pool bills and SJVN's computed bills "failing" the tariff check.
 
-let reia, sellerCo, seller, ppa;
+let reia, checker, sellerCo, seller, ppa;
 const post = (path, body = {}, who = reia) => request(app).post(path).set(auth(who)).send(body);
 const get = (path, who = reia) => request(app).get(path).set(auth(who));
 const lockEnergy = (contract, period, mwh, cuf = 22) => db.prepare(`
@@ -36,6 +36,8 @@ const status = (inv) => db.prepare('SELECT status, verification_status, verified
 beforeEach(() => {
   resetReia();
   reia = tokenFor('REIA_USER');
+  // Phase B.2: checking is the checker's.
+  checker = tokenFor('REIA_CHECKER');
   sellerCo = makeEntity('SELLER');
   seller = signToken(makeUser('SELLER', { linked_entity_id: sellerCo.id }));
   ppa = makeContract({ contract_type: 'PPA', project_type: 'Solar', capacity_mw: 50, tariff_per_unit: 2.88, seller_id: sellerCo.id, cod_date: '2024-01-01', tenure_start: '2024-01-01', tenure_end: '2040-12-31' });
@@ -46,18 +48,17 @@ describe('S49 Approval waits for a completed verification', () => {
   it('refuses to approve a developer bill whose checklist is not done, and lets it through once it is', async () => {
     const inv = await raise();
     expect((await post(`/api/invoices/${inv.id}/submit-for-approval`)).status).toBe(200);
-    const early = await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'APPROVED' });
+    const early = await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'APPROVED' }, checker);
     expect(early.status).toBe(400);
     expect(early.body.error).toMatch(/Verify this bill first/);
 
     const done = await verify(inv);
     expect(done.status, JSON.stringify(done.body)).toBe(200);
     expect(done.body.verification_status).toBe('VERIFIED');
-    // The verifier does not approve level 1 as well (17-Oct-2026); another officer does.
+    // The maker verified it (Phase B.2), so the maker does not sign level 1; the checker does.
     const own = await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'APPROVED' });
     expect(own.status).toBe(403);
-    expect(own.body.error).toMatch(/You verified/);
-    expect((await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'APPROVED' }, signToken(makeUser('REIA_CHECKER', { name: 'Second Officer' })))).status).toBe(200);
+    expect((await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'APPROVED' }, checker)).status).toBe(200);
   });
 
   it('holds a wrong-tariff bill: the failed check cannot be cleared without a reason, and a failed checklist blocks approval', async () => {
@@ -69,11 +70,11 @@ describe('S49 Approval waits for a completed verification', () => {
 
     const asFailed = ALL_CLEAR.map((t) => (t.key === 'TARIFF_VERIFIED' ? { ...t, status: 'FAILED' } : t));
     expect((await verify(inv, asFailed)).body.verification_status).toBe('FAILED');
-    const blocked = await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'APPROVED' });
+    const blocked = await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'APPROVED' }, checker);
     expect(blocked.status).toBe(400);
     expect(blocked.body.error).toMatch(/failed: Tariff Verified/);
     // Sending it back is still open.
-    expect((await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'REJECTED', comments: 'rate is 2.88' })).status).toBe(200);
+    expect((await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'REJECTED', comments: 'rate is 2.88' }, checker)).status).toBe(200);
   });
 
   it('records who verified only when the bill is verified', async () => {
@@ -173,7 +174,7 @@ describe('S49 The checks read the figures', () => {
   it('verifies the revised bill afresh', async () => {
     const inv = await raise();
     await verify(inv);
-    await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'REJECTED', comments: 'redo' });
+    await post(`/api/invoices/${inv.id}/approvals/1/act`, { decision: 'REJECTED', comments: 'redo' }, checker);
     const revised = await request(app).put(`/api/invoices/${inv.id}/revise`).set(auth(seller)).send({ taxes: 1000 });
     expect(revised.status, JSON.stringify(revised.body)).toBe(200);
     expect(status(inv)).toMatchObject({ verification_status: null, verified_by: null });

@@ -12,7 +12,8 @@ router.use(requireAuth);
 
 // The weekly statement is read by every desk that settles a station on it.
 const READ = [...new Set([...ROLE_GROUPS.REIA_ALL, ...ROLE_GROUPS.HYDRO_THERMAL_ALL, ...ROLE_GROUPS.THERMAL_ALL, 'COMPLIANCE_AUDITOR'])];
-const WRITE = [...new Set([...ROLE_GROUPS.REIA_WRITE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
+// Phase B.2: fetching and uploading the DSA is the REIA maker's (the station desks have no split yet).
+const WRITE = [...new Set([...ROLE_GROUPS.REIA_MAKE, ...ROLE_GROUPS.HYDRO_THERMAL_WRITE, ...ROLE_GROUPS.THERMAL_WRITE])];
 
 // Statements run a few hundred KB; the largest in the archive is under 2 MB.
 // Held in memory because nothing needs the bytes once they are parsed — what
